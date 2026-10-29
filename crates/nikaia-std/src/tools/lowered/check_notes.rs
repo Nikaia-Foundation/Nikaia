@@ -184,7 +184,7 @@ impl CheckState {
         }
         let asked = self.flow.at_a_write_door && !written;
         let mut local = CheckLocal::free(world.words.resolve(name).to_string(), ty, self.a_new_binding());
-        if asked { local.immutable = Some(CheckImmutable { at: span.clone(), kind: CheckKind::Parameter }); }
+        if asked { local.immutable = Some(CheckImmutable { at: span.clone(), kind: CheckKind::Parameter, over: String::from("") }); }
         let opened = self.flow.open_params.remove(&local.name);
         if self.flow.lent_params.remove(&local.name) {
             if a_tuple(&local.ty) { local.lent = true; }

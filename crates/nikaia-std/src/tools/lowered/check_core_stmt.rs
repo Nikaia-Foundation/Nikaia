@@ -628,7 +628,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let mut literal: Option<String> = None;
     if ty.is_none() { literal = check_core_stmt_literal(value); }
     let mut immutable: Option<CheckImmutable> = None;
-    if !mutable { immutable = Some(CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Let }); }
+    if !mutable { immutable = Some(CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Let, over: String::from("") }); }
     match bound {
         Ty::Named { ref name, .. } => { if name == "TaskHandle" { state.flow.handle_lets.insert(span.start as i64); } },
         _ => { },
@@ -914,8 +914,17 @@ pub(crate) fn check_core_stmt_for_a_range(state: &mut CheckState, world: &CheckW
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_list_type(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => (type_last_segment(name) == "Vec" || type_last_segment(name) == "List") && args.len() == 1 || name == ARRAY && !args.is_empty(),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], iter: &Expr, body: &Block, span: &Span) -> Ty {
+pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, iter: &Expr, body: &Block, span: &Span) -> Ty {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates");
     let over = check_core_expr(state, world, host, iter, span);
     state.a_loop_over_a_nullable(world, &over, iter, span);
@@ -953,6 +962,13 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let owned = is_a_place(iter) && a_seq;
     if owned { state.facts.owned_loops.insert(span.start as i64); }
     let lent = is_a_place(iter) && !owned;
+    let mut a_list_place = false;
+    let mut walked_list: String = String::from("");
+    if !mutable && lent && check_core_stmt_a_list_type(&over) { walked_list = nikaia_std::index::or(dotted_path(world, iter), || "".into()); }
+    if mutable && lent {
+        state.a_for_mut_over_a_place(world, iter, &over, span);
+        a_list_place = true;
+    }
     let mut frame: Vec<CheckLocal> = vec![];
     let mut at: i64 = 0;
     for b in bindings.iter() {
@@ -974,7 +990,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let mut local = CheckLocal::free(name, bound, id);
         local.written_mut = false;
         local.lent = lent && !copied && !a_view;
-        local.immutable = Some(CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop });
+        if !mutable || a_list_place { local.immutable = Some(CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: walked_list.to_string() }); }
         frame.push(local);
     }
     if bindings.len() == 1 { check_core_stmt_for_a_range(state, world, iter, &mut frame, span); }
@@ -1071,7 +1087,7 @@ pub fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         Stmt::Comptime { name, ty, value, bounds } => { let name = *name; check_core_comptime_binding(state, world, host, name, (ty).as_ref(), value, bounds, span) },
         Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, (op).as_ref(), value, span),
         Stmt::While { cond, body } => check_core_stmt_while(state, world, host, cond, body, span),
-        Stmt::For { bindings, shape, iter, body } => check_core_stmt_for(state, world, host, bindings, shape, iter, body, span),
+        Stmt::For { bindings, shape, mutable, iter, body } => { let mutable = *mutable; check_core_stmt_for(state, world, host, bindings, shape, mutable, iter, body, span) },
         Stmt::Return(value) => check_core_stmt_return(state, world, host, (value).as_ref(), span),
         Stmt::Break => check_core_stmt_jump(state, "break", span),
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),

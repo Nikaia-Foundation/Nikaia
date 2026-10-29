@@ -382,7 +382,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
         } else { ty = host.declared(state, &arg.ty, &arg.span); }
         let id = state.a_new_binding();
         let mut local = CheckLocal::free(name, ty.erase(parameters), id);
-        if !arg.mutable { local.immutable = Some(CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter }); }
+        if !arg.mutable { local.immutable = Some(CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter, over: String::from("") }); }
         local.changing = arg.mutable;
         frame.push(local);
         at += 1;

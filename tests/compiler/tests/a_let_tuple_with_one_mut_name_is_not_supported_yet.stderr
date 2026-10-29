@@ -1,0 +1,8 @@
+error[NK1307]: `mut` in front of one name of a tuple pattern isn't supported yet.
+  --> tests/a_let_tuple_with_one_mut_name_is_not_supported_yet.nika:2:13
+   |
+ 2 |     let (a, mut b) = (1, 2)
+   |             ^^^ not supported yet
+   |
+   = note: This is not refused on purpose: the form is left for later, and a program that spells it today would change meaning if it were added in a hurry.
+   = help: Write `mut` in front of the whole pattern, which marks every name in it: `let mut (tx, rx) = …`, `for mut (a, b) in pairs`.

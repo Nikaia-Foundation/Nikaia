@@ -340,7 +340,7 @@ impl CheckState {
 
 pub(crate) fn a_parameter_binding(local: &CheckLocal) -> bool {
     if local.immutable.is_none() { return false; }
-    let at = match local.immutable { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let at = match local.immutable.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     at.kind == CheckKind::Parameter
 }
 

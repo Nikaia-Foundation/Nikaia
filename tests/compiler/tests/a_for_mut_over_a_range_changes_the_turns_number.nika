@@ -1,0 +1,6 @@
+fn main() {
+    for mut i in 0..<3 {
+        i = i * 10 + 1
+        println(f"{i}")
+    }
+}

@@ -63,7 +63,7 @@ pub enum Stmt {
     Let { names: Vec<winnow_grammar::Symbol>, shape: Vec<i64>, mutable: bool, ty: Option<Type>, value: Expr },
     Comptime { name: winnow_grammar::Symbol, ty: Option<Type>, value: Expr, bounds: Vec<ConfigArg> },
     Assign { target: Expr, op: Option<BinaryOp>, value: Expr },
-    For { bindings: Vec<winnow_grammar::Symbol>, shape: Vec<i64>, iter: Expr, body: Block },
+    For { bindings: Vec<winnow_grammar::Symbol>, shape: Vec<i64>, mutable: bool, iter: Expr, body: Block },
     While { cond: Expr, body: Block },
     Return(Option<Expr>),
     Break,

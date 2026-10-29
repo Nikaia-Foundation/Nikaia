@@ -260,10 +260,10 @@ pub(crate) fn numbers_stmt(stmt: Stmt, st: &mut NodeNumbersState) -> Stmt {
             let value2 = numbers_expr(value, st);
             return Stmt::Assign { target: target2, op, value: value2 };
         },
-        Stmt::For { bindings, shape, iter, body } => {
+        Stmt::For { bindings, shape, mutable, iter, body } => {
             let iter2 = numbers_expr(iter, st);
             let body2 = numbers_block(body, st);
-            return Stmt::For { bindings, shape, iter: iter2, body: body2 };
+            return Stmt::For { bindings, shape, mutable, iter: iter2, body: body2 };
         },
         Stmt::While { cond, body } => {
             let cond2 = numbers_expr(cond, st);

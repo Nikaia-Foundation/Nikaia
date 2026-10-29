@@ -8,10 +8,11 @@ pub enum CheckKind {
     Loop,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckImmutable {
     pub at: Span,
     pub kind: CheckKind,
+    pub over: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

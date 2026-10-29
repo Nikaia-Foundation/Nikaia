@@ -75,6 +75,9 @@ pub struct Trivia {
     core: nikaia_std::tools::parser_leaves::PrTrivia,
     /// The byte after the last `;` a statement read.
     semi_end: usize,
+    /// Where a `mut` stood in front of one name of a tuple pattern
+    /// (`NK1307`, ADR-views-2 D1): the first one is refused.
+    mut_name: Option<usize>,
 }
 
 impl Default for Trivia {
@@ -82,6 +85,7 @@ impl Default for Trivia {
         Trivia {
             core: nikaia_std::tools::parser_leaves::pr_trivia(),
             semi_end: 0,
+            mut_name: None,
         }
     }
 }
@@ -92,6 +96,11 @@ impl Trivia {
     pub fn cut(&self, span: std::ops::Range<usize>) -> ast::Span {
         let end = self.core.cut(span.start as i64, span.end as i64) as usize;
         ast::Span::from(span.start..end)
+    }
+
+    /// A `mut` stood at this byte in front of one name of a tuple pattern.
+    fn a_mut_name(&mut self, at: usize) {
+        self.mut_name = Some(self.mut_name.map_or(at, |first| first.min(at)));
     }
 
     /// A `;` stood at this byte.
@@ -805,6 +814,11 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
             refuse_parsing(finding, input)
         })?;
 
+    // **`mut` in front of one name of a tuple pattern** (`NK1307`, ADR-views-2 D1).
+    if let Some(at) = stream.state.user_state.mut_name {
+        return Err(refuse_parsing(a_mut_name_in_a_tuple(at), input));
+    }
+
     // The generated entry point already refuses leftover input; this is a
     // backstop so a partial parse can never be reported as a success.
     if !stream.input.is_empty() {
@@ -886,6 +900,31 @@ fn a_parse_finding(
             span: ast::Span::new(at, at),
             word: word.to_string(),
             text: String::new(),
+            main: true,
+        }],
+    }
+}
+
+/// **`mut` in front of one name inside a tuple pattern is not supported yet**
+/// (`NK1307`, [ADR-views-2](../../../../docs/specification/adr/adr-views-2.md)
+/// D1, section 6): refused now, possible later, and not refused on purpose.
+fn a_mut_name_in_a_tuple(at: usize) -> crate::check::Finding {
+    let span = ast::Span::new(at, at + 3);
+    crate::check::Finding {
+        severity: crate::check::Severity::Error,
+        span,
+        code: "NK1307".to_string(),
+        message: "`mut` in front of one name of a tuple pattern isn't supported yet.".to_string(),
+        notes: vec![
+            "This is not refused on purpose: the form is left for later, and a program that spells it today would change meaning if it were added in a hurry.".to_string(),
+        ],
+        help: Some(
+            "Write `mut` in front of the whole pattern, which marks every name in it: `let mut (tx, rx) = …`, `for mut (a, b) in pairs`.".to_string(),
+        ),
+        labels: vec![crate::check::Label {
+            span,
+            word: "mut".to_string(),
+            text: "not supported yet".to_string(),
             main: true,
         }],
     }
@@ -2476,9 +2515,13 @@ grammar! {
 
         // Names in written order and the shape in prefix order (a tuple's
         // width, `0` for a name). `(p)` is `p`.
+        //
+        // **`mut` in front of one name is read and refused** (ADR-views-2 D1,
+        // `NK1307`): the grammar keeps the place for it, `parse_unrefined`
+        // says the refusal once the parse is through.
         rule tuple_pattern -> (Vec<Symbol>, Vec<i64>) =
             n:let_name -> { (vec![n], vec![0]) }
-          | "(" first:tuple_pattern rest:tuple_pattern_tail* ")" -> {
+          | "(" first:tuple_name_part rest:tuple_pattern_tail* ")" -> {
                 if rest.is_empty() {
                     first
                 } else {
@@ -2492,7 +2535,15 @@ grammar! {
                 }
             }
 
-        rule tuple_pattern_tail -> (Vec<Symbol>, Vec<i64>) = "," p:tuple_pattern -> { p }
+        rule mut_name -> () @=
+            KW_MUT -> { _state.user().a_mut_name(_span.start) }
+
+        // A part of a tuple, or a name written `mut` (`NK1307`).
+        rule tuple_name_part -> (Vec<Symbol>, Vec<i64>) =
+            p:tuple_pattern -> { p }
+          | mut_name n:let_name -> { (vec![n], vec![0]) }
+
+        rule tuple_pattern_tail -> (Vec<Symbol>, Vec<i64>) = "," p:tuple_name_part -> { p }
 
         // The ignore pattern carries the symbol `_`, which is what the emitter
         // writes below and what `NK1144` looks for. It is a symbol no `NAME` can
@@ -2518,12 +2569,14 @@ grammar! {
                 Stmt::While { cond, body }
             }
 
+        // **`mut` stands in front of the whole head** (ADR-views-2 D1), as it
+        // stands in front of a `let`'s, and marks every name in it.
         rule for_stmt -> Stmt =
-            KW_FOR head:let_names KW_IN
+            KW_FOR mutable:kw_mut? head:let_names KW_IN
             iter:head_expr body:block semi?
             -> {
                 let (bindings, shape) = head;
-                Stmt::For { bindings, shape, iter, body }
+                Stmt::For { bindings, shape, mutable: mutable.is_some(), iter, body }
             }
 
         // **A `for` head is a `let`'s pattern** (ADR-356): `for (_, bucket) in

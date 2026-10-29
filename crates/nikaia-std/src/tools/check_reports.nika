@@ -128,10 +128,15 @@ impl CheckState {
         let mut help: String = f"Add `mut` where it's declared: `let mut {name}`."
         let mut declared_text: String = "declared here without `mut`"
         if immutable.kind == CheckKind::Loop {
-            message = f"You're changing `{name}`, which a `for` binds, and a `for` binding can't be changed."
-            notes.push("A `for` binding is the element of this turn, and its head takes no `mut`.")
-            help = f"Change a copy instead: `let mut {name}_own = {name}`."
-            declared_text = "bound here by the `for`"
+            message = f"You're changing `{name}`, which a `for` binds, but the `for` wasn't declared `mut`."
+            notes.push("A `for` binding is the element of this turn, and it changes only if the head says `mut`.")
+            help = f"For a change meant for this turn only, change a copy: `let mut {name}_own = {name}.clone()`."
+            if immutable.over != "" {
+                let list = immutable.over.clone()
+                notes.push(f"`for mut {name} in {list}` makes `{name}` the element of `{list}` itself, and a change to it reaches `{list}`.")
+                help = f"To change `{list}`, write `for mut {name} in {list}`. For a change meant for this turn only, write `let mut {name}_own = {name}.clone()`."
+            }
+            declared_text = "bound here by the `for`, without `mut`"
         }
         if immutable.kind == CheckKind::Parameter {
             code = "NK1138"
@@ -143,6 +148,11 @@ impl CheckState {
         let there = CheckLabel { span: immutable.at.clone(), word: name.clone(), text: declared_text, main: false }
         let here = CheckLabel { span: changed_at.clone(), word: name.clone(), text: how.clone(), main: true }
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code: code, message: message, notes: notes, help: help, labels: [there, here] })
+    }
+
+    /// **`for mut` over a place** (ADR-views-2 D2): not built yet.
+    pub fn a_for_mut_over_a_place(ref mut self, world: ref CheckWorld, iter: ref Expr, over: ref Ty, span: ref Span) sync {
+        self.findings.push(check_refusal("NK1139", span, "`for mut` over a list isn't supported yet.", [], null))
     }
 
     /// **`NK1178`: a grammar this compiler could not run while it built**

@@ -350,7 +350,7 @@ impl EmitState {
                 }
                 self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, here.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), null))
             },
-            Stmt::For { bindings, shape, iter, body } => self.emit_stmt_for(world, walk, out, host, bindings, shape, iter, body, span, depth, here, scope),
+            Stmt::For { bindings, shape, mutable, iter, body } => self.emit_stmt_for(world, walk, out, host, bindings, shape, mutable, iter, body, span, depth, here, scope),
             Stmt::Break => self.emit_stmt_jump(out, "break", here),
             Stmt::Continue => self.emit_stmt_jump(out, "continue", here),
             Stmt::Return(value) => {
@@ -880,7 +880,7 @@ impl EmitState {
     /// `for`: a loop over a type's fields is the block once per field (ADR-304
     /// D5, D6); a step that pauses is a `.next().await` loop (ADR-172 D1); else
     /// Rust's own `for`, which lends what is a place (ADR-094 D4).
-    fn emit_stmt_for[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], iter: ref Expr, body: ref Block, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_stmt_for[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, iter: ref Expr, body: ref Block, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = span.start as i64
         if walk.specialising != null {
             let parameter = (walk.specialising?.first ?? "").clone()
@@ -905,8 +905,19 @@ impl EmitState {
         for one in bindings {
             each.push(self.emit_stmt_local(emit_text(world, one)))
         }
-        let names = each.join(", ")
-        let bound = emit_stmt_tuple_pattern(each, shape)
+        // **`mut` in front of the head marks every name in it** (ADR-views-2
+        // D1, D3): Rust's `for mut x in …` and `for (mut a, mut b) in …`.
+        let mut written: Vec[String] = []
+        for one in each {
+            if mutable && one != "_" {
+                written.push(f"mut {one}")
+            } else {
+                written.push(one.clone())
+            }
+        }
+        let names = written.join(", ")
+        let bound = emit_stmt_tuple_pattern(written, shape)
+        let plain = emit_stmt_tuple_pattern(each, shape)
         // **A step that pauses is a loop that gives its thread up** (ADR-172
         // D1): the sequence is bound once and stepped with a `.next().await`.
         // Off the checker's set and not off the shape, as the `?` below is.
@@ -915,7 +926,7 @@ impl EmitState {
             // function.
             let mut unwrap: String? = null
             if self.facts.fallible_loops.contains(at) {
-                unwrap = f"let {bound} = {bound}?;"
+                unwrap = f"let {bound} = {plain}?;"
             }
             let pad = "    ".repeat(depth)
             let inner = "    ".repeat(depth + 1)
@@ -949,7 +960,7 @@ impl EmitState {
         // ADR-025 D1: a step that can fail fails the enclosing function.
         let mut unwrap: String? = null
         if self.facts.fallible_loops.contains(at) {
-            unwrap = f"let {names} = {names}?;"
+            unwrap = f"let {names} = {each.join(", ")}?;"
         }
         // **A number, a `bool` or a `char` is read out of the view once, where
         // the body opens** (`Checked::copied_loop_bindings`, ADR-182 D1, D5).

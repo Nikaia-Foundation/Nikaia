@@ -31,6 +31,9 @@ pub enum CheckKind {
 pub struct CheckImmutable {
     pub at: Span,
     pub kind: CheckKind,
+    /// For a `for` binding over a list or an array, the list as written: the
+    /// help writes `for mut x in xs` (ADR-views-2 D8). Empty otherwise.
+    pub over: String,
 }
 
 /// A name in scope: what it is called, the type it holds, and - where this

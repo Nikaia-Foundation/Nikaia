@@ -334,6 +334,8 @@ pub enum Stmt {
         bindings: Vec[winnow_grammar::Symbol],
         /// How the bindings nest, as `Let::shape` (ADR-356).
         shape: Vec[i64],
+        /// `mut` in front of the whole head (ADR-views-2 D1), as `Let::mutable`.
+        mutable: bool,
         iter: Expr,
         body: Block,
     },

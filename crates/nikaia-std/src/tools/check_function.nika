@@ -475,7 +475,7 @@ fn check_function_frame[H: CheckHost](mut state: CheckState, world: ref CheckWor
         let id = state.a_new_binding()
         let mut local = CheckLocal::free(name, ty.erase(parameters), id)
         if !arg.mutable {
-            local.immutable = CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter }
+            local.immutable = CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter, over: "" }
         }
         local.changing = arg.mutable
         frame.push(local)

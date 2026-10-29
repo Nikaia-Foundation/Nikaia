@@ -880,7 +880,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     }
     let mut immutable: CheckImmutable? = null
     if !mutable {
-        immutable = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Let }
+        immutable = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Let, over: "" }
     }
     match bound {
         Ty::Named { name, .. } => {
@@ -1262,8 +1262,16 @@ fn check_core_stmt_for_a_range(mut state: CheckState, world: ref CheckWorld, ite
     }
 }
 
+/// A `Vec` or an `Array`: the lists a `for mut` element is written through.
+fn check_core_stmt_a_list_type(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, .. } => ((type_last_segment(name) == "Vec" || type_last_segment(name) == "List") && args.len() == 1) || (name == ARRAY && args.len() > 0),
+        else => false,
+    }
+}
+
 /// **`for`** (Part I 3.3).
-pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
+pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates")
     let over = check_core_expr(state, world, host, iter, span)
     state.a_loop_over_a_nullable(world, over, iter, span)
@@ -1320,6 +1328,19 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     }
     // **A `for` over a place lends** (ADR-094 D4).
     let lent = is_a_place(iter) && !owned
+    // **`mut` in front of the head** (ADR-views-2 D1-D3): over elements the loop
+    // owns (a range, `drain()`, a produced sequence) every name is a `let mut`
+    // of the turn. Over a place, the element is a view of it (D2, step 2).
+    let mut a_list_place = false
+    // The list a `for` without `mut` walks, as written, for `NK1139`'s help.
+    let mut walked_list: String = ""
+    if !mutable && lent && check_core_stmt_a_list_type(over) {
+        walked_list = dotted_path(world, iter) ?? ""
+    }
+    if mutable && lent {
+        state.a_for_mut_over_a_place(world, iter, over, span)
+        a_list_place = true
+    }
     let mut frame: Vec[CheckLocal] = []
     let mut at = 0
     for b in bindings {
@@ -1363,9 +1384,12 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         let mut local = CheckLocal::free(name, bound, id)
         local.written_mut = false
         local.lent = lent && !copied && !a_view
-        // **A `for` binding takes no `mut`** (Part I 3.3, #734): its head is
-        // a `let`'s pattern, so a change to it is `NK1139`.
-        local.immutable = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop }
+        // **A `for` binding changes only with `mut`** (Part I 3.3, #734,
+        // ADR-views-2): its head is a `let`'s pattern, so a change to one
+        // without it is `NK1139`.
+        if !mutable || a_list_place {
+            local.immutable = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: walked_list.clone() }
+        }
         frame.push(local)
     }
     // **A range's binding is a use of the numbers it counts between**
@@ -1480,7 +1504,7 @@ pub fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         Stmt::Comptime { name, ty, value, bounds } => check_core_comptime_binding(state, world, host, name, ty, value, bounds, span),
         Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, op, value, span),
         Stmt::While { cond, body } => check_core_stmt_while(state, world, host, cond, body, span),
-        Stmt::For { bindings, shape, iter, body } => check_core_stmt_for(state, world, host, bindings, shape, iter, body, span),
+        Stmt::For { bindings, shape, mutable, iter, body } => check_core_stmt_for(state, world, host, bindings, shape, mutable, iter, body, span),
         Stmt::Return(value) => check_core_stmt_return(state, world, host, value, span),
         Stmt::Break => check_core_stmt_jump(state, "break", span),
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),

@@ -256,7 +256,7 @@ impl EmitState {
                 }
                 self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, here.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), None))?;
             },
-            Stmt::For { bindings, shape, iter, body } => { self.emit_stmt_for(world, walk, out, host, bindings, shape, iter, body, span, depth, here, scope)?; },
+            Stmt::For { bindings, shape, mutable, iter, body } => { let mutable = *mutable; self.emit_stmt_for(world, walk, out, host, bindings, shape, mutable, iter, body, span, depth, here, scope)?; },
             Stmt::Break => { self.emit_stmt_jump(out, String::from("break"), here)?; },
             Stmt::Continue => { self.emit_stmt_jump(out, String::from("continue"), here)?; },
             Stmt::Return(value) => {
@@ -648,7 +648,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_stmt_for<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], iter: &Expr, body: &Block, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_stmt_for<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, iter: &Expr, body: &Block, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = span.start as i64;
         if walk.specialising.is_some() {
             let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string();
@@ -675,11 +675,14 @@ impl EmitState {
             let one = *one;
             each.push(self.emit_stmt_local(&emit_text(world, one)));
         }
-        let names = each.join(", ");
-        let bound = emit_stmt_tuple_pattern(&each, shape);
+        let mut written: Vec<String> = vec![];
+        for one in each.iter() { if mutable && one != "_" { written.push(format!("mut {}", one)); } else { written.push(one.to_string()); } }
+        let names = written.join(", ");
+        let bound = emit_stmt_tuple_pattern(&written, shape);
+        let plain = emit_stmt_tuple_pattern(&each, shape);
         if self.facts.pausing_loops.contains(&at) {
             let mut unwrap: Option<String> = None;
-            if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", bound, bound)); }
+            if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", bound, plain)); }
             let pad = "    ".repeat(nikaia_std::count::of(depth));
             let inner = "    ".repeat(nikaia_std::count::of(depth + 1));
             out.push("{\n");
@@ -704,7 +707,7 @@ impl EmitState {
         }
         out.push(" ");
         let mut unwrap: Option<String> = None;
-        if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", names, names)); }
+        if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", names, each.join(", "))); }
         let mut copied: String = String::from("");
         for one in bindings.iter() {
             let one = *one;

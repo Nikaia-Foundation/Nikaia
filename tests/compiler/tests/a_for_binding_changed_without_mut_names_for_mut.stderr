@@ -1,0 +1,12 @@
+error[NK1139]: You're changing `p`, which a `for` binds, but the `for` wasn't declared `mut`.
+  --> tests/a_for_binding_changed_without_mut_names_for_mut.nika:6:9
+   |
+ 5 |     for p in v {
+   |         - bound here by the `for`, without `mut`
+ 6 |         p.n += 1
+   |         ^ one of its parts is changed here
+   |
+   = note: A `for` binding is the element of this turn, and it changes only if the head says `mut`.
+   = note: `for mut p in v` makes `p` the element of `v` itself, and a change to it reaches `v`.
+   = help: To change `v`, write `for mut p in v`. For a change meant for this turn only, write `let mut p_own = p.clone()`.
+1 type error

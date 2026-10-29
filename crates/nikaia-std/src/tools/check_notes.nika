@@ -262,7 +262,7 @@ impl CheckState {
         let asked = self.flow.at_a_write_door && !written
         let mut local = CheckLocal::free(world.words.resolve(name).clone(), ty, self.a_new_binding())
         if asked {
-            local.immutable = CheckImmutable { at: span.clone(), kind: CheckKind::Parameter }
+            local.immutable = CheckImmutable { at: span.clone(), kind: CheckKind::Parameter, over: "" }
         }
         // **Handed the items of a walk of an open number, it is that number**
         // (ADR-285 D34, #594), as a `for` binding over its list is.

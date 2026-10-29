@@ -91,10 +91,15 @@ impl CheckState {
         let mut help: String = format!("Add `mut` where it's declared: `let mut {}`.", name);
         let mut declared_text: String = String::from("declared here without `mut`");
         if immutable.kind == CheckKind::Loop {
-            message = format!("You're changing `{}`, which a `for` binds, and a `for` binding can't be changed.", name);
-            notes.push(String::from("A `for` binding is the element of this turn, and its head takes no `mut`."));
-            help = format!("Change a copy instead: `let mut {}_own = {}`.", name, name);
-            declared_text = String::from("bound here by the `for`");
+            message = format!("You're changing `{}`, which a `for` binds, but the `for` wasn't declared `mut`.", name);
+            notes.push(String::from("A `for` binding is the element of this turn, and it changes only if the head says `mut`."));
+            help = format!("For a change meant for this turn only, change a copy: `let mut {}_own = {}.clone()`.", name, name);
+            if immutable.over != "" {
+                let list = immutable.over.to_string();
+                notes.push(format!("`for mut {} in {}` makes `{}` the element of `{}` itself, and a change to it reaches `{}`.", name, list, name, list, list));
+                help = format!("To change `{}`, write `for mut {} in {}`. For a change meant for this turn only, write `let mut {}_own = {}.clone()`.", list, name, list, name, name);
+            }
+            declared_text = String::from("bound here by the `for`, without `mut`");
         }
         if immutable.kind == CheckKind::Parameter {
             code = String::from("NK1138");
@@ -107,6 +112,9 @@ impl CheckState {
         let here = CheckLabel { span: changed_at.clone(), word: name.to_string(), text: how.to_string(), main: true };
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code, message, notes, help: Some(help), labels: vec![there, here] });
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_for_mut_over_a_place(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr, over: &Ty, span: &Span) { self.findings.push(check_refusal("NK1139", span, String::from("`for mut` over a list isn't supported yet."), vec![], None)); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_grammar_that_did_not_run(&mut self, owner: &str, rule: &str, why: &CheckWall, span: &Span) {

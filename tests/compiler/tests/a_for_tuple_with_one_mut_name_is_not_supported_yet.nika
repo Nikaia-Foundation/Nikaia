@@ -1,0 +1,8 @@
+fn main() {
+    let mut m: Map[String, i64] = collections::BTreeMap()
+    m.insert("a", 1)
+    for (k, mut v) in m {
+        v += 1
+        println(f"{k} {v}")
+    }
+}
