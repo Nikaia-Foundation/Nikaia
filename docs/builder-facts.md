@@ -20,6 +20,8 @@ the same dirty lock file). Read once; the brief adds only what is specific.
 
 ## Traps already met
 
+* **A wrong lowering: look before you read code** (b933, 15 turns reading `views.nika` before one probe found the cause): `nikaia check --tethers F.nika` prints what each result views, and the `nikaia.contracts` file written beside a lowered probe shows the ledger the lowering used. Run both on the probe first; they name the pass (`buffers.nika`, `tether.nika`, `views.nika`).
+* `nikaia test` has no name filter: write its whole output to a file (`> out.txt 2>&1`) and grep that, never `| tail` (b933 ran `tests/compiler` a second time, 10 minutes, to find one test's line).
 * `tests/compiler/nikaia.lock` is git-ignored, like the other test
   packages' locks (it changes with every compiler build). Never commit it.
 * `scripts/pre-push-check.sh` fails with *out of date: self-hosted.svg* when a
