@@ -1,0 +1,35 @@
+use std::collections
+
+// A mutable view - an entry's `or_insert`, a map's read past a jump, a
+// `get` past a jump, a list's element - handed to a `mut` parameter is the
+// `&mut` already, lent on again (#975).
+fn add(mut all: Vec[String], x: String) {
+    all.push(x.clone())
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for _ in 0..<2 {
+        let mut all = m.entry("a").or_insert([])
+        add(all, "x")
+        add(all, "y")
+        all.push("z")
+    }
+    let mut v = m["a"] ?? return
+    add(v, "u")
+    add(v, "w")
+    let mut g = m.get("a") ?? return
+    add(g, "t")
+    let s = m["a"] ?? return
+    println(f"{s.len()}")
+    let mut lists: Vec[Vec[String]] = [[], []]
+    grow(lists)
+    println(f"{lists[1].len()}")
+}
+
+fn grow(mut lists: Vec[Vec[String]]) {
+    let mut e = lists[1]
+    add(e, "r")
+    add(e, "s")
+    e.push("q")
+}

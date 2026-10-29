@@ -61,6 +61,19 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_mut_view_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                let name = world.words.resolve(symbol).to_string();
+                let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                self.flow.mut_view_bindings.contains(&found.id)
+            },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_name_that_is_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
@@ -109,8 +122,9 @@ impl CheckState {
                 self.facts.reborrowed_args.insert(id_of(given_expr) as i64);
                 return true;
             }
-            if !(found.fits(want) || self.fits_through_deref(world, found, want)) { return false; }
-            if self.a_name_that_changes(world, given_expr) { return true; }
+            let viewed = self.a_mut_view_name(world, given_expr);
+            if !(found.fits(want) || self.fits_through_deref(world, found, want) || viewed && unviewed_type(found).fits(want)) { return false; }
+            if !viewed && self.a_name_that_changes(world, given_expr) { return true; }
             let root: Option<String> = self.rooted_at(world, given_expr);
             if root.is_some() {
                 let changed: String = nikaia_std::index::or(root, || "".into());
@@ -119,6 +133,7 @@ impl CheckState {
             check_narrow_handed(&mut *self, world, given_expr, span.start as i64);
             check_narrow_written_through(&mut *self, given_expr);
             self.facts.mut_args.insert(id_of(given_expr) as i64);
+            if viewed { self.facts.reborrowed_args.insert(id_of(given_expr) as i64); }
             let bound = match given_expr {
                 Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::index::or(self.binding(world.words.resolve(symbol)).as_ref().map(|__nikaia_it| __nikaia_it.id), || -1) },
                 _ => -1,

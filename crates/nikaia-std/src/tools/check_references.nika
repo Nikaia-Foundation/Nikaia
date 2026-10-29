@@ -90,6 +90,19 @@ impl CheckState {
         }
     }
 
+    /// Whether the expression is a name a `let mut` bound to a mutable view
+    /// of a place (#975), which is the `&mut` already.
+    fn a_mut_view_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        return match expr {
+            Expr::Variable(symbol, _) => {
+                let name = world.words.resolve(symbol).clone()
+                let found = self.binding(name) ?? return false
+                self.flow.mut_view_bindings.contains(found.id)
+            },
+            else => false,
+        }
+    }
+
     /// Whether the expression is a name whose binding was lent to this code.
     pub fn a_name_that_is_lent(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
@@ -153,13 +166,18 @@ impl CheckState {
                 self.facts.reborrowed_args.insert(id_of(given_expr) as i64)
                 return true
             }
+            // **A mutable view of an entry or an element is the `&mut`
+            // already** (#975): lent on again, `&mut *x`, whether it is
+            // typed as the view an entry's `or_insert` hands back or as the
+            // value it stands for.
+            let viewed = self.a_mut_view_name(world, given_expr)
             // **The `&mut` is the compiler's, the type is still the
             // argument's.**
-            if !(found.fits(want) || self.fits_through_deref(world, found, want)) {
+            if !(found.fits(want) || self.fits_through_deref(world, found, want) || (viewed && unviewed_type(found).fits(want))) {
                 return false
             }
             // **A reference that is already there is not written twice.**
-            if self.a_name_that_changes(world, given_expr) {
+            if !viewed && self.a_name_that_changes(world, given_expr) {
                 return true
             }
             // **The caller's name is changed there** (Part I 6.5, #734): a
@@ -174,6 +192,9 @@ impl CheckState {
             check_narrow_handed(self, world, given_expr, span.start as i64)
             check_narrow_written_through(self, given_expr)
             self.facts.mut_args.insert(id_of(given_expr) as i64)
+            if viewed {
+                self.facts.reborrowed_args.insert(id_of(given_expr) as i64)
+            }
             let bound = match given_expr {
                 Expr::Variable(symbol, _) => self.binding(world.words.resolve(symbol))?.id ?? -1,
                 else => -1,
