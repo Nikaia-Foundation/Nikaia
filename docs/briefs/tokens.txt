@@ -141,3 +141,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 1216073 34
 /home/user/Nikaia/docs/briefs/b934-closed-by-hand.md 2490444 46
 /home/user/Nikaia/docs/briefs/architect-task.md 1142427 23
+/home/user/Nikaia/docs/briefs/b933-method-result-owned.md 455334 4
