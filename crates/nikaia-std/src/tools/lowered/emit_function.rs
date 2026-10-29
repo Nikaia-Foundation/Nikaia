@@ -149,8 +149,14 @@ impl EmitState {
             if viewed { return sig.lifetimes.of_the_input(); }
             return sig.lifetimes.over_the_input();
         }
+        if emit_is_inner(sig.lifetimes) && self.emit_fn_result_points_into(&sig.key, text) { return EmitLifetimes::Named; }
         if emit_is_inner(sig.lifetimes) && read_only { return EmitLifetimes::Elided; }
         sig.lifetimes.clone()
+    }
+    pub(crate) fn emit_fn_result_points_into(&self, key: &str, name: &str) -> bool {
+        let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if nikaia_std::list::contains(&c.borrows, &name) { return true; }
+        c.returns.contains(&format!("ref({})", name)) || c.returns.contains(&format!("ref({} |", name)) || c.returns.contains(&format!("| {})", name)) || c.returns.contains(&format!("| {} |", name))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

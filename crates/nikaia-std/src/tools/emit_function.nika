@@ -233,10 +233,27 @@ impl EmitState {
             }
             return sig.lifetimes.over_the_input()
         }
+        // **A result over the `impl`'s `'a` that points into this
+        // parameter** (#945): `fn new(input: String) -> Parser` building
+        // `Parser { input, .. }` hands back a view of `input`, so the
+        // parameter is written over that same `'a`.
+        if emit_is_inner(sig.lifetimes) && self.emit_fn_result_points_into(sig.key, text) {
+            return EmitLifetimes::Named
+        }
         if emit_is_inner(sig.lifetimes) && read_only {
             return EmitLifetimes::Elided
         }
         return sig.lifetimes.clone()
+    }
+
+    /// Whether the result points into the parameter `name`, whole
+    /// (`borrows`) or by path (`returns`, ADR-353 D5).
+    fn emit_fn_result_points_into(ref self, key: ref String, name: ref String) -> bool {
+        let c = self.own_contracts.functions.get(key) ?? return false
+        if c.borrows.contains(name) {
+            return true
+        }
+        return c.returns.contains(f"ref({name})") || c.returns.contains(f"ref({name} |") || c.returns.contains(f"| {name})") || c.returns.contains(f"| {name} |")
     }
 
     /// A function or a method, with its signature and body.

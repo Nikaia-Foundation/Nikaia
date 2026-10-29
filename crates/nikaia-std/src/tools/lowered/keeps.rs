@@ -363,8 +363,12 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
                 if field.value.is_none() {
                     let named = interner.resolve(field.name).to_string();
                     keep_viewed_name(&named, walk);
-                    if context.parameters.contains(&named) { walk.uses.kept.insert(named); }
-                } else { keep_part(Option::as_ref(&field.value), interner, context, own, library, walk); }
+                    if context.parameters.contains(&named) && !keeps_a_lent_text(&named, context) { walk.uses.kept.insert(named); }
+                } else {
+                    let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    let lent = parameter_named(value, interner, context);
+                    if lent.is_none() || !keeps_a_lent_text(nikaia_std::index::or(lent.as_deref(), || ""), context) { keep_part(Option::as_ref(&field.value), interner, context, own, library, walk); }
+                }
             }
         },
         Expr::ListLit { items, .. } => { for item in items.iter() { keep_part(Some(item), interner, context, own, library, walk); } },
@@ -619,6 +623,12 @@ pub(crate) fn keeps_text_as_is(expr: &Expr, interner: &winnow_grammar::InternerC
 pub(crate) fn keep_part(expr: Option<&Expr>, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     let part = match expr { Some(__nikaia_value) => __nikaia_value, None => return };
     for one in keeps_handed(part, interner, context, own, library, &walk) { walk.uses.kept.insert(one); }
+}
+
+pub(crate) fn keeps_a_lent_text(name: &str, context: &KeepsBody<'_, '_>) -> bool {
+    if name == "self" || !context.lent.contains(name) { return false; }
+    let ty = match *nikaia_std::index::get(&context.types, name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    ty == "String"
 }
 
 pub(crate) fn keep_viewed_name(name: &str, walk: &mut KeepsWalk) {

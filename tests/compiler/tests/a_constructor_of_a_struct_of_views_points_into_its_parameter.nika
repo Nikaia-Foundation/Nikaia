@@ -1,0 +1,46 @@
+// A constructor that moves its text parameter into a field that is a view
+// lends the parameter (Part I 6.5): the struct points into the caller's text,
+// and the parameter is written with the struct's lifetime - for a constructor
+// declared `fn new`, one declared `pub fn`, and a named method alike (#945).
+struct Event { text: String, line: i64 }
+
+struct Parser { input: String, pos: i64 }
+
+impl Parser {
+    fn new(input: String) -> Parser { return Parser { input, pos: 0 } }
+
+    fn start(input: String, pos: i64) -> Parser { return Parser { input, pos } }
+
+    fn next(ref mut self) -> Event? {
+        let lines = self.input.lines().collect()
+        if self.pos >= lines.len() { return null }
+        let e = Event { text: lines[self.pos].trim(), line: self.pos + 1 }
+        self.pos += 1
+        return e
+    }
+}
+
+struct Words { input: String }
+
+impl Words {
+    pub fn(input: String) -> Words sync { return Words { input } }
+
+    fn first(ref self) -> String { return self.input.split(" ").collect()[0] }
+}
+
+fn main() {
+    let text = "  one\n  two  \n"
+    let mut p = Parser(text.trim())
+    while true {
+        let e = p.next() ?? break
+        println(f"{e.line}: {e.text}")
+    }
+    let made = f"three\nfour {p.pos}"
+    let mut q = Parser::start(made.trim(), 1)
+    while true {
+        let e = q.next() ?? break
+        println(f"{e.line}: {e.text}")
+    }
+    let w = Words(text.trim())
+    println(w.first())
+}

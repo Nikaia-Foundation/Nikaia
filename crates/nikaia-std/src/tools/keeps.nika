@@ -552,17 +552,24 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
     match expr {
         // **A struct literal keeps every field it is given**: the struct
         // outlives the call wherever it goes. `P { x }` is the field and the
-        // name in one, and the name may be a parameter.
+        // name in one, and the name may be a parameter. **A text parameter
+        // the tiers lent is not kept by moving it in** (Part I 6.5, ADR-353
+        // D8, #945): the field it goes into is a view of it, and a result
+        // built from the literal points into it (`returns`).
         Expr::StructLit { fields, .. } => {
             for field in fields {
                 if field.value == null {
                     let named = interner.resolve(field.name).clone()
                     keep_viewed_name(named, walk)
-                    if context.parameters.contains(named) {
+                    if context.parameters.contains(named) && !keeps_a_lent_text(named, context) {
                         walk.uses.kept.insert(named)
                     }
                 } else {
-                    keep_part(field.value, interner, context, own, library, walk)
+                    let value = field.value ?? continue
+                    let lent = parameter_named(value, interner, context)
+                    if lent == null || !keeps_a_lent_text(lent ?? "", context) {
+                        keep_part(field.value, interner, context, own, library, walk)
+                    }
                 }
             }
         }
@@ -984,6 +991,17 @@ fn keep_part(expr: ref Expr?, interner: ref winnow_grammar::InternerContext, con
     for one in keeps_handed(part, interner, context, own, library, walk) {
         walk.uses.kept.insert(one)
     }
+}
+
+// **A `String` parameter that is a view below** - lent by the tiers or
+// written `ref` - and not the receiver: moved into a struct literal, the field
+// views it (ADR-353 D8).
+fn keeps_a_lent_text(name: ref String, context: ref KeepsBody) -> bool {
+    if name == "self" || !context.lent.contains(name) {
+        return false
+    }
+    let ty = context.types[name] ?? return false
+    return ty == "String"
 }
 
 // What a name bound to a call's result points into leaves where the name
