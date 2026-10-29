@@ -3108,12 +3108,22 @@ kept. A call through it can fail with that set; writing, storing, handing on
 or returning it can fail with nothing. Where values with different sets meet
 (the arms of an `if` or a `match`, the elements of one list or map, the values
 assigned to one variable or field, the arguments every caller hands one
-parameter), the place carries their union. A place no failing value reaches
-cannot fail ([ADR-351](adr/adr-351.md)). Code that is kept lives in a value
+kept parameter), the place carries their union. A place no failing value
+reaches cannot fail ([ADR-351](adr/adr-351.md)). Code that is kept lives in a value
 someone holds, reached from a parameter or a result: the set belongs to that
 storage, every handle to it shares it (a `Shared`, the two ends of a channel),
 and it holds everything put there in the value's life. What a function puts
 into such a place is in its ledger entry (Part III 13.5, `code`).
+
+**A code parameter the body does not keep fails with what each call hands
+it.** Where a function only calls its code parameter or hands it on, a call of
+the function fails with the function's own errors and with what that call
+passed, never with what other callers pass, `pub` or not
+([ADR-error-sets-1](adr/adr-error-sets-1.md)). With
+`fn retry(f: fn() throws) throws { f() }`, a `match` over `error` around
+`retry(read)` is complete when it names what `read` fails with, whatever else
+`retry` is handed elsewhere. Inside the body, a `catch` around `f()` sees
+whatever any caller may pass, and needs `else`.
 
 **An error type is an `enum`.**
 

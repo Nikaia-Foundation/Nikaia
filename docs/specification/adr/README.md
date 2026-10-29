@@ -279,6 +279,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [error-sets-1](adr-error-sets-1.md) | A code parameter the body does not keep is `from(p)` in the set of every function, public or not, replaced at each call by what that call hands it; a kept one stays a place with its storage's union (ADR-351 D8); nothing is written | Accepted | no |
 | [357](adr-357.md) | A `catch` whose `match` names every non-fatal error type arriving is complete, with no `else`; `"?"` or an open `from(p)` needs `else`; a grown set refuses such a `match` (`NK1151`, narrated), and the author of a `pub` function is warned when its set grows (`NK2404`) | Accepted | partly: D1, D2, D5 built; D3 (the ledger narrating a grown set) and D4 (`NK2404`) not; a fatal type no arm names is still asked for |
 | [351](adr-351.md) | A function value keeps the error set inferred for it, called at once or kept: a call through it fails with that set, storing or handing it on fails with nothing, values that meet carry the union; a ledger says `from(p)`; `supervisor::run` throws a child's fatal error itself (`Handed` withdrawn); a `net::serve` handler's error is a detached task's; kept code's set belongs to its storage, the ledger's `code` says what a function puts there, lowered without a box (D8) | Accepted | no |
 | [308](adr-308.md) | An unread error is bound as `_error`, a `catch` over what cannot fail is refused (`NK1134`), and an error that newly reaches a handler is named once (`NK2402`). | Accepted | yes |
@@ -315,6 +316,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 | [269](adr-269.md) D9 | [381](adr-381.md) D1-D3 | a pure `bool` call over unchanged values is a name of the prover (a property), proved by name |
 | [010](adr-010.md) D2, D3 | [365](adr-365.md) D1-D3 | standard input and files are untrusted; `trusted: true` at the source; assets trusted |
 | [278](adr-278.md) D1 | [364](adr-364.md) D1-D3 | a tuple may be nullable, `(A, B)?`; `NK1254` retired |
+| [351](adr-351.md) D3 | [error-sets-1](adr-error-sets-1.md) D1, D2 | the arguments every caller hands a parameter meet only where it is kept; otherwise each call sees what it handed |
 | [023](adr-023.md) D4, [280](adr-280.md) D18, [308](adr-308.md) D11 | [357](adr-357.md) D1-D3 | the set of error types at a `catch` is closed; a `match` naming every type needs no `else`, and a grown set refuses it |
 | [291](adr-291.md) D1, D5 | [356](adr-356.md) D1, D2 | a `let` and a `for` head take a nested tuple; a variant there is `NK1259` |
 | [349](adr-349.md) D3 | [355](adr-355.md) D3 | `E::V(a, ..)` and `(a, ..)` are the remaining values; `NK1255` only on a variant without values |
