@@ -155,6 +155,11 @@ impl TrEm {
             // `()`: nothing
         } else if mode == "return" && self.push_to != "" {
             lines.push(f"{ind}{self.handed(e)}")
+        } else if mode == "return" && !self.unit && self.ret_ty.starts_with("Vec[") && self.chain_pushes(e, "out", f": {self.ret_ty}", ind.clone()).len() > 0 {
+            for l in self.chain_pushes(e, "out", f": {self.ret_ty}", ind.clone()) {
+                lines.push(l)
+            }
+            lines.push(f"{ind}return out")
         } else if mode == "return" && !self.unit && self.ret_ty.starts_with("Vec[") && self.loop_collect(e, "out", f": {self.ret_ty}", ind.clone()).len() > 0 {
             for l in self.loop_collect(e, "out", f": {self.ret_ty}", ind.clone()) {
                 lines.push(l)
@@ -362,6 +367,89 @@ impl TrEm {
             return [f"{ind}let mut {bare}{t} = []", f"{ind}let mut {missed} = false", f"{ind}for {p} in {over} {{", f"{ind}    {bare}.push({item})", f"{ind}}}", f"{ind}if {missed} {{", f"{ind}    continue", f"{ind}}}"]
         }
         return [f"{ind}let mut {bare}{t} = []", f"{ind}for {p} in {over} {{", f"{ind}    {bare}.push({item})", f"{ind}}}"]
+    }
+
+    /// `list.into_iter().chain(o).collect()`, where some `o` is an option
+    /// (`c.then(|| v)`, `o.map(|x| v)`, `Some(v)`): Rust chains an option as
+    /// a list of none or one, Nikaia's `chain` takes a sequence. The list is
+    /// built and each option pushed where it is there; [] when `c` is not
+    /// that.
+    fn chain_pushes(ref mut self, c: i64, name: ref String, ty: ref String, ind: String) -> Vec[String] {
+        if !self.t.is(c, "METHOD_CALL_EXPR") || self.src(self.t.kid(c, "NAME_REF")) != "collect" || self.nodes(self.t.kid(c, "ARG_LIST")).len() > 0 {
+            return []
+        }
+        let mut parts: Vec[i64] = []
+        let mut at = self.t.nth(c, 0)
+        while self.t.is(at, "METHOD_CALL_EXPR") && self.src(self.t.kid(at, "NAME_REF")) == "chain" && self.nodes(self.t.kid(at, "ARG_LIST")).len() == 1 {
+            parts.insert(0, self.nodes(self.t.kid(at, "ARG_LIST"))[0])
+            at = self.t.nth(at, 0)
+        }
+        if parts.len() == 0 || !self.t.is(at, "METHOD_CALL_EXPR") || self.nodes(self.t.kid(at, "ARG_LIST")).len() > 0 {
+            return []
+        }
+        let first = self.src(self.t.kid(at, "NAME_REF"))
+        if first != "into_iter" && first != "iter" {
+            return []
+        }
+        let inner = f"{ind}    "
+        let mut pushes: Vec[String] = []
+        let mut any_option = false
+        for part in parts {
+            let m = if self.t.is(part, "METHOD_CALL_EXPR") { self.src(self.t.kid(part, "NAME_REF")) } else { "" }
+            let margs = self.nodes(self.t.kid(part, "ARG_LIST"))
+            if (m == "then" || m == "then_some") && margs.len() == 1 {
+                let cond = self.expr(self.t.nth(part, 0))
+                let mut v: String = ""
+                if m == "then" {
+                    let (p, body) = self.closure_parts(margs[0])
+                    if p != "_" {
+                        return []
+                    }
+                    v = body
+                } else {
+                    v = self.expr(margs[0])
+                }
+                pushes.push(f"{ind}if {cond} {{")
+                pushes.push(f"{inner}{name}.push({v})")
+                pushes.push(f"{ind}}}")
+                any_option = true
+            } else if m == "map" && margs.len() == 1 && !self.iter_chain(self.t.nth(part, 0)) {
+                let (p, body) = self.closure_parts(margs[0])
+                if p == "" || p == "_" {
+                    return []
+                }
+                let mut o = self.t.nth(part, 0)
+                while self.t.is(o, "METHOD_CALL_EXPR") && self.nodes(self.t.kid(o, "ARG_LIST")).len() == 0 && (self.src(self.t.kid(o, "NAME_REF")) == "as_ref" || self.src(self.t.kid(o, "NAME_REF")) == "as_deref") {
+                    o = self.t.nth(o, 0)
+                }
+                pushes.push(f"{ind}match {self.expr(o)} {{")
+                pushes.push(f"{inner}{p} => {name}.push({body}),")
+                pushes.push(f"{inner}null => {{}},")
+                pushes.push(f"{ind}}}")
+                any_option = true
+            } else if self.t.is(part, "CALL_EXPR") && self.segs(self.t.nth(part, 0)) == ["Some"] && margs.len() == 1 {
+                pushes.push(f"{ind}{name}.push({self.expr(margs[0])})")
+                any_option = true
+            } else if self.optional_expr(part) {
+                pushes.push(f"{ind}match {self.expr(part)} {{")
+                pushes.push(f"{inner}one => {name}.push(one),")
+                pushes.push(f"{inner}null => {{}},")
+                pushes.push(f"{ind}}}")
+                any_option = true
+            } else {
+                pushes.push(f"{ind}for one in {self.expr(part)} {{")
+                pushes.push(f"{inner}{name}.push(one)")
+                pushes.push(f"{ind}}}")
+            }
+        }
+        if !any_option {
+            return []
+        }
+        let mut out: Vec[String] = [f"{ind}let mut {name}{ty} = {self.expr(self.t.nth(at, 0))}"]
+        for l in pushes {
+            out.push(l.clone())
+        }
+        return out
     }
 
     /// `xs.iter().map(|x| { stmts; v }).collect()` into a list, the closure

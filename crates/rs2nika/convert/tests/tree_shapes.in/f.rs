@@ -57,3 +57,18 @@ fn level(word: &str) -> String {
         _ => String::new(),
     }
 }
+
+pub struct W {
+    pub target: String,
+    pub tests: bool,
+    pub cpu: Option<String>,
+}
+impl W {
+    fn as_env(&self) -> Vec<(String, String)> {
+        vec![(A.to_string(), self.target.clone())]
+            .into_iter()
+            .chain(self.tests.then(|| (A.to_string(), "1".to_string())))
+            .chain(self.cpu.as_ref().map(|level| (A.to_string(), level.clone())))
+            .collect()
+    }
+}

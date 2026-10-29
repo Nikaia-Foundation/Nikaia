@@ -65,3 +65,22 @@ pub fn level(word: String) -> String {
         else => "",
     }
 }
+
+pub struct W {
+    pub target: String,
+    pub tests: bool,
+    pub cpu: String?,
+}
+impl W {
+    fn as_env(ref self) -> Vec[(String, String)] {
+        let mut out: Vec[(String, String)] = [(A.to_string(), self.target.clone())]
+        if self.tests {
+            out.push((A.to_string(), "1"))
+        }
+        match self.cpu {
+            level => out.push((A.to_string(), level.clone())),
+            null => {},
+        }
+        return out
+    }
+}
