@@ -86,47 +86,59 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   `target/fast/nikaia lower f.nika` or `nikaia run f.nika`. A defect that shows
   only in `tools/*.nika` needs a throwaway probe function in a tools file and
   `nikaia lower-std`; look at `tools/lowered/<file>.rs`, then restore both.
-* **Syntax gaps** (each cost a build cycle). Not a licence to write around
-  (owner, 2026-10-29, CLAUDE.md *A missing form stops the work*): a row that
-  is a design (`a..<b`, `else =>`, `String` for text) holds; a row that is a
-  gap or a defect (`BTreeSet` without `extend`, the typed text literal of
-  #943) is an issue, and meeting it again stops the slice instead of
-  repeating the way around. Until the architect has marked each row, ask
-  which it is:
-  * no `if let`: use `x ?? default`, or `starts_with` then `strip_prefix(..) ?? ""`;
-  * no `*x`; loop variables over a `ref Vec` are values;
-  * `.to_owned()` is `NK1189`: write `.clone()`;
-  * text is `String` (ADR-282 D2); never `ref` on a number, `bool` or a
-    data-less enum (`NK1257`). Until #654 step 0 is built, `ref String` is
-    written in exactly these places and nowhere else: a field; a type argument
-    (`Vec[ref String]`, a map's key); an option after `;`; a function's or a
-    rule's result; a parameter the result points into; a parameter used as a
-    key of a map keyed by `ref String`. Everywhere else, above all a
-    parameter that is only read, it is `String`;
-  * `opt ?? ""` moves the option: `(opt ?? "").clone()` for a second use;
-    a method on a `String?` is `opt?.len() ?? 0`;
-  * f-string braces are `{{` `}}`; a plain string takes braces literally;
-  * a function parameter is `fn(ref X) -> T sync`; a `Span` that arrives by
-    reference is copied as `Span { start: s.start, end: s.end }`.
-  * `view_of` resolves to `signature::view_of`, not `check_types::view_of_type`:
-    a false `NK1104` (*returns `ref String`, but declared `ref String`*) means
-    the wrong one was called;
-  * a nested `Some(FactWrap::Widen(x))` pattern leaves `x` untyped and counts
-    as an unanswered method call (`sequences::`, ceiling 17): bind
-    `how ?? ...` first and match the plain enum;
-  * a `T?` local needs `?.clone()` (NK1125);
-  * a `ref String?` parameter does not accept a bare `String` argument: pass a `String?` local;
-  * `for mut x in v` is not accepted;
-  * `a..b` includes `b` (Part I, ranges); the half-open range is `a..<b`;
-  * the catch-all arm of a `match` is `else =>`; `_ =>` and `None =>` are refused;
-  * a `String?` field needs `x?.clone()` before it can be matched.
-  * collections (P4b): a `BTreeMap` is walked with `for (k, v) in m` (no
-    `.iter()`), a `BTreeSet` has no `extend` (`insert` in a loop); `fs::read`
-    is async and gives `Bytes` (the Rust caller needs `block_on`; a `Vec[u8]`
-    is filled by a loop, as `sysroot_cache.nika` does); `read_dir` gives sorted
-    names, not paths. Two host parameters `[M: A, H: B]` lower.
-  * a text literal changed in place needs its type: `let mut out: String = "a"`
-    (without it `lower-std` reads `String?`, NK1125/NK1104, #943).
+* **Syntax gaps** (each cost a build cycle), classed by the architect
+  (2026-10-29, probes on `target/fast/nikaia run`). Not a licence to write
+  around (CLAUDE.md *A missing form stops the work*): **[design]** holds, build
+  that way; **[gap #N]** is a `decision` issue: meeting it stops the slice
+  (`Result: blocked`), no way around; **[defect #N]** is a `ready` issue: fix
+  it or wait; **[works]** is a form that exists today: use it, and do not copy
+  the old way around from the moves that did (#953).
+  * [design: ADR-382 D6, Part I 3.1] no `if let`: `x ?? default`, `match`, or
+    `starts_with` then `strip_prefix(..) ?? ""`;
+  * [design: ADR-094 D4, ADR-231] no `*x`; loop variables over a `ref Vec` are values;
+  * [design: Part I 2.5, ADR-282] `.to_owned()` is `NK1189`: write `.clone()`;
+  * [design: ADR-282 D2; transition #654] text is `String`; never `ref` on a
+    number, `bool` or a data-less enum (`NK1257`). Until #654 step 0 is built,
+    `ref String` is written in exactly these places and nowhere else: a field;
+    a type argument (`Vec[ref String]`, a map's key); an option after `;`; a
+    function's or a rule's result; a parameter the result points into; a
+    parameter used as a key of a map keyed by `ref String`. Everywhere else,
+    above all a parameter that is only read, it is `String`;
+  * [design: ADR-293 D19, Part I 4.5] `opt ?? ""` moves the option:
+    `(opt ?? "").clone()` for a second use; a method on a `String?` is
+    `opt?.len() ?? 0`;
+  * [design: Part I 2.5] f-string braces are `{{` `}}`; a plain string takes braces literally;
+  * [design: ADR-288] a function parameter is `fn(ref X) -> T sync`;
+    [works] a `Span` that arrives by reference is copied with `s.clone()`;
+  * [design: one namespace for `tools/*.nika`, above] `view_of` resolves to
+    `signature::view_of`, not `check_types::view_of_type`: a false `NK1104`
+    (*returns `ref String`, but declared `ref String`*) means the wrong one was called;
+  * [design: ADR-352 D5, #825] `Some(..)`/`None` are no patterns of a `T?`:
+    bind `how ?? ...` first and match the plain enum;
+  * [design: Part I 4.5, ADR-293] a `T?` local needs `?.clone()` (NK1125);
+  * [works] a `ref String?` parameter takes a bare `String` argument (and
+    `ref String?` is `NK1261`, write `String?`);
+  * [gap #951] `for mut x in v` is a parser error;
+  * [design: Part I 3.3] `a..b` includes `b`; the half-open range is `a..<b`;
+  * [design: Part I 3.4, ADR-352] the catch-all arm of a `match` is `else =>`;
+    `_ =>` and `None =>` are refused;
+  * [works] a `String?` field is matched as it is (`match s.f { null => .., x => .. }`);
+  * collections: [works] a `BTreeMap` has `.iter()` (`m.iter().filter_map(..)`)
+    and `for (k, v) in m`; [works: ADR-293 D20] `a.iter().zip(b.iter())`;
+    [works: ADR-282 D7, #816] in-place change of a map's value is
+    `let mut c = m[k] ?? continue` (the `m.get(k)` spelling: [defect #952]);
+    [gap #950] a `BTreeSet` has no `extend`, a `BTreeMap` no `entry`
+    (`HashMap::entry` works); [gap #949] no `mem::take`, and no part taken out
+    of a `let mut` view (NK1131); [design: Part I 2.6] a text is cut only at a
+    position it handed out (`NK1214`): a prefix of a hex digest is
+    `hex.scalars.take(16).collect()` or `hex.bytes[0..<16].text()`;
+    [design: Part III fs] `fs::read` is async and gives `Bytes` (the Rust
+    caller needs `block_on`; a `Vec[u8]` is filled by a loop, as
+    `sysroot_cache.nika` does); `read_dir` gives sorted names, not paths. Two
+    host parameters `[M: A, H: B]` lower.
+  * [defect #943, closed by 417fc04] a text literal changed in place needed
+    its type (`let mut out: String = "a"`); not probed in `tools/` since: if
+    `lower-std` reads `String?` again, reopen #943 rather than type it.
 * **Host traits** (M3b, 2026-10-29): a host method that `throws` lowers to
   `Result<T, Box<dyn std::error::Error>>`; to hand an `anyhow` refusal back
   unchanged, keep it in a `RefCell` of the Rust host and return it after the

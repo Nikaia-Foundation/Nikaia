@@ -15,10 +15,20 @@ three commits, thirteen functions: `5755b65` (`several_errors`,
 
 ## Language: forms Nikaia does not have
 
-| Rust form | Today | Written instead |
-| :--- | :--- | :--- |
-| `map.entry(k).or_insert(..)` | NK1171, no `entry` in `std` | `get`, then `insert` |
-| `opt.as_mut()` on a `T?` | NK1125 | `?.clone()`, change, write the option back |
+Classed by the architect (2026-10-29, CLAUDE.md *A missing form stops the
+work*): a *Written instead* that is not the designed form is debt, and a gap
+row stops the move until its issue is decided and built.
+
+| Rust form | Today (probe 2026-10-29) | Class | Written instead |
+| :--- | :--- | :--- | :--- |
+| `map.entry(k).or_insert(..)` | works on `HashMap`; NK1171 on `BTreeMap` | gap #950 (`decision`) | nothing until #950 is built; `HashMap::entry` as it is |
+| `opt.as_mut()` on a `T?` | NK1125 | design, ADR-382: narrow, then write (`if o != null { o.n = 2 }`, lowered as `as_mut().unwrap()`) | the narrowed write; the old `?.clone()`, change, write back is debt (#953) |
+| `map.get_mut(k)` | NK1171 | design, ADR-282 D7 (#816): `let mut c = m[k] ?? continue` is a mutable view; `m.get(k)` there is defect #952 | the mutable view; P5b's get-clone-insert is debt (#953) |
+| `std::mem::take(&mut place)` | NK1181; NK1131 for a part of a `let mut` view | gap #949 (`decision`) | nothing until #949 is built |
+| `a.into_iter().zip(b)` | works (`Seq::zip`, ADR-293 D20) | not a gap | `zip`; P5b's index loop is debt (#953) |
+| `s[..16]` on text | NK1214 | design, Part I 2.6 | `s.scalars.take(16).collect()` or `s.bytes[0..<16].text()` |
+| `for mut x in v` | parser error | gap #951 (`decision`) | nothing until #951 is built |
+| `set.extend(xs)` on a `BTreeSet` | NK1171 | gap #950 (`decision`) | nothing new until #950 is built (156 loops already written, listed there) |
 
 Not gaps, by design: `Vec[ref i64]` is refused (NK1257, a view of a word is
 the word); `grammar` is a reserved word; there is no `T??`: `a?.b` and a
@@ -27,16 +37,16 @@ Rust's `Option<Option<T>>` keeps two kinds of absence apart (`reads_any` in
 `comptime_run.rs`: keep, drop, drop under a name), the move names them as
 an enum.
 
-Not probed yet, met in the moves: `usize` arithmetic in indices,
-`mem::replace`, `'static`, `impl FnOnce(&mut Self)`, a struct of views taken
-from a field of a `ref` struct (NK1106), `ref T?` where Rust has
-`&Option<T>`. Each one becomes a row above, or a line under *Resolved since*,
+Not probed yet, met in the moves: `usize` arithmetic in indices
+(`mem::replace` is #949), `'static`, `impl FnOnce(&mut Self)`, a struct of views taken
+from a field of a `ref` struct (NK1106). (`ref T?` for Rust's `&Option<T>`
+is `T?`: NK1261.) Each one becomes a row above, or a line under *Resolved since*,
 when it is probed.
 
 ## Converter (rs2nika, #579, #802)
 
-* `Option::as_mut()` on a field: no translation (the language form is
-  missing too, see above).
+* `Option::as_mut()` on a field: no translation; the language's form is the
+  narrowed write (ADR-382, above), which the converter could emit.
 * `spec?.clone()` on a `String?` is written right only with `--facts`.
 
 ## Compiler defects that block a move
