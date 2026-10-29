@@ -252,6 +252,12 @@ impl TrEm {
         if init < 0 {
             return [f"{ind}let {name}{ty}"]
         }
+        if self.t.is(p, "RECORD_PAT") && els < 0 {
+            let fields = self.record_lets(p, init, ind.clone())
+            if fields.len() > 0 {
+                return fields
+            }
+        }
         // `let _ = call;` lets its failure go: `call catch {}` (NK1144)
         if self.t.is(p, "WILDCARD_PAT") && els < 0 && (self.t.is(init, "CALL_EXPR") || self.t.is(init, "METHOD_CALL_EXPR")) {
             return [f"{ind}{self.expr(init)} catch {{}}"]
@@ -272,6 +278,10 @@ impl TrEm {
             if pushed.len() > 0 {
                 return pushed
             }
+        }
+        // `Vec<_>` has no Nikaia spelling: the value says the type
+        if ty_n >= 0 && self.t.find(ty_n, "INFER_TYPE") >= 0 {
+            ty = ""
         }
         let tested = self.opt_test(init, ind.clone())
         if tested.len() > 0 {
@@ -415,6 +425,34 @@ impl TrEm {
             out.push(l.clone())
         }
         out.push(f"{ind}}}")
+        return out
+    }
+
+    /// `let S { a, b: c, .. } = e` (Nikaia's `let` takes no record
+    /// pattern) -> `let a = e.a`, `let c = e.b`, through `let whole = e`
+    /// where `e` is more than a name; [] for a field whose pattern is not a
+    /// name.
+    fn record_lets(ref mut self, p: i64, init: i64, ind: String) -> Vec[String] {
+        let mut out: Vec[String] = []
+        let mut subject = self.expr(init)
+        if !self.t.is(init, "PATH_EXPR") || subject.contains("::") {
+            out.push(f"{ind}let whole = {subject}")
+            subject = "whole"
+        }
+        for f in self.nodes(self.t.kid(p, "RECORD_PAT_FIELD_LIST")) {
+            if self.t.is(f, "REST_PAT") {
+                continue
+            }
+            let ps = self.nodes(f)
+            if ps.len() == 0 || !self.t.is(ps[ps.len() - 1], "IDENT_PAT") {
+                return []
+            }
+            let bound = ps[ps.len() - 1]
+            let nr = self.t.kid(f, "NAME_REF")
+            let field = if nr >= 0 { self.src(nr) } else { self.t.name_of(bound) }
+            let m = if self.t.has_tok(bound, "MUT_KW") { "mut " } else { "" }
+            out.push(f"{ind}let {m}{tr_ident(self.t.name_of(bound))} = {subject}.{tr_ident(field)}")
+        }
         return out
     }
 

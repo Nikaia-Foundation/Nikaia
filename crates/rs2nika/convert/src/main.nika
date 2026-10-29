@@ -16569,6 +16569,12 @@ fn rs2nika_let_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Strin
             out.push(l.clone())
             continue
         }
+        // the parenthesis must close at the end: `(match ..).map(..)` stays
+        let whole: Vec[scalar] = f"({rhs}".chars().collect()
+        if rs2nika_closing(whole, 0, '(', ')') != whole.len() - 1 {
+            out.push(l.clone())
+            continue
+        }
         let (subject, arms0) = rhs.split_once(" { ") ?? ("", "")
         let arms = rs2nika_split_args(arms0[0..<arms0.len() - " })".len()].clone())
         let mut null_arm: String = ""

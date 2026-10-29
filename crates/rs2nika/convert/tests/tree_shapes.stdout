@@ -1,0 +1,35 @@
+use std::collections
+struct Around {
+    foreign: Vec[String],
+    newly: bool,
+}
+struct P {
+    site: (u32, String)?,
+}
+
+pub fn split(around: Around) -> i64 {
+    let foreign = around.foreign
+    let mut fresh = around.newly
+    fresh = !fresh
+    if fresh {
+        return foreign.len()
+    } else {
+        return 0
+    }
+}
+
+pub fn split_made() -> bool {
+    let whole = make()
+    let newly = whole.newly
+    return newly
+}
+
+pub fn what(pause: P?) -> String? {
+    let what = (match (match pause { pause => pause.site, null => null }) { (_, what) => what.clone(), null => null })
+    return what
+}
+
+pub fn kept(xs: ref Vec[i64]) -> i64 {
+    let found = xs.iter().filter(fn(x) { x > 1 }).collect()
+    return sync_::count(found)
+}

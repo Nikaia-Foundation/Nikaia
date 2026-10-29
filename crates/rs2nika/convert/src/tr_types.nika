@@ -443,6 +443,9 @@ impl TrEm {
             }
             if s == "Self" && self.self_ty != "" {
                 out.push(self.self_ty.clone())
+            } else if i < segs.len() - 1 && segs[0] != "std" && segs[0] != "core" {
+                // the crate's own module may be a Nikaia word: `sync::check`
+                out.push(tr_ident(s))
             } else {
                 out.push(s)
             }

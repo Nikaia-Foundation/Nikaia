@@ -610,7 +610,7 @@ impl TrEm {
             if m == "cloned" || m == "copied" || m == "as_ref" || m == "as_deref" || m == "as_mut" || m == "take" {
                 return self.optional_expr(self.t.nth(n, 0))
             }
-            return tr_option_method(m) || m == "map" && !self.iter_chain(self.t.nth(n, 0)) && self.optional_expr(self.t.nth(n, 0))
+            return tr_option_method(m) || (m == "map" || m == "and_then" || m == "filter") && !self.iter_chain(self.t.nth(n, 0)) && self.optional_expr(self.t.nth(n, 0))
         }
         if self.t.is(n, "PATH_EXPR") || self.t.is(n, "FIELD_EXPR") {
             let s = self.src(n)
