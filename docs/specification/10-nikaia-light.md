@@ -562,7 +562,7 @@ stays one wherever a `String` is wanted. Where the use only **reads** it, or
 of a list, an argument the callee keeps - into which only literals and other
 views flow, nothing is allocated: the position holds the view, and static text
 outlives every name. Where text of its own (an `f"…"`, a `.clone()`, a `String`
-handed over) flows into the same position, the literal is constructed there, as
+handed over that no view still reads, 6.6) flows into the same position, the literal is constructed there, as
 `[1, 2]` is a `Vec` where one is wanted. A literal in a `String` that is changed, or handed on to
 what takes text of its own (a `mut` or owning parameter, also through a
 `match` binding or a lambda's last expression), is text of its own:
@@ -2631,7 +2631,8 @@ use std::fs
 **The declaration writes the `ref`, never the call.** A parameter written with a
 plain type is a **view** unless the function's body keeps the value: stores
 it, hands it back, gives it to a task, or passes it to something that keeps
-it. **Handing back a *part* of it is handing it back**: a field whose type
+it. Moving it into a struct, a variant's value, a tuple or a list the body
+builds is not keeping it, unless that value keeps it. **Handing back a *part* of it is handing it back**: a field whose type
 moves, taken out of the parameter and returned, keeps the parameter; a field
 that **copies** leaves the parameter a view. Which of the two it is comes from
 the body, is written to the ledger (6.7), and holds for every caller. The
@@ -2773,7 +2774,8 @@ keep is read off the program:
 
 **What a body owns is handed out the same way**, whole or a part: a view of a
 local, `fn d() -> ref String { let s = "x".clone(); return ref s }`, puts `s` in
-the caller's keep. **A view handed back from a parameter points into the
+the caller's keep, and so does a struct, a variant's value, a tuple or a list
+handed back whose views point into `s`. **A view handed back from a parameter points into the
 caller's argument**, which lives as long as the result does; an argument made
 in the call itself, `let r = e(name.clone())`, lives in the caller's keep. **A
 view of a parameter kept in a place another parameter holds**, such as a part of
@@ -2819,7 +2821,8 @@ Handing a view back out of the buffer it came from is **not** this rule:
 `fn count(seq: ref String, k: i64) -> HashMap[ref String, Tally]` returns views
 of `seq`, and the result points into `seq` and nothing else. The same holds for
 a struct literal handed back: `fn make(name: ref String) -> Reading` returns a
-`Reading` that points into `name`.
+`Reading` that points into `name`, and so does `fn make(name: String)` whose
+body only moves `name` into the `Reading`.
 
 **A result points where the body says, view by view.** Every way out of the
 body - a `return`, the last expression - is followed back to the parameters
@@ -2866,11 +2869,14 @@ declaration names.
 
 **While a view is used, the data it may point into stays as it was.** Giving
 an argument up is not changing it: a caller may assign its variable a new
-value, leave its scope, move it into another variable, or pass it to a
-parameter that is a view (6.5) while a view of it is still used, and the old
-buffer moves into the keep of whatever holds the view, to be freed with the
-last such view. A variable it moved into is held to the same rule as the
-argument. Nothing is copied:
+value, leave its scope, move it into another variable or into a struct, a
+variant's value, a tuple or a list it builds, or pass it to a parameter that is
+a view (6.5) while a view of it is still used, and the old buffer moves into
+the keep of whatever holds the view, to be freed with the last such view. The
+place it moved into holds a view of that buffer, so a field, element or
+variant's value is a view wherever such moves flow in, and holds either where
+text of its own flows in too (2.2). A variable or place it moved into is held
+to the same rule as the argument. Nothing is copied:
 
 ```nika
 let mut y = "short".clone()
@@ -2883,10 +2889,17 @@ println(r)
 `NK2305`, at the change: a method that changes the value, or an assignment to a
 part of it. So is **handing the data to a new owner**, at the call: a callee
 whose parameter keeps or changes it (`push` on a list too), since it may change
-or discard the data. The message names the view, the call that made it and the
-way out of the callee that may hand back that argument. Use the view before the
-change, or take a copy of it with `.clone()` before the change; for a
-hand-over, a copy may also be what is handed over (`take(y.clone())`):
+or discard the data. So is **moving it into a place that must hold text of its
+own**, at the move: a field, element or variant's value that the program,
+in any function, changes in place or hands to a callee that keeps it. The
+message names the view, the call that made it and the way out of the callee
+that may hand back that argument; for such a move, also the place that makes
+the field own its text. Use the view before the change, or take a copy of it
+with `.clone()` before the change; for a hand-over, a copy may also be what is
+handed over (`take(y.clone())`); for a move into a place, a copy may be what
+moves (`Cursor { input: text.clone(), pos: 0 }`), or the value is built first
+and the view taken from its field
+(`let c = Cursor { input: text, pos: 0 }` then `parse(c.input)`):
 
 ```nika
 let mut y = "short".clone()
