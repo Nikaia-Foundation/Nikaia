@@ -1286,36 +1286,50 @@ impl TrEm {
                 lead.push(f"{inner}let {x} = {cs}[{i}]")
             }
         }
-        // `for x in xs.iter_mut()` (also `.skip(k)`): an index, and `x` in
-        // the body is the place `xs[i]` itself, so a change lands in the list
-        let mut alias: String = ""
-        let mut was: String? = null
+        // `for x in xs.iter_mut()` and `for x in &mut xs` over a list or an
+        // array: `for mut x in xs`, a view of each element, so a change
+        // lands in the list (ADR-views-2 D2). A map's values changed in
+        // place are not decided yet (section 6): the loop gets a TODO.
         if head == "" {
-            let mut from: String = "0"
-            let mut mut_it = it
-            if self.t.is(it, "METHOD_CALL_EXPR") && self.src(self.t.kid(it, "NAME_REF")) == "skip" {
-                let recv = self.t.nth(it, 0)
-                if self.t.is(recv, "METHOD_CALL_EXPR") && self.src(self.t.kid(recv, "NAME_REF")) == "iter_mut" {
-                    from = self.args(it).join(", ")
-                    mut_it = recv
-                }
+            let mut lent_mut = false
+            let mut raw = parts[1]
+            while self.t.is(raw, "PAREN_EXPR") {
+                raw = self.t.nth(raw, 0)
             }
-            if self.t.is(mut_it, "METHOD_CALL_EXPR") && self.src(self.t.kid(mut_it, "NAME_REF")) == "iter_mut" {
-                let xs = self.expr(self.t.nth(mut_it, 0))
-                let i = self.fresh("at")
-                let x = self.pat(p)
-                head = f"{ind}for {i} in {from}..<{xs}.len() {{"
-                // keyed by the Rust name, which `path_expr` looks up (`view`
-                // is written `view_`)
-                let raw = self.t.name_of(p)
-                if self.t.is(p, "IDENT_PAT") && !self.binds(body_n, raw) {
-                    alias = raw.clone()
-                    was = self.aliases[raw]?.clone()
-                    self.aliases.insert(raw.clone(), f"{xs}[{i}]")
-                } else {
-                    self.todos += 1
-                    lead.push(f"{inner}let {x} = {xs}[{i}] // TODO(rs2nika): `iter_mut`: write the change back, `{xs}[{i}] = ..`")
+            if self.t.is(raw, "REF_EXPR") && self.t.has_tok(raw, "MUT_KW") {
+                lent_mut = true
+            }
+            let mut xs_n = -1
+            let mut by_values = false
+            if self.t.is(it, "METHOD_CALL_EXPR") && self.nodes(self.t.kid(it, "ARG_LIST")).len() == 0 {
+                let m = self.src(self.t.kid(it, "NAME_REF"))
+                if m == "iter_mut" {
+                    xs_n = self.t.nth(it, 0)
+                } else if m == "values_mut" {
+                    xs_n = self.t.nth(it, 0)
+                    by_values = true
                 }
+            } else if lent_mut {
+                xs_n = it
+            }
+            if xs_n >= 0 {
+                let xs = self.expr(xs_n)
+                let held = self.held_kind(xs_n)
+                let is_map = by_values || held == "map" || (held == "" && self.t.is(p, "TUPLE_PAT"))
+                if is_map {
+                    self.todos += 1
+                    let walked = if by_values { f"{xs}.values()" } else { xs.clone() }
+                    out.push(f"{ind}// TODO(rs2nika): a map's values changed in place are not decided yet (ADR-views-2 section 6, NK1307): change `{xs}[k]` in a loop over keys taken before it")
+                    head = f"{ind}for {self.pat(p)} in {walked} {{"
+                } else {
+                    head = f"{ind}for mut {self.pat(p)} in {xs} {{"
+                }
+            } else if self.t.is(p, "IDENT_PAT") && self.t.has_tok(p, "MUT_KW") {
+                // an owned element is the loop's own (ADR-views-2 D3): a
+                // list Rust consumes is drained
+                let place = self.t.is(it, "PATH_EXPR") || self.t.is(it, "FIELD_EXPR")
+                let walked = if place { f"{self.expr(it)}.drain()" } else { self.expr(it) }
+                head = f"{ind}for mut {self.pat(p)} in {walked} {{"
             } else {
                 head = f"{ind}for {self.pat(p)} in {self.expr(it)} {{"
             }
@@ -1332,18 +1346,44 @@ impl TrEm {
         for l in self.block(body_n, inner, "stmt") {
             out.push(l)
         }
-        if alias != "" {
-            match was {
-                null => {
-                    self.aliases.remove(alias)
-                },
-                w => {
-                    self.aliases.insert(alias, w)
-                },
-            }
-        }
         out.push(f"{ind}}}")
         return out
+    }
+
+    /// What the place `n` a `for` walks holds, by the type its declaration
+    /// writes (a parameter or a typed `let` of the function, a field of a
+    /// struct of the file): "map", "list", or "" when unknown.
+    fn held_kind(ref mut self, n: i64) -> String {
+        let mut ty: String = ""
+        if self.t.is(n, "FIELD_EXPR") {
+            ty = self.field_ty("", self.src(self.t.kid(n, "NAME_REF")))
+        } else if self.t.is(n, "PATH_EXPR") {
+            ty = self.declared_ty(self.t.up(n, "FN"), self.src(n))
+        }
+        if ty == "" {
+            return ""
+        }
+        return if ty.contains("Map") { "map" } else { "list" }
+    }
+
+    /// The type text of the parameter or typed `let` named `name` inside `n`, or "".
+    fn declared_ty(ref self, n: i64, name: ref String) -> String {
+        if n < 0 {
+            return ""
+        }
+        if self.t.is(n, "PARAM") || self.t.is(n, "LET_STMT") {
+            let ns = self.nodes(n)
+            if ns.len() >= 2 && self.t.is(ns[0], "IDENT_PAT") && self.t.name_of(ns[0]) == name && self.t.kind(ns[1]).ends_with("_TYPE") {
+                return self.src(ns[1])
+            }
+        }
+        for k in self.nodes(n) {
+            let d = self.declared_ty(k, name)
+            if d != "" {
+                return d
+            }
+        }
+        return ""
     }
 
     fn while_expr(ref mut self, n: i64, ind: String) -> Vec[String] {

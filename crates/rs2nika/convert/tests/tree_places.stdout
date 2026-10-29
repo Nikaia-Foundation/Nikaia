@@ -17,8 +17,8 @@ pub fn t_count(names: ref Vec[String]) -> Tally {
 }
 
 pub fn t_grow(mut views: Vec[Tally], from: i64) {
-    for at_1 in from..<views.len() {
-        views[at_1].total += 1
+    for view_ in views.iter_mut() /* TODO(rs2nika): `iter_mut` outside a `for` over the list itself (an adapter, a map): not decided yet (ADR-views-2 section 6); `for mut x in xs` walks a list in place */.skip(from) {
+        view_.total += 1
     }
 }
 

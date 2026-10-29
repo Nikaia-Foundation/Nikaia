@@ -104,8 +104,8 @@ impl Bag {
 }
 
 pub fn shout(mut v: Vec[String]) {
-    for at_1 in 0..<v.len() {
-        v[at_1] = v[at_1].to_uppercase()
+    for mut s in v {
+        s = s.to_uppercase()
     }
 }
 pub fn match_jumps(xs: ref Vec[Item]) -> Vec[String] {

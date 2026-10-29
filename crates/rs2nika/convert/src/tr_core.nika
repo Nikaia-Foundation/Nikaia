@@ -47,9 +47,6 @@ pub struct TrEm {
     pub fns: collections::BTreeSet[String],
     /// nested items, written after the top-level item that holds them
     pub hoisted: Vec[String],
-    /// a name that stands for a place while a body is written: the variable
-    /// of `for x in xs.iter_mut()` is `xs[i]`
-    pub aliases: collections::BTreeMap[String, String],
     /// a `-free` profile's world (`CheckWorld`): the state's methods become
     /// free functions of `state`, `world` (and `host`)
     pub world: String,
@@ -107,7 +104,6 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
         todos: 0,
         fns: collections::BTreeSet(),
         hoisted: [],
-        aliases: collections::BTreeMap(),
         world: world,
         host_fns: host_fns.iter().map(fn(h) { h.clone() }).collect(),
         state_impl: false,

@@ -342,12 +342,6 @@ impl TrEm {
                 }
                 return "self"
             }
-            match self.aliases[name] {
-                null => {},
-                place => {
-                    return place.clone()
-                },
-            }
             // a local or a parameter of that name is not the function
             if self.prefix != "" && self.fns.contains(name) && !self.binds(self.t.up(n, "FN"), name) {
                 return tr_prefixed(self.prefix, name)
@@ -838,7 +832,7 @@ impl TrEm {
             }
         }
         if m == "iter_mut" {
-            return self.todo("`iter_mut` (index the list: `for i in 0..<xs.len()`)", n)
+            return self.todo("`iter_mut` outside a `for` over the list itself (an adapter, a map): not decided yet (ADR-views-2 section 6); `for mut x in xs` walks a list in place", n)
         }
         if m == "unwrap" && a.len() == 0 {
             if self.t.is(recv_n, "METHOD_CALL_EXPR") && self.src(self.t.kid(recv_n, "NAME_REF")) == "parse" {
