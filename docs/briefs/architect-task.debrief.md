@@ -1,11 +1,13 @@
-1. **What cost the most:** designing the M3b host traits. I read about 255 lines of `modules.rs` and grepped `emit/mod.rs`, `contracts/mod.rs` and `ty.nika` to learn which types are already Nikaia's (`Ledger`, `Provenance`) and what `emit_module_body_at` takes. That was about 8 of my roughly 25 turns. Second: my first Python edit script failed because I had guessed the exact `CLAUDE.md` line wrong, which cost a re-grep and a second run.
-2. **What I looked up that the task could have handed me:**
-   - The latest *State* entry. It sits under 30 older entries in `architect.md`, and the 25k read cap cut off the rest of the file.
-   - That `crate::contracts::{Ledger, Provenance}` are re-exports of `ty.nika`'s.
-   - Whether #933, #934 and #921 were still open.
-   - The current line ranges in `modules.rs` after M3a.
-   - That `batch.nika` cuts only on `Found:` and `Deviation:`, not on `Needs:`.
-3. **Checks:**
-   - Useful: the M3a report and debrief, the reflog (it confirmed the reset), `git log` on `manifest.rs` (it confirmed MF's range still holds), the issue states through `gh api`, and `pre-push-check` before the push.
-   - Wasted: reading the 30 older *State* entries; one grep over `it` tests for callers, which the brief only lists because the signatures stay the same.
-4. **Change that would have saved the most:** `architect-input.txt` should carry the newest *State* paragraph and the cut report's path and debrief. Alternatively, `architect.md` should move older *State* entries to a history file and keep only the last three, so one read covers the state.
+1. **What cost the most:** designing P5d's and P5b's hosts. That meant reading about 900 lines of `project.rs` (the check and explain block, `lower_reading`, `report`), then checking the Nikaia side one item at a time: `CheckFinding`, `Newly`/`Kept`, `Published`, the ledger parser, `changed_contracts`, whether `eprint` exists. Close behind was finding that host calls already have a mechanism (`rs2nika.names` `[forms X_]`/`[hosts X_]`, R244/R295). I nearly wrote a converter brief for "wanted pattern (3)" when it was already learned.
+2. **What the brief could have handed me:**
+   - Current line ranges. The plan's `Cut:` lines were stale (at a4b33a0), so I re-grepped every range.
+   - That `[forms X_]` already covers the "named Rust call becomes a host method" pattern. `docs/architect.md` lists it as *wanted*, which misled me.
+   - How free disk space compares with `agent.nika`'s 3 GB limit.
+3. **Checks run:**
+   - **Useful:** the converter's draft of P5d (it showed P5d is almost all host calls), `where.nika` for callers, the open-issue list, and `git status` for other lanes' files.
+   - **Wasted:** `rs2nika --score` with one argument; I got the usage wrong.
+   - **Not done:**
+     - I did not check that `[forms]` can match a call with seven arguments, nor the `it` filter names in either brief.
+     - The #943 issue body says `Fixes #N` instead of `#943`.
+     - The CI query showed every run of today's pushes still `in_progress`, so I checked nothing about their result.
+4. **One change that would have saved the most:** have `architect-input.txt` (or `drive.nika`) carry the current line ranges of the next plan rows, from a `scripts/plan_rows.nika` (still owed). Also fix the *Schematic patterns* paragraph in `docs/architect.md` to say host calls are learned through `[forms X_]` (P4b). Together that would have saved about a third of my turns.

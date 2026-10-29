@@ -1,4 +1,4 @@
 Result: done
-Batch: mf-manifest-file.md m3b-modules-program.md
+Batch: p5d-project-check.md p5b-project-lower.md
 Owner: none
-Commit: 3b84372 (pushed). M3a done (1890fc9); its Found was a process event (another session reset the shared tree at 22:41), not a defect: CLAUDE.md and builder.md now forbid reset/stash/`checkout .` in the shared checkout, builders re-check lowered files before long tests, and common.part sends such events to `Needs:`. New brief m3b-modules-program.md (host signatures given, per the m3a debrief; rule added to architect.md). For the converter lane: `--prefix` is not applied to functions and types (m3a's costliest edit). Still owed: P5a rest after #933/#934 (lane briefs), R0 (#921) once C1 is quiet.
+Commit: 2539da8 (pushed). MF and M3b done; m3b's Found filed as #943 (ready, brief form); M3b debrief into builder-facts (Host traits, anchored `it` filter). P5d narrowed (`report` moves to P5c), P5b narrowed to `lower_reading`; both schematic host-calls via `rs2nika.names` `[forms X_]` rows, added in step 1. Disk: 3.7 GB free.
