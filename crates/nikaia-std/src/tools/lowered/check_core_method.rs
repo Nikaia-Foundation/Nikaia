@@ -431,6 +431,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         _ => { },
     }
     let key: String = nikaia_std::index::or(resolved, || "".into());
+    if key == "Vec::get" || key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get" { let gets = state.flow.std_gets.insert(id_of(expr) as i64); }
     if key == "Vec::get" || key == "Vec::first" || key == "Vec::last" {
         match value {
             Ty::Nullable(ref inner) => {

@@ -157,6 +157,22 @@ fn check_core_stmt_mut_view(mut state: CheckState, world: ref CheckWorld, value:
                         }
                     }
                 },
+                // The same entry read by a `std` list's or map's `get` (#952,
+                // ADR-293 D1): `get_mut`, whose receiver Rust lends itself.
+                Expr::MethodCall { receiver, .. } => {
+                    if state.flow.std_gets.contains(id_of(read) as i64) {
+                        let path = dotted_path(world, receiver) ?? return
+                        let parts: Vec[ref String] = path.split(".").collect()
+                        let root = parts[0].clone()
+                        let found = state.binding(root) ?? return
+                        if found.immutable == null {
+                            state.facts.mut_view_reads.insert(id_of(value) as i64, "")
+                            state.facts.mut_view_gets.insert(id_of(receiver) as i64)
+                        } else {
+                            state.a_changed_binding_says_mut(root, "a mutable view of the entry is taken here", span.clone())
+                        }
+                    }
+                },
                 Expr::Index { base, .. } => {
                     let path = dotted_path(world, base) ?? return
                     let parts: Vec[ref String] = path.split(".").collect()
@@ -812,7 +828,8 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         state.a_map_read_assigned(world, bound, value, span)
     }
     let read_through_a_jump = jumped && !copied_read && !copied_word
-    if mutable && (read_through_a_jump || check_core_stmt_a_field_jump(state, world, value)) {
+    let got_a_view = got && !a_copy_by_value(bound) && !copies_as_a_view(bound) && !(state.a_package_copy(world, bound) && check_core_stmt_a_named(bound))
+    if mutable && (read_through_a_jump || got_a_view || check_core_stmt_a_field_jump(state, world, value)) {
         check_core_stmt_mut_view(state, world, value, span, a_copy_by_value(bound))
     }
     if check_core_stmt_a_path(bound) && state.made_from_text(world, value) {

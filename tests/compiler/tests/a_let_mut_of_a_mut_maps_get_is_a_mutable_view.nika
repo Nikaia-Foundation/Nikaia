@@ -1,0 +1,35 @@
+// #952: `let mut x = m.get(k) ?? <jump>` over a `mut` map or list is the same
+// mutable view of the entry as `m[k]` (#816, ADR-293 D1): `get_mut` below.
+use std::collections
+
+struct C { pub ensures: Vec[String] }
+
+fn bump(mut m: collections::BTreeMap[String, C], k: String) {
+    let mut c = m.get(k) ?? return
+    c.ensures.push("p")
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, C] = collections::BTreeMap()
+    m.insert("a", C { ensures: [] })
+    let mut c = m.get("a") ?? return
+    c.ensures.push("e")
+    bump(m, "a")
+    let r = m["a"] ?? return
+    println(f"{r.ensures.len()}")
+    let mut h: collections::HashMap[String, C] = collections::HashMap()
+    h.insert("b", C { ensures: [] })
+    let mut e = h.get("b") ?? return
+    e.ensures.push("e")
+    let g = h["b"] ?? return
+    println(f"{g.ensures.len()}")
+    let mut v: Vec[C] = [C { ensures: [] }]
+    let mut d = v.get(0) ?? return
+    d.ensures.push("x")
+    println(f"{v[0].ensures.len()}")
+    // A number is still copied out: the list keeps its value.
+    let nums: Vec[i64] = [1, 2]
+    let mut n = nums.get(0) ?? return
+    n = n + 10
+    println(f"{n} {nums[0]}")
+}

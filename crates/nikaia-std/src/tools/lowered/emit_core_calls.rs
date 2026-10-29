@@ -672,7 +672,7 @@ impl EmitState {
                 None => { },
                 Some(on) => { if self.facts.text_copies.contains(&node_key(on)) { written = String::from("to_string"); }; },
             }
-        } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); } else if !limit.is_empty() { written = String::from("join_within"); }
+        } else if name == "get" && args.len() == 1 && self.facts.mut_view_gets.contains(&on_node) { written = String::from("get_mut"); } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); } else if !limit.is_empty() { written = String::from("join_within"); }
         if name == "fold" && receiver.is_some() {
             let folded = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.facts.par_folds.contains(&node_key(folded)) { written = String::from("fold_merged"); }

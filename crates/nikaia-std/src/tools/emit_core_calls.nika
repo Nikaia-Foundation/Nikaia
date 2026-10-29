@@ -999,6 +999,10 @@ impl EmitState {
                     written = "to_string"
                 },
             }
+        } else if name == "get" && args.len() == 1 && self.facts.mut_view_gets.contains(on_node) {
+            // **A `let mut` past a jump is a mutable view of the entry**
+            // (#952), as `m[k]`'s is (#816).
+            written = "get_mut"
         } else if name == "set" && witness.len() > 0 {
             written = "set_after"
         } else if limit.len() > 0 {

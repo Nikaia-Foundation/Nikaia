@@ -587,6 +587,9 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     // **A list's element read by `get`, `first` or `last` is a view below**
     // (`Option<&T>`): a value that copies is copied out of it, as a walk's is.
     let key: String = resolved ?? ""
+    if key == "Vec::get" || key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get" {
+        let gets = state.flow.std_gets.insert(id_of(expr) as i64)
+    }
     if key == "Vec::get" || key == "Vec::first" || key == "Vec::last" {
         match value {
             Ty::Nullable(inner) => {
