@@ -311,7 +311,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
             _ => { },
         }
     }
-    state.bind_local(CheckLocal { written_mut: false, id, literal: None, name: bound, ty: held, lent: false, changing: false, constant, built: evaluated, immutable: None, empty_list: None, open_number: None });
+    state.bind_local(CheckLocal { written_mut: false, id, literal: None, name: bound, ty: held, lent: false, view_of: String::from(""), changing: false, constant, built: evaluated, immutable: None, empty_list: None, open_number: None });
     Ty::Tuple(vec![])
 }
 

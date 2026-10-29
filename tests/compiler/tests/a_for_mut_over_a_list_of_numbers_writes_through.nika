@@ -1,0 +1,8 @@
+fn main() {
+    let mut counts = [1, 2, 3]
+    for mut n in counts {
+        n = n * 2
+        n += 1
+    }
+    println(f"{counts[0]} {counts[1]} {counts[2]}")
+}

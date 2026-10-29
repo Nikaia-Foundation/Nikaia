@@ -1,0 +1,9 @@
+error[NK1306]: `mut` here marks the key of a map, and a key can't be changed in place.
+  --> tests/a_for_mut_on_a_map_key_is_refused.nika:6:9
+   |
+ 6 |     for mut (k, v) in m {
+   |         ^^^ marks the key
+   |
+   = note: The key decides where the entry stands in the map (its order, or its hash), so a key changed in place would leave the entry in the wrong place. A map's values can't be changed by a loop over the map yet either.
+   = help: Take the entry out and insert it again after the loop. To change a value, change `m[k]` in a loop over keys taken before it.
+1 type error

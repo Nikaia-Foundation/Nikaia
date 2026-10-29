@@ -52,23 +52,55 @@ pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: C
             return
         }
     }
-    check_core_a_lent_place_given_away(state, world, host, value, span, true)
+    check_core_a_lent_place_given_away(state, world, host, value, span, true, true)
 }
 
 /// **`NK1131` for a place that is lent here, passed to a parameter that owns
 /// its value** (#792): `k(v[0])` or `k(v[0].u)` out of `v: ref Vec[T]`.
 /// Text is `NK1102`'s, which says what it views.
-pub fn check_core_a_lent_place_passed[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span) sync {
-    check_core_a_lent_place_given_away(state, world, host, value, span, false)
+pub fn check_core_a_lent_place_passed[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, keeps: bool, span: ref Span) sync {
+    check_core_a_lent_place_given_away(state, world, host, value, span, false, keeps)
 }
 
-fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, handed_back: bool) sync {
+fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, handed_back: bool, keeps: bool) sync {
     // **An element read out of a lent list is a place of it too** (#738):
     // `return v[0]` out of `v: ref Vec[String]`.
     let mut element = false
     let mut path: String = ""
     let mut root: String = ""
     match value {
+        // **The whole element of a `for mut`** (ADR-views-2 D5): a view of the
+        // list, which the loop only borrows.
+        Expr::Variable(name, _) => {
+            let written = world.words.resolve(name).clone()
+            let local = state.binding(written) ?? return
+            if local.view_of == "" || !keeps {
+                return
+            }
+            let ty = check_core_expr(state, world, host, value, span)
+            if ty.is_unknown() || copies_plainly(ty) || ty.is_a_view() || state.copied(world, ty) {
+                return
+            }
+            let in_package = match ty {
+                Ty::Named { name, .. } => state.copies_in_the_package.contains(name),
+                else => false,
+            }
+            if in_package {
+                return
+            }
+            let text = match ty {
+                Ty::Named { name, .. } => a_type_base(name) == "String" || a_type_base(name) == "str",
+                else => false,
+            }
+            if text {
+                return
+            }
+            let list = local.view_of.clone()
+            let notes: Vec[String] = [f"`{written}` is the element of `{list}` itself, and `{list}` belongs to whoever lent it. Giving the element away would take a piece out of something this function doesn't own."]
+            let help: String = f"Write `{written}.clone()` for a copy, or take the elements out of `{list}` with `{list}.drain()`."
+            state.findings.push(check_refusal("NK1131", span, f"You can't give away `{written}` here: it is an element of `{list}`, which is only borrowed.", notes, help))
+            return
+        }
         Expr::Field { base, name, .. } => {
             let whole: String? = state.place_path(world, value)
             if whole != null {

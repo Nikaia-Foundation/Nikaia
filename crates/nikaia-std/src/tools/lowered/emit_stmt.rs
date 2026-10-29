@@ -675,8 +675,9 @@ impl EmitState {
             let one = *one;
             each.push(self.emit_stmt_local(&emit_text(world, one)));
         }
+        let viewed = mutable && is_a_place(iter) && self.facts.mut_view_reads.contains_key(&node_key(iter));
         let mut written: Vec<String> = vec![];
-        for one in each.iter() { if mutable && one != "_" { written.push(format!("mut {}", one)); } else { written.push(one.to_string()); } }
+        for one in each.iter() { if mutable && !viewed && one != "_" { written.push(format!("mut {}", one)); } else { written.push(one.to_string()); } }
         let names = written.join(", ");
         let bound = emit_stmt_tuple_pattern(&written, shape);
         let plain = emit_stmt_tuple_pattern(&each, shape);
@@ -701,7 +702,7 @@ impl EmitState {
         out.push(&format!("for {} in ", bound));
         let lends = is_a_place(iter) && !self.facts.owned_loops.contains(&at);
         self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)?;
-        if lends {
+        if lends && viewed { out.push(".iter_mut()"); } else if lends {
             out.push(".iter()");
             if self.reads_through_handle(world, &walk, &scope.function, iter) { out.push(".map(|held| held.get())"); }
         }
@@ -725,7 +726,16 @@ impl EmitState {
         }
         let mut opening: Option<String> = None;
         if copied == "" { opening = unwrap; } else if unwrap.is_none() { opening = Some(copied.to_string()); } else { opening = Some(format!("{} {}", nikaia_std::index::or(unwrap.as_deref(), || ""), copied)); }
-        self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))?;
+        let mut inside = scope.clone();
+        if viewed {
+            let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.to_owned();
+            for one in bindings.iter() {
+                let one = *one;
+                if emit_text(world, one) != "_" { changed.push(one.to_owned()); }
+            }
+            inside = EmitScope { changed: changed, ..scope.clone() };
+        }
+        self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), &inside, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))?;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -1,0 +1,10 @@
+error[NK2305]: `v` is read here, inside the loop whose element is a mutable view of it.
+  --> tests/a_for_mut_body_reading_its_list_is_refused.nika:6:15
+   |
+ 5 |     for mut p in v {
+   |                  - `v` is lent to this loop, and each element is a mutable view of it
+ 6 |         p.n = v[0].n + 1
+   |               ^ `v` is read here
+   |
+   = help: Read what you need into a name before the loop, or write the index loop: `for i in 0..<v.len()`.
+1 change to data a view still to be used may point into

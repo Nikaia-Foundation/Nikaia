@@ -35,20 +35,43 @@ pub fn check_core_a_field_of_a_lent_place_handed_back<H: CheckHost>(state: &mut 
         let declared = match expected { Some(__nikaia_value) => __nikaia_value, None => return };
         if declared.is_a_view() { return; }
     }
-    check_core_a_lent_place_given_away(state, world, host, value, span, true);
+    check_core_a_lent_place_given_away(state, world, host, value, span, true, true);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_a_lent_place_passed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span) { check_core_a_lent_place_given_away(state, world, host, value, span, false); }
+pub fn check_core_a_lent_place_passed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, keeps: bool, span: &Span) { check_core_a_lent_place_given_away(state, world, host, value, span, false, keeps); }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, handed_back: bool) {
+pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, handed_back: bool, keeps: bool) {
     let mut element = false;
     let mut path: String = String::from("");
     let mut root: String = String::from("");
     match value {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let written = world.words.resolve(name).to_string();
+            let local = match state.binding(&written) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if local.view_of == "" || !keeps { return; }
+            let ty = check_core_expr(state, world, host, value, span);
+            if ty.is_unknown() || copies_plainly(&ty) || ty.is_a_view() || state.copied(world, &ty) { return; }
+            let in_package = match ty {
+                Ty::Named { ref name, .. } => state.copies_in_the_package.contains(name),
+                _ => false,
+            };
+            if in_package { return; }
+            let text = match ty {
+                Ty::Named { ref name, .. } => a_type_base(name) == "String" || a_type_base(name) == "str",
+                _ => false,
+            };
+            if text { return; }
+            let list = local.view_of.to_string();
+            let notes: Vec<String> = vec![format!("`{}` is the element of `{}` itself, and `{}` belongs to whoever lent it. Giving the element away would take a piece out of something this function doesn't own.", written, list, list)];
+            let help: String = format!("Write `{}.clone()` for a copy, or take the elements out of `{}` with `{}.drain()`.", written, list, list);
+            state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is an element of `{}`, which is only borrowed.", written, list), notes, Some(help)));
+            return;
+        },
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
             let whole: Option<String> = state.place_path(world, value);

@@ -1,0 +1,9 @@
+use std::collections
+
+fn main() {
+    let mut seen: collections::BTreeSet[i64] = collections::BTreeSet()
+    seen.insert(1)
+    for mut s in seen {
+        println(f"{s}")
+    }
+}

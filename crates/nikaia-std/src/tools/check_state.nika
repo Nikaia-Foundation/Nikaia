@@ -63,6 +63,10 @@ pub struct CheckLocal {
     /// **The binding is a view the emitter lent**, which a `for` over a place
     /// is (ADR-094 D4). One reader: a cast over it.
     pub lent: bool,
+    /// **The list a `for mut` binding is the element of**, as written (ADR-views-2
+    /// D2, D5); empty for any other binding. Handing the whole element to
+    /// something that keeps it is `NK1131`.
+    pub view_of: String,
     /// Where the binding was written and what kind it is, when it did **not**
     /// say `mut`. On the binding rather than in a map so that the scope is the
     /// one `scope` already keeps.
@@ -99,6 +103,7 @@ impl CheckLocal {
             ty: ty,
             constant: null,
             lent: false,
+            view_of: "",
             immutable: null,
             changing: false,
             built: null,

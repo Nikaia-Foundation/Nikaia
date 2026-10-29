@@ -1,0 +1,9 @@
+use std::collections
+
+fn main() {
+    let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    m.insert("a", 1)
+    for mut (k, v) in m {
+        println(f"{k} {v}")
+    }
+}

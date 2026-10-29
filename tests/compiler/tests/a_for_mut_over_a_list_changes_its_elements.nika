@@ -1,0 +1,12 @@
+struct P { pub n: i64, pub weight: i64 }
+
+fn main() {
+    let mut v: Vec[P] = [P { n: 1, weight: 5 }, P { n: 2, weight: 6 }]
+    for mut p in v {
+        p.n = p.n + 10
+        p.weight *= 2
+    }
+    for p in v {
+        println(f"{p.n} {p.weight}")
+    }
+}

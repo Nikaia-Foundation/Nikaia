@@ -907,9 +907,14 @@ impl EmitState {
         }
         // **`mut` in front of the head marks every name in it** (ADR-views-2
         // D1, D3): Rust's `for mut x in …` and `for (mut a, mut b) in …`.
+        // **Over a list or an array held `mut` the element is a view of it**
+        // (D2, D7): `iter_mut()`, the binding is the `&mut` itself and every
+        // mention of it is dereferenced (`scope.changed`, as a `mut` lambda
+        // parameter is).
+        let viewed = mutable && is_a_place(iter) && self.facts.mut_view_reads.contains_key(node_key(iter))
         let mut written: Vec[String] = []
         for one in each {
-            if mutable && one != "_" {
+            if mutable && !viewed && one != "_" {
                 written.push(f"mut {one}")
             } else {
                 written.push(one.clone())
@@ -950,7 +955,9 @@ impl EmitState {
         // (ADR-293 D19): the checker says which loops walk by value.
         let lends = is_a_place(iter) && !self.facts.owned_loops.contains(at)
         self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)
-        if lends {
+        if lends && viewed {
+            out.push(".iter_mut()")
+        } else if lends {
             out.push(".iter()")
             if self.reads_through_handle(world, walk, scope.function, iter) {
                 out.push(".map(|held| held.get())")
@@ -985,7 +992,17 @@ impl EmitState {
         } else {
             opening = f"{unwrap ?? ""} {copied}"
         }
-        self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))
+        let mut inside = scope.clone()
+        if viewed {
+            let mut changed: Vec[winnow_grammar::Symbol] = scope.changed.clone()
+            for one in bindings {
+                if emit_text(world, one) != "_" {
+                    changed.push(one.clone())
+                }
+            }
+            inside = scope.clone() with { changed: changed }
+        }
+        self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), inside, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))
     }
 
     /// What a `for` iterates over, written.

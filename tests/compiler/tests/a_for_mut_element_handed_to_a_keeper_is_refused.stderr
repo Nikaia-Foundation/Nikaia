@@ -1,0 +1,9 @@
+error[NK1131]: You can't give away `p` here: it is an element of `v`, which is only borrowed.
+  --> tests/a_for_mut_element_handed_to_a_keeper_is_refused.nika:7:9
+   |
+ 7 |         kept.push(p)
+   |         ^^^^^^^^^^^^
+   |
+   = note: `p` is the element of `v` itself, and `v` belongs to whoever lent it. Giving the element away would take a piece out of something this function doesn't own.
+   = help: Write `p.clone()` for a copy, or take the elements out of `v` with `v.drain()`.
+1 type error

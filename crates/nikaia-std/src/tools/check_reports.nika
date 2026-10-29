@@ -150,7 +150,48 @@ impl CheckState {
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code: code, message: message, notes: notes, help: help, labels: [there, here] })
     }
 
-    /// **`for mut` over a place** (ADR-views-2 D2): not built yet.
+    /// **`NK1306`: `mut` on a `for` binding that cannot be changed in place**
+    /// (ADR-views-2 D4, section 6): a map's key, a set's element, the element a
+    /// lending adapter hands. Labelled at the `mut`.
+    pub fn a_for_mut_that_cannot_write(ref mut self, why: ref String, iter: ref Expr, world: ref CheckWorld, span: ref Span) sync {
+        let mut message: String = ""
+        let mut note: String = ""
+        let mut help: String = ""
+        let mut label: String = ""
+        if why == "map" {
+            message = "`mut` here marks the key of a map, and a key can't be changed in place."
+            note = "The key decides where the entry stands in the map (its order, or its hash), so a key changed in place would leave the entry in the wrong place. A map's values can't be changed by a loop over the map yet either."
+            help = "Take the entry out and insert it again after the loop. To change a value, change `m[k]` in a loop over keys taken before it."
+            label = "marks the key"
+        } else if why == "set" {
+            message = "`mut` here marks an element of a set, and a set's element can't be changed in place."
+            note = "An element decides where it stands in the set (its order, or its hash), so one changed in place would stand in the wrong place."
+            help = "Take the element out of the set and insert the changed one after the loop."
+            label = "marks a set's element"
+        } else {
+            let root = check_core_stmt_adapter_root(world, iter)
+            message = "`mut` here marks the element of an adapter, and an adapter hands read-only views."
+            note = "`iter()`, `enumerate()`, `zip` and `rev` lend views of the elements of the list, not the elements, so a change through one would reach nothing."
+            help = f"Write the index loop: `for i in 0..<{root}.len()` and change `{root}[i]`."
+            label = "marks a read-only view"
+        }
+        let there = CheckLabel { span: span.clone(), word: "mut", text: label, main: true }
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1306", message: message, notes: [note], help: help, labels: [there] })
+    }
+
+    /// **`for mut` over a list the function may not change** (ADR-views-2 D2):
+    /// `NK1139`, labelled at the list.
+    pub fn a_for_mut_over_a_list_not_mut(ref mut self, list: ref String, head: ref String, a_parameter: bool, span: ref Span) sync {
+        let mut way_out: String = f"Declare it `mut` where it's declared: `let mut {list}`, or walk a copy of your own: `for mut {head} in {list}.clone()`."
+        if a_parameter {
+            way_out = f"Write `mut {list}` in the parameter list, or walk a copy of your own: `for mut {head} in {list}.clone()`."
+        }
+        let label = CheckLabel { span: span.clone(), word: list.clone(), text: "can't be changed here", main: true }
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1139", message: f"`for mut {head}` changes the elements of `{list}`, but `{list}` wasn't declared as mutable.", notes: ["A `for mut` binding is the element of the list itself, so a change to it reaches the list."], help: way_out, labels: [label] })
+    }
+
+    /// **`for mut` over a place that is not a list or an array** (ADR-views-2
+    /// D2): not supported yet.
     pub fn a_for_mut_over_a_place(ref mut self, world: ref CheckWorld, iter: ref Expr, over: ref Ty, span: ref Span) sync {
         self.findings.push(check_refusal("NK1139", span, "`for mut` over a list isn't supported yet.", [], null))
     }

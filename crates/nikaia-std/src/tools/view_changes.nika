@@ -701,7 +701,11 @@ fn vc_loop_view(iter: ref Expr, at: ref Span, ask: ref VcAsk) -> VcView? {
     let mut parts: collections::BTreeSet[String] = collections::BTreeSet()
     parts.insert(path.clone())
     let help = f"Collect what the loop wants to add in a list of its own and add it after the loop with `{path}.extend(more)`, or walk `0..<n` with `let n = {path}.len()` before the loop."
-    return VcView { name: path.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{path}` is lent to this loop", way_out: collections::BTreeMap(), used: at.clone(), call: null, callee: null, shown: [], help: help, looped: true, exclusive: false }
+    // **A `for mut` walks views of the elements** (ADR-views-2 D6): the list is
+    // not read in the body either.
+    let viewed = ask.mut_viewed.contains(id_of(iter) as i64)
+    let from = if viewed { f"`{path}` is lent to this loop, and each element is a mutable view of it" } else { f"`{path}` is lent to this loop" }
+    return VcView { name: path.clone(), roots: roots, parts: parts, made: at.clone(), from: from, way_out: collections::BTreeMap(), used: at.clone(), call: null, callee: null, shown: [], help: help, looped: true, exclusive: viewed }
 }
 
 fn vc_place_view(at: ref Span, name: ref String, place: ref Expr, outer: ref Vec[VcView], ask: ref VcAsk) -> VcView? {
@@ -1280,6 +1284,11 @@ fn vc_refuse(root: ref String, at: ref Span, views: ref Vec[VcView], mut walk: V
 /// A read of `root` while a mutable view of it is still used.
 fn vc_refuse_read(root: ref String, at: ref Span, view: ref VcView, mut walk: VcWalk) {
     let name = view.name.clone()
+    if view.looped {
+        let labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{root}` is read here", true), vc_label(view.made.clone(), name, view.from.clone(), false)]
+        walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{root}` is read here, inside the loop whose element is a mutable view of it.", notes: [], help: f"Read what you need into a name before the loop, or write the index loop: `for i in 0..<{root}.len()`.", warning: false, labels: labels })
+        return
+    }
     let mut labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{root}` is read here", true), vc_label(view.made.clone(), name, view.from.clone(), false)]
     match view.used {
         null => {}

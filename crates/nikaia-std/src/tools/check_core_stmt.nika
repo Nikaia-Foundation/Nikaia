@@ -1262,6 +1262,45 @@ fn check_core_stmt_for_a_range(mut state: CheckState, world: ref CheckWorld, ite
     }
 }
 
+/// Why the element a `for` walks cannot be changed in place, as a word: `map`
+/// (its key is part of the head), `set`, or `adapter` (it lends read-only
+/// views); empty where it can (ADR-views-2 D4).
+fn check_core_stmt_unwritable_element(state: ref CheckState, world: ref CheckWorld, iter: ref Expr, over: ref Ty) -> String sync {
+    match over {
+        Ty::Named { name, .. } => {
+            if a_map_type(name) {
+                return "map"
+            }
+            let last = type_last_segment(name)
+            if last == "HashSet" || last == "BTreeSet" || last == "Set" {
+                return "set"
+            }
+        },
+        else => {},
+    }
+    if !is_a_place(iter) && (state.flow.lent_walks.contains(id_of(iter) as i64) || check_core_stmt_from_iter(world, iter)) {
+        return "adapter"
+    }
+    return ""
+}
+
+/// Whether a chain of calls starts with `iter()`: what it hands are views.
+fn check_core_stmt_from_iter(world: ref CheckWorld, iter: ref Expr) -> bool sync {
+    return match iter {
+        Expr::MethodCall { receiver, method, .. } => f"{world.words.resolve(method)}" == "iter" || check_core_stmt_from_iter(world, receiver),
+        else => false,
+    }
+}
+
+/// The place a chain of adapters starts from, as written: `v` of
+/// `v.iter().enumerate()`; `xs` where it is not a place.
+fn check_core_stmt_adapter_root(world: ref CheckWorld, iter: ref Expr) -> String sync {
+    return match iter {
+        Expr::MethodCall { receiver, .. } => check_core_stmt_adapter_root(world, receiver),
+        else => dotted_path(world, iter) ?? "xs",
+    }
+}
+
 /// A `Vec` or an `Array`: the lists a `for mut` element is written through.
 fn check_core_stmt_a_list_type(ty: ref Ty) -> bool sync {
     return match ty {
@@ -1331,15 +1370,42 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     // **`mut` in front of the head** (ADR-views-2 D1-D3): over elements the loop
     // owns (a range, `drain()`, a produced sequence) every name is a `let mut`
     // of the turn. Over a place, the element is a view of it (D2, step 2).
-    let mut a_list_place = false
+    let mut mut_view = false
     // The list a `for` without `mut` walks, as written, for `NK1139`'s help.
     let mut walked_list: String = ""
     if !mutable && lent && check_core_stmt_a_list_type(over) {
         walked_list = dotted_path(world, iter) ?? ""
     }
-    if mutable && lent {
-        state.a_for_mut_over_a_place(world, iter, over, span)
-        a_list_place = true
+    // **A key, a set's element and a lending adapter's element take no `mut`**
+    // (D4, section 6): `NK1306`, labelled at the `mut`.
+    let unwritable = if mutable { check_core_stmt_unwritable_element(state, world, iter, over) } else { "" }
+    if unwritable != "" {
+        state.a_for_mut_that_cannot_write(unwritable, iter, world, span)
+    } else if mutable && lent {
+        // **Over a list or an array held by something the function may change
+        // the element is a `let mut` view of it** (D2): lowered `iter_mut()`.
+        let list: String? = dotted_path(world, iter)
+        let mut names: Vec[String] = []
+        for b in bindings {
+            names.push(f"{world.words.resolve(b)}")
+        }
+        let head: String = if names.len() == 1 { names[0].clone() } else { f"({names.join(", ")})" }
+        if list != null && check_core_stmt_a_list_type(over) {
+            let written: String = list ?? ""
+            let parts: Vec[ref String] = written.split(".").collect()
+            let found = state.binding(parts[0]) ?? return check_core_stmt_unit()
+            match found.immutable {
+                null => {
+                    mut_view = true
+                    state.facts.mut_view_reads.insert(id_of(iter) as i64, "")
+                },
+                kept => {
+                    state.a_for_mut_over_a_list_not_mut(written, head, kept.kind == CheckKind::Parameter, span)
+                },
+            }
+        } else {
+            state.a_for_mut_over_a_place(world, iter, over, span)
+        }
     }
     let mut frame: Vec[CheckLocal] = []
     let mut at = 0
@@ -1350,7 +1416,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         let name: String = f"{world.words.resolve(b)}"
         let element = elements[at].clone()
         at += 1
-        let copied = lent && name != "_" && a_copy_by_value(element)
+        let copied = lent && !mut_view && name != "_" && a_copy_by_value(element)
         if copied {
             state.facts.copied_loop_bindings.insert((span.start as i64, name.clone()))
         }
@@ -1358,8 +1424,8 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         // (`selfhosting_defects::a_loop_over_copies_binds_the_value`): a type
         // of the package that derives `Copy`, or a described one whose ledger
         // says `copies`, as a number is above.
-        let declared_copy = lent && name != "_" && !copied && !element.is_a_view() && state.a_view_that_copies(world, view_of_type(element))
-        let a_view = declared_copy || (lent && name != "_" && !copied && element.is_a_view())
+        let declared_copy = lent && !mut_view && name != "_" && !copied && !element.is_a_view() && state.a_view_that_copies(world, view_of_type(element))
+        let a_view = declared_copy || (lent && !mut_view && name != "_" && !copied && element.is_a_view())
         if a_view {
             state.facts.copied_view_bindings.insert((span.start as i64, name.clone()))
         }
@@ -1369,7 +1435,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
             else => false,
         }
         let mut bound = element.clone()
-        if lent && !copied && !declared_copy && named {
+        if lent && !mut_view && !copied && !declared_copy && named {
             bound = view_of_type(element)
         }
         let id = state.a_new_binding()
@@ -1382,12 +1448,15 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
             state.flow.lent_text_params.insert(id)
         }
         let mut local = CheckLocal::free(name, bound, id)
-        local.written_mut = false
-        local.lent = lent && !copied && !a_view
+        local.written_mut = mutable
+        if mut_view {
+            local.view_of = dotted_path(world, iter) ?? ""
+        }
+        local.lent = lent && !mut_view && !copied && !a_view
         // **A `for` binding changes only with `mut`** (Part I 3.3, #734,
         // ADR-views-2): its head is a `let`'s pattern, so a change to one
         // without it is `NK1139`.
-        if !mutable || a_list_place {
+        if !mutable {
             local.immutable = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: walked_list.clone() }
         }
         frame.push(local)
@@ -1465,10 +1534,24 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     state.repeats.push(CheckRepeats::a_loop(world.words, depth, body))
     check_narrow_turn_begins(state, depth)
     state.scope.push(frame)
+    // **The element of a `for mut` is only borrowed from its list** (D5): a part
+    // of it handed to something that keeps it is `NK1131`, as out of a `let`
+    // over a place (`lent_lets`); the emitter still lends it as a `&mut`.
+    let frame_at = state.scope.len() as i64 - 1
+    if mut_view {
+        for b in bindings {
+            state.lent_lets.insert((f"{world.words.resolve(b)}", frame_at))
+        }
+    }
     state.flow.loops += 1
     check_core_stmt_body_discarded(state, body)
     check_core_block(state, world, host, body)
     state.flow.loops -= 1
+    if mut_view {
+        for b in bindings {
+            state.lent_lets.remove((f"{world.words.resolve(b)}", frame_at))
+        }
+    }
     state.scope.pop()
     check_narrow_turn_ends(state)
     state.repeats.pop()

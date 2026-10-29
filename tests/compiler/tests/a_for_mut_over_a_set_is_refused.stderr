@@ -1,0 +1,9 @@
+error[NK1306]: `mut` here marks an element of a set, and a set's element can't be changed in place.
+  --> tests/a_for_mut_over_a_set_is_refused.nika:6:9
+   |
+ 6 |     for mut s in seen {
+   |         ^^^ marks a set's element
+   |
+   = note: An element decides where it stands in the set (its order, or its hash), so one changed in place would stand in the wrong place.
+   = help: Take the element out of the set and insert the changed one after the loop.
+1 type error

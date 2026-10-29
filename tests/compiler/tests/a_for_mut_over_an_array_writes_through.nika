@@ -1,0 +1,7 @@
+fn main() {
+    let mut cells: Array[i64, 3] = [1, 2, 3]
+    for mut c in cells {
+        c = c + 100
+    }
+    println(f"{cells[0]} {cells[1]} {cells[2]}")
+}

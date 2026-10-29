@@ -1,0 +1,9 @@
+error[NK1306]: `mut` here marks the element of an adapter, and an adapter hands read-only views.
+  --> tests/a_for_mut_over_an_adapter_is_refused.nika:3:9
+   |
+ 3 |     for mut (i, x) in v.iter().enumerate() {
+   |         ^^^ marks a read-only view
+   |
+   = note: `iter()`, `enumerate()`, `zip` and `rev` lend views of the elements of the list, not the elements, so a change through one would reach nothing.
+   = help: Write the index loop: `for i in 0..<v.len()` and change `v[i]`.
+1 type error

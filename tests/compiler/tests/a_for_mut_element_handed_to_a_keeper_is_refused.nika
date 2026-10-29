@@ -1,0 +1,10 @@
+struct P { pub tags: Vec[i64] }
+
+fn main() {
+    let mut v: Vec[P] = [P { tags: [1] }]
+    let mut kept: Vec[P] = []
+    for mut p in v {
+        kept.push(p)
+    }
+    println(f"{kept.len()}")
+}

@@ -114,6 +114,41 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_for_mut_that_cannot_write(&mut self, why: &str, iter: &Expr, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, span: &Span) {
+        let mut message: String = String::from("");
+        let mut note: String = String::from("");
+        let mut help: String = String::from("");
+        let mut label: String = String::from("");
+        if why == "map" {
+            message = String::from("`mut` here marks the key of a map, and a key can't be changed in place.");
+            note = String::from("The key decides where the entry stands in the map (its order, or its hash), so a key changed in place would leave the entry in the wrong place. A map's values can't be changed by a loop over the map yet either.");
+            help = String::from("Take the entry out and insert it again after the loop. To change a value, change `m[k]` in a loop over keys taken before it.");
+            label = String::from("marks the key");
+        } else if why == "set" {
+            message = String::from("`mut` here marks an element of a set, and a set's element can't be changed in place.");
+            note = String::from("An element decides where it stands in the set (its order, or its hash), so one changed in place would stand in the wrong place.");
+            help = String::from("Take the element out of the set and insert the changed one after the loop.");
+            label = String::from("marks a set's element");
+        } else {
+            let root = check_core_stmt_adapter_root(world, iter);
+            message = String::from("`mut` here marks the element of an adapter, and an adapter hands read-only views.");
+            note = String::from("`iter()`, `enumerate()`, `zip` and `rev` lend views of the elements of the list, not the elements, so a change through one would reach nothing.");
+            help = format!("Write the index loop: `for i in 0..<{}.len()` and change `{}[i]`.", root, root);
+            label = String::from("marks a read-only view");
+        }
+        let there = CheckLabel { span: span.clone(), word: String::from("mut"), text: label, main: true };
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1306"), message, notes: vec![note], help: Some(help), labels: vec![there] });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_for_mut_over_a_list_not_mut(&mut self, list: &str, head: &str, a_parameter: bool, span: &Span) {
+        let mut way_out: String = format!("Declare it `mut` where it's declared: `let mut {}`, or walk a copy of your own: `for mut {} in {}.clone()`.", list, head, list);
+        if a_parameter { way_out = format!("Write `mut {}` in the parameter list, or walk a copy of your own: `for mut {} in {}.clone()`.", list, head, list); }
+        let label = CheckLabel { span: span.clone(), word: list.to_string(), text: String::from("can't be changed here"), main: true };
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1139"), message: format!("`for mut {}` changes the elements of `{}`, but `{}` wasn't declared as mutable.", head, list, list), notes: vec![String::from("A `for mut` binding is the element of the list itself, so a change to it reaches the list.")], help: Some(way_out), labels: vec![label] });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_for_mut_over_a_place(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr, over: &Ty, span: &Span) { self.findings.push(check_refusal("NK1139", span, String::from("`for mut` over a list isn't supported yet."), vec![], None)); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

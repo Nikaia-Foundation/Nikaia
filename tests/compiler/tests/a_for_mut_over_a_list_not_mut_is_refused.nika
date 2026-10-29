@@ -1,0 +1,12 @@
+struct P { pub n: i64 }
+
+fn bump(v: Vec[P]) {
+    for mut p in v {
+        p.n += 1
+    }
+}
+
+fn main() {
+    let v: Vec[P] = [P { n: 1 }]
+    bump(v)
+}

@@ -28,6 +28,7 @@ pub struct CheckLocal {
     pub ty: Ty,
     pub constant: Option<Integer>,
     pub lent: bool,
+    pub view_of: String,
     pub immutable: Option<CheckImmutable>,
     pub changing: bool,
     pub built: Option<BuildValue>,
@@ -38,7 +39,7 @@ pub struct CheckLocal {
 }
 
 impl CheckLocal {
-    pub fn free(name: String, ty: Ty, id: i64) -> CheckLocal { CheckLocal { name, written_mut: false, ty, constant: None, lent: false, immutable: None, changing: false, built: None, literal: None, empty_list: None, open_number: None, id } }
+    pub fn free(name: String, ty: Ty, id: i64) -> CheckLocal { CheckLocal { name, written_mut: false, ty, constant: None, lent: false, view_of: String::from(""), immutable: None, changing: false, built: None, literal: None, empty_list: None, open_number: None, id } }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
