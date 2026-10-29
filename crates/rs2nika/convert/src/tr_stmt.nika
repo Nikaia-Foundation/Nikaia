@@ -189,18 +189,24 @@ impl TrEm {
             return self.if_expr(n, ind, mode)
         } else if kind == "MATCH_EXPR" {
             return self.match_expr(n, ind, mode)
-        } else if kind == "FOR_EXPR" {
-            return self.for_expr(n, ind)
-        } else if kind == "WHILE_EXPR" {
-            return self.while_expr(n, ind)
-        } else if kind == "LOOP_EXPR" {
-            let mut out: Vec[String] = [f"{ind}while true {{"]
-            self.label_note(n, ind.clone(), out)
-            for l in self.block(self.t.kid(n, "BLOCK_EXPR"), f"{ind}    ", "stmt") {
-                out.push(l)
+        } else if kind == "FOR_EXPR" || kind == "WHILE_EXPR" || kind == "LOOP_EXPR" {
+            let label = self.loop_label(n)
+            self.loops.push(label.clone())
+            let before = self.jumps.len()
+            let mut lines: Vec[String] = []
+            if kind == "FOR_EXPR" {
+                lines = self.for_expr(n, ind.clone())
+            } else if kind == "WHILE_EXPR" {
+                lines = self.while_expr(n, ind.clone())
+            } else {
+                lines.push(f"{ind}while true {{")
+                for l in self.block(self.t.kid(n, "BLOCK_EXPR"), f"{ind}    ", "stmt") {
+                    lines.push(l)
+                }
+                lines.push(f"{ind}}}")
             }
-            out.push(f"{ind}}}")
-            return out
+            self.loops.pop()
+            return self.close_jumps(label, before, ind, lines)
         }
         // a block
         let body = self.block(n, f"{ind}    ", mode)
@@ -215,11 +221,81 @@ impl TrEm {
         return out
     }
 
-    fn label_note(ref mut self, n: i64, ind: String, mut out: Vec[String]) {
-        if self.t.kid(n, "LABEL") >= 0 {
-            self.todos += 1
-            out.push(f"{ind}    // TODO(rs2nika): the label `{self.src(self.t.kid(n, "LABEL"))}` (Nikaia has none: a flag, or a function that returns)")
+    /// A loop's label without its `'` and `:` (`'packages:` -> `packages`),
+    /// or "".
+    fn loop_label(ref self, n: i64) -> String {
+        let l = self.t.kid(n, "LABEL")
+        if l < 0 {
+            return ""
         }
+        return self.src(l).trim_start_matches("'").trim_end_matches(":").trim().clone()
+    }
+
+    /// The child nodes of a loop without its label.
+    fn loop_parts(ref self, n: i64) -> Vec[i64] {
+        return self.nodes(n).iter().filter(fn(k) { !self.t.is(k, "LABEL") }).collect()
+    }
+
+    /// `break 'L` (`what` "done") or `continue 'L` ("next"): the loop's own
+    /// `break` or `continue` where `L` is the innermost loop; from an inner
+    /// loop, a flag set before the `break` that leaves it, which
+    /// `close_jumps` reads after each loop out to `L`. "" where no loop
+    /// around is `L` (a labelled block).
+    pub fn labelled_jump(ref mut self, n: i64, what: String) -> String {
+        let name: String = self.src(self.t.kid(n, "LIFETIME")).trim_start_matches("'").clone()
+        if name == "" || !self.loops.contains(name) {
+            return ""
+        }
+        if self.loops[self.loops.len() - 1] == name {
+            return if what == "done" { "break" } else { "continue" }
+        }
+        self.pre.push(f"{self.ind}{name}_{what} = true")
+        self.jumps.push(f"{name}:{what}")
+        return "break"
+    }
+
+    /// The lines of a loop `label` with the labelled jumps out of its inner
+    /// loops since `before`: a jump to this loop declares its flag before
+    /// it; one to a loop further out reads the flag after it, leaving this
+    /// loop too, or continuing the loop around it where that is the target.
+    fn close_jumps(ref mut self, label: String, before: i64, ind: String, given: Vec[String]) -> Vec[String] {
+        let mut out: Vec[String] = []
+        let mut after: Vec[String] = []
+        let mut kept: Vec[String] = []
+        for k in before..<self.jumps.len() {
+            let j: String = self.jumps[k].clone()
+            if kept.contains(j) || out.iter().any(fn(l) { l.ends_with(f" {j.replace(":", "_")} = false") }) {
+                continue
+            }
+            let (l, what) = j.split_once(":") ?? ("", "")
+            let flag = f"{l}_{what}"
+            if l == label {
+                out.push(f"{ind}let mut {flag} = false")
+                continue
+            }
+            kept.push(j.clone())
+            after.push(f"{ind}if {flag} {{")
+            if what == "next" && self.loops.len() > 0 && self.loops[self.loops.len() - 1] == l {
+                after.push(f"{ind}    {flag} = false")
+                after.push(f"{ind}    continue")
+            } else {
+                after.push(f"{ind}    break")
+            }
+            after.push(f"{ind}}}")
+        }
+        while self.jumps.len() > before {
+            self.jumps.pop()
+        }
+        for j in kept {
+            self.jumps.push(j.clone())
+        }
+        for l in given {
+            out.push(l.clone())
+        }
+        for l in after {
+            out.push(l.clone())
+        }
+        return out
     }
 
     // ---- let ----
@@ -1179,7 +1255,7 @@ impl TrEm {
     }
 
     fn for_expr(ref mut self, n: i64, ind: String) -> Vec[String] {
-        let parts = self.nodes(n)
+        let parts = self.loop_parts(n)
         let p = parts[0]
         let it = self.iterable(parts[1])
         let body_n = parts[2]
@@ -1250,7 +1326,6 @@ impl TrEm {
         }
         self.pre = []
         out.push(head)
-        self.label_note(n, ind.clone(), out)
         for l in lead {
             out.push(l.clone())
         }
@@ -1272,7 +1347,7 @@ impl TrEm {
     }
 
     fn while_expr(ref mut self, n: i64, ind: String) -> Vec[String] {
-        let parts = self.nodes(n)
+        let parts = self.loop_parts(n)
         let cond = parts[0]
         let body_n = parts[parts.len() - 1]
         let inner = f"{ind}    "
@@ -1283,8 +1358,7 @@ impl TrEm {
             let e = self.expr(ps[1])
             let some_inner = self.t.nth(p, 1)
             out.push(f"{ind}while true {{")
-            self.label_note(n, ind.clone(), out)
-            if self.is_some_pat(p) && !self.refutable(some_inner) {
+                if self.is_some_pat(p) && !self.refutable(some_inner) {
                 out.push(f"{inner}let {self.pat(some_inner)} = {e} ?? break")
                 for l in self.block(body_n, inner.clone(), "stmt") {
                     out.push(l)
@@ -1303,7 +1377,6 @@ impl TrEm {
             return out
         }
         out.push(f"{ind}while {self.expr(cond)} {{")
-        self.label_note(n, ind.clone(), out)
         for l in self.block(body_n, inner, "stmt") {
             out.push(l)
         }

@@ -103,13 +103,16 @@ impl TrEm {
         } else if kind == "RETURN_EXPR" {
             return self.ret(n)
         } else if kind == "BREAK_EXPR" {
-            if self.nodes(n).len() > 0 || self.t.has_tok(n, "LIFETIME") || self.t.kid(n, "LIFETIME") >= 0 {
+            let has_label = self.t.has_tok(n, "LIFETIME") || self.t.kid(n, "LIFETIME") >= 0
+            if self.nodes(n).iter().any(fn(k) { !self.t.is(k, "LIFETIME") }) || has_label && self.labelled_jump(n, "done") == "" {
                 return self.todo("`break` with a value or a label", n)
             }
             return "break"
         } else if kind == "CONTINUE_EXPR" {
             if self.t.kid(n, "LIFETIME") >= 0 {
-                return self.todo("`continue` with a label", n)
+                let jump = self.labelled_jump(n, "next")
+                if jump == "" { return self.todo("`continue` with a label", n) }
+                return jump
             }
             return "continue"
         } else if kind == "TRY_EXPR" {

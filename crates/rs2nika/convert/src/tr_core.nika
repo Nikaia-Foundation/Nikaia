@@ -65,6 +65,12 @@ pub struct TrEm {
     /// a refusal was written as `{Prefix}Refusal::Refused(..)`: the file
     /// declares that enum
     pub refused_by: bool,
+    /// the loops around the code being written, innermost last: a label's
+    /// name, or "" for a loop without one
+    pub loops: Vec[String],
+    /// the labelled jumps out of an inner loop written so far: `L:done`
+    /// (`break 'L`) or `L:next` (`continue 'L`), set through a flag
+    pub jumps: Vec[String],
     /// the type the function being written returns, as Nikaia writes it
     pub ret_ty: String,
     /// a closure's body written as a loop's (`xs.iter().map(|x| { .. })
@@ -109,6 +115,8 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
         self_var: "",
         impl_fns: collections::BTreeSet(),
         refused_by: false,
+        loops: [],
+        jumps: [],
         ret_ty: "",
         push_to: "",
         push_opt: false,

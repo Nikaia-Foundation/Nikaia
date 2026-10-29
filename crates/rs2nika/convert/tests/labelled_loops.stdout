@@ -1,0 +1,80 @@
+use std::collections
+
+pub fn first(m: ref collections::BTreeMap[String, Vec[u32]]) -> u32? {
+    let mut found = null
+    let mut packages_done = false
+    let mut packages_next = false
+    for (name, units) in m {
+        for u in units {
+            if u > 3 {
+                found = u
+                packages_done = true
+                break
+            }
+            if u == 0 {
+                packages_next = true
+                break
+            }
+        }
+        if packages_done {
+            break
+        }
+        if packages_next {
+            packages_next = false
+            continue
+        }
+    }
+    return found
+}
+pub fn deep(xs: ref Vec[Vec[Vec[i64]]]) -> i64 {
+    let mut n = 0
+    let mut outer_next = false
+    let mut outer_done = false
+    for a in xs {
+        for b in a {
+            let mut inner_done = false
+            while true {
+                for c in b {
+                    if c < 0 {
+                        outer_next = true
+                        break
+                    }
+                    if c == 0 {
+                        inner_done = true
+                        break
+                    }
+                    if c > 9 {
+                        outer_done = true
+                        break
+                    }
+                    n += c
+                }
+                if outer_next {
+                    break
+                }
+                if inner_done {
+                    break
+                }
+                if outer_done {
+                    break
+                }
+                break
+            }
+            if outer_next {
+                break
+            }
+            if outer_done {
+                break
+            }
+            n += 1
+        }
+        if outer_next {
+            outer_next = false
+            continue
+        }
+        if outer_done {
+            break
+        }
+    }
+    return n
+}
