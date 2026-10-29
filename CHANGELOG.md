@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1272] — 2026-10-29
+
+**A text moved into a struct field, a tuple or a list while a view of it is still used is followed there: changing it in place is NK2305 (ADR-353 D3, D4, #942).**
+- `Cursor { input: text }` (also the shorthand `Cursor { input }`), `(text, 1)` and `[text]` make the new local a root of the view; a struct field is watched on its own (`c.input.push_str(..)` is NK2305, `c.pos = 2` is not), a tuple or list element as part of its container.
+- Open: lowering the move itself (the buffer parked in the keep) still reaches rustc (E0505); it waits for a decision (#942). A variant payload (`E::A(text)`) is not followed yet.
+
 ## [0.0.1271] — 2026-10-29
 
 **A list field of text literals, drained and collected where `Vec[String]` is declared, keeps text of its own (#941).**
