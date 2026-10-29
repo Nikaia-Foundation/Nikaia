@@ -1,0 +1,35 @@
+// A text parameter the body only moves into a local struct is not kept
+// (Part I 6.5, ADR-353 D8): it stays a view, the struct's field views the
+// caller's text, and the events handed back point into it (#942).
+struct Event { text: String, line: i64 }
+
+struct Parser { input: String, pos: i64 }
+
+impl Parser {
+    fn next(ref mut self) -> Event? {
+        let lines = self.input.lines().collect()
+        if self.pos >= lines.len() { return null }
+        let e = Event { text: lines[self.pos].trim(), line: self.pos + 1 }
+        self.pos += 1
+        return e
+    }
+}
+
+fn events(text: String) -> Vec[Event] {
+    let mut p = Parser { input: text, pos: 0 }
+    let mut events: Vec[Event] = []
+    while true {
+        let e = p.next() ?? break
+        events.push(e)
+    }
+    return events
+}
+
+fn main() {
+    let text = f"one\n two \nthree {3}"
+    let found = events(text)
+    for e in found {
+        println(f"{e.line}: {e.text}")
+    }
+    println(text)
+}

@@ -176,17 +176,19 @@ pub(crate) struct TextDeclared {
     pub(crate) variants: collections::BTreeMap<String, Vec<Type>>,
     public_enums: collections::BTreeSet<String>,
     pub(crate) fns: collections::BTreeMap<String, FnDecl>,
+    pub(crate) types: collections::BTreeSet<String>,
     pub(crate) methods: collections::BTreeMap<String, Vec<String>>,
     pub(crate) rules: collections::BTreeSet<String>,
 }
 
 pub(crate) fn declared_of(program: &Program, names: &winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new() };
+    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), types: collections::BTreeSet::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Struct { name, fields, is_public, .. } => {
                 let is_public = *is_public; let name = *name;
                 let owner = names.resolve(name).to_string();
+                declared.types.insert(owner.to_string());
                 for field in fields.iter() {
                     let key = (owner.to_string(), names.resolve(field.name).to_string());
                     declared.fields.insert(key, FieldDecl { ty: field.ty.clone(), published: is_public && field.is_public });
@@ -195,6 +197,7 @@ pub(crate) fn declared_of(program: &Program, names: &winnow_grammar::InternerCon
             Item::Enum { name, variants, is_public, is_extern } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                 let owner = names.resolve(name).to_string();
+                declared.types.insert(owner.to_string());
                 if is_public { declared.public_enums.insert(owner.to_string()); }
                 if !is_extern {
                     for variant in variants.iter() {
@@ -379,6 +382,7 @@ pub(crate) struct TextTie {
     pub(crate) word: String,
     pub(crate) depth: i64,
     pub(crate) through_text: bool,
+    pub(crate) through_value: bool,
 }
 
 pub(crate) fn open_tier_scope(walk: &mut TierWalk) { walk.frames.push(vec![]); }
@@ -1730,7 +1734,7 @@ pub(crate) fn call_ties(callee: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_, '
                     let depth = tie_depth(&name, &walk);
                     if depth >= 0 && !lasting_tier(tier_of_kinds(&kinds)) {
                         let word = seen(&TextOwner::Param(callee.to_string(), at), &no_path(), walk);
-                        out.push(TextTie { word, depth, through_text: hands_back_text(&function, ask) });
+                        out.push(TextTie { word, depth, through_text: hands_back_text(&function, ask), through_value: hands_back_a_value(&function, ask, &walk) });
                     }
                 }
             }
@@ -1747,6 +1751,12 @@ pub(crate) fn field_ties(field: &FieldInit, shorthand: &Expr, ask: &TierAsk<'_, 
     ties_of(shorthand, ask, walk)
 }
 
+pub(crate) fn hands_back_a_value(function: &FnDecl, ask: &TierAsk<'_, '_, '_, '_>, walk: &TierWalk) -> bool {
+    let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if !result.generics.is_empty() || result.is_nullable || result.is_tuple || result.is_slice || (*result.code).is_some() { return false; }
+    walk.declared.types.contains(ask.names.resolve(result.name))
+}
+
 pub(crate) fn hands_back_text(function: &FnDecl, ask: &TierAsk<'_, '_, '_, '_>) -> bool {
     let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     a_text_parameter(ask.names, result)
@@ -1755,7 +1765,7 @@ pub(crate) fn hands_back_text(function: &FnDecl, ask: &TierAsk<'_, '_, '_, '_>) 
 pub(crate) fn tie_leaves(value: &Expr, depth: i64, into: Option<String>, back: bool, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) {
     let ties = ties_of(value, ask, walk);
     if ties.is_empty() { return; }
-    for tie in ties.iter() { if tie.depth > depth && !(back && tie.depth == 0 && tie.through_text) { walk.unlent.insert(tie.word.to_string()); } }
+    for tie in ties.iter() { if tie.depth > depth && !(back && tie.depth == 0 && tie.through_text) && !(back && tie.depth > 0 && tie.through_value) { walk.unlent.insert(tie.word.to_string()); } }
     let name = match into { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut all: Vec<TextTie> = nikaia_std::index::or(match *nikaia_std::index::get(&walk.ties, &name) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1766,7 +1776,7 @@ pub(crate) fn tie_leaves(value: &Expr, depth: i64, into: Option<String>, back: b
 }
 
 pub(crate) fn tie_add(all: &mut Vec<TextTie>, tie: &TextTie) {
-    for held in all.iter() { if held.word == tie.word && held.depth == tie.depth && held.through_text == tie.through_text { return; } }
+    for held in all.iter() { if held.word == tie.word && held.depth == tie.depth && held.through_text == tie.through_text && held.through_value == tie.through_value { return; } }
     all.push(tie.clone());
 }
 

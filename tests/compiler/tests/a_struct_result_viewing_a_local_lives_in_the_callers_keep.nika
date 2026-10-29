@@ -1,0 +1,29 @@
+// A struct, or a tuple, handed back whose views point into text the body made
+// puts that text in the caller's keep (ADR-353 D10, ADR-283 D23): the field
+// stays a view, nothing is copied, and the view is read after the call (#942).
+struct View { head: String }
+
+struct Cursor { input: String, pos: i64 }
+
+fn parse(t: String) -> View { return View { head: t } }
+
+fn make(n: i64) -> Cursor {
+    let text = f"a: {n}"
+    let v = parse(text)
+    let c = Cursor { input: v.head, pos: 0 }
+    println(v.head)
+    return c
+}
+
+fn pair(n: i64) -> (View, i64) {
+    let text = f"b: {n}"
+    let v = parse(text)
+    return (v, n)
+}
+
+fn main() {
+    let c = make(1)
+    println(f"{c.input} {c.pos}")
+    let (v, k) = pair(2)
+    println(f"{v.head} {k}")
+}

@@ -286,6 +286,8 @@ struct TextDeclared {
     public_enums: collections::BTreeSet[String],
     /// Every function and method, by key.
     fns: collections::BTreeMap[String, FnDecl],
+    /// The structs and enums this program declares, by name.
+    types: collections::BTreeSet[String],
     /// Method names declared in this program, to the keys that declare them.
     methods: collections::BTreeMap[String, Vec[String]],
     /// The keys of the grammars' rules, `G::rule`.
@@ -293,11 +295,12 @@ struct TextDeclared {
 }
 
 fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), methods: collections::BTreeMap(), rules: collections::BTreeSet() }
+    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), types: collections::BTreeSet(), methods: collections::BTreeMap(), rules: collections::BTreeSet() }
     for item in program.items {
         match item.node {
             Item::Struct { name, fields, is_public, .. } => {
                 let owner = names.resolve(name).clone()
+                declared.types.insert(owner.clone())
                 for field in fields {
                     let key = (owner.clone(), names.resolve(field.name).clone())
                     declared.fields.insert(key, FieldDecl { ty: field.ty.clone(), published: is_public && field.is_public })
@@ -308,6 +311,7 @@ fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext)
             // to C by value.
             Item::Enum { name, variants, is_public, is_extern } => {
                 let owner = names.resolve(name).clone()
+                declared.types.insert(owner.clone())
                 if is_public {
                     declared.public_enums.insert(owner.clone())
                 }
@@ -612,6 +616,10 @@ struct TextTie {
     /// The callee hands back text: a parameter of the caller handed back
     /// through it is lent on, as the callee's result is (#678).
     through_text: bool,
+    /// The callee hands back a value of a declared type, a struct or an
+    /// enum: handed back out of the function walked, the local text it views
+    /// goes into the caller's keep (ADR-353 D10).
+    through_value: bool,
 }
 
 fn open_tier_scope(mut walk: TierWalk) {
@@ -2384,7 +2392,7 @@ fn call_ties(callee: ref String, args: ref Vec[Expr], ask: ref TierAsk, mut walk
                     let depth = tie_depth(name, walk)
                     if depth >= 0 && !lasting_tier(tier_of_kinds(kinds)) {
                         let word = seen(TextOwner::Param(callee.clone(), at), no_path(), walk)
-                        out.push(TextTie { word: word, depth: depth, through_text: hands_back_text(function, ask) })
+                        out.push(TextTie { word: word, depth: depth, through_text: hands_back_text(function, ask), through_value: hands_back_a_value(function, ask, walk) })
                     }
                 }
             }
@@ -2401,6 +2409,16 @@ fn field_ties(field: ref FieldInit, shorthand: ref Expr, ask: ref TierAsk, mut w
     return ties_of(shorthand, ask, walk)
 }
 
+/// Whether `function` hands back a struct or an enum this program declares,
+/// as it is (no option, no type arguments).
+fn hands_back_a_value(function: ref FnDecl, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+    let result = function.result ?? return false
+    if !result.generics.is_empty() || result.is_nullable || result.is_tuple || result.is_slice || result.code != null {
+        return false
+    }
+    return walk.declared.types.contains(ask.names.resolve(result.name))
+}
+
 fn hands_back_text(function: ref FnDecl, ask: ref TierAsk) -> bool {
     let result = function.result ?? return false
     return a_text_parameter(ask.names, result)
@@ -2414,8 +2432,11 @@ fn tie_leaves(value: ref Expr, depth: i64, into: String?, back: bool, ask: ref T
     if ties.len() == 0 {
         return
     }
+    // **A value viewing what the body owns takes the caller's keep**
+    // (ADR-353 D10, ADR-283 D23): a struct or an enum a callee built over a
+    // local's text, handed back, leaves the callee's parameter lent.
     for tie in ties {
-        if tie.depth > depth && !(back && tie.depth == 0 && tie.through_text) {
+        if tie.depth > depth && !(back && tie.depth == 0 && tie.through_text) && !(back && tie.depth > 0 && tie.through_value) {
             walk.unlent.insert(tie.word.clone())
         }
     }
@@ -2432,7 +2453,7 @@ fn tie_leaves(value: ref Expr, depth: i64, into: String?, back: bool, ask: ref T
 /// doubled with every such statement, and a long function ran out of memory.
 fn tie_add(mut all: Vec[TextTie], tie: ref TextTie) {
     for held in all {
-        if held.word == tie.word && held.depth == tie.depth && held.through_text == tie.through_text {
+        if held.word == tie.word && held.depth == tie.depth && held.through_text == tie.through_text && held.through_value == tie.through_value {
             return
         }
     }
