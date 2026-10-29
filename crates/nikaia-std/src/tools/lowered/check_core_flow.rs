@@ -885,7 +885,10 @@ pub(crate) fn check_core_flow_arm_names_compared(state: &mut CheckState, arm: i6
             continue;
         }
         if !lent.contains(&each.1) { continue; }
-        if each.4 && each.3 == "lhs" { let removed = state.facts.compared_views.remove(&(each.2, String::from("rhs"))); } else if each.4 { let removed = state.facts.compared_views.remove(&(each.2, String::from("lhs"))); } else if each.5 { let added = state.facts.compared_views.insert((each.2, each.3.to_string())); }
+        if each.4 {
+            let other: String = if each.3 == "lhs" { String::from("rhs") } else { String::from("lhs") };
+            let removed = state.facts.compared_views.remove(&(each.2, other));
+        } else if each.5 { let added = state.facts.compared_views.insert((each.2, each.3.to_string())); }
     }
     state.arm_compared = kept;
 }

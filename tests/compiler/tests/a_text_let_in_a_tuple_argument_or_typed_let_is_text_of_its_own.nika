@@ -1,0 +1,28 @@
+// #956: a name bound to a text literal, a `String` part of a tuple handed to
+// a parameter `(i64, String)` or bound by a `let` of that type, is what that
+// position holds: text of its own where the position keeps it, a view of
+// the program's text where only literals reach it (ADR-282 D17, D29).
+fn length(t: (i64, String)) -> i64 {
+    return t.0 + t.1.len()
+}
+
+fn keep(mut into: Vec[(i64, String)], t: (i64, String)) {
+    into.push(t)
+}
+
+fn main() {
+    let o3 = "abc"
+    println(f"{length((1, o3))}")
+    let o4 = "de"
+    let t: (i64, String) = (1, o4)
+    println(f"{t.0} {t.1}")
+    let n = 2
+    let mut v: Vec[(i64, String)] = [(0, f"z{n}")]
+    let o5 = "fgh"
+    keep(v, (1, o5))
+    keep(v, (2, f"y{n}"))
+    let o6 = "ij"
+    let u: (i64, String) = (3, o6)
+    v.push(u)
+    println(f"{v.len()} {v[1].1} {v[3].1}")
+}

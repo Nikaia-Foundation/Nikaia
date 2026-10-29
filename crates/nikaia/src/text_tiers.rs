@@ -138,6 +138,37 @@ fn separate_repeated_ids(parsed: &mut Parsed) {
 /// the fixpoint over them, and where a value is handed into a mixed one. What
 /// stays here is writing that answer into the syntax tree.
 pub fn refine(parsed: &mut Parsed) {
+    refine_with(parsed, &BTreeMap::new());
+}
+
+/// The published fields of the published structs of a package's files, as
+/// written (`tier_beside_fields`).
+pub type BesideFields = BTreeMap<String, Vec<nikaia_std::tools::ty::FieldContract>>;
+
+/// **One package's files, each decided against the published fields of all
+/// of them** ([ADR-282](../../../docs/specification/adr/adr-282.md) D17, D25,
+/// #956): a name bound to a literal and kept in a `String` of a struct
+/// another file declares is declared `String`. The fields are read before
+/// any file is decided, so the answer does not hang on the order.
+pub fn refine_package(files: &mut [&mut Parsed]) {
+    let read: Vec<&Parsed> = files.iter().map(|parsed| &**parsed).collect();
+    let beside = beside_fields(&read);
+    for parsed in files.iter_mut() {
+        refine_with(parsed, &beside);
+    }
+}
+
+/// What `refine_package` reads of the files (`tools/text_tiers.nika`).
+pub fn beside_fields(files: &[&Parsed]) -> BesideFields {
+    let views: Vec<_> = files
+        .iter()
+        .map(|parsed| crate::check::parsed_view_of(parsed))
+        .collect();
+    nikaia_std::tools::text_tiers::tier_beside_fields(&views)
+}
+
+/// One file, against the published fields of its package's files.
+pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     separate_repeated_ids(parsed);
     use nikaia_std::tools::text_tiers::{TierAsk, hand_number, text_tiers};
     let library = crate::contracts::std_ledger();
@@ -147,6 +178,7 @@ pub fn refine(parsed: &mut Parsed) {
         aliases: &parsed.aliases,
         library,
         methods: &methods,
+        beside,
     };
     let decided = text_tiers(&parsed.program, &ask);
     parsed.viewed_arms = decided.viewed_arms.clone();

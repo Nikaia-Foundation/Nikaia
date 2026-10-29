@@ -763,6 +763,19 @@ fn a_parse_error(error: &ParseError, source: &str) -> crate::check::Finding {
 }
 
 pub fn parse_to_ast(input: &str) -> Result<Parsed> {
+    let mut parsed = parse_unrefined(input)?;
+    // **What a `String` field or result is below is decided here, once**
+    // ([ADR-282](../../../../docs/specification/adr/adr-282.md)): by what flows
+    // into it, and written into its type so every later reader agrees.
+    crate::text_tiers::refine(&mut parsed);
+    Ok(parsed)
+}
+
+/// **A file of a package, its text tiers not decided yet**: the package's
+/// loader decides them once every file is parsed, reading the published
+/// fields of the others (`text_tiers::refine_package`,
+/// [ADR-282](../../../../docs/specification/adr/adr-282.md) D17, #956).
+pub fn parse_unrefined(input: &str) -> Result<Parsed> {
     fits(input.len())?;
     // Generated parsers run on a `Stateful` stream: `LocatingSlice` supplies the
     // spans, `ParseContext` carries the shared parser state including the
@@ -852,10 +865,6 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
     // each construction, each exit of a method that changes the value, and
     // each entry that reads one.
     crate::type_rules::expand(&mut parsed)?;
-    // **What a `String` field or result is below is decided here, once**
-    // ([ADR-282](../../../../docs/specification/adr/adr-282.md)): by what flows
-    // into it, and written into its type so every later reader agrees.
-    crate::text_tiers::refine(&mut parsed);
     Ok(parsed)
 }
 

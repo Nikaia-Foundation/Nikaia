@@ -474,10 +474,16 @@ fn lower_tools_files_cached(
         let source =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         sizes.push(source.len());
-        let one = crate::parser::parse_to_ast(&source)
+        let one = crate::parser::parse_unrefined(&source)
             .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
         texts.push(source);
         parsed.push(one);
+    }
+    // **The package's text tiers, once all its files are parsed** (ADR-282
+    // D17, #956): a file reads the published fields of the others.
+    {
+        let mut files: Vec<&mut crate::parser::Parsed> = parsed.iter_mut().collect();
+        crate::text_tiers::refine_package(&mut files);
     }
     timer.lap("parse");
     // **One package, one namespace** (ADR-286 D1), as a project's files are.

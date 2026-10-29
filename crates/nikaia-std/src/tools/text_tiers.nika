@@ -199,6 +199,38 @@ pub struct TierAsk {
     pub library: ref Ledger,
     /// `library`'s functions by their last `::` segment (`method_index`).
     pub methods: ref MethodIndex,
+    /// **The published fields of the package's published structs**, by
+    /// struct, as written (`tier_beside_fields`): text of its own (D25), read
+    /// where a field of a struct another file declares holds a `String`
+    /// (ADR-282 D17, #956).
+    pub beside: ref collections::BTreeMap[String, Vec[FieldContract]],
+}
+
+/// **What the package's files publish of their structs' fields** (ADR-282
+/// D17, D25, #956), each as its file writes it: read before any file's tiers
+/// are decided, so no file's answer hangs on the order they are read in. A
+/// generic struct's fields stand for what it is made with, and are left out.
+pub fn tier_beside_fields(files: ref Vec[ParsedView]) -> collections::BTreeMap[String, Vec[FieldContract]] {
+    let mut out: collections::BTreeMap[String, Vec[FieldContract]] = collections::BTreeMap()
+    for file in files {
+        for item in file.items {
+            match item.node {
+                Item::Struct { name, generics, fields, is_public, .. } => {
+                    if is_public && generics.len() == 0 {
+                        let mut held: Vec[FieldContract] = []
+                        for field in fields {
+                            if field.is_public {
+                                held.push(FieldContract { name: file.text(field.name), ty: written_ty(file.words, file.aliases, field.ty), public: true, default: "", attributes: [] })
+                            }
+                        }
+                        out.insert(file.text(name), held)
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    return out
 }
 
 /// A value handed over inside an `f"…"` hole: a copy of it, whose shape is
@@ -495,6 +527,10 @@ struct Flows {
     /// A `let` binding a name to a literal, by the byte it stands at, and the
     /// positions that name is kept in (ADR-282 D17).
     literal_lets: collections::BTreeMap[i64, collections::BTreeSet[String]],
+    /// The same `let`s kept in a `String` another file of the package
+    /// publishes (#956): text of its own there (D25), which no position of
+    /// this walk stands for.
+    owned_lets: collections::BTreeSet[i64],
     /// Values that go into a mixed position at a line whose lowering does not
     /// wrap them itself, by where they stand.
     wraps: collections::BTreeMap[i64, Hand],
@@ -576,7 +612,7 @@ struct Flows {
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet(), forced: collections::BTreeMap(), arm_uses: collections::BTreeMap() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), owned_lets: collections::BTreeSet(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet(), forced: collections::BTreeMap(), arm_uses: collections::BTreeMap() }
 }
 
 struct TierWalk {
@@ -2901,11 +2937,142 @@ fn cut_bytes(base: ref Expr, index: ref Expr, ask: ref TierAsk, mut walk: TierWa
 /// The type a field holds, by its written name, where that is one name: a
 /// struct of the program's or a type of `std` (`http1::Head`).
 fn field_struct(base: ref Expr, field: ref String, ask: ref TierAsk, mut walk: TierWalk) -> String? {
-    let place = field_place(base, field, ask, walk) ?? return null
+    let place = field_place(base, field, ask, walk) ?? return beside_struct(base, field, ask, walk)
     if place.ty.generics.len() > 0 || place.ty.is_nullable || place.ty.is_tuple || place.ty.is_slice || place.ty.code != null {
         return null
     }
     return ask.names.resolve(place.ty.name).clone()
+}
+
+/// **A field of a struct another file of the package declares**, by the
+/// type that file publishes it with (#956): no position of this walk.
+fn beside_field(base: ref Expr, field: ref String, ask: ref TierAsk, mut walk: TierWalk) -> Ty? {
+    let owner = tier_struct_of(base, ask, walk) ?? return null
+    if walk.declared.types.contains(owner) {
+        return null
+    }
+    let fields = ask.beside[owner] ?? return null
+    for one in fields {
+        if one.name == field {
+            return one.ty.clone()
+        }
+    }
+    return null
+}
+
+/// The struct such a field holds, where its type is one plain name.
+fn beside_struct(base: ref Expr, field: ref String, ask: ref TierAsk, mut walk: TierWalk) -> String? {
+    let ty = beside_field(base, field, ask, walk) ?? return null
+    match ty {
+        Ty::Named { name, args, view } => {
+            if args.len() == 0 && !view {
+                return name.clone()
+            }
+        },
+        else => {}
+    }
+    return null
+}
+
+/// **A name bound to a literal, put into or looked up in a container another
+/// file of the package publishes** (ADR-282 D17, #956): where that
+/// container holds `String`, the text is text of its own (D25), so the
+/// binding is declared `String`. A lookup takes the whole element, so only
+/// a tuple's parts are kept by one: a `String` looked up alone is lent.
+fn kept_beside(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) {
+    let held = match receiver {
+        Expr::Field { base, name, .. } => beside_field(base, ask.names.resolve(name), ask, walk),
+        else => null,
+    }
+    let ty = held ?? return
+    let puts = method == "push" || method == "push_back" || method == "push_front" || method == "insert"
+    if !puts && !looks_up(method) {
+        return
+    }
+    match ty {
+        Ty::Named { name, args: inner, view } => {
+            if view || !is_a_container_name(name) || inner.len() == 0 {
+                return
+            }
+            if puts {
+                let mut at = 0
+                for arg in args {
+                    if at < inner.len() {
+                        kept_beside_parts(arg, inner[at], ask, walk)
+                    }
+                    at += 1
+                }
+            } else if args.len() == 1 {
+                match inner[0] {
+                    Ty::Tuple(_) => kept_beside_parts(args[0], inner[0], ask, walk),
+                    else => {}
+                }
+            }
+        },
+        else => {}
+    }
+}
+
+/// The names bound to a literal in a value that goes into a `String` of
+/// another file's published type, or into a tuple's `String` parts there.
+fn kept_beside_parts(value: ref Expr, ty: ref Ty, ask: ref TierAsk, mut walk: TierWalk) {
+    match ty {
+        Ty::Tuple(parts) => {
+            match value {
+                Expr::Tuple(items, _) => {
+                    if items.len() == parts.len() {
+                        for (item, part) in items.iter().zip(parts.iter()) {
+                            kept_beside_parts(item, part, ask, walk)
+                        }
+                    }
+                },
+                else => {}
+            }
+        },
+        Ty::Named { name, args, view } => {
+            if name == "String" && args.len() == 0 && !view {
+                let bound = match value {
+                    Expr::Variable(bound, _) => ask.names.resolve(bound).clone(),
+                    else => return,
+                }
+                let local = tier_local(bound, walk) ?? return
+                if local.literal >= 0 {
+                    walk.flows.owned_lets.insert(local.literal)
+                }
+            }
+        },
+        else => {}
+    }
+}
+
+/// A method that finds an element by one equal to its argument.
+fn looks_up(method: ref String) -> bool {
+    return method == "remove" || method == "contains" || method == "contains_key" || method == "get"
+}
+
+/// **A tuple looked up by** (ADR-282 D17, #956): Rust compares the whole
+/// element, so a part bound to a literal is kept where the element's part
+/// is, as a put one is.
+fn kept_in_lookup(value: ref Expr, owner: ref TextOwner, mut path: Vec[i64], ty: ref Type, ask: ref TierAsk, mut walk: TierWalk) {
+    match value {
+        Expr::Tuple(items, _) => {
+            if items.len() != ty.generics.len() {
+                return
+            }
+            let mut at = 0
+            for item in items {
+                path.push(at)
+                if a_followed_tuple(ask.names, ty.generics[at]) {
+                    kept_in_lookup(item, owner, path.clone(), ty.generics[at], ask, walk)
+                } else {
+                    kept_literal(item, owner, path, ty.generics[at], ask, walk)
+                }
+                path.pop()
+                at += 1
+            }
+        },
+        else => {}
+    }
 }
 
 fn struct_of_local(name: ref String, walk: ref TierWalk) -> String? {
@@ -4349,6 +4516,11 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
     if !puts_its_argument(method) && any_still(given) && !std_has_method(method, ask) {
         kept_args(args, given, ask, walk)
     }
+    // **Into or out of a container another file of the package publishes**
+    // (ADR-282 D17, #956).
+    if place_of(receiver, ask, walk) == null {
+        kept_beside(receiver, method, args, ask, walk)
+    }
     // **Into a container no position this walk sees declares**: a list of
     // its own or of a struct of another file.
     if puts_its_argument(method) && any_still(given) && place_of(receiver, ask, walk) == null {
@@ -4368,6 +4540,9 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
         if method == "entry" && a_map(ask.names, ty) && args.len() == 1 && given.len() == 1 && ty.generics.len() == 2 {
             flow_value(going_into(found.owner, ty.generics[0], [0], true), args[0], given[0], ask, walk)
             return owned_kinds()
+        }
+        if looks_up(method) && a_container(ask.names, ty) && args.len() == 1 && ty.generics.len() > 0 && a_followed_tuple(ask.names, ty.generics[0]) {
+            kept_in_lookup(args[0], found.owner, [0], ty.generics[0], ask, walk)
         }
         if hands_back_an_element(method) {
             return element_kinds(found, method == "keys", ask, walk)
@@ -4661,6 +4836,9 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
             all.insert(word.clone())
         }
         into.literal_lets.insert(at.clone(), all)
+    }
+    for at in from.owned_lets {
+        into.owned_lets.insert(at.clone())
     }
     for (at, hand) in from.wraps {
         into.wraps.insert(at.clone(), hand.clone())
@@ -5105,8 +5283,8 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
         // **A name bound to a literal is one binding** (ADR-282 D17): kept
         // anywhere as text of its own, it is text of its own everywhere it
         // is kept.
-        for (_, kept) in flows.literal_lets {
-            let mut owned = false
+        for (at, kept) in flows.literal_lets {
+            let mut owned = flows.owned_lets.contains(at)
             for word in kept {
                 let tier = tier_of_kinds(positions[word]?.clone() ?? no_kinds())
                 let published = fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared)
@@ -5704,6 +5882,9 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     // **A name bound to a literal and kept where text of its own is wanted is
     // declared `String`** (ADR-282 D17).
     let mut lets: collections::BTreeSet[i64] = collections::BTreeSet()
+    for at in walk.flows.owned_lets {
+        lets.insert(at.clone())
+    }
     for (at, kept) in walk.flows.literal_lets {
         for word in kept {
             if !walk.tiers.contains_key(word) {

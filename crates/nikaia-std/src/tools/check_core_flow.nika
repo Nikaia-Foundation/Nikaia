@@ -1096,10 +1096,9 @@ fn check_core_flow_arm_names_compared(mut state: CheckState, arm: i64, lent: ref
         if !lent.contains(each.1) {
             continue
         }
-        if each.4 && each.3 == "lhs" {
-            let removed = state.facts.compared_views.remove((each.2, "rhs"))
-        } else if each.4 {
-            let removed = state.facts.compared_views.remove((each.2, "lhs"))
+        if each.4 {
+            let other = if each.3 == "lhs" { "rhs" } else { "lhs" }
+            let removed = state.facts.compared_views.remove((each.2, other))
         } else if each.5 {
             let added = state.facts.compared_views.insert((each.2, each.3.clone()))
         }

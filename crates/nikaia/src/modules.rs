@@ -115,7 +115,8 @@ impl ModulesHost for Parsing {
         // any other failure keeps the path as its context. Either way it
         // keeps its type, which is what says this is a refusal of the program
         // rather than a failure of this compiler (`diagnostics::Refused`).
-        match parser::parse_to_ast(source) {
+        // Its text tiers wait for the package's other files (`units`).
+        match parser::parse_unrefined(source) {
             Ok(mut parsed) => {
                 parsed.package = package;
                 let mut kept = self.parsed.borrow_mut();
@@ -199,7 +200,7 @@ impl Parsing {
             ModulesRefusal::Unreadable { what, why } => anyhow::anyhow!(why).context(what),
         })?;
         let mut kept = self.parsed.borrow_mut();
-        Ok(found
+        let mut units: Vec<Unit> = found
             .into_iter()
             .map(|unit| Unit {
                 package: unit.package,
@@ -208,7 +209,17 @@ impl Parsing {
                 source: unit.source,
                 parsed: kept[unit.parsed as usize].take().expect(KEPT),
             })
-            .collect())
+            .collect();
+        // **Each package's text tiers, once all its files are parsed**
+        // ([ADR-282](../../../docs/specification/adr/adr-282.md) D17, #956).
+        for range in groups(&units) {
+            let mut files: Vec<&mut Parsed> = units[range]
+                .iter_mut()
+                .map(|unit| &mut unit.parsed)
+                .collect();
+            crate::text_tiers::refine_package(&mut files);
+        }
+        Ok(units)
     }
 }
 
@@ -902,8 +913,16 @@ fn with_tests_as_functions(mut units: Vec<Unit>) -> Result<(Vec<Unit>, Vec<TestC
         count,
         DISPATCH,
     ));
-    let mut parsed = parser::parse_to_ast(&text)
+    let mut parsed = parser::parse_unrefined(&text)
         .with_context(|| format!("{} with its tests", entry.path.display()))?;
+    // Against the published fields of the program's own files, as the entry
+    // was without its tests (ADR-282 D17, #956).
+    {
+        let mut read: Vec<&Parsed> = own[1..].iter().map(|&at| &units[at].parsed).collect();
+        read.push(&parsed);
+        let beside = crate::text_tiers::beside_fields(&read);
+        crate::text_tiers::refine_with(&mut parsed, &beside);
+    }
     let interner = &parsed.interner;
     modules::modules_dispatcher_as_main(&mut parsed.program.items, interner, DISPATCH, &|text| {
         interner.intern_string(text)
