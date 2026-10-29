@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1292] — 2026-10-29
+
+**`extend` of a list literal of text into a `Vec[String]`, `HashSet[String]` or `BTreeSet[String]` builds owned text again (rustc E0271 since 0.0.1286); `extend` of text literals into a list or set of text views is no longer refused with a false `NK1102` (since 0.0.1288) (#950, #963).**
+
 ## [0.0.1291] — 2026-10-29
 
 **Collection methods (`push`, `insert`, `contains`, `get`, …) check a composite argument part by part (tuples, lists, options) (#965); a text view fits `String`, a character fits a byte, and declared types fit each other again, which ends the false `NK1102` of 0.0.1289 (#964).**
