@@ -129,3 +129,4 @@
 /home/user/Nikaia/docs/briefs/p5a-project-settings.md 1573653 11
 /home/user/Nikaia/docs/briefs/architect-task.md 1518667 26
 /home/user/Nikaia/docs/briefs/m3a-modules-collect.md 5034800 61
+/home/user/Nikaia/docs/briefs/architect-task.md 1255139 26
