@@ -340,7 +340,6 @@ pub(crate) struct Flows {
     pub(crate) positions: collections::BTreeMap<String, Kinds>,
     pub(crate) known: collections::BTreeMap<String, TextPosition>,
     pub(crate) literal_lets: collections::BTreeMap<i64, collections::BTreeSet<String>>,
-    pub(crate) owned_lets: collections::BTreeSet<i64>,
     pub(crate) wraps: collections::BTreeMap<i64, Hand>,
     pub(crate) param_into: collections::BTreeSet<(String, String)>,
     pub(crate) hole_wraps: collections::BTreeMap<i64, Vec<HoleWrap>>,
@@ -367,7 +366,7 @@ pub(crate) struct Flows {
     pub(crate) forced: collections::BTreeMap<String, TierForced>,
 }
 
-pub(crate) fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), owned_lets: collections::BTreeSet::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), read_into: collections::BTreeSet::new(), unlinked: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new(), kept_through: collections::BTreeSet::new(), forced: collections::BTreeMap::new(), arm_uses: collections::BTreeMap::new() } }
+pub(crate) fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), read_into: collections::BTreeSet::new(), unlinked: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new(), kept_through: collections::BTreeSet::new(), forced: collections::BTreeMap::new(), arm_uses: collections::BTreeMap::new() } }
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct TierWalk {
@@ -2046,10 +2045,6 @@ pub(crate) fn lent_parameter(name: &str, walk: &TierWalk) -> bool {
 }
 
 pub(crate) fn kept_literal(value: &Expr, owner: &TextOwner, path: &[i64], ty: &Type, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) {
-    if ty.is_tuple {
-        kept_in_a_tuple(value, ty, ask, walk);
-        return;
-    }
     if !plain_string(ask.names, ty) { return; }
     let name = match value {
         Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_string() },
@@ -2064,29 +2059,6 @@ pub(crate) fn kept_literal(value: &Expr, owner: &TextOwner, path: &[i64], ty: &T
     }, || collections::BTreeSet::new().into());
     kept.insert(word);
     walk.flows.literal_lets.insert(local.literal, kept);
-}
-
-pub(crate) fn kept_in_a_tuple(value: &Expr, ty: &Type, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) {
-    match value {
-        Expr::Tuple(parts, _) => {
-            let mut at: i64 = 0;
-            while ((at) as usize) < parts.len() && ((at) as usize) < ty.generics.len() {
-                if nikaia_std::index::get(&ty.generics, (at) as usize).is_tuple { kept_in_a_tuple(nikaia_std::index::get(&parts, (at) as usize), nikaia_std::index::get(&ty.generics, (at) as usize), ask, walk); } else if plain_string(ask.names, nikaia_std::index::get(&ty.generics, (at) as usize)) {
-                    match nikaia_std::index::get(&parts, (at) as usize) {
-                        Expr::Variable(name, _) => {
-                            let name = *name;
-                            let local = tier_local(ask.names.resolve(name), &walk);
-                            let literal = nikaia_std::index::or(local.as_ref().map(|__nikaia_it| __nikaia_it.literal), || -1);
-                            if literal >= 0 { walk.flows.owned_lets.insert(literal); }
-                        },
-                        _ => { },
-                    }
-                }
-                at += 1;
-            }
-        },
-        _ => { },
-    }
 }
 
 pub(crate) fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
@@ -3251,7 +3223,6 @@ pub(crate) fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &T
             put_into_container(&found, method, args, &given, ask, walk);
             return owned_kinds();
         }
-        if (method == "remove" || method == "contains" || method == "contains_key" || method == "get") && a_container(ask.names, &ty) && args.len() == 1 && !ty.generics.is_empty() { kept_in_a_tuple(nikaia_std::index::get(&args, 0), nikaia_std::index::get(&ty.generics, 0), ask, walk); }
         if method == "entry" && a_map(ask.names, &ty) && args.len() == 1 && given.len() == 1 && ty.generics.len() == 2 {
             flow_value(&going_into(&found.owner, nikaia_std::index::get(&ty.generics, 0), vec![0], true), Some(nikaia_std::index::get(&args, 0)), nikaia_std::index::get(&given, 0), ask, walk);
             return owned_kinds();
@@ -3472,10 +3443,6 @@ pub(crate) fn merge_flows(into: &mut Flows, from: &Flows) {
         }, || collections::BTreeSet::new().into());
         for word in kept.iter() { all.insert(word.to_string()); }
         into.literal_lets.insert(at.clone(), all);
-    }
-    for at in from.owned_lets.iter() {
-        let at = nikaia_std::num::value(at);
-        into.owned_lets.insert(at.clone());
     }
     for (at, hand) in from.wraps.iter() {
         let at = nikaia_std::num::value(at);let hand = *hand;
@@ -3816,9 +3783,8 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
                 changed = true;
             }
         }
-        for (at, kept) in flows.literal_lets.iter() {
-            let at = nikaia_std::num::value(at);
-            let mut owned = flows.owned_lets.contains(&at);
+        for (_, kept) in flows.literal_lets.iter() {
+            let mut owned = false;
             for word in kept.iter() {
                 let tier = tier_of_kinds(&nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -4296,10 +4262,6 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_>) -> TextTiers
         tiers.push((position, tier.clone()));
     }
     let mut lets: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for at in walk.flows.owned_lets.iter() {
-        let at = nikaia_std::num::value(at);
-        lets.insert(at.clone());
-    }
     for (at, kept) in walk.flows.literal_lets.iter() {
         let at = nikaia_std::num::value(at);
         for word in kept.iter() {

@@ -495,9 +495,6 @@ struct Flows {
     /// A `let` binding a name to a literal, by the byte it stands at, and the
     /// positions that name is kept in (ADR-282 D17).
     literal_lets: collections::BTreeMap[i64, collections::BTreeSet[String]],
-    /// The same `let`s kept as a part of a tuple that holds `String` there
-    /// (#956): a tuple is no position (D29), its text is text of its own.
-    owned_lets: collections::BTreeSet[i64],
     /// Values that go into a mixed position at a line whose lowering does not
     /// wrap them itself, by where they stand.
     wraps: collections::BTreeMap[i64, Hand],
@@ -579,7 +576,7 @@ struct Flows {
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), owned_lets: collections::BTreeSet(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet(), forced: collections::BTreeMap(), arm_uses: collections::BTreeMap() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet(), forced: collections::BTreeMap(), arm_uses: collections::BTreeMap() }
 }
 
 struct TierWalk {
@@ -2834,10 +2831,6 @@ fn lent_parameter(name: ref String, walk: ref TierWalk) -> bool {
 /// where the position stays `String` the binding is declared `String`
 /// (ADR-282 D17).
 fn kept_literal(value: ref Expr, owner: ref TextOwner, path: ref Vec[i64], ty: ref Type, ask: ref TierAsk, mut walk: TierWalk) {
-    if ty.is_tuple {
-        kept_in_a_tuple(value, ty, ask, walk)
-        return
-    }
     if !plain_string(ask.names, ty) {
         return
     }
@@ -2853,37 +2846,6 @@ fn kept_literal(value: ref Expr, owner: ref TextOwner, path: ref Vec[i64], ty: r
     let mut kept: collections::BTreeSet[String] = walk.flows.literal_lets[local.literal]?.clone() ?? collections::BTreeSet()
     kept.insert(word)
     walk.flows.literal_lets.insert(local.literal, kept)
-}
-
-/// **A name bound to a literal, a part of a tuple literal where the tuple
-/// holds `String`** (ADR-282 D17, #956): a tuple is no position this walk
-/// follows (D29), so its text is text of its own, and the binding is
-/// declared `String`. `(1, other)` put into or looked up in a
-/// `BTreeSet[(i64, String)]`.
-fn kept_in_a_tuple(value: ref Expr, ty: ref Type, ask: ref TierAsk, mut walk: TierWalk) {
-    match value {
-        Expr::Tuple(parts, _) => {
-            let mut at = 0
-            while at < parts.len() && at < ty.generics.len() {
-                if ty.generics[at].is_tuple {
-                    kept_in_a_tuple(parts[at], ty.generics[at], ask, walk)
-                } else if plain_string(ask.names, ty.generics[at]) {
-                    match parts[at] {
-                        Expr::Variable(name, _) => {
-                            let local = tier_local(ask.names.resolve(name), walk)
-                            let literal = local?.literal ?? -1
-                            if literal >= 0 {
-                                walk.flows.owned_lets.insert(literal)
-                            }
-                        },
-                        else => {}
-                    }
-                }
-                at += 1
-            }
-        },
-        else => {}
-    }
 }
 
 /// The struct a value is of, where the program says so without types: a
@@ -4401,10 +4363,6 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
             put_into_container(found, method, args, given, ask, walk)
             return owned_kinds()
         }
-        // **A tuple looked up by** keeps its parts as a put one does (#956).
-        if (method == "remove" || method == "contains" || method == "contains_key" || method == "get") && a_container(ask.names, ty) && args.len() == 1 && ty.generics.len() > 0 {
-            kept_in_a_tuple(args[0], ty.generics[0], ask, walk)
-        }
         // **`entry(k)` puts its key into the map** whatever the chain after it
         // does with the value.
         if method == "entry" && a_map(ask.names, ty) && args.len() == 1 && given.len() == 1 && ty.generics.len() == 2 {
@@ -4703,9 +4661,6 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
             all.insert(word.clone())
         }
         into.literal_lets.insert(at.clone(), all)
-    }
-    for at in from.owned_lets {
-        into.owned_lets.insert(at.clone())
     }
     for (at, hand) in from.wraps {
         into.wraps.insert(at.clone(), hand.clone())
@@ -5150,8 +5105,8 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
         // **A name bound to a literal is one binding** (ADR-282 D17): kept
         // anywhere as text of its own, it is text of its own everywhere it
         // is kept.
-        for (at, kept) in flows.literal_lets {
-            let mut owned = flows.owned_lets.contains(at)
+        for (_, kept) in flows.literal_lets {
+            let mut owned = false
             for word in kept {
                 let tier = tier_of_kinds(positions[word]?.clone() ?? no_kinds())
                 let published = fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared)
@@ -5749,9 +5704,6 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     // **A name bound to a literal and kept where text of its own is wanted is
     // declared `String`** (ADR-282 D17).
     let mut lets: collections::BTreeSet[i64] = collections::BTreeSet()
-    for at in walk.flows.owned_lets {
-        lets.insert(at.clone())
-    }
     for (at, kept) in walk.flows.literal_lets {
         for word in kept {
             if !walk.tiers.contains_key(word) {
