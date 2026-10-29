@@ -1787,6 +1787,11 @@ length does not match `N` is refused with `NK1157` naming both numbers.
 `[v; n]` (4.5) is such a literal too: `let buf: Array[u8, 4096] = [0; 4096]`,
 where `n` is a number the build knows and equal to `N`.
 
+**An array is walked as a list is** ([ADR-collections-2](adr/adr-collections-2.md)):
+`for x in a` lends it (3.3), and `a.iter()`, on an array and on a run of one,
+is the sequence a list's `iter()` is, so `a.iter().zip(b.iter())`, `map`,
+`filter` and `enumerate` follow. Nothing is copied.
+
 ### 4.6. Generics (Type Parameters)
 A **generic** declaration is written once for several types. A type parameter is
 declared inside square brackets `[...]`.
@@ -2651,14 +2656,21 @@ shape is `NK1131`, as is a `mut` parameter given away whole: it stays the
 caller's, so the way out is `.clone()` or taking it without `mut`.
 
 **A part taken out of a `mut` parameter is given back before the function is
-left.** A `match` arm that changes a part it binds takes it (3.4), and so does
+left**, and one taken out of a `let mut` view of a place before the view's block
+is left ([ADR-views-1](adr/adr-views-1.md)). A `match` arm that changes a part it binds takes it (3.4), and so does
 handing a field to something that keeps it; assigning the part, or the whole,
 gives it back. On every way out of the function - its end, a `return`, a
 `throw` - the parameter is whole again, and between the taking and the giving
 back stands no `throw` and no call that can fail. Both are refused with
 `NK2108`. In `match e { E::Add(a, b) => { … e = E::Add(l, r) } … }` the arm
 takes `a` and `b` out of `e`, and the assignment makes it whole again.
-`ref mut self` is such a parameter too.
+`ref mut self` is such a parameter too. A `let mut` over a place of something
+the function may change, `let mut c = m[k] ?? continue`, is a view through
+which a change reaches the place, and the same rule holds for it: on every way
+out of its block - its end, a `continue`, a `break`, a `return`, a `throw` - it
+is whole again. `let kept = pairs(c.ensures, c.from)` takes both lists out with
+no copy, and `c.ensures = []`, `c.from = []` give them back. Handing the whole
+view to something that keeps it is `NK1131`, as for a `mut` parameter.
 
 A `for` **lends** its list, so the list is still there after the loop;
 iteration that takes the elements away is written `for x in xs.drain()`. A

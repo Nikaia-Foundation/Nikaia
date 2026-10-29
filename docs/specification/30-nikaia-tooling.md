@@ -1405,6 +1405,15 @@ Every value of every build option has the same `std::fs` surface; only the targe
 
 **`std::collections` — and where keys come from**
 
+**The ordered and the hashed collections offer the same entries**
+([ADR-collections-1](adr/adr-collections-1.md)). `BTreeMap` has what `HashMap`
+has apart from hashing, and `BTreeSet` what `HashSet` has: `m.entry(k)` with
+`or_insert`, `or_insert_with` and `and_modify` on both maps, and
+`s.extend(items)` on both sets, as on `Vec`. `extend` takes a list, a set or a
+sequence of owned elements, and keeps them; `s.extend(xs.clone())` copies the
+elements, never a list in between. Only what depends on order (`first`,
+`last`) is the ordered kind's alone.
+
 Every input carries a **provenance**, because the compiler knows where a buffer came from (Part I 6.6):
 
 * **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, and every file read while the program runs.

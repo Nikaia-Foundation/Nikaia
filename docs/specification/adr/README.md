@@ -124,6 +124,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [views-1](adr-views-1.md) | A part taken out of a `let mut` view of a place (`let mut c = m[k] ?? continue`) is given back before the view's block is left, as out of a `mut` parameter (`NK2108`); lowered as `mem::take`/`mem::replace`; no `std::mem` | Accepted | no |
 | [312](adr-312.md) | A handle on a shared value is duplicated, never moved; it may go into a task of our own but not into code nothing describes, and at one user thread its count is plain. | Accepted | partly: D9's bridge type |
 | [302](adr-302.md) | A call into C is written inside `unsafe`, and what crosses is a view for the call or an opaque handle that may be absent, never a raw pointer. | Accepted | yes |
 | [281](adr-281.md) | Shared mutable state is `SharedMut[T]`: its shape is chosen per value, it opens through four doors, a lock inside a lock is refused, and what leaves a door is stamped `Seen[T]`. | Accepted | partly: D33 for a stored lambda |
@@ -214,6 +215,8 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [collections-1](adr-collections-1.md) | `BTreeMap`/`BTreeSet` offer what `HashMap`/`HashSet` offer apart from hashing: `entry` with `or_insert`, `or_insert_with`, `and_modify` on both maps, `extend` on both sets and `Vec`, taking a list, a set or a sequence of owned elements; `s.extend(xs.clone())` copies elements, not the list | Accepted | no |
+| [collections-2](adr-collections-2.md) | An array is read as a list is: `Array[T, N]` and its run have `iter()`, the sequence `Vec::iter()` is (`zip`, `map`, `filter`, `enumerate` follow); a `for` lends an array | Accepted | no |
 | [regex-1](adr-regex-1.md) | `std::regex` is RE2's dialect, linear in the text; a regular expression is `regex::Regex[E]`, typed by its engine (`Literal`, `OnePass`, `Dfa`, `TaggedDfa`, `BitNfa`, `FlatNfa`, `Dynamic`), `regex::Any` for a mix; `regex::compile(comptime p)` chooses the engine while building, `regex::dynamic(p)` compiles at run time on Rust's automata crates; tables lie in the binary as read; `std`'s calls take `comptime? self` and are specialised per known pattern; `--comptime` reports | Accepted | no |
 | [specialization-1](adr-specialization-1.md) | A parameter marked `comptime?` (also `self`) makes a copy of the function per build-time value a call gives it and leaves the function as written for the rest; `@unroll` before a `for` makes the loop variable a build-time value in every turn (`NK1304` where the list is not one), `@unroll(up_to: N)` up to `N` elements, the body checked both ways (`NK1305`); an `if` or `match` on a known value is decided while building; nothing asks whether a value is known; a result type may be computed from `comptime` parameters; `--comptime` reports | Accepted | no |
 | [catch-1](adr-catch-1.md) | A `catch` block whose first item is an arm is a `match` over `error`, under the same rules (patterns, a type by its name, completeness, fatal errors only by name); a block holds statements or arms, never both, so every `catch` written today keeps its meaning | Accepted | no |
@@ -303,6 +306,8 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 | Changed | By | What holds now |
 | :--- | :--- | :--- |
+| [094](adr-094.md) D7 | [views-1](adr-views-1.md) D1-D3 | a part taken out of a `let mut` view of a place is given back as one out of a `mut` parameter |
+| [253](adr-253.md) D2 | [collections-1](adr-collections-1.md) D3 | `extend` takes a list, a set or a sequence of owned elements, on `Vec` and on both sets |
 | [269](adr-269.md) D4 | [380](adr-380.md) D1, D2 | an `assert` not proved refuses the program (`NK1300`) unless `unproved-claims = "warn"`, where it is checked |
 | [340](adr-340.md) D1 | [383](adr-383.md) D1-D3 | the id is given by a numbering pass right after the parse, in input order without gaps, not by the parser as it makes the node |
 | [269](adr-269.md) D9 | [381](adr-381.md) D1-D3 | a pure `bool` call over unchanged values is a name of the prover (a property), proved by name |
@@ -336,7 +341,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 ## Topics in use
 
-`catch`, `decision-records`, `regex`, `specialization`.
+`catch`, `collections`, `decision-records`, `regex`, `specialization`, `views`.
 
 ## Reserved numbers
 
