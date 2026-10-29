@@ -161,6 +161,8 @@ pub(crate) const PROJECT_SETTINGS_CPU_VAR: &str = "NIKAIA_CPU";
 pub trait ProjectSettingsHost {
     fn env_var(&self, name: &str) -> Option<String>;
     fn native_cpu(&self, triple: &str) -> Result<String, Box<dyn std::error::Error>>;
+    fn sha256_hex(&self, text: &str) -> String;
+    fn hard_link(&self, from: &std::path::Path, to: &std::path::Path) -> bool;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -295,5 +297,59 @@ pub fn project_settings_switches_beside(gen_dir: &std::path::Path) -> Option<fs:
         Err(_error) => { return None; },
     };
     if found.is_file() { Some(path) } else { None }
+}
+
+pub fn project_settings_program_name<H: ProjectSettingsHost>(root: &std::path::Path, variant: &Option<String>, package: String, host: &H) -> String {
+    match host.env_var("CARGO_TARGET_DIR") {
+        None => format!("{}-{}", package, project_settings_root_tag(root, &variant, host)),
+        _ => package,
+    }
+}
+
+pub fn project_settings_root_tag<H: ProjectSettingsHost>(root: &std::path::Path, variant: &Option<String>, host: &H) -> String {
+    let named = match match variant.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } {
+        Some(ref named) => format!("{}\x1f{}", nikaia_std::fs::path::display(&(root)), named),
+        None => nikaia_std::fs::path::display(&(root)),
+    };
+    let hex = host.sha256_hex(&named);
+    hex.chars().take(16).collect()
+}
+
+pub fn project_settings_own_copy<H: ProjectSettingsHost>(root: &std::path::Path, variant: &Option<String>, built: &std::path::Path, host: &H) -> Result<fs::Path, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+    let dir = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("target")))), std::path::Path::new(&("nikaia")))), std::path::Path::new(&("bin")));
+    match fs::create_dir(&dir, &fs::Root::Anywhere, true) {
+        Ok(_) => {},
+        Err(error) => { return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("{}", error)), &"project_settings_own_copy")); },
+    };
+    let file = match nikaia_std::fs::path::file_name(&(built)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(String::from("a program has a file name")), &"project_settings_own_copy")) };
+    let name = nikaia_std::search::replacen(&nikaia_std::fs::path::display(&(file)), &format!("-{}", project_settings_root_tag(root, &variant, host)), &"", 1);
+    let own = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name)));
+    match fs::remove(&own, &fs::Root::Anywhere, false) {
+        Ok(_) => {},
+        Err(_error) => { },
+    };
+    if !host.hard_link(built, &own) {
+        match fs::copy(built, &own, &fs::Root::Anywhere) {
+            Ok(_) => {},
+            Err(_error) => { return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("copying {} to {}", nikaia_std::fs::path::display(&(built)), nikaia_std::fs::path::display(&(own)))), &"project_settings_own_copy")); },
+        };
+    }
+    Ok(own)
+}
+
+pub async fn project_settings_trace<H: ProjectSettingsHost>(trace_var: &str, crate_name: Option<String>, is_probe: bool, verdict: &str, host: &H) {
+    let path = match host.env_var(trace_var) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let named = nikaia_std::index::or(crate_name, || "-".into());
+    let said = match is_probe {
+        true => nikaia_std::either_text::either(format!("{} (target-info probe)", verdict)),
+        false => nikaia_std::either_text::either(verdict),
+    };
+    match fs::write(std::path::Path::new(&(path)), &fs::Root::Anywhere, format!("{} {}\n", named, said), true, true).await {
+        Ok(_) => {},
+        Err(_error) => { },
+    };
 }
 

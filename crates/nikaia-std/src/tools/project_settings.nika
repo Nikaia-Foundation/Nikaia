@@ -251,6 +251,10 @@ pub trait ProjectSettingsHost {
     fn env_var(ref self, name: ref String) -> String? sync
     /// The CPU `rustc` finds on this machine for `triple`.
     fn native_cpu(ref self, triple: ref String) -> String sync throws
+    /// The SHA-256 of `text`, as lowercase hex.
+    fn sha256_hex(ref self, text: ref String) -> String sync
+    /// Whether `to` became a hard link to `from`.
+    fn hard_link(ref self, from: ref fs::Path, to: ref fs::Path) -> bool sync
 }
 
 /// **Every switch's word, checked**, before anything is read, so a mistyped
@@ -440,4 +444,59 @@ pub fn project_settings_switches_beside(gen_dir: ref fs::Path) -> fs::Path? {
     let path = gen_dir.join("switches")
     let found = fs::metadata(path, fs::Root::Anywhere) catch { return null }
     return if found.is_file() { path } else { null }
+}
+
+/// The program's name for Cargo: in the shared directory its package's
+/// name and [`project_settings_root_tag`], elsewhere the package's name (#495).
+pub fn project_settings_program_name[H: ProjectSettingsHost](root: ref fs::Path, variant: String?, package: String, host: ref H) -> String {
+    return match host.env_var("CARGO_TARGET_DIR") {
+        null => f"{package}-{project_settings_root_tag(root, variant, host)}",
+        else => package,
+    }
+}
+
+/// What sets this project's program apart in the shared directory: the
+/// start of the hash of where the project is (#495).
+pub fn project_settings_root_tag[H: ProjectSettingsHost](root: ref fs::Path, variant: String?, host: ref H) -> String {
+    let named = match variant?.clone() {
+        named => f"{root.display()}\x1f{named}",
+        null => root.display(),
+    }
+    let hex = host.sha256_hex(named)
+    return hex.scalars.take(16).collect()
+}
+
+/// The program a build in the shared directory produced, under the
+/// project's own name in its own `target/nikaia/bin/` (#495): a hard link
+/// where the file system allows one, a copy where not.
+pub fn project_settings_own_copy[H: ProjectSettingsHost](root: ref fs::Path, variant: String?, built: ref fs::Path, host: ref H) -> fs::Path throws {
+    let dir = root.join("target").join("nikaia").join("bin")
+    fs::create_dir(dir, fs::Root::Anywhere; recursive: true) catch { throw ProjectSettingsRefusal::Refused(f"{error}") }
+    let file = built.file_name() ?? throw ProjectSettingsRefusal::Refused("a program has a file name")
+    let name = file.display().replacen(f"-{project_settings_root_tag(root, variant, host)}", "", 1)
+    let own = dir.join(name)
+    fs::remove(own, fs::Root::Anywhere) catch {}
+    if !host.hard_link(built, own) {
+        fs::copy(built, own, fs::Root::Anywhere) catch { throw ProjectSettingsRefusal::Refused(f"copying {built.display()} to {own.display()}") }
+    }
+    return own
+}
+
+/// Record one invocation in the file the variable `trace_var` names, if
+/// anybody asked. A trace that cannot be written is silent: this is a
+/// debugging facility, and a build must not fail because the place it was
+/// told to write a note to is unwritable.
+pub fn project_settings_trace[H: ProjectSettingsHost](trace_var: String, crate_name: String?, is_probe: bool, verdict: String, host: ref H) {
+    let path = host.env_var(trace_var) ?? return
+    let named = crate_name ?? "-"
+    // **And whether this one is Cargo's target-info probe**
+    // ([ADR-166](../../../docs/specification/adr/adr-166.md) D1), because that is
+    // the invocation whose standard input decides whether a build starts at all
+    // — and a trace that cannot say so cannot answer the question the trace
+    // exists for.
+    let said = match is_probe {
+        true => f"{verdict} (target-info probe)",
+        false => verdict,
+    }
+    fs::write(path, fs::Root::Anywhere, f"{named} {said}\n"; append: true) catch {}
 }

@@ -2711,7 +2711,7 @@ pub mod project_members {
 }
 pub mod project_settings {
     #[allow(unused_imports)]
-    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_switches_beside};
+    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_switches_beside, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
 }
 pub mod project_tests {
     #[allow(unused_imports)]
