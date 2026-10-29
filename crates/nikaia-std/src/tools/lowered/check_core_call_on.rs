@@ -318,7 +318,7 @@ pub(crate) fn check_core_call_on_map_part(state: &mut CheckState, world: &CheckW
 pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, entry: &str, expected: Vec<Ty>) -> Vec<Ty> {
     let mut map = receiver.clone();
     let mut from: i64 = 0;
-    if entry == "insert" && expected.len() == 2 { from = 0; } else if entry == "or_insert" && expected.len() == 1 {
+    if entry == "insert" && expected.len() == 2 { from = 0; } else if (entry == "or_insert" || entry == "or_insert_with") && expected.len() == 1 {
         map = match receiver {
             Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); receiver.clone() },
             _ => return expected,
@@ -335,6 +335,13 @@ pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckW
         _ => vec![],
     };
     if parts.len() != 2 { return expected; }
+    if entry == "or_insert_with" {
+        let wrapped: Ty = match *nikaia_std::index::get(&expected, 0) {
+            Ty::Fn { ref params, ref result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); if result.is_none() && !(*nikaia_std::index::get(&parts, 1)).is_unknown() { Ty::Fn { params: params.to_owned(), result: Box::new(Some((*nikaia_std::index::get(&parts, 1)).clone())), is_sync, can_throw } } else { (*nikaia_std::index::get(&expected, 0)).clone() } },
+            _ => (*nikaia_std::index::get(&expected, 0)).clone(),
+        };
+        return vec![wrapped];
+    }
     let mut out: Vec<Ty> = vec![];
     let mut at: i64 = 0;
     for ty in expected.iter() {
@@ -859,6 +866,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.a_set_that_reads_what_it_writes(on, entry, &found, span);
     i = 0;
     for given in args.iter() {
+        if entry == "or_insert_with" && i < expected.len() as i64 { state.a_lambdas_text_is_its_own(world, nikaia_std::index::get(&expected, (i) as usize), given); }
         if i < expected.len() as i64 && state.text_literal(world, nikaia_std::index::get(&expected, (i) as usize), given, true).is_none() && i < found.len() as i64 {
             let by_map: Ty = nikaia_std::index::or(match bound.get("K") {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),

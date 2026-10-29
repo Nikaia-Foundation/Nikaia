@@ -1,0 +1,22 @@
+use std::collections
+
+// `or_insert_with`'s lambda hands back the map's value (#977): the text its
+// body ends in is built as text of its own, as `or_insert`'s value is.
+fn main() {
+    let mut m: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    let mut late = m.entry("b").or_insert_with(fn() { ["z"] })
+    late.push("w")
+    let mut again = m.entry("b").or_insert_with(fn() { ["never"] })
+    again.push("v")
+    let mut h: collections::HashMap[String, Vec[String]] = collections::HashMap()
+    let mut hl = h.entry("b").or_insert_with(fn() { ["y", "x"] })
+    hl.push("w")
+    let mut names: collections::BTreeMap[i64, String] = collections::BTreeMap()
+    let mut one = names.entry(1).or_insert_with(fn() { "ada" })
+    one += "!"
+    for (k, v) in m {
+        println(f"{k} {v.join(",")}")
+    }
+    let got = h["b"] ?? return
+    println(f"{got.join(",")} {names[1] ?? ""}")
+}

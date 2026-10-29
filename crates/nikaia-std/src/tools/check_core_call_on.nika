@@ -441,7 +441,7 @@ fn check_core_call_on_now_expected(state: ref CheckState, world: ref CheckWorld,
     let mut from = 0
     if entry == "insert" && expected.len() == 2 {
         from = 0
-    } else if entry == "or_insert" && expected.len() == 1 {
+    } else if (entry == "or_insert" || entry == "or_insert_with") && expected.len() == 1 {
         map = match receiver {
             Expr::MethodCall { receiver, .. } => receiver.clone(),
             else => return expected,
@@ -461,6 +461,15 @@ fn check_core_call_on_now_expected(state: ref CheckState, world: ref CheckWorld,
     }
     if parts.len() != 2 {
         return expected
+    }
+    // **`or_insert_with`'s lambda hands back the map's value** (#977): the
+    // text its body ends in is built as `or_insert`'s value is.
+    if entry == "or_insert_with" {
+        let wrapped: Ty = match expected[0] {
+            Ty::Fn { params, result, is_sync, can_throw } => if result == null && !parts[1].is_unknown() { Ty::Fn { params: params.clone(), result: parts[1].clone(), is_sync: is_sync, can_throw: can_throw } } else { expected[0].clone() },
+            else => expected[0].clone(),
+        }
+        return [wrapped]
     }
     let mut out: Vec[Ty] = []
     let mut at = 0
@@ -1126,6 +1135,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // **A literal where the receiver says text is wanted** (ADR-293 D21).
     i = 0
     for given in args {
+        if entry == "or_insert_with" && i < expected.len() as i64 {
+            state.a_lambdas_text_is_its_own(world, expected[i], given)
+        }
         // **And a tuple with text literals beside other parts** (#750).
         if i < expected.len() as i64 && state.text_literal(world, expected[i], given, true) == null && i < found.len() as i64 {
             // **A lookup's key is `?`** in the ledger, and a tuple with text in it
