@@ -100,18 +100,26 @@ pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<Projec
 pub fn project_lower_published(ledger: Ledger, published: &collections::BTreeMap<String, Published>) -> Ledger {
     let mut ledger = ledger;
     for (key, found) in published.iter() {
-        let contract = match ledger.functions.get_mut(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut kept: Vec<(String, String)> = vec![];
-        if found.ensures.is_empty() { for (ensures, from) in contract.ensures.iter().zip(contract.from.iter()) { kept.push((ensures.to_string(), from.to_string())); } }
+        if found.ensures.is_empty() { kept = project_lower_pairs(std::mem::take(&mut contract.ensures), std::mem::take(&mut contract.from)); }
         contract.requires = found.requires.to_owned();
         contract.ensures = found.ensures.to_owned();
         contract.from = found.from.to_owned();
         contract.inferred = found.inferred.to_owned();
-        for (ensures, from) in kept.iter() {
-            contract.ensures.push(ensures.to_string());
-            contract.from.push(from.to_string());
+        for (ensures, from) in kept.into_iter() {
+            contract.ensures.push(ensures);
+            contract.from.push(from);
         }
     }
     ledger
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn project_lower_pairs(ensures: Vec<String>, from: Vec<String>) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = vec![];
+    for (e, f) in ensures.into_iter().zip(from.into_iter()) { out.push((e, f)); }
+    out
 }
 

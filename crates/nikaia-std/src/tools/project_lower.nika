@@ -197,21 +197,30 @@ fn project_lower_made[H: ProjectLowerHost](host: ref H) -> ProjectLowerArtifacts
 pub fn project_lower_published(ledger: Ledger, published: ref collections::BTreeMap[String, Published]) -> Ledger {
     let mut ledger = ledger
     for (key, found) in published {
-        let mut contract = ledger.functions.get(key) ?? continue
+        let mut contract = ledger.functions[key] ?? continue
+        // **The ledger's own pairs are taken out of the entry**, not copied
+        // (ADR-views-1, #949): the assignments below give the lists back.
         let mut kept: Vec[(String, String)] = []
         if found.ensures.is_empty() {
-            for (ensures, from) in contract.ensures.iter().zip(contract.from.iter()) {
-                kept.push((ensures.clone(), from.clone()))
-            }
+            kept = project_lower_pairs(contract.ensures, contract.from)
         }
         contract.requires = found.requires.clone()
         contract.ensures = found.ensures.clone()
         contract.from = found.from.clone()
         contract.inferred = found.inferred.clone()
-        for (ensures, from) in kept {
-            contract.ensures.push(ensures.clone())
-            contract.from.push(from.clone())
+        for (ensures, from) in kept.drain() {
+            contract.ensures.push(ensures)
+            contract.from.push(from)
         }
     }
     return ledger
+}
+
+/// Each `ensures` with the `from` beside it, taken out of the two lists.
+fn project_lower_pairs(ensures: Vec[String], from: Vec[String]) -> Vec[(String, String)] sync {
+    let mut out: Vec[(String, String)] = []
+    for (e, f) in ensures.drain().zip(from.drain()) {
+        out.push((e, f))
+    }
+    return out
 }
