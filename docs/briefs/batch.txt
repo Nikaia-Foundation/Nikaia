@@ -1,2 +1,2 @@
-m3a-modules-collect.md
 mf-manifest-file.md
+m3b-modules-program.md

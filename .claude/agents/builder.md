@@ -70,13 +70,18 @@ You build one small slice of an issue in the Nikaia repository and end.
   Catch Rust slips with `cargo check --release -p nikaia --message-format
   short` (under a minute). Then **the cycle, as one tool call**, exactly:
 
-      target/fast/nikaia lower-std 2>&1 | grep -E '^error|-->' | head -30; cargo build --profile fast -p nikaia --message-format short 2>&1 | grep -E '^error' | head; target/fast/nikaia lower-std 2>&1 | grep -E '^error|-->' | head; git status --short crates/nikaia-std/src/tools/lowered
+      target/fast/nikaia lower-std 2>&1 | grep -E '^error|-->' | head -30; cargo build --profile fast -p nikaia --message-format short 2>&1 | grep -E '^error' | head; target/fast/nikaia lower-std 2>&1 | grep -E '^error|-->' | head; git status --short crates/nikaia-std/src/tools/lowered crates/nikaia-std/src/tools/lowered.rs
 
   The first `lower-std` (old binary) reports refusals in `.nika` in seconds:
   fix them all before the next cycle. If the second `lower-std` changed a
   lowered file, build once more (the fixpoint); else go straight to the
   probes and touched tests, in one go, and fix all they show before the next
-  cycle. Never reset `lowered/` by hand (`git checkout ...lowered/`), never
+  cycle. Right before a long test run (clippy + `it`, `tests/compiler`),
+  run that `git status` line once more: a lowered file of yours that lost its
+  change means another session rewrote it; run `lower-std` again first (m3a,
+  2026-10-28: one 8-minute round lost on a reset tree). Never `git reset`,
+  `git stash`, `git checkout .` or `git restore .` in the shared checkout (they
+  throw away the other agents' work). Never reset `lowered/` by hand (`git checkout ...lowered/`), never
   `git clone` or a second `target/` (a cold build is about 10 minutes of 4
   cores), never `sleep`/`pgrep` loops. A build only to try one case is a
   wasted cycle.

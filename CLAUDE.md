@@ -94,6 +94,10 @@ the background in a cloud session.
   agent goes on committing. No separate worktrees with
   `develop` checked out: a commit in one moves the branch under the others,
   and their index then shows the reverse of that commit as staged changes.
+  Nobody - main session, lane or builder - runs `git reset`, `git stash`,
+  `git checkout .` or `git restore .` in the shared checkout: it throws away
+  the other agents' unfinished files (m3a, 2026-10-28: a reset at 22:41 cost a
+  builder a test round). Restore only your own files, by name.
 * **Version raises and new error codes are the supervisor's.** An agent
   commits without touching the version lines, `CHANGELOG.md` or the badges,
   names in its report what the change decided, and takes a new `NK` code only
