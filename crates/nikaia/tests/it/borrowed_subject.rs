@@ -42,7 +42,9 @@ fn around(body: &str, call: &str) -> String {
     format!(
         r#"
 fn takes(s: String) -> i64 {{
-    return 1
+    let mut kept: Vec[String] = []
+    kept.push(s)
+    return kept.len() as i64
 }}
 
 struct Row {{
