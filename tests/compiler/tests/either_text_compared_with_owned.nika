@@ -1,0 +1,21 @@
+fn swapped(line: String, from: String, to: String) -> String {
+    if !from.contains("{") {
+        let r: String = line.replace(from, to)
+        if r != line {
+            println("changed")
+        }
+        return r
+    }
+    if !from.ends_with("x") {
+        return line
+    }
+    let mut s: String = line.clone()
+    s.push_str(to)
+    return s
+}
+
+fn main() {
+    println(swapped("abc", "a", "b"))
+    println(swapped("xyz", "{x", "b"))
+    println(swapped("xyz", "{y", "b"))
+}

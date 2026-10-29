@@ -276,6 +276,20 @@ impl PartialEq<EitherText<'_>> for &str {
     }
 }
 
+impl PartialEq<EitherText<'_>> for String {
+    fn eq(&self, other: &EitherText<'_>) -> bool {
+        **self == *other.0
+    }
+}
+
+/// Text of its own from either: an owned answer moves, a view is copied
+/// (`text = either_fn()` into a `String` variable, #911).
+impl From<EitherText<'_>> for String {
+    fn from(text: EitherText<'_>) -> String {
+        text.0.into_owned()
+    }
+}
+
 impl std::fmt::Display for EitherText<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&*self.0, f)

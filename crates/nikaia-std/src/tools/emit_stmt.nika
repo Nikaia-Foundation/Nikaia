@@ -667,8 +667,16 @@ impl EmitState {
         if appended {
             out.push("::core::convert::AsRef::<str>::as_ref(&")
         }
+        // **Text of both kinds handed back is made the place's** (#911): an
+        // `EitherText` result may view the very local it is assigned to,
+        // `text = bang(text, k)`; `.into()` owns it, and is the identity where
+        // the place is `EitherText` itself.
+        let either_back = op == null && !own_view && !reputted && self.either_result(world, value)
         if !own_view {
             self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+        }
+        if either_back {
+            out.push(".into()")
         }
         if appended {
             out.push(")")

@@ -445,7 +445,7 @@ impl EmitState {
         let rebound = host.given_up_rebound(at);
         if rebound.is_some() { if nikaia_std::index::or(rebound, || false) { out.push("let mut "); } else { out.push("let "); } }
         self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)?;
-        if op.is_none() { out.push(" = "); } else { out.push(&format!(" {} ", emit_stmt_op_text(op))); }
+        if op.is_none() { out.push(" = "); } else { out.push(&format!(" {} ", emit_stmt_op_text(std::convert::identity(op)))); }
         let reput = self.emit_stmt_reput(&walk, &scope.function, at);
         let reputted = reput.is_some();
         if reputted { out.push(nikaia_std::index::or(reput.as_deref(), || "")); }
@@ -484,7 +484,9 @@ impl EmitState {
         }
         let appended = op.is_some() && self.facts.appended_texts.contains(&at);
         if appended { out.push("::core::convert::AsRef::<str>::as_ref(&"); }
+        let either_back = op.is_none() && !own_view && !reputted && self.either_result(world, value);
         if !own_view { self.emit_expr(world, walk, out, host, value, depth, flow, scope)?; }
+        if either_back { out.push(".into()"); }
         if appended { out.push(")"); }
         out.push(&after);
         if reputted { out.push(")"); }

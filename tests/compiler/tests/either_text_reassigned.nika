@@ -1,0 +1,18 @@
+fn bang(text: String, n: i64) -> String {
+    if n == 0 {
+        return text
+    }
+    let s: String = f"{text}!"
+    return s
+}
+
+fn main() {
+    let parts: Vec[String] = ["a", "b"]
+    let mut text = parts.join("-")
+    let mut k = 0
+    while k < 2 {
+        text = bang(text, k)
+        k = k + 1
+    }
+    println(text)
+}

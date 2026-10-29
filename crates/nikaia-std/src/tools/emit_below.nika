@@ -173,6 +173,31 @@ impl EmitState {
         return seen > 0
     }
 
+    /// Whether `value` calls a function of this unit whose result is text
+    /// both kinds of which flow into (ADR-282 D14, #911): `EitherText` below,
+    /// which a `String` place takes only made its own.
+    pub fn either_result(ref self, world: ref EmitWorld, value: ref Expr) -> bool {
+        let func = match value {
+            Expr::Call { func, .. } => func,
+            else => return false,
+        }
+        let callee = emit_callee_text(world, func) ?? return false
+        let own = emit_base(callee)
+        for item in world.items {
+            match item.node {
+                Item::Fn { name, ret_type, .. } => {
+                    let called = name ?? continue
+                    if world.words.resolve(called) == own {
+                        let ty = ret_type ?? return false
+                        return ty.either && !ty.is_nullable && ty.generics.is_empty()
+                    }
+                },
+                else => {},
+            }
+        }
+        return false
+    }
+
     /// Whether a struct's field is text both kinds of which flow into
     /// (ADR-282 D14).
     pub fn either_field(ref self, world: ref EmitWorld, owner: ref String, field: winnow_grammar::Symbol) -> bool {

@@ -115,6 +115,28 @@ impl EmitState {
         }
         seen > 0
     }
+    pub fn either_result(&self, world: &EmitWorld<'_, '_, '_, '_>, value: &Expr) -> bool {
+        let func = match value {
+            Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
+            _ => return false,
+        };
+        let callee = match emit_callee_text(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let own = emit_base(&callee);
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Fn { name, ret_type, .. } => {
+                    let name = *name;
+                    let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if world.words.resolve(called) == own {
+                        let ty = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
+                        return ty.either && !ty.is_nullable && ty.generics.is_empty();
+                    }
+                },
+                _ => { },
+            }
+        }
+        false
+    }
     pub fn either_field(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: winnow_grammar::Symbol) -> bool {
         let wanted = world.words.resolve(field);
         let own = emit_base(owner);
