@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1284] — 2026-10-29
+
+**`Array[T, N]` and a run `ref Array[T]` get `iter()` with the sequence surface of `Vec::iter()`: `zip`, `map`, `filter`, `enumerate` and `rev` follow (ADR-collections-2 D1, Fixes #955).**
+- `bind_code` in `tools/ty.nika` zips the two parameter lists instead of walking an index.
+
 ## [0.0.1283] — 2026-10-29
 
 **`let mut e = v[i]` over a `mut` list binds a view of the element (`&mut v[i]`), also for a struct of numbers: a write through `e` reaches the list instead of being lost in a copy (Fixes #959).**
