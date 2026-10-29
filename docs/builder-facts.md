@@ -118,12 +118,10 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * [design: Part I 4.5, ADR-293] a `T?` local needs `?.clone()` (NK1125);
   * [works] a `ref String?` parameter takes a bare `String` argument (and
     `ref String?` is `NK1261`, write `String?`);
-  * [decided, ADR-views-2; built by #951] `for mut x in v` is a parser error
-    until #951 is built; then it writes through (`iter_mut()`) over a list or
-    an array. `mut` on one name of a tuple (`for (k, mut v) in m`,
-    `let (a, mut b) = …`), and so a map's `values_mut()`, is refused now,
-    possible later (`NK1307`, ADR-views-2 section 6): a move that needs it
-    stops (`Result: blocked`);
+  * [gap: ADR-views-2 section 6] `mut` on one name of a tuple
+    (`for (k, mut v) in m`, `let (a, mut b) = …`), and so a map's
+    `values_mut()` / `iter_mut()`, is refused now, possible later (`NK1307`):
+    a move that needs it stops (`Result: blocked`);
   * [design: Part I 3.3] `a..b` includes `b`; the half-open range is `a..<b`;
   * [design: Part I 3.4, ADR-352] the catch-all arm of a `match` is `else =>`;
     `_ =>` and `None =>` are refused;
