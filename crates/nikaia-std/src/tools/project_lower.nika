@@ -197,12 +197,11 @@ fn project_lower_made[H: ProjectLowerHost](host: ref H) -> ProjectLowerArtifacts
 pub fn project_lower_published(ledger: Ledger, published: ref collections::BTreeMap[String, Published]) -> Ledger {
     let mut ledger = ledger
     for (key, found) in published {
-        let mut contract = (ledger.functions.get(key) ?? continue).clone()
+        let mut contract = ledger.functions.get(key) ?? continue
         let mut kept: Vec[(String, String)] = []
         if found.ensures.is_empty() {
-            let pairs = if contract.ensures.len() < contract.from.len() { contract.ensures.len() } else { contract.from.len() }
-            for at in 0..<pairs {
-                kept.push((contract.ensures[at].clone(), contract.from[at].clone()))
+            for (ensures, from) in contract.ensures.iter().zip(contract.from.iter()) {
+                kept.push((ensures.clone(), from.clone()))
             }
         }
         contract.requires = found.requires.clone()
@@ -213,7 +212,6 @@ pub fn project_lower_published(ledger: Ledger, published: ref collections::BTree
             contract.ensures.push(ensures.clone())
             contract.from.push(from.clone())
         }
-        ledger.functions.insert(key.clone(), contract)
     }
     return ledger
 }

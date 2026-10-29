@@ -514,8 +514,7 @@ pub(crate) fn in_class_order(classes: &[Class]) -> Vec<Class> {
 }
 
 pub(crate) fn class_before(a: &Class, b: &Class) -> bool {
-    let shorter = if (a.members.len() as i64) < b.members.len() as i64 { a.members.len() as i64 } else { b.members.len() as i64 };
-    for i in 0..shorter { if *nikaia_std::index::get(&a.members, (i) as usize) != *nikaia_std::index::get(&b.members, (i) as usize) { return AsRef::<str>::as_ref(&(*nikaia_std::index::get(&a.members, (i) as usize))) < AsRef::<str>::as_ref(&(*nikaia_std::index::get(&b.members, (i) as usize))); } }
+    for (x, y) in a.members.iter().zip(b.members.iter()) { if AsRef::<str>::as_ref(&(x)) != AsRef::<str>::as_ref(&(y)) { return AsRef::<str>::as_ref(&(x)) < AsRef::<str>::as_ref(&(y)); } }
     if (a.members.len() as i64) != b.members.len() as i64 { return (a.members.len() as i64) < b.members.len() as i64; }
     a.count.rank() < b.count.rank()
 }

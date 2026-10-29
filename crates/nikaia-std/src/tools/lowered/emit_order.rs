@@ -65,8 +65,7 @@ pub(crate) fn emit_order_independent(moved: &EmitOrderTouch, passed: &EmitOrderT
 pub(crate) fn emit_order_overlap(a: &str, b: &str) -> bool {
     let xs: Vec<&str> = a.split('.').collect::<Vec<_>>();
     let ys: Vec<&str> = b.split('.').collect::<Vec<_>>();
-    let n = (xs.len() as i64).min(ys.len() as i64);
-    for k in 0..n { if *nikaia_std::index::get(&xs, (k) as usize) != *nikaia_std::index::get(&ys, (k) as usize) { return false; } }
+    for (x, y) in xs.iter().zip(ys.iter()) { if AsRef::<str>::as_ref(&(x)) != AsRef::<str>::as_ref(&(y)) { return false; } }
     true
 }
 

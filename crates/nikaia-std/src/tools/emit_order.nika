@@ -107,9 +107,8 @@ fn emit_order_independent(moved: ref EmitOrderTouch, passed: ref EmitOrderTouch)
 fn emit_order_overlap(a: ref String, b: ref String) -> bool {
     let xs: Vec[ref String] = a.split(".").collect()
     let ys: Vec[ref String] = b.split(".").collect()
-    let n = xs.len().min(ys.len())
-    for k in 0..<n {
-        if xs[k] != ys[k] {
+    for (x, y) in xs.iter().zip(ys.iter()) {
+        if x != y {
             return false
         }
     }

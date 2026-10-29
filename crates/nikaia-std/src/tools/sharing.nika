@@ -732,10 +732,9 @@ fn in_class_order(classes: Vec[Class]) -> Vec[Class] {
 }
 
 fn class_before(a: ref Class, b: ref Class) -> bool {
-    let shorter = if a.members.len() < b.members.len() { a.members.len() } else { b.members.len() }
-    for i in 0..<shorter {
-        if a.members[i] != b.members[i] {
-            return a.members[i] < b.members[i]
+    for (x, y) in a.members.iter().zip(b.members.iter()) {
+        if x != y {
+            return x < y
         }
     }
     if a.members.len() != b.members.len() {

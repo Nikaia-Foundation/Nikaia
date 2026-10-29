@@ -100,12 +100,9 @@ pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<Projec
 pub fn project_lower_published(ledger: Ledger, published: &collections::BTreeMap<String, Published>) -> Ledger {
     let mut ledger = ledger;
     for (key, found) in published.iter() {
-        let mut contract = match ledger.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue }.clone();
+        let contract = match ledger.functions.get_mut(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut kept: Vec<(String, String)> = vec![];
-        if found.ensures.is_empty() {
-            let pairs = if (contract.ensures.len() as i64) < contract.from.len() as i64 { contract.ensures.len() as i64 } else { contract.from.len() as i64 };
-            for at in 0..pairs { kept.push(((*nikaia_std::index::get(&contract.ensures, (at) as usize)).to_string(), (*nikaia_std::index::get(&contract.from, (at) as usize)).to_string())); }
-        }
+        if found.ensures.is_empty() { for (ensures, from) in contract.ensures.iter().zip(contract.from.iter()) { kept.push((ensures.to_string(), from.to_string())); } }
         contract.requires = found.requires.to_owned();
         contract.ensures = found.ensures.to_owned();
         contract.from = found.from.to_owned();
@@ -114,7 +111,6 @@ pub fn project_lower_published(ledger: Ledger, published: &collections::BTreeMap
             contract.ensures.push(ensures.to_string());
             contract.from.push(from.to_string());
         }
-        ledger.functions.insert(key.to_string(), contract);
     }
     ledger
 }
