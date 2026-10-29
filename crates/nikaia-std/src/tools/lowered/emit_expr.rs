@@ -82,6 +82,7 @@ impl EmitState {
         let other = how / 4 % 2 == 1;
         let given_up = how / 8 % 2 == 1;
         let written = how / 16 % 2 == 1;
+        let a_reference = how / 32 % 2 == 1;
         if written {
             if copied {
                 out.push("(*");
@@ -103,7 +104,7 @@ impl EmitState {
             }
             if out.buf.ends_with("Some(") {
                 out.buf = nikaia_std::index::or(out.buf.strip_suffix("Some("), || "").to_string();
-                out.push("std::convert::identity(");
+                out.push(if a_reference { "Option::as_ref(" } else { "std::convert::identity(" });
                 out.append(name);
                 return;
             }

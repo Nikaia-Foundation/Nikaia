@@ -1863,7 +1863,7 @@ pub(crate) fn bounding_loop_change(walk: &mut BoundsWalk, facts: &mut BoundsFact
 }
 
 pub(crate) fn bounding_steps_up(name: &str, op: Option<&BinaryOp>, value: &Expr, words: &winnow_grammar::InternerContext) -> bool {
-    if op.is_some() { return bounding_is_op(op, &BinaryOp::Add); }
+    if op.is_some() { return bounding_is_op(std::convert::identity(op), &BinaryOp::Add); }
     match value {
         Expr::Binary { op: added, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); *added == BinaryOp::Add && (nikaia_std::index::or(path_of(lhs, words), || "".into()) == name || nikaia_std::index::or(path_of(rhs, words), || "".into()) == name) },
         _ => false,

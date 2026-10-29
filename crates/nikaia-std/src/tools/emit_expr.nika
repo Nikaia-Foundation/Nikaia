@@ -125,6 +125,9 @@ impl EmitState {
         let other = (how / 4) % 2 == 1
         let given_up = (how / 8) % 2 == 1
         let written = (how / 16) % 2 == 1
+        // **A name bound out of a lent value is a reference to the option**
+        // (#898): put back into one, it is lent out as `Option<&T>`.
+        let a_reference = (how / 32) % 2 == 1
         if written {
             if copied {
                 out.push("(*")
@@ -148,7 +151,7 @@ impl EmitState {
             }
             if out.buf.ends_with("Some(") {
                 out.buf = (out.buf.strip_suffix("Some(") ?? "").clone()
-                out.push("std::convert::identity(")
+                out.push(if a_reference { "Option::as_ref(" } else { "std::convert::identity(" })
                 out.append(name)
                 return
             }

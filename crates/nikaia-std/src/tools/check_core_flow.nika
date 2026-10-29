@@ -1183,6 +1183,19 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         owned_text = check_core_flow_owned_texts(state, world, arm.pattern, typed, arm.body)
     }
     let frame = check_core_flow_frame(state, world, arm.pattern, id_of(arm.body) as i64, parts, lent_parts, owned_text)
+    // **A `T?` bound out of a view is a reference to the option** (#898),
+    // unless the arm copies it out.
+    if typed.is_a_view() || through_the_reference {
+        for local in frame {
+            let an_option = match local.ty {
+                Ty::Nullable(_) => true,
+                else => false,
+            }
+            if an_option && !state.facts.copied_bindings.contains((id_of(arm.body) as i64, local.name.clone())) {
+                state.narrowing.option_refs.insert(local.id)
+            }
+        }
+    }
     let mut in_place: collections::BTreeSet[i64] = collections::BTreeSet()
     for local in frame {
         if !state.copied(world, local.ty) {

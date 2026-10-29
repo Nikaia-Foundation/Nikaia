@@ -967,7 +967,7 @@ pub(crate) fn function_fits(found: &[Ty], found_result: Option<&Ty>, never_pause
 pub(crate) fn results_fit(found: Option<&Ty>, wanted: Option<&Ty>) -> bool {
     if found.is_none() || wanted.is_none() { return true; }
     nikaia_std::index::or(match found {
-        Some(__nikaia_it) => Some(__nikaia_it.fits_any(wanted)),
+        Some(__nikaia_it) => Some(__nikaia_it.fits_any(std::convert::identity(wanted))),
         None => None,
     }, || true)
 }

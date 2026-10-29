@@ -2077,7 +2077,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             let mut position: i64 = 0;
             if receiver.is_some() {
                 position = 1;
-                if takes_a_view_of_itself((receiver).as_ref()) { sources.push(self_name.to_string()); } else if subject.is_some() {
+                if takes_a_view_of_itself(Option::as_ref(receiver)) { sources.push(self_name.to_string()); } else if subject.is_some() {
                     let held = match subject { Some(__nikaia_value) => __nikaia_value, None => return false };
                     if names_borrowing(asked.names, held, &unit.borrowing) { sources.push(self_name.to_string()); }
                 }

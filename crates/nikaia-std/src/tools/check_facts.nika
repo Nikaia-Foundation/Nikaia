@@ -288,7 +288,9 @@ pub struct CheckFacts {
     /// **A read of a `T?` a test proved not `null`** (ADR-382), by the read:
     /// bit 0 whether the value is copied out (`x.unwrap()`) or lent
     /// (`x.as_ref().unwrap()`), bit 1 whether it is an operand, which no wrap
-    /// into an option stands directly around.
+    /// into an option stands directly around, bit 2 lent, bit 3 given up,
+    /// bit 4 written through, bit 5 a name that is a reference to the option
+    /// (a pattern binding through `ref`, #898).
     pub narrowed_reads: collections::BTreeMap[i64, i64],
     /// **The positions of a tuple pattern that meet only set values**
     /// (ADR-352 D1 per position, #879), by the arm's body: each is written

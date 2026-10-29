@@ -82,6 +82,10 @@ pub struct CheckNarrowing {
     pub walls: Vec[i64],
     /// The place an assignment writes, which it does not read.
     pub target: i64,
+    /// **The names an arm bound out of a view, by the binding's id**, whose
+    /// `T?` is a reference to the option below (`&Option<T>`, #898), not an
+    /// option of a view (`Option<&T>`), which a `ref T?` parameter is.
+    pub option_refs: collections::BTreeSet[i64],
 }
 
 impl CheckNarrowing {
@@ -98,6 +102,7 @@ impl CheckNarrowing {
             turns: [],
             walls: [],
             target: -1,
+            option_refs: collections::BTreeSet(),
         }
     }
 }
@@ -397,9 +402,17 @@ pub fn check_narrow_read_as_proved(mut state: CheckState, expr: ref Expr, name: 
     }
     match check_narrow_proved(state, name, span.start as i64) {
         CheckProved::Yes(inner) => {
-            let bound: CheckLocal? = state.binding(name)
-            let lent_binding = if bound != null { (bound ?? return ty.clone()).lent } else { false }
-            return check_narrow_as_proved(state, node, ty, inner, lent_binding)
+            let local: CheckLocal = state.binding(name) ?? return check_narrow_as_proved(state, node, ty, inner, false, 0)
+            // **What the name is below** (#898): a `ref T?` parameter an
+            // `Option<&T>`, a name an arm bound out of a view or a lent
+            // binding a reference to the option.
+            let mut held = 0
+            if local.lent || state.narrowing.option_refs.contains(local.id) {
+                held = 2
+            } else if check_narrow_a_parameter(local) {
+                held = 1
+            }
+            return check_narrow_as_proved(state, node, ty, inner, local.lent, held)
         },
         CheckProved::Lost(lost) => {
             state.narrowing.lost_reads.insert(node, lost)
@@ -413,7 +426,21 @@ pub fn check_narrow_read_as_proved(mut state: CheckState, expr: ref Expr, name: 
 
 /// A proved read at `node` of a `T?` (`ty`) as the `T` (`inner`), with the
 /// lowering's flags.
-fn check_narrow_as_proved(mut state: CheckState, node: i64, ty: ref Ty, inner: ref Ty, lent_binding: bool) -> Ty sync {
+/// Whether the binding is a parameter that did not say `mut`.
+fn check_narrow_a_parameter(local: ref CheckLocal) -> bool {
+    return match local.immutable {
+        null => false,
+        written => match written.kind {
+            CheckKind::Parameter => true,
+            else => false,
+        },
+    }
+}
+
+/// `held` says what a name is below: 0 an option of its own or of a view
+/// as the type says, 1 a `ref T?` parameter (`Option<&T>`), 2 a reference to
+/// the option (`&Option<T>`).
+fn check_narrow_as_proved(mut state: CheckState, node: i64, ty: ref Ty, inner: ref Ty, lent_binding: bool, held: i64) -> Ty sync {
     let copied = check_narrow_copied(inner)
     // **A value a word holds is copied out, text is read as the view it
     // is, and anything else is lent out of the option** (#621): a read, a
@@ -423,25 +450,35 @@ fn check_narrow_as_proved(mut state: CheckState, node: i64, ty: ref Ty, inner: r
     let written = inner.text()
     let text = written == "String" || written == "ref String"
     let lent = !copied && !text
-    // **Only where the name holds the option itself**: a `ref T?` is an
-    // `Option<&T>` below and a name bound out of a lent value a reference
-    // to the option, and either is put back into an option slot as it is.
-    // Both keep their `T?` here.
-    if lent && (inner.is_a_view() || lent_binding) {
+    // **A `ref T?` parameter is an `Option<&T>` below** (#898): the proved
+    // read copies the reference out, a `ref T` as it is.
+    let a_view = lent && inner.is_a_view() && held == 1
+    // **A name bound out of a lent value is a reference to the option**
+    // (#898): the proved read is lent out of it, a view of the `T`.
+    let viewed = lent && held == 2
+    // **Any other option of a view keeps its `T?`**: what it is below is not
+    // known here, and it is put back into an option slot as it is.
+    if lent && (inner.is_a_view() || lent_binding) && !a_view && !viewed {
         return ty.clone()
     }
     let operand = state.narrowing.operand_reads.contains(node)
     let mut bits = 0
-    if copied {
+    if copied || a_view {
         bits = bits + 1
     }
     if operand {
         bits = bits + 2
     }
-    if lent {
+    if lent && !a_view {
         bits = bits + 4
     }
+    if viewed {
+        bits = bits + 32
+    }
     state.facts.narrowed_reads.insert(node, bits)
+    if viewed && !inner.is_a_view() {
+        return view_of_type(inner)
+    }
     return inner.clone()
 }
 
@@ -466,7 +503,7 @@ pub fn check_narrow_path_read(mut state: CheckState, world: ref CheckWorld, expr
     match check_narrow_proved(state, path, span.start as i64) {
         CheckProved::Yes(_) => {
             let narrow: CheckNarrow = check_narrow_found(state, path) ?? return ty.clone()
-            let proved = check_narrow_as_proved(state, node, ty, inner, false)
+            let proved = check_narrow_as_proved(state, node, ty, inner, false, 0)
             if state.narrowing.turns.len() > 0 && state.facts.narrowed_reads.contains_key(node) {
                 state.narrowing.path_reads.push(CheckPathRead { node: node, path: path.clone(), frame: narrow.frame, span: Span { start: span.start, end: span.end } })
             }

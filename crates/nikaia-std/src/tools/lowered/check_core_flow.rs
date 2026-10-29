@@ -945,6 +945,12 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     let mut owned_text: collections::BTreeSet<String> = collections::BTreeSet::new();
     if lent_parts { owned_text = check_core_flow_owned_texts(state, world, &arm.pattern, typed, &arm.body); }
     let frame = check_core_flow_frame(state, world, &arm.pattern, id_of(&arm.body) as i64, &parts, lent_parts, &owned_text);
+    if typed.is_a_view() || through_the_reference {
+        for local in frame.iter() {
+            let an_option = matches!(local.ty, Ty::Nullable(_));
+            if an_option && !state.facts.copied_bindings.contains(&(id_of(&arm.body) as i64, local.name.to_string())) { state.narrowing.option_refs.insert(local.id); }
+        }
+    }
     let mut in_place: collections::BTreeSet<i64> = collections::BTreeSet::new();
     for local in frame.iter() { if !state.copied(world, &local.ty) { in_place.insert(local.id); } }
     state.scope.push(frame);

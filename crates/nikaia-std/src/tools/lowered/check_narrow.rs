@@ -38,10 +38,11 @@ pub struct CheckNarrowing {
     pub turns: Vec<CheckNarrowTurn>,
     pub walls: Vec<i64>,
     pub target: i64,
+    pub option_refs: collections::BTreeSet<i64>,
 }
 
 impl CheckNarrowing {
-    pub fn nothing() -> CheckNarrowing { CheckNarrowing { narrows: collections::BTreeMap::new(), lost_reads: collections::BTreeMap::new(), not_paths: collections::BTreeMap::new(), maybe_reads: collections::BTreeSet::new(), operand_reads: collections::BTreeSet::new(), handed_at: vec![], path_reads: vec![], turns: vec![], walls: vec![], target: -1 } }
+    pub fn nothing() -> CheckNarrowing { CheckNarrowing { narrows: collections::BTreeMap::new(), lost_reads: collections::BTreeMap::new(), not_paths: collections::BTreeMap::new(), maybe_reads: collections::BTreeSet::new(), operand_reads: collections::BTreeSet::new(), handed_at: vec![], path_reads: vec![], turns: vec![], walls: vec![], target: -1, option_refs: collections::BTreeSet::new() } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -264,9 +265,10 @@ pub fn check_narrow_read_as_proved(state: &mut CheckState, expr: &Expr, name: &s
     if !nullable || state.reading_only || state.narrowing.maybe_reads.contains(&node) { return ty.clone(); }
     match check_narrow_proved(&state, name, span.start as i64) {
         CheckProved::Yes(ref inner) => {
-            let bound: Option<CheckLocal> = state.binding(name);
-            let lent_binding = if bound.is_some() { match bound { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() }.lent } else { false };
-            return check_narrow_as_proved(state, node, ty, inner, lent_binding);
+            let local: CheckLocal = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return check_narrow_as_proved(state, node, ty, inner, false, 0) };
+            let mut held: i64 = 0;
+            if local.lent || state.narrowing.option_refs.contains(&local.id) { held = 2; } else if check_narrow_a_parameter(&local) { held = 1; }
+            return check_narrow_as_proved(state, node, ty, inner, local.lent, held);
         },
         CheckProved::Lost(lost) => {
             state.narrowing.lost_reads.insert(node, lost);
@@ -276,20 +278,31 @@ pub fn check_narrow_read_as_proved(state: &mut CheckState, expr: &Expr, name: &s
     }
 }
 
+pub(crate) fn check_narrow_a_parameter(local: &CheckLocal) -> bool {
+    match &local.immutable {
+        None => false,
+        Some(written) => matches!(written.kind, CheckKind::Parameter),
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_narrow_as_proved(state: &mut CheckState, node: i64, ty: &Ty, inner: &Ty, lent_binding: bool) -> Ty {
+pub(crate) fn check_narrow_as_proved(state: &mut CheckState, node: i64, ty: &Ty, inner: &Ty, lent_binding: bool, held: i64) -> Ty {
     let copied = check_narrow_copied(inner);
     let written = inner.text();
     let text = written == "String" || written == "ref String";
     let lent = !copied && !text;
-    if lent && (inner.is_a_view() || lent_binding) { return ty.clone(); }
+    let a_view = lent && inner.is_a_view() && held == 1;
+    let viewed = lent && held == 2;
+    if lent && (inner.is_a_view() || lent_binding) && !a_view && !viewed { return ty.clone(); }
     let operand = state.narrowing.operand_reads.contains(&node);
     let mut bits = 0;
-    if copied { bits = bits + 1; }
+    if copied || a_view { bits = bits + 1; }
     if operand { bits = bits + 2; }
-    if lent { bits = bits + 4; }
+    if lent && !a_view { bits = bits + 4; }
+    if viewed { bits = bits + 32; }
     state.facts.narrowed_reads.insert(node, bits);
+    if viewed && !inner.is_a_view() { return view_of_type(inner); }
     inner.clone()
 }
 
@@ -312,7 +325,7 @@ pub fn check_narrow_path_read(state: &mut CheckState, world: &CheckWorld<'_, '_,
     match check_narrow_proved(&state, &path, span.start as i64) {
         CheckProved::Yes(_) => {
             let narrow: CheckNarrow = match check_narrow_found(&state, &path) { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
-            let proved = check_narrow_as_proved(state, node, ty, &inner, false);
+            let proved = check_narrow_as_proved(state, node, ty, &inner, false, 0);
             if !state.narrowing.turns.is_empty() && state.facts.narrowed_reads.contains_key(&node) { state.narrowing.path_reads.push(CheckPathRead { node, path: path.to_string(), frame: narrow.frame, span: Span { start: span.start, end: span.end } }); }
             return proved;
         },

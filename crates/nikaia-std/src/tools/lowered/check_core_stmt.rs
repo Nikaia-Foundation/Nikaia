@@ -852,7 +852,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         if check_core_ops_add(o.clone()) { let added = state.facts.appended_texts.insert(span.start as i64); }
     }
-    if op.is_some() && !check_core_stmt_a_shift(op) {
+    if op.is_some() && !check_core_stmt_a_shift(std::convert::identity(op)) {
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         if !state.an_integer_beside_a_float(world, target, &into, value, &found, span) { state.a_compound_over_two_integer_types(world, o.clone(), target, &into, value, &found, span); }
     }

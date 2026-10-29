@@ -1,0 +1,36 @@
+// `x != null` narrows a `ref T?` parameter and a pattern binding of a `T?`
+// reached through `ref` (ADR-382, #898): proved, each reads as `ref T`.
+struct Ty { k: i64 }
+enum E { A { r: Ty? } }
+struct N { r: Ty? }
+
+fn g(t: ref Ty) -> bool { return t.k == 1 }
+
+fn h(t: ref Ty?) -> i64 { return t?.k ?? 0 }
+
+fn f(ret: ref Ty?, n: ref N, e: ref E) -> bool {
+    let one = (ret != null && g(ret)) || (n.r != null && g(n.r))
+    return match e {
+        E::A { r } if r != null && g(r) => true,
+        else => one,
+    }
+}
+
+fn read(ret: ref Ty?, ts: ref Vec[Ty?]) -> i64 {
+    let mut sum = 0
+    if ret != null {
+        let x = ret
+        sum += x.k + ret.k + h(ret)
+    }
+    for t in ts {
+        if t != null && g(t) {
+            sum += t.k * 10
+        }
+    }
+    return sum
+}
+
+fn main() {
+    println(f"{f(Ty { k: 1 }, N { r: null }, E::A { r: null })} {f(null, N { r: null }, E::A { r: Ty { k: 1 } })}")
+    println(f"{read(Ty { k: 2 }, [Ty { k: 1 }, null, Ty { k: 3 }])} {read(null, [])}")
+}
