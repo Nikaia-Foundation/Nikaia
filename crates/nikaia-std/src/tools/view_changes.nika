@@ -57,6 +57,9 @@ pub struct VcAsk {
     /// The names moved into a position that must hold text of its own, by
     /// their nodes (`text_tiers`, ADR-353 D9).
     pub refused: ref collections::BTreeMap[i64, TierRefusal],
+    /// The names that stay where they are, a view of them going in instead
+    /// of the name (`text_tiers`, ADR-282 D7, ADR-353 D8), by their nodes.
+    pub viewed: ref collections::BTreeSet[i64],
 }
 
 struct VcView {
@@ -894,9 +897,16 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
     // that part, followed as the argument was, so changing it in place is
     // D4's. A struct's field is watched alone; a tuple's or a list's element
     // is read as part of its container.
-    for (moved, part) in vc_moved_parts(name, value, ask) {
+    for (moved, part, node) in vc_moved_parts(name, value, ask) {
         // Refused at the move: a change of the part is not refused again.
         if refused.contains(moved) {
+            continue
+        }
+        // **A view of the text goes in, the text stays in its keep** (D8,
+        // #948): the part is no data of the new local's, so a callee that
+        // changes the local cannot change it. A change in place of the part
+        // makes it own its text, and the move is refused above (D9).
+        if node >= 0 && ask.viewed.contains(node) {
             continue
         }
         for v in 0..<views.len() {
@@ -929,27 +939,29 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
 /// The variables a literal bound to `name` takes whole, each with the place
 /// of `name` it lands in: `c.input` for a struct's field, `name` itself for an
 /// element of a tuple or a list.
-fn vc_moved_parts(name: ref String, value: ref Expr, ask: ref VcAsk) -> Vec[(String, String)] {
-    let mut out: Vec[(String, String)] = []
+fn vc_moved_parts(name: ref String, value: ref Expr, ask: ref VcAsk) -> Vec[(String, String, i64)] {
+    let mut out: Vec[(String, String, i64)] = []
     match value {
         Expr::StructLit { fields, .. } => {
             for field in fields {
                 let label = ask.names.resolve(field.name).clone()
-                let moved = match field.value {
-                    null => label.clone(),
-                    given => vc_variable(given ?? continue, ask) ?? continue,
+                match field.value {
+                    null => out.push((label.clone(), f"{name}.{label}", -1)),
+                    given => {
+                        let item = given ?? continue
+                        out.push((vc_variable(item, ask) ?? continue, f"{name}.{label}", node_key(item)))
+                    }
                 }
-                out.push((moved, f"{name}.{label}"))
             }
         }
         Expr::Tuple(items, _) => {
             for item in items {
-                out.push((vc_variable(item, ask) ?? continue, name.clone()))
+                out.push((vc_variable(item, ask) ?? continue, name.clone(), node_key(item)))
             }
         }
         Expr::ListLit { items, .. } => {
             for item in items {
-                out.push((vc_variable(item, ask) ?? continue, name.clone()))
+                out.push((vc_variable(item, ask) ?? continue, name.clone(), node_key(item)))
             }
         }
         else => {}

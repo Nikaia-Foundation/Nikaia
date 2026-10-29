@@ -1,0 +1,22 @@
+// A grammar result kept where text of its own is required - a published
+// field, which is never both kinds - is refused in Nikaia terms, as a
+// `Vec[String]` one is, not in the Rust below (#929, ADR-282 D25).
+grammar Lines {
+    rule WS = "" -> { }
+    rule Line -> (String, String) = ind:text(" "*) body:until(line_ending) line_ending -> { (ind, body) }
+    entry rule doc -> Vec[(String, String)] = ls:Line* eof -> { ls }
+}
+pub struct Doc {
+    pub lines: Vec[(String, String)],
+}
+fn load(n: i64) -> Doc throws {
+    let text = f"a:\n  b: {n}\n"
+    Doc { lines: Lines::doc(text) }
+}
+fn main() throws {
+    let mut d = load(1)
+    d.lines.push(("x", f"{2}"))
+    for (ind, body) in d.lines {
+        println(f"[{ind}] {body}")
+    }
+}

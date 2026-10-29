@@ -1,0 +1,14 @@
+// A grammar rule whose result is a tuple of `String` takes the views of the
+// input its action builds, with no `ref` written (#929, ADR-282 D1, D2).
+grammar Lines {
+    rule WS = "" -> { }
+    rule Line -> (String, String) = ind:text(" "*) body:until(line_ending) line_ending -> { (ind, body) }
+    entry rule doc -> Vec[(String, String)] = ls:Line* eof -> { ls }
+}
+
+fn main() throws {
+    let text = "a:\n  b: 1\n  c: two\n"
+    for (ind, body) in Lines::doc(text) {
+        println(f"[{ind}] {body}")
+    }
+}

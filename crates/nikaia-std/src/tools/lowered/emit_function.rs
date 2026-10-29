@@ -215,7 +215,8 @@ impl EmitState {
                                 if carrying.len() == 1 {
                                     let one = *nikaia_std::index::get(&carrying, 0);
                                     let lent = self.emit_fn_lends(world, &key, one) && !self.emit_fn_written_as_view(&key, one);
-                                    if !nikaia_std::index::get(&args, nikaia_std::index::at(one)).ty.is_view && !nikaia_std::index::get(&args, nikaia_std::index::at(one)).ty.either && lent { inner_views = Some(nikaia_std::index::get(&args, nikaia_std::index::at(one)).name); }
+                                    let changed = self.emit_fn_changes(&key, &emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(one)).name));
+                                    if !nikaia_std::index::get(&args, nikaia_std::index::at(one)).ty.is_view && !nikaia_std::index::get(&args, nikaia_std::index::at(one)).ty.either && (lent || changed) { inner_views = Some(nikaia_std::index::get(&args, nikaia_std::index::at(one)).name); }
                                 }
                             }
                         },

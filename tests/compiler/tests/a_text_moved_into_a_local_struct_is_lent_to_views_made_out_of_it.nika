@@ -1,0 +1,44 @@
+// A text moved into a local struct literal, with no view of it yet, is lent
+// all the same where a method that changes the struct hands back views of
+// it that are read later (ADR-353 D8, ADR-282 D13, #948): the field is a
+// view, the text stays in its keep, and the views outlive each call.
+struct Event { text: String, line: i64 }
+
+struct Parser { input: String, pos: i64 }
+
+impl Parser {
+    fn next(ref mut self) -> Event? {
+        let lines = self.input.lines().collect()
+        if self.pos >= lines.len() { return null }
+        let e = Event { text: lines[self.pos].trim(), line: self.pos + 1 }
+        self.pos += 1
+        return e
+    }
+}
+
+fn events(text: String) -> Vec[Event] {
+    let mut p = Parser { input: text, pos: 0 }
+    let mut events: Vec[Event] = []
+    while true {
+        let e = p.next() ?? break
+        events.push(e)
+    }
+    return events
+}
+
+fn main() {
+    let text = f"one\n two \nthree {3}"
+    let mut p = Parser { input: text, pos: 0 }
+    let mut found: Vec[Event] = []
+    while true {
+        let e = p.next() ?? break
+        found.push(e)
+    }
+    for e in found {
+        println(f"{e.line}: {e.text}")
+    }
+    let moved = f"four\n five {5}"
+    for e in events(moved) {
+        println(f"{e.line}: {e.text}")
+    }
+}

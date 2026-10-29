@@ -1,0 +1,48 @@
+// A text a view still reads, moved into a struct, is kept and the field
+// views it (ADR-353 D8): a callee that takes the struct `mut` and changes
+// another field cannot change that text, so the view stays valid (#948).
+enum Value {
+    Str(String),
+    Seq(Vec[Value]),
+}
+
+struct Cursor { input: String, pos: i64 }
+
+fn next_item(mut c: Cursor) -> String? {
+    let rest = c.input.lines().skip(c.pos).collect()
+    if rest.len() == 0 {
+        return null
+    }
+    c.pos += 1
+    return rest[0].trim()
+}
+
+fn parse(input: String) -> Value {
+    let mut items: Vec[Value] = []
+    for l in input.lines() {
+        items.push(Value::Str(l.trim()))
+    }
+    return Value::Seq(items)
+}
+
+fn main() {
+    let text = f"a: {1}\n  b: two"
+    let v = parse(text)
+    let mut c = Cursor { input: text, pos: 0 }
+    while true {
+        let s = next_item(c)
+        if s == null { break }
+        println(f"pull: {s}")
+    }
+    match v {
+        Value::Seq(items) => {
+            for it in items {
+                match it {
+                    Value::Str(s) => println(s),
+                    else => println("?"),
+                }
+            }
+        },
+        else => println("?"),
+    }
+}
