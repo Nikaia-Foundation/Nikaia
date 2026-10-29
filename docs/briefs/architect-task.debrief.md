@@ -1,13 +1,15 @@
-1. **What cost the most:** designing P5d's and P5b's hosts. That meant reading about 900 lines of `project.rs` (the check and explain block, `lower_reading`, `report`), then checking the Nikaia side one item at a time: `CheckFinding`, `Newly`/`Kept`, `Published`, the ledger parser, `changed_contracts`, whether `eprint` exists. Close behind was finding that host calls already have a mechanism (`rs2nika.names` `[forms X_]`/`[hosts X_]`, R244/R295). I nearly wrote a converter brief for "wanted pattern (3)" when it was already learned.
-2. **What the brief could have handed me:**
-   - Current line ranges. The plan's `Cut:` lines were stale (at a4b33a0), so I re-grepped every range.
-   - That `[forms X_]` already covers the "named Rust call becomes a host method" pattern. `docs/architect.md` lists it as *wanted*, which misled me.
-   - How free disk space compares with `agent.nika`'s 3 GB limit.
+1. **Most turns:** finding out why CI was red. The job logs could not be fetched (the log URL returned 403), so I took the failing test from the check-run annotations instead. Then about 8 turns went on narrowing the formatter refusal: three probes that formatted fine, a loop that formatted the file item by item to find the first bad one, then two more probe rounds.
+2. **Looked up that the input could have given me:**
+   - `architect-input.txt` said only `BATCH DONE` and the `RED` file was empty, yet CI was red at 0f9a525. If the input had named the failing job and test, I would have saved about 4 calls.
+   - That the formatter is self-hosted (`tools/fmt.nika`, called from `fmt.rs:21`).
+   - Where `lower-std` runs its check (`sysroot.rs:281`).
+   - The real matching rule for `[forms]` rows, which I read off P5b's rows because the header comment in `rs2nika.names` is wrong.
 3. **Checks run:**
-   - **Useful:** the converter's draft of P5d (it showed P5d is almost all host calls), `where.nika` for callers, the open-issue list, and `git status` for other lanes' files.
-   - **Wasted:** `rs2nika --score` with one argument; I got the usage wrong.
-   - **Not done:**
-     - I did not check that `[forms]` can match a call with seven arguments, nor the `it` filter names in either brief.
-     - The #943 issue body says `Fixes #N` instead of `#943`.
-     - The CI query showed every run of today's pushes still `in_progress`, so I checked nothing about their result.
-4. **One change that would have saved the most:** have `architect-input.txt` (or `drive.nika`) carry the current line ranges of the next plan rows, from a `scripts/plan_rows.nika` (still owed). Also fix the *Schematic patterns* paragraph in `docs/architect.md` to say host calls are learned through `[forms X_]` (P4b). Together that would have saved about a third of my turns.
+   - The runs list and failed jobs through `gh api`, and the annotations.
+   - `nikaia fmt` on copies of the two new files, and the bisection loop.
+   - `where.nika` for NK1125.
+   - **Wasted:**
+     - Fetching the job logs twice; both times only the 403 came back.
+     - The `where.nika` call, which listed tests but no place where NK1125 is raised.
+     - Two probes that looked for tuple-closure lines with `grep` before I bisected.
+4. **The change that would save the most:** when CI is red, `drive.nika` should write the failing jobs and the annotation messages into `architect-input.txt`; today the line is `RED`, or `BATCH DONE` as in this run. Second: fix the header comment on `[forms]` in `rs2nika.names` (it is the converter lane's file) so it says rows match the Nikaia draft text.
