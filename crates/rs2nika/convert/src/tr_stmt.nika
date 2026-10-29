@@ -153,6 +153,13 @@ impl TrEm {
             lines = self.flow(e, ind.clone(), mode)
         } else if self.t.is(e, "TUPLE_EXPR") && self.nodes(e).len() == 0 {
             // `()`: nothing
+        } else if mode == "return" && self.push_to != "" {
+            lines.push(f"{ind}{self.handed(e)}")
+        } else if mode == "return" && !self.unit && self.ret_ty.starts_with("Vec[") && self.loop_collect(e, "out", f": {self.ret_ty}", ind.clone()).len() > 0 {
+            for l in self.loop_collect(e, "out", f": {self.ret_ty}", ind.clone()) {
+                lines.push(l)
+            }
+            lines.push(f"{ind}return out")
         } else {
             let text = self.expr(e)
             if mode == "return" && !self.unit && !tr_leaves(text) && text != "()" {
@@ -259,6 +266,13 @@ impl TrEm {
         if looped.len() > 0 {
             return looped
         }
+        let bare_name: String = name.trim_start_matches("mut ").clone()
+        if init >= 0 && self.t.is(p, "IDENT_PAT") {
+            let pushed = self.loop_collect(init, bare_name, ty, ind.clone())
+            if pushed.len() > 0 {
+                return pushed
+            }
+        }
         let tested = self.opt_test(init, ind.clone())
         if tested.len() > 0 {
             let mut out: Vec[String] = [f"{ind}let {name}{ty} = {tested[0].trim_start()}"]
@@ -291,7 +305,7 @@ impl TrEm {
         let whole = self.src(c)
         let is_opt = whole.contains("collect::<Option<")
         let is_res = whole.contains("collect::<Result<")
-        if !(is_opt && self.opt) && !(is_res && self.fails) {
+        if !(is_opt && (self.opt || self.push_opt)) && !(is_res && self.fails && self.push_to == "") {
             return []
         }
         let mapped = self.t.nth(c, 0)
@@ -329,7 +343,136 @@ impl TrEm {
         if t.contains("?") || t.contains("_") {
             t = ""
         }
-        return [f"{ind}let mut {bare}{t} = []", f"{ind}for {p} in {self.expr(base)} {{", f"{ind}    {bare}.push({item})", f"{ind}}}"]
+        let over = self.expr(base)
+        if is_opt && self.push_opt {
+            // In a loop that stands for a `filter_map` the `?` drops the
+            // outer item: a `continue` here would only go on with this loop.
+            let missed = f"{bare}_missed"
+            item = f"{body} ?? {{ {missed} = true; break }}"
+            return [f"{ind}let mut {bare}{t} = []", f"{ind}let mut {missed} = false", f"{ind}for {p} in {over} {{", f"{ind}    {bare}.push({item})", f"{ind}}}", f"{ind}if {missed} {{", f"{ind}    continue", f"{ind}}}"]
+        }
+        return [f"{ind}let mut {bare}{t} = []", f"{ind}for {p} in {over} {{", f"{ind}    {bare}.push({item})", f"{ind}}}"]
+    }
+
+    /// `xs.iter().map(|x| { stmts; v }).collect()` into a list, the closure
+    /// a block of more than its value -> `let mut name = []`, `for x in xs
+    /// { stmts; name.push(v) }`: its `return v` pushes and goes on, and a
+    /// `filter_map`'s `None` (or `?`) is `continue`. [] for anything else,
+    /// and when the code is written twice (a probe), the second answer is
+    /// the same.
+    fn loop_collect(ref mut self, c: i64, name: ref String, ty: ref String, ind: String) -> Vec[String] {
+        if !self.t.is(c, "METHOD_CALL_EXPR") || self.src(self.t.kid(c, "NAME_REF")) != "collect" || self.nodes(self.t.kid(c, "ARG_LIST")).len() > 0 {
+            return []
+        }
+        let fish = self.t.kid(c, "GENERIC_ARG_LIST")
+        let tf = if fish >= 0 { self.src(fish) } else { "" }
+        if !(tf.contains("Vec<") || (tf == "" && ty.contains("Vec["))) {
+            return []
+        }
+        let mapped = self.t.nth(c, 0)
+        if !self.t.is(mapped, "METHOD_CALL_EXPR") {
+            return []
+        }
+        let m = self.src(self.t.kid(mapped, "NAME_REF"))
+        let args = self.nodes(self.t.kid(mapped, "ARG_LIST"))
+        if (m != "map" && m != "filter_map") || args.len() != 1 || !self.t.is(args[0], "CLOSURE_EXPR") {
+            return []
+        }
+        let params = self.t.kids_of(self.t.kid(args[0], "PARAM_LIST"), "PARAM")
+        let ns = self.nodes(args[0])
+        let body = ns[ns.len() - 1]
+        if params.len() != 1 || !self.t.is(body, "BLOCK_EXPR") || self.nodes(self.t.kid(body, "STMT_LIST")).len() < 2 || self.leaves_inner_loop(body, false) {
+            return []
+        }
+        if (m == "map" && self.t.find(body, "TRY_EXPR") >= 0) || !self.changes_outer(body, args[0]) {
+            return []
+        }
+        let mut base = self.t.nth(mapped, 0)
+        while self.t.is(base, "METHOD_CALL_EXPR") && self.nodes(self.t.kid(base, "ARG_LIST")).len() == 0 {
+            let inner = self.src(self.t.kid(base, "NAME_REF"))
+            if inner != "iter" && inner != "into_iter" && inner != "copied" && inner != "cloned" {
+                break
+            }
+            base = self.t.nth(base, 0)
+        }
+        let p = self.pat(self.t.nth(params[0], 0))
+        let saved_to = self.push_to.clone()
+        let saved_opt = self.push_opt
+        let saved_unit = self.unit
+        self.push_to = name.clone()
+        self.push_opt = m == "filter_map"
+        self.unit = false
+        let lines = self.block(body, f"{ind}    ", "return")
+        self.push_to = saved_to
+        self.push_opt = saved_opt
+        self.unit = saved_unit
+        let mut t: String = ty.clone()
+        if t.contains("_") {
+            t = ""
+        }
+        let mut out: Vec[String] = [f"{ind}let mut {name}{t} = []", f"{ind}for {p} in {self.expr(base)} {{"]
+        for l in lines {
+            out.push(l.clone())
+        }
+        out.push(f"{ind}}}")
+        return out
+    }
+
+    /// Whether `n` assigns to, or calls a changing method on, a place the
+    /// closure `c` does not bind itself (or `self`): a closure that changes
+    /// its surroundings is the case for a loop; one that does not stays one.
+    fn changes_outer(ref self, n: i64, c: i64) -> bool {
+        let mut place = -1
+        if self.t.is(n, "BIN_EXPR") {
+            let op = self.t.toks(n)
+            if op.len() > 0 && op[0].ends_with("EQ") && op[0] != "EQ2" && op[0] != "NEQ" && op[0] != "LTEQ" && op[0] != "GTEQ" {
+                place = self.t.nth(n, 0)
+            }
+        } else if self.t.is(n, "METHOD_CALL_EXPR") {
+            let changing = ["push", "push_str", "insert", "remove", "extend", "pop", "clear", "entry", "truncate", "retain", "sort", "dedup"]
+            let called = self.src(self.t.kid(n, "NAME_REF"))
+            if changing.contains(called) {
+                place = self.t.nth(n, 0)
+            }
+        }
+        if place >= 0 {
+            let text = self.src(place).trim_start_matches("*").trim_start_matches("&mut ").clone()
+            let mut root: String = ""
+            for ch in text.chars() {
+                if !(ch.is_alphanumeric() || ch == '_') {
+                    break
+                }
+                root.push(ch)
+            }
+            if root == "self" || !self.binds(c, root) {
+                return true
+            }
+        }
+        for k in self.nodes(n) {
+            if self.changes_outer(k, c) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether a `return` or `?` of the closure `n` stands inside a loop
+    /// of its own (`inside`): written as `continue`, it would go on with
+    /// that loop instead of the one the closure became.
+    fn leaves_inner_loop(ref self, n: i64, inside: bool) -> bool {
+        if self.t.is(n, "CLOSURE_EXPR") {
+            return false
+        }
+        if inside && (self.t.is(n, "RETURN_EXPR") || self.t.is(n, "TRY_EXPR")) {
+            return true
+        }
+        let looped = inside || self.t.is(n, "FOR_EXPR") || self.t.is(n, "WHILE_EXPR") || self.t.is(n, "LOOP_EXPR")
+        for k in self.nodes(n) {
+            if self.leaves_inner_loop(k, looped) {
+                return true
+            }
+        }
+        return false
     }
 
     /// `o.is_none_or(|w| e)` -> `match o { null => true, w => e, }`,
@@ -710,7 +853,7 @@ impl TrEm {
             }
         }
         // in `return` mode with only one-line arms: `return match ..`
-        let mut simple = mode == "return" && !self.unit
+        let mut simple = mode == "return" && !self.unit && self.push_to == ""
         if simple {
             for a in arms {
                 let ns = self.nodes(a)

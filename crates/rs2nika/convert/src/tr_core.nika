@@ -54,6 +54,13 @@ pub struct TrEm {
     pub host_fns: collections::BTreeSet[String],
     /// the methods being written are the state's (`impl Checker`)
     pub state_impl: bool,
+    /// the type the function being written returns, as Nikaia writes it
+    pub ret_ty: String,
+    /// a closure's body written as a loop's (`xs.iter().map(|x| { .. })
+    /// .collect()`): the list its values are pushed to, and whether they
+    /// are options (`filter_map`), whose absence is `continue`
+    pub push_to: String,
+    pub push_opt: bool,
 }
 
 pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, host_fns: ref Vec[String]) -> String {
@@ -80,6 +87,9 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
         world: world,
         host_fns: host_fns.iter().map(fn(h) { h.clone() }).collect(),
         state_impl: false,
+        ret_ty: "",
+        push_to: "",
+        push_opt: false,
     }
     if em.t.nodes.len() == 0 {
         return ""

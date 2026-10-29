@@ -236,9 +236,11 @@ impl TrEm {
         let saved_throws = self.fails
         let saved_opt = self.opt
         let saved_unit = self.unit
+        let saved_ret = self.ret_ty.clone()
         self.fails = false
         self.opt = false
         self.unit = true
+        self.ret_ty = ""
         let mut ret: String = ""
         if ret_n >= 0 {
             let last = self.last_seg(ret_n)
@@ -257,6 +259,7 @@ impl TrEm {
                 }
                 if ok != "" {
                     self.unit = false
+                    self.ret_ty = ok.clone()
                     ret = f" -> {ok} throws"
                 } else {
                     ret = " throws"
@@ -269,6 +272,7 @@ impl TrEm {
                 if t.ends_with("?") {
                     self.opt = true
                 }
+                self.ret_ty = t.clone()
                 ret = f" -> {t}"
             }
         }
@@ -331,6 +335,7 @@ impl TrEm {
                 out.push(f"{ind}}}")
             }
         }
+        self.ret_ty = saved_ret
         self.fails = saved_throws
         self.opt = saved_opt
         self.unit = saved_unit

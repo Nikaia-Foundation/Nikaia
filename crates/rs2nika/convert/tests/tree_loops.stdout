@@ -1,0 +1,46 @@
+use std::collections
+pub fn loop_halves(xs: ref Vec[i64], mut seen: Vec[i64]) -> Vec[i64] {
+    let mut out: Vec[i64] = []
+    for x in xs {
+        seen.push(x)
+        let h = x / 2
+        out.push(h + 1)
+    }
+    return out
+}
+
+fn loop_half(n: i64) -> i64? {
+    if n % 2 == 0 {
+        return n / 2
+    } else {
+        return null
+    }
+}
+
+pub fn loop_evens(rows: ref Vec[Vec[i64]], mut count: i64) -> Vec[Vec[i64]] {
+    let mut out: Vec[Vec[i64]] = []
+    for row in rows {
+        count += 1
+        if row.is_empty() {
+            continue
+        }
+        let first = (loop_half(row[0]) ?? continue)
+        let mut rest = []
+        let mut rest_missed = false
+        for n in row {
+            rest.push(loop_half(n) ?? { rest_missed = true; break })
+        }
+        if rest_missed {
+            continue
+        }
+        out.push([first, rest.len()])
+    }
+    return out
+}
+
+pub fn loop_plain(xs: ref Vec[i64]) -> Vec[i64] {
+    return xs.iter().map(fn(x) {
+        let y = x * 2
+        return y + 1
+    }).collect()
+}

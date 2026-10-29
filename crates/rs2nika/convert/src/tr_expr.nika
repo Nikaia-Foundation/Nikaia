@@ -114,6 +114,9 @@ impl TrEm {
             return "continue"
         } else if kind == "TRY_EXPR" {
             let inner = self.expr(self.t.nth(n, 0))
+            if self.push_to != "" && self.push_opt {
+                return f"({inner} ?? continue)"
+            }
             if self.fails {
                 return inner
             } else if self.opt {
@@ -971,6 +974,14 @@ impl TrEm {
     }
 
     fn closure(ref mut self, n: i64) -> String {
+        let saved_to = self.push_to.clone()
+        self.push_to = ""
+        let written = self.closure_written(n)
+        self.push_to = saved_to
+        return written
+    }
+
+    fn closure_written(ref mut self, n: i64) -> String {
         let mut ps: Vec[String] = []
         for p in self.t.kids_of(self.t.kid(n, "PARAM_LIST"), "PARAM") {
             let written = self.pat(self.t.nth(p, 0))
@@ -1066,10 +1077,39 @@ impl TrEm {
         return false
     }
 
+    /// What a value handed back by a closure written as a loop's body
+    /// becomes (`push_to`): `out.push(v)`, or `continue` for a
+    /// `filter_map`'s `None`.
+    fn handed(ref mut self, e: i64) -> String {
+        if self.push_opt {
+            if self.t.is(e, "PATH_EXPR") && self.src(e) == "None" {
+                return "continue"
+            }
+            if self.t.is(e, "CALL_EXPR") && self.segs(self.t.nth(e, 0)) == ["Some"] {
+                let args = self.nodes(self.t.kid(e, "ARG_LIST"))
+                if args.len() == 1 {
+                    let v = self.expr(args[0])
+                    return f"{self.push_to}.push({v})"
+                }
+            }
+            let v = self.expr(e)
+            return f"{self.push_to}.push({v} ?? continue)"
+        }
+        let v = self.expr(e)
+        return f"{self.push_to}.push({v})"
+    }
+
     fn ret(ref mut self, n: i64) -> String {
         let inner = self.t.nth(n, 0)
         if inner < 0 {
             return "return"
+        }
+        if self.push_to != "" {
+            let pushed = self.handed(inner)
+            if pushed == "continue" {
+                return pushed
+            }
+            return f"{{ {pushed}\n{self.ind}continue }}"
         }
         if self.t.is(inner, "CALL_EXPR") {
             let segs = self.segs(self.t.nth(inner, 0))
