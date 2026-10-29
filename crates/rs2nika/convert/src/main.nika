@@ -16928,6 +16928,7 @@ fn rs2nika_scan(mut ctx: Rs2nikaCtx, viewed: ref String, prefix: ref String) -> 
     // closure R227 lifts does: its short name was its function's own
     let mut depth = 0
     let mut in_impl = false
+    let mut inside = false
     for given in viewed.split("\n") {
         let raw = rs2nika_const_fn(ctx, given)
         let hoisted: String = raw.trim().clone()
@@ -16936,7 +16937,15 @@ fn rs2nika_scan(mut ctx: Rs2nikaCtx, viewed: ref String, prefix: ref String) -> 
         }
         let nested = depth > 0 && !(in_impl && depth == 1) && rs2nika_indent(raw) != "" && hoisted.starts_with("fn ")
         depth = depth + rs2nika_depth_of(raw)
-        lines.push(rs2nika_reserved(ctx, raw))
+        // R215: a line that goes on in a text opened above keeps its words
+        if inside {
+            let opened: String = rs2nika_reserved(ctx, f"\"{raw}")
+            lines.push((opened.strip_prefix("\"") ?? "").clone())
+            inside = rs2nika_open_text(f"\"{raw}")
+        } else {
+            lines.push(rs2nika_reserved(ctx, raw))
+            inside = !raw.trim_start().starts_with("//") && rs2nika_open_text(raw)
+        }
         if pending != "" {
             if rs2nika_replace_word(raw, "self", "\u{3}") != raw {
                 ctx.methods.push(pending.clone())
@@ -19259,17 +19268,26 @@ fn rs2nika_mask_texts(given: String) -> (String, Vec[String]) {
             }
             end = end + 1
         }
+        let mark = "\u{4}"
         if end >= c.len() {
-            // a text that goes on in the next line stays as it is
-            out.push_str(rs2nika_text(c, at, c.len()))
+            // a text that goes on in the next line keeps its words too, and
+            // the line ends in the mark (`rs2nika_open_text`)
+            out.push_str(f"\"{mark}{texts.len()}{mark}")
+            texts.push(rs2nika_text(c, at + 1, c.len()))
             return (out, texts)
         }
-        let mark = "\u{4}"
         out.push_str(f"\"{mark}{texts.len()}{mark}\"")
         texts.push(rs2nika_text(c, at + 1, end))
         at = end + 1
     }
     return (out, texts)
+}
+
+/// Whether a text is still open at the end of `given` (a Rust text goes on
+/// in the next line, after `\` or a line break).
+fn rs2nika_open_text(given: String) -> bool {
+    let (masked, _) = rs2nika_mask_texts(given)
+    return masked.ends_with("\u{4}")
 }
 
 fn rs2nika_load(mut ctx: Rs2nikaCtx, repo: String) {

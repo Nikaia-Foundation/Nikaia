@@ -1,0 +1,10 @@
+use std::collections
+pub fn a(d: ref D) throws {
+    throw refuse(f"`{d.name}` is by path.\nA package with a `{SRC}/` folder.")
+}
+fn b() -> String {
+    return f"x {1} with y"
+}
+fn c() -> String {
+    return "a `b` with c"
+}
