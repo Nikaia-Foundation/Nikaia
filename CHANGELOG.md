@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1288] — 2026-10-29
+
+**`extend` on a list, a `HashSet` or a `BTreeSet` refuses elements of the wrong type with `NK1102` instead of a rustc error (ADR-collections-1, Fixes #963).**
+
 ## [0.0.1287] — 2026-10-29
 
 **`let mut e = v[i]` and `let mut f = s.field` (a struct of numbers) are mutable views: reading the list or struct before the view's last use is `NK2305` instead of a rustc error, and a write through `f` reaches `s` (Part I 6.8, Fixes #962).**
