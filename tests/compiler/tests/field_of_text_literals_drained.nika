@@ -1,0 +1,13 @@
+// #941: a struct literal of text literals does not retype the declared field
+// `Vec[String]` inside a method: drained and collected, it is `Vec[String]`.
+pub struct S { items: Vec[String] }
+impl S {
+    pub fn take_all(ref mut self) -> Vec[String] {
+        return self.items.drain().collect()
+    }
+}
+fn main() {
+    let mut s = S { items: ["a"] }
+    let t = s.take_all()
+    println(f"{t.len()} {s.items.len()}")
+}

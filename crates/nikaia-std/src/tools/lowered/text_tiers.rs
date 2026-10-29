@@ -1132,8 +1132,31 @@ pub(crate) fn collected_into(going: &TierGoing, receiver: &Expr, ask: &TierAsk<'
     if !plain_string(ask.names, nikaia_std::index::get(&ty.generics, 0)) { return; }
     let mut at = going.path.to_owned();
     at.push(0);
+    let moved = drained_list(receiver, ask, walk);
+    if moved.is_some() {
+        let from = match moved { Some(__nikaia_value) => __nikaia_value, None => return };
+        let to = Declaring { owner: going.owner.clone(), ty: (*nikaia_std::index::get(&ty.generics, 0)).clone() };
+        link(&from, &mut vec![0], &to, &mut at.to_owned(), ask, walk);
+    }
     let word = seen(&going.owner, &at, walk);
     if walk.in_hole && walk.hole_text < 0 { walk.flows.unwrappable.insert(word); } else if mixed_at(&word, walk) { hand_value_over(receiver, Hand::Items, walk); }
+}
+
+pub(crate) fn drained_list(chain: &Expr, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> Option<Declaring> {
+    match chain {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            if !args.is_empty() || name != "drain" && name != "into_iter" { return None; }
+            let found = match source_of(receiver, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let ty = found.ty.clone();
+            if !a_container(ask.names, &ty) || a_map(ask.names, &ty) || ty.generics.is_empty() { return None; }
+            if !plain_string(ask.names, nikaia_std::index::get(&ty.generics, 0)) { return None; }
+            return Some(Declaring { owner: found.owner.clone(), ty: (*nikaia_std::index::get(&ty.generics, 0)).clone() });
+        },
+        _ => { },
+    }
+    None
 }
 
 pub(crate) fn mixed_part(going: &TierGoing, at: i64, ask: &TierAsk<'_, '_, '_, '_>, walk: &mut TierWalk) -> bool {

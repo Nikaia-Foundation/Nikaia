@@ -1628,12 +1628,46 @@ fn collected_into(going: ref TierGoing, receiver: ref Expr, ask: ref TierAsk, mu
     }
     let mut at = going.path.clone()
     at.push(0)
+    // **What `drain` or `into_iter` hands out is the list's own items** (#941):
+    // collected, they are the same text below, so the two element positions
+    // are linked as a list handed over whole is (D16), and a list of static
+    // text collected where text of its own is declared keeps text of its own.
+    let moved = drained_list(receiver, ask, walk)
+    if moved != null {
+        let from = moved ?? return
+        let to = Declaring { owner: going.owner.clone(), ty: ty.generics[0].clone() }
+        link(from, [0], to, at.clone(), ask, walk)
+    }
     let word = seen(going.owner, at, walk)
     if walk.in_hole && walk.hole_text < 0 {
         walk.flows.unwrappable.insert(word)
     } else if mixed_at(word, walk) {
         hand_value_over(receiver, Hand::Items, walk)
     }
+}
+
+/// The element of the declared list `xs.drain()` or `xs.into_iter()` moves
+/// out of: a `Declaring` of the element type under the list's owner.
+fn drained_list(chain: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Declaring? {
+    match chain {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let name = ask.names.resolve(method)
+            if args.len() != 0 || (name != "drain" && name != "into_iter") {
+                return null
+            }
+            let found = source_of(receiver, ask, walk) ?? return null
+            let ty = found.ty.clone()
+            if !a_container(ask.names, ty) || a_map(ask.names, ty) || ty.generics.len() == 0 {
+                return null
+            }
+            if !plain_string(ask.names, ty.generics[0]) {
+                return null
+            }
+            return Declaring { owner: found.owner.clone(), ty: ty.generics[0].clone() }
+        },
+        else => {},
+    }
+    return null
 }
 
 fn mixed_part(going: ref TierGoing, at: i64, ask: ref TierAsk, mut walk: TierWalk) -> bool {
