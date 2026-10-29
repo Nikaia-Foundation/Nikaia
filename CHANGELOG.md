@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1293] — 2026-10-29
+
+**Text a call returned, handed whole to `push` or `insert` through an `if` or `match` arm beside a literal arm (`ps.push(if w == "()" { "_" } else { w })`), is moved as its own instead of being kept as a view, which rustc refused (#969).**
+
 ## [0.0.1292] — 2026-10-29
 
 **`extend` of a list literal of text into a `Vec[String]`, `HashSet[String]` or `BTreeSet[String]` builds owned text again (rustc E0271 since 0.0.1286); `extend` of text literals into a list or set of text views is no longer refused with a false `NK1102` (since 0.0.1288) (#950, #963).**
