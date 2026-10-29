@@ -120,12 +120,6 @@ fn tr_split_commas(t: ref RtTree, tt: i64) -> Vec[String] {
 }
 
 impl TrEm {
-    fn todo(ref mut self, what: String, n: i64) -> String {
-        self.todos += 1
-        let src = self.t.text(n).trim().replace("\n", " ")
-        return f"{src} /* TODO(rs2nika): {what} */"
-    }
-
     fn fresh(ref mut self, base: String) -> String {
         self.uniq += 1
         return f"{base}_{self.uniq}"
@@ -369,4 +363,13 @@ fn tr_drop_suffix(s: String, p: ref String) -> String {
         return rest.clone()
     }
     return s
+}
+
+/// A function of the draft under `prefix`; the line passes wrote some
+/// helpers (`modules_is_file`) with it already.
+fn tr_prefixed(prefix: ref String, name: ref String) -> String {
+    if name.starts_with(prefix) {
+        return name.clone()
+    }
+    return f"{prefix}{name}"
 }

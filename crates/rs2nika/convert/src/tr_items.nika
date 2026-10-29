@@ -306,7 +306,7 @@ impl TrEm {
             head = f"{ind}pub fn{gen}({ps.join(", ")}){ret}"
         } else if !in_impl && self.prefix != "" && self.fns.contains(name) {
             // a top-level function takes the prefix its calls are written with
-            head = f"{ind}{self.vis(n)}fn {self.prefix}{name}{gen}({ps.join(", ")}){ret}"
+            head = f"{ind}{self.vis(n)}fn {tr_prefixed(self.prefix, name)}{gen}({ps.join(", ")}){ret}"
         } else {
             head = f"{ind}{self.vis(n)}fn {tr_ident(name)}{gen}({ps.join(", ")}){ret}"
         }

@@ -217,7 +217,7 @@ impl TrEm {
             }
             // a local or a parameter of that name is not the function
             if self.prefix != "" && self.fns.contains(name) && !self.binds(self.t.up(n, "FN"), name) {
-                return f"{self.prefix}{name}"
+                return tr_prefixed(self.prefix, name)
             }
             return tr_ident(name)
         }
@@ -341,6 +341,44 @@ impl TrEm {
         return f"{e} as {ty}"
     }
 
+    /// What the tree cannot write yet, marked. A call keeps its converted
+    /// receiver and arguments and a macro is a call to `rs2nika_NAME`, so
+    /// the draft still parses and the compiler points at each one; the Rust
+    /// is in the comment.
+    fn todo(ref mut self, what: String, n: i64) -> String {
+        self.todos += 1
+        let src = self.t.text(n).trim().replace("\n", " ").replace("*/", "* /")
+        let kind = self.t.kind(n)
+        if kind == "METHOD_CALL_EXPR" {
+            let r = self.expr(self.t.nth(n, 0))
+            let m = self.src(self.t.kid(n, "NAME_REF"))
+            return f"{r}.{m}({self.args(n).join(", ")}) /* TODO(rs2nika): {what} */"
+        }
+        if kind == "CALL_EXPR" && self.t.is(self.t.nth(n, 0), "PATH_EXPR") {
+            let callee = self.src(self.t.nth(n, 0)).replace(" ", "")
+            if !callee.contains("<") {
+                return f"{callee}({self.args(n).join(", ")}) /* TODO(rs2nika): {what} */"
+            }
+        }
+        if kind == "MACRO_CALL" || kind == "MACRO_EXPR" {
+            let mut mc = n
+            if kind == "MACRO_EXPR" {
+                mc = self.t.kid(n, "MACRO_CALL")
+            }
+            let name = self.last_seg(mc)
+            let a = self.margs[mc] ?? -1
+            let mut inner: String = ""
+            if a >= 0 && self.t.is(a, "LITERAL") {
+                inner = self.src(a)
+            } else if src.ends_with("\")") && src.contains("!(\"") && src.split("\"").count() == 3 {
+                // `env!("NAME")`: the one text it names
+                inner = f"\"{src.split("\"").nth(1) ?? ""}\""
+            }
+            return f"rs2nika_{name}({inner}) /* TODO(rs2nika): {what}: `{src}` */"
+        }
+        return f"{src} /* TODO(rs2nika): {what} */"
+    }
+
     fn args(ref mut self, n: i64) -> Vec[String] {
         let mut out: Vec[String] = []
         for a in self.nodes(self.t.kid(n, "ARG_LIST")) {
@@ -441,7 +479,7 @@ impl TrEm {
         }
         let mut path = self.path_text(self.t.kid(callee, "PATH"))
         if segs.len() == 1 && self.prefix != "" && self.fns.contains(last) {
-            path = f"{self.prefix}{last}"
+            path = tr_prefixed(self.prefix, last)
         } else if segs.len() == 1 {
             path = tr_ident(last)
         }
