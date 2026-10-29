@@ -104,3 +104,17 @@ Refused::Because( = ProjectMembersRefusal::Refused( # the file's refusal, turned
 [hosts project_members_]
 manifests = M: ProjectMembersHost # P4b: the manifests come from project.rs's host, P4a's trait (P4a's own functions call it `host`; the move kept them)
 host = H: ProjectMembersForeignHost # P4b: the ledger and the crate sources are the foreign host's (8394790)
+
+[forms project_check_]
+check::check_against( = host.check_against( # the checker's walk stays Rust behind ProjectCheckHost; the host holds the program, the build's facts and keeps `checked.facts` (P5d)
+project_check_check(parsed, foreign.declared, = host.foreign_check( # `crate::foreign::check` stays Rust, the host's (P5d)
+sync_::check( = host.sync_violations( # `contracts::sync::check` stays Rust: the host keeps the violations, Nikaia counts them (P5d)
+diagnostics::render_finding_in( = host.render_finding_in( # the renderer stays Rust (P5d)
+diagnostics::render_sync_violation( = host.render_sync_violation( # the same, a violation named by its index (P5d)
+host.env_var(WRAPPER_MARKER) != null || WARNED.with(fn(warned) { warned.get() }) = host.in_the_wrapper() # the wrapper's marker and the thread-local stay Rust (P5d)
+eprint( = host.eprint( # std has no `eprint` without a newline (P5d)
+check::Kept { = ProjectCheckKept { # `check::Kept` stays Rust (lane 2); project.rs maps this one to it (P5d)
+{x}.arguments() = {x}.params # `SignatureOps::arguments` is the params after a `self` (contracts/mod.rs) (P5d)
+
+[hosts project_check_]
+host = H: ProjectCheckHost # P5d: the walks and the renderer stay Rust behind project.rs's host

@@ -3,7 +3,12 @@
 // **What `check` says at its end**, for the compiler's `project`: the switches
 // that turn a finding into a warning, the tally of a refused program, and the
 // `--locked` refusals of the proofs and the ledger. Moved from Rust (ADR-294,
-// #125, P2).
+// #125, P2). The check's tally, the contracts that moved since the committed
+// ledger and the order of `--explain`'s reports followed (P5d): the walks, the
+// renderer and the reports stay Rust, behind `ProjectCheckHost` and
+// `ProjectCheckExplainHost`.
+
+use std::collections
 
 /// **The tally of a refused program**: one line per family of the errors in
 /// `findings` (its warnings are not counted), and `violations`, the calls
@@ -289,3 +294,198 @@ pub fn project_check_locked_ledger_changed(path: String, changed: String) -> Str
     return f"--locked: the contracts changed and {path} does not say so.\nWhat the build inferred and the ledger does not have:\n{changed}\nRun without --locked to record it, and read the diff."
 }
 
+
+/// **What the check of one unit needs from the compiler**, which stays Rust:
+/// the walks over the parsed file, the renderer, and where a warning goes.
+/// `project.rs`'s `CheckHost` holds the file, the build's facts (`Around`)
+/// and the library, and keeps what the walks found for the caller.
+pub trait ProjectCheckHost {
+    /// The checker's findings for the unit (`check::check_against`); the host
+    /// keeps the walk's facts for an emitter that would ask the same.
+    fn check_against(ref self) -> Vec[CheckFinding] sync
+    /// The findings at the boundary of the build (`foreign::check`): it needs
+    /// the manifest rather than a ledger.
+    fn foreign_check(ref self) -> Vec[CheckFinding] sync
+    /// How many calls a `sync` function may not make (`contracts::sync`); the
+    /// host keeps them, named by their index.
+    fn sync_violations(ref self) -> i64 sync
+    /// The violation `at`, rendered against the file.
+    fn render_sync_violation(ref self, at: i64, path: ref String, source: ref String) -> String sync
+    /// A finding, rendered against the file's lines.
+    fn render_finding_in(ref self, finding: ref CheckFinding, path: ref String, lines: ref Vec[String]) -> String sync
+    /// Whether this is the `rustc` wrapper's lowering, or a build that has
+    /// said its warnings already (#481).
+    fn in_the_wrapper(ref self) -> bool sync
+    /// `text` on standard error, as it is: a rendered finding ends in its
+    /// own newline.
+    fn eprint(ref self, text: ref String) sync
+}
+
+/// **What the check said**: the warnings as they were said, suppressed or
+/// not (the build cache keeps them with the lowering, and a build that reuses
+/// it says them again), and the tally of a refused program.
+pub struct ProjectCheckSaid {
+    pub warnings: String,
+    pub refused: String?,
+}
+
+/// **Check one unit and say what was found**: the checker's findings and the
+/// build's boundary, in source order, through the switches that turn some
+/// into warnings, printed; a program with an error or a `sync` violation is
+/// refused with the tally.
+///
+/// `user_parallelism` reaches this and reaches **nothing inside the
+/// analyses**: the verdict of every rule is a property of the program (ADR-005
+/// §1 Group B); the switch changes only whether a refusal is about *this*
+/// build, which is a question about severity
+/// (`project_check_lint_where_nothing_crosses`).
+pub fn project_check_check[H: ProjectCheckHost](host: ref H, path: String, source: String, user_parallelism: String, refuted_claims: String, unproved_claims: String, building_a_library: bool) -> ProjectCheckSaid {
+    let mut all = host.check_against()
+    // **`NK1238` is the checker's answer for a build it knows nothing of**
+    // (ADR-284 D4): a library build exports its entry points.
+    if building_a_library {
+        all = all.iter().filter(fn(finding) { finding.code != "NK1238" }).map(fn(finding) { finding.clone() }).collect()
+    }
+    // A separate walk, for the reason the three inside `check_program` are
+    // separate: it asks about the **boundary** of the build rather than about a
+    // type, and it needs the manifest rather than a ledger.
+    all.extend(host.foreign_check())
+    all.sort_by_key(fn(finding) { finding.span.start })
+    project_check_lint_where_nothing_crosses(all, user_parallelism)
+    project_check_let_refuted_claims_through(all, refuted_claims)
+    project_check_let_unproved_claims_through(all, unproved_claims)
+    let violations = host.sync_violations()
+    if all.is_empty() && violations == 0 {
+        return ProjectCheckSaid { warnings: "", refused: null }
+    }
+
+    // A warning is printed and does not stop anything: a string that looks
+    // like an `f"…"` (ADR-309 D15), or a `??` or `?.` after a value that
+    // cannot be absent (ADR-279 D13).
+    //
+    // **Once** (#481): the build lowers every member before `cargo` runs, and
+    // the wrapper lowers it again inside, so the wrapper keeps its warnings to
+    // itself. An error is still said - the build has stopped before the
+    // wrapper on any it saw.
+    let in_the_wrapper = host.in_the_wrapper()
+    let mut warnings: String = ""
+    let lines: Vec[String] = source.split("\n").map(fn(line) { line.clone() }).collect()
+    for finding in all {
+        let rendered = host.render_finding_in(finding, path, lines)
+        if finding.severity == CheckSeverity::Warning {
+            warnings.push_str(rendered)
+            if in_the_wrapper {
+                continue
+            }
+        }
+        host.eprint(rendered)
+    }
+    if !all.iter().any(fn(f) { f.severity == CheckSeverity::Error }) && violations == 0 {
+        return ProjectCheckSaid { warnings: warnings, refused: null }
+    }
+    for at in 0..<violations {
+        host.eprint(host.render_sync_violation(at, path, source))
+    }
+
+    // A refusal and not a failure of this compiler, so it leaves without a
+    // backtrace: the diagnostics above have already said everything, and this
+    // is the tally (`diagnostics::Refused`).
+    return ProjectCheckSaid { warnings: warnings, refused: project_check_summary(all, violations) }
+}
+
+/// **What each function has newly gained in its `throws` set** since the
+/// ledger committed beside it
+/// ([ADR-308](../../docs/specification/adr/adr-308.md) D1).
+///
+/// The ledger records `throws` as a **set** (ADR-023 D1), so a callee that
+/// gains a failure is a set that gained a member, and every `catch` over that
+/// callee now receives something it did not when it was written. A function
+/// the committed ledger does not name is **new**, so nothing was ever written
+/// against its set: a new function's whole set is not a set that grew. (No
+/// committed ledger, or one that does not parse, is `project.rs`'s `newly`.)
+pub fn project_check_gained(committed: ref Ledger, inferred: ref Ledger) -> collections::BTreeMap[String, Vec[String]] {
+    let mut out: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for (name, contract) in inferred.functions {
+        let before = committed.functions.get(name) ?? continue
+        let gained: Vec[String] = contract.fails_with.iter().filter(fn(error) { !before.fails_with.contains(error) }).map(fn(x) { x.clone() }).collect()
+        if !gained.is_empty() {
+            out.insert(name.clone(), gained)
+        }
+    }
+    return out
+}
+
+/// **A parameter whose `keeps` moved** (ADR-297 D12), `check::Kept` on the
+/// Rust side: `now` is `true` where the callee keeps it now and did not,
+/// `false` where it kept it and only reads it now; `ty` its type's text.
+pub struct ProjectCheckKept {
+    pub param: String,
+    pub now: bool,
+    pub ty: String,
+}
+
+/// **The parameters whose `keeps` changed**
+/// ([ADR-297](../../docs/specification/adr/adr-297.md) D12): kept now and not
+/// before, or kept before and only read now. A parameter the old signature
+/// does not have is **new** rather than moved, as a new function's set is not
+/// a set that grew. Whether the type's teardown does anything is the checker's
+/// question, which has both ledgers. The parameters are a call's, after a
+/// `self` (`SignatureOps::arguments`).
+pub fn project_check_keeps_that_moved(committed: ref Ledger, inferred: ref Ledger) -> collections::BTreeMap[String, Vec[ProjectCheckKept]] {
+    let mut out: collections::BTreeMap[String, Vec[ProjectCheckKept]] = collections::BTreeMap()
+    for (name, contract) in inferred.functions {
+        let before = committed.functions.get(name) ?? continue
+        let now = contract.signature ?? continue
+        let then = before.signature ?? continue
+        let moved: Vec[ProjectCheckKept] = now.params.iter().filter(fn((param, _)) { param != "self" && then.params.iter().any(fn((p, _)) { p == param }) }).filter_map(fn((param, ty)) {
+            let kept = contract.keeps.contains(param)
+            return if kept != before.keeps.contains(param) { ProjectCheckKept { param: param.clone(), now: kept, ty: ty.text() } } else { null }
+        }).collect()
+        if !moved.is_empty() {
+            out.insert(name.clone(), moved)
+        }
+    }
+    return out
+}
+
+/// **The reports `--explain` asks of one program**, which stay Rust: the
+/// unrolling of the whole program, and per unit the overlap, sharing, tether,
+/// assert, bounds and trust reports. Units are named by index.
+pub trait ProjectCheckExplainHost {
+    /// How many units the program has.
+    fn units(ref self) -> i64 sync
+    /// The path of unit `at`, as shown.
+    fn unit_path(ref self, at: i64) -> String sync
+    /// What each `T::fields` loop was unrolled to (ADR-304 D9).
+    fn unrolling_report(ref self) -> String sync
+    /// The report `kind` (`overlaps`, `sharing`, `tethers`, `asserts`,
+    /// `bounds`, `trust`) of unit `at`.
+    fn explain_report(ref self, kind: ref String, at: i64) -> String sync
+}
+
+/// **Print the explanations a run asked for**, over every file of the
+/// package: the unrolling once, if `comptime_asked`, then each of `kinds` per
+/// unit, in that order.
+///
+/// **The unrolling once for the program and not once per file**
+/// ([ADR-304](../../docs/specification/adr/adr-304.md) D10): an unrolling is a
+/// fact about a **call**, and the call may stand in a different file from the
+/// function it names. The file name is printed where there is more than one,
+/// because a slot key (`zaehle::counts`) does not say which file it is in.
+pub fn project_check_explain[H: ProjectCheckExplainHost](host: ref H, comptime_asked: bool, kinds: ref Vec[String]) {
+    if !comptime_asked && kinds.is_empty() {
+        return
+    }
+    if comptime_asked {
+        print(host.unrolling_report())
+    }
+    let units = host.units()
+    for at in 0..<units {
+        if units > 1 {
+            println(f"--- {host.unit_path(at)}")
+        }
+        for kind in kinds {
+            print(host.explain_report(kind, at))
+        }
+    }
+}

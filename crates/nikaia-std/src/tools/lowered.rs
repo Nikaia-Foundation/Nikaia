@@ -2691,7 +2691,7 @@ pub mod paths {
 }
 pub mod project_check {
     #[allow(unused_imports)]
-    pub use super::{project_check_summary, project_check_let_refuted_claims_through, project_check_let_unproved_claims_through, project_check_lint_where_nothing_crosses, project_check_locked_proofs, project_check_locked_ledger_missing, project_check_locked_ledger_changed};
+    pub use super::{project_check_summary, project_check_let_refuted_claims_through, project_check_let_unproved_claims_through, project_check_lint_where_nothing_crosses, project_check_locked_proofs, project_check_locked_ledger_missing, project_check_locked_ledger_changed, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain};
 }
 pub mod project_members {
     #[allow(unused_imports)]

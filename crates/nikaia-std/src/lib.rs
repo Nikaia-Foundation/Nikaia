@@ -227,6 +227,9 @@ pub mod runtime {
 /// **And `unnecessary_unwrap`**: a local a `null` test proved is read as
 /// `.as_ref().unwrap()` after the test (ADR-382, Consequences), which rustc
 /// checks again; the test is the program's, the unwrap the lowering's.
+///
+/// **And `map_clone`**: `.map(fn(x) { x.clone() })` lowers as written, the
+/// house style of `tools/*.nika` (P5d's `project_check_check`).
 #[allow(
     unused_assignments,
     clippy::unnecessary_unwrap,
@@ -270,6 +273,7 @@ pub mod runtime {
     clippy::manual_unwrap_or_default,
     clippy::needless_borrows_for_generic_args,
     clippy::manual_ok_err,
+    clippy::map_clone,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):

@@ -94,3 +94,101 @@ pub fn project_check_locked_ledger_missing(path: &str) -> String { format!("--lo
 
 pub fn project_check_locked_ledger_changed(path: &str, changed: &str) -> String { format!("--locked: the contracts changed and {} does not say so.\nWhat the build inferred and the ledger does not have:\n{}\nRun without --locked to record it, and read the diff.", path, changed) }
 
+pub trait ProjectCheckHost {
+    fn check_against(&self) -> Vec<CheckFinding>;
+    fn foreign_check(&self) -> Vec<CheckFinding>;
+    fn sync_violations(&self) -> i64;
+    fn render_sync_violation(&self, at: i64, path: &str, source: &str) -> String;
+    fn render_finding_in(&self, finding: &CheckFinding, path: &str, lines: &[String]) -> String;
+    fn in_the_wrapper(&self) -> bool;
+    fn eprint(&self, text: &str);
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectCheckSaid {
+    pub warnings: String,
+    pub refused: Option<String>,
+}
+
+pub fn project_check_check<H: ProjectCheckHost>(host: &H, path: &str, source: &str, user_parallelism: &str, refuted_claims: &str, unproved_claims: &str, building_a_library: bool) -> ProjectCheckSaid {
+    let mut all = host.check_against();
+    if building_a_library { all = all.iter().filter(|&finding| { finding.code != "NK1238" }).map(|finding| { finding.clone() }).collect::<Vec<_>>(); }
+    all.extend(host.foreign_check());
+    all.sort_by_key(|finding| { finding.span.start });
+    project_check_lint_where_nothing_crosses(&mut all, user_parallelism);
+    project_check_let_refuted_claims_through(&mut all, refuted_claims);
+    project_check_let_unproved_claims_through(&mut all, unproved_claims);
+    let violations = host.sync_violations();
+    if all.is_empty() && violations == 0 { return ProjectCheckSaid { warnings: String::from(""), refused: None }; }
+    let in_the_wrapper = host.in_the_wrapper();
+    let mut warnings: String = String::from("");
+    let lines: Vec<String> = source.split("\n").map(|line| { line.to_string() }).collect::<Vec<_>>();
+    for finding in all.iter() {
+        let rendered = host.render_finding_in(finding, path, &lines);
+        if finding.severity == CheckSeverity::Warning {
+            warnings.push_str(&rendered);
+            if in_the_wrapper { continue; }
+        }
+        host.eprint(&rendered);
+    }
+    if !all.iter().any(|f| { f.severity == CheckSeverity::Error }) && violations == 0 { return ProjectCheckSaid { warnings, refused: None }; }
+    for at in 0..violations { host.eprint(&host.render_sync_violation(at, path, source)); }
+    ProjectCheckSaid { warnings, refused: Some(project_check_summary(&all, violations)) }
+}
+
+pub fn project_check_gained(committed: &Ledger, inferred: &Ledger) -> collections::BTreeMap<String, Vec<String>> {
+    let mut out: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    for (name, contract) in inferred.functions.iter() {
+        let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let gained: Vec<String> = contract.fails_with.iter().filter(|&error| { !before.fails_with.contains(error) }).map(|x| { x.to_string() }).collect::<Vec<_>>();
+        if !gained.is_empty() { out.insert(name.to_string(), gained); }
+    }
+    out
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectCheckKept {
+    pub param: String,
+    pub now: bool,
+    pub ty: String,
+}
+
+pub fn project_check_keeps_that_moved(committed: &Ledger, inferred: &Ledger) -> collections::BTreeMap<String, Vec<ProjectCheckKept>> {
+    let mut out: collections::BTreeMap<String, Vec<ProjectCheckKept>> = collections::BTreeMap::new();
+    for (name, contract) in inferred.functions.iter() {
+        let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let now = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let then = match before.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple23434| {
+            let (param, _) = __nikaia_tuple23434;
+            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple23493| {
+                let (p, _) = __nikaia_tuple23493;
+                AsRef::<str>::as_ref(&(p)) == AsRef::<str>::as_ref(&(param))
+            })
+        }).filter_map(|__nikaia_tuple23534| {
+            let (param, ty) = __nikaia_tuple23534;
+            let kept = nikaia_std::list::contains(&contract.keeps, &param);
+            if kept != nikaia_std::list::contains(&before.keeps, &param) { Some(ProjectCheckKept { param: param.to_string(), now: kept, ty: ty.text() }) } else { None }
+        }).collect::<Vec<_>>();
+        if !moved.is_empty() { out.insert(name.to_string(), moved); }
+    }
+    out
+}
+
+pub trait ProjectCheckExplainHost {
+    fn units(&self) -> i64;
+    fn unit_path(&self, at: i64) -> String;
+    fn unrolling_report(&self) -> String;
+    fn explain_report(&self, kind: &str, at: i64) -> String;
+}
+
+pub fn project_check_explain<H: ProjectCheckExplainHost>(host: &H, comptime_asked: bool, kinds: &[String]) {
+    if !comptime_asked && kinds.is_empty() { return; }
+    if comptime_asked { print!("{}", host.unrolling_report()); }
+    let units = host.units();
+    for at in 0..units {
+        if units > 1 { println!("--- {}", host.unit_path(at)); }
+        for kind in kinds.iter() { print!("{}", host.explain_report(kind, at)); }
+    }
+}
+

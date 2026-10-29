@@ -43,7 +43,6 @@ use orchestrator::project::{
     write_if_changed,
 };
 
-use crate::contracts::SignatureOps;
 use crate::contracts::{Ledger, sync};
 use crate::emit::Build;
 use crate::manifest::{Dependency, Manifest};
@@ -1251,83 +1250,106 @@ pub fn check(
         beside,
         reads,
     } = around;
-    let library = foreign_library(foreign)?;
-
-    // A described crate is a package by the spelling rule, which is what
-    // `modules` is: a set of words that appear in front of a `::` and are not
-    // `std`'s ([`Foreign::packages`]).
-    let modules = foreign.packages(modules);
-    let checked = check::check_against(parsed, beside, own, &library, &modules, newly, reads);
-    let mut all = checked.findings;
-    if let Some(out) = facts_out {
-        *out = Some(checked.facts);
-    }
-    // **`NK1238` is the checker's answer for a build it knows nothing of**
-    // (ADR-284 D4): a library build exports its entry points.
-    if building_a_library {
-        all.retain(|finding| finding.code != "NK1238");
-    }
-    // A separate walk, for the reason the three inside `check_program` are
-    // separate: it asks about the **boundary** of the build rather than about a
-    // type, and it needs the manifest rather than a ledger.
-    all.extend(crate::foreign::check(
+    let host = CheckHost {
         parsed,
-        &foreign.declared,
-        &foreign.described,
-        &foreign.moved,
-    ));
-    all.sort_by_key(|finding| finding.span.at());
-    project_check::project_check_lint_where_nothing_crosses(&mut all, user_parallelism);
-    project_check::project_check_let_refuted_claims_through(&mut all, refuted_claims);
-    project_check::project_check_let_unproved_claims_through(&mut all, unproved_claims);
-    let violations = sync::check(parsed, own, &library);
-    if all.is_empty() && violations.is_empty() {
-        return Ok(String::new());
+        beside,
+        own,
+        library: foreign_library(foreign)?,
+        // A described crate is a package by the spelling rule, which is what
+        // `modules` is: a set of words that appear in front of a `::` and are
+        // not `std`'s ([`Foreign::packages`]).
+        modules: foreign.packages(modules),
+        newly,
+        reads,
+        foreign,
+        facts: std::cell::RefCell::new(None),
+        violations: std::cell::RefCell::new(Vec::new()),
+    };
+    let said = project_check::project_check_check(
+        &host,
+        &path.display().to_string(),
+        source,
+        user_parallelism,
+        refuted_claims,
+        unproved_claims,
+        building_a_library,
+    );
+    if let (Some(out), Some(facts)) = (facts_out, host.facts.into_inner()) {
+        *out = Some(facts);
     }
+    match said.refused {
+        // A refusal and not a failure of this compiler, so it leaves without a
+        // backtrace: the diagnostics have already said everything, and this is
+        // the tally (`diagnostics::Refused`).
+        Some(tally) => Err(diagnostics::refuse(tally)),
+        None => Ok(said.warnings),
+    }
+}
 
-    // A warning is printed and does not stop anything: a string that looks
-    // like an `f"…"` (ADR-309 D15), or a `??` or `?.` after a value that
-    // cannot be absent (ADR-279 D13).
-    //
-    // **Once** (#481): the build lowers every member before `cargo` runs, and
-    // the wrapper lowers it again inside, so the wrapper keeps its warnings to
-    // itself. An error is still said - the build has stopped before the
-    // wrapper on any it saw.
-    let in_the_wrapper =
-        std::env::var_os(WRAPPER_MARKER).is_some() || WARNED.with(|warned| warned.get());
-    //
-    // **The warnings are handed back as they were said**, suppressed or not:
-    // the build cache keeps them with the lowering, and a build that reuses
-    // it says them again.
-    let path = path.display().to_string();
-    let mut warnings = String::new();
-    let lines: Vec<&str> = source.split('\n').collect();
-    for finding in &all {
-        let rendered = diagnostics::render_finding_in(finding, &path, &lines);
-        if finding.severity == check::Severity::Warning {
-            warnings.push_str(&rendered);
-            if in_the_wrapper {
-                continue;
-            }
-        }
-        eprint!("{rendered}");
-    }
-    if !all.iter().any(|f| f.severity == check::Severity::Error) && violations.is_empty() {
-        return Ok(warnings);
-    }
-    for violation in &violations {
-        eprint!(
-            "{}",
-            diagnostics::render_sync_violation(violation, &path, source)
+/// What `project_check_check` asks of the compiler (`tools/project_check.nika`):
+/// the walks over one unit, which stay Rust, and the renderer.
+struct CheckHost<'a> {
+    parsed: &'a crate::parser::Parsed,
+    beside: &'a [&'a crate::parser::Parsed],
+    own: &'a Ledger,
+    library: Ledger,
+    modules: BTreeSet<String>,
+    newly: &'a check::Newly,
+    reads: &'a assets::Reads,
+    foreign: &'a Foreign,
+    /// The walk's facts, for the caller's `facts_out`.
+    facts: std::cell::RefCell<Option<check::CheckFacts>>,
+    /// What `sync::check` found, named by index on the Nikaia side.
+    violations: std::cell::RefCell<Vec<sync::Violation>>,
+}
+
+impl project_check::ProjectCheckHost for CheckHost<'_> {
+    fn check_against(&self) -> Vec<check::Finding> {
+        let checked = check::check_against(
+            self.parsed,
+            self.beside,
+            self.own,
+            &self.library,
+            &self.modules,
+            self.newly,
+            self.reads,
         );
+        *self.facts.borrow_mut() = Some(checked.facts);
+        checked.findings
     }
 
-    // A refusal and not a failure of this compiler, so it leaves without a
-    // backtrace: the diagnostics above have already said everything, and this is
-    // the tally (`diagnostics::Refused`).
-    Err(diagnostics::refuse(
-        nikaia_std::tools::project_check::project_check_summary(&all, violations.len() as i64),
-    ))
+    fn foreign_check(&self) -> Vec<check::Finding> {
+        crate::foreign::check(
+            self.parsed,
+            &self.foreign.declared,
+            &self.foreign.described,
+            &self.foreign.moved,
+        )
+    }
+
+    fn sync_violations(&self) -> i64 {
+        let violations = sync::check(self.parsed, self.own, &self.library);
+        let count = violations.len() as i64;
+        *self.violations.borrow_mut() = violations;
+        count
+    }
+
+    fn render_sync_violation(&self, at: i64, path: &str, source: &str) -> String {
+        diagnostics::render_sync_violation(&self.violations.borrow()[at as usize], path, source)
+    }
+
+    fn render_finding_in(&self, finding: &check::Finding, path: &str, lines: &[String]) -> String {
+        let lines: Vec<&str> = lines.iter().map(String::as_str).collect();
+        diagnostics::render_finding_in(finding, path, &lines)
+    }
+
+    fn in_the_wrapper(&self) -> bool {
+        std::env::var_os(WRAPPER_MARKER).is_some() || WARNED.with(|warned| warned.get())
+    }
+
+    fn eprint(&self, text: &str) {
+        eprint!("{text}");
+    }
 }
 
 /// **What each function has newly gained in its `throws` set** since the
@@ -1353,22 +1375,10 @@ fn newly(root: &Path, inferred: &Ledger) -> check::Newly {
     else {
         return check::Newly::new();
     };
-    let mut newly: check::Newly = inferred
-        .functions
-        .iter()
-        .filter_map(|(name, contract)| {
-            let before = committed.functions.get(name)?;
-            let gained: Vec<String> = contract
-                .fails_with
-                .iter()
-                .filter(|error| !before.fails_with.contains(error))
-                .cloned()
-                .collect();
-            (!gained.is_empty()).then(|| (name.clone(), gained))
-        })
-        .collect();
-    newly.keeps = keeps_that_moved(&committed, inferred);
-    newly
+    check::Newly {
+        throws: project_check::project_check_gained(&committed, inferred),
+        keeps: keeps_that_moved(&committed, inferred),
+    }
 }
 
 /// **The parameters whose `keeps` changed**
@@ -1378,26 +1388,18 @@ fn newly(root: &Path, inferred: &Ledger) -> check::Newly {
 /// a set that grew. Whether the type's teardown does anything is the checker's
 /// question, which has both ledgers.
 fn keeps_that_moved(committed: &Ledger, inferred: &Ledger) -> BTreeMap<String, Vec<check::Kept>> {
-    inferred
-        .functions
-        .iter()
-        .filter_map(|(name, contract)| {
-            let before = committed.functions.get(name)?;
-            let (now, then) = (contract.signature.as_ref()?, before.signature.as_ref()?);
-            let moved: Vec<check::Kept> = now
-                .arguments()
-                .iter()
-                .filter(|(param, _)| then.arguments().iter().any(|(p, _)| p == param))
-                .filter_map(|(param, ty)| {
-                    let kept = contract.keeps.contains(param);
-                    (kept != before.keeps.contains(param)).then(|| check::Kept {
-                        param: param.clone(),
-                        now: kept,
-                        ty: ty.text(),
-                    })
+    project_check::project_check_keeps_that_moved(committed, inferred)
+        .into_iter()
+        .map(|(name, moved)| {
+            let moved = moved
+                .into_iter()
+                .map(|kept| check::Kept {
+                    param: kept.param,
+                    now: kept.now,
+                    ty: kept.ty,
                 })
                 .collect();
-            (!moved.is_empty()).then(|| (name.clone(), moved))
+            (name, moved)
         })
         .collect()
 }
@@ -1550,127 +1552,123 @@ pub fn explain(
     if !want.asked() {
         return Ok(());
     }
-    let library = crate::contracts::std_ledger();
-    let several = program.units.len() > 1;
+    // The kinds in the order they are printed in, per unit.
+    let kinds: Vec<String> = [
+        ("overlaps", want.overlaps),
+        ("sharing", want.sharing),
+        ("tethers", want.tethers),
+        ("asserts", want.asserts),
+        ("bounds", want.bounds),
+        ("trust", want.trust),
+    ]
+    .into_iter()
+    .filter(|(_, asked)| *asked)
+    .map(|(kind, _)| kind.to_string())
+    .collect();
+    let host = ExplainHost {
+        program,
+        settings,
+        reads,
+        library: crate::contracts::std_ledger(),
+    };
+    project_check::project_check_explain(&host, want.comptime, &kinds);
+    Ok(())
+}
 
-    // **Once for the program and not once per file**
-    // ([ADR-304](../../docs/specification/adr/adr-304.md) D10), which is the
-    // difference from the four reports below: an unrolling is a fact about a
-    // **call**, and the call may stand in a different file from the function it
-    // names. Printing it per unit would print each one as many times as the
-    // program has files.
-    if want.comptime {
+/// What `project_check_explain` asks of the compiler: the reports, which stay
+/// Rust, over the program's units by index.
+struct ExplainHost<'a> {
+    program: &'a modules::Program,
+    settings: &'a Settings,
+    reads: &'a assets::Reads,
+    library: &'static Ledger,
+}
+
+impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
+    fn units(&self) -> i64 {
+        self.program.units.len() as i64
+    }
+
+    fn unit_path(&self, at: i64) -> String {
+        self.program.units[at as usize].path.display().to_string()
+    }
+
+    fn unrolling_report(&self) -> String {
         let beside: Vec<&crate::parser::Parsed> =
-            program.units.iter().map(|unit| &unit.parsed).collect();
+            self.program.units.iter().map(|unit| &unit.parsed).collect();
         // **`Reads::none()`**, because what is reported is which types a
         // function was **used with**, and no file a build reads changes that.
         // Handing it a real allowlist would run a grammar to answer a question
         // about call sites ([ADR-177](../../docs/specification/adr/adr-177.md)).
-        print!(
-            "{}",
-            crate::check::unrolling_report(
-                &beside,
-                &program.contracts,
-                &crate::assets::Reads::none(),
-            )
-        );
+        crate::check::unrolling_report(
+            &beside,
+            &self.program.contracts,
+            &crate::assets::Reads::none(),
+        )
     }
 
-    for unit in &program.units {
-        if several {
-            println!("--- {}", unit.path.display());
-        }
-        if want.overlaps {
-            print!(
-                "{}",
-                crate::contracts::order::overlap_report(
+    fn explain_report(&self, kind: &str, at: i64) -> String {
+        let (program, settings, library) = (self.program, self.settings, self.library);
+        let unit = &program.units[at as usize];
+        match kind {
+            "overlaps" => crate::contracts::order::overlap_report(
+                &unit.parsed,
+                &program.contracts,
+                library,
+                &crate::emit::branch_starts_first(&unit.parsed, settings.build, &program.contracts),
+            ),
+            "sharing" => crate::contracts::sharing::report(
+                &unit.parsed,
+                &program.contracts,
+                library,
+                settings.build.user_parallelism == crate::emit::UserParallelism::Yes,
+            ),
+            "tethers" => crate::contracts::tether::report(&unit.parsed, &program.contracts),
+            "asserts" => crate::check::claims_report(
+                &unit.parsed,
+                &unit.source,
+                &unit.path.display().to_string(),
+                &program
+                    .units
+                    .iter()
+                    .map(|unit| &unit.parsed)
+                    .collect::<Vec<_>>(),
+                &program.contracts,
+                library,
+                self.reads,
+                settings.words.unproved_claims != "warn",
+                // **Red and green only on a terminal**, and never where
+                // `NO_COLOR` is set (Part III, `--asserts`).
+                std::env::var_os("NO_COLOR").is_none()
+                    && std::io::IsTerminal::is_terminal(&std::io::stdout()),
+            ),
+            "bounds" => crate::bounds_report::report(
+                &unit.parsed,
+                &unit.source,
+                &unit.path.display().to_string(),
+                &program.contracts,
+                library,
+                settings.build.bounds,
+                settings.build.overflow,
+                settings.build.prove_through_loops,
+            ),
+            "trust" => crate::contracts::trust::render(
+                &crate::contracts::trust::analyse_in(
                     &unit.parsed,
-                    &program.contracts,
-                    library,
-                    &crate::emit::branch_starts_first(
-                        &unit.parsed,
-                        settings.build,
-                        &program.contracts,
-                    ),
-                )
-            );
-        }
-        if want.sharing {
-            print!(
-                "{}",
-                crate::contracts::sharing::report(
-                    &unit.parsed,
-                    &program.contracts,
-                    library,
-                    settings.build.user_parallelism == crate::emit::UserParallelism::Yes,
-                )
-            );
-        }
-        if want.tethers {
-            print!(
-                "{}",
-                crate::contracts::tether::report(&unit.parsed, &program.contracts)
-            );
-        }
-        if want.asserts {
-            print!(
-                "{}",
-                crate::check::claims_report(
-                    &unit.parsed,
-                    &unit.source,
-                    &unit.path.display().to_string(),
                     &program
                         .units
                         .iter()
-                        .map(|unit| &unit.parsed)
+                        .filter(|u| u.package == unit.package)
+                        .map(|u| &u.parsed)
                         .collect::<Vec<_>>(),
-                    &program.contracts,
                     library,
-                    reads,
-                    settings.words.unproved_claims != "warn",
-                    // **Red and green only on a terminal**, and never where
-                    // `NO_COLOR` is set (Part III, `--asserts`).
-                    std::env::var_os("NO_COLOR").is_none()
-                        && std::io::IsTerminal::is_terminal(&std::io::stdout()),
-                )
-            );
-        }
-        if want.bounds {
-            print!(
-                "{}",
-                crate::bounds_report::report(
-                    &unit.parsed,
-                    &unit.source,
-                    &unit.path.display().to_string(),
-                    &program.contracts,
-                    library,
-                    settings.build.bounds,
-                    settings.build.overflow,
-                    settings.build.prove_through_loops,
-                )
-            );
-        }
-        if want.trust {
-            print!(
-                "{}",
-                crate::contracts::trust::render(
-                    &crate::contracts::trust::analyse_in(
-                        &unit.parsed,
-                        &program
-                            .units
-                            .iter()
-                            .filter(|u| u.package == unit.package)
-                            .map(|u| &u.parsed)
-                            .collect::<Vec<_>>(),
-                        library,
-                    ),
-                    &unit.path.display().to_string(),
-                    &unit.source,
-                )
-            );
+                ),
+                &unit.path.display().to_string(),
+                &unit.source,
+            ),
+            other => unreachable!("no `--explain` report `{other}`"),
         }
     }
-    Ok(())
 }
 
 /// A project: its root, its manifest, and the switches this build resolved.
