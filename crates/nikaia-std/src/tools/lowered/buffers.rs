@@ -49,7 +49,7 @@ pub struct BufferPlan {
 }
 
 #[derive(Debug, Clone)]
-pub struct BufferAsk<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7> {
+pub struct BufferAsk<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7, 'a8> {
     pub names: &'a winnow_grammar::InternerContext,
     pub own: &'a1 Ledger,
     pub own_methods: &'a2 MethodIndex,
@@ -58,6 +58,7 @@ pub struct BufferAsk<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7> {
     pub items: &'a5 [Spanned<Item>],
     pub context: &'a6 KeepContext,
     pub given_up: &'a7 collections::BTreeMap<i64, String>,
+    pub viewed: &'a8 collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -155,7 +156,7 @@ pub(crate) fn bind_local(name: String, local: Local, walk: &mut BufferWalk) {
 
 pub(crate) fn a_local(at: i64, path: &[(i64, bool)], origins: collections::BTreeSet<(i64, String)>, ty: Option<Type>, buffer: bool, text: bool) -> Local { Local { at, path: path.to_owned(), origins, ty, parameter: false, keeps: false, buffer, text, number: false, parts: vec![] } }
 
-pub fn buffer_plans(program: &Program, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String) -> Vec<BufferPlan> {
+pub fn buffer_plans(program: &Program, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String) -> Vec<BufferPlan> {
     let mut out: Vec<BufferPlan> = vec![];
     for item in program.items.iter() {
         match &item.node {
@@ -170,7 +171,7 @@ pub fn buffer_plans(program: &Program, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '
     out
 }
 
-pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String) -> Option<BufferPlan> {
+pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String) -> Option<BufferPlan> {
     let (name, receiver, args, body) = match item {
         Item::Fn { name, receiver, args, body, .. } => { let name = *name; (name, receiver, args, body) },
         _ => return None,
@@ -221,12 +222,12 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
     Some(decide(key, body, &walk, ask))
 }
 
-pub(crate) fn carries_maybe(ty: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn carries_maybe(ty: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
     ask.context.carries(ask.names, written)
 }
 
-pub(crate) fn buffer_block(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+pub(crate) fn buffer_block(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     open_scope(walk);
     for stmt in block.stmts.iter() {
         walk.statement = stmt.span.start as i64;
@@ -235,13 +236,13 @@ pub(crate) fn buffer_block(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_
     close_scope(walk);
 }
 
-pub(crate) fn nested(at: i64, looping: bool, block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+pub(crate) fn nested(at: i64, looping: bool, block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     walk.path.push((at, looping));
     buffer_block(block, ask, holes_of, unaliased, walk);
     walk.path.pop();
 }
 
-pub(crate) fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+pub(crate) fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     let at = span.start as i64;
     match stmt {
         Stmt::Let { value, .. } => {
@@ -319,7 +320,7 @@ pub(crate) fn shed(root: &str, walk: &mut BufferWalk) {
     walk.sheds.insert(root.to_string(), paths);
 }
 
-pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     let (names, value, ty, made) = match stmt {
         Stmt::Let { names, value, ty, .. } => (names, value, ty, made_here(names, value, (ty).as_ref(), span.start as i64, ask, unaliased, &walk)),
         _ => return,
@@ -392,7 +393,7 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
 
 pub(crate) fn a_named_buffer(made: &Buffer) -> bool { matches!(made, Buffer::Named(_)) }
 
-pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, walk: &BufferWalk) -> Buffer {
+pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, walk: &BufferWalk) -> Buffer {
     if names.len() != 1 { return Buffer::None; }
     match value {
         Expr::MethodCall { receiver, method, .. } => {
@@ -414,7 +415,7 @@ pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Opti
     found
 }
 
-pub(crate) fn text_by_every_method(ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, method: &str) -> Option<String> {
+pub(crate) fn text_by_every_method(ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, method: &str) -> Option<String> {
     if !method_keys(ask.library_methods, method).is_empty() { return None; }
     let mut found: Option<String> = None;
     for key in method_keys(ask.own_methods, method) {
@@ -434,7 +435,7 @@ pub(crate) fn text_by_every_method(ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '
     found
 }
 
-pub(crate) fn struct_made_by(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> Option<String> {
+pub(crate) fn struct_made_by(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> Option<String> {
     let func = match value {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
         Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return struct_made_by(expr, ask, unaliased) },
@@ -464,7 +465,7 @@ pub(crate) fn struct_made_by(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
     None
 }
 
-pub(crate) fn held_text_field(base: &Expr, field: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<i64> {
+pub(crate) fn held_text_field(base: &Expr, field: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<i64> {
     let local = match base {
         Expr::Variable(name, _) => { let name = *name; match local_of(ask.names.resolve(name), walk) { Some(__nikaia_value) => __nikaia_value, None => return None } },
         _ => return None,
@@ -490,7 +491,7 @@ pub(crate) fn a_viewed_buffer(ty: &str) -> bool {
     base == "String" || base == "Bytes" || base == "Mapped" || ty.starts_with("Vec[u8") || ty.starts_with("List[u8")
 }
 
-pub(crate) fn joins_text(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn joins_text(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match value {
         Expr::Binary { op, lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
@@ -501,7 +502,7 @@ pub(crate) fn joins_text(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '
     }
 }
 
-pub(crate) fn text_operand(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn text_operand(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match value {
         Expr::LitStr { .. } => true,
         Expr::LitInterpolated { .. } => true,
@@ -515,7 +516,7 @@ pub(crate) fn text_operand(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
     }
 }
 
-pub(crate) fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match receiver {
         Expr::LitStr { .. } => true,
         Expr::LitInterpolated { .. } => true,
@@ -528,7 +529,7 @@ pub(crate) fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
     }
 }
 
-pub(crate) fn clones_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn clones_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match receiver {
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); clones_text(value, ask, walk) || clones_text(fallback, ask, walk) },
         Expr::MethodCall { receiver: inner, method, .. } => { let inner = nikaia_std::boxed::open(inner); let method = *method; match ask.names.resolve(method) == "trim" || ask.names.resolve(method) == "trim_start" || ask.names.resolve(method) == "trim_end" || ask.names.resolve(method) == "clone" {
@@ -541,7 +542,7 @@ pub(crate) fn clones_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
     }
 }
 
-pub(crate) fn cuts_text(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn cuts_text(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match value {
         Expr::Coalesce { value: cut, fallback, .. } => { let cut = nikaia_std::boxed::open(cut); let fallback = nikaia_std::boxed::open(fallback); cuts_text(cut, ask, walk) && texts_pair(fallback, ask, walk) },
         Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (ask.names.resolve(method) == "split_once" || ask.names.resolve(method) == "rsplit_once") && clones_text(receiver, ask, walk) },
@@ -549,14 +550,14 @@ pub(crate) fn cuts_text(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
     }
 }
 
-pub(crate) fn texts_pair(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn texts_pair(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match value {
         Expr::Tuple(items, _) => items.len() == 2 && copies_text(nikaia_std::index::get(&items, 0), ask, walk) && copies_text(nikaia_std::index::get(&items, 1), ask, walk),
         _ => cuts_text(value, ask, walk),
     }
 }
 
-pub(crate) fn text_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn text_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if local.text { return true; }
     let ty = match local.ty { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -564,14 +565,14 @@ pub(crate) fn text_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_,
     (written == "String" || written == "str") && ty.generics.is_empty()
 }
 
-pub(crate) fn formats(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn formats(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match receiver {
         Expr::Variable(name, _) => { let name = *name; formats_local(ask.names.resolve(name), ask, walk) },
         _ => formats_a_number(receiver, ask, walk),
     }
 }
 
-pub(crate) fn formats_a_number(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn formats_a_number(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match value {
         Expr::LitInt { .. } => true,
         Expr::LitFloat(..) => true,
@@ -588,7 +589,7 @@ pub(crate) fn formats_a_number(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_,
     }
 }
 
-pub(crate) fn formats_a_tuple_number(base: &Expr, field: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn formats_a_tuple_number(base: &Expr, field: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match base {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -600,7 +601,7 @@ pub(crate) fn formats_a_tuple_number(base: &Expr, field: &str, ask: &BufferAsk<'
     }
 }
 
-pub(crate) fn formats_a_called_number(func: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn formats_a_called_number(func: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     match func {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -621,7 +622,7 @@ pub(crate) fn formats_a_called_number(func: &Expr, ask: &BufferAsk<'_, '_, '_, '
     }
 }
 
-pub(crate) fn formats_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn formats_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if local.number { return true; }
     let ty = match local.ty { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -629,7 +630,7 @@ pub(crate) fn formats_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, 
     written != "String" && written != "str"
 }
 
-pub(crate) fn is_the_buffer(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+pub(crate) fn is_the_buffer(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match expr {
         Expr::Variable(name, _) => { let name = *name; a_buffer_local(ask.names.resolve(name), walk) },
         Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; match ask.names.resolve(method) == "clone" || ask.names.resolve(method) == "to_owned" || ask.names.resolve(method) == "to_string" {
@@ -640,7 +641,7 @@ pub(crate) fn is_the_buffer(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
     }
 }
 
-pub(crate) fn struct_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<String> {
+pub(crate) fn struct_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<String> {
     let name = match expr {
         Expr::StructLit { name, .. } => { let name = *name; ask.names.resolve(name).to_string() },
         Expr::Variable(name, _) => { let name = *name; match written_type_of(ask.names.resolve(name), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None } },
@@ -650,13 +651,13 @@ pub(crate) fn struct_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_,
     None
 }
 
-pub(crate) fn written_type_of(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<String> {
+pub(crate) fn written_type_of(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<String> {
     let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let ty = match local.ty { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(ask.names.resolve(ty.name).to_string())
 }
 
-pub(crate) fn a_variant(callee: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn a_variant(callee: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     let segments: Vec<&str> = callee.split("::").collect::<Vec<_>>();
     if segments.len() < 2 { return false; }
     let variant = *nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1));
@@ -698,7 +699,7 @@ pub(crate) fn flow_into(root: &str, origins: &collections::BTreeSet<(i64, String
     set_local(root, local, walk);
 }
 
-pub(crate) fn given_up_inside(bound_at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut BufferWalk) {
+pub(crate) fn given_up_inside(bound_at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut BufferWalk) {
     let viewer = match *nikaia_std::index::get(&ask.given_up, &bound_at) { Some(__nikaia_value) => __nikaia_value, None => return }.to_string();
     let no_callee: String = String::from("");
     let id = (bound_at, no_callee);
@@ -729,7 +730,7 @@ pub(crate) fn escape_word(escaping: &Escape) -> String {
     }
 }
 
-pub(crate) fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+pub(crate) fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     match expr {
         Expr::Block(block, _) => { nested_keeping_statement(at, block, ask, holes_of, unaliased, walk); },
         Expr::Unsafe(block, _) => { nested_keeping_statement(at, block, ask, holes_of, unaliased, walk); },
@@ -768,13 +769,13 @@ pub(crate) fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_, '_, '_, '_
     }
 }
 
-pub(crate) fn nested_keeping_statement(at: i64, block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+pub(crate) fn nested_keeping_statement(at: i64, block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     let statement = walk.statement;
     nested(at, false, block, ask, holes_of, unaliased, walk);
     walk.statement = statement;
 }
 
-pub(crate) fn spawns_in(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut BufferWalk) {
+pub(crate) fn spawns_in(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut BufferWalk) {
     let mut bodies: Vec<Expr> = vec![];
     spawn_bodies(expr, holes_of, &mut bodies);
     for body in bodies.iter() {
@@ -796,7 +797,7 @@ pub(crate) fn capture(name: &str, local: &Local, walk: &mut BufferWalk) {
     walk.captured.insert(name.to_string(), held);
 }
 
-pub(crate) fn task_names(body: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> collections::BTreeSet<String> {
+pub(crate) fn task_names(body: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for one in seen_in_expression(body, ask.names, &name_as_it_is, holes_of, &no_root, true) {
         match one {
@@ -894,7 +895,7 @@ pub(crate) fn spawn_bodies(expr: &Expr, holes_of: &impl Fn(&Expr) -> Vec<Expr>, 
     }
 }
 
-pub(crate) fn effects(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+pub(crate) fn effects(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     match expr {
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -908,7 +909,7 @@ pub(crate) fn effects(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '
     }
 }
 
-pub(crate) fn put_by_method(root: &str, method: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+pub(crate) fn put_by_method(root: &str, method: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     if drops_entries(method) { shed(root, walk); }
     if !keeps_what_it_is_given(method) { return; }
     let mut all: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
@@ -940,7 +941,7 @@ pub(crate) fn put_into(root: &str, at: i64, of: &collections::BTreeSet<(i64, Str
     walk.puts_into.insert(key, PutsAt { by_arg });
 }
 
-pub(crate) fn lent_origins(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+pub(crate) fn lent_origins(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let mut out = origins_of(expr, ask, holes_of, unaliased, walk);
     match expr {
         Expr::Field { base, name, .. } => {
@@ -956,7 +957,7 @@ pub(crate) fn lent_origins(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, 
     out
 }
 
-pub(crate) fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+pub(crate) fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     match expr {
         Expr::Variable(name, _) => { let name = *name; origins_of_local(ask.names.resolve(name), &walk) },
@@ -980,7 +981,7 @@ pub(crate) fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
                 }
                 let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let of = origins_of(value, ask, holes_of, unaliased, walk);
-                if !is_the_buffer(value, ask, &walk) { add_all(&of, &mut out); }
+                if !is_the_buffer(value, ask, &walk) || ask.viewed.contains(&node_key(value)) { add_all(&of, &mut out); }
             }
             out
         },
@@ -1050,16 +1051,16 @@ pub(crate) fn a_buffer_local(name: &str, walk: &BufferWalk) -> bool {
 
 pub(crate) fn add_all(from: &collections::BTreeSet<(i64, String)>, into: &mut collections::BTreeSet<(i64, String)>) { for one in from.iter() { into.insert(one.clone()); } }
 
-pub(crate) fn items_origins(items: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+pub(crate) fn items_origins(items: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let mut out: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     for item in items.iter() {
         let of = origins_of(item, ask, holes_of, unaliased, walk);
-        if !is_the_buffer(item, ask, &walk) { add_all(&of, &mut out); }
+        if !is_the_buffer(item, ask, &walk) || ask.viewed.contains(&node_key(item)) { add_all(&of, &mut out); }
     }
     out
 }
 
-pub(crate) fn method_origins(call: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+pub(crate) fn method_origins(call: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let (receiver, method, args) = match call {
         Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, ask.names.resolve(method).to_string(), args) },
         Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, ask.names.resolve(method).to_string(), args) },
@@ -1100,7 +1101,7 @@ pub(crate) fn owned_by_every_method(ledger: &Ledger, methods: &MethodIndex, meth
     any
 }
 
-pub(crate) fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+pub(crate) fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let callee = written_callee(ask.names, func, unaliased);
     let named = nikaia_std::index::or(match callee.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1135,7 +1136,7 @@ pub(crate) fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '
     out
 }
 
-pub(crate) fn borrowed_positions(named: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<i64> {
+pub(crate) fn borrowed_positions(named: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<i64> {
     let mut out: collections::BTreeSet<i64> = collections::BTreeSet::new();
     let contract = match *nikaia_std::index::get(&ask.own.functions, named) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, named) { Some(__nikaia_value) => __nikaia_value, None => return out } };
     if contract.borrows.is_empty() { return out; }
@@ -1150,7 +1151,7 @@ pub(crate) fn borrowed_positions(named: &str, ask: &BufferAsk<'_, '_, '_, '_, '_
     out
 }
 
-pub(crate) fn answered_by(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) -> bool {
+pub(crate) fn answered_by(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) -> bool {
     if takes_a_keep(contract) {
         let source = call_source(named, walk);
         for held in contract.views.iter() {
@@ -1172,7 +1173,7 @@ pub(crate) fn answered_by(contract: &FnContract, named: &str, args: &[Expr], ask
     !a_ledger_type_with_a_view(result) && !holds_a_struct_of_views(result, ask)
 }
 
-pub(crate) fn holds_a_struct_of_views(ty: &Ty, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn holds_a_struct_of_views(ty: &Ty, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     if a_struct_of_views(ty, ask) { return true; }
     match ty {
         Ty::Named { args, .. } => {
@@ -1190,7 +1191,7 @@ pub(crate) fn holds_a_struct_of_views(ty: &Ty, ask: &BufferAsk<'_, '_, '_, '_, '
     }
 }
 
-pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) {
+pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) {
     stored_arguments(contract, named, args, ask, unaliased, walk);
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -1207,7 +1208,7 @@ pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], 
     }
 }
 
-pub(crate) fn stored_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+pub(crate) fn stored_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     let copying: Vec<&Ledger> = vec![ask.own, ask.library];
     for entry in contract.stores.iter() {
         let parts = entry.split(':').collect::<Vec<_>>();
@@ -1228,14 +1229,14 @@ pub(crate) fn stored_arguments(contract: &FnContract, named: &str, args: &[Expr]
     }
 }
 
-pub(crate) fn a_struct_of_views(result: &Ty, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn a_struct_of_views(result: &Ty, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     match result {
         Ty::Named { name, .. } => ask.context.borrowing.contains(name) || ask.context.borrowing.contains(&last_segment(name)) || a_library_struct_of_views(name, ask),
         _ => false,
     }
 }
 
-pub(crate) fn a_library_struct_of_views(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn a_library_struct_of_views(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     if !name.contains("::") { return false; }
     let found = match *nikaia_std::index::get(&ask.own.types, name) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.types, name) { Some(__nikaia_value) => __nikaia_value, None => return false } };
     if !found.tethered.is_empty() { return true; }
@@ -1243,7 +1244,7 @@ pub(crate) fn a_library_struct_of_views(name: &str, ask: &BufferAsk<'_, '_, '_, 
     false
 }
 
-pub(crate) fn buffers_view_call(arg: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> bool {
+pub(crate) fn buffers_view_call(arg: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> bool {
     match arg {
         Expr::Call { func, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -1290,7 +1291,7 @@ pub(crate) fn parameter_index(contract: &FnContract, position: &str) -> i64 {
     -1
 }
 
-pub(crate) fn tail_origins(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+pub(crate) fn tail_origins(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     if block.stmts.is_empty() { return none; }
     let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
@@ -1317,7 +1318,7 @@ pub(crate) fn call_source(callee: &str, walk: &mut BufferWalk) -> collections::B
     one
 }
 
-pub(crate) fn decide(key: String, body: &Block, walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> BufferPlan {
+pub(crate) fn decide(key: String, body: &Block, walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> BufferPlan {
     let mut first: i64 = -1;
     if !body.stmts.is_empty() { first = nikaia_std::index::get(&body.stmts, 0).span.start as i64; }
     let mut plan = BufferPlan { key, first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet::new(), puts: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), tethered: collections::BTreeMap::new(), element_keepers: collections::BTreeSet::new(), struct_keepers: collections::BTreeSet::new(), widths: collections::BTreeMap::new(), keeper_structs: collections::BTreeMap::new(), held_locals: collections::BTreeSet::new(), holds: collections::BTreeMap::new(), escapes: vec![], refusals: vec![], reputs: collections::BTreeMap::new(), opaque_puts: collections::BTreeSet::new() };
@@ -1352,18 +1353,18 @@ pub(crate) fn decide(key: String, body: &Block, walk: &BufferWalk, ask: &BufferA
     plan
 }
 
-pub(crate) fn struct_of_views_maybe(written: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn struct_of_views_maybe(written: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     let ty = match written { Some(__nikaia_value) => __nikaia_value, None => return false };
     names_a_struct_of_views(ask.names, ty, &ask.context.borrowing)
 }
 
-pub(crate) fn not_held_maybe(written: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> Option<String> {
+pub(crate) fn not_held_maybe(written: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> Option<String> {
     let ty = match written { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut seen: Vec<String> = vec![];
     ask.context.not_held(ask.names, ty, &mut seen)
 }
 
-pub(crate) fn a_sequence_container(written: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn a_sequence_container(written: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     let ty = match written { Some(__nikaia_value) => __nikaia_value, None => return true };
     let container = ask.names.resolve(ty.name);
     container == "Vec" || container == "List" || container == "VecDeque" || container == "Deque"
@@ -1377,7 +1378,7 @@ pub(crate) fn keeper_type(keeper: &str, walk: &BufferWalk) -> Option<Type> {
     }
 }
 
-pub(crate) fn keeper_struct(keeper: &str, written: Option<&Type>, walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> Option<String> {
+pub(crate) fn keeper_struct(keeper: &str, written: Option<&Type>, walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> Option<String> {
     if walk.struct_puts.contains_key(keeper) {
         return match *nikaia_std::index::get(&walk.struct_puts, keeper) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1526,7 +1527,7 @@ pub(crate) fn source_refusal(source: &Source, what: &str, why: &str, help: &str)
     refusal("NK2304", span, format!("{} {}", named, what), vec![why.to_string()], help.to_string())
 }
 
-pub(crate) fn element_refusals(walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_>, plan: &mut BufferPlan) {
+pub(crate) fn element_refusals(walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, plan: &mut BufferPlan) {
     let mut found: Vec<Finding> = vec![];
     for keeper in plan.element_keepers.iter() {
         let written = keeper_type(keeper, walk);

@@ -1,0 +1,52 @@
+struct View { head: String }
+struct Cursor { input: String, pos: i64 }
+enum Piece { Word(String), Gap }
+
+fn parse(t: String) -> View {
+    return View { head: t }
+}
+
+fn show(p: Piece) {
+    match p {
+        Piece::Word(s) => println(s)
+        Piece::Gap => println("gap")
+    }
+}
+
+// ADR-353 D8 (#942): a text that a live view reads, moved into a literal
+// whose position only reads it, is kept where it is and the position views
+// it: a struct, a tuple, a list, a variant, and a text moved on first.
+fn main() {
+    let n = 1
+    let a = f"struct: {n}"
+    let va = parse(a)
+    let c = Cursor { input: a, pos: 0 }
+    println(va.head)
+    println(f"{c.input} {c.pos}")
+
+    let b = f"tuple: {n}"
+    let vb = parse(b)
+    let t = (b, 2)
+    println(vb.head)
+    println(f"{t.0} {t.1}")
+
+    let l = f"list: {n}"
+    let vl = parse(l)
+    let items = [l]
+    println(vl.head)
+    println(items[0])
+
+    let w = f"variant: {n}"
+    let vw = parse(w)
+    let p = Piece::Word(w)
+    println(vw.head)
+    show(p)
+    show(Piece::Gap)
+
+    let m = f"moved: {n}"
+    let vm = parse(m)
+    let moved = m
+    let d = Cursor { input: moved, pos: 3 }
+    println(vm.head)
+    println(f"{d.input} {d.pos}")
+}

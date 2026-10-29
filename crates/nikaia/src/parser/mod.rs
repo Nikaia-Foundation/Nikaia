@@ -348,6 +348,11 @@ pub struct Parsed {
     /// their nodes ([ADR-282](../../../docs/specification/adr/adr-282.md) D13,
     /// #712). The checker types each as a view and lends it.
     pub viewed_arms: std::collections::BTreeSet<i64>,
+    /// **The names moved into a literal's position that must hold text of
+    /// its own while a view of them is still used**, by their nodes
+    /// ([ADR-353](../../../docs/specification/adr/adr-353.md) D9):
+    /// [`crate::view_changes`] refuses each (`NK2305`).
+    pub refused_moves: std::collections::BTreeMap<i64, nikaia_std::tools::text_tiers::TierRefusal>,
     /// **Every hole this file's readers parsed, by its text**: what
     /// [`Parsed::hole`] answered before. Each analysis walks every literal and
     /// parses its holes again, which was a fifth of lowering a program with a
@@ -522,6 +527,7 @@ impl Parsed {
             package: self.package.clone(),
             hole_wraps: self.hole_wraps.clone(),
             viewed_arms: self.viewed_arms.clone(),
+            refused_moves: self.refused_moves.clone(),
             holes: Default::default(),
             kept_calls: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
@@ -564,6 +570,7 @@ impl Parsed {
             package: self.package.clone(),
             hole_wraps: self.hole_wraps.clone(),
             viewed_arms: self.viewed_arms.clone(),
+            refused_moves: self.refused_moves.clone(),
             holes: Default::default(),
             kept_calls: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
@@ -830,6 +837,7 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
         package: None,
         hole_wraps: std::collections::BTreeMap::new(),
         viewed_arms: std::collections::BTreeSet::new(),
+        refused_moves: std::collections::BTreeMap::new(),
         holes: Default::default(),
         kept_calls: Default::default(),
         next_id: std::sync::Mutex::new(after_ids),

@@ -227,6 +227,26 @@ pub struct TextTiers {
     /// choice, or in a later turn of a loop**, by their nodes: each is a view
     /// of the name, and the name is not moved (ADR-282 D7, D13, #712).
     pub viewed_arms: collections::BTreeSet[i64],
+    /// **The names moved into a literal's position that must hold text of
+    /// its own while a view of them is still used** (ADR-353 D9), by their
+    /// nodes: each stays a move, and `view_changes` refuses it (`NK2305`).
+    pub refused_moves: collections::BTreeMap[i64, TierRefusal],
+}
+
+/// A move into a position that must hold text of its own while a view of
+/// the text lives: the position as written (`Cursor.input`), and the place
+/// that makes it hold text of its own, where the walk found one.
+pub struct TierRefusal {
+    pub position: String,
+    pub forced: TierForced?,
+}
+
+/// **A change in place of a position's text**: the statement, the function
+/// it stands in, and what it does as written (`c.input.push_str(..)`).
+pub struct TierForced {
+    pub span: Span,
+    pub function: String,
+    pub written: String,
 }
 
 /// The position a `let` is linked to, and the type it is declared with.
@@ -543,10 +563,13 @@ struct Flows {
     /// of another of its parameters, where that one is a parameter of the
     /// function walked too, with this one's index (#740).
     kept_through: collections::BTreeSet[(String, i64)],
+    /// The first change in place of each position, by its word: what makes
+    /// it hold text of its own (ADR-353 D9).
+    forced: collections::BTreeMap[String, TierForced],
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet(), forced: collections::BTreeMap() }
 }
 
 struct TierWalk {
@@ -605,6 +628,9 @@ struct TierWalk {
     param_arms: collections::BTreeSet[i64],
     /// What the unit walked read of the decisions so far.
     reads: TierReads,
+    /// The function walked, and the statement walked in it.
+    function: String,
+    stmt: Span,
 }
 
 /// A view a call's result may hold of the caller's text (#702): the word of
@@ -1479,7 +1505,7 @@ fn still_tail(block: ref Block, ask: ref TierAsk, mut walk: TierWalk, mut out: V
 /// position the changed value is declared as, or was read out of, has text
 /// of its own flowing in, and is never mixed: what is changed is owned, so
 /// a view handed there is refused (`NK1102`), not taken as `EitherText`.
-fn changed_in_place(target: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+fn changed_in_place(target: ref Expr, written: String, ask: ref TierAsk, mut walk: TierWalk) {
     // `names[i] += "!"`: the element position of the list.
     match target {
         Expr::Index { base, .. } => {
@@ -1495,6 +1521,9 @@ fn changed_in_place(target: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
         let found = place ?? return
         if plain_string(ask.names, found.ty) {
             let word = seen(found.owner, no_path(), walk)
+            if !walk.flows.forced.contains_key(word) {
+                walk.flows.forced.insert(word.clone(), TierForced { span: Span { start: walk.stmt.start, end: walk.stmt.end }, function: walk.function.clone(), written: written })
+            }
             walk.flows.changed.insert(word.clone())
             walk.flows.unwrappable.insert(word.clone())
             flow_word(word, owned_kinds(), walk)
@@ -1505,6 +1534,17 @@ fn changed_in_place(target: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
     walk.flows.changed.insert(read_from.clone())
     walk.flows.unwrappable.insert(read_from.clone())
     flow_word(read_from, owned_kinds(), walk)
+}
+
+/// A place as written, for a message: `c.input`.
+fn tier_written(place: ref Expr, ask: ref TierAsk) -> String {
+    return match place {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        Expr::Field { base, name, .. } => f"{tier_written(base, ask)}.{ask.names.resolve(name)}",
+        Expr::SafeField { base, name, .. } => f"{tier_written(base, ask)}?.{ask.names.resolve(name)}",
+        Expr::Index { base, .. } => f"{tier_written(base, ask)}[..]",
+        else => "..",
+    }
 }
 
 fn a_null(value: ref Expr) -> bool {
@@ -1869,6 +1909,7 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         if k + 1 == block.stmts.len() && (walk.frames.len() == 2 || back) && walk.result != null {
             walk.tail_back = a_value_statement(stmt.node)
         }
+        walk.stmt = Span { start: stmt.span.start, end: stmt.span.end }
         let kinds = tier_statement(stmt.node, stmt.span.start as i64, ask, walk)
         walk.tail_back = false
         if bound >= 0 {
@@ -1932,7 +1973,7 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
             tie_stored(target, value, ask, walk)
             tier_assign(target, value, ask, walk)
             if op != null {
-                changed_in_place(target, ask, walk)
+                changed_in_place(target, tier_written(target, ask), ask, walk)
             }
         }
         Stmt::For { bindings, iter, body, .. } => {
@@ -2700,7 +2741,7 @@ fn flow_args(key: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], ask: r
             }
             flow_value(going_into(owner, function.params[at], [], false), args[at], kinds, ask, walk)
             if at < function.changes.len() && function.changes[at] {
-                changed_in_place(args[at], ask, walk)
+                changed_in_place(args[at], f"{key}({tier_written(args[at], ask)})", ask, walk)
             }
         }
         at += 1
@@ -2735,6 +2776,10 @@ struct TierLateFound {
     arms: collections::BTreeSet[i64],
     args: collections::BTreeSet[i64],
     params: collections::BTreeSet[i64],
+    /// The names moved into a literal's position while a view of them is
+    /// still used, by their nodes: the position's word and how it is written
+    /// (ADR-353 D8, D9).
+    moved: collections::BTreeMap[i64, (String, String)],
 }
 
 /// One binding of a name: its serial, and the loops around it.
@@ -2774,12 +2819,43 @@ struct TierLate {
     /// read in another branch of the same choice is not after it.
     branch_args: Vec[TierLateArm],
     branches: i64,
+    /// The functions of this program whose result may hold a view of a text
+    /// handed to them, by key, and the methods among them by name (ADR-353
+    /// D8).
+    viewing: collections::BTreeSet[String],
+    viewing_methods: collections::BTreeSet[String],
+    /// The variants of the program's enums, `E::V`.
+    variants: collections::BTreeSet[String],
+    /// The bindings whose text a binding's value may view, by `name serial`.
+    views: collections::BTreeMap[String, Vec[String]],
+    /// The views of a binding's text, by its `name serial`: each view's name
+    /// and serial.
+    viewers: collections::BTreeMap[String, Vec[(String, i64)]],
+    /// Every name moved into a literal's declared position while a view of
+    /// it lived, by its node: the position's word and how it is written.
+    moved: collections::BTreeMap[i64, (String, String)],
 }
 
 /// The arms that are a name still read after their choice, or in a later turn
 /// of a loop around the choice but not around the name, by their nodes.
-fn late_arms(program: ref Program, ask: ref TierAsk) -> TierLateFound {
-    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0 }
+fn late_arms(program: ref Program, declared: ref TextDeclared, ask: ref TierAsk) -> TierLateFound {
+    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0, viewing: collections::BTreeSet(), viewing_methods: collections::BTreeSet(), variants: collections::BTreeSet(), views: collections::BTreeMap(), viewers: collections::BTreeMap(), moved: collections::BTreeMap() }
+    for (key, function) in declared.fns {
+        let result = function.result ?? continue
+        if late_holds_text(result, declared, ask, 0) {
+            late.viewing.insert(key.clone())
+        }
+    }
+    for (name, keys) in declared.methods {
+        for key in keys {
+            if late.viewing.contains(key) {
+                late.viewing_methods.insert(name.clone())
+            }
+        }
+    }
+    for (key, _) in declared.variants {
+        late.variants.insert(key.clone())
+    }
     for item in program.items {
         match item.node {
             Item::Fn { .. } => late_function(item.node, ask, late),
@@ -2793,7 +2869,13 @@ fn late_arms(program: ref Program, ask: ref TierAsk) -> TierLateFound {
             else => {}
         }
     }
-    return TierLateFound { arms: late.found.clone(), args: late.args.clone(), params: late.params.clone() }
+    let mut moved: collections::BTreeMap[i64, (String, String)] = collections::BTreeMap()
+    for (node, position) in late.moved {
+        if late.found.contains(node) {
+            moved.insert(node.clone(), position.clone())
+        }
+    }
+    return TierLateFound { arms: late.found.clone(), args: late.args.clone(), params: late.params.clone(), moved: moved }
 }
 
 fn late_function(item: ref Item, ask: ref TierAsk, mut late: TierLate) {
@@ -2818,6 +2900,8 @@ fn late_body(body: ref Block, names: Vec[String], ask: ref TierAsk, mut late: Ti
     late.pending = []
     late.branch_args = []
     late.branches = 0
+    late.views = collections::BTreeMap()
+    late.viewers = collections::BTreeMap()
     late_open(late)
     late.params_from = late.serial
     for name in names {
@@ -2966,9 +3050,12 @@ fn late_block(block: ref Block, leaf: bool, ask: ref TierAsk, mut late: TierLate
 fn late_stmt(stmt: ref Stmt, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
     match stmt {
         Stmt::Let { names, value, .. } => {
+            let sources = late_sources(value, ask, late)
+            let alias = late_alias(value, ask, late)
             late_expr(value, false, ask, late)
             for name in names {
                 late_bind(ask.names.resolve(name).clone(), late)
+                late_viewing(ask.names.resolve(name), sources, alias, late)
             }
         }
         Stmt::Comptime { name, value, .. } => {
@@ -3121,6 +3208,15 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             for arg in args {
                 late_argument(arg, ask, late)
             }
+            let callee = tier_callee(func, ask) ?? ""
+            if late.variants.contains(callee) {
+                let (of, variant) = variant_named(callee)
+                let mut at = 0
+                for arg in args {
+                    late_moved_into(arg, TextOwner::Variant(of.clone(), variant.clone(), at), callee.clone(), ask, late)
+                    at += 1
+                }
+            }
         }
         Expr::MethodCall { receiver, args, .. } => {
             late_expr(receiver, false, ask, late)
@@ -3130,8 +3226,14 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             late_expr(receiver, false, ask, late)
             late_all(args, ask, late)
         }
-        Expr::Tuple(parts, _) => late_all(parts, ask, late),
-        Expr::ListLit { items, .. } => late_all(items, ask, late),
+        Expr::Tuple(parts, _) => {
+            late_all(parts, ask, late)
+            late_all_moved(parts, ask, late)
+        }
+        Expr::ListLit { items, .. } => {
+            late_all(items, ask, late)
+            late_all_moved(items, ask, late)
+        }
         Expr::ListRepeat { value, count, .. } => {
             late_expr(value, false, ask, late)
             late_expr(count, false, ask, late)
@@ -3142,9 +3244,15 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
         }
         Expr::Field { base, .. } => late_expr(base, false, ask, late),
         Expr::SafeField { base, .. } => late_expr(base, false, ask, late),
-        Expr::StructLit { fields, .. } => {
+        Expr::StructLit { name, fields, .. } => {
             for field in fields {
                 late_maybe(field.value, ask, late)
+            }
+            let of = ask.names.resolve(name).clone()
+            for field in fields {
+                let moved = field.value ?? continue
+                let label = ask.names.resolve(field.name).clone()
+                late_moved_into(moved, TextOwner::Field(of.clone(), label.clone()), f"{of}.{label}", ask, late)
             }
         }
         Expr::With { base, fields, .. } => {
@@ -3222,6 +3330,180 @@ fn late_argument(arg: ref Expr, ask: ref TierAsk, mut late: TierLate) {
         return
     }
     late_defer(TierLateArm { at: node_key(arg), name: word.clone(), serial: serial, loops: loops, argument: true }, late)
+}
+
+// --- A text moved into a literal while a view of it lives (ADR-353 D8) ---
+
+/// Whether a value of `ty` may hold text: a `String`, or a type that holds
+/// one, a struct's field or a variant's payload of this program among them.
+fn late_holds_text(ty: ref Type, declared: ref TextDeclared, ask: ref TierAsk, depth: i64) -> bool {
+    if depth > 4 {
+        return false
+    }
+    let name = ask.names.resolve(ty.name)
+    if name == "String" {
+        return true
+    }
+    for arg in ty.generics {
+        if late_holds_text(arg, declared, ask, depth + 1) {
+            return true
+        }
+    }
+    if !declared.types.contains(name) {
+        return false
+    }
+    for (key, field) in declared.fields {
+        if key.0 == name && late_holds_text(field.ty, declared, ask, depth + 1) {
+            return true
+        }
+    }
+    let prefix = f"{name}::"
+    for (key, parts) in declared.variants {
+        if key.starts_with(prefix) {
+            for part in parts {
+                if late_holds_text(part, declared, ask, depth + 1) {
+                    return true
+                }
+            }
+        }
+    }
+    return false
+}
+
+/// A binding as the late walk tells it apart: its name and serial.
+fn late_key(name: ref String, late: ref TierLate) -> String? {
+    let serial = late_serial(name, late)
+    if serial < 0 {
+        return null
+    }
+    return f"{name} {serial}"
+}
+
+/// The name a place is rooted in, through fields and indices only: what is
+/// read off a view is a view of the same text.
+fn late_place_root(value: ref Expr, ask: ref TierAsk) -> String? {
+    return match value {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        Expr::Field { base, .. } => late_place_root(base, ask),
+        Expr::SafeField { base, .. } => late_place_root(base, ask),
+        Expr::Index { base, .. } => late_place_root(base, ask),
+        else => null,
+    }
+}
+
+/// The bindings whose text `value` may view: what a call of this program's
+/// that may hand back a view is given, and what a place read off a view
+/// views.
+fn late_sources(value: ref Expr, ask: ref TierAsk, late: ref TierLate) -> Vec[String] {
+    let mut out: Vec[String] = []
+    match value {
+        Expr::Call { func, args, .. } => {
+            if late.viewing.contains(tier_callee(func, ask) ?? "") {
+                for arg in args {
+                    late_given(arg, ask, late, out)
+                }
+            }
+        }
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if late.viewing_methods.contains(ask.names.resolve(method)) {
+                late_given(receiver, ask, late, out)
+                for arg in args {
+                    late_given(arg, ask, late, out)
+                }
+            }
+        }
+        Expr::Try(inner, _) => return late_sources(inner, ask, late),
+        else => late_read_off(value, ask, late, out),
+    }
+    return out
+}
+
+/// What a value handed to a call that may view it lends: the binding a name
+/// is, and what a view handed on views.
+fn late_given(arg: ref Expr, ask: ref TierAsk, late: ref TierLate, mut out: Vec[String]) {
+    match arg {
+        Expr::Variable(name, _) => {
+            let key = late_key(ask.names.resolve(name), late) ?? return
+            if !out.contains(key) {
+                out.push(key.clone())
+            }
+        }
+        else => {}
+    }
+    late_read_off(arg, ask, late, out)
+}
+
+fn late_read_off(value: ref Expr, ask: ref TierAsk, late: ref TierLate, mut out: Vec[String]) {
+    let root = late_place_root(value, ask) ?? return
+    let key = late_key(root, late) ?? return
+    for source in late.views[key]?.clone() ?? [] {
+        if !out.contains(source) {
+            out.push(source)
+        }
+    }
+}
+
+/// `let moved = text`: the binding `text` was, whose views now view `moved`.
+fn late_alias(value: ref Expr, ask: ref TierAsk, late: ref TierLate) -> String? {
+    return match value {
+        Expr::Variable(name, _) => late_key(ask.names.resolve(name), late),
+        else => null,
+    }
+}
+
+/// The binding just made of `name` views `sources`, and takes over the views
+/// of the binding `alias` it was moved out of.
+fn late_viewing(name: ref String, sources: ref Vec[String], alias: ref String?, mut late: TierLate) {
+    let serial = late_serial(name, late)
+    let key = late_key(name, late) ?? return
+    if sources.len() > 0 {
+        late.views.insert(key.clone(), sources.clone())
+    }
+    for source in sources {
+        let mut held = late.viewers.remove(source) ?? []
+        held.push((name.clone(), serial))
+        late.viewers.insert(source.clone(), held)
+    }
+    let from = alias ?? return
+    let taken = late.viewers[from]?.clone() ?? return
+    late.viewers.insert(key, taken)
+}
+
+fn late_all_moved(values: ref Vec[Expr], ask: ref TierAsk, mut late: TierLate) {
+    for value in values {
+        late_moved(value, null, ask, late)
+    }
+}
+
+/// A name moved into a declared position: as `late_moved`, and the position
+/// is kept for a refusal where it must hold text of its own (D9).
+fn late_moved_into(value: ref Expr, owner: TextOwner, written: String, ask: ref TierAsk, mut late: TierLate) {
+    late_moved(value, (position_word(owner, no_path()), written), ask, late)
+}
+
+/// **A name moved as it is into a literal while a view of it is still used
+/// is a view of it** (ADR-353 D8): the literal is a variable of the function,
+/// and moving the text would end the view read next. A declared position it
+/// goes into is kept, by its word and as written.
+fn late_moved(value: ref Expr, position: (String, String)?, ask: ref TierAsk, mut late: TierLate) {
+    if late.leaving > 0 {
+        return
+    }
+    let word = match value {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        else => return,
+    }
+    let key = late_key(word, late) ?? return
+    let held = late.viewers[key]?.clone() ?? return
+    for viewer in held {
+        if late_serial(viewer.0, late) == viewer.1 {
+            late_defer(TierLateArm { at: node_key(value), name: viewer.0.clone(), serial: viewer.1, loops: late.loops, argument: false }, late)
+            match position {
+                null => {}
+                found => late.moved.insert(node_key(value), found.clone()),
+            }
+        }
+    }
 }
 
 /// A choice begins: the outermost one collects its arms afresh.
@@ -3688,7 +3970,7 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
     walk.read_here = true
     let received = tier_expr(receiver, ask, walk)
     if changes_its_text(method) {
-        changed_in_place(receiver, ask, walk)
+        changed_in_place(receiver, f"{tier_written(receiver, ask)}.{method}(..)", ask, walk)
     }
     let mut given: Vec[Kinds] = []
     for arg in args {
@@ -4111,6 +4393,11 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
     for (node, word) in from.param_arm_into {
         into.param_arm_into.insert(node.clone(), word.clone())
     }
+    for (word, forced) in from.forced {
+        if !into.forced.contains_key(word) {
+            into.forced.insert(word.clone(), forced.clone())
+        }
+    }
 }
 
 /// Whether a unit read a decision that changed between two rounds.
@@ -4220,6 +4507,7 @@ fn fresh_tier_frame(mut walk: TierWalk) {
 }
 
 fn walk_body(body: ref Block, ask: ref TierAsk, mut walk: TierWalk) {
+    walk.function = ""
     walk.locals = collections::BTreeMap()
     walk.ties = collections::BTreeMap()
     walk.frames = []
@@ -4373,6 +4661,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         else => return,
     }
     let key = tier_key(target, own_name(name, ask.names))
+    walk.function = own_name(name, ask.names)
     walk.locals = collections::BTreeMap()
     walk.ties = collections::BTreeMap()
     walk.frames = []
@@ -4988,8 +5277,8 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads() }
-    let found = late_arms(program, ask)
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 } }
+    let found = late_arms(program, walk.declared, ask)
     walk.late = found.arms
     walk.late_args = found.args
     walk.late_params = found.params
@@ -5071,7 +5360,22 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     for (at, target) in walk.flows.adopted {
         adopted.insert(at.clone(), TierAdopted { owner: target.owner.clone(), ty: target.ty.clone() })
     }
-    return TextTiers { tiers: tiers, lets: lets, text: text, wraps: walk.flows.wraps.clone(), hole_wraps: walk.flows.hole_wraps.clone(), adopted: adopted, viewed_arms: walk.flows.viewed_arms.clone() }
+    // **A moved text whose position must hold text of its own stays a move**
+    // (ADR-353 D9): `view_changes` refuses it, with the place that makes it
+    // so.
+    let mut viewed_arms = walk.flows.viewed_arms.clone()
+    let mut refused_moves: collections::BTreeMap[i64, TierRefusal] = collections::BTreeMap()
+    for (node, moved) in found.moved {
+        if !viewed_arms.contains(node) {
+            continue
+        }
+        let held = walk.tiers[moved.0]?.clone() ?? Tier::Owned
+        if owned_tier(held) {
+            viewed_arms.remove(node)
+            refused_moves.insert(node.clone(), TierRefusal { position: moved.1.clone(), forced: walk.flows.forced[moved.0]?.clone() })
+        }
+    }
+    return TextTiers { tiers: tiers, lets: lets, text: text, wraps: walk.flows.wraps.clone(), hole_wraps: walk.flows.hole_wraps.clone(), adopted: adopted, viewed_arms: viewed_arms, refused_moves: refused_moves }
 }
 
 fn same_adopted(a: ref collections::BTreeMap[i64, Declaring], b: ref collections::BTreeMap[i64, Declaring]) -> bool {

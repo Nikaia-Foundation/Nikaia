@@ -230,7 +230,12 @@ pub mod runtime {
 ///
 /// **And `map_clone`**: `.map(fn(x) { x.clone() })` lowers as written, the
 /// house style of `tools/*.nika` (P5d's `project_check_check`).
+///
+/// **And `map_identity`**: `.map(fn(w) { w.to_string() })` into a list the
+/// tiers decide is of views lowers its body to `w` (`view_changes.nika`'s
+/// `vc_part_of`, #942).
 #[allow(
+    clippy::map_identity,
     unused_assignments,
     clippy::unnecessary_unwrap,
     clippy::never_loop,

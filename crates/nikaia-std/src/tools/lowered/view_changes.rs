@@ -15,13 +15,14 @@ pub struct VcAnswer {
 }
 
 #[derive(Debug, Clone)]
-pub struct VcAsk<'a, 'a1, 'a2, 'a3, 'a4, 'a5> {
+pub struct VcAsk<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {
     pub names: &'a winnow_grammar::InternerContext,
     pub items: &'a1 [Spanned<Item>],
     pub own: &'a2 Ledger,
     pub library: &'a3 Ledger,
     pub lent: &'a4 collections::BTreeSet<i64>,
     pub coalesced: &'a5 collections::BTreeSet<i64>,
+    pub refused: &'a6 collections::BTreeMap<i64, TierRefusal>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +35,8 @@ pub(crate) struct VcView {
     pub(crate) way_out: collections::BTreeMap<String, String>,
     pub(crate) used: Option<Span>,
     pub(crate) call: Option<String>,
+    pub(crate) callee: Option<String>,
+    pub(crate) shown: Vec<String>,
     pub(crate) help: Option<String>,
 }
 
@@ -55,7 +58,7 @@ pub(crate) struct VcCall {
     pub(crate) names: Vec<Option<String>>,
 }
 
-pub fn vc_analyse(ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> VcAnswer {
+pub fn vc_analyse(ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> VcAnswer {
     let mut methods: collections::BTreeMap<String, Vec<(bool, String)>> = collections::BTreeMap::new();
     for (key, _) in ask.own.functions.iter() { vc_index(&mut methods, key, true); }
     for (key, _) in ask.library.functions.iter() { vc_index(&mut methods, key, false); }
@@ -121,12 +124,12 @@ pub(crate) fn vc_param_index(signature: &Signature, name: &str) -> i64 {
     -1
 }
 
-pub(crate) fn vc_rooted(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn vc_rooted(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> bool {
     let root = match root_of(ask.names, expr) { Some(__nikaia_value) => __nikaia_value, None => return false };
     root == name
 }
 
-pub(crate) fn vc_path_of(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> String {
+pub(crate) fn vc_path_of(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> String {
     match expr {
         Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_string() },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; format!("{}.{}", vc_path_of(base, ask), ask.names.resolve(name)) },
@@ -189,7 +192,7 @@ pub(crate) fn vc_any_watches(views: &[VcView], root: &str, path: &str) -> bool {
     false
 }
 
-pub(crate) fn vc_calls(stmt: &Stmt, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Vec<VcCall> {
+pub(crate) fn vc_calls(stmt: &Stmt, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Vec<VcCall> {
     let mut out: Vec<VcCall> = vec![];
     match stmt {
         Stmt::Let { value, .. } => { vc_calls_in(value, ask, holes_of, &mut out); },
@@ -210,7 +213,7 @@ pub(crate) fn vc_calls(stmt: &Stmt, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_o
     out
 }
 
-pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, out: &mut Vec<VcCall>) {
+pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, out: &mut Vec<VcCall>) {
     match expr {
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -238,14 +241,14 @@ pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, hole
     for child in check_visit_children(expr) { vc_calls_in(child, ask, holes_of, out); }
 }
 
-pub(crate) fn vc_variable(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> Option<String> {
+pub(crate) fn vc_variable(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; Some(ask.names.resolve(name).to_string()) },
         _ => None,
     }
 }
 
-pub(crate) fn vc_names_in_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_names_in_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
     match stmt {
         Stmt::Let { value, .. } => vc_names_in(value, name, ask, holes_of),
         Stmt::Comptime { value, .. } => vc_names_in(value, name, ask, holes_of),
@@ -261,7 +264,7 @@ pub(crate) fn vc_names_in_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, 
     }
 }
 
-pub(crate) fn vc_names_in(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_names_in(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
     match expr {
         Expr::Variable(n, _) => {
             let n = *n;
@@ -274,18 +277,18 @@ pub(crate) fn vc_names_in(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '
     false
 }
 
-pub(crate) fn vc_mentions_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_mentions_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
     if vc_names_in_stmt(stmt, name, ask, holes_of) { return true; }
     for inner in check_visit_stmt_blocks(stmt) { for each in inner.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, holes_of) { return true; } } }
     false
 }
 
-pub(crate) fn vc_first_use(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
+pub(crate) fn vc_first_use(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
     for block in check_visit_stmt_blocks(stmt) { for each in block.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, holes_of) { return Some(nikaia_std::index::or(vc_first_use(&each.node, name, ask, holes_of), || each.span.clone().into())); } } }
     None
 }
 
-pub(crate) fn vc_methods_all(method: &str, mutates: bool, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, walk: &VcWalk) -> bool {
+pub(crate) fn vc_methods_all(method: &str, mutates: bool, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &VcWalk) -> bool {
     let known = match *nikaia_std::index::get(&walk.methods, method) { Some(__nikaia_value) => __nikaia_value, None => return false };
     for entry in known.iter() {
         if entry.0 {
@@ -299,7 +302,7 @@ pub(crate) fn vc_methods_all(method: &str, mutates: bool, ask: &VcAsk<'_, '_, '_
     true
 }
 
-pub(crate) fn vc_method_keeps(method: &str, index: i64, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, walk: &VcWalk) -> bool {
+pub(crate) fn vc_method_keeps(method: &str, index: i64, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &VcWalk) -> bool {
     let known = match *nikaia_std::index::get(&walk.methods, method) { Some(__nikaia_value) => __nikaia_value, None => return false };
     for entry in known.iter() {
         if entry.0 {
@@ -318,7 +321,7 @@ pub(crate) fn vc_subject_first(contract: &FnContract) -> bool {
     !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self"
 }
 
-pub(crate) fn vc_changes(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &VcWalk) -> bool {
+pub(crate) fn vc_changes(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &VcWalk) -> bool {
     match stmt {
         Stmt::Assign { target, .. } => { if vc_rooted(target, name, ask) { return true; } },
         _ => { },
@@ -339,7 +342,7 @@ pub(crate) fn vc_changes(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_
     false
 }
 
-pub(crate) fn vc_changes_argument(callee: Option<&str>, index: i64, ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn vc_changes_argument(callee: Option<&str>, index: i64, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> bool {
     let name = match callee { Some(__nikaia_value) => __nikaia_value, None => return true };
     let contract = match *nikaia_std::index::get(&ask.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return true } };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
@@ -347,7 +350,7 @@ pub(crate) fn vc_changes_argument(callee: Option<&str>, index: i64, ask: &VcAsk<
     signature.mutable.contains(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(index)).0)
 }
 
-pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
+pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
     let calls = vc_calls(stmt, ask, holes_of);
     let mut changed: Vec<(String, String)> = vec![];
     for call in calls.iter() {
@@ -376,7 +379,7 @@ pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAs
     for (root, callee) in handed.iter() { if vc_first_viewing(views, root) >= 0 { vc_refuse_hand_over(root, callee, at, views, walk); } }
 }
 
-pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> Option<VcView> {
+pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> Option<VcView> {
     match value {
         Expr::Variable(other, _) => {
             let other = *other;
@@ -421,19 +424,19 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
             let mut shown: Vec<String> = vec![];
             for arg in args.iter() { shown.push(nikaia_std::index::or(root_of(ask.names, arg), || "..".into())); }
             let written = shown.join(", ");
-            return Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is made here by `{}`", name, callee), way_out, used: None, call: Some(format!("{}({})", callee, written)), help: None });
+            return Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is made here by `{}`", name, callee), way_out, used: None, call: Some(format!("{}({})", callee, written)), callee: Some(callee.to_string()), shown, help: None });
         },
         _ => return None,
     }
 }
 
-pub(crate) fn vc_place_view(at: &Span, name: &str, place: &Expr, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> Option<VcView> {
+pub(crate) fn vc_place_view(at: &Span, name: &str, place: &Expr, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> Option<VcView> {
     let root = match root_of(ask.names, place) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let (roots, parts) = vc_through(&root, vc_path_of(place, ask), outer);
-    Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is a view into `{}`", name, root), way_out: collections::BTreeMap::new(), used: None, call: None, help: None })
+    Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is a view into `{}`", name, root), way_out: collections::BTreeMap::new(), used: None, call: None, callee: None, shown: vec![], help: None })
 }
 
-pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> Vec<VcView> {
+pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> Vec<VcView> {
     let callee = match vc_variable(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let contract = match *nikaia_std::index::get(&ask.own.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => return vec![] } };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
@@ -455,12 +458,12 @@ pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcA
         roots.insert(root.to_string());
         let mut way_out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
         way_out.insert(root.to_string(), format!("`{}` keeps views of what it was given as `{}` in `{}`.", callee, source, place));
-        out.push(VcView { name: holder.to_string(), roots, parts: collections::BTreeSet::new(), made: at.clone(), from: format!("`{}` keeps a view of `{}` in `{}` here", callee, root, holder), way_out, used: None, call: None, help: Some(format!("Use `{}` before this change, or hand `{}` a copy: `{}.clone()`.", holder, callee, root)) });
+        out.push(VcView { name: holder.to_string(), roots, parts: collections::BTreeSet::new(), made: at.clone(), from: format!("`{}` keeps a view of `{}` in `{}` here", callee, root, holder), way_out, used: None, call: None, callee: None, shown: vec![], help: Some(format!("Use `{}` before this change, or hand `{}` a copy: `{}.clone()`.", holder, callee, root)) });
     }
     out
 }
 
-pub(crate) fn vc_returning(callee: &str, param: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> String {
+pub(crate) fn vc_returning(callee: &str, param: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> String {
     for item in ask.items.iter() {
         match &item.node {
             Item::Fn { name, body, .. } => {
@@ -474,7 +477,7 @@ pub(crate) fn vc_returning(callee: &str, param: &str, ask: &VcAsk<'_, '_, '_, '_
     format!("`{}` may hand back what it was given as `{}`.", callee, param)
 }
 
-pub(crate) fn vc_returns(block: &Block, param: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn vc_returns(block: &Block, param: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> bool {
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Return(value) => {
@@ -490,12 +493,12 @@ pub(crate) fn vc_returns(block: &Block, param: &str, ask: &VcAsk<'_, '_, '_, '_,
     false
 }
 
-pub(crate) fn vc_used_after(block: &Block, from: i64, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
+pub(crate) fn vc_used_after(block: &Block, from: i64, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
     for k in from..block.stmts.len() as i64 { if vc_mentions_stmt(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(k)).node, name, ask, holes_of) { return Some(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(k)).span.clone()); } }
     None
 }
 
-pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
+pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
     let mut views: Vec<VcView> = outer.to_owned();
     let own_from = views.len() as i64;
     let mut declared: collections::BTreeMap<String, (i64, bool)> = collections::BTreeMap::new();
@@ -555,7 +558,7 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
     }
 }
 
-pub(crate) fn vc_assigns_to(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> bool {
+pub(crate) fn vc_assigns_to(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> bool {
     match stmt {
         Stmt::Assign { target, .. } => match target {
             Expr::Variable(n, _) => { let n = *n; ask.names.resolve(n) == name },
@@ -566,7 +569,7 @@ pub(crate) fn vc_assigns_to(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_,
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &Span, views: &mut Vec<VcView>, declared: &collections::BTreeMap<String, (i64, bool)>, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
+pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &Span, views: &mut Vec<VcView>, declared: &collections::BTreeMap<String, (i64, bool)>, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
     let root = match root_of(ask.names, target) { Some(__nikaia_value) => __nikaia_value, None => return };
     let viewer = vc_first_viewing(&views, &root);
     if !whole && vc_any_watches(&views, &root, &vc_path_of(target, ask)) { vc_refuse(&root, at, &views, walk); } else if whole && viewer >= 0 && declared.contains_key(&root) {
@@ -585,7 +588,7 @@ pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &
     if whole { for v in 0..views.len() as i64 { views[nikaia_std::index::at(v)].roots.remove(&root); } }
 }
 
-pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView>, ask: &VcAsk<'_, '_, '_, '_, '_, '_>, walk: &mut VcWalk) {
+pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView>, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut VcWalk) {
     let mut left: Vec<VcView> = vec![];
     for view in views.iter() { if view.name != name { left.push(view.clone()); } }
     *views = left;
@@ -597,7 +600,13 @@ pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView
             return;
         },
     }
+    let mut refused: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (moved, node, head) in vc_literal_moves(value, ask) {
+        let refusal = match *nikaia_std::index::get(&ask.refused, &node) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if vc_refuse_move(&moved, name, &head, refusal, at, &views, walk) { refused.insert(moved); }
+    }
     for (moved, part) in vc_moved_parts(name, value, ask) {
+        if refused.contains(&moved) { continue; }
         for v in 0..views.len() as i64 {
             if nikaia_std::index::get(&views, (v) as usize).roots.contains(&moved) {
                 views[nikaia_std::index::at(v)].roots.insert(name.to_string());
@@ -620,7 +629,7 @@ pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView
     }
 }
 
-pub(crate) fn vc_moved_parts(name: &str, value: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> Vec<(String, String)> {
+pub(crate) fn vc_moved_parts(name: &str, value: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = vec![];
     match value {
         Expr::StructLit { fields, .. } => {
@@ -638,6 +647,81 @@ pub(crate) fn vc_moved_parts(name: &str, value: &Expr, ask: &VcAsk<'_, '_, '_, '
         _ => { },
     }
     out
+}
+
+pub(crate) fn vc_literal_moves(value: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_>) -> Vec<(String, i64, String)> {
+    let mut out: Vec<(String, i64, String)> = vec![];
+    match value {
+        Expr::StructLit { name, fields, .. } => {
+            let name = *name;
+            let of = ask.names.resolve(name).to_string();
+            for field in fields.iter() {
+                let given = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let moved = match vc_variable(given, ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                out.push((moved, node_key(given), format!("{} {{ {}: ", of, ask.names.resolve(field.name))));
+            }
+        },
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let callee = nikaia_std::index::or(vc_variable(func, ask), || nikaia_std::index::or(root_of(ask.names, func), || "".into()).into());
+            for arg in args.iter() {
+                let moved = match vc_variable(arg, ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                out.push((moved, node_key(arg), format!("{}(", callee)));
+            }
+        },
+        _ => { },
+    }
+    out
+}
+
+pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierRefusal, at: &Span, views: &[VcView], walk: &mut VcWalk) -> bool {
+    let held = vc_last_viewing(views, root);
+    if held < 0 { return false; }
+    let view = nikaia_std::index::get(&views, nikaia_std::index::at(held));
+    if view.used.is_none() { return false; }
+    let viewer = view.name.to_string();
+    let position = refusal.position.to_string();
+    let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` must hold text of its own", position), true), vc_label(view.made.clone(), &viewer, view.from.to_string(), false)];
+    match &refusal.forced {
+        None => { },
+        Some(forced) => {
+            let place = if forced.function == "" { String::from("") } else { format!(" in `{}`", forced.function) };
+            labels.push(vc_label(Span { start: forced.span.start, end: forced.span.end }, &forced.written, format!("`{}`{} changes it in place", forced.written, place), false));
+        },
+    }
+    match view.used {
+        None => { },
+        Some(used) => { labels.push(vc_label(used.clone(), &viewer, format!("`{}` is read here", viewer), false)); },
+    }
+    let mut notes: Vec<String> = vec![];
+    match *nikaia_std::index::get(&view.way_out, root) {
+        None => { },
+        Some(way) => { notes.push(way.to_string()); },
+    }
+    let close = if head.ends_with('(') { ")" } else { ", .. }" };
+    let part = vc_part_of(head);
+    let mut help = format!("Hand over a copy: `{}{}.clone(){}`", head, root, close);
+    if part != "" {
+        help.push_str(&format!(", or build the value first and take the view from its field: `let {} = {}{}{}`", name, head, root, close));
+        match &view.callee {
+            None => { },
+            Some(callee) => {
+                let mut given: Vec<String> = vec![];
+                for shown in view.shown.iter() { given.push(if shown == root { format!("{}.{}", name, part) } else { shown.to_string() }); }
+                help.push_str(&format!(", then `{}({})`", callee, given.join(", ")));
+            },
+        }
+    }
+    help.push_str(".");
+    walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` gets `{}`, but `{}` still reads its text afterwards.", position, root, viewer), notes, help: Some(help), warning: false, labels });
+    true
+}
+
+pub(crate) fn vc_part_of(head: &str) -> &str {
+    if !head.ends_with(": ") { return ""; }
+    let words: Vec<&str> = head.split(' ').map(|w| { w }).collect::<Vec<_>>();
+    if words.len() < 3 { return ""; }
+    nikaia_std::index::or((*nikaia_std::index::get(&words, 2)).strip_suffix(':'), || "")
 }
 
 pub(crate) fn vc_label(span: Span, word: &str, text: String, main: bool) -> CheckLabel { CheckLabel { span, word: word.to_string(), text, main } }

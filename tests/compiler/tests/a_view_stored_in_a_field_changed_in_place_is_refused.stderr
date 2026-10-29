@@ -1,0 +1,11 @@
+error[NK1106]: `Cursor.input` holds `String`, but you're giving it `ref String`.
+   --> tests/a_view_stored_in_a_field_changed_in_place_is_refused.nika:14:33
+    |
+ 14 |     let mut c = Cursor { input: v.head, pos: 0 }
+    |                                 ^^^^^^
+    |
+    = note: This is a view: it points into text that something else owns.
+    = note: `Cursor` keeps its `input` after this line, so it needs text of its own.
+    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+    = help: Write `.clone()` to copy it here.
+1 type error

@@ -1,14 +1,17 @@
-error[NK2305]: `c` is changed here, but `v` may point into its data and is used later.
-   --> tests/text_moved_into_a_field_is_watched_while_a_view_is_used.nika:17:5
+error[NK2305]: `Cursor.input` gets `text`, but `v` still reads its text afterwards.
+   --> tests/text_moved_into_a_field_is_watched_while_a_view_is_used.nika:15:33
     |
  14 |     let v = parse(text)
     |         - `v` is made here by `parse`
+ 15 |     let mut c = Cursor { input: text, pos: 0 }
+    |                                 ^^^^ `Cursor.input` must hold text of its own
     ...
  17 |     c.input.push_str("b")
-    |     ^ `c` changes here
+    |     - `c.input.push_str(..)` in `main` changes it in place
     ...
  19 |     println(v.head)
-    |             - `v` is used here, after the change
+    |             - `v` is read here
     |
-    = help: Use `v` before this change, or take a copy of it with `v.clone()` before the change.
+    = note: `parse` may hand back what it was given as `t`.
+    = help: Hand over a copy: `Cursor { input: text.clone(), .. }`, or build the value first and take the view from its field: `let c = Cursor { input: text, .. }`, then `parse(c.input)`.
 1 change to data a view still to be used may point into

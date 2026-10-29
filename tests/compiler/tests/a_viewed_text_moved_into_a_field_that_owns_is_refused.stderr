@@ -1,0 +1,17 @@
+error[NK2305]: `Cursor.input` gets `text`, but `v` still reads its text afterwards.
+   --> tests/a_viewed_text_moved_into_a_field_that_owns_is_refused.nika:20:29
+    |
+  9 |     c.input.push_str("!")
+    |     - `c.input.push_str(..)` in `advance` changes it in place
+    ...
+ 19 |     let v = parse(text)
+    |         - `v` is made here by `parse`
+ 20 |     let c = Cursor { input: text, pos: 0 }
+    |                             ^^^^ `Cursor.input` must hold text of its own
+    ...
+ 22 |     println(v.head)
+    |             - `v` is read here
+    |
+    = note: `parse` may hand back what it was given as `t`.
+    = help: Hand over a copy: `Cursor { input: text.clone(), .. }`, or build the value first and take the view from its field: `let c = Cursor { input: text, .. }`, then `parse(c.input)`.
+1 change to data a view still to be used may point into

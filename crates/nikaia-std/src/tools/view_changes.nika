@@ -54,6 +54,9 @@ pub struct VcAsk {
     pub library: ref Ledger,
     pub lent: ref collections::BTreeSet[i64],
     pub coalesced: ref collections::BTreeSet[i64],
+    /// The names moved into a position that must hold text of its own, by
+    /// their nodes (`text_tiers`, ADR-353 D9).
+    pub refused: ref collections::BTreeMap[i64, TierRefusal],
 }
 
 struct VcView {
@@ -71,8 +74,11 @@ struct VcView {
     way_out: collections::BTreeMap[String, String],
     /// The first later statement that uses it, where one does.
     used: Span?,
-    /// The call that made it, as written (`longest(x, y)`), where one did.
+    /// The call that made it, as written (`longest(x, y)`), where one did,
+    /// with the callee and each argument as shown there.
     call: String?,
+    callee: String?,
+    shown: Vec[String],
     /// The way out the refusal names, where it is not a copy of the view.
     help: String?,
 }
@@ -631,7 +637,7 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
                 shown.push(root_of(ask.names, arg) ?? "..")
             }
             let written = shown.join(", ")
-            return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", help: null }
+            return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", callee: callee.clone(), shown: shown, help: null }
         }
         else => return null,
     }
@@ -640,7 +646,7 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
 fn vc_place_view(at: ref Span, name: ref String, place: ref Expr, outer: ref Vec[VcView], ask: ref VcAsk) -> VcView? {
     let root = root_of(ask.names, place) ?? return null
     let (roots, parts) = vc_through(root, vc_path_of(place, ask), outer)
-    return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is a view into `{root}`", way_out: collections::BTreeMap(), used: null, call: null, help: null }
+    return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is a view into `{root}`", way_out: collections::BTreeMap(), used: null, call: null, callee: null, shown: [], help: null }
 }
 
 /// The views a call keeps in the places its arguments hold (ADR-283 D27):
@@ -669,7 +675,7 @@ fn vc_kept_in_places(at: ref Span, func: ref Expr, args: ref Vec[Expr], ask: ref
         roots.insert(root.clone())
         let mut way_out: collections::BTreeMap[String, String] = collections::BTreeMap()
         way_out.insert(root.clone(), f"`{callee}` keeps views of what it was given as `{source}` in `{place}`.")
-        out.push(VcView { name: holder.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{callee}` keeps a view of `{root}` in `{holder}` here", way_out: way_out, used: null, call: null, help: f"Use `{holder}` before this change, or hand `{callee}` a copy: `{root}.clone()`." })
+        out.push(VcView { name: holder.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{callee}` keeps a view of `{root}` in `{holder}` here", way_out: way_out, used: null, call: null, callee: null, shown: [], help: f"Use `{holder}` before this change, or hand `{callee}` a copy: `{root}.clone()`." })
     }
     return out
 }
@@ -874,12 +880,25 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
             return
         }
     }
+    // **A move into a position that must hold text of its own** while a view
+    // of the text is still used (D9): refused at the move.
+    let mut refused: collections::BTreeSet[String] = collections::BTreeSet()
+    for (moved, node, head) in vc_literal_moves(value, ask) {
+        let refusal = ask.refused[node] ?? continue
+        if vc_refuse_move(moved, name, head, refusal, at, views, walk) {
+            refused.insert(moved)
+        }
+    }
     // **A move into a part of a new local** (D3, #942): `Cursor { input:
     // text }`, `(text, 1)`, `[text]` - the new local holds the same data in
     // that part, followed as the argument was, so changing it in place is
     // D4's. A struct's field is watched alone; a tuple's or a list's element
     // is read as part of its container.
     for (moved, part) in vc_moved_parts(name, value, ask) {
+        // Refused at the move: a change of the part is not refused again.
+        if refused.contains(moved) {
+            continue
+        }
         for v in 0..<views.len() {
             if views[v].roots.contains(moved) {
                 views[v].roots.insert(name.clone())
@@ -936,6 +955,97 @@ fn vc_moved_parts(name: ref String, value: ref Expr, ask: ref VcAsk) -> Vec[(Str
         else => {}
     }
     return out
+}
+
+/// The names a literal takes whole into a declared position - a struct's
+/// field or a variant's payload - each with its node and the literal's head
+/// as written: `Cursor { input: ` or `E::A(`.
+fn vc_literal_moves(value: ref Expr, ask: ref VcAsk) -> Vec[(String, i64, String)] {
+    let mut out: Vec[(String, i64, String)] = []
+    match value {
+        Expr::StructLit { name, fields, .. } => {
+            let of = ask.names.resolve(name).clone()
+            for field in fields {
+                let given = field.value ?? continue
+                let moved = vc_variable(given, ask) ?? continue
+                out.push((moved, node_key(given), f"{of} {{ {ask.names.resolve(field.name)}: "))
+            }
+        }
+        Expr::Call { func, args, .. } => {
+            let callee = vc_variable(func, ask) ?? root_of(ask.names, func) ?? ""
+            for arg in args {
+                let moved = vc_variable(arg, ask) ?? continue
+                out.push((moved, node_key(arg), f"{callee}("))
+            }
+        }
+        else => {}
+    }
+    return out
+}
+
+/// D9: `root` moved into a position that must hold text of its own, bound
+/// to `name`, while a view of `root` is still used: the move hands the text
+/// to a new owner (D6's words). Whether it was refused.
+fn vc_refuse_move(root: ref String, name: ref String, head: ref String, refusal: ref TierRefusal, at: ref Span, views: ref Vec[VcView], mut walk: VcWalk) -> bool {
+    let held = vc_last_viewing(views, root)
+    if held < 0 {
+        return false
+    }
+    let view = views[held]
+    if view.used == null {
+        return false
+    }
+    let viewer = view.name.clone()
+    let position = refusal.position.clone()
+    let mut labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{position}` must hold text of its own", true), vc_label(view.made.clone(), viewer, view.from.clone(), false)]
+    match refusal.forced {
+        null => {}
+        forced => {
+            let place = if forced.function == "" { "" } else { f" in `{forced.function}`" }
+            labels.push(vc_label(Span { start: forced.span.start, end: forced.span.end }, forced.written, f"`{forced.written}`{place} changes it in place", false))
+        }
+    }
+    match view.used {
+        null => {}
+        used => labels.push(vc_label(used.clone(), viewer, f"`{viewer}` is read here", false)),
+    }
+    let mut notes: Vec[String] = []
+    match view.way_out[root] {
+        null => {}
+        way => notes.push(way.clone()),
+    }
+    let close = if head.ends_with("(") { ")" } else { ", .. }" }
+    let part = vc_part_of(head)
+    let mut help = f"Hand over a copy: `{head}{root}.clone(){close}`"
+    if part != "" {
+        help.push_str(f", or build the value first and take the view from its field: `let {name} = {head}{root}{close}`")
+        match view.callee {
+            null => {}
+            callee => {
+                let mut given: Vec[String] = []
+                for shown in view.shown {
+                    given.push(if shown == root { f"{name}.{part}" } else { shown.clone() })
+                }
+                help.push_str(f", then `{callee}({given.join(", ")})`")
+            }
+        }
+    }
+    help.push_str(".")
+    walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{position}` gets `{root}`, but `{viewer}` still reads its text afterwards.", notes: notes, help: help, warning: false, labels: labels })
+    return true
+}
+
+/// The field a struct literal's head names (`Cursor { input: ` is `input`),
+/// and "" for a variant's.
+fn vc_part_of(head: ref String) -> String {
+    if !head.ends_with(": ") {
+        return ""
+    }
+    let words: Vec[String] = head.split(" ").map(fn(w) { w.to_string() }).collect()
+    if words.len() < 3 {
+        return ""
+    }
+    return (words[2].strip_suffix(":") ?? "").to_string()
 }
 
 fn vc_label(span: Span, word: ref String, text: String, main: bool) -> CheckLabel {

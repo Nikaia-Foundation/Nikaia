@@ -94,6 +94,10 @@ pub struct BufferAsk {
     pub items: ref Vec[Spanned[Item]],
     pub context: ref KeepContext,
     pub given_up: ref collections::BTreeMap[i64, String],
+    /// The names the text tiers took as a view of themselves where they
+    /// stand, by their nodes (`viewed_arms`): a buffer moved so into a
+    /// literal is a view of it (ADR-353 D8).
+    pub viewed: ref collections::BTreeSet[i64],
 }
 
 // One local, as far as this walk needs it: the statement that binds it, the
@@ -1291,7 +1295,7 @@ fn origins_of(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[
                 }
                 let value = field.value ?? continue
                 let of = origins_of(value, ask, holes_of, unaliased, walk)
-                if !is_the_buffer(value, ask, walk) {
+                if !is_the_buffer(value, ask, walk) || ask.viewed.contains(node_key(value)) {
                     add_all(of, out)
                 }
             }
@@ -1379,7 +1383,7 @@ fn items_origins(items: ref Vec[Expr], ask: ref BufferAsk, holes_of: fn(ref Expr
     let mut out: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     for item in items {
         let of = origins_of(item, ask, holes_of, unaliased, walk)
-        if !is_the_buffer(item, ask, walk) {
+        if !is_the_buffer(item, ask, walk) || ask.viewed.contains(node_key(item)) {
             add_all(of, out)
         }
     }

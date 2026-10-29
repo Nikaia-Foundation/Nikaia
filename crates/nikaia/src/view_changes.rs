@@ -32,6 +32,7 @@ pub fn analyse(
         library,
         lent,
         coalesced,
+        refused: &parsed.refused_moves,
     };
     let answer = vc_analyse(&ask, &|expr| crate::emit::literal_expressions(parsed, expr));
     (
