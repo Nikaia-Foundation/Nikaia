@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1299] — 2026-10-29
+
+**ADR-error-sets-1 (#625, specified, not built): a code parameter that the function's body does not keep fails, at each call, only with what that call hands it (for private and `pub` functions alike), while a kept parameter keeps the union of everything stored in it (ADR-351 D8).**
+
 ## [0.0.1298] — 2026-10-29
 
 **A `let` over a part of a `mut` parameter, `ref mut self` or a `let mut` view is a view while the name is only read, and takes the part out with no copy when the name is kept. Inside a loop, the part is given back before the turn ends. A refusal that comes from the taking names the line that keeps the name (ADR-views-1 D6, Part I 6.5, #979). Specified; not built yet.**
