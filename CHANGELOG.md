@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1281] — 2026-10-29
+
+**A name bound to text literals, used as a `String` part of a tuple looked up in a container that holds text of its own (`set.remove((1, other))`), or kept in a published `String` field of a struct another file of the package declares, is declared `String`: the tier pass reads the package's own published fields (ADR-282 D17, Fixes #956).**
+- Decided and specified, not yet built: `BTreeMap`/`BTreeSet` (and `HashSet`) get `extend` and `entry` like `HashMap`/`Vec` (ADR-collections-1, #950); `Array[T, N]` gets `iter()` (ADR-collections-2, #955); the take-out-and-give-back rule of Part I 6.5 reaches `let mut` views (ADR-views-1, #949).
+
 ## [0.0.1280] — 2026-10-29
 
 **A `null` in a tuple of a list literal whose declared element holds an option there takes that option, wherever in the list it stands (Fixes #957).**
