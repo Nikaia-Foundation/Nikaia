@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1279] — 2026-10-29
+
+**A pull parser over a moved text runs, and a tuple of `String` takes views, with no `ref` written (ADR-353 D8, ADR-282 D1-D2, #948, #929)**
+- A text moved into a local struct literal is lent where a `ref mut self` method later hands back views of it that are still read: `let mut p = Parser { input: text, pos: 0 }` then `p.next()` in a loop lowers to `Parser<'a>` and `Event<'a>`, as `Parser(text)` through a constructor already did. A text parameter used only that way is lent by its callers. Where the field must own its text the move stays a move.
+- A callee that takes the struct `mut` and changes only other fields (`next_item(c)` changing `c.pos`) no longer counts as changing a moved text a view reads, so it is no longer a false NK2305. A change in place of the field itself is still refused at the move (D9). Such a `mut` parameter writes its inner lifetime for a view result (`fn next_item<'a>(c: &mut Cursor<'a>) -> Option<&'a str>`).
+- A tuple of `String` in a function's or a grammar rule's result takes the views it is handed (`rule Line -> (String, String) = ind:text(" "*) body:until(line_ending) …`), no longer NK1104. The text tiers follow a tuple into its parts; its `String` parts share one tier: a view, text of its own, or either per value.
+
 ## [0.0.1278] — 2026-10-29
 
 **A `match` arm name bound by reference over a value (an option field of an `.iter()` loop variable) compares with a view or a value as it should, instead of Rust code rustc refused (Fixes #954).**

@@ -320,7 +320,12 @@ impl EmitState {
                                 if carrying.len() == 1 {
                                     let one = carrying[0]
                                     let lent = self.emit_fn_lends(world, key, one) && !self.emit_fn_written_as_view(key, one)
-                                    if !args[one].ty.is_view && !args[one].ty.either && lent {
+                                    // **A `mut` one too** (#948): `&mut Cursor<'a>`
+                                    // changed by the body hands back a view of
+                                    // the text its fields view, over `'a`, not
+                                    // over the `&mut` borrow.
+                                    let changed = self.emit_fn_changes(key, emit_text(world, args[one].name))
+                                    if !args[one].ty.is_view && !args[one].ty.either && (lent || changed) {
                                         inner_views = args[one].name
                                     }
                                 }

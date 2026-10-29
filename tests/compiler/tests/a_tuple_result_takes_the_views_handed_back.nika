@@ -1,0 +1,43 @@
+// A tuple of `String` handed back takes the views it is given, with no `ref`
+// written (#929, ADR-282 D1, D2): a tuple's text is one tier, a view where
+// only views go in, a view or text of its own per value where both do. Its
+// parts read, assigned and changed in place are that tier's.
+struct Named {
+    name: String,
+}
+
+fn halves(s: String) -> (String, String) {
+    let a = s.trim()
+    let b = s.trim_start()
+    (a, b)
+}
+
+fn lits() -> (String, String) {
+    ("a", "b")
+}
+
+fn mixed(s: String, n: i64) -> (String, String) {
+    if n > 0 {
+        (s.trim(), f"{n}")
+    } else {
+        (s.trim(), s.trim_start())
+    }
+}
+
+fn main() {
+    let (k, v) = halves("  x ")
+    println(f"[{k}] [{v}]")
+    let (a, b) = lits()
+    println(f"{a}{b}")
+    let (c, d) = mixed(" p ", 3)
+    let (e, f) = mixed(" q ", 0)
+    println(f"[{c}] [{d}] [{e}] [{f}]")
+    let mut t = mixed(" r ", 0)
+    let kept = Named { name: t.0 }
+    t.1 = f"{c}!"
+    println(f"{kept.name} {t.1}")
+    let mut pairs: Vec[(String, String)] = []
+    pairs.push(("k", ""))
+    pairs[0].1.push_str("v")
+    println(f"{pairs[0].0}={pairs[0].1}")
+}

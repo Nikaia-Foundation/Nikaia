@@ -1,0 +1,24 @@
+// A text a view still reads cannot move into a field that a callee changes
+// in place (ADR-353 D9, #948): handing the struct to `grow` would change the
+// text `v` reads, so the field must own its text and the move is refused
+// where it stands. A callee that changes another field only is no change
+// to the text (`a_callee_changing_another_field_leaves_a_view_of_the_moved_text`).
+struct Cursor { input: String, pos: i64 }
+
+fn grow(mut c: Cursor) {
+    c.input.push_str("!")
+    c.pos += 1
+}
+
+fn parse(t: String) -> String {
+    return t.trim()
+}
+
+fn main() {
+    let text = f"a {1}"
+    let v = parse(text)
+    let mut c = Cursor { input: text, pos: 0 }
+    grow(c)
+    println(v)
+    println(c.input)
+}

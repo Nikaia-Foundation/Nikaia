@@ -295,6 +295,9 @@ struct FnDecl {
     published: bool,
     /// A method of a trait's: its signature is the trait's.
     of_a_trait: bool,
+    /// A method that takes `ref mut self` or `mut self`: it may change its
+    /// subject.
+    changes_self: bool,
 }
 
 struct TextDeclared {
@@ -371,15 +374,16 @@ fn declare_rules(def: ref GrammarDef, names: ref winnow_grammar::InternerContext
     for rule in def.rules {
         let key = f"{gname}::{names.resolve(rule.name)}"
         declared.rules.insert(key.clone())
-        declared.fns.insert(key, FnDecl { params: [], changes: [], result: rule.ret_type?.clone(), published: def.public && rule.is_entry, of_a_trait: false })
+        declared.fns.insert(key, FnDecl { params: [], changes: [], result: rule.ret_type?.clone(), published: def.public && rule.is_entry, of_a_trait: false, changes_self: false })
     }
 }
 
 fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::InternerContext, mut declared: TextDeclared, of_a_trait: bool) {
-    let (name, args, ret_type, is_public) = match item {
-        Item::Fn { name, args, ret_type, is_public, .. } => (name, args, ret_type, is_public),
+    let (name, receiver, args, ret_type, is_public) = match item {
+        Item::Fn { name, receiver, args, ret_type, is_public, .. } => (name, receiver, args, ret_type, is_public),
         else => return,
     }
+    let changes_self = receiver?.is_mut ?? false
     let own = own_name(name, names)
     let key = tier_key(target, own)
     if target != null {
@@ -393,7 +397,7 @@ fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::
         params.push(arg.ty.clone())
         changes.push(arg.mutable)
     }
-    declared.fns.insert(key, FnDecl { params: params, changes: changes, result: ret_type?.clone(), published: is_public || of_a_trait, of_a_trait: of_a_trait })
+    declared.fns.insert(key, FnDecl { params: params, changes: changes, result: ret_type?.clone(), published: is_public || of_a_trait, of_a_trait: of_a_trait, changes_self: changes_self })
 }
 
 fn own_name(name: ref winnow_grammar::Symbol?, names: ref winnow_grammar::InternerContext) -> String {
@@ -566,13 +570,16 @@ struct Flows {
     /// of another of its parameters, where that one is a parameter of the
     /// function walked too, with this one's index (#740).
     kept_through: collections::BTreeSet[(String, i64)],
+    /// The uses of each parameter that are an arm still read later, a view
+    /// of it whatever its callers hand (ADR-353 D8, #948), by its word.
+    arm_uses: collections::BTreeMap[String, i64],
     /// The first change in place of each position, by its word: what makes
     /// it hold text of its own (ADR-353 D9).
     forced: collections::BTreeMap[String, TierForced],
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), owned_lets: collections::BTreeSet(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet(), forced: collections::BTreeMap() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), owned_lets: collections::BTreeSet(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet(), forced: collections::BTreeMap(), arm_uses: collections::BTreeMap() }
 }
 
 struct TierWalk {
@@ -756,6 +763,26 @@ fn a_container(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool
     return container_of(names, ty) != null
 }
 
+/// A container, or a tuple holding text: a type whose `String`s inside it
+/// are positions.
+fn a_followed(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
+    return a_container(names, ty) || a_followed_tuple(names, ty)
+}
+
+/// **A tuple holding text is followed into its parts** (#929): each part is a
+/// position, by its place, as a container's element is (ADR-282 D1, D2).
+fn a_followed_tuple(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
+    if !ty.is_tuple || ty.is_view || ty.is_nullable || ty.is_slice || ty.code != null {
+        return false
+    }
+    for part in ty.generics {
+        if holds_text(names, part) || a_followed_tuple(names, part) {
+            return true
+        }
+    }
+    return false
+}
+
 /// Record that values of these kinds go into every declared `String` of
 /// `ty`: the type itself, or an element of it.
 fn flow_type(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) {
@@ -778,7 +805,168 @@ fn flow_type(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], kinds: ref 
             path.pop()
             at += 1
         }
+        return
     }
+    if a_followed_tuple(ask.names, ty) {
+        tie_parts(owner, ty, path.clone(), ask, walk)
+        let mut at = 0
+        for part in ty.generics {
+            path.push(at)
+            flow_type(owner, part, path, kinds, ask, walk)
+            path.pop()
+            at += 1
+        }
+    }
+}
+
+/// **A tuple's text is one tier** (#929): its `String` parts are linked, so
+/// that a tuple taken apart (`let (a, b) = t`, `for (k, v) in pairs`) binds
+/// each part as what the tuple holds. Nested tuples are parts too; a list
+/// inside one is a position of its own.
+fn tie_parts(owner: ref TextOwner, ty: ref Type, path: Vec[i64], ask: ref TierAsk, mut walk: TierWalk) {
+    let mut words: Vec[String] = []
+    tuple_text_words(owner, ty, path.clone(), ask, walk, words)
+    for at in 1..<words.len() {
+        walk.flows.links.insert((words[at - 1].clone(), words[at].clone()))
+    }
+}
+
+fn tuple_text_words(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: ref TierAsk, mut walk: TierWalk, mut out: Vec[String]) {
+    let mut at = 0
+    for part in ty.generics {
+        path.push(at)
+        if part.is_tuple && !part.is_view && !part.is_nullable {
+            tuple_text_words(owner, part, path.clone(), ask, walk, out)
+        } else if plain_string(ask.names, part) {
+            out.push(seen(owner, path, walk))
+        }
+        path.pop()
+        at += 1
+    }
+}
+
+/// A tuple's part as a field name writes it, `t.1`, or -1.
+fn tier_part_index(field: ref String) -> i64 {
+    if field.len() == 0 {
+        return -1
+    }
+    let mut at = 0
+    for c in field.chars() {
+        if c < '0' || c > '9' || field.len() > 4 {
+            return -1
+        }
+        at = at * 10 + (c as i64 - 48)
+    }
+    return at
+}
+
+/// **The position a tuple's part read or written stands for** (#929): `t.0`
+/// of a declared tuple, `pairs[i].1` of a list of them, by the path inside
+/// the declaration they come from.
+fn tuple_part_going(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> TierGoing? {
+    let (base, name) = match expr {
+        Expr::Field { base, name, .. } => (base, name),
+        else => return null,
+    }
+    let at = tier_part_index(ask.names.resolve(name))
+    if at < 0 {
+        return null
+    }
+    let whole = part_root(base, ask, walk) ?? return null
+    if !a_followed_tuple(ask.names, whole.ty) || at >= whole.ty.generics.len() {
+        return null
+    }
+    let mut path = whole.path.clone()
+    path.push(at)
+    return going_into(whole.owner, whole.ty.generics[at], path, true)
+}
+
+fn part_root(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> TierGoing? {
+    match base {
+        Expr::Index { base: inner, index, .. } => {
+            if a_range(index) {
+                return null
+            }
+            let list = part_root(inner, ask, walk) ?? return null
+            if !a_container(ask.names, list.ty) || a_map(ask.names, list.ty) || list.ty.generics.len() == 0 {
+                return null
+            }
+            let mut path = list.path.clone()
+            path.push(0)
+            return going_into(list.owner, list.ty.generics[0], path, true)
+        }
+        Expr::Field { name, .. } => {
+            if tier_part_index(ask.names.resolve(name)) >= 0 {
+                return tuple_part_going(base, ask, walk)
+            }
+        }
+        else => {}
+    }
+    let place = place_of(base, ask, walk) ?? return null
+    return going_into(place.owner, place.ty, [], true)
+}
+
+/// The value a block ends with, going in as `flow_tuple_parts` takes it;
+/// false where it ends with none.
+fn flow_tuple_tail(going: ref TierGoing, block: ref Block, kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    if block.stmts.len() == 0 {
+        return false
+    }
+    match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Expr(last) => {
+            flow_value(going, last, kinds, ask, walk)
+            return true
+        }
+        else => return false,
+    }
+}
+
+/// **A tuple going in part by part** (#929): a literal's parts each into its
+/// own position, and a tuple read out of a declared one linked to it, so that
+/// each part is decided by what goes there. False where neither holds.
+fn flow_tuple_parts(going: ref TierGoing, value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    let ty = going.ty.clone()
+    match value {
+        Expr::Tuple(items, _) => {
+            if items.len() != ty.generics.len() {
+                return false
+            }
+            // The parts are one tier, so each takes what the whole tuple
+            // holds: walked again here, a name bound in the block the tuple
+            // ends would be out of scope.
+            tie_parts(going.owner, ty, going.path.clone(), ask, walk)
+            let mut at = 0
+            for item in items {
+                let mut path = going.path.clone()
+                path.push(at)
+                flow_value(going_into(going.owner, ty.generics[at], path, true), item, kinds, ask, walk)
+                at += 1
+            }
+            return true
+        }
+        // **Each way a choice ends** goes in as a value of its own, so that
+        // a tuple built in a branch is taken part by part.
+        Expr::Block(block, _) => return flow_tuple_tail(going, block, kinds, ask, walk),
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = else_branch ?? return false
+            flow_tuple_tail(going, then_branch, kinds, ask, walk)
+            flow_tuple_tail(going, otherwise, kinds, ask, walk)
+            return true
+        }
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                flow_value(going, arm.body, kinds, ask, walk)
+            }
+            return true
+        }
+        else => {}
+    }
+    let from = source_of(value, ask, walk) ?? return false
+    if !a_followed_tuple(ask.names, from.ty) || from.ty.generics.len() != ty.generics.len() {
+        return false
+    }
+    link(from, [], Declaring { owner: going.owner.clone(), ty: ty.clone() }, going.path.clone(), ask, walk)
+    return true
 }
 
 /// A value going into one argument of a declared type, which is a position
@@ -789,6 +977,12 @@ fn flow_value(going: ref TierGoing, value: ref Expr?, kinds: ref Kinds, ask: ref
     let ty = going.ty.clone()
     let path = going.path.clone()
     let plain = plain_string(ask.names, ty)
+    if a_followed_tuple(ask.names, ty) && value != null {
+        let whole = value ?? return
+        if flow_tuple_parts(going, whole, kinds, ask, walk) {
+            return
+        }
+    }
     // **A parameter handed on as it is** (ADR-282 D24), remembered so that
     // what it goes into can hold it to text of its own.
     if plain {
@@ -844,7 +1038,7 @@ fn flow_value(going: ref TierGoing, value: ref Expr?, kinds: ref Kinds, ask: ref
     }
     // **Into a type this walk does not follow** - a `ref` list, a tuple, a
     // type of its own - a view of static text is kept unseen (ADR-282 D29).
-    if !plain && !a_container(ask.names, ty) && kinds.still && value != null {
+    if !plain && !a_container(ask.names, ty) && !a_followed_tuple(ask.names, ty) && kinds.still && value != null {
         let unseen = value ?? return
         kept_unseen(unseen, ask, walk)
     }
@@ -919,12 +1113,12 @@ fn an_empty_container(value: ref Expr, ask: ref TierAsk) -> bool {
     }
 }
 
-/// Whether a container declares `String` anywhere inside it.
+/// Whether a container or a tuple declares `String` anywhere inside it.
 fn holds_text(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
     if plain_string(names, ty) {
         return true
     }
-    if !a_container(names, ty) {
+    if !a_container(names, ty) && !a_followed_tuple(names, ty) {
         return false
     }
     for arg in ty.generics {
@@ -1204,7 +1398,7 @@ fn bind_a_payload(part: ref MatchPattern, owner: TextOwner, ty: ref Type, ask: r
         bind_tier_local(name, local, walk)
         return true
     }
-    if a_container(ask.names, ty) && holds_text(ask.names, ty) {
+    if a_followed(ask.names, ty) && holds_text(ask.names, ty) {
         let declared = Declaring { owner: owner, ty: ty.clone() }
         let mut local = plain_local(kinds_of_declared(declared, ask, walk))
         local.declared = declared
@@ -1340,7 +1534,7 @@ fn kept_unseen(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
             let whole = source_of(value, ask, walk)
             if whole != null {
                 let found = whole ?? return
-                if a_container(ask.names, found.ty) {
+                if a_followed(ask.names, found.ty) {
                     demote_inside(found.owner, found.ty, [], ask, walk)
                     return
                 }
@@ -1421,7 +1615,7 @@ fn demote_inside(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: re
         walk.flows.demoted.insert(word)
         return
     }
-    if !a_container(ask.names, ty) {
+    if !a_followed(ask.names, ty) {
         return
     }
     let mut at = 0
@@ -1441,7 +1635,7 @@ fn unlinked_inside(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: 
         walk.flows.unlinked.insert(word)
         return
     }
-    if !a_container(ask.names, ty) {
+    if !a_followed(ask.names, ty) {
         return
     }
     let mut at = 0
@@ -1461,7 +1655,7 @@ fn unlinked_inside(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: 
 /// own, not taken as `EitherText`.
 fn lent_whole(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
     let source = source_of(value, ask, walk) ?? return
-    if !a_container(ask.names, source.ty) {
+    if !a_followed(ask.names, source.ty) {
         return
     }
     unlinked_inside(source.owner, source.ty, [], ask, walk)
@@ -1518,6 +1712,18 @@ fn changed_in_place(target: ref Expr, written: String, ask: ref TierAsk, mut wal
             return
         }
         else => {}
+    }
+    // `pairs[i].1.push_str(..)`: the part's position (#929).
+    let part = tuple_part_going(target, ask, walk)
+    if part != null {
+        let found = part ?? return
+        if plain_string(ask.names, found.ty) {
+            let word = seen(found.owner, found.path, walk)
+            walk.flows.changed.insert(word.clone())
+            walk.flows.unwrappable.insert(word.clone())
+            flow_word(word, owned_kinds(), walk)
+        }
+        return
     }
     let place = place_of(target, ask, walk)
     if place != null {
@@ -1786,8 +1992,14 @@ fn link(from: ref Declaring, mut from_path: Vec[i64], to: ref Declaring, mut to_
         }
         return
     }
-    if !a_container(ask.names, from_ty) || !a_container(ask.names, to_ty) || from_ty.generics.len() != to_ty.generics.len() {
+    let containers = a_container(ask.names, from_ty) && a_container(ask.names, to_ty)
+    let tuples = a_followed_tuple(ask.names, from_ty) && a_followed_tuple(ask.names, to_ty)
+    if !(containers || tuples) || from_ty.generics.len() != to_ty.generics.len() {
         return
+    }
+    if tuples {
+        tie_parts(from.owner, from_ty, from_path.clone(), ask, walk)
+        tie_parts(to.owner, to_ty, to_path.clone(), ask, walk)
     }
     let keyed = a_map(ask.names, from_ty) || a_map(ask.names, to_ty)
     for at in 0..<from_ty.generics.len() {
@@ -1835,7 +2047,7 @@ fn kinds_of(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: ref Tie
     if ty.is_view && ask.names.resolve(ty.name) == "String" {
         return view_kinds()
     }
-    if a_container(ask.names, ty) {
+    if a_container(ask.names, ty) || a_followed_tuple(ask.names, ty) {
         let mut out = no_kinds()
         let mut at = 0
         for arg in ty.generics {
@@ -2091,7 +2303,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
 
 fn container_source(source: ref Declaring?, ask: ref TierAsk) -> bool {
     let found = source ?? return false
-    return a_container(ask.names, found.ty)
+    return a_followed(ask.names, found.ty)
 }
 
 /// A literal, or an `if` or a `match` whose every value is one (#441): static
@@ -2167,9 +2379,14 @@ fn tier_assign(target: ref Expr, value: ref Expr, ask: ref TierAsk, mut walk: Ti
         }
         else => {
             let place = place_of(target, ask, walk)
+            let part = tuple_part_going(target, ask, walk)
             if place != null {
                 let found = place ?? return
                 flow_value(going_into(found.owner, found.ty, [], true), value, kinds, ask, walk)
+            } else if part != null {
+                // `t.0 = v`: into the part's position (#929).
+                let into = part ?? return
+                flow_value(into, value, kinds, ask, walk)
             } else if kinds.still && !a_variable(target) {
                 // A field of a struct this walk does not declare.
                 kept_unseen(value, ask, walk)
@@ -2268,6 +2485,15 @@ fn count_use(name: ref String, mut walk: TierWalk) {
     }
     let before = walk.flows.uses[word] ?? 0
     walk.flows.uses.insert(word, before + 1)
+}
+
+/// A use of a parameter that is an arm still read later: counted whatever
+/// the parameter's tier, so the decision does not swing back once the
+/// parameter is a view (#948).
+fn count_arm_use(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    let word = lendable_parameter(value, ask, walk) ?? return
+    let before = walk.flows.arm_uses[word] ?? 0
+    walk.flows.arm_uses.insert(word, before + 1)
 }
 
 /// The id of a struct literal handed back as it is, and -1 for anything else.
@@ -2818,6 +3044,9 @@ struct TierLateFound {
     /// still used, by their nodes: the position's word and how it is written
     /// (ADR-353 D8, D9).
     moved: collections::BTreeMap[i64, (String, String)],
+    /// Those among them only a view made later out of their holder keeps
+    /// (#948).
+    held: collections::BTreeSet[i64],
 }
 
 /// One binding of a name: its serial, and the loops around it.
@@ -2872,12 +3101,25 @@ struct TierLate {
     /// Every name moved into a literal's declared position while a view of
     /// it lived, by its node: the position's word and how it is written.
     moved: collections::BTreeMap[i64, (String, String)],
+    /// The methods of this program that change their subject and may hand
+    /// back a view of it, by name (ADR-353 D8, #948).
+    changing_methods: collections::BTreeSet[String],
+    /// The text fields of the program's structs, `S.f`.
+    text_fields: collections::BTreeSet[String],
+    /// The names a binding of a struct literal took into a text field, by the
+    /// binding's `name serial`: each name's node, and the position's word and
+    /// how it is written.
+    held: collections::BTreeMap[String, Vec[(i64, (String, String))]],
+    /// The moves in `moved` only a view made later out of their holder
+    /// keeps: where the position holds text of its own they stay moves,
+    /// unrefused.
+    held_moves: collections::BTreeSet[i64],
 }
 
 /// The arms that are a name still read after their choice, or in a later turn
 /// of a loop around the choice but not around the name, by their nodes.
 fn late_arms(program: ref Program, declared: ref TextDeclared, ask: ref TierAsk) -> TierLateFound {
-    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0, viewing: collections::BTreeSet(), viewing_methods: collections::BTreeSet(), variants: collections::BTreeSet(), views: collections::BTreeMap(), viewers: collections::BTreeMap(), moved: collections::BTreeMap() }
+    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0, viewing: collections::BTreeSet(), viewing_methods: collections::BTreeSet(), variants: collections::BTreeSet(), views: collections::BTreeMap(), viewers: collections::BTreeMap(), moved: collections::BTreeMap(), changing_methods: collections::BTreeSet(), text_fields: collections::BTreeSet(), held: collections::BTreeMap(), held_moves: collections::BTreeSet() }
     for (key, function) in declared.fns {
         let result = function.result ?? continue
         if late_holds_text(result, declared, ask, 0) {
@@ -2888,7 +3130,15 @@ fn late_arms(program: ref Program, declared: ref TextDeclared, ask: ref TierAsk)
         for key in keys {
             if late.viewing.contains(key) {
                 late.viewing_methods.insert(name.clone())
+                if declared.fns[key]?.changes_self ?? false {
+                    late.changing_methods.insert(name.clone())
+                }
             }
+        }
+    }
+    for (key, field) in declared.fields {
+        if !field.ty.is_nullable && plain_string(ask.names, field.ty) {
+            late.text_fields.insert(f"{key.0}.{key.1}")
         }
     }
     for (key, _) in declared.variants {
@@ -2908,12 +3158,16 @@ fn late_arms(program: ref Program, declared: ref TextDeclared, ask: ref TierAsk)
         }
     }
     let mut moved: collections::BTreeMap[i64, (String, String)] = collections::BTreeMap()
+    let mut held: collections::BTreeSet[i64] = collections::BTreeSet()
     for (node, position) in late.moved {
         if late.found.contains(node) {
             moved.insert(node.clone(), position.clone())
+            if late.held_moves.contains(node) {
+                held.insert(node.clone())
+            }
         }
     }
-    return TierLateFound { arms: late.found.clone(), args: late.args.clone(), params: late.params.clone(), moved: moved }
+    return TierLateFound { arms: late.found.clone(), args: late.args.clone(), params: late.params.clone(), moved: moved, held: held }
 }
 
 fn late_function(item: ref Item, ask: ref TierAsk, mut late: TierLate) {
@@ -2940,6 +3194,7 @@ fn late_body(body: ref Block, names: Vec[String], ask: ref TierAsk, mut late: Ti
     late.branches = 0
     late.views = collections::BTreeMap()
     late.viewers = collections::BTreeMap()
+    late.held = collections::BTreeMap()
     late_open(late)
     late.params_from = late.serial
     for name in names {
@@ -3094,6 +3349,10 @@ fn late_stmt(stmt: ref Stmt, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             for name in names {
                 late_bind(ask.names.resolve(name).clone(), late)
                 late_viewing(ask.names.resolve(name), sources, alias, late)
+            }
+            if names.len() == 1 {
+                late_held_view(ask.names.resolve(names[0]), value, ask, late)
+                late_holding(ask.names.resolve(names[0]), value, ask, late)
             }
         }
         Stmt::Comptime { name, value, .. } => {
@@ -3519,6 +3778,80 @@ fn late_moved_into(value: ref Expr, owner: TextOwner, written: String, ask: ref 
     late_moved(value, (position_word(owner, no_path()), written), ask, late)
 }
 
+/// `let p = Parser { input: text, .. }`: the names `p` took into a text
+/// field, remembered for the views made out of `p` later (#948).
+fn late_holding(name: ref String, value: ref Expr, ask: ref TierAsk, mut late: TierLate) {
+    if late.leaving > 0 {
+        return
+    }
+    let (of, fields) = match value {
+        Expr::StructLit { name: of, fields, .. } => (ask.names.resolve(of).clone(), fields),
+        else => return,
+    }
+    let holder = late_key(name, late) ?? return
+    let mut held: Vec[(i64, (String, String))] = []
+    for field in fields {
+        let given = field.value ?? continue
+        let moved = match given {
+            Expr::Variable(moved, _) => ask.names.resolve(moved).clone(),
+            else => continue,
+        }
+        let label = ask.names.resolve(field.name).clone()
+        if moved == name || late_key(moved, late) == null || !late.text_fields.contains(f"{of}.{label}") {
+            continue
+        }
+        held.push((node_key(given), (position_word(TextOwner::Field(of.clone(), label.clone()), no_path()), f"{of}.{label}")))
+    }
+    if held.len() > 0 {
+        late.held.insert(holder, held)
+    }
+}
+
+/// What a value is made by, under `?` and the left side of `??`.
+fn late_made(value: ref Expr) -> ref Expr {
+    return match value {
+        Expr::Coalesce { value: first, .. } => late_made(first),
+        Expr::Try(inner, _) => late_made(inner),
+        else => value,
+    }
+}
+
+/// **A view made out of a struct by a method that changes it** (ADR-353 D8,
+/// ADR-282 D13, #948): `let e = p.next()`, where `next` takes `ref mut self`
+/// and hands back what may view `p`. Where `e` is read later, `p` cannot
+/// own the text it took: the view would outlive the method's hold on `p`.
+/// The name moved into `p` is a view of it, as one a view of lived at the
+/// move.
+fn late_held_view(name: ref String, value: ref Expr, ask: ref TierAsk, mut late: TierLate) {
+    if late.leaving > 0 {
+        return
+    }
+    let (receiver, method) = match late_made(value) {
+        Expr::MethodCall { receiver, method, .. } => (receiver, method),
+        else => return,
+    }
+    if !late.changing_methods.contains(ask.names.resolve(method)) {
+        return
+    }
+    let holder = match receiver {
+        Expr::Variable(holder, _) => ask.names.resolve(holder).clone(),
+        else => return,
+    }
+    if holder == name {
+        return
+    }
+    let key = late_key(holder, late) ?? return
+    let held = late.held[key]?.clone() ?? return
+    let serial = late_serial(name, late)
+    for (node, position) in held {
+        late_defer(TierLateArm { at: node, name: name.clone(), serial: serial, loops: late.loops, argument: false }, late)
+        if !late.moved.contains_key(node) {
+            late.moved.insert(node, position.clone())
+            late.held_moves.insert(node)
+        }
+    }
+}
+
 /// **A name moved as it is into a literal while a view of it is still used
 /// is a view of it** (ADR-353 D8): the literal is a variable of the function,
 /// and moving the text would end the view read next. A declared position it
@@ -3623,6 +3956,9 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             // **An arm that is a name still read later is a view of it**
             // (ADR-282 D7, D13, #712): moving it would end what is read next.
             let late = walk.late.contains(node_key(expr)) || tier_arm_read(node_key(expr), walk)
+            if late {
+                count_arm_use(expr, ask, walk)
+            }
             if late && kinds.owned && !kinds.view && !kinds.either && !kinds.still {
                 walk.flows.viewed_arms.insert(node_key(expr))
                 return view_kinds()
@@ -3872,8 +4208,15 @@ fn items_kinds(items: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) -> Ki
 
 fn field_kinds(expr: ref Expr, base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     tier_expr(base, ask, walk)
-    let place = place_of(expr, ask, walk) ?? return owned_kinds()
-    return kinds_of_declared(place, ask, walk)
+    let place = place_of(expr, ask, walk)
+    if place == null {
+        // **A tuple's part is what its position holds** (#929), where the
+        // tuple comes from a declared one.
+        let part = tuple_part_going(expr, ask, walk) ?? return owned_kinds()
+        return kinds_of(part.owner, part.ty, part.path.clone(), ask, walk)
+    }
+    let found = place ?? return owned_kinds()
+    return kinds_of_declared(found, ask, walk)
 }
 
 /// A field of a struct literal: what goes into it is a flow the emitter wraps
@@ -3973,7 +4316,7 @@ fn std_container_args(args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk)
         let whole = source_of(arg, ask, walk)
         if whole != null {
             let found = whole ?? return
-            if a_container(ask.names, found.ty) && holds_text(ask.names, found.ty) {
+            if a_followed(ask.names, found.ty) && holds_text(ask.names, found.ty) {
                 demote_inside(found.owner, found.ty, [], ask, walk)
             }
         }
@@ -4434,6 +4777,10 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
     }
     for pair in from.kept_through {
         into.kept_through.insert(pair.clone())
+    }
+    for (word, count) in from.arm_uses {
+        let before = into.arm_uses[word] ?? 0
+        into.arm_uses.insert(word.clone(), before + count)
     }
     for (node, word) in from.param_arm_into {
         into.param_arm_into.insert(node.clone(), word.clone())
@@ -4913,6 +5260,15 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
     }
     for word in flows.viewed {
         out.insert(word.clone(), Tier::View)
+    }
+    // **A parameter named only as arms that stay views of it is a view**
+    // (ADR-353 D8, Part I 6.5, #948): `Parser { input: text, .. }` bound to
+    // a local while a view of `text`, or one made out of the local later,
+    // is still read. Moving it in is no keeping, so its callers lend it.
+    for (word, count) in flows.arm_uses {
+        if (flows.uses[word] ?? 0) == count && !flows.changed.contains(word) && !a_published_parameter(word, flows, declared) {
+            out.insert(word.clone(), Tier::View)
+        }
     }
     // A parameter lent where what it went into did not end a view is kept
     // from the next walk on.
@@ -5420,6 +5776,11 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
         let held = walk.tiers[moved.0]?.clone() ?? Tier::Owned
         if owned_tier(held) {
             viewed_arms.remove(node)
+            // Kept only for a view made later out of its holder (#948): a
+            // position that owns its text takes it as before.
+            if found.held.contains(node) {
+                continue
+            }
             refused_moves.insert(node.clone(), TierRefusal { position: moved.1.clone(), forced: walk.flows.forced[moved.0]?.clone() })
         }
     }

@@ -1,0 +1,35 @@
+// A grammar rule whose result holds `String` in a struct's field or an enum's
+// payload takes the views of the input its action builds (#929, ADR-282 D2).
+struct Pair {
+    key: String,
+    val: String,
+}
+
+enum Entry {
+    Word(String),
+    Blank,
+}
+
+grammar Pairs {
+    rule WS = "" -> { }
+    rule P -> Pair = k:until(":") ":" v:until(line_ending) line_ending -> { Pair { key: k, val: v } }
+    entry rule doc -> Vec[Pair] = ps:P* eof -> { ps }
+}
+
+grammar Entries {
+    rule WS = "" -> { }
+    rule E -> Entry = b:until(line_ending) line_ending -> { if b.len() == 0 { Entry::Blank } else { Entry::Word(b) } }
+    entry rule doc -> Vec[Entry] = es:E* eof -> { es }
+}
+
+fn main() throws {
+    for p in Pairs::doc("a:1\nb:two\n") {
+        println(f"{p.key}={p.val}")
+    }
+    for e in Entries::doc("x\n\ny\n") {
+        match e {
+            Entry::Word(w) => println(w),
+            Entry::Blank => println("-"),
+        }
+    }
+}
