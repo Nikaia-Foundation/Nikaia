@@ -672,6 +672,14 @@ impl EmitState {
                 _ => { },
             }
         }
+        if name == "extend" && args.len() == 1 && receiver.is_some() && self.facts.text_extends.contains(&node_key(nikaia_std::index::get(&args, 0))) {
+            let target = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)?;
+            out.push(".extend(");
+            self.emit_core_postfix_base(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+            out.push(".iter().map(|item| item.to_string()))");
+            return Ok(());
+        }
         let mut copies = walk.reached_copy;
         let mut byte_copy = false;
         if receiver.is_some() {

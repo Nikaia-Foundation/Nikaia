@@ -1,0 +1,11 @@
+use std::collections
+
+comptime NAMES: Array[ref String, 3] = ["b", "a", "b"]
+
+fn main() {
+    let mut s: collections::BTreeSet[String] = collections::BTreeSet()
+    s.extend(NAMES)
+    let mut v: Vec[String] = Vec()
+    v.extend(NAMES)
+    println(f"{s.len()} {v.len()}")
+}

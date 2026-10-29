@@ -352,6 +352,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         _ => false,
     };
     if collection && name == "clone" && args.is_empty() { state.facts.collection_clones.insert(id_of(expr) as i64); }
+    if collection && name == "extend" && args.len() == 1 { check_core_method_text_extend(state, world, &on, nikaia_std::index::get(&args, 0)); }
     let bytes = match on {
         Ty::Named { ref name, ref args, .. } => args.is_empty() && (name == "Bytes" || name == "Mapped" || name == "fs::Mapped"),
         _ => false,
@@ -513,6 +514,28 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     let changed: Option<Ty> = check_simd_method_result(&lanes, &name);
     if changed.is_some() { return nikaia_std::index::or(changed, || Ty::Unknown); }
     walked
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_text_extend(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, arg: &Expr) {
+    let symbol = match arg {
+        Expr::Variable(symbol, _) => { let symbol = *symbol; symbol },
+        _ => return,
+    };
+    let named: String = format!("{}", world.words.resolve(symbol));
+    if !state.facts.comptime_names.contains(&named) { return; }
+    let held: Ty = match state.lookup(&named) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let item: Ty = unviewed_type(&element_walked(&held, 1));
+    let receiver_item: Ty = match on {
+        Ty::Named { args, .. } => (*nikaia_std::index::get(&args, 0)).clone(),
+        _ => return,
+    };
+    let owned = match receiver_item {
+        Ty::Named { ref name, view, .. } => name == "String" && !view,
+        _ => false,
+    };
+    if owned && (item.text() == "String" || item.text() == "str") { state.facts.text_extends.insert(id_of(arg) as i64); }
 }
 
 pub(crate) fn check_core_method_one_item(name: &str) -> bool { name == "filter" || name == "find" || name == "take_while" || name == "skip_while" || name == "map" || name == "any" || name == "all" || name == "for_each" || name == "filter_map" || name == "flat_map" || name == "position" || name == "inspect" || name == "max_by_key" || name == "min_by_key" }

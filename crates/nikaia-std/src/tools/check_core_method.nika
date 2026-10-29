@@ -476,6 +476,11 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if collection && name == "clone" && args.len() == 0 {
         state.facts.collection_clones.insert(id_of(expr) as i64)
     }
+    // **A `comptime` array of text, extended into owned text** (#966): the
+    // constant's items are `&str` below.
+    if collection && name == "extend" && args.len() == 1 {
+        check_core_method_text_extend(state, world, on, args[0])
+    }
     // **A `Bytes` is cut by a set through `std`'s own `split`** (ADR-375 D3).
     let bytes = match on {
         Ty::Named { name, args, .. } => args.len() == 0 && (name == "Bytes" || name == "Mapped" || name == "fs::Mapped"),
@@ -697,6 +702,33 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
         return changed ?? Ty::Unknown
     }
     return walked
+}
+
+/// `s.extend(NAMES)` with `comptime NAMES: Array[ref String, N]` into a list or
+/// a set of owned `String` (#966): recorded, the lowering maps each item to a
+/// `String`.
+fn check_core_method_text_extend(mut state: CheckState, world: ref CheckWorld, on: ref Ty, arg: ref Expr) sync {
+    let symbol = match arg {
+        Expr::Variable(symbol, _) => symbol,
+        else => return,
+    }
+    let named: String = f"{world.words.resolve(symbol)}"
+    if !state.facts.comptime_names.contains(named) {
+        return
+    }
+    let held: Ty = state.lookup(named) ?? return
+    let item: Ty = unviewed_type(element_walked(held, 1))
+    let receiver_item: Ty = match on {
+        Ty::Named { args, .. } => args[0].clone(),
+        else => return,
+    }
+    let owned = match receiver_item {
+        Ty::Named { name, view, .. } => name == "String" && !view,
+        else => false,
+    }
+    if owned && (item.text() == "String" || item.text() == "str") {
+        state.facts.text_extends.insert(id_of(arg) as i64)
+    }
 }
 
 /// A walk's method whose lambda is handed one item, and nothing beside it.

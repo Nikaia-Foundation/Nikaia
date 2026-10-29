@@ -41,14 +41,8 @@ pub(crate) fn inherent_at_home(names: &winnow_grammar::InternerContext, item: &I
 
 pub(crate) fn known_traits(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], own: &Ledger, library: &Ledger) -> collections::BTreeSet<String> {
     let mut known: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for shape in SHAPE_BOUNDS.iter() {
-        let shape = *shape;
-        known.insert(shape.to_string());
-    }
-    for standard in STANDARD_BOUNDS.iter() {
-        let standard = *standard;
-        known.insert(standard.to_string());
-    }
+    known.extend(SHAPE_BOUNDS.iter().map(|item| item.to_string()));
+    known.extend(STANDARD_BOUNDS.iter().map(|item| item.to_string()));
     for (key, _) in own.traits.iter() { with_its_last_segment(key, &mut known); }
     for (key, _) in library.traits.iter() { with_its_last_segment(key, &mut known); }
     for item in items.iter() {
@@ -73,10 +67,7 @@ pub(crate) fn with_its_last_segment(key: &str, known: &mut collections::BTreeSet
 
 pub(crate) fn known_names(own: &Ledger, library: &Ledger, declared: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut known: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for name in BUILT_IN.iter() {
-        let name = *name;
-        known.insert(name.to_string());
-    }
+    known.extend(BUILT_IN.iter().map(|item| item.to_string()));
     for (key, _) in library.types.iter() { known.insert(key.to_string()); }
     for (key, _) in own.types.iter() { with_its_last_segment(key, &mut known); }
     known.extend(declared.iter().cloned());

@@ -985,6 +985,16 @@ impl EmitState {
                 else => {}
             }
         }
+        // **`s.extend(NAMES)` of a `comptime` array of text into owned text**
+        // (#966): the constant is `[&str; N]`, each item becomes a `String`.
+        if name == "extend" && args.len() == 1 && receiver != null && self.facts.text_extends.contains(node_key(args[0])) {
+            let target = receiver ?? return
+            self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)
+            out.push(".extend(")
+            self.emit_core_postfix_base(world, walk, out, host, args[0], depth, flow, scope)
+            out.push(".iter().map(|item| item.to_string()))")
+            return
+        }
         let mut copies = walk.reached_copy
         let mut byte_copy = false
         if receiver != null {

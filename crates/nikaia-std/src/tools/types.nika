@@ -67,12 +67,8 @@ fn inherent_at_home(names: ref winnow_grammar::InternerContext, item: ref Item, 
 // key and by its last segment - and the ones this file declares.
 fn known_traits(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], own: ref Ledger, library: ref Ledger) -> collections::BTreeSet[String] {
     let mut known: collections::BTreeSet[String] = collections::BTreeSet()
-    for shape in SHAPE_BOUNDS {
-        known.insert(shape.clone())
-    }
-    for standard in STANDARD_BOUNDS {
-        known.insert(standard.clone())
-    }
+    known.extend(SHAPE_BOUNDS)
+    known.extend(STANDARD_BOUNDS)
     for (key, _) in own.traits {
         with_its_last_segment(key, known)
     }
@@ -110,9 +106,7 @@ fn with_its_last_segment(key: ref String, mut known: collections::BTreeSet[Strin
 // types this file declares.
 fn known_names(own: ref Ledger, library: ref Ledger, declared: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
     let mut known: collections::BTreeSet[String] = collections::BTreeSet()
-    for name in BUILT_IN {
-        known.insert(name.clone())
-    }
+    known.extend(BUILT_IN)
     for (key, _) in library.types {
         known.insert(key.clone())
     }

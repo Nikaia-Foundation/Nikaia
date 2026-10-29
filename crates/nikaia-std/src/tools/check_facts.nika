@@ -225,6 +225,10 @@ pub struct CheckFacts {
     /// D4): as the argument of `extend` it is written `xs.iter().cloned()`,
     /// no list in between.
     pub collection_clones: collections::BTreeSet[i64],
+    /// **A `comptime` array of text handed to `extend` of a container of owned
+    /// `String`** (#966), by the argument: the constant is `[&str; N]` below, so
+    /// each item is made a `String` as it goes in.
+    pub text_extends: collections::BTreeSet[i64],
     pub kept_lambdas: collections::BTreeMap[i64, (bool, bool)],
     pub kept_hulls: collections::BTreeMap[i64, Vec[String]],
     pub kept_owned: collections::BTreeMap[i64, Vec[String]],
@@ -485,6 +489,7 @@ impl CheckFacts {
             copied_entry_lambdas: collections::BTreeSet(),
             owned_entry_keys: collections::BTreeSet(),
             collection_clones: collections::BTreeSet(),
+            text_extends: collections::BTreeSet(),
             kept_lambdas: collections::BTreeMap(),
             kept_hulls: collections::BTreeMap(),
             kept_owned: collections::BTreeMap(),
