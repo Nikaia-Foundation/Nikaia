@@ -63,28 +63,28 @@ pub(crate) fn project_check_plural(n: i64) -> &'static str { if n == 1 { "" } el
 
 pub fn project_check_let_refuted_claims_through(findings: &mut Vec<CheckFinding>, refuted_claims: &str) {
     if refuted_claims != "warn" { return; }
-    for i in 0..findings.len() as i64 {
-        if nikaia_std::index::get(&findings, (i) as usize).code != "NK1207" { continue; }
-        findings[nikaia_std::index::at(i)].severity = CheckSeverity::Warning;
-        findings[nikaia_std::index::at(i)].notes.push(String::from("`refuted-claims = \"warn\"` lets this build through: the claim is checked when the program runs, and stops it there"));
+    for finding in findings.iter_mut() {
+        if (*finding).code != "NK1207" { continue; }
+        (*finding).severity = CheckSeverity::Warning;
+        (*finding).notes.push(String::from("`refuted-claims = \"warn\"` lets this build through: the claim is checked when the program runs, and stops it there"));
     }
 }
 
 pub fn project_check_let_unproved_claims_through(findings: &mut Vec<CheckFinding>, unproved_claims: &str) {
     if unproved_claims != "warn" { return; }
-    for i in 0..findings.len() as i64 {
-        if nikaia_std::index::get(&findings, (i) as usize).code != "NK1300" { continue; }
-        findings[nikaia_std::index::at(i)].severity = CheckSeverity::Warning;
-        findings[nikaia_std::index::at(i)].notes.push(String::from("`unproved-claims = \"warn\"` lets this build through: the claim is checked when the program runs, and a false one stops it there"));
+    for finding in findings.iter_mut() {
+        if (*finding).code != "NK1300" { continue; }
+        (*finding).severity = CheckSeverity::Warning;
+        (*finding).notes.push(String::from("`unproved-claims = \"warn\"` lets this build through: the claim is checked when the program runs, and a false one stops it there"));
     }
 }
 
 pub fn project_check_lint_where_nothing_crosses(findings: &mut Vec<CheckFinding>, user_parallelism: &str) {
     if user_parallelism != "no" { return; }
-    for i in 0..findings.len() as i64 {
-        if nikaia_std::index::get(&findings, (i) as usize).code != "NK2501" { continue; }
-        findings[nikaia_std::index::at(i)].severity = CheckSeverity::Warning;
-        findings[nikaia_std::index::at(i)].notes.push(String::from("`user_parallelism = no` runs nothing you wrote concurrently, so this build does not perform the crossing - it is reported so that the same source still builds at `yes`"));
+    for finding in findings.iter_mut() {
+        if (*finding).code != "NK2501" { continue; }
+        (*finding).severity = CheckSeverity::Warning;
+        (*finding).notes.push(String::from("`user_parallelism = no` runs nothing you wrote concurrently, so this build does not perform the crossing - it is reported so that the same source still builds at `yes`"));
     }
 }
 
@@ -159,14 +159,14 @@ pub fn project_check_keeps_that_moved(committed: &Ledger, inferred: &Ledger) -> 
         let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let now = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let then = match before.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple23434| {
-            let (param, _) = __nikaia_tuple23434;
-            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple23493| {
-                let (p, _) = __nikaia_tuple23493;
+        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple23398| {
+            let (param, _) = __nikaia_tuple23398;
+            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple23457| {
+                let (p, _) = __nikaia_tuple23457;
                 AsRef::<str>::as_ref(&(p)) == AsRef::<str>::as_ref(&(param))
             })
-        }).filter_map(|__nikaia_tuple23534| {
-            let (param, ty) = __nikaia_tuple23534;
+        }).filter_map(|__nikaia_tuple23498| {
+            let (param, ty) = __nikaia_tuple23498;
             let kept = nikaia_std::list::contains(&contract.keeps, &param);
             if kept != nikaia_std::list::contains(&before.keeps, &param) { Some(ProjectCheckKept { param: param.to_string(), now: kept, ty: ty.text() }) } else { None }
         }).collect::<Vec<_>>();

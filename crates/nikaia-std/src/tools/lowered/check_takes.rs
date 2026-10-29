@@ -34,7 +34,7 @@ impl CheckState {
             }
         }
     }
-    pub fn failing_cleanups_left(&mut self, span: &Span) { for at in 0..self.cleanups_pending.len() as i64 { if nikaia_std::index::get(&self.cleanups_pending, (at) as usize).loops == self.flow.loops { self.cleanups_pending[nikaia_std::index::at(at)].leaves.push(span.start as i64); } } }
+    pub fn failing_cleanups_left(&mut self, span: &Span) { for pending in self.cleanups_pending.iter_mut() { if (*pending).loops == self.flow.loops { (*pending).leaves.push(span.start as i64); } } }
     pub fn failing_cleanups_settled(&mut self) {
         let depth = self.scope.len() as i64;
         let pending = self.cleanups_pending.to_owned();

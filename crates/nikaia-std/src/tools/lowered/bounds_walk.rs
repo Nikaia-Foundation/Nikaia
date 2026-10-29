@@ -804,10 +804,7 @@ pub(crate) fn bounding_shift(walk: &mut BoundsWalk, facts: &mut BoundsFacts, nam
     let old = walk.arena.sub(now, by);
     let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     given.insert(name.to_string(), old);
-    for k in 0..facts.facts.len() as i64 {
-        let fact = *nikaia_std::index::get(&facts.facts, (k) as usize);
-        if walk.arena.mentions(fact, name) { { let __nikaia_stored = walk.arena.substitute(fact, &given); nikaia_std::index::set(&mut facts.facts, (k) as usize, __nikaia_stored); } }
-    }
+    for fact in facts.facts.iter_mut() { if walk.arena.mentions((*fact), name) { (*fact) = walk.arena.substitute((*fact), &given); } }
 }
 
 pub(crate) fn bounding_after_change(walk: &mut BoundsWalk, facts: &mut BoundsFacts, changed: &BoundsChanged) {
@@ -1853,10 +1850,7 @@ pub(crate) fn bounding_loop_change(walk: &mut BoundsWalk, facts: &mut BoundsFact
         let e = walk.arena.var(&entry);
         let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         given.insert(x.to_string(), e);
-        for k in 0..facts.facts.len() as i64 {
-            let fact = *nikaia_std::index::get(&facts.facts, (k) as usize);
-            if walk.arena.mentions(fact, x) { { let __nikaia_stored = walk.arena.substitute(fact, &given); nikaia_std::index::set(&mut facts.facts, (k) as usize, __nikaia_stored); } }
-        }
+        for fact in facts.facts.iter_mut() { if walk.arena.mentions((*fact), x) { (*fact) = walk.arena.substitute((*fact), &given); } }
         entries.push((x.to_string(), entry));
     }
     bounding_after_change(walk, facts, changed);

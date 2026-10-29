@@ -631,9 +631,9 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
         }
         let mut inner_views = views.to_owned();
         if looping {
-            for v in 0..inner_views.len() as i64 {
-                let name = nikaia_std::index::get(&inner_views, nikaia_std::index::at(v)).name.to_string();
-                if nikaia_std::index::get(&inner_views, nikaia_std::index::at(v)).used.is_none() && vc_mentions_stmt(&stmt.node, &name, ask, holes_of) { inner_views[nikaia_std::index::at(v)].used = Some(nikaia_std::index::or(vc_first_use(&stmt.node, &name, ask, holes_of), || at.clone().into())); }
+            for view in inner_views.iter_mut() {
+                let name = (*view).name.to_string();
+                if (*view).used.is_none() && vc_mentions_stmt(&stmt.node, &name, ask, holes_of) { (*view).used = Some(nikaia_std::index::or(vc_first_use(&stmt.node, &name, ask, holes_of), || at.clone().into())); }
             }
         }
         match &stmt.node {
@@ -687,14 +687,14 @@ pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &
         let bound = nikaia_std::index::or(*nikaia_std::index::get(&walk.lets, &root), || 0);
         walk.give_ups.kept.insert(bound, nikaia_std::index::get(&views, nikaia_std::index::at(viewer)).name.to_string());
     }
-    if whole { for v in 0..views.len() as i64 { views[nikaia_std::index::at(v)].roots.remove(&root); } }
+    if whole { for view in views.iter_mut() { (*view).roots.remove(&root); } }
 }
 
 pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView>, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut VcWalk) {
     let mut left: Vec<VcView> = vec![];
     for view in views.iter() { if view.name != name { left.push(view.clone()); } }
     *views = left;
-    for v in 0..views.len() as i64 { views[nikaia_std::index::at(v)].roots.remove(name); }
+    for view in views.iter_mut() { (*view).roots.remove(name); }
     match vc_view_of(at, name, value, &views, ask) {
         None => { },
         Some(view) => {
@@ -710,19 +710,19 @@ pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView
     for (moved, part, node) in vc_moved_parts(name, value, ask) {
         if refused.contains(&moved) { continue; }
         if node >= 0 && ask.viewed.contains(&node) { continue; }
-        for v in 0..views.len() as i64 {
-            if nikaia_std::index::get(&views, (v) as usize).roots.contains(&moved) {
-                views[nikaia_std::index::at(v)].roots.insert(name.to_string());
-                views[nikaia_std::index::at(v)].parts.insert(part.to_string());
+        for view in views.iter_mut() {
+            if (*view).roots.contains(&moved) {
+                (*view).roots.insert(name.to_string());
+                (*view).parts.insert(part.to_string());
             }
         }
     }
     let other = match vc_variable(value, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut viewer: Option<String> = None;
-    for v in 0..views.len() as i64 {
-        if nikaia_std::index::get(&views, (v) as usize).roots.contains(&other) {
-            views[nikaia_std::index::at(v)].roots.insert(name.to_string());
-            if nikaia_std::index::get(&views, (v) as usize).used.is_some() && viewer.is_none() { viewer = Some(nikaia_std::index::get(&views, (v) as usize).name.to_string()); }
+    for view in views.iter_mut() {
+        if (*view).roots.contains(&other) {
+            (*view).roots.insert(name.to_string());
+            if (*view).used.is_some() && viewer.is_none() { viewer = Some((*view).name.to_string()); }
         }
     }
     let first = match viewer { Some(__nikaia_value) => __nikaia_value, None => return };

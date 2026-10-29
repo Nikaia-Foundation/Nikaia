@@ -534,9 +534,9 @@ fn type_key(mut entry: TypeContract, key: ref String, value: ref String, n: i64)
             }
             let named = slice(c, 0, colon).trim().clone()
             let held = slice(c, colon + 1, c.len()).trim().clone()
-            for at in 0..<entry.variants.len() {
-                if entry.variants[at].name == named {
-                    entry.variants[at].attributes.push(held.clone())
+            for mut variant in entry.variants {
+                if variant.name == named {
+                    variant.attributes.push(held.clone())
                 }
             }
         }
@@ -553,9 +553,9 @@ fn type_key(mut entry: TypeContract, key: ref String, value: ref String, n: i64)
             let field = slice(c, 0, colon)
             let held = slice(c, colon + 1, c.len())
             let named = field.trim().clone()
-            for at in 0..<entry.fields.len() {
-                if entry.fields[at].name == named {
-                    entry.fields[at].attributes.push(held.trim().clone())
+            for mut known in entry.fields {
+                if known.name == named {
+                    known.attributes.push(held.trim().clone())
                 }
             }
         }

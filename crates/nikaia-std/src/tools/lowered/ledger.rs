@@ -399,7 +399,7 @@ pub(crate) fn type_key(entry: &mut TypeContract, key: &str, value: &str, n: i64)
             if colon < 0 { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: a variant's attribute is `Variant: Value {{ … }}`, not `{}`", n, one)), &"type_key")); }
             let named = slice(&c, 0, colon).trim().to_string();
             let held = slice(&c, colon + 1, c.len() as i64).trim().to_string();
-            for at in 0..entry.variants.len() as i64 { if nikaia_std::index::get(&entry.variants, (at) as usize).name == named { entry.variants[nikaia_std::index::at(at)].attributes.push(held.to_string()); } }
+            for variant in entry.variants.iter_mut() { if (*variant).name == named { (*variant).attributes.push(held.to_string()); } }
         }
     } else if key == "field_attributes" {
         for one in entries(value, n)? {
@@ -409,7 +409,7 @@ pub(crate) fn type_key(entry: &mut TypeContract, key: &str, value: &str, n: i64)
             let field = slice(&c, 0, colon);
             let held = slice(&c, colon + 1, c.len() as i64);
             let named = field.trim().to_string();
-            for at in 0..entry.fields.len() as i64 { if nikaia_std::index::get(&entry.fields, (at) as usize).name == named { entry.fields[nikaia_std::index::at(at)].attributes.push(held.trim().to_string()); } }
+            for known in entry.fields.iter_mut() { if (*known).name == named { (*known).attributes.push(held.trim().to_string()); } }
         }
     } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: unknown key `{}` on a type", n, key)), &"type_key")); }
     Ok(())

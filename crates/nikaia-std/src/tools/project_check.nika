@@ -214,12 +214,12 @@ pub fn project_check_let_refuted_claims_through(mut findings: Vec[CheckFinding],
     if refuted_claims != "warn" {
         return
     }
-    for i in 0..<findings.len() {
-        if findings[i].code != "NK1207" {
+    for mut finding in findings {
+        if finding.code != "NK1207" {
             continue
         }
-        findings[i].severity = CheckSeverity::Warning
-        findings[i].notes.push("`refuted-claims = \"warn\"` lets this build through: the claim is checked when the program runs, and stops it there")
+        finding.severity = CheckSeverity::Warning
+        finding.notes.push("`refuted-claims = \"warn\"` lets this build through: the claim is checked when the program runs, and stops it there")
     }
 }
 
@@ -230,12 +230,12 @@ pub fn project_check_let_unproved_claims_through(mut findings: Vec[CheckFinding]
     if unproved_claims != "warn" {
         return
     }
-    for i in 0..<findings.len() {
-        if findings[i].code != "NK1300" {
+    for mut finding in findings {
+        if finding.code != "NK1300" {
             continue
         }
-        findings[i].severity = CheckSeverity::Warning
-        findings[i].notes.push("`unproved-claims = \"warn\"` lets this build through: the claim is checked when the program runs, and a false one stops it there")
+        finding.severity = CheckSeverity::Warning
+        finding.notes.push("`unproved-claims = \"warn\"` lets this build through: the claim is checked when the program runs, and a false one stops it there")
     }
 }
 
@@ -265,12 +265,12 @@ pub fn project_check_lint_where_nothing_crosses(mut findings: Vec[CheckFinding],
     if user_parallelism != "no" {
         return
     }
-    for i in 0..<findings.len() {
-        if findings[i].code != "NK2501" {
+    for mut finding in findings {
+        if finding.code != "NK2501" {
             continue
         }
-        findings[i].severity = CheckSeverity::Warning
-        findings[i].notes.push("`user_parallelism = no` runs nothing you wrote concurrently, so this build does not perform the crossing - it is reported so that the same source still builds at `yes`")
+        finding.severity = CheckSeverity::Warning
+        finding.notes.push("`user_parallelism = no` runs nothing you wrote concurrently, so this build does not perform the crossing - it is reported so that the same source still builds at `yes`")
     }
 }
 

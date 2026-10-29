@@ -56,9 +56,9 @@ impl CheckState {
     /// A `break` or `continue` of the loop a held value was bound in leaves
     /// its block, with the value.
     pub fn failing_cleanups_left(ref mut self, span: ref Span) {
-        for at in 0..<self.cleanups_pending.len() {
-            if self.cleanups_pending[at].loops == self.flow.loops {
-                self.cleanups_pending[at].leaves.push(span.start as i64)
+        for mut pending in self.cleanups_pending {
+            if pending.loops == self.flow.loops {
+                pending.leaves.push(span.start as i64)
             }
         }
     }

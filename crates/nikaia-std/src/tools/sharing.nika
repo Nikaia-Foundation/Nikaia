@@ -123,10 +123,10 @@ impl Sharing {
 /// Every count plain, because nothing can cross (ADR-312 D10). Applied to the
 /// finished answer, so the duplication sites are kept as they were found.
 pub fn every_count_plain(mut sharing: Sharing) {
-    for i in 0..<sharing.decisions.len() {
-        sharing.decisions[i].count = Count::Plain
-        sharing.decisions[i].why = null
-        sharing.decisions[i].fallback = null
+    for mut decision in sharing.decisions {
+        decision.count = Count::Plain
+        decision.why = null
+        decision.fallback = null
     }
     let mut keys: Vec[String] = []
     for key in sharing.counts.keys() {

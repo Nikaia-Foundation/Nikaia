@@ -24,9 +24,9 @@ impl EmitOut {
         self.entries.push(EmitMapEntry { start, end, source: Span { start: span.start, end: span.end }, unit: 0 });
     }
     pub fn shift_entries(&mut self, at: i64, by: i64) {
-        for k in 0..self.entries.len() as i64 {
-            if nikaia_std::index::get(&self.entries, (k) as usize).start >= at { self.entries[nikaia_std::index::at(k)].start += by; }
-            if nikaia_std::index::get(&self.entries, (k) as usize).end >= at { self.entries[nikaia_std::index::at(k)].end += by; }
+        for entry in self.entries.iter_mut() {
+            if (*entry).start >= at { (*entry).start += by; }
+            if (*entry).end >= at { (*entry).end += by; }
         }
     }
     pub fn append(&mut self, other: EmitOut) {

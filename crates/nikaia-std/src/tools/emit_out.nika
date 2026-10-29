@@ -51,12 +51,12 @@ impl EmitOut {
     /// Text of its own was put in at `at`, `by` bytes long: every entry that
     /// starts or ends at or after it moves along.
     pub fn shift_entries(ref mut self, at: i64, by: i64) {
-        for k in 0..<self.entries.len() {
-            if self.entries[k].start >= at {
-                self.entries[k].start += by
+        for mut entry in self.entries {
+            if entry.start >= at {
+                entry.start += by
             }
-            if self.entries[k].end >= at {
-                self.entries[k].end += by
+            if entry.end >= at {
+                entry.end += by
             }
         }
     }

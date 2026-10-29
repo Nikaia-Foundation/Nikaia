@@ -935,10 +935,10 @@ fn vc_block(block: ref Block, outer: ref Vec[VcView], ask: ref VcAsk, holes_of: 
         // Nested blocks: a loop around a change uses what its body names.
         let mut inner_views = views.clone()
         if looping {
-            for v in 0..<inner_views.len() {
-                let name = inner_views[v].name.clone()
-                if inner_views[v].used == null && vc_mentions_stmt(stmt.node, name, ask, holes_of) {
-                    inner_views[v].used = vc_first_use(stmt.node, name, ask, holes_of) ?? at.clone()
+            for mut view in inner_views {
+                let name = view.name.clone()
+                if view.used == null && vc_mentions_stmt(stmt.node, name, ask, holes_of) {
+                    view.used = vc_first_use(stmt.node, name, ask, holes_of) ?? at.clone()
                 }
             }
         }
@@ -1016,8 +1016,8 @@ fn vc_assign(block: ref Block, j: i64, target: ref Expr, whole: bool, at: ref Sp
     }
     if whole {
         // The name holds other data now.
-        for v in 0..<views.len() {
-            views[v].roots.remove(root)
+        for mut view in views {
+            view.roots.remove(root)
         }
     }
 }
@@ -1032,8 +1032,8 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
         }
     }
     views = left
-    for v in 0..<views.len() {
-        views[v].roots.remove(name)
+    for mut view in views {
+        view.roots.remove(name)
     }
     match vc_view_of(at, name, value, views, ask) {
         null => {}
@@ -1068,10 +1068,10 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
         if node >= 0 && ask.viewed.contains(node) {
             continue
         }
-        for v in 0..<views.len() {
-            if views[v].roots.contains(moved) {
-                views[v].roots.insert(name.clone())
-                views[v].parts.insert(part.clone())
+        for mut view in views {
+            if view.roots.contains(moved) {
+                view.roots.insert(name.clone())
+                view.parts.insert(part.clone())
             }
         }
     }
@@ -1080,11 +1080,11 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
     // its `let`.
     let other = vc_variable(value, ask) ?? return
     let mut viewer: String? = null
-    for v in 0..<views.len() {
-        if views[v].roots.contains(other) {
-            views[v].roots.insert(name.clone())
-            if views[v].used != null && viewer == null {
-                viewer = views[v].name.clone()
+    for mut view in views {
+        if view.roots.contains(other) {
+            view.roots.insert(name.clone())
+            if view.used != null && viewer == null {
+                viewer = view.name.clone()
             }
         }
     }

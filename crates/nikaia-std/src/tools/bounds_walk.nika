@@ -1208,10 +1208,9 @@ fn bounding_shift(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String
     let old = walk.arena.sub(now, by)
     let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
     given.insert(name.clone(), old)
-    for k in 0..<facts.facts.len() {
-        let fact = facts.facts[k]
+    for mut fact in facts.facts {
         if walk.arena.mentions(fact, name) {
-            facts.facts[k] = walk.arena.substitute(fact, given)
+            fact = walk.arena.substitute(fact, given)
         }
     }
 }
@@ -2612,10 +2611,9 @@ fn bounding_loop_change(mut walk: BoundsWalk, mut facts: BoundsFacts, changed: r
         let e = walk.arena.var(entry)
         let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
         given.insert(x.clone(), e)
-        for k in 0..<facts.facts.len() {
-            let fact = facts.facts[k]
+        for mut fact in facts.facts {
             if walk.arena.mentions(fact, x) {
-                facts.facts[k] = walk.arena.substitute(fact, given)
+                fact = walk.arena.substitute(fact, given)
             }
         }
         entries.push((x.clone(), entry))

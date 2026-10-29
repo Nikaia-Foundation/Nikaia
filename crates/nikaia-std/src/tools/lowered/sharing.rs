@@ -68,10 +68,10 @@ impl Sharing {
 }
 
 pub fn every_count_plain(sharing: &mut Sharing) {
-    for i in 0..sharing.decisions.len() as i64 {
-        sharing.decisions[nikaia_std::index::at(i)].count = Count::Plain;
-        sharing.decisions[nikaia_std::index::at(i)].why = None;
-        sharing.decisions[nikaia_std::index::at(i)].fallback = None;
+    for decision in sharing.decisions.iter_mut() {
+        (*decision).count = Count::Plain;
+        (*decision).why = None;
+        (*decision).fallback = None;
     }
     let mut keys: Vec<String> = vec![];
     for key in sharing.counts.keys() { keys.push(key.to_string()); }
