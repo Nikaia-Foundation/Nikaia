@@ -45,3 +45,23 @@ fn key(t: String) -> String throws {
 pub fn keyed(t: String) -> (String, String) {
     return ((key(t) catch { "" }), t)
 }
+
+pub fn long_list(a: String) -> Vec[(String, String)] {
+    return [
+        (TARGET_VARIABLE_NAME.to_string(), a.clone()),
+        (TARGET_VARIABLE_NAME.to_string(), a.clone()),
+        (TARGET_VARIABLE_NAME.to_string(), a.clone()),
+        (TARGET_VARIABLE_NAME.to_string(), a.clone()),
+    ].iter().collect()
+}
+
+pub fn both(a: String) -> (String, String) {
+    return (a.clone(), a.clone())
+}
+
+pub fn level(word: String) -> String {
+    return match word {
+        "error" | "warn" => word,
+        else => "",
+    }
+}

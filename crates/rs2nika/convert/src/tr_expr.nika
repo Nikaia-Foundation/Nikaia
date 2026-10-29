@@ -731,9 +731,13 @@ impl TrEm {
         if m == "to_string" && r.starts_with("\"") && a.len() == 0 {
             return r
         }
-        // R183: a text parameter is a text already
+        // R183: a text parameter read once is a text already; read more
+        // often, Rust's copy is a clone
         if (m == "to_string" || m == "to_owned") && a.len() == 0 && self.texts.contains(r) {
             return r
+        }
+        if (m == "to_string" || m == "to_owned") && a.len() == 0 && self.shared_texts.contains(r) {
+            return f"{r}.clone()"
         }
         // `text::parse_i64` hands back an option already
         if m == "ok" && a.len() == 0 && r.starts_with("text::parse_") {

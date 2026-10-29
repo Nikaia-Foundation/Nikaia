@@ -195,7 +195,9 @@ impl TrEm {
         let mut ps: Vec[String] = []
         let saved_optional = self.optional.clone()
         let saved_texts = self.texts.clone()
+        let saved_shared = self.shared_texts.clone()
         self.texts = collections::BTreeSet()
+        self.shared_texts = collections::BTreeSet()
         let mut has_self = false
         for p in self.nodes(params_n) {
             if self.t.is(p, "SELF_PARAM") {
@@ -223,7 +225,11 @@ impl TrEm {
             if ty.ends_with("?") {
                 self.optional.insert(pname.clone())
             }
-            if ty == "String" || ty == "ref String" || ty == "mut String" {
+            // copied once, its `to_string()` is the text itself; copied more
+            // often, each copy is a `clone()`
+            if (ty == "String" || ty == "ref String" || ty == "mut String") && self.copies_of(self.t.kid(n, "BLOCK_EXPR"), pname) > 1 {
+                self.shared_texts.insert(pname.clone())
+            } else if ty == "String" || ty == "ref String" || ty == "mut String" {
                 self.texts.insert(pname.clone())
             }
             if is_mut || self.t.is(pat_n, "IDENT_PAT") && self.t.has_tok(pat_n, "MUT_KW") {
@@ -341,6 +347,7 @@ impl TrEm {
         self.unit = saved_unit
         self.optional = saved_optional
         self.texts = saved_texts.clone()
+        self.shared_texts = saved_shared.clone()
         return out
     }
 

@@ -40,6 +40,8 @@ pub struct TrEm {
     pub optional: collections::BTreeSet[String],
     /// the parameters that are texts (`&str`, `String`): R183
     pub texts: collections::BTreeSet[String],
+    /// text parameters read more than once: each `to_string()` is a clone
+    pub shared_texts: collections::BTreeSet[String],
     pub todos: i64,
     /// the file's own top-level functions (a `prefix` renames them)
     pub fns: collections::BTreeSet[String],
@@ -82,6 +84,7 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
         margs: collections::BTreeMap(),
         optional: collections::BTreeSet(),
         texts: collections::BTreeSet(),
+        shared_texts: collections::BTreeSet(),
         todos: 0,
         fns: collections::BTreeSet(),
         hoisted: [],
@@ -162,6 +165,38 @@ impl TrEm {
             }
         }
         return false
+    }
+
+    /// How often `n` copies the variable `name`: `name.to_string()` or
+    /// `name.to_owned()`, inside a macro's arguments (tokens) too.
+    fn copies_of(ref self, n: i64, name: ref String) -> i64 {
+        if n < 0 || self.t.nodes[n].tok {
+            return 0
+        }
+        let mut count = 0
+        if self.t.is(n, "METHOD_CALL_EXPR") {
+            let m = self.src(self.t.kid(n, "NAME_REF"))
+            if (m == "to_string" || m == "to_owned") && self.t.is(self.t.nth(n, 0), "PATH_EXPR") && self.src(self.t.nth(n, 0)) == name {
+                count += 1
+            }
+        }
+        if self.t.is(n, "TOKEN_TREE") {
+            let mut toks: Vec[String] = []
+            for k in self.t.nodes[n].kids {
+                if self.t.nodes[k].tok && self.t.nodes[k].kind != "WHITESPACE" && self.t.nodes[k].kind != "COMMENT" {
+                    toks.push(self.t.nodes[k].text.clone())
+                }
+            }
+            for i in 0..<toks.len() {
+                if i + 2 < toks.len() && toks[i] == name && toks[i + 1] == "." && (toks[i + 2] == "to_string" || toks[i + 2] == "to_owned") && (i == 0 || toks[i - 1] != ".") {
+                    count += 1
+                }
+            }
+        }
+        for k in self.t.nodes[n].kids {
+            count += self.copies_of(k, name)
+        }
+        return count
     }
 
     /// The name a `PATH` / `PATH_EXPR` / `PATH_TYPE` ends in.

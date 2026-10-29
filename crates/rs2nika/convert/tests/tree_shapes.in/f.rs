@@ -35,3 +35,25 @@ fn key(t: &str) -> Result<String> {
 fn keyed(t: &str) -> (String, OsString) {
     (key(t).unwrap_or_default(), OsString::from(t))
 }
+
+fn long_list(a: &str) -> Vec<(String, String)> {
+    vec![
+        (TARGET_VARIABLE_NAME.to_string(), a.to_string()),
+        (TARGET_VARIABLE_NAME.to_string(), a.to_string()),
+        (TARGET_VARIABLE_NAME.to_string(), a.to_string()),
+        (TARGET_VARIABLE_NAME.to_string(), a.to_string()),
+    ]
+    .into_iter()
+    .collect()
+}
+
+fn both(a: &str) -> (String, String) {
+    (a.to_string(), a.to_string())
+}
+
+fn level(word: &str) -> String {
+    match word {
+        "error" | "warn" => word.to_string(),
+        _ => String::new(),
+    }
+}

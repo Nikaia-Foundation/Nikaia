@@ -2809,7 +2809,7 @@ fn rs2nika_tail_returns(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Stri
 
 fn rs2nika_at_body(l: String, body: String, deeper: String) -> bool {
     let st: String = l.trim().clone()
-    return l.starts_with(body) && !l.starts_with(deeper) && !st.starts_with("}") && !st.starts_with("//")
+    return l.starts_with(body) && !l.starts_with(deeper) && !st.starts_with("}") && !st.starts_with("]") && !st.starts_with(")") && !st.starts_with("//")
 }
 
 /// The statements that are not a value: `return`, `let`, loops, an assignment.
