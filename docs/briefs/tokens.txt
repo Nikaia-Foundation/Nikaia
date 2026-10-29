@@ -139,3 +139,4 @@
 /home/user/Nikaia/docs/briefs/b-fixforward-fmt-tuple-closure.md 459614 16
 /home/user/Nikaia/docs/briefs/b943-literal-local-push.md 5820047 81
 /home/user/Nikaia/docs/briefs/architect-task.md 1216073 34
+/home/user/Nikaia/docs/briefs/b934-closed-by-hand.md 2490444 46
