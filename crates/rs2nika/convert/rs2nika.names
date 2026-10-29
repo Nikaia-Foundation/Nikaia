@@ -118,3 +118,15 @@ check::Kept { = ProjectCheckKept { # `check::Kept` stays Rust (lane 2); project.
 
 [hosts project_check_]
 host = H: ProjectCheckHost # P5d: the walks and the renderer stay Rust behind project.rs's host
+
+[forms project_lower_]
+program.could_promise() = host.could_promise() # the program stays Rust, held by project.rs's LowerHost (P5b)
+program.lost_sync( = host.lost_sync( # the same: what a `pub` function lost, asked of the held program (P5b)
+host.env_var(WRAPPER_MARKER) != null || WARNED.with(fn(warned) { warned.get() }) = host.in_the_wrapper() # the wrapper's marker and the thread-local stay Rust (P5b, as P5d)
+eprint( = host.eprint( # std has no `eprint` without a newline (P5b, as P5d)
+reads.unused() = host.unused_reads() # `assets::Reads` stays Rust, the host's (P5b)
+changed_contracts( = host.changed_contracts( # the prover's `implies` and the dependencies filter stay Rust, behind the host (P5b)
+Ledger::parse( = host.parse_ledger( # `Ledger::parse` is the compiler's, behind the host (P5b)
+
+[hosts project_lower_]
+host = H: ProjectLowerHost # P5b: the program, the cache, the check and the emitter stay Rust behind project.rs's LowerHost

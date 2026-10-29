@@ -21,12 +21,14 @@
 //! switches were chosen, and what the lowering does.
 
 use crate::contracts::LedgerOps;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use nikaia_std::rt::exec::block_on;
 use nikaia_std::tools::project_check;
+use nikaia_std::tools::project_lower;
 use nikaia_std::tools::project_members::{
     self, ProjectMembersForeignHost, ProjectMembersHost, ProjectMembersManifest,
     ProjectMembersMember, ProjectMembersRefusal, project_members_canonical as canonical,
@@ -764,307 +766,41 @@ pub fn lower_reading(
     };
 
     // A cache that cannot be opened is a slower build, never a failed one
-    // (D12).
-    let mut cache = if no_cache {
-        None
-    } else {
-        match Cache::open(
-            &layout.lock,
-            &layout.store,
-            env!("NIKAIA_RUSTC_VERSION"),
-            env!("NIKAIA_COMPILER"),
-        ) {
-            Ok(cache) => Some(cache),
-            Err(error) => {
-                eprintln!("warning: the build cache is unavailable: {error:#}");
-                None
-            }
+    // (D12). The steps from here on are Nikaia (`project_lower_reading`,
+    // ADR-294, #125, P5b); the program, the cache, the check and the emitter
+    // stay Rust behind [`LowerHost`].
+    let host = LowerHost {
+        input,
+        settings,
+        no_cache,
+        packages,
+        unit,
+        layout: &layout,
+        reads: &reads,
+        choices: RefCell::new(Some(choices)),
+        program: RefCell::new(None),
+        key_source: RefCell::new(String::new()),
+        cache: RefCell::new(None),
+        exported: RefCell::new(None),
+        foreign: RefCell::new(None),
+        book: RefCell::new(None),
+        checked_facts: RefCell::new(BTreeMap::new()),
+        published: RefCell::new(BTreeMap::new()),
+        proofs: RefCell::new(None),
+        failed: RefCell::new(None),
+    };
+    let out = match project_lower::project_lower_reading(&host, layout.in_project) {
+        Ok(out) => out,
+        Err(error) => {
+            return Err(host
+                .failed
+                .into_inner()
+                .unwrap_or_else(|| anyhow!("{error}")));
         }
     };
-
-    // Part I 9.1: a package is a directory, so a build is every `.nika` beside
-    // the entry - and the cache cannot be asked about a program until the
-    // program is known.
-    //
-    // **Outside a project it is the one file.** A package is a directory *of a
-    // project*, which is what a `nikaia.toml` declares; a directory of loose
-    // examples is a directory of programs, and compiling one of them must not
-    // pull in the other ten (ADR-286 D1, `modules::collect_one`).
-    // **An option's computed default is compiled where this build compiles
-    // its `comptime`s** (ADR-321 D1, ADR-318 D1): the ledger inferred while
-    // the program is read records the value.
-    let program = crate::comptime_run::defaults_compiled_in(reads.workshop().place(), || {
-        match (settings.words.tests, layout.in_project) {
-            (true, in_project) => modules::Program::read_for_tests(input, packages, in_project),
-            (false, true) => modules::Program::read_with(input, packages),
-            (false, false) => modules::Program::read_one(input),
-        }
-    })?;
-    let mut program = program;
-    program.entry_shown_as = SHOWN_AS.with(|cell| cell.borrow().clone());
-    let key_source = program.sources().join("\n// --- unit ---\n");
-    // **What the output names is part of the key** (0.0.239): the abort table
-    // names each file as it was handed to the compiler (ADR-300 D9), so a
-    // lowering cached for `/abs/one.nika` and reused for `one.nika` named the
-    // first path in the second program's aborts. A choice, and not part of
-    // the source, because the source's hash is the lockfile's.
-    let choices = choices.naming(program.shown_paths().join("\n"));
-    let sources: Vec<PathBuf> = program.units.iter().map(|unit| unit.path.clone()).collect();
-    // Read off the program, which every lowering builds - a cache hit too - so
-    // the note is the same whether the emitter ran or not.
-    let mut notes = program.could_promise();
-    // The packages this program depends on: their entries in the ledger are
-    // theirs, and a contract they changed is said in their own build.
-    let dependencies: BTreeSet<String> = program.as_its_own.keys().cloned().collect();
-    // **What a `pub` function lost since the ledger was committed** (ADR-288
-    // D5), against the project's committed file, which this lowering has not
-    // written yet. Outside a project there is no committed ledger to have lost
-    // anything against.
-    if layout.in_project
-        && let Some(committed) = std::fs::read_to_string(layout.root.join("nikaia.contracts"))
-            .ok()
-            .and_then(|text| Ledger::parse(&text).ok())
-    {
-        notes.insert_str(0, &program.lost_sync(&committed));
-    }
-
-    // **Read off the program before the lowering takes it**: what the entry
-    // points are is the program's, and the wrappers are the same either way.
-    let exported = match settings.library() {
-        true => {
-            let package = Manifest::read(&layout.root.join("nikaia.toml"))
-                .ok()
-                .and_then(|m| m.package_name().map(str::to_string))
-                .unwrap_or_else(|| settings.words.symbol_prefix.clone());
-            crate::cexport::export(
-                &program,
-                &settings.words.symbol_prefix,
-                &package,
-                settings.words.user_parallelism == "yes",
-                &settings.words.target,
-            )?
-        }
-        false => None,
-    };
-
-    // An entry that predates an artifact this build needs is a miss, not a
-    // gap: adding an output stays a safe change.
-    let cached = cache
-        .as_ref()
-        .and_then(|cache| cache.lookup(&unit, &key_source, &choices, &layout.root))
-        .filter(|artifacts| artifacts.has_all(&[RUST, CONTRACTS, DERIVED, WARNINGS]));
-    let reused = cached.is_some();
-    let mut proofs = None;
-
-    let (rust, ledger, derived) = match &cached {
-        Some(artifacts) => {
-            // **A warning is the program's, not the build's** (as Cargo
-            // replays a fresh crate's): what the check said when this
-            // lowering was made is said again, under the same rule of once.
-            let in_the_wrapper =
-                std::env::var_os(WRAPPER_MARKER).is_some() || WARNED.with(|warned| warned.get());
-            if !in_the_wrapper {
-                eprint!("{}", artifacts.get(WARNINGS).expect("checked above"));
-            }
-            (
-                artifacts.get(RUST).expect("checked above").to_string(),
-                artifacts.get(CONTRACTS).expect("checked above").to_string(),
-                artifacts.get(DERIVED).expect("checked above").to_string(),
-            )
-        }
-        None => {
-            // Every unit is checked against the *program's* contracts, not its
-            // own: `utils::double` is a name `main.nika` may write, and the
-            // type checker resolves it in the one place any name is resolved.
-            let modules = program.package_names();
-            // **Read once per lowering and not per unit** (ADR-290 D1): the
-            // boundary is the build's, and every unit of it stands at the same
-            // one. `layout.root` is the project this input belongs to, and
-            // outside a project there is no manifest and therefore nothing
-            // declared.
-            let foreign = match layout.in_project {
-                true => foreign_of(&layout.root),
-                false => project_members::project_members_no_foreign(),
-            };
-            // **The committed ledger against the one this build inferred**
-            // ([ADR-308](../../docs/specification/adr/adr-308.md) D11), read
-            // once for the package rather than once per unit: the question is
-            // whether a *contract* moved, and a contract belongs to the
-            // package.
-            let newly = newly(&layout.root, &program.contracts);
-            // Collected once for the whole package, because every unit is
-            // checked against the same program (`ADR-286`) and a `comptime` in
-            // any of them may call into any other.
-            let beside: Vec<&crate::parser::Parsed> =
-                program.units.iter().map(|unit| &unit.parsed).collect();
-            let around = Around {
-                foreign: &foreign,
-                newly: &newly,
-                beside: &beside,
-                reads: &reads,
-            };
-            // **A dependency's unit is checked as its own package writes it**
-            // (issue #159). The program's
-            // contracts are the right ledger for the program's own files and the
-            // wrong one for a package's: absorbing qualified its keys *and the
-            // types inside them*, and the package's file writes the bare word.
-            // `Program::as_its_own` is the ledger that package was inferred
-            // with, kept rather than reconstructed.
-            //
-            // **And the program's own files against what each dependency
-            // promised** (ADR-288 D28), not what its body happens to be: an
-            // `"inferred"` `sync` reads as *may pause* across the boundary.
-            let promised = program.contracts_as_promised();
-            // **The prover's recorded answers** ([ADR-270](../../docs/specification/adr/adr-270.md)
-            // D4, D21, #448): open while the program is checked and lowered,
-            // which is where every question is asked, and written back beside
-            // `nikaia.contracts` after. Outside a project there is no file.
-            let book = match layout.in_project {
-                true => crate::proofs::Book::read(&layout.root),
-                false => crate::proofs::Book::default(),
-            };
-            let mut warnings = String::new();
-            // **The check's facts are the emitter's** where the check asked
-            // exactly what `check::propagation_against` asks: the unit's own
-            // ledger the emitter's, no module and no contract that moved
-            // (#727).
-            let facts_reusable = foreign.packages(&modules).is_empty()
-                && newly.throws.is_empty()
-                && newly.keeps.is_empty()
-                && promised == program.contracts;
-            let mut checked_facts = BTreeMap::new();
-            let (checked, book) = crate::proofs::with_book(book, || -> Result<()> {
-                for (at, unit) in program.units.iter().enumerate() {
-                    let contracts = match &unit.package {
-                        Some(package) => program
-                            .as_its_own
-                            .get(package)
-                            .unwrap_or(&program.contracts),
-                        None => &promised,
-                    };
-                    let mut facts = None;
-                    let keep = facts_reusable && unit.package.is_none();
-                    warnings += &crate::proofs::for_unit(
-                        &unit.path,
-                        &unit.source,
-                        unit.package.is_some(),
-                        || {
-                            check(
-                                &unit.parsed,
-                                contracts,
-                                &modules,
-                                around,
-                                &unit.path,
-                                &unit.source,
-                                &settings.words.user_parallelism,
-                                &settings.words.refuted_claims,
-                                &settings.words.unproved_claims,
-                                settings.library(),
-                                keep.then_some(&mut facts),
-                            )
-                        },
-                    )?;
-                    if let Some(facts) = facts {
-                        checked_facts.insert(at, facts);
-                    }
-                }
-                Ok(())
-            });
-            checked?;
-            let (lowered, book) = crate::proofs::with_book(book, || -> Result<_> {
-                let lowered = {
-                    // **The described crates' boundary reaches the emitter**
-                    // (ADR-290 D20), which the checker above already read it for.
-                    let mut program = program;
-                    program.described = foreign.descriptions.clone();
-                    program.checked_facts = checked_facts;
-                    let lowered = program.emit_reading(settings.build, &reads)?;
-                    (lowered, program)
-                };
-                Ok(lowered)
-            });
-            let (lowered, mut program) = lowered?;
-            if layout.in_project {
-                proofs = Some(book);
-            }
-            // **The contract the `assert`s make** (ADR-269 D18): the prover
-            // decided it while the program was checked, and the ledger
-            // publishes it.
-            for (key, published) in &lowered.published {
-                if let Some(contract) = program.contracts.functions.get_mut(key) {
-                    // **An expression function's `ensures` stays** (ADR-314
-                    // D3): its body is one `return`, so it has no `assert` of
-                    // its own to publish one, only preconditions carried back.
-                    let expression = match published.ensures.is_empty() {
-                        true => std::mem::take(&mut contract.ensures)
-                            .into_iter()
-                            .zip(std::mem::take(&mut contract.from))
-                            .collect(),
-                        false => Vec::new(),
-                    };
-                    contract.requires = published.requires.clone();
-                    contract.ensures = published.ensures.clone();
-                    contract.from = published.from.clone();
-                    contract.inferred = published.inferred.clone();
-                    for (ensures, from) in expression {
-                        contract.ensures.push(ensures);
-                        contract.from.push(from);
-                    }
-                }
-            }
-            let ledger = program.contracts.render();
-            let derived = program.contracts.render_derived();
-
-            // **An entry nothing read** ([ADR-310](../../docs/specification/adr/adr-310.md)
-            // D8): a list that may hold names nothing uses decays into
-            // *everything we ever needed*, which is how an allowlist stops
-            // being read. Said at the end of the build, where the whole set is
-            // known, and a warning rather than a refusal — the line is a
-            // permission that is no longer used, not a program that is wrong.
-            for entry in reads.unused() {
-                let line = format!("warning: the allowlist names `{entry}` and nothing read it\n");
-                eprint!("{line}");
-                warnings.push_str(&line);
-            }
-
-            if let Some(cache) = &mut cache {
-                // **What the build actually read** (ADR-021 D13, ADR-310 D10).
-                // An empty map is correct and usual: with no list in effect
-                // nothing can be read at all.
-                let artifacts = Artifacts::new()
-                    .with(RUST, &lowered.rust)
-                    .with(CONTRACTS, &ledger)
-                    .with(DERIVED, &derived)
-                    .with(WARNINGS, &warnings);
-                let stored = cache
-                    .record(&unit, &key_source, reads.taken(), &choices, &artifacts)
-                    .and_then(|()| cache.save());
-                if let Err(error) = stored {
-                    // The outputs are in hand; only the next build is slower.
-                    eprintln!("warning: the build cache could not be updated: {error:#}");
-                }
-            }
-            (lowered.rust, ledger, derived)
-        }
-    };
-
-    // **A contract that changed in the breaking direction** (ADR-269 D19),
-    // against the committed file this lowering has not written yet: the new
-    // ledger is read back, whether it came from the cache or not.
-    if layout.in_project
-        && let Some(committed) = std::fs::read_to_string(layout.root.join("nikaia.contracts"))
-            .ok()
-            .and_then(|text| Ledger::parse(&text).ok())
-        && let Ok(now) = Ledger::parse(&ledger)
-    {
-        notes.insert_str(
-            0,
-            &crate::prove::changed_contracts(&now, &committed, |key| {
-                !key.split_once("::")
-                    .is_some_and(|(package, _)| dependencies.contains(package))
-            }),
-        );
-    }
+    let proofs = host.proofs.into_inner();
+    let exported = host.exported.into_inner();
+    let (rust, ledger) = (out.rust, out.ledger);
 
     // **A library's entry points get their wrappers and their header**
     // (ADR-284 D4, D7, D12), whether the cache answered or not; the header
@@ -1095,15 +831,394 @@ pub fn lower_reading(
     Ok(Lowered {
         rust,
         ledger,
-        derived,
-        sources,
-        reused,
-        notes,
+        derived: out.derived,
+        sources: out.sources,
+        reused: out.reused,
+        notes: out.notes,
         proofs,
         header,
         python,
         node,
     })
+}
+
+/// What `project_lower_reading` asks of the compiler (`tools/project_lower.nika`,
+/// P5b): the program, the cache and the build's choices it holds, the check
+/// and the emitter over them, and what they leave for [`Lowered`]. A refusal
+/// of a `throws` method is kept in `failed` and handed back unchanged.
+struct LowerHost<'a> {
+    input: &'a Path,
+    settings: &'a Settings,
+    no_cache: bool,
+    packages: &'a [modules::Dependency],
+    unit: String,
+    layout: &'a Layout,
+    reads: &'a assets::Reads,
+    /// The key's choices; named with the program's paths once it is read.
+    choices: RefCell<Option<Choices>>,
+    program: RefCell<Option<modules::Program>>,
+    key_source: RefCell<String>,
+    cache: RefCell<Option<Cache>>,
+    exported: RefCell<Option<crate::cexport::Exported>>,
+    /// The boundary the check read, for the emitter.
+    foreign: RefCell<Option<Foreign>>,
+    /// The prover's book between the check and the emitter.
+    book: RefCell<Option<crate::proofs::Book>>,
+    checked_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
+    published: RefCell<BTreeMap<String, crate::prove::Published>>,
+    /// The book as the lowering left it, in a project.
+    proofs: RefCell<Option<crate::proofs::Book>>,
+    failed: RefCell<Option<anyhow::Error>>,
+}
+
+type HostResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+impl LowerHost<'_> {
+    /// `result` for the Nikaia side, its error kept to be handed back.
+    fn held<T>(&self, result: Result<T>) -> HostResult<T> {
+        result.map_err(|error| {
+            let said = format!("{error:#}");
+            *self.failed.borrow_mut() = Some(error);
+            said.into()
+        })
+    }
+
+    fn program(&self) -> std::cell::Ref<'_, modules::Program> {
+        std::cell::Ref::map(self.program.borrow(), |program| {
+            program.as_ref().expect("the program is read first")
+        })
+    }
+
+    fn choices(&self) -> std::cell::Ref<'_, Choices> {
+        std::cell::Ref::map(self.choices.borrow(), |choices| {
+            choices.as_ref().expect("the choices are set")
+        })
+    }
+}
+
+impl project_lower::ProjectLowerHost for LowerHost<'_> {
+    fn read_program(&self) -> HostResult<()> {
+        // Part I 9.1: a package is a directory, so a build is every `.nika`
+        // beside the entry - and the cache cannot be asked about a program
+        // until the program is known.
+        //
+        // **Outside a project it is the one file.** A package is a directory *of a
+        // project*, which is what a `nikaia.toml` declares; a directory of loose
+        // examples is a directory of programs, and compiling one of them must not
+        // pull in the other ten (ADR-286 D1, `modules::collect_one`).
+        // **An option's computed default is compiled where this build compiles
+        // its `comptime`s** (ADR-321 D1, ADR-318 D1): the ledger inferred while
+        // the program is read records the value.
+        let (input, packages) = (self.input, self.packages);
+        let program =
+            crate::comptime_run::defaults_compiled_in(self.reads.workshop().place(), || {
+                match (self.settings.words.tests, self.layout.in_project) {
+                    (true, in_project) => {
+                        modules::Program::read_for_tests(input, packages, in_project)
+                    }
+                    (false, true) => modules::Program::read_with(input, packages),
+                    (false, false) => modules::Program::read_one(input),
+                }
+            });
+        let mut program = self.held(program)?;
+        program.entry_shown_as = SHOWN_AS.with(|cell| cell.borrow().clone());
+        *self.key_source.borrow_mut() = program.sources().join("\n// --- unit ---\n");
+        // **What the output names is part of the key** (0.0.239): the abort table
+        // names each file as it was handed to the compiler (ADR-300 D9), so a
+        // lowering cached for `/abs/one.nika` and reused for `one.nika` named the
+        // first path in the second program's aborts. A choice, and not part of
+        // the source, because the source's hash is the lockfile's.
+        let choices = self
+            .choices
+            .borrow_mut()
+            .take()
+            .expect("the choices are set");
+        *self.choices.borrow_mut() = Some(choices.naming(program.shown_paths().join("\n")));
+        *self.program.borrow_mut() = Some(program);
+        Ok(())
+    }
+
+    fn open_cache(&self) {
+        if self.no_cache {
+            return;
+        }
+        match Cache::open(
+            &self.layout.lock,
+            &self.layout.store,
+            env!("NIKAIA_RUSTC_VERSION"),
+            env!("NIKAIA_COMPILER"),
+        ) {
+            Ok(cache) => *self.cache.borrow_mut() = Some(cache),
+            Err(error) => eprintln!("warning: the build cache is unavailable: {error:#}"),
+        }
+    }
+
+    fn source_paths(&self) -> Vec<PathBuf> {
+        self.program()
+            .units
+            .iter()
+            .map(|unit| unit.path.clone())
+            .collect()
+    }
+
+    fn could_promise(&self) -> String {
+        self.program().could_promise()
+    }
+
+    fn committed_ledger(&self) -> Option<Ledger> {
+        std::fs::read_to_string(self.layout.root.join("nikaia.contracts"))
+            .ok()
+            .and_then(|text| Ledger::parse(&text).ok())
+    }
+
+    fn lost_sync(&self, committed: &Ledger) -> String {
+        self.program().lost_sync(committed)
+    }
+
+    fn export(&self) -> HostResult<()> {
+        let settings = self.settings;
+        if !settings.library() {
+            return Ok(());
+        }
+        let package = Manifest::read(&self.layout.root.join("nikaia.toml"))
+            .ok()
+            .and_then(|m| m.package_name().map(str::to_string))
+            .unwrap_or_else(|| settings.words.symbol_prefix.clone());
+        let exported = crate::cexport::export(
+            &self.program(),
+            &settings.words.symbol_prefix,
+            &package,
+            settings.words.user_parallelism == "yes",
+            &settings.words.target,
+        );
+        *self.exported.borrow_mut() = self.held(exported)?;
+        Ok(())
+    }
+
+    fn cached(&self) -> Option<project_lower::ProjectLowerArtifacts> {
+        let cache = self.cache.borrow();
+        let artifacts = cache
+            .as_ref()?
+            .lookup(
+                &self.unit,
+                &self.key_source.borrow(),
+                &self.choices(),
+                &self.layout.root,
+            )
+            .filter(|artifacts| artifacts.has_all(&[RUST, CONTRACTS, DERIVED, WARNINGS]))?;
+        let get = |name| artifacts.get(name).expect("checked above").to_string();
+        Some(project_lower::ProjectLowerArtifacts {
+            rust: get(RUST),
+            ledger: get(CONTRACTS),
+            derived: get(DERIVED),
+            warnings: get(WARNINGS),
+        })
+    }
+
+    fn record(&self, made: &project_lower::ProjectLowerArtifacts) {
+        let mut cache = self.cache.borrow_mut();
+        let Some(cache) = cache.as_mut() else {
+            return;
+        };
+        // An empty map is correct and usual: with no list in effect nothing
+        // can be read at all.
+        let artifacts = Artifacts::new()
+            .with(RUST, &made.rust)
+            .with(CONTRACTS, &made.ledger)
+            .with(DERIVED, &made.derived)
+            .with(WARNINGS, &made.warnings);
+        let stored = cache
+            .record(
+                &self.unit,
+                &self.key_source.borrow(),
+                self.reads.taken(),
+                &self.choices(),
+                &artifacts,
+            )
+            .and_then(|()| cache.save());
+        if let Err(error) = stored {
+            // The outputs are in hand; only the next build is slower.
+            eprintln!("warning: the build cache could not be updated: {error:#}");
+        }
+    }
+
+    fn in_the_wrapper(&self) -> bool {
+        std::env::var_os(WRAPPER_MARKER).is_some() || WARNED.with(|warned| warned.get())
+    }
+
+    fn eprint(&self, text: &str) {
+        eprint!("{text}");
+    }
+
+    fn check_units(&self) -> HostResult<String> {
+        let (layout, settings) = (self.layout, self.settings);
+        let program = self.program();
+        // Every unit is checked against the *program's* contracts, not its
+        // own: `utils::double` is a name `main.nika` may write, and the
+        // type checker resolves it in the one place any name is resolved.
+        let modules = program.package_names();
+        // **Read once per lowering and not per unit** (ADR-290 D1): the
+        // boundary is the build's, and every unit of it stands at the same
+        // one. `layout.root` is the project this input belongs to, and
+        // outside a project there is no manifest and therefore nothing
+        // declared.
+        let foreign = match layout.in_project {
+            true => foreign_of(&layout.root),
+            false => project_members::project_members_no_foreign(),
+        };
+        // **The committed ledger against the one this build inferred**
+        // ([ADR-308](../../docs/specification/adr/adr-308.md) D11), read
+        // once for the package rather than once per unit: the question is
+        // whether a *contract* moved, and a contract belongs to the
+        // package.
+        let newly = newly(&layout.root, &program.contracts);
+        // Collected once for the whole package, because every unit is
+        // checked against the same program (`ADR-286`) and a `comptime` in
+        // any of them may call into any other.
+        let beside: Vec<&crate::parser::Parsed> =
+            program.units.iter().map(|unit| &unit.parsed).collect();
+        let around = Around {
+            foreign: &foreign,
+            newly: &newly,
+            beside: &beside,
+            reads: self.reads,
+        };
+        // **A dependency's unit is checked as its own package writes it**
+        // (issue #159). The program's
+        // contracts are the right ledger for the program's own files and the
+        // wrong one for a package's: absorbing qualified its keys *and the
+        // types inside them*, and the package's file writes the bare word.
+        // `Program::as_its_own` is the ledger that package was inferred
+        // with, kept rather than reconstructed.
+        //
+        // **And the program's own files against what each dependency
+        // promised** (ADR-288 D28), not what its body happens to be: an
+        // `"inferred"` `sync` reads as *may pause* across the boundary.
+        let promised = program.contracts_as_promised();
+        // **The prover's recorded answers** ([ADR-270](../../docs/specification/adr/adr-270.md)
+        // D4, D21, #448): open while the program is checked and lowered,
+        // which is where every question is asked, and written back beside
+        // `nikaia.contracts` after. Outside a project there is no file.
+        let book = match layout.in_project {
+            true => crate::proofs::Book::read(&layout.root),
+            false => crate::proofs::Book::default(),
+        };
+        let mut warnings = String::new();
+        // **The check's facts are the emitter's** where the check asked
+        // exactly what `check::propagation_against` asks: the unit's own
+        // ledger the emitter's, no module and no contract that moved
+        // (#727).
+        let facts_reusable = foreign.packages(&modules).is_empty()
+            && newly.throws.is_empty()
+            && newly.keeps.is_empty()
+            && promised == program.contracts;
+        let mut checked_facts = BTreeMap::new();
+        let (checked, book) = crate::proofs::with_book(book, || -> Result<()> {
+            for (at, unit) in program.units.iter().enumerate() {
+                let contracts = match &unit.package {
+                    Some(package) => program
+                        .as_its_own
+                        .get(package)
+                        .unwrap_or(&program.contracts),
+                    None => &promised,
+                };
+                let mut facts = None;
+                let keep = facts_reusable && unit.package.is_none();
+                warnings += &crate::proofs::for_unit(
+                    &unit.path,
+                    &unit.source,
+                    unit.package.is_some(),
+                    || {
+                        check(
+                            &unit.parsed,
+                            contracts,
+                            &modules,
+                            around,
+                            &unit.path,
+                            &unit.source,
+                            &settings.words.user_parallelism,
+                            &settings.words.refuted_claims,
+                            &settings.words.unproved_claims,
+                            settings.library(),
+                            keep.then_some(&mut facts),
+                        )
+                    },
+                )?;
+                if let Some(facts) = facts {
+                    checked_facts.insert(at, facts);
+                }
+            }
+            Ok(())
+        });
+        self.held(checked)?;
+        *self.book.borrow_mut() = Some(book);
+        *self.checked_facts.borrow_mut() = checked_facts;
+        *self.foreign.borrow_mut() = Some(foreign);
+        Ok(warnings)
+    }
+
+    fn emit(&self) -> HostResult<String> {
+        let mut program = self
+            .program
+            .borrow_mut()
+            .take()
+            .expect("the program is read first");
+        // **The described crates' boundary reaches the emitter**
+        // (ADR-290 D20), which the checker above already read it for.
+        program.described = self
+            .foreign
+            .borrow()
+            .as_ref()
+            .expect("the program is checked first")
+            .descriptions
+            .clone();
+        program.checked_facts = std::mem::take(&mut *self.checked_facts.borrow_mut());
+        let book = self
+            .book
+            .borrow_mut()
+            .take()
+            .expect("the program is checked first");
+        let (lowered, book) = crate::proofs::with_book(book, || {
+            program.emit_reading(self.settings.build, self.reads)
+        });
+        *self.program.borrow_mut() = Some(program);
+        let lowered = self.held(lowered)?;
+        if self.layout.in_project {
+            *self.proofs.borrow_mut() = Some(book);
+        }
+        *self.published.borrow_mut() = lowered.published;
+        Ok(lowered.rust)
+    }
+
+    fn contracts(&self) -> Ledger {
+        self.program().contracts.clone()
+    }
+
+    fn published(&self) -> BTreeMap<String, crate::prove::Published> {
+        std::mem::take(&mut *self.published.borrow_mut())
+    }
+
+    fn render(&self, ledger: &Ledger) -> (String, String) {
+        (ledger.render(), ledger.render_derived())
+    }
+
+    fn unused_reads(&self) -> Vec<String> {
+        self.reads.unused()
+    }
+
+    fn changed_contracts(&self, now: &Ledger, committed: &Ledger) -> String {
+        // The packages this program depends on: their entries in the ledger are
+        // theirs, and a contract they changed is said in their own build.
+        let program = self.program();
+        crate::prove::changed_contracts(now, committed, |key| {
+            !key.split_once("::")
+                .is_some_and(|(package, _)| program.as_its_own.contains_key(package))
+        })
+    }
+
+    fn parse_ledger(&self, text: &str) -> Option<Ledger> {
+        Ledger::parse(text).ok()
+    }
 }
 
 /// The names a lowering stores its outputs under.

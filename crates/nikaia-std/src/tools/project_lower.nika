@@ -1,0 +1,219 @@
+// crates/nikaia-std/src/tools/project_lower.nika
+//
+// **The steps of one lowering**, for the compiler's `project::lower_reading`:
+// their order, the cache hit's replay of the check's warnings, the contract the
+// `assert`s publish merged into the ledger, the allowlist's unused entries and
+// the notes said at the end. Moved from Rust (ADR-294, #125, P5b). What the
+// build may read, its choices, the program, the cache, the check, the emitter
+// and a library's export stay Rust, behind `ProjectLowerHost`.
+
+use std::collections
+use std::fs
+
+/// **What a lowering stores in the cache**: the Rust, the ledger
+/// (`nikaia.contracts`), what it was derived from (`nikaia.derived`) and the
+/// warnings the check said while it made them, said again when it is reused.
+pub struct ProjectLowerArtifacts {
+    pub rust: String,
+    pub ledger: String,
+    pub derived: String,
+    pub warnings: String,
+}
+
+/// **What a lowering hands back**: the artifacts, the files it read, whether
+/// the cache answered, and the notes to say after the build. `project.rs`
+/// builds its `Lowered` from it, the proofs and a library's export.
+pub struct ProjectLowerOut {
+    pub rust: String,
+    pub ledger: String,
+    pub derived: String,
+    pub sources: Vec[fs::Path],
+    pub reused: bool,
+    pub notes: String,
+}
+
+/// What `project_lower_reading` asks of the compiler (`project.rs`'s
+/// `LowerHost`): it holds the program, the cache and the build's choices; a
+/// refusal of a `throws` method is kept there and handed back unchanged.
+pub trait ProjectLowerHost {
+    /// **Reads the program** (Part I 9.1: every `.nika` of the package, or the
+    /// one file outside a project, ADR-286 D1) with an option's computed default
+    /// compiled where the build compiles its `comptime`s (ADR-321 D1); the
+    /// paths it shows become part of the key (0.0.239).
+    fn read_program(ref self) sync throws
+    /// Opens the build cache unless the build said not to; one that cannot be
+    /// opened is a warning and a slower build, never a failed one (D12).
+    fn open_cache(ref self) sync
+    /// The files the program was read from, as they were handed over.
+    fn source_paths(ref self) -> Vec[fs::Path] sync
+    /// The note on what the program could promise, read off the program so it
+    /// is the same whether the emitter ran or not.
+    fn could_promise(ref self) -> String sync
+    /// The project's committed `nikaia.contracts`, read and parsed; `null`
+    /// when it cannot be read or parsed.
+    fn committed_ledger(ref self) -> Ledger? sync
+    /// What a `pub` function lost since `committed` (ADR-288 D5).
+    fn lost_sync(ref self, committed: ref Ledger) -> String sync
+    /// **A library's entry points**, read off the program before the lowering
+    /// takes it (ADR-284 D4); the host keeps them for after the call.
+    fn export(ref self) sync throws
+    /// The cache's entry for this program, when it holds every artifact.
+    fn cached(ref self) -> ProjectLowerArtifacts? sync
+    /// Records `made` in the cache and saves it; a failure is a warning.
+    fn record(ref self, made: ref ProjectLowerArtifacts) sync
+    /// Whether a warning was already said in this build (the wrapper's marker,
+    /// or once per process).
+    fn in_the_wrapper(ref self) -> bool sync
+    /// Writes `text` to stderr as it is, without a newline added.
+    fn eprint(ref self, text: ref String) sync
+    /// **Checks every unit** against the program's contracts (ADR-286), the
+    /// boundary (ADR-290 D1), the contracts that moved (ADR-308 D11) and the
+    /// recorded proofs (ADR-270 D4): the warnings it said; the host keeps the
+    /// book and the check's facts for the emitter.
+    fn check_units(ref self) -> String sync throws
+    /// **Lowers the program** with the described crates' boundary (ADR-290
+    /// D20) and the check's facts: the Rust. The host keeps what the prover
+    /// published, the program and, in a project, the proofs.
+    fn emit(ref self) -> String sync throws
+    /// The program's contracts as inferred.
+    fn contracts(ref self) -> Ledger sync
+    /// What the prover published of each function while it was lowered.
+    fn published(ref self) -> collections::BTreeMap[String, Published] sync
+    /// The ledger's two files: `nikaia.contracts` and `nikaia.derived`.
+    fn render(ref self, ledger: ref Ledger) -> (String, String) sync
+    /// The allowlist's entries nothing read (ADR-310 D8).
+    fn unused_reads(ref self) -> Vec[String] sync
+    /// The contracts that changed in the breaking direction (ADR-269 D19),
+    /// the program's own: a dependency's are said in its own build.
+    fn changed_contracts(ref self, now: ref Ledger, committed: ref Ledger) -> String sync
+    /// `text` read as a ledger, `null` when it does not parse.
+    fn parse_ledger(ref self, text: ref String) -> Ledger? sync
+}
+
+/// **One lowering**, its steps in order: the cache opened, the program read,
+/// what it lost against the committed ledger noted, a library's entry points
+/// read off it, then the cache's answer replayed or the program checked and
+/// lowered, and what changed in the breaking direction noted. `in_project`:
+/// the input belongs to a `nikaia.toml` project, the only place with a
+/// committed ledger.
+pub fn project_lower_reading[H: ProjectLowerHost](host: ref H, in_project: bool) -> ProjectLowerOut throws {
+    // A cache that cannot be opened is a slower build, never a failed one
+    // (D12).
+    host.open_cache()
+    host.read_program()
+    let sources = host.source_paths()
+    // Read off the program, which every lowering builds - a cache hit too - so
+    // the note is the same whether the emitter ran or not.
+    let mut notes = host.could_promise()
+    // **What a `pub` function lost since the ledger was committed** (ADR-288
+    // D5), against the project's committed file, which this lowering has not
+    // written yet. Outside a project there is no committed ledger to have lost
+    // anything against.
+    if in_project {
+        match host.committed_ledger() {
+            null => {},
+            committed => {
+                let lost = host.lost_sync(committed)
+                notes = f"{lost}{notes}"
+            },
+        }
+    }
+
+    // **Read off the program before the lowering takes it**: what the entry
+    // points are is the program's, and the wrappers are the same either way.
+    host.export()
+
+    // An entry that predates an artifact this build needs is a miss, not a
+    // gap: adding an output stays a safe change.
+    let cached = host.cached()
+    let reused = cached != null
+    let made = match cached {
+        null => project_lower_made(host),
+        artifacts => {
+            // **A warning is the program's, not the build's** (as Cargo
+            // replays a fresh crate's): what the check said when this
+            // lowering was made is said again, under the same rule of once.
+            if !host.in_the_wrapper() {
+                host.eprint(artifacts.warnings)
+            }
+            artifacts
+        },
+    }
+
+    // **A contract that changed in the breaking direction** (ADR-269 D19),
+    // against the committed file this lowering has not written yet: the new
+    // ledger is read back, whether it came from the cache or not.
+    if in_project {
+        match host.committed_ledger() {
+            null => {},
+            committed => {
+                match host.parse_ledger(made.ledger) {
+                    null => {},
+                    now => {
+                        let changed = host.changed_contracts(now, committed)
+                        notes = f"{changed}{notes}"
+                    },
+                }
+            },
+        }
+    }
+    return ProjectLowerOut { rust: made.rust, ledger: made.ledger, derived: made.derived, sources: sources, reused: reused, notes: notes }
+}
+
+/// **A lowering the cache did not hold**: the program checked and lowered,
+/// the published contracts merged, the allowlist's unused entries warned
+/// about, and the result recorded.
+fn project_lower_made[H: ProjectLowerHost](host: ref H) -> ProjectLowerArtifacts throws {
+    let mut warnings = host.check_units()
+    let rust = host.emit()
+    // **The contract the `assert`s make** (ADR-269 D18): the prover decided
+    // it while the program was checked, and the ledger publishes it.
+    let ledger = project_lower_published(host.contracts(), host.published())
+    let (text, derived) = host.render(ledger)
+
+    // **An entry nothing read** ([ADR-310](../../docs/specification/adr/adr-310.md)
+    // D8): a list that may hold names nothing uses decays into
+    // *everything we ever needed*, which is how an allowlist stops
+    // being read. Said at the end of the build, where the whole set is
+    // known, and a warning rather than a refusal — the line is a
+    // permission that is no longer used, not a program that is wrong.
+    for entry in host.unused_reads() {
+        let line = f"warning: the allowlist names `{entry}` and nothing read it\n"
+        host.eprint(line)
+        warnings = f"{warnings}{line}"
+    }
+
+    // **What the build actually read** (ADR-021 D13, ADR-310 D10).
+    let made = ProjectLowerArtifacts { rust: rust, ledger: text, derived: derived, warnings: warnings }
+    host.record(made)
+    return made
+}
+
+/// **`ledger` with what the prover `published`** (ADR-269 D18): each
+/// function's `requires`, `ensures`, `from` and `inferred` replaced by the
+/// published ones. **An expression function's `ensures` stays** (ADR-314 D3):
+/// its body is one `return`, so it has no `assert` of its own to publish one,
+/// only preconditions carried back, and its own come after the published.
+pub fn project_lower_published(ledger: Ledger, published: ref collections::BTreeMap[String, Published]) -> Ledger {
+    let mut ledger = ledger
+    for (key, found) in published {
+        let mut contract = (ledger.functions.get(key) ?? continue).clone()
+        let mut kept: Vec[(String, String)] = []
+        if found.ensures.is_empty() {
+            let pairs = if contract.ensures.len() < contract.from.len() { contract.ensures.len() } else { contract.from.len() }
+            for at in 0..<pairs {
+                kept.push((contract.ensures[at].clone(), contract.from[at].clone()))
+            }
+        }
+        contract.requires = found.requires.clone()
+        contract.ensures = found.ensures.clone()
+        contract.from = found.from.clone()
+        contract.inferred = found.inferred.clone()
+        for (ensures, from) in kept {
+            contract.ensures.push(ensures.clone())
+            contract.from.push(from.clone())
+        }
+        ledger.functions.insert(key.clone(), contract)
+    }
+    return ledger
+}

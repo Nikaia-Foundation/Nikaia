@@ -1627,6 +1627,14 @@ mod project_check_lowered {
 #[allow(unused_imports)]
 pub use project_check_lowered::*;
 
+mod project_lower_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/project_lower.rs");
+}
+#[allow(unused_imports)]
+pub use project_lower_lowered::*;
+
 mod project_members_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2692,6 +2700,10 @@ pub mod paths {
 pub mod project_check {
     #[allow(unused_imports)]
     pub use super::{project_check_summary, project_check_let_refuted_claims_through, project_check_let_unproved_claims_through, project_check_lint_where_nothing_crosses, project_check_locked_proofs, project_check_locked_ledger_missing, project_check_locked_ledger_changed, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain};
+}
+pub mod project_lower {
+    #[allow(unused_imports)]
+    pub use super::{ProjectLowerArtifacts, ProjectLowerOut, ProjectLowerHost, project_lower_reading, project_lower_published};
 }
 pub mod project_members {
     #[allow(unused_imports)]
