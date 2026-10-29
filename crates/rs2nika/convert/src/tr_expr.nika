@@ -506,6 +506,10 @@ impl TrEm {
         for a in self.nodes(self.t.kid(n, "ARG_LIST")) {
             out.push(self.expr(a))
         }
+        // a function that reads the environment is handed the host
+        if self.env_call(n) {
+            out.push("host")
+        }
         return out
     }
 
@@ -536,6 +540,10 @@ impl TrEm {
         }
         if segs.len() >= 2 {
             let owner = segs[segs.len() - 2].clone()
+            // the environment is the host's: `host.env_var(name)` is `T?`
+            if owner == "env" && (last == "var" || last == "var_os") && arg_nodes.len() == 1 {
+                return f"host.env_var({self.expr(arg_nodes[0])})"
+            }
             if (owner == "Box" || owner == "Rc" || owner == "Arc" || owner == "RefCell" || owner == "Cell") && last == "new" && arg_nodes.len() == 1 {
                 return self.expr(arg_nodes[0])
             }
@@ -740,7 +748,7 @@ impl TrEm {
             return f"{r}.clone()"
         }
         // `text::parse_i64` hands back an option already
-        if m == "ok" && a.len() == 0 && r.starts_with("text::parse_") {
+        if m == "ok" && a.len() == 0 && (r.starts_with("text::parse_") || r.starts_with("host.env_var(")) {
             return r
         }
         if m == "into_iter" && a.len() == 0 {

@@ -65,6 +65,9 @@ pub struct TrEm {
     pub push_opt: bool,
     /// `module::f` of the crate -> its name in tools/module.nika
     pub tool_paths: collections::BTreeMap[String, String],
+    /// the functions that read the environment (`env::var`), themselves or
+    /// through another: they take `host: ref H`, as the moved tools do
+    pub env_fns: collections::BTreeSet[String],
 }
 
 pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, host_fns: ref Vec[String], tool_paths: collections::BTreeMap[String, String]) -> String {
@@ -85,6 +88,7 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
         optional: collections::BTreeSet(),
         texts: collections::BTreeSet(),
         shared_texts: collections::BTreeSet(),
+        env_fns: collections::BTreeSet(),
         todos: 0,
         fns: collections::BTreeSet(),
         hoisted: [],
@@ -102,6 +106,7 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
     }
     em.graft_macros()
     em.find_ctors()
+    em.find_env_fns()
     let body = em.file(0)
     let mut out: Vec[String] = []
     for u in em.uses {
@@ -284,6 +289,81 @@ impl TrEm {
                 }
             }
         }
+    }
+
+    /// The functions that read the environment: `env::var` in their body, or
+    /// a call to one that does (`f(..)`, `Self::f(..)`, `self.f(..)`).
+    fn find_env_fns(ref mut self) {
+        let mut grew = true
+        while grew {
+            grew = false
+            for i in 0..<self.t.nodes.len() {
+                if self.t.nodes[i].kind != "FN" || self.env_fns.contains(self.t.name_of(i)) {
+                    continue
+                }
+                if self.reads_env(self.t.kid(i, "BLOCK_EXPR")) {
+                    self.env_fns.insert(self.t.name_of(i).clone())
+                    grew = true
+                }
+            }
+        }
+    }
+
+    fn reads_env(ref self, n: i64) -> bool {
+        if n < 0 {
+            return false
+        }
+        if self.env_call(n) {
+            return true
+        }
+        for k in self.nodes(n) {
+            if self.reads_env(k) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether `n` is `env::var(..)` / `env::var_os(..)`, or a call to a
+    /// function of `env_fns`.
+    fn env_call(ref self, n: i64) -> bool {
+        if self.t.is(n, "CALL_EXPR") && self.t.is(self.t.nth(n, 0), "PATH_EXPR") {
+            let segs = self.segs(self.t.nth(n, 0))
+            let last = segs[segs.len() - 1].clone()
+            if segs.len() >= 2 && segs[segs.len() - 2] == "env" && (last == "var" || last == "var_os") {
+                return true
+            }
+            return (segs.len() == 1 || segs.len() == 2 && segs[0] == "Self") && self.env_fns.contains(last)
+        }
+        if self.t.is(n, "METHOD_CALL_EXPR") && self.src(self.t.nth(n, 0)) == "self" {
+            return self.env_fns.contains(self.src(self.t.kid(n, "NAME_REF")))
+        }
+        return false
+    }
+
+    /// The host trait of this file's functions that read the environment:
+    /// `project_settings_` -> `ProjectSettingsHost`; without a prefix, the
+    /// world's (`CheckWorld` -> `CheckHost`).
+    fn host_trait(ref self) -> String {
+        if self.prefix == "" && self.world != "" {
+            return self.world.replace("World", "Host")
+        }
+        let mut out: String = ""
+        for w in self.prefix.split("_") {
+            if w == "" {
+                continue
+            }
+            let mut first = true
+            for c in w.scalars {
+                if first {
+                    out.push_str(c.to_string().to_uppercase())
+                    first = false
+                } else {
+                    out.push(c)
+                }
+            }
+        }
+        return f"{out}Host"
     }
 
     /// Parse the arguments of the macros the converter knows, in rounds: an

@@ -311,6 +311,11 @@ impl TrEm {
                 }
             }
         }
+        if self.env_fns.contains(name) && !ps.contains("host: ref H") {
+            ps.push("host: ref H")
+            let bound = f"H: {self.host_trait()}"
+            gen = if gen == "" { f"[{bound}]" } else { f"{(gen.strip_suffix("]") ?? "")}, {bound}]" }
+        }
         let mut head: String = ""
         if in_impl && name == "new" && !has_self && self.ctors.contains(self.self_ty.clone()) {
             head = f"{ind}pub fn{gen}({ps.join(", ")}){ret}"

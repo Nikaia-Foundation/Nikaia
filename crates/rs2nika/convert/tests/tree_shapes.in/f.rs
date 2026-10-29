@@ -72,3 +72,11 @@ impl W {
             .collect()
     }
 }
+
+fn flags() -> Option<String> {
+    std::env::var("RUSTFLAGS").ok()
+}
+
+fn has_flags() -> bool {
+    flags().is_some()
+}

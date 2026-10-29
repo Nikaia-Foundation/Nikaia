@@ -84,3 +84,11 @@ impl W {
         return out
     }
 }
+
+fn flags[H: CheckHost](host: ref H) -> String? {
+    return host.env_var("RUSTFLAGS")
+}
+
+pub fn has_flags[H: CheckHost](host: ref H) -> bool {
+    return flags(host) != null
+}
