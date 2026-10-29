@@ -90,22 +90,35 @@ fn a_parameter_returned_as_a_view_is_not_kept() {
 fn a_parameter_put_into_a_struct_is_kept() {
     assert_eq!(
         keeps(
-            "struct Row { name: String }\n\
-             fn wrap(name: String) -> Row { return Row { name: name } }",
+            "struct Row { ids: Vec[i64] }\n\
+             fn wrap(ids: Vec[i64]) -> Row { return Row { ids: ids } }",
             "wrap"
         ),
-        ["name"]
+        ["ids"]
     );
 
-    // `Row { name }` is the field and the name in one, and the name may be a
+    // `Row { ids }` is the field and the name in one, and the name may be a
     // parameter — the shorthand must not be a hole in the walk.
     assert_eq!(
+        keeps(
+            "struct Row { ids: Vec[i64] }\n\
+             fn wrap(ids: Vec[i64]) -> Row { return Row { ids } }",
+            "wrap"
+        ),
+        ["ids"]
+    );
+
+    // **A text parameter only moved into a field is not kept**
+    // ([ADR-353](../../../docs/specification/adr/adr-353.md) D8, #945): the
+    // tiers lend it, the field views the caller's argument, and `returns`
+    // records where the result points.
+    assert!(
         keeps(
             "struct Row { name: String }\n\
              fn wrap(name: String) -> Row { return Row { name } }",
             "wrap"
-        ),
-        ["name"]
+        )
+        .is_empty()
     );
 }
 
@@ -345,16 +358,16 @@ fn a_parse_whose_record_this_walk_cannot_see_keeps_the_text() {
 #[test]
 fn the_column_renders_and_parses_back() {
     let parsed = parse_to_ast(
-        "struct Row { name: String }\n\
-         fn wrap(name: String) -> Row { return Row { name: name } }",
+        "struct Row { ids: Vec[i64] }\n\
+         fn wrap(ids: Vec[i64]) -> Row { return Row { ids: ids } }",
     )
     .expect("the source parses");
     let ledger = Ledger::infer(&parsed);
     let rendered = ledger.render();
-    assert!(rendered.contains("keeps = [\"name\"]"), "{rendered}");
+    assert!(rendered.contains("keeps = [\"ids\"]"), "{rendered}");
 
     let read = Ledger::parse(&rendered).expect("its own output parses");
-    assert_eq!(read.functions["wrap"].keeps, ["name"]);
+    assert_eq!(read.functions["wrap"].keeps, ["ids"]);
     assert_eq!(read.render(), rendered);
 
     // And a function that keeps nothing writes no line, so no existing ledger
