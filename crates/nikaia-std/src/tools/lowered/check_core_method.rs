@@ -409,6 +409,12 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span);
     let walk_open: Option<i64> = state.flow.walk_open;
     state.flow.walk_open = None;
+    let walk_item: Option<i64> = state.flow.walk_item;
+    state.flow.walk_item = None;
+    if walk_item.is_some() {
+        state.flow.open_items.insert(id_of(expr) as i64, nikaia_std::index::or(walk_item, || 0));
+        let typed = state.open_number_typed(world, expr);
+    }
     if state.flow.walk_lent { let lent = state.flow.lent_walks.insert(id_of(expr) as i64); }
     state.flow.walk_lent = false;
     state.flow.receiver_from_text = false;

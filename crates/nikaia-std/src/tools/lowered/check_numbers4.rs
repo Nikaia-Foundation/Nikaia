@@ -176,7 +176,10 @@ impl CheckState {
             },
             Expr::MethodCall { receiver, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver);
-                if self.a_method_of_a_number(receiver) { out.extend(self.open_numbers_in(world, receiver)); }
+                if self.a_method_of_a_number(receiver) { out.extend(self.open_numbers_in(world, receiver)); } else {
+                    let item = *nikaia_std::index::get(&self.flow.open_items, &(id_of(expr) as i64));
+                    if item.is_some() { out.push(self.open_root(nikaia_std::index::or(item, || 0))); }
+                }
             },
             Expr::If { .. } => { for tail in nikaia_std::index::or(number_branches(expr), || vec![].into()) { out.extend(self.open_numbers_in(world, tail)); } },
             Expr::Match { .. } => { for tail in nikaia_std::index::or(number_branches(expr), || vec![].into()) { out.extend(self.open_numbers_in(world, tail)); } },
@@ -216,7 +219,7 @@ impl CheckState {
             Expr::Index { .. } => self.open_element_of(world, expr).is_some() && !self.a_read_of_a_map(world, expr),
             Expr::Field { .. } => self.open_part_of(world, expr).is_some(),
             Expr::Call { args, .. } => self.a_call_of_numbers(world, args),
-            Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver) || world.words.resolve(method) == "or_insert" && check_core_call_on_entry_values(self, world, receiver) >= 0 },
+            Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver) || self.flow.open_items.contains_key(&(id_of(expr) as i64)) || world.words.resolve(method) == "or_insert" && check_core_call_on_entry_values(self, world, receiver) >= 0 },
             Expr::If { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Match { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); an_operation_of_one_type(*op) && self.number_shaped(world, lhs) && self.number_shaped(world, rhs) },

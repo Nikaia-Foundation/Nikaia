@@ -1,0 +1,11 @@
+// The items of a list written in number literals are one open number, and
+// what `sum` hands back is one of them: `let total: i64` asks it for an
+// `i64`, and one nothing asks is the default `i64` (#931).
+fn main() {
+    let xs = [1, 2, 3]
+    let total: i64 = xs.iter().sum()
+    println(f"{total} {xs.iter().max() ?? 0}")
+    let ys = [4, 5]
+    let more = ys.iter().sum()
+    println(f"{more + 1}")
+}

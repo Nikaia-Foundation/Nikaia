@@ -237,6 +237,11 @@ impl CheckState {
             Expr::MethodCall { receiver, .. } => {
                 if self.a_method_of_a_number(receiver) {
                     out.extend(self.open_numbers_in(world, receiver))
+                } else {
+                    let item = self.flow.open_items[id_of(expr) as i64]
+                    if item != null {
+                        out.push(self.open_root(item ?? 0))
+                    }
                 }
             },
             // **A choice between numbers is one number** (D1): each branch's
@@ -293,7 +298,7 @@ impl CheckState {
             Expr::Index { .. } => self.open_element_of(world, expr) != null && !self.a_read_of_a_map(world, expr),
             Expr::Field { .. } => self.open_part_of(world, expr) != null,
             Expr::Call { args, .. } => self.a_call_of_numbers(world, args),
-            Expr::MethodCall { receiver, method, .. } => (self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver)) || (world.words.resolve(method) == "or_insert" && check_core_call_on_entry_values(self, world, receiver) >= 0),
+            Expr::MethodCall { receiver, method, .. } => (self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver)) || self.flow.open_items.contains_key(id_of(expr) as i64) || (world.words.resolve(method) == "or_insert" && check_core_call_on_entry_values(self, world, receiver) >= 0),
             Expr::If { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Match { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Binary { op, lhs, rhs, .. } => an_operation_of_one_type(op) && self.number_shaped(world, lhs) && self.number_shaped(world, rhs),
@@ -780,9 +785,17 @@ impl CheckState {
     pub fn open_walk_result(ref mut self, world: ref CheckWorld, contract: ref FnContract, args: ref Vec[Expr], items: i64?) sync {
         self.flow.walk_open = null
         self.flow.walk_view = false
+        self.flow.walk_item = null
         let number: i64 = items ?? return
         let signature = contract.signature ?? return
         let result: Ty = signature.result?.clone() ?? return
+        // **The item itself** (#931): `sum` and `product` hand back a `T`,
+        // the same open number the items are.
+        let item_held = open_walk_variable(signature) ?? ""
+        if open_walk_the_item(result, item_held) {
+            self.flow.walk_item = self.open_root(number)
+            return
+        }
         let made: Ty = open_walk_made(result) ?? return
         let name = open_walk_named(made) ?? return
         let view = open_walk_a_view(made)

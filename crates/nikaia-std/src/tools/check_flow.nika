@@ -254,6 +254,10 @@ pub struct CheckFlow {
     /// **A walk whose items are an open number** (ADR-285 D34, #594), by the
     /// call that makes it, and the entry of `open_numbers` it names.
     pub open_walks: collections::BTreeMap[i64, i64],
+    /// **An item a walk of an open number hands back** (#931): `sum` of
+    /// `xs.iter()` with `xs = [1, 2, 3]`, by the call, and the entry of
+    /// `open_numbers` it is one of.
+    pub open_items: collections::BTreeMap[i64, i64],
     /// The parameters of a lambda the call being walked hands such items to,
     /// by name, and the entry of `open_numbers` each is bound to.
     pub open_params: collections::BTreeMap[String, i64],
@@ -261,6 +265,9 @@ pub struct CheckFlow {
     /// number, and whether as views of it.
     pub walk_open: i64?,
     pub walk_view: bool,
+    /// What it hands back is one of the walk's items itself, of this open
+    /// number (#931).
+    pub walk_item: i64?,
     /// **A walk whose items are lent** (#626), by the call that makes it: a
     /// walk of views of a list's elements, and one that hands those on.
     pub lent_walks: collections::BTreeSet[i64],
@@ -383,9 +390,11 @@ impl CheckFlow {
             open_parts: collections::BTreeMap(),
             open_map_parts: collections::BTreeMap(),
             open_walks: collections::BTreeMap(),
+            open_items: collections::BTreeMap(),
             open_params: collections::BTreeMap(),
             walk_open: null,
             walk_view: false,
+            walk_item: null,
             lent_walks: collections::BTreeSet(),
             lent_params: collections::BTreeSet(),
             lent_text_params: collections::BTreeSet(),

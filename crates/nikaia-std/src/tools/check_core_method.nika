@@ -568,6 +568,14 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span)
     let walk_open: i64? = state.flow.walk_open
     state.flow.walk_open = null
+    let walk_item: i64? = state.flow.walk_item
+    state.flow.walk_item = null
+    if walk_item != null {
+        state.flow.open_items.insert(id_of(expr) as i64, walk_item ?? 0)
+        // The language below infers no type for what `sum` hands back: the
+        // number's type is written (D4).
+        let typed = state.open_number_typed(world, expr)
+    }
     if state.flow.walk_lent {
         let lent = state.flow.lent_walks.insert(id_of(expr) as i64)
     }
