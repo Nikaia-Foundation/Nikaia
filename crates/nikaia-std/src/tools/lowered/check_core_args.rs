@@ -250,7 +250,7 @@ pub fn check_core_fold_form(state: &mut CheckState, world: &CheckWorld<'_, '_, '
         }
         state.facts.reborrowed_args.extend(handed);
     }
-    let form = if lent { 2 } else { 1 };
+    let form: i64 = if lent { 2 } else { 1 };
     state.facts.in_place_folds.insert(id_of(part) as i64, form);
 }
 

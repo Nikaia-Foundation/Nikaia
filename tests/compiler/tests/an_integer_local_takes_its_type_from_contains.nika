@@ -1,0 +1,15 @@
+// The argument of `contains` on a `Vec[i64]` asks an open number for an
+// `i64`, as an annotated `let` would (#917).
+use std::collections
+fn main() {
+    let home: Vec[i64] = [0, 2]
+    let mut taken = 0
+    if !home.contains(taken) { println("x") }
+    taken += 1
+    println(f"{taken}")
+    let seen: collections::HashSet[i64] = collections::HashSet()
+    let mut other = 3
+    if !seen.contains(other) { println("y") }
+    other += 1
+    println(f"{other}")
+}

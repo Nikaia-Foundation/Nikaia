@@ -144,7 +144,7 @@ pub(crate) fn loop_constant_step(arena: &mut TermArena, name: &str, value: i64) 
     arena.variables(difference, &mut read);
     let mut low: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut high: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut k = 0;
+    let mut k: i64 = 0;
     for n in read.iter() {
         low.insert(n.to_string(), 3 + 7 * k);
         high.insert(n.to_string(), 11 + 13 * k);

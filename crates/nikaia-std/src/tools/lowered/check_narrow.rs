@@ -296,7 +296,7 @@ pub(crate) fn check_narrow_as_proved(state: &mut CheckState, node: i64, ty: &Ty,
     let viewed = lent && held == 2;
     if lent && (inner.is_a_view() || lent_binding) && !a_view && !viewed { return ty.clone(); }
     let operand = state.narrowing.operand_reads.contains(&node);
-    let mut bits = 0;
+    let mut bits: i64 = 0;
     if copied || a_view { bits = bits + 1; }
     if operand { bits = bits + 2; }
     if lent && !a_view { bits = bits + 4; }

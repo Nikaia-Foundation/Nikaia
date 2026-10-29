@@ -1151,7 +1151,7 @@ pub(crate) fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '
     let mut out: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     let mut by_args: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     let borrowed = borrowed_positions(&named, ask);
-    let mut position = 0;
+    let mut position: i64 = 0;
     for arg in args.iter() {
         let of = lent_origins(arg, ask, holes_of, unaliased, walk);
         let lent = borrowed.is_empty() || borrowed.contains(&position);
@@ -1181,7 +1181,7 @@ pub(crate) fn borrowed_positions(named: &str, ask: &BufferAsk<'_, '_, '_, '_, '_
     let contract = match *nikaia_std::index::get(&ask.own.functions, named) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, named) { Some(__nikaia_value) => __nikaia_value, None => return out } };
     if contract.borrows.is_empty() { return out; }
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out };
-    let mut position = 0;
+    let mut position: i64 = 0;
     for (name, _) in signature.params.iter() {
         let dotted = format!("{}.", name);
         for b in contract.borrows.iter() { if b == name || b.starts_with(&dotted) { out.insert(position); } }

@@ -96,7 +96,7 @@ pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump
     let end = close + "\n}\n".len() as i64;
     let main = cr_main(value_fn, dump, budget, memory);
     let mut starts: Vec<i64> = vec![0];
-    let mut byte = 0;
+    let mut byte: i64 = 0;
     for c in rust.chars() {
         let code = c as i64;
         if code < 128 { byte += 1; } else if code < 2048 { byte += 2; } else if code < 65536 { byte += 3; } else { byte += 4; }

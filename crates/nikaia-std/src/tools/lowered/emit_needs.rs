@@ -77,7 +77,7 @@ pub fn emit_needs_abort_table(rust: &str, rows: &[(i64, i64, i64)], paths: &[Str
 
 pub(crate) fn emit_needs_line_starts(text: &str) -> Vec<i64> {
     let mut starts: Vec<i64> = vec![0];
-    let mut at = 0;
+    let mut at: i64 = 0;
     for b in text.bytes() {
         at += 1;
         if (b as i64) == 10 { starts.push(at); }

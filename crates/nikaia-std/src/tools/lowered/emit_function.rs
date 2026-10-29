@@ -207,7 +207,7 @@ impl EmitState {
                         Some(ty) => {
                             if self.carries_a_view(world, ty) && input_empty {
                                 let mut carrying: Vec<i64> = vec![];
-                                let mut at = 0;
+                                let mut at: i64 = 0;
                                 for each in args.iter() {
                                     if self.carries_a_view(world, &each.ty) { carrying.push(at); }
                                     at += 1;

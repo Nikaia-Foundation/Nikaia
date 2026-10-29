@@ -248,7 +248,7 @@ pub(crate) fn emit_holes_comptimes<H: EmitHolesHost>(host: &H, words: &winnow_gr
 pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
     let mut waiting: Vec<String> = vec![];
     let mut free: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut at = 0;
+    let mut at: i64 = 0;
     for item in items.iter() {
         match &item.node {
             Item::Comptime { value, .. } => { emit_holes_names_deep(host, words, value, 1, &mut waiting); },

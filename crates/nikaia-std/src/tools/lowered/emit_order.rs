@@ -22,7 +22,7 @@ pub fn emit_order(block: &Block, proofs: &EmitOrderProofs, words: &winnow_gramma
     let count = block.stmts.len() as i64;
     let mut movable: collections::BTreeMap<i64, EmitOrderTouch> = collections::BTreeMap::new();
     let mut passable: collections::BTreeMap<i64, EmitOrderTouch> = collections::BTreeMap::new();
-    let mut i = 0;
+    let mut i: i64 = 0;
     for stmt in block.stmts.iter() {
         let mut touch = EmitOrderTouch { reads: vec![], writes: vec![] };
         if emit_order_assignment(&stmt.node, stmt.span.start as i64, proofs, words, &mut touch) { movable.insert(i, touch); } else {

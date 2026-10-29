@@ -866,6 +866,10 @@ fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, k
         return
     }
     let want: Ty = check_core_call_on_written(bound.get(var)?.clone() ?? Ty::Unknown)
+    // **The element, key or value asks an open number for its type** (ADR-285
+    // D2, #917): `home.contains(taken)` on a `Vec[i64]` makes `taken` an
+    // `i64`, as `let taken: i64` would; nothing below the call infers it.
+    state.number_asked(world, args[at], want, span, true)
     let have: Ty = check_core_call_on_written(found[at])
     if check_core_call_on_may_fit(have, want) {
         return

@@ -672,6 +672,7 @@ pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &Chec
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || Ty::Unknown));
+    state.number_asked(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), &want, span, true);
     let have: Ty = check_core_call_on_written(nikaia_std::index::get(&found, nikaia_std::index::at(at)));
     if check_core_call_on_may_fit(&have, &want) { return; }
     let at_span = check_span_at(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), span);

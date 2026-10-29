@@ -71,7 +71,7 @@ pub fn computed_options(item: &Item) -> Vec<i64> {
     let mut places: Vec<i64> = vec![];
     match item {
         Item::Fn { config, .. } => {
-            let mut at = 0;
+            let mut at: i64 = 0;
             for option in config.iter() {
                 if !a_literal(&option.default) { places.push(at); }
                 at += 1;

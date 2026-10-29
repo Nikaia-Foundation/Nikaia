@@ -522,23 +522,23 @@ impl EmitState {
     pub(crate) fn emit_method_hoisted(&self, world: &EmitWorld<'_, '_, '_, '_>, receiver: Option<&Expr>, args: &[Expr]) -> Vec<i64> {
         let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         if !emit_pure_place(on) { return vec![]; }
-        let mut last = -1;
+        let mut last: i64 = -1;
         let root = root_of(world.words, on);
         if root.is_some() {
             let name = nikaia_std::index::or(root, || "".into());
-            let mut j = 0;
+            let mut j: i64 = 0;
             for later in args.iter() {
                 if made_in_the_call(later) && !emit_arg_is_closure(later) && self.emit_lends_mut(world, later, &name) { last = j; }
                 j += 1;
             }
         }
-        let mut i = 0;
+        let mut i: i64 = 0;
         for arg in args.iter() {
             if self.facts.mut_args.contains(&node_key(arg)) {
                 let lent_root = root_of(world.words, arg);
                 if lent_root.is_some() {
                     let lent_name = nikaia_std::index::or(lent_root, || "".into());
-                    let mut j = 0;
+                    let mut j: i64 = 0;
                     for later in args.iter() {
                         if j > i && j > last && made_in_the_call(later) && !emit_arg_is_closure(later) && emit_mentions(world, later, &lent_name) { last = j; }
                         j += 1;
@@ -548,7 +548,7 @@ impl EmitState {
             i += 1;
         }
         let mut hoisted: Vec<i64> = vec![];
-        let mut k = 0;
+        let mut k: i64 = 0;
         for arg in args.iter() {
             if k <= last && made_in_the_call(arg) && !emit_arg_is_closure(arg) && !self.facts.mut_args.contains(&node_key(arg)) { hoisted.push(k); }
             k += 1;
