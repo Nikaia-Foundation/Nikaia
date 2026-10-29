@@ -23,6 +23,7 @@ pub fn analyse(
     library: &Ledger,
     lent: &BTreeSet<i64>,
     coalesced: &BTreeSet<i64>,
+    mut_viewed: &BTreeSet<i64>,
 ) -> (Vec<Finding>, GiveUps) {
     use nikaia_std::tools::view_changes::{VcAsk, vc_analyse};
     let ask = VcAsk {
@@ -32,6 +33,7 @@ pub fn analyse(
         library,
         lent,
         coalesced,
+        mut_viewed,
         refused: &parsed.refused_moves,
         viewed: &parsed.viewed_arms,
     };
@@ -50,4 +52,10 @@ pub fn analyse(
 /// checker's facts, by the id of the `??` or of its fallback.
 pub fn coalesced(facts: &crate::check::CheckFacts) -> BTreeSet<i64> {
     nikaia_std::tools::view_changes::vc_coalesced(facts)
+}
+
+/// **The `let mut`s that bind a mutable view of an element or a field**
+/// (#959, #962): the checker's facts, by the id of the value.
+pub fn mut_viewed(facts: &crate::check::CheckFacts) -> BTreeSet<i64> {
+    nikaia_std::tools::view_changes::vc_mut_viewed(facts)
 }

@@ -1016,6 +1016,7 @@ impl<'p> Emitter<'p> {
             library,
             &state.facts.lent_lets,
             &crate::view_changes::coalesced(&state.facts),
+            &crate::view_changes::mut_viewed(&state.facts),
         )
         .1;
         let mut made = Self {

@@ -1,0 +1,13 @@
+// `let mut f = s.field` over a `mut` struct binds the field itself (#962):
+// a write through `f` lands in `s`; another field may be read meanwhile.
+struct P { pub n: i64, pub m: i64 }
+struct Q { pub p: P, pub k: i64, pub name: String }
+fn main() {
+    let mut q = Q { p: P { n: 1, m: 2 }, k: 5, name: "q" }
+    let mut f = q.p
+    println(f"{q.k} {q.name}")
+    f.n = 10
+    f.m += 1
+    println(f"{f.n} {f.m}")
+    println(f"{q.p.n} {q.p.m}")
+}

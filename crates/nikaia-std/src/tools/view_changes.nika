@@ -60,6 +60,9 @@ pub struct VcAsk {
     /// The names that stay where they are, a view of them going in instead
     /// of the name (`text_tiers`, ADR-282 D7, ADR-353 D8), by their nodes.
     pub viewed: ref collections::BTreeSet[i64],
+    /// The `let mut`s that bind a mutable view of an element or a field of a
+    /// `mut` place, by the id of the value (`mut_view_reads`, #959, #962).
+    pub mut_viewed: ref collections::BTreeSet[i64],
 }
 
 struct VcView {
@@ -87,6 +90,10 @@ struct VcView {
     /// Whether it is the list a `for` lends to its body (Part I 3.3): any
     /// change of the list inside the loop is refused.
     looped: bool,
+    /// Whether it is a `let mut` view of an element or a field (`&mut`):
+    /// while it is used, a read of what it views is refused as well (Part I
+    /// 6.8, #962).
+    exclusive: bool,
 }
 
 struct VcWalk {
@@ -166,6 +173,16 @@ pub fn vc_coalesced(facts: ref CheckFacts) -> collections::BTreeSet[i64] {
     vc_insert_all(ids, facts.lent_map_fallbacks)
     vc_insert_all(ids, facts.view_fallbacks)
     vc_insert_all(ids, facts.map_read_views)
+    return ids
+}
+
+/// The `let mut`s that bind a mutable view of an element or a field, by the
+/// id of the value (`mut_view_reads`).
+pub fn vc_mut_viewed(facts: ref CheckFacts) -> collections::BTreeSet[i64] {
+    let mut ids: collections::BTreeSet[i64] = collections::BTreeSet()
+    for (id, _) in facts.mut_view_reads {
+        ids.insert(id)
+    }
     return ids
 }
 
@@ -601,12 +618,18 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
             return view
         }
         Expr::Index { .. } => {
+            if ask.mut_viewed.contains(id_of(value) as i64) {
+                return vc_mut_view(at, name, value, outer, ask)
+            }
             if !ask.lent.contains(at.start as i64) {
                 return null
             }
             return vc_place_view(at, name, value, outer, ask)
         }
         Expr::Field { .. } => {
+            if ask.mut_viewed.contains(id_of(value) as i64) {
+                return vc_mut_view(at, name, value, outer, ask)
+            }
             if !ask.lent.contains(at.start as i64) {
                 return null
             }
@@ -616,6 +639,9 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
         // return` is a view into `walk`, and `f.result ?? ""` into
         // whatever `f` views.
         Expr::Coalesce { value: left, fallback, .. } => {
+            if ask.mut_viewed.contains(id_of(value) as i64) {
+                return vc_mut_view(at, name, left, outer, ask)
+            }
             if !ask.coalesced.contains(id_of(value) as i64) && !ask.coalesced.contains(id_of(fallback) as i64) {
                 return null
             }
@@ -654,7 +680,7 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
                 shown.push(root_of(ask.names, arg) ?? "..")
             }
             let written = shown.join(", ")
-            return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", callee: callee.clone(), shown: shown, help: null, looped: false }
+            return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", callee: callee.clone(), shown: shown, help: null, looped: false, exclusive: false }
         }
         else => return null,
     }
@@ -675,13 +701,97 @@ fn vc_loop_view(iter: ref Expr, at: ref Span, ask: ref VcAsk) -> VcView? {
     let mut parts: collections::BTreeSet[String] = collections::BTreeSet()
     parts.insert(path.clone())
     let help = f"Collect what the loop wants to add in a list of its own and add it after the loop with `{path}.extend(more)`, or walk `0..<n` with `let n = {path}.len()` before the loop."
-    return VcView { name: path.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{path}` is lent to this loop", way_out: collections::BTreeMap(), used: at.clone(), call: null, callee: null, shown: [], help: help, looped: true }
+    return VcView { name: path.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{path}` is lent to this loop", way_out: collections::BTreeMap(), used: at.clone(), call: null, callee: null, shown: [], help: help, looped: true, exclusive: false }
 }
 
 fn vc_place_view(at: ref Span, name: ref String, place: ref Expr, outer: ref Vec[VcView], ask: ref VcAsk) -> VcView? {
     let root = root_of(ask.names, place) ?? return null
     let (roots, parts) = vc_through(root, vc_path_of(place, ask), outer)
-    return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is a view into `{root}`", way_out: collections::BTreeMap(), used: null, call: null, callee: null, shown: [], help: null, looped: false }
+    return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is a view into `{root}`", way_out: collections::BTreeMap(), used: null, call: null, callee: null, shown: [], help: null, looped: false, exclusive: false }
+}
+
+/// The view a `let mut` over an element or a field of a `mut` place binds
+/// (`&mut v[i]`, #959, #962): exclusive, so a read of the place is refused too.
+fn vc_mut_view(at: ref Span, name: ref String, place: ref Expr, outer: ref Vec[VcView], ask: ref VcAsk) -> VcView? {
+    let mut view = vc_place_view(at, name, place, outer, ask) ?? return null
+    view.exclusive = true
+    let root = root_of(ask.names, place) ?? return null
+    view.from = f"`{name}` is a mutable view into `{root}`"
+    return view
+}
+
+/// Whether an expression reads a place `view` points into: a variable, a
+/// field path or an element of `root`, judged by the place it names.
+fn vc_reads_expr(expr: ref Expr, view: ref VcView, root: ref String, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    match expr {
+        Expr::Variable(_, _) => {
+            if vc_rooted(expr, root, ask) {
+                return vc_watches(view, root, vc_path_of(expr, ask))
+            }
+        }
+        Expr::Field { .. } => {
+            if vc_rooted(expr, root, ask) {
+                return vc_watches(view, root, vc_path_of(expr, ask))
+            }
+        }
+        Expr::Index { index, .. } => {
+            if vc_rooted(expr, root, ask) {
+                return vc_watches(view, root, vc_path_of(expr, ask)) || vc_reads_expr(index, view, root, ask, holes_of)
+            }
+        }
+        else => {}
+    }
+    if check_visit_has_holes(expr) {
+        for hole in holes_of(expr) {
+            if vc_reads_expr(hole, view, root, ask, holes_of) {
+                return true
+            }
+        }
+    }
+    for child in check_visit_children(expr) {
+        if vc_reads_expr(child, view, root, ask, holes_of) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether one of a statement's own expressions reads what `view` points
+/// into; the target of an assignment is a change, asked apart.
+fn vc_reads_stmt(stmt: ref Stmt, view: ref VcView, root: ref String, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    return match stmt {
+        Stmt::Let { value, .. } => vc_reads_expr(value, view, root, ask, holes_of),
+        Stmt::Comptime { value, .. } => vc_reads_expr(value, view, root, ask, holes_of),
+        Stmt::Assign { value, .. } => vc_reads_expr(value, view, root, ask, holes_of),
+        Stmt::For { iter, .. } => vc_reads_expr(iter, view, root, ask, holes_of),
+        Stmt::While { cond, .. } => vc_reads_expr(cond, view, root, ask, holes_of),
+        Stmt::Return(value) => match value {
+            null => false,
+            returned => vc_reads_expr(returned, view, root, ask, holes_of),
+        },
+        Stmt::Expr(expr) => vc_reads_expr(expr, view, root, ask, holes_of),
+        else => false,
+    }
+}
+
+/// A read of what a mutable view points into, while the view is still used
+/// (Part I 6.8), or named by the same statement: refused at the read, once.
+fn vc_reads_in(stmt: ref Stmt, at: ref Span, views: ref Vec[VcView], ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: VcWalk) {
+    for view in views {
+        if !view.exclusive {
+            continue
+        }
+        // Live: used by a later statement, or by this one beside the read.
+        if view.used == null && !vc_mentions_stmt(stmt, view.name, ask, holes_of) {
+            continue
+        }
+        for root in view.roots {
+            if vc_reads_stmt(stmt, view, root, ask, holes_of) {
+                vc_refuse_read(root, at, view, walk)
+                return
+            }
+        }
+    }
 }
 
 /// The views a call keeps in the places its arguments hold (ADR-283 D27):
@@ -710,7 +820,7 @@ fn vc_kept_in_places(at: ref Span, func: ref Expr, args: ref Vec[Expr], ask: ref
         roots.insert(root.clone())
         let mut way_out: collections::BTreeMap[String, String] = collections::BTreeMap()
         way_out.insert(root.clone(), f"`{callee}` keeps views of what it was given as `{source}` in `{place}`.")
-        out.push(VcView { name: holder.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{callee}` keeps a view of `{root}` in `{holder}` here", way_out: way_out, used: null, call: null, callee: null, shown: [], help: f"Use `{holder}` before this change, or hand `{callee}` a copy: `{root}.clone()`.", looped: false })
+        out.push(VcView { name: holder.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{callee}` keeps a view of `{root}` in `{holder}` here", way_out: way_out, used: null, call: null, callee: null, shown: [], help: f"Use `{holder}` before this change, or hand `{callee}` a copy: `{root}.clone()`.", looped: false, exclusive: false })
     }
     return out
 }
@@ -783,7 +893,11 @@ fn vc_block(block: ref Block, outer: ref Vec[VcView], ask: ref VcAsk, holes_of: 
             else => false,
         }
         let at = stmt.span.clone()
+        let refused_before = walk.findings.len()
         vc_changes_in(stmt.node, at, views, ask, holes_of, walk)
+        if walk.findings.len() == refused_before {
+            vc_reads_in(stmt.node, at, views, ask, holes_of, walk)
+        }
         match stmt.node {
             Stmt::Assign { target, op, .. } => {
                 let whole = op == null && match target {
@@ -1161,4 +1275,15 @@ fn vc_refuse(root: ref String, at: ref Span, views: ref Vec[VcView], mut walk: V
         written => written.clone(),
     }
     walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{root}` is changed here, but `{name}` may point into its data and is used later.", notes: notes, help: help, warning: false, labels: labels })
+}
+
+/// A read of `root` while a mutable view of it is still used.
+fn vc_refuse_read(root: ref String, at: ref Span, view: ref VcView, mut walk: VcWalk) {
+    let name = view.name.clone()
+    let mut labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{root}` is read here", true), vc_label(view.made.clone(), name, view.from.clone(), false)]
+    match view.used {
+        null => {}
+        used => labels.push(vc_label(used.clone(), name, f"`{name}` is used here, after the read", false)),
+    }
+    walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{root}` is read here, but `{name}` is a mutable view into it and is used later.", notes: [], help: f"End the view first, or read through `{name}`.", warning: false, labels: labels })
 }

@@ -1,0 +1,11 @@
+// The same for a field of a struct of numbers only (#962).
+struct V { pub x: i64, pub y: i64 }
+struct Seg { pub a: V, pub b: V }
+fn main() {
+    let mut s = Seg { a: V { x: 1, y: 2 }, b: V { x: 3, y: 4 } }
+    let mut a = s.a
+    let mut b = s.b
+    a.x = 7
+    b.y = 9
+    println(f"{s.a.x} {s.a.y} {s.b.x} {s.b.y}")
+}

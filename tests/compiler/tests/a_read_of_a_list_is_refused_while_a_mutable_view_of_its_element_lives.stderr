@@ -1,0 +1,12 @@
+error[NK2305]: `v` is read here, but `e` is a mutable view into it and is used later.
+  --> tests/a_read_of_a_list_is_refused_while_a_mutable_view_of_its_element_lives.nika:7:16
+   |
+ 6 |     let mut e = v[0]
+   |             - `e` is a mutable view into `v`
+ 7 |     println(f"{v[1].n}")
+   |                ^ `v` is read here
+ 8 |     e.n = 10
+   |     - `e` is used here, after the read
+   |
+   = help: End the view first, or read through `e`.
+1 change to data a view still to be used may point into

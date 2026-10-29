@@ -477,6 +477,7 @@ fn walked<'a>(
             library,
             &checker.s.facts.lent_lets,
             &crate::view_changes::coalesced(&checker.s.facts),
+            &crate::view_changes::mut_viewed(&checker.s.facts),
         );
         checker.s.findings.extend(changed);
         // A view handed back that points into a buffer the body owns (`NK2303`).
