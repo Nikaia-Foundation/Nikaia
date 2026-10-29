@@ -195,6 +195,26 @@ fn check_core_stmt_mut_view(mut state: CheckState, world: ref CheckWorld, value:
     }
 }
 
+/// **`let mut e = v[i]` over a `mut` list is a view of the element** (#959,
+/// ADR-282 D7, Part I 6.5): the same view `let mut e = v[i] ?? continue` is,
+/// written `&mut v[i]`. A struct is not a word by its kind, so a struct of
+/// numbers is no copy either. A place the function may not change keeps the
+/// copy it was.
+fn check_core_stmt_mut_view_of_an_element(mut state: CheckState, world: ref CheckWorld, value: ref Expr) sync {
+    match value {
+        Expr::Index { base, .. } => {
+            let path = dotted_path(world, base) ?? return
+            let parts: Vec[ref String] = path.split(".").collect()
+            let root = parts[0].clone()
+            let found = state.binding(root) ?? return
+            if found.immutable == null {
+                state.facts.mut_view_reads.insert(id_of(value) as i64, "")
+            }
+        },
+        else => {},
+    }
+}
+
 /// A name or a field, the values a `let` may see through.
 fn check_core_stmt_a_name_or_field(value: ref Expr) -> bool sync {
     return match value {
@@ -831,6 +851,8 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     let got_a_view = got && !a_copy_by_value(bound) && !copies_as_a_view(bound) && !(state.a_package_copy(world, bound) && check_core_stmt_a_named(bound))
     if mutable && (read_through_a_jump || got_a_view || check_core_stmt_a_field_jump(state, world, value)) {
         check_core_stmt_mut_view(state, world, value, span, a_copy_by_value(bound))
+    } else if mutable && ty == null && names.len() == 1 && shape.len() == 0 && check_core_stmt_a_named(bound) && !a_copy_by_value(bound) {
+        check_core_stmt_mut_view_of_an_element(state, world, value)
     }
     if check_core_stmt_a_path(bound) && state.made_from_text(world, value) {
         state.flow.text_paths.insert(id)

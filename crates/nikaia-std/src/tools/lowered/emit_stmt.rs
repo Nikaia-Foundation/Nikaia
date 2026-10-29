@@ -370,6 +370,18 @@ impl EmitState {
         let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
         out.push(&format!("let {}{}{} = ", mut_word, local, annotation));
         out.push(&before);
+        match value {
+            Expr::Index { .. } => {
+                if self.facts.mut_view_reads.contains_key(&node_key(value)) {
+                    out.push("&mut ");
+                    self.emit_expr(world, walk, out, host, value, depth, flow.place(), &inner)?;
+                    out.push(&after);
+                    out.push(";");
+                    return Ok(());
+                }
+            },
+            _ => { },
+        }
         if self.facts.lent_lets.contains(&at) { out.push("&"); }
         let viewed = match value {
             Expr::Variable(name, _) => { let name = *name; self.facts.viewed_numbers.contains(&(flow.statement, emit_text(world, name))) },

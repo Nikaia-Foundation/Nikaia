@@ -517,6 +517,19 @@ impl EmitState {
         let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
         out.push(f"let {mut_word}{local}{annotation} = ")
         out.push(before)
+        // **A `let mut` over a list's element is the `&mut` of it** (#959).
+        match value {
+            Expr::Index { .. } => {
+                if self.facts.mut_view_reads.contains_key(node_key(value)) {
+                    out.push("&mut ")
+                    self.emit_expr(world, walk, out, host, value, depth, flow.place(), inner)
+                    out.push(after)
+                    out.push(";")
+                    return
+                }
+            },
+            else => {},
+        }
         // **A `let` over a place is a view of it** (ADR-094 D4); `let y = x`
         // over a whole variable stays a move, and a call or a literal owns what
         // it is given.

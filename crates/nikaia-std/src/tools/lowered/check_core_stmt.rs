@@ -150,6 +150,22 @@ pub(crate) fn check_core_stmt_mut_view(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_mut_view_of_an_element(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) {
+    match value {
+        Expr::Index { base, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            let path = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
+            let root = (*nikaia_std::index::get(&parts, 0)).to_string();
+            let found = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if found.immutable.is_none() { state.facts.mut_view_reads.insert(id_of(value) as i64, String::from("")); }
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_name_or_field(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _) | Expr::Field { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -598,7 +614,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if copied_word { state.a_map_read_assigned(world, &bound, value, span); }
     let read_through_a_jump = jumped && !copied_read && !copied_word;
     let got_a_view = got && !a_copy_by_value(&bound) && !copies_as_a_view(&bound) && !(state.a_package_copy(world, &bound) && check_core_stmt_a_named(&bound));
-    if mutable && (read_through_a_jump || got_a_view || check_core_stmt_a_field_jump(&state, world, value)) { check_core_stmt_mut_view(state, world, value, span, a_copy_by_value(&bound)); }
+    if mutable && (read_through_a_jump || got_a_view || check_core_stmt_a_field_jump(&state, world, value)) { check_core_stmt_mut_view(state, world, value, span, a_copy_by_value(&bound)); } else if mutable && ty.is_none() && names.len() == 1 && shape.is_empty() && check_core_stmt_a_named(&bound) && !a_copy_by_value(&bound) { check_core_stmt_mut_view_of_an_element(state, world, value); }
     if check_core_stmt_a_path(&bound) && state.made_from_text(world, value) { state.flow.text_paths.insert(id); }
     if bound.is_unknown() || state.a_drivers_row(world, value) { state.flow.unknown_bound.insert(id); }
     let mut literal: Option<String> = None;

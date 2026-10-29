@@ -1,0 +1,8 @@
+struct P { pub n: i64 }
+fn main() {
+    let mut v: Vec[P] = [P { n: 1 }, P { n: 2 }]
+    let mut e = v[0]
+    e.n = 10
+    println(f"{v[1].n}")
+    println(f"{v[0].n}")
+}
