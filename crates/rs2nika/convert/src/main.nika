@@ -13661,6 +13661,23 @@ fn rs2nika_or_arms(mut ctx: Rs2nikaCtx, src: String) -> String {
     return out.join("\n")
 }
 
+/// Whether `name` above line `at` is the element of a `for name in
+/// v.iter_mut()`, which the tree engine writes as a loop over the indexes.
+fn rs2nika_walked_mut(lines: ref Vec[String], at: i64, name: ref String) -> bool {
+    let mut j = at - 1
+    while j >= 0 {
+        let t = lines[j].trim()
+        if t.starts_with("fn ") || t.starts_with("pub fn ") {
+            return false
+        }
+        if t.starts_with(f"for {name} in ") && t.contains(".iter_mut()") {
+            return true
+        }
+        j = j - 1
+    }
+    return false
+}
+
 /// R262: `for item in &mut v { .. item.node = e; }` -> M2's rebuild: the
 /// items drained into `kept`, the changed one pushed as `Spanned { node, span,
 /// doc, attributes }`, the others as they are, `v.extend(kept)` (a loop
@@ -13674,7 +13691,7 @@ fn rs2nika_drained(mut ctx: Rs2nikaCtx, src: String) -> String {
         let l: String = lines[i].clone()
         let ind = rs2nika_indent(l)
         let t: String = l.trim().clone()
-        if t.starts_with("*") && t.ends_with(";") && t.contains(" = ") && !t.contains("==") {
+        if t.starts_with("*") && t.ends_with(";") && t.contains(" = ") && !t.contains("==") && !rs2nika_walked_mut(lines, i, (t.strip_prefix("*") ?? "").split(" ").next() ?? "") {
             out.push(f"{ind}// TODO(rs2nika): a write through a match binding (ADR-094 D7, #576): rebuild the value and put it back, as M2 drains and pushes the items (R262)")
             rs2nika_hit(ctx, "R262")
         }

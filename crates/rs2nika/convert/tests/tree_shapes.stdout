@@ -92,3 +92,19 @@ fn flags[H: CheckHost](host: ref H) -> String? {
 pub fn has_flags[H: CheckHost](host: ref H) -> bool {
     return flags(host) != null
 }
+
+pub struct Bag {
+    items: Vec[String],
+}
+
+impl Bag {
+    pub fn take_items(ref mut self) -> Vec[String] {
+        return self.items.drain().collect()
+    }
+}
+
+pub fn shout(mut v: Vec[String]) {
+    for at_1 in 0..<v.len() {
+        v[at_1] = v[at_1].to_uppercase()
+    }
+}

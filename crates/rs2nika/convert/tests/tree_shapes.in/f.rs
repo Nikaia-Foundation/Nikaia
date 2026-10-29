@@ -80,3 +80,17 @@ fn flags() -> Option<String> {
 fn has_flags() -> bool {
     flags().is_some()
 }
+
+pub struct Bag { items: Vec<String> }
+
+impl Bag {
+    pub fn take_items(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.items)
+    }
+}
+
+fn shout(v: &mut Vec<String>) {
+    for s in v.iter_mut() {
+        *s = s.to_uppercase();
+    }
+}

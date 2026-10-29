@@ -585,6 +585,17 @@ impl TrEm {
                 let b = self.expr(arg_nodes[1])
                 return f"{a}.{last}({b})"
             }
+            // **`mem::take` of a collection is a `drain`** (#564, ADR-094 D4):
+            // the elements leave, the field stays the caller's and empty.
+            if owner == "mem" && last == "take" && arg_nodes.len() == 1 && self.t.is(arg_nodes[0], "REF_EXPR") {
+                let place = self.nodes(arg_nodes[0])[self.nodes(arg_nodes[0]).len() - 1]
+                if self.t.is(place, "FIELD_EXPR") {
+                    let held = self.field_ty("", self.src(self.t.kid(place, "NAME_REF")))
+                    if held.starts_with("Vec[") || held.starts_with("collections::") {
+                        return f"{self.expr(place)}.drain().collect()"
+                    }
+                }
+            }
             if owner == "mem" && (last == "swap" || last == "replace" || last == "take") {
                 return self.todo("`std::mem` moves values in place", n)
             }
