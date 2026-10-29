@@ -1,0 +1,8 @@
+fn main() {
+    let v: Vec[(String, bool)] = [("a", true), ("self", false), ("b", true)]
+    let w: Vec[(String, bool)] = [("a", true), ("c", false)]
+    let m = v.iter().filter(fn((param, _)) { param != "self" && w.iter().any(fn((p, _)) { p == param }) }).filter_map(fn((param, _)) {
+        return if param == "a" { 1 } else { null }
+    }).count()
+    print(m)
+}

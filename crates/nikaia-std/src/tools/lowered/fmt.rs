@@ -658,9 +658,29 @@ pub(crate) fn fmt_operators(toks: &[FmtToken], shape: &FmtShape, last: i64, leve
 pub(crate) fn fmt_sealed(toks: &[FmtToken], open: i64, close: i64) -> bool {
     if nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "[" && open > 0 && nikaia_std::index::get(&toks, nikaia_std::index::at(open - 1)).kind == FmtKind::Word { return true; }
     if nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "(" && open > 0 && (nikaia_std::index::get(&toks, nikaia_std::index::at(open - 1)).text == "->" || nikaia_std::index::get(&toks, nikaia_std::index::at(open - 1)).text == ":") { return true; }
+    if nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "(" && fmt_in_closure_params(toks, open) { return true; }
     if close + 1 >= toks.len() as i64 { return false; }
     let after = &nikaia_std::index::get(&toks, nikaia_std::index::at(close + 1)).text;
     after == "=>" || after == "|" || after == "=" || after == "in"
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn fmt_in_closure_params(toks: &[FmtToken], open: i64) -> bool {
+    let mut at = open;
+    while at > 0 {
+        if nikaia_std::index::get(&toks, nikaia_std::index::at(at)).text == "(" && nikaia_std::index::get(&toks, nikaia_std::index::at(at - 1)).text == "fn" { return true; }
+        let mut depth = 0;
+        let mut k = at - 1;
+        let mut found: i64 = -1;
+        while k >= 0 && found < 0 {
+            if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Close { depth += 1; } else if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Open { if depth == 0 { found = k; } else { depth -= 1; } }
+            k -= 1;
+        }
+        if found < 0 || nikaia_std::index::get(&toks, nikaia_std::index::at(found)).text != "(" { return false; }
+        at = found;
+    }
+    false
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

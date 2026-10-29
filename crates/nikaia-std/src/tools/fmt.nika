@@ -855,11 +855,45 @@ fn fmt_sealed(toks: ref Vec[FmtToken], open: i64, close: i64) -> bool sync {
     if toks[open].text == "(" && open > 0 && (toks[open - 1].text == "->" || toks[open - 1].text == ":") {
         return true
     }
+    if toks[open].text == "(" && fmt_in_closure_params(toks, open) {
+        return true
+    }
     if close + 1 >= toks.len() {
         return false
     }
     let after = toks[close + 1].text
     return after == "=>" || after == "|" || after == "=" || after == "in"
+}
+
+// Whether the parenthesis at `open` is a closure's parameter list `fn(..)` or
+// a tuple pattern inside one: neither is cut, nor takes a trailing comma.
+fn fmt_in_closure_params(toks: ref Vec[FmtToken], open: i64) -> bool sync {
+    let mut at = open
+    while at > 0 {
+        if toks[at].text == "(" && toks[at - 1].text == "fn" {
+            return true
+        }
+        let mut depth = 0
+        let mut k = at - 1
+        let mut found = -1
+        while k >= 0 && found < 0 {
+            if toks[k].kind == FmtKind::Close {
+                depth += 1
+            } else if toks[k].kind == FmtKind::Open {
+                if depth == 0 {
+                    found = k
+                } else {
+                    depth -= 1
+                }
+            }
+            k -= 1
+        }
+        if found < 0 || toks[found].text != "(" {
+            return false
+        }
+        at = found
+    }
+    return false
 }
 
 fn fmt_breakable(toks: ref Vec[FmtToken], shape: ref FmtShape, open: i64, close: i64) -> bool sync {
