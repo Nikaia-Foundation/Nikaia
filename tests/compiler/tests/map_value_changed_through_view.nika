@@ -1,0 +1,28 @@
+// A change in place through a `m[k] ?? jump` or `m.get(k) ?? jump` view of a
+// map's text makes the map's value text of its own (#981), as the entry view
+// does.
+
+use std::collections
+
+fn bump(mut s: collections::BTreeMap[String, String]) {
+    let mut si = s["a"] ?? return
+    si += "!"
+}
+
+fn bump_get(mut s: collections::BTreeMap[String, String]) {
+    let mut sg = s.get("b") ?? return
+    sg += "?"
+}
+
+fn main() {
+    let mut s: collections::BTreeMap[String, String] = collections::BTreeMap()
+    s.insert("a", "p")
+    s.insert("b", "q")
+    bump(s)
+    bump_get(s)
+    println(f"{s["a"] ?? ""} {s["b"] ?? ""}")
+    let mut names: Vec[String] = ["x"]
+    let mut first = names[0]
+    first += "y"
+    println(names[0])
+}

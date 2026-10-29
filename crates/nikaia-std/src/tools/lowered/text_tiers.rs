@@ -781,9 +781,33 @@ pub(crate) fn text_source_word(value: Option<&Expr>, ask: &TierAsk<'_, '_, '_, '
                 None => None,
             }
         },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); element_text_word(base, index, ask, walk) },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if args.len() != 1 || ask.names.resolve(method) != "get" { return None; }
+            element_text_word(receiver, nikaia_std::index::get(&args, 0), ask, walk)
+        },
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
+            if !tier_a_jump(fallback) { return None; }
+            text_source_word(Some(first), ask, walk)
+        },
         _ => None,
     }
 }
+
+pub(crate) fn element_text_word(base: &Expr, index: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
+    if a_range(index) { return None; }
+    let found = match source_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let ty = found.ty.clone();
+    if !a_container(ask.names, &ty) { return None; }
+    let mut at: i64 = 0;
+    if a_map(ask.names, &ty) { at = 1; }
+    if ty.generics.len() <= ((at) as usize) || !plain_string(ask.names, nikaia_std::index::get(&ty.generics, (at) as usize)) { return None; }
+    Some(seen(&found.owner, &vec![at], walk))
+}
+
+pub(crate) fn tier_a_jump(value: &Expr) -> bool { matches!(value, Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_)) }
 
 pub(crate) fn read_through(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
     match value {
@@ -1554,6 +1578,8 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
         Stmt::For { bindings, iter, body, .. } => {
             let kinds = tier_expr(iter, ask, walk);
             let from = element_word(iter, ask, walk);
+            let mut walked: Option<String> = None;
+            if bindings.len() == 1 { walked = walked_struct(iter, ask, walk); }
             let mut map: Option<Declaring> = None;
             if bindings.len() == 2 { map = map_walked(iter, ask, walk); }
             open_tier_scope(walk);
@@ -1563,6 +1589,10 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
                 let mut local = plain_local(kinds.clone());
                 if bindings.len() == 1 {
                     local.from = match from.as_ref() {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    };
+                    local.of = match walked.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     };
@@ -2081,6 +2111,33 @@ pub(crate) fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, wal
     }
 }
 
+pub(crate) fn element_struct(list: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
+    let found = match source_of(list, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let ty = found.ty.clone();
+    if !a_container(ask.names, &ty) { return None; }
+    let mut at: i64 = 0;
+    if a_map(ask.names, &ty) { at = 1; }
+    if ty.generics.len() <= ((at) as usize) { return None; }
+    let element = (*nikaia_std::index::get(&ty.generics, (at) as usize)).clone();
+    if !element.generics.is_empty() || element.is_nullable || element.is_tuple || element.is_slice || (*element.code).is_some() { return None; }
+    Some(ask.names.resolve(element.name).to_string())
+}
+
+pub(crate) fn walked_struct(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
+    match iter {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            if args.is_empty() && (name == "iter" || name == "iter_mut" || name == "drain" || name == "into_iter") { return walked_struct(receiver, ask, walk); }
+            return None;
+        },
+        _ => { },
+    }
+    let found = match source_of(iter, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if a_map(ask.names, &found.ty) { return None; }
+    element_struct(iter, ask, walk)
+}
+
 pub(crate) fn called_struct(func: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> Option<String> {
     let found = match called_result(func, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let ty = &found.ty;
@@ -2096,6 +2153,7 @@ pub(crate) fn field_struct_or_bytes(base: &Expr, field: &str, ask: &TierAsk<'_, 
 
 pub(crate) fn cut_bytes(base: &Expr, index: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
     let a_range = matches!(index, Expr::Range { .. });
+    if !a_range { return element_struct(base, ask, walk); }
     let of = match tier_struct_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if a_range && of == "Bytes" { return Some(of); }
     None

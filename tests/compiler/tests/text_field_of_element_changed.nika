@@ -1,0 +1,22 @@
+// A text field of a list's element changed in place makes the literal that
+// fills it text of its own (#967): through `v[i].f`, a `let mut` view of the
+// element, and a `for mut` binding.
+
+struct P {
+    pub name: String,
+}
+
+fn main() {
+    let mut v: Vec[P] = [P { name: "a" }]
+    v[0].name += "!"
+    println(v[0].name)
+    let mut w: Vec[P] = [P { name: "b" }]
+    let mut e = w[0]
+    e.name += "?"
+    println(w[0].name)
+    let mut u: Vec[P] = [P { name: "c" }, P { name: "d" }]
+    for mut p in u {
+        p.name += "."
+    }
+    println(f"{u[0].name} {u[1].name}")
+}

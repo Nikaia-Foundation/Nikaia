@@ -1182,7 +1182,54 @@ fn text_source_word(value: ref Expr?, ask: ref TierAsk, mut walk: TierWalk) -> S
             let local = tier_local(ask.names.resolve(name), walk) ?? return null
             local.from?.clone()
         }
+        // **An element read whole is a view of the element** (#981): `xs[i]`,
+        // `m[k]` and `m.get(k)`, and the same before a `??` that jumps,
+        // which hands out the element or leaves.
+        Expr::Index { base, index, .. } => element_text_word(base, index, ask, walk),
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if args.len() != 1 || ask.names.resolve(method) != "get" {
+                return null
+            }
+            element_text_word(receiver, args[0], ask, walk)
+        }
+        Expr::Coalesce { value: first, fallback, .. } => {
+            if !tier_a_jump(fallback) {
+                return null
+            }
+            text_source_word(first, ask, walk)
+        }
         else => null,
+    }
+}
+
+/// The word of the `String` element a declared list or map hands out at
+/// `index`: a list's element, a map's value; none for a cut.
+fn element_text_word(base: ref Expr, index: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String? {
+    if a_range(index) {
+        return null
+    }
+    let found = source_of(base, ask, walk) ?? return null
+    let ty = found.ty.clone()
+    if !a_container(ask.names, ty) {
+        return null
+    }
+    let mut at = 0
+    if a_map(ask.names, ty) {
+        at = 1
+    }
+    if ty.generics.len() <= at || !plain_string(ask.names, ty.generics[at]) {
+        return null
+    }
+    return seen(found.owner, [at], walk)
+}
+
+/// `return`, `break` or `continue`: a fallback that hands out nothing.
+fn tier_a_jump(value: ref Expr) -> bool {
+    return match value {
+        Expr::Return(_, _) => true,
+        Expr::Break(_) => true,
+        Expr::Continue(_) => true,
+        else => false,
     }
 }
 
@@ -2236,6 +2283,10 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
         Stmt::For { bindings, iter, body, .. } => {
             let kinds = tier_expr(iter, ask, walk)
             let from = element_word(iter, ask, walk)
+            let mut walked: String? = null
+            if bindings.len() == 1 {
+                walked = walked_struct(iter, ask, walk)
+            }
             // **A walk of a map binds its key and its value apart** (#659),
             // each of the kinds its position holds; the key is read out of its
             // position, so going back into it adds nothing.
@@ -2249,6 +2300,7 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
                 let mut local = plain_local(kinds.clone())
                 if bindings.len() == 1 {
                     local.from = from?.clone()
+                    local.of = walked?.clone()
                 }
                 if map != null {
                     let found = map?.clone() ?? continue
@@ -2910,6 +2962,50 @@ fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Strin
     }
 }
 
+/// **The struct a declared list's or map's element is** (#967): `v[0]` of a
+/// `Vec[P]`, a value of a `BTreeMap[K, P]`, and so what a loop over the list
+/// binds. Its fields are the struct's positions, so a change in place of
+/// `v[0].name` is a change of `P.name`.
+fn element_struct(list: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String? {
+    let found = source_of(list, ask, walk) ?? return null
+    let ty = found.ty.clone()
+    if !a_container(ask.names, ty) {
+        return null
+    }
+    let mut at = 0
+    if a_map(ask.names, ty) {
+        at = 1
+    }
+    if ty.generics.len() <= at {
+        return null
+    }
+    let element = ty.generics[at].clone()
+    if element.generics.len() > 0 || element.is_nullable || element.is_tuple || element.is_slice || element.code != null {
+        return null
+    }
+    return ask.names.resolve(element.name).clone()
+}
+
+/// The struct a loop's one binding is: an element of the list it walks,
+/// also through `iter()`, `iter_mut()`, `drain()` and `into_iter()`.
+fn walked_struct(iter: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String? {
+    match iter {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let name = ask.names.resolve(method)
+            if args.len() == 0 && (name == "iter" || name == "iter_mut" || name == "drain" || name == "into_iter") {
+                return walked_struct(receiver, ask, walk)
+            }
+            return null
+        }
+        else => {}
+    }
+    let found = source_of(iter, ask, walk) ?? return null
+    if a_map(ask.names, found.ty) {
+        return null
+    }
+    return element_struct(iter, ask, walk)
+}
+
 /// The struct a call's declared result names, where that is one plain name.
 fn called_struct(func: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> String? {
     let found = called_result(func, ask, walk) ?? return null
@@ -2930,11 +3026,15 @@ fn field_struct_or_bytes(base: ref Expr, field: ref String, ask: ref TierAsk, mu
     return "Bytes"
 }
 
-/// A cut of a `Bytes` is one too.
+/// A cut of a `Bytes` is one too, and an element of a declared list or map
+/// is the struct its element type names (#967).
 fn cut_bytes(base: ref Expr, index: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String? {
     let a_range = match index {
         Expr::Range { .. } => true,
         else => false,
+    }
+    if !a_range {
+        return element_struct(base, ask, walk)
     }
     let of = tier_struct_of(base, ask, walk) ?? return null
     if a_range && of == "Bytes" {
