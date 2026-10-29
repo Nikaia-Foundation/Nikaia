@@ -569,8 +569,38 @@ impl TrEm {
         if (m == "to_string" || m == "to_owned") && a.len() == 0 && self.texts.contains(r) {
             return r
         }
+        // `text::parse_i64` hands back an option already
+        if m == "ok" && a.len() == 0 && r.starts_with("text::parse_") {
+            return r
+        }
         if m == "into_iter" && a.len() == 0 {
             return f"{r}.iter()"
+        }
+        // `fs::Path` has neither `to_path_buf` nor `file_stem` nor `as_os_str`
+        if m == "to_path_buf" && a.len() == 0 {
+            return f"{r}.clone()"
+        }
+        if m == "file_stem" && a.len() == 0 {
+            return f"{r}.with_extension(\"\").file_name()"
+        }
+        if m == "as_os_str" && a.len() == 0 {
+            return f"{r}.display()"
+        }
+        // `o.is_some_and(|w| e)` read as a value: `(match o { null => false, w => e })`
+        if (m == "is_some_and" || m == "is_none_or") && a.len() == 1 {
+            let (p, body) = self.closure_parts(arg_nodes[0])
+            if body != "" && !body.contains("\n") {
+                let absent = if m == "is_some_and" { "false" } else { "true" }
+                let mut base = recv_n
+                while self.t.is(base, "METHOD_CALL_EXPR") && self.nodes(self.t.kid(base, "ARG_LIST")).len() == 0 {
+                    let inner = self.src(self.t.kid(base, "NAME_REF"))
+                    if inner != "as_ref" && inner != "as_deref" && inner != "as_mut" {
+                        break
+                    }
+                    base = self.t.nth(base, 0)
+                }
+                return f"(match {self.expr(base)} {{ null => {absent}, {p} => {body} }})"
+            }
         }
         if m == "iter_mut" {
             return self.todo("`iter_mut` (index the list: `for i in 0..<xs.len()`)", n)
@@ -583,6 +613,16 @@ impl TrEm {
         }
         if m == "expect" && a.len() == 1 {
             return f"({r} ?? panic({a[0]}))"
+        }
+        // `o.or_else(|| p)` / `o.or(p)`: the other option where it is absent
+        if m == "or_else" && a.len() == 1 {
+            let (p, body) = self.closure_parts(arg_nodes[0])
+            if p == "_" && self.nodes(self.t.kid(arg_nodes[0], "PARAM_LIST")).len() == 0 {
+                return f"({r} ?? {body})"
+            }
+        }
+        if m == "or" && a.len() == 1 && self.optional_expr(recv_n) {
+            return f"({r} ?? {a[0]})"
         }
         if m == "unwrap_or" && a.len() == 1 {
             return f"({r} ?? {a[0]})"
@@ -707,9 +747,6 @@ impl TrEm {
         if m == "sort_unstable_by_key" {
             return f"{r}.sort_by_key({al})"
         }
-        if m == "enumerate" {
-            return self.todo("`enumerate` (`Seq` has none: index the list, `(0..<xs.len()).map(fn(i) { .. })`)", n)
-        }
         return f"{r}.{m}({al})"
     }
 
@@ -805,6 +842,13 @@ impl TrEm {
             let saved_opt = self.opt
             let saved_unit = self.unit
             let mut mode: String = "return"
+            // a block that hands back `None` or `Some(..)` is an option's:
+            // `?` in it is `?? return null`
+            let text = self.src(body)
+            if text.contains("return None") || (text.contains("Some(") && text.contains("?") && !text.contains("Ok(") && !text.contains("Err(")) {
+                self.opt = true
+                self.fails = false
+            }
             if self.closure_unit(n, body) {
                 mode = "stmt"
                 self.unit = true

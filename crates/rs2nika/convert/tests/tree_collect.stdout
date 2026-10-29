@@ -1,0 +1,31 @@
+use std::collections
+use std::fs
+use std::text
+
+fn collect_literal_of(part: String) -> i64? {
+    return text::parse_i64(part)
+}
+
+pub fn collect_literals(parts: ref Vec[String]) -> Vec[i64]? {
+    let mut args: Vec[i64] = []
+    for part in parts {
+        args.push(collect_literal_of(part) ?? return null)
+    }
+    return args
+}
+
+pub fn collect_stem(path: ref fs::Path) -> bool {
+    return (match path.with_extension("").file_name() { null => false, s => s == "main" })
+}
+
+pub fn collect_either(a: i64?, b: i64?) -> i64? {
+    return (a ?? b)
+}
+
+pub fn collect_owned(path: ref fs::Path) -> fs::Path {
+    return path.clone()
+}
+
+pub fn collect_numbered(xs: ref Vec[String]) -> Vec[(i64, String)] {
+    return xs.iter().map(fn(x) { x.clone() }).enumerate().collect()
+}

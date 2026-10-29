@@ -255,6 +255,10 @@ impl TrEm {
         if els >= 0 {
             return self.let_else(p, init, els, ind)
         }
+        let looped = self.collect_loop(name, ty, init, ind.clone())
+        if looped.len() > 0 {
+            return looped
+        }
         let tested = self.opt_test(init, ind.clone())
         if tested.len() > 0 {
             let mut out: Vec[String] = [f"{ind}let {name}{ty} = {tested[0].trim_start()}"]
@@ -270,6 +274,62 @@ impl TrEm {
             value = self.expr(init)
         }
         return [f"{ind}let {name}{ty} = {value}"]
+    }
+
+    /// `let v = xs.iter().map(|x| f(x)).collect::<Option<Vec<_>>>()?;`: a
+    /// lambda cannot jump out of the function (NK2606), so a loop that
+    /// pushes `f(x) ?? return null`; a `Result` the same, its failure
+    /// thrown on by the call. [] for anything else.
+    fn collect_loop(ref mut self, name: ref String, ty: ref String, init: i64, ind: String) -> Vec[String] {
+        if !self.t.is(init, "TRY_EXPR") {
+            return []
+        }
+        let c = self.t.nth(init, 0)
+        if !self.t.is(c, "METHOD_CALL_EXPR") || self.src(self.t.kid(c, "NAME_REF")) != "collect" {
+            return []
+        }
+        let whole = self.src(c)
+        let is_opt = whole.contains("collect::<Option<")
+        let is_res = whole.contains("collect::<Result<")
+        if !(is_opt && self.opt) && !(is_res && self.fails) {
+            return []
+        }
+        let mapped = self.t.nth(c, 0)
+        if !self.t.is(mapped, "METHOD_CALL_EXPR") || self.src(self.t.kid(mapped, "NAME_REF")) != "map" {
+            return []
+        }
+        let args = self.nodes(self.t.kid(mapped, "ARG_LIST"))
+        if args.len() != 1 {
+            return []
+        }
+        let mut base = self.t.nth(mapped, 0)
+        while self.t.is(base, "METHOD_CALL_EXPR") && self.nodes(self.t.kid(base, "ARG_LIST")).len() == 0 {
+            let m = self.src(self.t.kid(base, "NAME_REF"))
+            if m != "iter" && m != "into_iter" && m != "copied" && m != "cloned" {
+                break
+            }
+            base = self.t.nth(base, 0)
+        }
+        let saved = self.ind.clone()
+        self.ind = f"{ind}    "
+        let (p, body) = self.closure_parts(args[0])
+        self.ind = saved
+        if body == "" {
+            return []
+        }
+        let mut bare: String = name.clone()
+        if bare.starts_with("mut ") {
+            bare = bare["mut ".len()..<bare.len()].clone()
+        }
+        let mut item = body.clone()
+        if is_opt {
+            item = f"{body} ?? return null"
+        }
+        let mut t: String = ty.clone()
+        if t.contains("?") || t.contains("_") {
+            t = ""
+        }
+        return [f"{ind}let mut {bare}{t} = []", f"{ind}for {p} in {self.expr(base)} {{", f"{ind}    {bare}.push({item})", f"{ind}}}"]
     }
 
     /// `o.is_none_or(|w| e)` -> `match o { null => true, w => e, }`,
