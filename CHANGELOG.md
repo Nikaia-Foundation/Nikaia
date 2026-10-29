@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1274] — 2026-10-29
+
+**ADR-353 D8-D10, decided (#942, #945): a text moved into a struct, variant, tuple or list while a view of it lives is kept, not copied.**
+- D8: such a literal is a variable of the same function (D3); the moved text flows in as a view, program-wide, and so does a text parameter only moved into a local struct (#945).
+- D9: where that place must own its text while a view lives, the move is `NK2305` in D6's words and names what forces it (a `push_str` in another function, say); the ways out are `.clone()`, or the struct first and the view from its field. NK1106 and NK2105 stay for cases with no live view.
+- D10: a struct, variant, tuple or list result viewing what the body owns takes the caller's keep (ADR-283 D10, D23). No nightly feature (ADR-001 D1).
+- Part I 2.2, 6.5, 6.6 and Part III `NK2305`. Specified, not built yet.
+
 ## [0.0.1273] — 2026-10-29
 
 **A view made from one field of a struct leaves its other fields free (#944).**
