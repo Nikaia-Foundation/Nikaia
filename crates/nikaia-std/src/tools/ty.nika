@@ -1825,9 +1825,8 @@ fn bind_item(pattern: ref Ty, actual: ref Ty, mut out: collections::BTreeMap[Str
 fn bind_code(pattern_params: ref Array[Ty], pattern_result: ref Ty?, actual: ref Ty, mut out: collections::BTreeMap[String, Ty]) {
     match actual {
         Ty::Fn { params, result, .. } => {
-            let shorter = if params.len() < pattern_params.len() { params.len() } else { pattern_params.len() }
-            for at in 0..<shorter {
-                bind(pattern_params[at], params[at], out)
+            for (pattern, actual_param) in pattern_params.iter().zip(params.iter()) {
+                bind(pattern, actual_param, out)
             }
             if pattern_result != null && result != null {
                 let pattern = pattern_result?.clone() ?? Ty::Unknown

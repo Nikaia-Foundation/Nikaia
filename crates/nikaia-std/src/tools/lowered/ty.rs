@@ -1057,8 +1057,7 @@ pub(crate) fn bind_code(pattern_params: &[Ty], pattern_result: Option<&Ty>, actu
     match actual {
         Ty::Fn { params, result, .. } => {
             let result = nikaia_std::boxed::open(result);
-            let shorter = if (params.len() as i64) < pattern_params.len() as i64 { params.len() as i64 } else { pattern_params.len() as i64 };
-            for at in 0..shorter { bind(nikaia_std::index::get(&pattern_params, (at) as usize), nikaia_std::index::get(&params, (at) as usize), out); }
+            for (pattern, actual_param) in pattern_params.iter().zip(params.iter()) { bind(&pattern, actual_param, out); }
             if pattern_result.is_some() && result.is_some() {
                 let pattern = nikaia_std::index::or(match pattern_result {
                     Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
