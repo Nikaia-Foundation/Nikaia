@@ -1,7 +1,7 @@
 # ADR-views-1: A Part Taken out of a `let mut` View of a Place Is Given Back Before the View Ends, as out of a `mut` Parameter
 
 **Status:** Accepted
-**Date:** October 29, 2026 (owner's decision, option 1; #949)
+**Date:** October 29, 2026 (owner's decision, option 1; #949); D6 October 29, 2026 (owner's decision, option 1; #979)
 **Answers:** how a program takes a part out of a place it changes through a
 `let mut` view and puts a new one in, without a copy: what Rust writes with
 `std::mem::take` and `std::mem::replace` (#949)
@@ -86,12 +86,54 @@ taking it out of its owner (`m.remove(k)`).
 
 `std::mem` stays absent (`NK1181`); D1-D3 are the one form.
 
+### D6 — A `let` over a part is a view while the name is read, and a taking when it is kept
+
+A `let` that binds a part of a `mut` parameter, of `ref mut self` or of a
+`let mut` view (`let outer = walk.at_field`) is a **view** of it while the
+name is only read. It **takes** the part (D1) when the name is kept: handed
+to something that keeps it, returned, or assigned into a place
+(`walk.at_field = outer`). Which of the two it is follows from the name's
+later uses, as for a parameter (Part I 6.5: a view unless the body keeps it).
+A taking follows D2: the part is given back on every way out, and between
+the taking and the giving back stands no `throw` and no call that can fail
+(`NK2108`).
+
+**Inside a loop**, a part taken this way out of something declared outside
+the loop is given back before the turn ends: at its end, at a `continue`, at
+a `break`. It is then whole at the start of the next turn, so `NK2105`'s loop
+case (bound by a `let` inside a loop, declared outside it) does not apply. A
+turn that can end with the part still out is `NK2108`, naming the way out.
+
+**The message names the keeping line.** Because what the `let` is depends on
+a line further down, every refusal that comes from the taking - a read or a
+change of the part before it is given back (`NK2105`), a way out with it still
+out (`NK2108`) - names the `let`, the place, and the line that keeps the name
+and so made the `let` a taking: *"`walk.at_field` was taken out by
+`let outer` at 12, because `outer` is kept at 15 (`walk.at_field = outer`)"*.
+
+Below, the `let` is `std::mem::take(&mut <place>)` or `std::mem::replace`
+with D3's stand-in; an assignment of a new value that directly follows may be
+folded into one `std::mem::replace(&mut <place>, <new>)`. There is no new
+syntax (D5): the four lines
+
+```text
+let outer = walk.at_field
+walk.at_field = P { .. }
+visit(walk)
+walk.at_field = outer
+```
+
+copy nothing, in a loop or out of one.
+
 ## 5. Consequences
 
 * Part I 6.5 states the rule for a `mut` parameter **and** a `let mut` view.
 * `project_lower_published` (`crates/nikaia-std/src/tools/project_lower.nika`)
   hands `contract.ensures` and `contract.from` to a keeping callee and assigns
   the published lists, with no copy of the kept pairs (#949, #953).
+
+* D6: the save/put/restore of a field around a call (`tools/emit_stmt.nika`,
+  the walkers) is written without `.clone()` (#979).
 
 ## 6. What this does not decide
 

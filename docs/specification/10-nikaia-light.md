@@ -2748,7 +2748,13 @@ out of `p` in `for mut p in v` is given back before the turn ends, and handing
 is refused with `NK1183`: the binding is a view, so the annotation comes off,
 or `.clone()` makes the copy. A
 `let` over a place (`config.name`, `totals.stations[name]`) is a view of it
-where the value would otherwise have to move.
+where the value would otherwise have to move, and **takes** the part where
+the name is kept (handed to a keeper, returned, or assigned into a place) and
+the place is a part of a `mut` parameter, of `ref mut self` or of a `let mut`
+view ([ADR-views-1](adr/adr-views-1.md) D6): `let outer = walk.at;
+walk.at = P {..}; visit(walk); walk.at = outer` copies nothing. In a loop,
+such a part is given back before the turn ends, and a refusal that comes from
+the taking names the line that keeps the name.
 
 **Declared `ref T` or `ref T?`, an index or a field read off a place is a view
 of it** ([ADR-354](adr/adr-354.md)), in the `let` and in an arm of its value:
