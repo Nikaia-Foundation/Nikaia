@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1278] — 2026-10-29
+
+**A `match` arm name bound by reference over a value (an option field of an `.iter()` loop variable) compares with a view or a value as it should, instead of Rust code rustc refused (Fixes #954).**
+
 ## [0.0.1277] — 2026-10-29
 
 **`let mut x = m.get(k) ?? <jump>` over a `mut` map or list is a mutable view of the entry, as `m[k]` is (`get_mut`), instead of Rust code rustc refused (Fixes #952).**
