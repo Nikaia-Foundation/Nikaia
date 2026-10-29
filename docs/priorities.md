@@ -15,7 +15,10 @@ every batch carries at least two moves, the largest Rust files first
 bug goes into a batch only when it blocks a move or turns `develop` red. The
 pause rule (more bugs found than fixed) still stops the self-hosting lane.
 Each move starts from an `rs2nika` draft; a converter defect met on the way
-is fixed in the converter (the 60 % rule in `scripts/drive.nika`).
+is fixed in the converter (the 60 % rule in `scripts/drive.nika`). A move
+is faithful by default; a schematic reshape is taught to the converter first,
+a real redesign needs a named reason and gets no draft (`docs/architect.md`,
+*Briefs and reports*, owner 2026-10-29).
 
 ## Estimating the terms per ticket
 

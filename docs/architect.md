@@ -70,6 +70,49 @@ callers of what moves including `crates/nikaia/tests/it/` (P4b found four
 test files only from clippy, after the build). Cut 400-600 lines
 a brief.
 
+**A move is faithful unless a named reason forces a redesign** (owner,
+2026-10-29: "weniger umbauen, oder schematische Umbauten gleich den Konverter
+machen lassen"; MF kept 12 of 180 lines, P5a 6 of 104, M3a 12 of 109, each
+flagged by the 60 % rule for a shape the brief had prescribed). Every move
+brief carries one `Shape:` line beside `Convert:`:
+
+* `Shape: faithful` (the default): the same functions, bodies and data, only
+  the language changes. Rust that stays Rust is reached through one-line
+  adapters with unchanged signatures, not by reshaping what moves.
+* `Shape: schematic <pattern>...`: a redesign that follows a fixed rule, one
+  the converter can apply to every occurrence (the list below). The brief
+  names the patterns; a pattern rs2nika does not yet know goes under
+  *Needs from the main session* with a three-line Rust probe and the Nikaia it
+  must become, and the move enters `batch.txt` only after the converter commit
+  that teaches it. The builder then keeps the draft's shape; the 60 % rule
+  stands and now measures the converter.
+* `Shape: redesign <reason>`: allowed only for (1) data held by a crate or a
+  type that stays Rust and cannot be reached by an adapter (MF: `toml::Value`
+  becomes a flat `ManifestItem` list), or (2) a shape `std` or the lowering
+  cannot say yet, with the issue number. Not a reason: taste, names, "cleaner".
+  Such a brief has **no `Convert:` line** (so no draft and no 60 % rule:
+  `drive.nika` checks only a report with `kept N of M`), its report writes
+  `Rs2nika: none (redesign)`, and the brief states the full target shape
+  (types, signatures, host methods) since no draft carries it. A brief whose
+  redesigned part is under a third of its lines splits: the redesign is its
+  own brief, the rest stays faithful or schematic with its draft.
+
+Schematic patterns, learned (commit) and wanted (in this order, from the
+reports): learned: methods become prefixed free functions, `&mut self` a `mut`
+parameter (a53f456); `mem::take` of a collection field a `drain()` (fab482f);
+`env::var` a `host.env_var` (1b08236). Wanted: (1) `--prefix` on every free
+function, type and call of the draft, not only constants (M3a's costliest);
+(2) a method of a struct that stays Rust becomes a free function over the
+fields it reads (`self.root`, `self.variant` -> parameters; P5a's `Project`
+paths); (3) a named Rust call becomes a host method, `env::var`'s rule made
+general (`parser::parse_to_ast` -> `host.parse_unit`, `manifest.setting` ->
+`host.setting`; M3a, P5a); (4) Rust error and path calls become `std`:
+`refuse(..)`/`.context(..)` a `throw`, `ancestors().skip(1).find(..)` a loop
+over `parent()`, `PathBuf::from`/`as_os_str` an `fs::Path` (M3a); (5) inside a
+loop, `let Some(x) = e else { continue }` and `match e { Some(x) => x, None =>
+continue }` become `let x = e ?? continue` (MF's 21 return edits). A defect
+beside them: the keyword escape renamed `with` inside a string literal (M3a).
+
 **Issues are written in brief form** (owner, 2026-10-25): when the architect
 writes an issue, its body is laid out as a brief (frontmatter, facts,
 *Locations*, *To build* steps with tests, rules, report form), so a builder can
@@ -273,6 +316,7 @@ performance*).
 ## State
 
 *Updated by the architect when it ends.*
+**2026-10-29 (architect, process note from the owner):** moves are faithful by default; `Shape: faithful | schematic <patterns> | redesign <reason>` in every move brief; a redesign gets no `Convert:` line and no 60 % rule; five schematic patterns wanted from the converter, in order, under *Briefs and reports*. `drive.nika` unchanged (it already checks only a `kept N of M`). Next move briefs (P5d, M3b, P5b) take the `Shape:` line.
 **2026-10-29 06:40 (architect after 06eaea6, cut at m3a on Found, a false cut: another session reset the shared tree at 22:41, a process event; rule in CLAUDE.md, builder.md (re-check lowered files before long tests) and common.part (such an event goes under `Needs:`)):** M3a done (1890fc9, 82.1 %, Changelog none). Converter defect for the converter lane: `--prefix` not applied to functions and types (m3a's costliest edit). Batch: `mf-manifest-file.md` (Opus, unchanged but for the new rules block), `m3b-modules-program.md` (Opus; `of` + `emit_reading` behind two hosts with signatures). Still owed: P5a rest after #933/#934 (lane briefs), R0 (#921, C1 not quiet: `crates/rs2nika/convert/nikaia.*` uncommitted), `scripts/plan_rows.nika`, the driver's CI check. Then: P5d, P5b.
 **2026-10-28 22:40 (architect after 3ba472a, cut at p5a on `partial`; the RED line was the empty state file: CI green to 986390f, 2e13458/3ba472a running):** P5a built in part (2e13458, 82.1 %, Changelog none): `root_tag`, `program_name`, `own_copy`, `trace` wait on two defects, filed `ready` in brief form: #933 (lowering: a host method's `String` result, viewed, lowers as `&'r str` of the parameters; brief `lane-lowering-933-host-result-view.md`) and #934 (NK2605 after an explicit `close() catch`; brief `lane-bugs-934-close-by-hand.md`); both C3 lane briefs, not in `batch.txt`. Debrief fixed at the source (builder-facts: own copy of the binary for long tests; a method-shaped draft for free functions). Batch: `m3a-modules-collect.md` (Opus, unchanged), `mf-manifest-file.md` (Opus; `rooted` stays Rust). Still owed: R0 (C1 not quiet: `crates/rs2nika/convert/*`, `text_tiers.nika` uncommitted), `scripts/plan_rows.nika`, the driver's CI check, the P5a rest after #933/#934. Then: P5d, M3b, P5b.
 **2026-10-28 22:10 (architect after 986390f, cut at b-fixforward-sweep2 on a Deviation, a false cut: re-keying `par_fold`'s KNOWN entry after 79d6e81, same program and reason; rule added to common.part):** sweep fixed forward (1f3adf2: `fn main` asked of the parsed items, not the text; Changelog none); CI runs 60b1154..986390f in progress. `project.rs`/`modules.rs` unchanged since a4b33a0, so the two move briefs stand. Batch: `p5a-project-settings.md`, `m3a-modules-collect.md` (both Opus). Still owed: R0 (C1 not quiet: converter lane's `crates/rs2nika/convert/*` uncommitted), `scripts/plan_rows.nika`, the driver's CI check missing a red sweep step. Then: P5d, MF, M3b, P5b.
