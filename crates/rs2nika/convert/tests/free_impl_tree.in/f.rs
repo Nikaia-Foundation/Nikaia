@@ -16,3 +16,10 @@ impl Mode {
 }
 
 pub fn fresh() -> Manifest { Manifest::new() }
+fn load_checked(path: &Path) -> Result<String> {
+    let other = load(path).context("cannot load")?;
+    if source.is_empty() {
+        return Err(crate::diagnostics::refuse(format!("{} is empty", path.display())));
+    }
+    Ok(source)
+}

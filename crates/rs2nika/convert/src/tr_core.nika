@@ -62,6 +62,9 @@ pub struct TrEm {
     pub free_impl: bool,
     pub self_var: String,
     pub impl_fns: collections::BTreeSet[String],
+    /// a refusal was written as `{Prefix}Refusal::Refused(..)`: the file
+    /// declares that enum
+    pub refused_by: bool,
     /// the type the function being written returns, as Nikaia writes it
     pub ret_ty: String,
     /// a closure's body written as a loop's (`xs.iter().map(|x| { .. })
@@ -105,6 +108,7 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
         free_impl: false,
         self_var: "",
         impl_fns: collections::BTreeSet(),
+        refused_by: false,
         ret_ty: "",
         push_to: "",
         push_opt: false,
@@ -357,6 +361,11 @@ impl TrEm {
         if self.prefix == "" && self.world != "" {
             return self.world.replace("World", "Host")
         }
+        return f"{self.prefix_camel()}Host"
+    }
+
+    /// The prefix as a type's name begins: `project_settings_` -> `ProjectSettings`.
+    fn prefix_camel(ref self) -> String {
         let mut out: String = ""
         for w in self.prefix.split("_") {
             if w == "" {
@@ -372,7 +381,7 @@ impl TrEm {
                 }
             }
         }
-        return f"{out}Host"
+        return out
     }
 
     /// Parse the arguments of the macros the converter knows, in rounds: an

@@ -11,7 +11,16 @@ impl TrEm {
     /// The whole file.
     pub fn file(ref mut self, root: i64) -> String {
         let lines = self.items_of(root, "")
-        return lines.join("\n")
+        if !self.refused_by {
+            return lines.join("\n")
+        }
+        // the file's refusal, as the moved files write it (`modules.nika`)
+        let ty = f"{self.prefix_camel()}Refusal"
+        let mut out: Vec[String] = [f"/// A refusal, in the words the compiler reports.", f"pub enum {ty} {{", "    Refused(String),", "}", "", f"impl Error for {ty} {{", "    fn message(ref self) -> String {", "        return match self {", f"            {ty}::Refused(why) => why.clone(),", "        }", "    }", "}", ""]
+        for l in lines {
+            out.push(l.clone())
+        }
+        return out.join("\n")
     }
 
     /// The items among `n`'s children, with the comments between them.

@@ -1,4 +1,19 @@
 use std::collections
+use std::fs
+
+/// A refusal, in the words the compiler reports.
+pub enum ManifestRefusal {
+    Refused(String),
+}
+
+impl Error for ManifestRefusal {
+    fn message(ref self) -> String {
+        return match self {
+            ManifestRefusal::Refused(why) => why.clone(),
+        }
+    }
+}
+
 pub struct Manifest {
     notes: Vec[String],
     name: String?,
@@ -38,4 +53,11 @@ impl Mode {
 
 pub fn manifest_fresh() -> Manifest {
     return manifest_new()
+}
+pub fn manifest_load_checked(path: ref fs::Path) -> String throws {
+    let other = load(path) catch { throw ManifestRefusal::Refused(f"cannot load: {error}") }
+    if source.is_empty() {
+        throw ManifestRefusal::Refused(f"{path.display()} is empty")
+    }
+    return source
 }

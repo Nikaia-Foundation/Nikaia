@@ -137,9 +137,14 @@ impl TrEm {
     /// statement's indentation, the first one without it.
     /// A refusal's text as what is thrown: only an error can be (NK1161),
     /// and a tools file has std's `Refused::Because`; elsewhere the text.
-    fn refusal(ref self, said: String) -> String {
+    fn refusal(ref mut self, said: String) -> String {
         if self.profile == "none" || self.profile == "" {
             return said
+        }
+        // a `-free` profile with a prefix: the file's own refusal
+        if self.frees_impls() {
+            self.refused_by = true
+            return f"{self.prefix_camel()}Refusal::Refused({said})"
         }
         return f"Refused::Because({said})"
     }
@@ -527,6 +532,10 @@ impl TrEm {
         let last = segs[segs.len() - 1].clone()
         let first = segs[0].clone()
         let joined = segs.join("::")
+        // `diagnostics::refuse(m)`: the file's own refusal
+        if last == "refuse" && arg_nodes.len() == 1 && self.frees_impls() {
+            return self.refusal(self.expr(arg_nodes[0]))
+        }
         if segs.len() == 1 {
             if last == "Some" && arg_nodes.len() == 1 {
                 return self.expr(arg_nodes[0])
@@ -751,6 +760,25 @@ impl TrEm {
                 }
                 return f"({r} ?? throw {self.refusal(said)})"
             }
+        }
+        // `.context(m)` / `.with_context(|| m)` on a call that fails, under
+        // a `-free` profile with a prefix: `call catch { throw Refused(..) }`
+        if (m == "context" || m == "with_context") && a.len() == 1 && self.frees_impls() && (self.t.is(recv_n, "METHOD_CALL_EXPR") || self.t.is(recv_n, "CALL_EXPR")) {
+            let mut said: String = a[0].clone()
+            if m == "with_context" {
+                let (p, body) = self.closure_parts(self.nodes(self.t.kid(n, "ARG_LIST"))[0])
+                if p != "_" {
+                    return f"{r}.{m}({al})"
+                }
+                said = body
+            }
+            let mut text: String = f"f\"{{{said}}}: {{error}}\""
+            if said.starts_with("f\"") && said.ends_with("\"") {
+                text = f"{said.strip_suffix("\"") ?? ""}: {{error}}\""
+            } else if said.starts_with("\"") && said.ends_with("\"") {
+                text = f"f{said.strip_suffix("\"") ?? ""}: {{error}}\""
+            }
+            return f"{r} catch {{ throw {self.refusal(text)} }}"
         }
         // a path's text: `p.to_string_lossy()` -> `p.display()`
         if m == "to_string_lossy" && a.len() == 0 {
@@ -1274,7 +1302,7 @@ impl TrEm {
         // R181, R292: the emitters' refusals; R263: `bail!` / `anyhow!`
         if (name == "refused" || name == "refuse" || name == "bail" || name == "anyhow" || name == "format_err") && args.len() > 0 {
             let mut said = self.fstring(args)
-            if name == "refused" || name == "refuse" {
+            if (name == "refused" || name == "refuse") && !self.frees_impls() {
                 said = f"Refused::Because({said})"
             } else {
                 said = self.refusal(said)
