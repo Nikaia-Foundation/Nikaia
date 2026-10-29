@@ -1,0 +1,20 @@
+// #915: a `mut String` pushed to in a loop, then read through `.trim()` and
+// `trim_start_matches` and copied, stays text of its own.
+
+fn main() {
+    let head = "f(test: &T)"
+    let mut ty: String = ""
+    for _ in ["(test: ", ", test: "] {
+        let hc: Vec[scalar] = head.chars().collect()
+        if ty == "" {
+            let mut t0: String = ""
+            let mut k = 0
+            while k < hc.len() && hc[k] != ')' {
+                t0.push(hc[k])
+                k = k + 1
+            }
+            ty = t0.trim().trim_start_matches("f(").clone()
+        }
+    }
+    println(ty)
+}

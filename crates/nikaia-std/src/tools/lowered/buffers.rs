@@ -521,7 +521,7 @@ pub(crate) fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
         Expr::LitStr { .. } => true,
         Expr::LitInterpolated { .. } => true,
         Expr::Variable(name, _) => { let name = *name; text_local(ask.names.resolve(name), ask, walk) },
-        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; match ask.names.resolve(method) == "trim" || ask.names.resolve(method) == "trim_start" || ask.names.resolve(method) == "trim_end" || ask.names.resolve(method) == "clone" {
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; match buffers_a_trim(ask.names.resolve(method)) {
             true => copies_text(receiver, ask, walk),
             false => false,
         } },
@@ -529,10 +529,12 @@ pub(crate) fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
     }
 }
 
+pub(crate) fn buffers_a_trim(method: &str) -> bool { nikaia_std::list::contains(&vec!["trim", "trim_start", "trim_end", "trim_matches", "trim_start_matches", "trim_end_matches", "clone"], &method) }
+
 pub(crate) fn clones_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match receiver {
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); clones_text(value, ask, walk) || clones_text(fallback, ask, walk) },
-        Expr::MethodCall { receiver: inner, method, .. } => { let inner = nikaia_std::boxed::open(inner); let method = *method; match ask.names.resolve(method) == "trim" || ask.names.resolve(method) == "trim_start" || ask.names.resolve(method) == "trim_end" || ask.names.resolve(method) == "clone" {
+        Expr::MethodCall { receiver: inner, method, .. } => { let inner = nikaia_std::boxed::open(inner); let method = *method; match buffers_a_trim(ask.names.resolve(method)) {
             true => clones_text(inner, ask, walk),
             false => false,
         } },

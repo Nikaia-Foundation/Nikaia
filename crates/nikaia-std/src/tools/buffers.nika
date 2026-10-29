@@ -677,12 +677,18 @@ fn copies_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
         Expr::LitStr { .. } => true,
         Expr::LitInterpolated { .. } => true,
         Expr::Variable(name, _) => text_local(ask.names.resolve(name), ask, walk),
-        Expr::MethodCall { receiver, method, .. } => match ask.names.resolve(method) == "trim" || ask.names.resolve(method) == "trim_start" || ask.names.resolve(method) == "trim_end" || ask.names.resolve(method) == "clone" {
+        Expr::MethodCall { receiver, method, .. } => match buffers_a_trim(ask.names.resolve(method)) {
             true => copies_text(receiver, ask, walk),
             false => false,
         },
         else => false,
     }
+}
+
+// A method that cuts a text at its ends, or copies it (#915): what it hands
+// back is a view of the text it is called on, and a copy of it is no view.
+fn buffers_a_trim(method: ref String) -> bool {
+    return ["trim", "trim_start", "trim_end", "trim_matches", "trim_start_matches", "trim_end_matches", "clone"].contains(method)
 }
 
 // Whether a `clone` of this copies text, so the copy points into nothing:
@@ -694,7 +700,7 @@ fn clones_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
     return match receiver {
         Expr::Coalesce { value, fallback, .. } => clones_text(value, ask, walk) || clones_text(fallback, ask, walk),
         // `(opt ?? "").trim()`, and a copy of one.
-        Expr::MethodCall { receiver: inner, method, .. } => match ask.names.resolve(method) == "trim" || ask.names.resolve(method) == "trim_start" || ask.names.resolve(method) == "trim_end" || ask.names.resolve(method) == "clone" {
+        Expr::MethodCall { receiver: inner, method, .. } => match buffers_a_trim(ask.names.resolve(method)) {
             true => clones_text(inner, ask, walk),
             false => false,
         },

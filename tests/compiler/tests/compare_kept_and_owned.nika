@@ -1,0 +1,23 @@
+fn tail(lines: ref Vec[String]) -> i64 {
+    let mut acc: String = ""
+    let mut k = 0
+    while k < lines.len() {
+        let x: String = lines[k].clone()
+        let t: String = x.trim().clone()
+        if acc == "" && t.starts_with("let ") {
+            acc = t.trim_end_matches(";").clone()
+            k = k + 1
+            continue
+        }
+        if t == acc {
+            return k
+        }
+        k = k + 1
+    }
+    return -1
+}
+
+fn main() {
+    let v: Vec[String] = ["let x;", "let x"]
+    println(f"{tail(v)}")
+}

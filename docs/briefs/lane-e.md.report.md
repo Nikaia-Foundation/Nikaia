@@ -1,11 +1,11 @@
 Result: done
 Pushed:
-Tests: split_once_default_owned (new; failed unfixed with 4x E0277, passes at both settings); it 23 passed; tests/compiler 332 passed, 2 failed (a_ref_nullable_narrowed is lane C's untracked test; mut_text_pushed_then_trimmed is #915's test, its fix not in this commit)
-Deviation: none
+Tests: mut_text_pushed_then_trimmed (new; failed unfixed, "Cannot borrow *t0 as mutable"), compare_kept_and_owned (new; the #910 probe, failed unfixed per the issue: can't compare &String with String); tests/compiler --both-settings 348 passed; it guard set 23 passed
+Deviation: #915 and #910 have one root and one commit
 Found: none
 Needs: none
-Changelog: Fixes the `??` default of `split_once` / `rsplit_once`: an owned tuple default (`("a".clone(), b)`) now lowers to views of it, a computed one maps the found pair to owned text (#908). Decided: the answer stays a pair of views when every default part is a literal or a place; otherwise both sides are owned `String`s.
+Changelog: A text cut by `trim_start_matches` / `trim_end_matches` / `trim_matches` and copied is text of its own, not a view that keeps its source (#915, #910). Decided: every trim method counts as a cut of its receiver in the keep plans, as `trim` did.
 Gate: green
-Files: crates/nikaia-std/src/tools/emit_core_flow.nika crates/nikaia-std/src/tools/lowered/emit_core_flow.rs tests/compiler/tests/split_once_default_owned.nika tests/compiler/tests/split_once_default_owned.stdout assets/badges/self-hosted.svg docs/briefs/lane-e.md.report.md
-Commit: Lower an owned `??` default of split_once to views of it
-Fixes: #908
+Files: crates/nikaia-std/src/tools/buffers.nika crates/nikaia-std/src/tools/lowered/buffers.rs tests/compiler/tests/mut_text_pushed_then_trimmed.nika tests/compiler/tests/mut_text_pushed_then_trimmed.stdout tests/compiler/tests/compare_kept_and_owned.nika tests/compiler/tests/compare_kept_and_owned.stdout assets/badges/self-hosted.svg docs/briefs/lane-e.md.report.md
+Commit: A copied trim_*_matches cut is text of its own, not a keep
+Fixes: #915, #910
