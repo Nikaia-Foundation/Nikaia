@@ -1,0 +1,25 @@
+// #949, ADR-views-1 D2: a `continue` between taking `c.names` out of the view
+// and giving it back leaves the map's entry without it.
+use std::collections
+struct C { pub names: Vec[String], pub skip: bool }
+fn keep(names: Vec[String]) -> Vec[Vec[String]] sync {
+    let mut out: Vec[Vec[String]] = []
+    out.push(names)
+    return out
+}
+fn main() {
+    let mut m: collections::HashMap[String, C] = collections::HashMap()
+    m.insert("a", C { names: [f"n{1}"], skip: true })
+    let keys: Vec[String] = ["a"]
+    let mut count = 0
+    for k in keys {
+        let mut c = m[k] ?? continue
+        let kept = keep(c.names)
+        if c.skip {
+            continue
+        }
+        c.names = []
+        count += kept.len()
+    }
+    println(f"{count}")
+}

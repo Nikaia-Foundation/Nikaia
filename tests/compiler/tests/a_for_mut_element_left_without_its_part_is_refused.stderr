@@ -1,0 +1,9 @@
+error[NK2108]: `p`, the element of `ps`, is left without `p.names`: it was taken out and never given back.
+   --> tests/a_for_mut_element_left_without_its_part_is_refused.nika:12:24
+    |
+ 12 |         let old = keep(p.names)
+    |                        ^^^^^^^ taken out here and not given back
+    |
+    = note: `p` is the element of `ps`: a change through it reaches the place, so it is whole wherever the place can be seen again. `p.names` was passed to `keep`, which keeps it, and nothing has put it back.
+    = help: Assign `p.names` (or the whole `p`) before its block is left.
+

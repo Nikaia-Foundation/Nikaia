@@ -1,0 +1,9 @@
+error[NK1131]: You can't give away `c` here: it is the view of `m[…]`, which is only borrowed.
+   --> tests/a_let_mut_view_given_away_whole_is_refused.nika:14:5
+    |
+ 14 |     println(f"{keep(c)}")
+    |     ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `c` is the view of `m[…]`, and the place belongs to its owner: a change through `c` reaches it. Giving it away whole would take it out of something this function doesn't own.
+    = help: Write `c.clone()` for a copy, or take the value out of its owner (`remove`).
+1 type error

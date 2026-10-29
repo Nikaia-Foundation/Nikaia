@@ -186,7 +186,9 @@ pub struct CheckRead {
 
 /// **A part taken out of a `mut` parameter** (ADR-094 D7, `NK2108`): the arm of
 /// a `match` over the parameter bound it and handed it to something that keeps
-/// it, so the parameter is missing it until an assignment gives it back.
+/// it, so the parameter is missing it until an assignment gives it back. **Or
+/// a field of a `mut` parameter or of a `let mut` view handed over**
+/// (ADR-views-1 D1): the subject is the name, the part the field's path.
 pub struct CheckPartOut {
     /// The parameter, or the place in it, that was matched: `e`, `e.kind`.
     pub subject: String,
@@ -196,6 +198,15 @@ pub struct CheckPartOut {
     pub binding: i64,
     /// The hand-over that took it.
     pub handed: i64,
+    /// **What the subject is a view of**, for the message (ADR-views-1 D2): the
+    /// view of a place, or the element of a list; empty for a parameter.
+    pub view: String,
+    /// The frame the view is bound in, -1 for a parameter: a `break` or a
+    /// `continue` of a loop around that frame leaves the view.
+    pub frame: i64,
+    /// Where the view's block ends, -1 until it has (and for a parameter,
+    /// whose block is the function's).
+    pub ends: i64,
 }
 
 /// **An assignment**, where it stands: what gives a part back.
@@ -227,7 +238,8 @@ pub struct CheckPendingCleanup {
 /// **A way out of the function, or a call that can fail**, where it stands:
 /// what a part taken out of a `mut` parameter may not be missing at.
 pub struct CheckWayOut {
-    /// `"return"`, `"throw"`, or `"fails"` for a call that can.
+    /// `"return"`, `"throw"`, `"fails"` for a call that can, `"break"` or
+    /// `"continue"`.
     pub how: String,
     /// The call, for `"fails"`.
     pub word: String,
@@ -235,6 +247,9 @@ pub struct CheckWayOut {
     pub seq: i64,
     pub choices: Vec[(i64, i64)],
     pub span: Span,
+    /// For a `break` or a `continue`: the frame the loop it leaves begins at,
+    /// -1 for the others (ADR-views-1 D2).
+    pub loop_frame: i64,
 }
 
 /// A `??` whose left side may be lent rather than taken.
@@ -821,6 +836,9 @@ pub struct CheckState {
     /// assignments that may give them back and the ways out of the function
     /// they must not be missing at.
     pub parts_out: Vec[CheckPartOut],
+    /// **The place a `let mut` binds a view of**, by name and frame, as text
+    /// for a message: `m[…]` for `let mut c = m[k] ?? continue` (ADR-views-1).
+    pub view_places: collections::BTreeMap[(String, i64), String],
     pub gives: Vec[CheckGive],
     pub ways_out: Vec[CheckWayOut],
     /// **The `NK2605`s held until their blocks end** (#934).

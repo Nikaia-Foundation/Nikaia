@@ -549,6 +549,8 @@ fn check_core_expr_jump(mut state: CheckState, word: ref String, span: ref Span)
         state.a_jump_with_nowhere_to_go(word, span)
     }
     state.failing_cleanups_left(span)
+    // **A jump leaves the views bound inside its loop** (ADR-views-1 D2).
+    state.a_way_out(word, "", span)
     return Ty::Unknown
 }
 

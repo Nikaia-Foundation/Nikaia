@@ -186,6 +186,21 @@ pub(crate) fn check_core_stmt_a_place(value: &Expr) -> bool { matches!(value, Ex
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_view_place(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<String> {
+    match value {
+        Expr::Coalesce { value: inner, .. } => { let inner = nikaia_std::boxed::open(inner); return check_core_stmt_view_place(state, world, inner) },
+        Expr::Index { base, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            let over = match state.place_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(format!("{}[…]", over));
+        },
+        Expr::Field { .. } => return state.place_path(world, value),
+        _ => return None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_part_of_an_owned_parameter(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); check_core_stmt_a_part_of_an_owned_parameter(state, world, base) || state.an_owned_parameter(world, base) },
@@ -446,6 +461,14 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     for n in bound_names.iter() { if n != "_" { state.written_at.push((n.to_string(), span.start as i64)); } }
     if !mutable && ty.is_none() && check_core_stmt_a_lent_list_read(&state, world, value) { check_core_stmt_lent_let(state, world, names, span); }
     if !moved_out && check_core_stmt_a_place(value) && state.takes_away(world, &found) && !state.facts.text_bytes.contains(&node_key(value)) { check_core_stmt_lent_let(state, world, names, span); }
+    if mutable && names.len() == 1 && shape.is_empty() {
+        let place = check_core_stmt_view_place(&state, world, value);
+        if place.is_some() {
+            let mut depth = state.scope.len() as i64 - 1;
+            if depth < 0 { depth = 0; }
+            state.view_places.insert(((*nikaia_std::index::get(&bound_names, 0)).to_string(), depth), nikaia_std::index::or(place.as_deref(), || "").to_string());
+        }
+    }
     if names.len() >= 2 || !shape.is_empty() { return state.tuple_let(world, names, shape, ty.is_some(), &found, value, span); }
     let name: String = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
     if name == "_" { state.a_let_that_binds_nothing(span); }
@@ -1111,6 +1134,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     check_core_stmt_body_discarded(state, body);
     check_core_block(state, world, host, body);
     state.flow.loops -= 1;
+    if mut_view && !body.stmts.is_empty() { state.views_end(frame_at, nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).span.end as i64); }
     if mut_view {
         for b in bindings.iter() {
             let b = *b;
@@ -1140,6 +1164,7 @@ pub fn check_core_stmt_return<H: CheckHost>(state: &mut CheckState, world: &Chec
 pub fn check_core_stmt_jump(state: &mut CheckState, word: &str, span: &Span) -> Ty {
     if state.flow.loops == 0 { state.a_jump_with_nowhere_to_go(word, span); }
     state.failing_cleanups_left(span);
+    state.a_way_out(word, "", span);
     Ty::Unknown
 }
 
@@ -1200,6 +1225,7 @@ pub fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     }
     check_crossings_a_bound_handle_is_taken(state, world, block);
     state.failing_cleanups_settled();
+    if count > 0 { state.views_end(state.scope.len() as i64 - 1, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(count - 1)).span.end as i64); }
     state.scope.pop();
     tail
 }

@@ -330,6 +330,17 @@ impl EmitState {
             out.push(".graphemes()")
             return
         }
+        // **A part taken out of a `mut` parameter or a `let mut` view** to be
+        // given back (ADR-views-1 D3): the place keeps its type's empty value,
+        // or a stand-in, until an assignment gives it back. Nothing is copied.
+        let taken: String? = self.facts.taken_parts.get(node_key(node))?.clone()
+        if taken != null {
+            if (taken ?? "") == "" {
+                out.push("std::mem::take(&mut ")
+            } else {
+                out.push("std::mem::replace(&mut ")
+            }
+        }
         // **A boxed field is read through its box** (ADR-246 D2):
         // `(*base.field)` is a place that behaves as the unboxed field would.
         let boxed = self.facts.boxed_reads.contains(node_key(node))
@@ -354,6 +365,14 @@ impl EmitState {
         out.push(f".{escaped_name(emit_text(world, name))}")
         if boxed {
             out.push(")")
+        }
+        if taken != null {
+            let stand_in = (taken ?? "").clone()
+            if stand_in == "" {
+                out.push(")")
+            } else {
+                out.push(f", {stand_in})")
+            }
         }
     }
 

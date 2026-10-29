@@ -183,6 +183,11 @@ pub struct CheckFacts {
     pub counted: collections::BTreeSet[i64],
     pub lent_bindings: collections::BTreeMap[i64, collections::BTreeSet[String]],
     pub taking_arms: collections::BTreeMap[i64, String],
+    /// **A part taken out of a `mut` parameter or a `let mut` view** to be
+    /// given back (ADR-views-1 D3), by the field's node: what stands in its
+    /// place meanwhile, empty where the type's empty value does
+    /// (`std::mem::take`).
+    pub taken_parts: collections::BTreeMap[i64, String],
     pub views_handed_on: collections::BTreeSet[i64],
     pub comptime_uses: collections::BTreeMap[i64, String],
     /// **The names of the package's `comptime`s** (#703): a binding by one
@@ -473,6 +478,7 @@ impl CheckFacts {
             counted: collections::BTreeSet(),
             lent_bindings: collections::BTreeMap(),
             taking_arms: collections::BTreeMap(),
+            taken_parts: collections::BTreeMap(),
             views_handed_on: collections::BTreeSet(),
             comptime_uses: collections::BTreeMap(),
             comptime_names: collections::BTreeSet(),

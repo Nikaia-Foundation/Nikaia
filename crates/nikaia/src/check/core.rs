@@ -112,6 +112,7 @@ pub(super) fn hollow() -> Box<CheckState> {
         read_at: Vec::new(),
         written_at: Vec::new(),
         parts_out: Vec::new(),
+        view_places: BTreeMap::new(),
         gives: Vec::new(),
         ways_out: Vec::new(),
         cleanups_pending: Vec::new(),

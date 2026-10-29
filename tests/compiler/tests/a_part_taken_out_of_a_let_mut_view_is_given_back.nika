@@ -1,0 +1,20 @@
+// #949, ADR-views-1 D1, D3: `c` is a view of the map's entry; handing
+// `c.ensures` and `c.from` to a callee that keeps them takes them out, with no
+// copy, and the assignments give them back before the view's block ends.
+use std::collections
+struct C { pub ensures: Vec[String], pub from: Vec[String] }
+fn pairs(e: Vec[String], f: Vec[String]) -> Vec[(String, String)] sync {
+    let mut out: Vec[(String, String)] = []
+    for (a, b) in e.drain().zip(f.drain()) { out.push((a, b)) }
+    return out
+}
+fn main() {
+    let mut m: collections::BTreeMap[String, C] = collections::BTreeMap()
+    m.insert("a", C { ensures: [f"e{1}"], from: [f"f{1}"] })
+    let mut c = m["a"] ?? return
+    let kept = pairs(c.ensures, c.from)
+    c.ensures = [f"x{1}", f"y{2}"]
+    c.from = []
+    let after = m["a"] ?? return
+    println(f"{after.ensures.len()} {kept.len()}")
+}

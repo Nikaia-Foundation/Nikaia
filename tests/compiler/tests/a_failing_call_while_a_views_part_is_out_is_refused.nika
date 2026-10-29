@@ -1,0 +1,30 @@
+// #949, ADR-views-1 D2: between taking `c.names` out of the view and giving
+// it back stands no call that can fail.
+use std::collections
+struct C { pub names: Vec[String] }
+struct Bad { why: String }
+impl Error for Bad { fn message(ref self) -> String { return self.why.clone() } }
+fn keep(names: Vec[String]) -> Vec[Vec[String]] sync {
+    let mut out: Vec[Vec[String]] = []
+    out.push(names)
+    return out
+}
+fn check(n: i64) -> i64 throws {
+    if n < 0 {
+        throw Bad { why: "negative" }
+    }
+    return n
+}
+fn run() -> i64 throws {
+    let mut m: collections::BTreeMap[String, C] = collections::BTreeMap()
+    m.insert("a", C { names: [f"n{1}"] })
+    let mut c = m["a"] ?? return 0
+    let kept = keep(c.names)
+    let n = check(kept.len())
+    c.names = []
+    return n
+}
+fn main() {
+    let n = run() catch { 0 }
+    println(f"{n}")
+}

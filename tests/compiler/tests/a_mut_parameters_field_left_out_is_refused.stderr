@@ -1,0 +1,11 @@
+error[NK2108]: This `return` leaves `c` without `c.ensures`.
+   --> tests/a_mut_parameters_field_left_out_is_refused.nika:11:5
+    |
+ 10 |     let kept = keep(c.ensures)
+    |                     --------- taken out of `c` here
+ 11 |     return kept.len()
+    |     ^^^^^^ leaves the function with the part still out
+    |
+    = note: `c` is a `mut` parameter, so it is the caller's and is whole whenever the caller can see it. `c.ensures` was passed to `keep`, which keeps it, and nothing has put it back.
+    = help: Assign `c` (or the part) before the function is left, or build the value by value with `fn f(c: T) -> T`.
+

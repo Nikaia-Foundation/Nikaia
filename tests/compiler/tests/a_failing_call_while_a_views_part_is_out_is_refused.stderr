@@ -1,0 +1,11 @@
+error[NK2108]: `check` can fail, and `c.names` is out of `c`, the view of `m[…]`, at that point.
+   --> tests/a_failing_call_while_a_views_part_is_out_is_refused.nika:23:13
+    |
+ 22 |     let kept = keep(c.names)
+    |                     ------- taken out of `c` here
+ 23 |     let n = check(kept.len())
+    |             ^^^^^ can fail while the part is out
+    |
+    = note: Between taking `c.names` out of `c` and giving it back, no call that can fail may stand: the place `c` stands for would be left with a part missing.
+    = help: Assign `c.names` (or the whole `c`) before its block is left and move the call out from between.
+

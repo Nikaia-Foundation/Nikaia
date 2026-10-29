@@ -1,0 +1,16 @@
+// #949, Part I 6.5, ADR-094 D7: a field of a `mut` parameter handed to a
+// callee that keeps it, and not given back before the `return`.
+struct C { pub ensures: Vec[String] }
+fn keep(v: Vec[String]) -> Vec[String] sync {
+    let mut out: Vec[String] = []
+    for s in v.drain() { out.push(s) }
+    return out
+}
+fn left(mut c: C) -> i64 {
+    let kept = keep(c.ensures)
+    return kept.len()
+}
+fn main() {
+    let mut c = C { ensures: [f"e{1}"] }
+    println(f"{left(c)}")
+}

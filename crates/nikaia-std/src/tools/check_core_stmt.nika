@@ -256,6 +256,20 @@ fn check_core_stmt_a_place(value: ref Expr) -> bool sync {
     }
 }
 
+/// The place a value reads, as a message names it: `m[…]` for `m[k] ?? continue`,
+/// `s.field`.
+fn check_core_stmt_view_place(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> String? sync {
+    match value {
+        Expr::Coalesce { value: inner, .. } => return check_core_stmt_view_place(state, world, inner),
+        Expr::Index { base, .. } => {
+            let over = state.place_path(world, base) ?? return null
+            return f"{over}[…]"
+        },
+        Expr::Field { .. } => return state.place_path(world, value),
+        else => return null,
+    }
+}
+
 /// A field path whose root is a parameter this function owns (#665).
 fn check_core_stmt_a_part_of_an_owned_parameter(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
@@ -594,6 +608,18 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // **Moved out of its owner, it is no view** (#665): the name owns what it holds.
     if !moved_out && check_core_stmt_a_place(value) && state.takes_away(world, found) && !state.facts.text_bytes.contains(node_key(value)) {
         check_core_stmt_lent_let(state, world, names, span)
+    }
+    // **The place a `let mut` is a view of**, for the messages that name it
+    // (ADR-views-1).
+    if mutable && names.len() == 1 && shape.len() == 0 {
+        let place = check_core_stmt_view_place(state, world, value)
+        if place != null {
+            let mut depth = state.scope.len() as i64 - 1
+            if depth < 0 {
+                depth = 0
+            }
+            state.view_places.insert((bound_names[0].clone(), depth), (place ?? "").clone())
+        }
     }
     // **A tuple of names takes the value apart** (ADR-291).
     if names.len() >= 2 || shape.len() > 0 {
@@ -1547,6 +1573,11 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     check_core_stmt_body_discarded(state, body)
     check_core_block(state, world, host, body)
     state.flow.loops -= 1
+    // **A turn's element is whole again where the turn ends** (ADR-views-1 D2,
+    // ADR-views-2).
+    if mut_view && body.stmts.len() > 0 {
+        state.views_end(frame_at, body.stmts[body.stmts.len() - 1].span.end as i64)
+    }
     if mut_view {
         for b in bindings {
             state.lent_lets.remove((f"{world.words.resolve(b)}", frame_at))
@@ -1575,6 +1606,8 @@ pub fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref S
         state.a_jump_with_nowhere_to_go(word, span)
     }
     state.failing_cleanups_left(span)
+    // **A jump leaves the views bound inside its loop** (ADR-views-1 D2).
+    state.a_way_out(word, "", span)
     return Ty::Unknown
 }
 
@@ -1654,6 +1687,9 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
     }
     check_crossings_a_bound_handle_is_taken(state, world, block)
     state.failing_cleanups_settled()
+    if count > 0 {
+        state.views_end(state.scope.len() as i64 - 1, block.stmts[count - 1].span.end as i64)
+    }
     state.scope.pop()
     return tail
 }

@@ -255,7 +255,7 @@ impl CheckState {
             }
             if at >= self.handed.len() as i64 { continue; }
             any = true;
-            self.parts_out.push(CheckPartOut { subject: path.to_string(), part: part.to_string(), binding, handed: at });
+            self.parts_out.push(CheckPartOut { subject: path.to_string(), part: part.to_string(), binding, handed: at, view: String::from(""), frame: -1, ends: -1 });
         }
         if !any { return; }
         let node = id_of(body) as i64;

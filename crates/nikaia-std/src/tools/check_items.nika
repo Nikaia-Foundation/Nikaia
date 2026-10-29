@@ -557,6 +557,17 @@ impl CheckState {
         return f"{name} {{ {joined} }}"
     }
 
+    /// **What stands in a part's place while it is taken out** (ADR-views-1
+    /// D3): empty where the type has an empty value, which `std::mem::take`
+    /// leaves; the stand-in a `match` arm leaves otherwise; `null` where there
+    /// is neither.
+    pub fn a_stand_in(ref self, view: ref ParsedView, ty: ref Ty) -> String? {
+        if item_has_a_default(ty) {
+            return ""
+        }
+        return self.a_placeholder(view, ty)
+    }
+
     /// The fields of a type, or an enum's variants as fields, in the order the
     /// declaration wrote them.
     pub fn shape_of(ref self, view: ref ParsedView, world: ref CheckWorld, on: ref String) -> Vec[FieldContract]? {

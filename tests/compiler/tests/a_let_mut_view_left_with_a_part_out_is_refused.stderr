@@ -1,0 +1,12 @@
+error[NK2108]: This `continue` leaves `c`, the view of `m[…]`, without `c.names`.
+   --> tests/a_let_mut_view_left_with_a_part_out_is_refused.nika:19:13
+    |
+ 17 |         let kept = keep(c.names)
+    |                         ------- taken out of `c` here
+    ...
+ 19 |             continue
+    |             ^^^^^^^^ leaves its block with the part still out
+    |
+    = note: `c` is the view of `m[…]`: a change through it reaches the place, so it is whole wherever the place can be seen again. `c.names` was passed to `keep`, which keeps it, and nothing has put it back.
+    = help: Assign `c.names` (or the whole `c`) before its block is left.
+

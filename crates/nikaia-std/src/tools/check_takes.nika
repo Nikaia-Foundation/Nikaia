@@ -140,7 +140,72 @@ impl CheckState {
                 return
             }
         }
-        self.ways_out.push(CheckWayOut { how: how.clone(), word: word.clone(), at: span.start as i64, seq: self.read_seq, choices: self.branch.clone(), span: span.clone() })
+        let mut loop_frame: i64 = -1
+        if how == "break" || how == "continue" {
+            let mut at = self.repeats.len()
+            while at > 0 && loop_frame < 0 {
+                at = at - 1
+                if self.repeats[at].what == "loop" {
+                    loop_frame = self.repeats[at].frame
+                }
+            }
+        }
+        self.ways_out.push(CheckWayOut { how: how.clone(), word: word.clone(), at: span.start as i64, seq: self.read_seq, choices: self.branch.clone(), span: span.clone(), loop_frame: loop_frame })
+    }
+
+    /// **A part of a `mut` parameter or of a `let mut` view, taken out to be
+    /// given back** (ADR-views-1 D1, D3; ADR-094 D7): a field of either, handed
+    /// to something that keeps it. What stands in the place meanwhile: empty
+    /// where the type's empty value does, the stand-in otherwise; `null` where
+    /// `path` is no such part, or no stand-in exists, and the hand-over stays
+    /// what it was. Not inside a lambda, which is a function of its own; not
+    /// of `self`.
+    pub fn a_part_taken_out(ref self, world: ref CheckWorld, path: ref String, ty: ref Ty) -> String? sync {
+        if !path.contains(".") {
+            return null
+        }
+        for around in self.repeats {
+            if around.what == "lambda" {
+                return null
+            }
+        }
+        let root = a_root_segment(path)
+        if root == "self" {
+            return null
+        }
+        let local = self.binding(root) ?? return null
+        if !local.changing && !self.a_changing_view(root) {
+            return null
+        }
+        return self.a_stand_in(world.here, ty)
+    }
+
+    /// **A `let mut` view of a place, or the element of a `for mut`**
+    /// (ADR-views-1 D1, ADR-views-2): a change through it reaches the place.
+    pub fn a_changing_view(ref self, name: ref String) -> bool sync {
+        let local = self.binding(name) ?? return false
+        return local.view_of != "" || (local.written_mut && self.lent_here(name))
+    }
+
+    /// The place a `let mut` view or a `for mut` element stands for, as the
+    /// message says it: the view of a place, the element of a list.
+    pub fn a_view_described(ref self, name: ref String) -> String sync {
+        let local = self.binding(name) ?? return "a view of a place"
+        if local.view_of != "" {
+            return f"the element of `{local.view_of}`"
+        }
+        let place = self.view_places.get((name.clone(), self.frame_of(name))) ?? return "a view of a place"
+        return f"the view of `{place}`"
+    }
+
+    /// **Where a view's block ends** (ADR-views-1 D2): the parts taken out of
+    /// a view bound in `frame` must be back by `end`.
+    pub fn views_end(ref mut self, frame: i64, end: i64) sync {
+        for mut out in self.parts_out {
+            if out.frame == frame && out.ends < 0 {
+                out.ends = end
+            }
+        }
     }
 
     /// **The first read after a taking, on a path that passes both** (ADR-293 D19,
@@ -264,6 +329,13 @@ impl CheckState {
     /// `NK2105`, `NK2106`: a value handed over, and what is written about it
     /// where a loop or a lambda around it would hand it over again.
     pub fn hands_over_path(ref mut self, world: ref CheckWorld, path: String, ty: ref Ty, seq: i64, to: ref String, span: ref Span) sync {
+        self.hands_over_path_of(world, -1, path, ty, seq, to, span)
+    }
+
+    /// The same, of the expression `node` where one stands for the value: a
+    /// field of a `mut` parameter or of a `let mut` view is **taken out**
+    /// there, to be given back (ADR-views-1 D1).
+    pub fn hands_over_path_of(ref mut self, world: ref CheckWorld, node: i64, path: String, ty: ref Ty, seq: i64, to: ref String, span: ref Span) sync {
         // A task's body is `NK2101`'s: what it uses it took with it already.
         if self.task_bindings.len() > 0 {
             return
@@ -273,12 +345,20 @@ impl CheckState {
             return
         }
         let root = a_root_segment(path)
-        if path.contains(".") && self.lent_here(root) {
+        let mut stand_in: String? = null
+        if node >= 0 {
+            stand_in = self.a_part_taken_out(world, path, ty)
+        }
+        if path.contains(".") && self.lent_here(root) && stand_in == null {
             self.a_part_of_a_loan_handed_over(path, root, to, span)
             return
         }
         let taken = self.taken(path.clone(), ty.clone(), seq, to, span)
         self.handed.push(taken)
+        if stand_in != null {
+            self.facts.taken_parts.insert(node, (stand_in ?? "").clone())
+            self.a_part_out(root, path, self.handed.len() as i64 - 1)
+        }
         let bound = self.frame_of(root)
         if bound < 0 {
             return
@@ -293,6 +373,19 @@ impl CheckState {
             again = "the next time round the loop it would be handed over again, but it's already gone"
         }
         self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"Hand over a copy each time: `{path}.clone()`."))
+    }
+
+    // The part `path` taken out of `root` by the hand-over `handed`: missing
+    // until it is given back (`NK2108`).
+    fn a_part_out(ref mut self, root: ref String, path: ref String, handed: i64) sync {
+        let local = self.binding(root) ?? return
+        let mut view: String = ""
+        let mut frame: i64 = -1
+        if !local.changing {
+            view = self.a_view_described(root)
+            frame = self.frame_of(root)
+        }
+        self.parts_out.push(CheckPartOut { subject: root.clone(), part: path.clone(), binding: local.id, handed: handed, view: view, frame: frame, ends: -1 })
     }
 
     /// Every taking whose name is read again: `NK2105`, said once per site.
@@ -452,18 +545,26 @@ impl CheckState {
                 continue
             }
             // The ways out after the taking, as (at, seq, index in `ways`), and
-            // the end of the function (-1) unless the arm left.
+            // the end of the function (-1) unless the arm left. **A view's
+            // ways out are its block's** (ADR-views-1 D2): its end, and a
+            // `break` or a `continue` of a loop around the frame it is bound in.
+            let mut ends: i64 = 9223372036854775807
+            if out.ends >= 0 {
+                ends = out.ends
+            }
             let mut ahead: Vec[(i64, i64, i64)] = []
             for at in 0..<ways.len() {
                 let way = ways[at].clone()
                 let after = way.at > taken.from || (way.at == taken.from && way.seq >= taken.seq)
-                let before_the_end = taken.until == null || way.at < (taken.until ?? 0)
-                if after && !choices_apart(taken.choices, way.choices) && before_the_end {
+                let before_the_end = (taken.until == null || way.at < (taken.until ?? 0)) && way.at < ends
+                let a_jump = way.how == "break" || way.how == "continue"
+                let leaves = !a_jump || (out.frame >= 0 && way.loop_frame >= 0 && way.loop_frame <= out.frame)
+                if after && leaves && !choices_apart(taken.choices, way.choices) && before_the_end {
                     ahead.push((way.at, way.seq, at))
                 }
             }
             if taken.until == null {
-                ahead.push((9223372036854775807, 0, -1))
+                ahead.push((ends, 0, -1))
             }
             let places = by_position(ahead)
             for position in places {
@@ -535,29 +636,53 @@ impl CheckState {
             at_the_way = way.span.clone()
         }
         let fails = some && how == "fails"
-        let mut message: String = f"`{subject}` is left without {part}: it was taken out and never given back."
+        // **A view is named with the place it stands for** (ADR-views-1 D2).
+        let a_view = out.frame >= 0
+        let mut named: String = f"`{subject}`"
+        let mut left: String = "the function"
+        if a_view {
+            named = f"`{subject}`, {out.view},"
+            left = "its block"
+        }
+        let mut message: String = f"{named} is left without {part}: it was taken out and never given back."
         let mut span = from.clone()
         let mut label = CheckLabel { span: from.clone(), word: out.part.clone(), text: "taken out here and not given back", main: true }
         if fails {
-            message = f"`{word}` can fail, and {part} is out of `{subject}` at that point."
+            message = f"`{word}` can fail, and {part} is out of {named} at that point."
+            if a_view {
+                message = f"`{word}` can fail, and {part} is out of `{subject}`, {out.view}, at that point."
+            }
             span = at_the_way.clone()
             label = CheckLabel { span: at_the_way.clone(), word: word.clone(), text: "can fail while the part is out", main: true }
         } else if some {
-            message = f"This `{how}` leaves `{subject}` without {part}."
+            message = f"This `{how}` leaves {named} without {part}."
+            if a_view {
+                message = f"This `{how}` leaves `{subject}`, {out.view}, without {part}."
+            }
             span = at_the_way.clone()
-            label = CheckLabel { span: at_the_way.clone(), word: how.clone(), text: "leaves the function with the part still out", main: true }
+            label = CheckLabel { span: at_the_way.clone(), word: how.clone(), text: f"leaves {left} with the part still out", main: true }
         }
         let mut labels: Vec[CheckLabel] = [label]
         if some {
             labels.push(CheckLabel { span: from.clone(), word: out.part.clone(), text: f"taken out of `{subject}` here", main: false })
         }
         let mut kept: String = f"`{subject}` is a `mut` parameter, so it is the caller's and is whole whenever the caller can see it. `{out.part}` was {taken.to}, and nothing has put it back."
+        if a_view {
+            kept = f"`{subject}` is {out.view}: a change through it reaches the place, so it is whole wherever the place can be seen again. `{out.part}` was {taken.to}, and nothing has put it back."
+        }
         let mut tail: String = ""
         if fails {
             kept = f"Between taking {part} out of `{subject}` and giving it back, no call that can fail may stand: the caller would be left a `{subject}` with a part missing."
+            if a_view {
+                kept = f"Between taking {part} out of `{subject}` and giving it back, no call that can fail may stand: the place `{subject}` stands for would be left with a part missing."
+            }
             tail = " and move the call out from between"
         }
-        return CheckFinding { severity: CheckSeverity::Error, span: span, code: "NK2108", message: message, notes: [kept], help: f"Assign `{subject}` (or the part) before the function is left{tail}, or build the value by value with `fn f({subject}: T) -> T`.", labels: labels }
+        let mut help: String = f"Assign `{subject}` (or the part) before the function is left{tail}, or build the value by value with `fn f({subject}: T) -> T`."
+        if a_view {
+            help = f"Assign {part} (or the whole `{subject}`) before its block is left{tail}."
+        }
+        return CheckFinding { severity: CheckSeverity::Error, span: span, code: "NK2108", message: message, notes: [kept], help: help, labels: labels }
     }
 }
 

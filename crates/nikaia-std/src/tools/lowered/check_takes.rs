@@ -76,8 +76,44 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_way_out(&mut self, how: &str, word: &str, span: &Span) {
         for around in self.repeats.iter() { if around.what == "lambda" { return; } }
-        self.ways_out.push(CheckWayOut { how: how.to_string(), word: word.to_string(), at: span.start as i64, seq: self.read_seq, choices: self.branch.to_owned(), span: span.clone() });
+        let mut loop_frame: i64 = -1;
+        if how == "break" || how == "continue" {
+            let mut at = self.repeats.len() as i64;
+            while at > 0 && loop_frame < 0 {
+                at = at - 1;
+                if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).what == "loop" { loop_frame = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame; }
+            }
+        }
+        self.ways_out.push(CheckWayOut { how: how.to_string(), word: word.to_string(), at: span.start as i64, seq: self.read_seq, choices: self.branch.to_owned(), span: span.clone(), loop_frame });
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_part_taken_out(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, ty: &Ty) -> Option<String> {
+        if !path.contains('.') { return None; }
+        for around in self.repeats.iter() { if around.what == "lambda" { return None; } }
+        let root = a_root_segment(path);
+        if root == "self" { return None; }
+        let local = match self.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if !local.changing && !self.a_changing_view(&root) { return None; }
+        self.a_stand_in(&world.here, ty)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_changing_view(&self, name: &str) -> bool {
+        let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        local.view_of != "" || local.written_mut && self.lent_here(name)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_view_described(&self, name: &str) -> String {
+        let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return String::from("a view of a place") };
+        if local.view_of != "" { return format!("the element of `{}`", local.view_of); }
+        let place = match self.view_places.get(&(name.to_string(), self.frame_of(name))) { Some(__nikaia_value) => __nikaia_value, None => return String::from("a view of a place") };
+        format!("the view of `{}`", place)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn views_end(&mut self, frame: i64, end: i64) { for out in self.parts_out.iter_mut() { if (*out).frame == frame && (*out).ends < 0 { (*out).ends = end; } } }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn first_read_after(&self, taken: &CheckTaken) -> Option<CheckUse> {
@@ -159,16 +195,26 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn hands_over_path(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: String, ty: &Ty, seq: i64, to: &str, span: &Span) {
+    pub fn hands_over_path(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: String, ty: &Ty, seq: i64, to: &str, span: &Span) { self.hands_over_path_of(world, -1, path, ty, seq, to, span); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn hands_over_path_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, node: i64, path: String, ty: &Ty, seq: i64, to: &str, span: &Span) {
         if !self.task_bindings.is_empty() { return; }
         if !self.takes_away(world, &ty.unseen()) { return; }
         let root = a_root_segment(&path);
-        if path.contains('.') && self.lent_here(&root) {
+        let mut stand_in: Option<String> = None;
+        if node >= 0 { stand_in = self.a_part_taken_out(world, &path, ty); }
+        if path.contains('.') && self.lent_here(&root) && stand_in.is_none() {
             self.a_part_of_a_loan_handed_over(&path, &root, to, span);
             return;
         }
         let taken = self.taken(path.to_string(), ty.clone(), seq, to, span);
         self.handed.push(taken);
+        if stand_in.is_some() {
+            self.facts.taken_parts.insert(node, nikaia_std::index::or(stand_in.as_deref(), || "").to_string());
+            self.a_part_out(&root, &path, self.handed.len() as i64 - 1);
+        }
         let bound = self.frame_of(&root);
         if bound < 0 { return; }
         let around = self.around_a_repeat(bound, &root);
@@ -177,6 +223,18 @@ impl CheckState {
         let mut again: &'static str = "a lambda may run more than once, and the second run would find it gone";
         if what == "loop" { again = "the next time round the loop it would be handed over again, but it's already gone"; }
         self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.text(), again), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("Hand over a copy each time: `{}.clone()`.", path))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_part_out(&mut self, root: &str, path: &str, handed: i64) {
+        let local = match self.binding(root) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut view: String = String::from("");
+        let mut frame: i64 = -1;
+        if !local.changing {
+            view = self.a_view_described(root);
+            frame = self.frame_of(root);
+        }
+        self.parts_out.push(CheckPartOut { subject: root.to_string(), part: path.to_string(), binding: local.id, handed, view, frame, ends: -1 });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -269,14 +327,18 @@ impl CheckState {
             if out.handed < 0 || out.handed >= self.handed.len() as i64 { continue; }
             let taken = (*nikaia_std::index::get(&self.handed, nikaia_std::index::at(out.handed))).clone();
             if nikaia_std::index::or(taken.binding, || -1) != out.binding { continue; }
+            let mut ends: i64 = 9223372036854775807i64;
+            if out.ends >= 0 { ends = out.ends; }
             let mut ahead: Vec<(i64, i64, i64)> = vec![];
             for at in 0..ways.len() as i64 {
                 let way = (*nikaia_std::index::get(&ways, (at) as usize)).clone();
                 let after = way.at > taken.from || way.at == taken.from && way.seq >= taken.seq;
-                let before_the_end = taken.until.is_none() || way.at < nikaia_std::index::or(taken.until, || 0);
-                if after && !choices_apart(&taken.choices, &way.choices) && before_the_end { ahead.push((way.at, way.seq, at)); }
+                let before_the_end = (taken.until.is_none() || way.at < nikaia_std::index::or(taken.until, || 0)) && way.at < ends;
+                let a_jump = way.how == "break" || way.how == "continue";
+                let leaves = !a_jump || out.frame >= 0 && way.loop_frame >= 0 && way.loop_frame <= out.frame;
+                if after && leaves && !choices_apart(&taken.choices, &way.choices) && before_the_end { ahead.push((way.at, way.seq, at)); }
             }
-            if taken.until.is_none() { ahead.push((9223372036854775807i64, 0, -1)); }
+            if taken.until.is_none() { ahead.push((ends, 0, -1)); }
             let places = by_position(&ahead);
             for position in places.iter() {
                 let mut choices: Vec<(i64, i64)> = vec![];
@@ -324,27 +386,40 @@ impl CheckState {
             at_the_way = way.span.clone();
         }
         let fails = some && how == "fails";
-        let mut message: String = format!("`{}` is left without {}: it was taken out and never given back.", subject, part);
+        let a_view = out.frame >= 0;
+        let mut named: String = format!("`{}`", subject);
+        let mut left: &'static str = "the function";
+        if a_view {
+            named = format!("`{}`, {},", subject, out.view);
+            left = "its block";
+        }
+        let mut message: String = format!("{} is left without {}: it was taken out and never given back.", named, part);
         let mut span = from.clone();
         let mut label = CheckLabel { span: from.clone(), word: out.part.to_string(), text: String::from("taken out here and not given back"), main: true };
         if fails {
-            message = format!("`{}` can fail, and {} is out of `{}` at that point.", word, part, subject);
+            message = format!("`{}` can fail, and {} is out of {} at that point.", word, part, named);
+            if a_view { message = format!("`{}` can fail, and {} is out of `{}`, {}, at that point.", word, part, subject, out.view); }
             span = at_the_way.clone();
             label = CheckLabel { span: at_the_way.clone(), word: word.to_string(), text: String::from("can fail while the part is out"), main: true };
         } else if some {
-            message = format!("This `{}` leaves `{}` without {}.", how, subject, part);
+            message = format!("This `{}` leaves {} without {}.", how, named, part);
+            if a_view { message = format!("This `{}` leaves `{}`, {}, without {}.", how, subject, out.view, part); }
             span = at_the_way.clone();
-            label = CheckLabel { span: at_the_way.clone(), word: how.to_string(), text: String::from("leaves the function with the part still out"), main: true };
+            label = CheckLabel { span: at_the_way.clone(), word: how.to_string(), text: format!("leaves {} with the part still out", left), main: true };
         }
         let mut labels: Vec<CheckLabel> = vec![label];
         if some { labels.push(CheckLabel { span: from.clone(), word: out.part.to_string(), text: format!("taken out of `{}` here", subject), main: false }); }
         let mut kept: String = format!("`{}` is a `mut` parameter, so it is the caller's and is whole whenever the caller can see it. `{}` was {}, and nothing has put it back.", subject, out.part, taken.to);
+        if a_view { kept = format!("`{}` is {}: a change through it reaches the place, so it is whole wherever the place can be seen again. `{}` was {}, and nothing has put it back.", subject, out.view, out.part, taken.to); }
         let mut tail: &'static str = "";
         if fails {
             kept = format!("Between taking {} out of `{}` and giving it back, no call that can fail may stand: the caller would be left a `{}` with a part missing.", part, subject, subject);
+            if a_view { kept = format!("Between taking {} out of `{}` and giving it back, no call that can fail may stand: the place `{}` stands for would be left with a part missing.", part, subject, subject); }
             tail = " and move the call out from between";
         }
-        CheckFinding { severity: CheckSeverity::Error, span, code: String::from("NK2108"), message, notes: vec![kept], help: Some(format!("Assign `{}` (or the part) before the function is left{}, or build the value by value with `fn f({}: T) -> T`.", subject, tail, subject)), labels }
+        let mut help: String = format!("Assign `{}` (or the part) before the function is left{}, or build the value by value with `fn f({}: T) -> T`.", subject, tail, subject);
+        if a_view { help = format!("Assign {} (or the whole `{}`) before its block is left{}.", part, subject, tail); }
+        CheckFinding { severity: CheckSeverity::Error, span, code: String::from("NK2108"), message, notes: vec![kept], help: Some(help), labels }
     }
 }
 

@@ -339,7 +339,7 @@ impl CheckState {
         if !a_name_or_a_field(value) { return; }
         let path = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path.to_string();
         let seq = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).seq;
-        self.hands_over_path(world, path, ty, seq, to, span);
+        self.hands_over_path_of(world, node_key(value), path, ty, seq, to, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

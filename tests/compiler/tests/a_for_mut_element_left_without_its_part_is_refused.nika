@@ -1,0 +1,16 @@
+// #949, #951, ADR-views-1 per turn (ADR-views-2): the turn ends with
+// `p.names` still out of the element.
+struct P { pub names: Vec[String], pub count: i64 }
+fn keep(names: Vec[String]) -> Vec[String] sync {
+    let mut out: Vec[String] = []
+    for n in names.drain() { out.push(n) }
+    return out
+}
+fn main() {
+    let mut ps: Vec[P] = [P { names: [f"a{1}"], count: 0 }]
+    for mut p in ps {
+        let old = keep(p.names)
+        p.count = old.len()
+    }
+    println(f"{ps[0].count}")
+}

@@ -523,7 +523,7 @@ impl CheckState {
         }
         let path = self.reads_on_paths[at].path.clone()
         let seq = self.reads_on_paths[at].seq
-        self.hands_over_path(world, path, ty, seq, to, span)
+        self.hands_over_path_of(world, node_key(value), path, ty, seq, to, span)
     }
 
     /// The tail of a block, handed over; its read stands at its statement.

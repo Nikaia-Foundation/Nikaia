@@ -1,0 +1,15 @@
+// #949, ADR-views-1 D4: a `let mut` view of a map's entry handed whole to
+// something that keeps it is `NK1131`: the entry is the map's.
+use std::collections
+struct C { pub names: Vec[String] }
+fn keep(c: C) -> i64 sync {
+    let mut out: Vec[C] = []
+    out.push(c)
+    return out.len()
+}
+fn main() {
+    let mut m: collections::BTreeMap[String, C] = collections::BTreeMap()
+    m.insert("a", C { names: [f"n{1}"] })
+    let mut c = m["a"] ?? return
+    println(f"{keep(c)}")
+}

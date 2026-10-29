@@ -209,6 +209,11 @@ impl EmitState {
             out.push(".graphemes()");
             return Ok(());
         }
+        let taken: Option<String> = match self.facts.taken_parts.get(&node_key(node)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if taken.is_some() { if nikaia_std::index::or(taken.as_deref(), || "") == "" { out.push("std::mem::take(&mut "); } else { out.push("std::mem::replace(&mut "); } }
         let boxed = self.facts.boxed_reads.contains(&node_key(node));
         if boxed { out.push("(*"); }
         let mut through = false;
@@ -225,6 +230,10 @@ impl EmitState {
         if !through { self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?; }
         out.push(&format!(".{}", escaped_name(&emit_text(world, name))));
         if boxed { out.push(")"); }
+        if taken.is_some() {
+            let stand_in = nikaia_std::index::or(taken.as_deref(), || "").to_string();
+            if stand_in == "" { out.push(")"); } else { out.push(&format!(", {})", stand_in)); }
+        }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -391,6 +391,10 @@ impl CheckState {
         let joined = holes.join(", ");
         Some(format!("{} {{ {} }}", name, joined))
     }
+    pub fn a_stand_in(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
+        if item_has_a_default(ty) { return Some(String::from("")); }
+        self.a_placeholder(view, ty)
+    }
     pub fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
         if !self.enums.contains_key(on) { return self.fields_of(world, on); }
         let known = match self.enums.get(on) { Some(__nikaia_value) => __nikaia_value, None => return None };

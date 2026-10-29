@@ -53,7 +53,8 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
             let name = *name;
             let written = world.words.resolve(name).to_string();
             let local = match state.binding(&written) { Some(__nikaia_value) => __nikaia_value, None => return };
-            if local.view_of == "" || !keeps { return; }
+            let a_let_view = local.view_of == "" && state.a_changing_view(&written);
+            if local.view_of == "" && !a_let_view || !keeps { return; }
             let ty = check_core_expr(state, world, host, value, span);
             if ty.is_unknown() || copies_plainly(&ty) || ty.is_a_view() || state.copied(world, &ty) { return; }
             let in_package = match ty {
@@ -66,6 +67,13 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
                 _ => false,
             };
             if text { return; }
+            if a_let_view {
+                let place = state.a_view_described(&written);
+                let notes: Vec<String> = vec![format!("`{}` is {}, and the place belongs to its owner: a change through `{}` reaches it. Giving it away whole would take it out of something this function doesn't own.", written, place, written)];
+                let help: String = format!("Write `{}.clone()` for a copy, or take the value out of its owner (`remove`).", written);
+                state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is {}, which is only borrowed.", written, place), notes, Some(help)));
+                return;
+            }
             let list = local.view_of.to_string();
             let notes: Vec<String> = vec![format!("`{}` is the element of `{}` itself, and `{}` belongs to whoever lent it. Giving the element away would take a piece out of something this function doesn't own.", written, list, list)];
             let help: String = format!("Write `{}.clone()` for a copy, or take the elements out of `{}` with `{}.drain()`.", written, list, list);
@@ -104,6 +112,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
     if root == "self" || !state.lent_here(&root) { return; }
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_unknown() || copies_plainly(&ty) { return; }
+    if !handed_back && !element && state.a_part_taken_out(world, &path, &ty).is_some() { return; }
     if !handed_back {
         let held: Ty = match ty {
             Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },

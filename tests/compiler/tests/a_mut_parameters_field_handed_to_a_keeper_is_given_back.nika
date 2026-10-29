@@ -1,0 +1,54 @@
+// #949, Part I 6.5, ADR-094 D7: a field of a `mut` parameter handed to a
+// callee that keeps it is taken out (no copy), and given back by assignment;
+// a struct-typed part with no empty value leaves a stand-in meanwhile, and a
+// `break` of a loop inside a view's block does not leave the view.
+use std::collections
+enum Shape { Leaf, Node(Vec[String]) }
+struct C { pub ensures: Vec[String], pub name: String, pub shape: Shape }
+fn keep(v: Vec[String]) -> Vec[String] sync {
+    let mut out: Vec[String] = []
+    for s in v.drain() { out.push(s) }
+    return out
+}
+fn keep_text(s: String) -> Vec[String] sync {
+    let mut out: Vec[String] = []
+    out.push(s)
+    return out
+}
+fn keep_shape(s: Shape) -> Vec[Shape] sync {
+    let mut out: Vec[Shape] = []
+    out.push(s)
+    return out
+}
+fn size(s: ref Shape) -> i64 {
+    return match s {
+        Shape::Leaf => 0,
+        Shape::Node(names) => names.len(),
+    }
+}
+fn fix(mut c: C) -> i64 {
+    let kept = keep(c.ensures)
+    let text = keep_text(c.name)
+    let shapes = keep_shape(c.shape)
+    c.ensures = [f"x{1}"]
+    c.name = f"n{2}"
+    c.shape = Shape::Node([f"s{size(shapes[0])}"])
+    return kept.len() + text.len()
+}
+fn main() {
+    let mut c = C { ensures: [f"e{1}", f"e{2}"], name: f"n{1}", shape: Shape::Node([f"a{1}", f"b{2}"]) }
+    let n = fix(c)
+    println(f"{n} {c.ensures.len()} {c.name} {size(c.shape)}")
+    let mut m: collections::BTreeMap[String, C] = collections::BTreeMap()
+    m.insert("a", C { ensures: [f"e{1}"], name: f"m{1}", shape: Shape::Leaf })
+    let mut v = m["a"] ?? return
+    let old = keep(v.ensures)
+    for i in 0..<3 {
+        if i == 1 {
+            break
+        }
+    }
+    v.ensures = [f"z{old.len()}"]
+    let after = m["a"] ?? return
+    println(after.ensures[0])
+}

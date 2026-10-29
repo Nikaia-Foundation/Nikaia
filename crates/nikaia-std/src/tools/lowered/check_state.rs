@@ -95,6 +95,9 @@ pub struct CheckPartOut {
     pub part: String,
     pub binding: i64,
     pub handed: i64,
+    pub view: String,
+    pub frame: i64,
+    pub ends: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,6 +127,7 @@ pub struct CheckWayOut {
     pub seq: i64,
     pub choices: Vec<(i64, i64)>,
     pub span: Span,
+    pub loop_frame: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -342,6 +346,7 @@ pub struct CheckState {
     pub read_at: Vec<(String, i64)>,
     pub written_at: Vec<(String, i64)>,
     pub parts_out: Vec<CheckPartOut>,
+    pub view_places: collections::BTreeMap<(String, i64), String>,
     pub gives: Vec<CheckGive>,
     pub ways_out: Vec<CheckWayOut>,
     pub cleanups_pending: Vec<CheckPendingCleanup>,
