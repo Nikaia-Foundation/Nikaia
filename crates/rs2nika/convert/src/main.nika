@@ -20608,7 +20608,19 @@ fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, pref
     if ctx.free {
         world = ctx.world.clone()
     }
-    let drafted = tr_convert(t, profile, prefix, world, ctx.host_fns).replace(", RS2NIKA_RECURSIVE)", "; recursive: true)")
+    // `module::f` of the crate -> the name tools/module.nika gives `f`:
+    // `f` itself, or `module_f`
+    let mut tool_paths = collections::BTreeMap()
+    for k in 0..<ctx.tool_names.len() {
+        let m = ctx.tool_files[k].trim_end_matches(".nika").clone()
+        let n: String = ctx.tool_names[k].clone()
+        tool_paths.insert(f"{m}::{n}", n.clone())
+        let short: String = n.strip_prefix(f"{m}_") ?? ""
+        if short != "" && !tool_paths.contains_key(f"{m}::{short}") {
+            tool_paths.insert(f"{m}::{short}", n.clone())
+        }
+    }
+    let drafted = tr_convert(t, profile, prefix, world, ctx.host_fns, tool_paths).replace(", RS2NIKA_RECURSIVE)", "; recursive: true)")
     // The line engine's later stages that help the tree's draft (measured on
     // the corpus: each of the others changes nothing or costs lines).
     let all: Vec[String] = ["renames", "names", "tail", "rmatch", "m2", "consts", "texts", "p4apre", "forms", "p3b", "p4b", "p4a", "uses", "typed"]

@@ -450,6 +450,12 @@ impl TrEm {
                 out.push(s)
             }
         }
+        if out.len() == 2 && segs[0] != "std" && segs[0] != "core" {
+            let moved = self.tool_paths.get(f"{segs[segs.len() - 2]}::{segs[segs.len() - 1]}")
+            if moved != null {
+                return moved.clone()
+            }
+        }
         if out.len() >= 2 && out[0] != "" {
             // `collections::HashMap` / `cmp::Ordering`: a std module keeps one segment
             let first = out[0].clone()

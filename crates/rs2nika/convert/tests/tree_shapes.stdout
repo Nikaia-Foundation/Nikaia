@@ -33,3 +33,7 @@ pub fn kept(xs: ref Vec[i64]) -> i64 {
     let found = xs.iter().filter(fn(x) { x > 1 }).collect()
     return sync_::count(found)
 }
+
+pub fn panics(t: Target) -> String {
+    return panic_strategy(t)
+}

@@ -61,9 +61,11 @@ pub struct TrEm {
     /// are options (`filter_map`), whose absence is `continue`
     pub push_to: String,
     pub push_opt: bool,
+    /// `module::f` of the crate -> its name in tools/module.nika
+    pub tool_paths: collections::BTreeMap[String, String],
 }
 
-pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, host_fns: ref Vec[String]) -> String {
+pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, host_fns: ref Vec[String], tool_paths: collections::BTreeMap[String, String]) -> String {
     let mut em = TrEm {
         t: t,
         profile: profile,
@@ -90,6 +92,7 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
         ret_ty: "",
         push_to: "",
         push_opt: false,
+        tool_paths: tool_paths,
     }
     if em.t.nodes.len() == 0 {
         return ""

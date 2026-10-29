@@ -23,3 +23,7 @@ fn kept(xs: &[i64]) -> usize {
     let found: Vec<_> = xs.iter().filter(|x| **x > 1).collect();
     sync::count(found)
 }
+
+fn panics(t: Target) -> String {
+    crate::project_settings::panic_strategy(t)
+}
