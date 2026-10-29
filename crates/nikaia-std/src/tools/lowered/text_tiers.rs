@@ -2438,14 +2438,8 @@ pub(crate) fn late_read(name: &str, late: &mut TierLate) {
     let mut waiting = late.pending.to_owned();
     for arm in late.branch_args.iter() { waiting.push(arm.clone()); }
     for arm in waiting.iter() { if arm.serial == serial && arm.name == name { if arm.argument { handed.push(arm.at); } else { read.push(arm.at); } } }
-    for at in read.iter() {
-        let at = nikaia_std::num::value(at);
-        late.found.insert(at);
-    }
-    for at in handed.iter() {
-        let at = nikaia_std::num::value(at);
-        late.args.insert(at);
-    }
+    late.found.extend(read);
+    late.args.extend(handed);
 }
 
 pub(crate) fn late_written(name: &str, late: &mut TierLate) {
@@ -3562,18 +3556,15 @@ pub(crate) fn merge_flows(into: &mut Flows, from: &Flows) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || collections::BTreeSet::new().into());
-        for word in kept.iter() { all.insert(word.to_string()); }
+        all.extend(kept.iter().cloned());
         into.literal_lets.insert(at.clone(), all);
     }
-    for at in from.owned_lets.iter() {
-        let at = nikaia_std::num::value(at);
-        into.owned_lets.insert(at.clone());
-    }
+    into.owned_lets.extend(from.owned_lets.iter().cloned());
     for (at, hand) in from.wraps.iter() {
         let at = nikaia_std::num::value(at);let hand = *hand;
         into.wraps.insert(at.clone(), hand.clone());
     }
-    for pair in from.param_into.iter() { into.param_into.insert(pair.clone()); }
+    into.param_into.extend(from.param_into.iter().cloned());
     for (at, wraps) in from.hole_wraps.iter() {
         let at = nikaia_std::num::value(at);
         let mut all: Vec<HoleWrap> = nikaia_std::index::or(match *nikaia_std::index::get(&into.hole_wraps, &at) {
@@ -3583,17 +3574,17 @@ pub(crate) fn merge_flows(into: &mut Flows, from: &Flows) {
         for wrap in wraps.iter() { all.push(wrap.clone()); }
         into.hole_wraps.insert(at.clone(), all);
     }
-    for pair in from.links.iter() { into.links.insert(pair.clone()); }
-    for word in from.unwrappable.iter() { into.unwrappable.insert(word.to_string()); }
-    for word in from.viewed.iter() { into.viewed.insert(word.to_string()); }
-    for pair in from.still_into.iter() { into.still_into.insert(pair.clone()); }
+    into.links.extend(from.links.iter().cloned());
+    into.unwrappable.extend(from.unwrappable.iter().cloned());
+    into.viewed.extend(from.viewed.iter().cloned());
+    into.still_into.extend(from.still_into.iter().cloned());
     for (at, target) in from.adopted.iter() {
         let at = nikaia_std::num::value(at);
         into.adopted.insert(at.clone(), target.clone());
     }
-    for word in from.demoted.iter() { into.demoted.insert(word.to_string()); }
-    for word in from.in_maps.iter() { into.in_maps.insert(word.to_string()); }
-    for pair in from.lent_into.iter() { into.lent_into.insert(pair.clone()); }
+    into.demoted.extend(from.demoted.iter().cloned());
+    into.in_maps.extend(from.in_maps.iter().cloned());
+    into.lent_into.extend(from.lent_into.iter().cloned());
     for (word, kinds) in from.lent_kinds.iter() {
         let kinds = *kinds;
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&into.lent_kinds, word) {
@@ -3612,20 +3603,17 @@ pub(crate) fn merge_flows(into: &mut Flows, from: &Flows) {
         let before = nikaia_std::index::or(*nikaia_std::index::get(&into.lent_uses, word), || 0);
         into.lent_uses.insert(word.to_string(), before + count);
     }
-    for pair in from.arg_into.iter() { into.arg_into.insert(pair.clone()); }
-    for pair in from.read_into.iter() { into.read_into.insert(pair.clone()); }
-    for word in from.unlinked.iter() { into.unlinked.insert(word.to_string()); }
+    into.arg_into.extend(from.arg_into.iter().cloned());
+    into.read_into.extend(from.read_into.iter().cloned());
+    into.unlinked.extend(from.unlinked.iter().cloned());
     for (word, count) in from.arg_uses.iter() {
         let count = nikaia_std::num::value(count);
         let before = nikaia_std::index::or(*nikaia_std::index::get(&into.arg_uses, word), || 0);
         into.arg_uses.insert(word.to_string(), before + count);
     }
-    for word in from.changed.iter() { into.changed.insert(word.to_string()); }
-    for node in from.viewed_arms.iter() {
-        let node = nikaia_std::num::value(node);
-        into.viewed_arms.insert(node.clone());
-    }
-    for pair in from.kept_through.iter() { into.kept_through.insert(pair.clone()); }
+    into.changed.extend(from.changed.iter().cloned());
+    into.viewed_arms.extend(from.viewed_arms.iter().cloned());
+    into.kept_through.extend(from.kept_through.iter().cloned());
     for (word, count) in from.arm_uses.iter() {
         let count = nikaia_std::num::value(count);
         let before = nikaia_std::index::or(*nikaia_std::index::get(&into.arm_uses, word), || 0);
@@ -3878,7 +3866,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'
 
 pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut collections::BTreeSet<String>, unlent: &mut collections::BTreeSet<String>) -> collections::BTreeMap<String, Tier> {
     let mut positions = flows.positions.to_owned();
-    for word in flows.demoted.iter() { demoted.insert(word.to_string()); }
+    demoted.extend(flows.demoted.iter().cloned());
     for word in demoted.iter() {
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -4141,7 +4129,7 @@ pub(crate) fn outlived_by_a_keeper(key: &str, at: i64, args: &[Expr], ask: &Tier
 
 pub(crate) fn tier_kept_into(flows: &Flows) -> collections::BTreeSet<(String, i64)> {
     let mut out: collections::BTreeSet<(String, i64)> = collections::BTreeSet::new();
-    for pair in flows.kept_through.iter() { out.insert(pair.clone()); }
+    out.extend(flows.kept_through.iter().cloned());
     for (from, to) in flows.param_into.iter() {
         let position = match match *nikaia_std::index::get(&flows.known, to) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -4364,7 +4352,7 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TextT
         if same_tiers(&next, &walk.tiers) && linked && settled && (walk.demoted.len() as i64) == demoted_before && (walk.unlent.len() as i64) == unlent_before { break; }
         let tiers_moved = changed_tier_words(&next, &walk.tiers);
         let mut keeping_moved = changed_words(&keeping, &walk.keeping);
-        for word in keepers_moved.iter() { keeping_moved.insert(word.to_string()); }
+        keeping_moved.extend(keepers_moved.iter().cloned());
         let arms_moved = changed_nodes(&arms, &walk.param_arms);
         let adopted_moved = changed_adopted(&walk.flows.adopted, &walk.adopted);
         let mut v: i64 = 0;
@@ -4388,10 +4376,7 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TextT
         tiers.push((position, tier.clone()));
     }
     let mut lets: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for at in walk.flows.owned_lets.iter() {
-        let at = nikaia_std::num::value(at);
-        lets.insert(at.clone());
-    }
+    lets.extend(walk.flows.owned_lets.iter().cloned());
     for (at, kept) in walk.flows.literal_lets.iter() {
         let at = nikaia_std::num::value(at);
         for word in kept.iter() {

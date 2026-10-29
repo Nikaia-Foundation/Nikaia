@@ -137,8 +137,8 @@ pub(crate) fn mp_named(name: String) -> MpDep {
 
 pub(crate) fn mp_join(one: &MpDep, other: &MpDep) -> MpDep {
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for n in one.names.iter() { names.insert(n.to_string()); }
-    for n in other.names.iter() { names.insert(n.to_string()); }
+    names.extend(one.names.iter().cloned());
+    names.extend(other.names.iter().cloned());
     MpDep { unknown: one.unknown || other.unknown, names }
 }
 
@@ -752,9 +752,9 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
             None => None,
         }, || MpHow { known: true, names: collections::BTreeSet::new() });
         let mut merged: collections::BTreeSet<String> = collections::BTreeSet::new();
-        for n in before.names.iter() { merged.insert(n.to_string()); }
+        merged.extend(before.names.iter().cloned());
         let mut known = before.known;
-        if seen.is_none() { known = false; } else { for n in nikaia_std::index::or(seen, || collections::BTreeSet::new().into()) { merged.insert(n.to_string()); } }
+        if seen.is_none() { known = false; } else { merged.extend(nikaia_std::index::or(seen, || collections::BTreeSet::new().into())); }
         how.insert(class, MpHow { known, names: merged });
     }
     let mut classes: collections::BTreeMap<i64, Vec<String>> = collections::BTreeMap::new();

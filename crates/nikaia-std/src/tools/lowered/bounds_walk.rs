@@ -1707,10 +1707,7 @@ pub(crate) fn bounding_loop_guesses(walk: &mut BoundsWalk, stmt: &Stmt, entry: &
     let mut head = entry.clone();
     bounding_after_change(walk, &mut head, changed);
     let mut kept: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for fact in head.facts.iter() {
-        let fact = nikaia_std::num::value(fact);
-        kept.insert(fact);
-    }
+    kept.extend(head.facts.iter().cloned());
     let mut out: Vec<i64> = vec![];
     for fact in entry.facts.iter() {
         let fact = nikaia_std::num::value(fact);
@@ -2529,11 +2526,11 @@ pub(crate) fn bounding_children(walk: &mut BoundsWalk, expr: &Expr, facts: &mut 
 }
 
 pub(crate) fn bounding_extend(changed: &mut BoundsChanged, other: &BoundsChanged) {
-    for name in other.values.iter() { changed.values.insert(name.to_string()); }
-    for name in other.lengths.iter() { changed.lengths.insert(name.to_string()); }
-    for name in other.parts.iter() { changed.parts.insert(name.to_string()); }
-    for name in other.jumps.iter() { changed.jumps.insert(name.to_string()); }
-    for place in other.elements.iter() { changed.elements.insert(place.to_string()); }
+    changed.values.extend(other.values.iter().cloned());
+    changed.lengths.extend(other.lengths.iter().cloned());
+    changed.parts.extend(other.parts.iter().cloned());
+    changed.jumps.extend(other.jumps.iter().cloned());
+    changed.elements.extend(other.elements.iter().cloned());
 }
 
 pub(crate) fn bounding_extend_maybe(changed: &mut BoundsChanged, block: Option<&Block>, context: &BoundsContext, words: &winnow_grammar::InternerContext) {

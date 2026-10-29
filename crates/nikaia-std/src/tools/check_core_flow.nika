@@ -1119,9 +1119,7 @@ fn check_core_flow_parts_handed_on_in_place(mut state: CheckState, body: ref Exp
             handed.push(node)
         }
     }
-    for node in handed {
-        state.facts.reborrowed_args.insert(node)
-    }
+    state.facts.reborrowed_args.extend(handed)
 }
 
 /// **A part copied out that the arm changes** (#730, Part I 3.4): a number

@@ -914,9 +914,7 @@ impl CheckState {
         for (name, fields) in members {
             let mut all: collections::BTreeSet[String] = collections::BTreeSet()
             for f in fields {
-                for h in f.inline {
-                    all.insert(h.clone())
-                }
+                all.extend(f.inline.clone())
             }
             holds.insert(name.clone(), all)
         }

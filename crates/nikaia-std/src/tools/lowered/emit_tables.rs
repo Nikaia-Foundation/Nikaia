@@ -182,7 +182,7 @@ pub fn emit_tables_structs_beside(beside: &[ParsedView<'_, '_, '_, '_, '_, '_>])
 
 pub fn emit_tables_declared_errors(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for unit in units.iter() { for name in declared_errors(unit.words, unit.items) { out.insert(name); } }
+    for unit in units.iter() { out.extend(declared_errors(unit.words, unit.items)); }
     out
 }
 
@@ -196,7 +196,7 @@ pub fn emit_tables_tethered(own: &Ledger, beside: &[ParsedView<'_, '_, '_, '_, '
 
 pub fn emit_tables_read_view_slots(ledger: &Ledger) -> collections::BTreeMap<String, Vec<String>> {
     let mut thrown: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for (_, function) in ledger.functions.iter() { for name in function.fails_with.iter() { thrown.insert(name.to_string()); } }
+    for (_, function) in ledger.functions.iter() { thrown.extend(function.fails_with.iter().cloned()); }
     let mut out: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for (name, contract) in ledger.types.iter() { if contract.tethered.len() >= 2 && contract.variants.is_empty() && !thrown.contains(name) { out.insert(name.to_string(), contract.tethered.to_owned()); } }
     out
@@ -220,7 +220,7 @@ pub fn emit_tables_package_borrowing(units: &[ParsedView<'_, '_, '_, '_, '_, '_>
         for unit in units.iter() {
             let mut more: Vec<String> = vec![];
             for held in emit_tables_borrowing_structs_beside(unit.words, unit.items, &found) { more.push(unit.text(held)); }
-            for name in more.iter() { found.insert(name.to_string()); }
+            found.extend(more.iter().cloned());
         }
         grew = (found.len() as i64) != before;
     }

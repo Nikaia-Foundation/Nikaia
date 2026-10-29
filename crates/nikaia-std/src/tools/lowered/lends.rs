@@ -107,7 +107,7 @@ pub(crate) fn add_kept(kept: &mut collections::BTreeMap<String, collections::BTr
     let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
     if kept.contains_key(name) {
         let held = match *nikaia_std::index::get(&kept, name) { Some(__nikaia_value) => __nikaia_value, None => return };
-        for one in held.iter() { parameters.insert(one.to_string()); }
+        parameters.extend(held.iter().cloned());
     }
     parameters.insert(parameter.to_string());
     kept.insert(name.to_string(), parameters);

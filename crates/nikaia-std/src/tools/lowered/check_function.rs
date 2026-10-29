@@ -64,8 +64,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn collect_comparisons(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
         let found = check_function_compared(world, &world.parts_beside, &self.structs, &self.enums, &self.enum_payloads, &self.struct_parameters);
-        for name in found.compares.iter() { self.facts.compares.insert(name.to_string()); }
-        for name in found.totally.iter() { self.facts.compares_totally.insert(name.to_string()); }
+        self.facts.compares.extend(found.compares.iter().cloned());
+        self.facts.compares_totally.extend(found.totally.iter().cloned());
     }
 }
 

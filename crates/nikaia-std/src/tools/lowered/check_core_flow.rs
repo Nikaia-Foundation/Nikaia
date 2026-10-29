@@ -902,10 +902,7 @@ pub(crate) fn check_core_flow_parts_handed_on_in_place(state: &mut CheckState, b
         let node = nikaia_std::num::value(node);let binding = nikaia_std::num::value(binding);
         if in_place.contains(&binding) { handed.push(node); }
     }
-    for node in handed.iter() {
-        let node = nikaia_std::num::value(node);
-        state.facts.reborrowed_args.insert(node);
-    }
+    state.facts.reborrowed_args.extend(handed);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -167,9 +167,7 @@ impl CheckState {
             if joining.len() == 0 {
                 break
             }
-            for name in joining {
-                copies.insert(name.clone())
-            }
+            copies.extend(joining.clone())
         }
         // What the emitter derives `Copy` for: the program's own types.
         let mut in_package: collections::BTreeSet[String] = collections::BTreeSet()

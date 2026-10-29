@@ -160,15 +160,11 @@ impl CheckState {
         match pattern {
             MatchPattern::Or(alternatives) => {
                 let mut first: collections::BTreeSet[String] = collections::BTreeSet()
-                for name in pattern_names(world, alternatives[0]) {
-                    first.insert(name)
-                }
+                first.extend(pattern_names(world, alternatives[0]))
                 let mut at = 1
                 while at < alternatives.len() {
                     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
-                    for name in pattern_names(world, alternatives[at]) {
-                        names.insert(name)
-                    }
+                    names.extend(pattern_names(world, alternatives[at]))
                     if names != first {
                         let mut missing: Vec[String] = []
                         for name in first {

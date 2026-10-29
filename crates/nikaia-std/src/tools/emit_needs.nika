@@ -79,9 +79,7 @@ impl EmitNeeds {
     /// Both files' needs, as one program's.
     pub fn join(ref self, other: ref EmitNeeds) -> EmitNeeds {
         let mut traits = self.foreign_traits.clone()
-        for path in other.foreign_traits {
-            traits.insert(path.clone())
-        }
+        traits.extend(other.foreign_traits.clone())
         return EmitNeeds {
             uses_grammar: self.uses_grammar || other.uses_grammar,
             driver: self.driver || other.driver,
@@ -168,9 +166,7 @@ pub fn emit_needs_abort_table(rust: ref String, rows: ref Vec[(i64, i64, i64)], 
             continue
         }
         let line = emit_needs_line_at(nika[unit], source_at)
-        if !lines.contains_key(generated) {
-            lines.insert(generated, (unit, line))
-        }
+        lines.entry(generated).or_insert((unit, line))
     }
     let mut out: String = "\n// ADR-300 D9: the generated line, and the `.nika` line it came from.\n"
     out.push_str("const __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[\n")

@@ -89,10 +89,7 @@ impl CheckState {
             lent.push(node_key(leaf));
         }
         if nulls == 0 || lent.is_empty() { return false; }
-        for node in lent.iter() {
-            let node = nikaia_std::num::value(node);
-            self.facts.lent_reads.insert(node);
-        }
+        self.facts.lent_reads.extend(lent);
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -128,10 +125,7 @@ impl CheckState {
             if a_view || literal && ty.is_a_view() { viewed.push(node_key(leaf)); } else if check_arm_is_a_place(leaf) || ty.is_a_view() { return false; } else { made.push(node_key(leaf)); }
         }
         if made.is_empty() && !owned.is_empty() && !text {
-            for node in owned.iter() {
-                let node = nikaia_std::num::value(node);
-                self.facts.lent_reads.insert(node);
-            }
+            self.facts.lent_reads.extend(owned);
             return true;
         }
         if (names + owned.len() as i64) == 0 || (made.len() as i64 + owned.len() as i64) == 0 { return false; }
@@ -239,10 +233,7 @@ impl CheckState {
         if lent.is_empty() && (only_lent || views == 0 || owned == 0) { return None; }
         if views_only && (owned > 0 || absent) { return None; }
         for node in self.choice_nodes(world, value) { self.arm_disagreements.remove(&node); }
-        for node in lent.iter() {
-            let node = nikaia_std::num::value(node);
-            self.facts.lent_reads.insert(node);
-        }
+        self.facts.lent_reads.extend(lent);
         if owned == 0 {
             for at in literals.iter() {
                 let at = nikaia_std::num::value(at);

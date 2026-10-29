@@ -115,7 +115,7 @@ pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump
         }
         let mut line: i64 = low;
         if generated >= end { line = line + moved; }
-        if !placed.contains_key(&line) { placed.insert(line, CrRow { line, unit, byte: at }); }
+        placed.entry(line).or_insert(CrRow { line, unit, byte: at });
     }
     let mut table: String = String::from("const __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[\n");
     for (line, row) in placed.iter() {

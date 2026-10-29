@@ -45,7 +45,7 @@ impl EmitState {
         let known = host.known_nonnegative(body);
         match known {
             None => { for symbol in nonnegative_locals(body) { locals.insert(emit_text(world, symbol)); } },
-            Some(ref names) => { for name in names.iter() { locals.insert(name.to_string()); } },
+            Some(ref names) => { locals.extend(names.iter().cloned()); },
         }
         walk.nonnegative.insert(key.to_string(), locals);
         let flow = EmitFlow { can_throw: throws_, ..EmitFlow::plain() };

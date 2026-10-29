@@ -676,7 +676,7 @@ pub fn cx_variant_codes(words: &winnow_grammar::InternerContext, items: &[Spanne
     let mut thrown: collections::BTreeSet<String> = collections::BTreeSet::new();
     for entry in entries.iter() {
         let contract = match *nikaia_std::index::get(&contracts.functions, &(entry.key())) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        for error in contract.fails_with.iter() { thrown.insert(error.to_string()); }
+        thrown.extend(contract.fails_with.iter().cloned());
     }
     let mut next: i64 = 100000;
     let mut out: Vec<CxRaising> = vec![];

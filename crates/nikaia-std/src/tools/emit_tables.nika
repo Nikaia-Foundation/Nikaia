@@ -269,9 +269,7 @@ pub fn emit_tables_structs_beside(beside: ref Vec[ParsedView]) -> collections::B
 pub fn emit_tables_declared_errors(units: ref Vec[ParsedView]) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     for unit in units {
-        for name in declared_errors(unit.words, unit.items) {
-            out.insert(name)
-        }
+        out.extend(declared_errors(unit.words, unit.items))
     }
     return out
 }
@@ -301,9 +299,7 @@ pub fn emit_tables_tethered(own: ref Ledger, beside: ref Vec[ParsedView]) -> col
 pub fn emit_tables_read_view_slots(ledger: ref Ledger) -> collections::BTreeMap[String, Vec[String]] {
     let mut thrown: collections::BTreeSet[String] = collections::BTreeSet()
     for (_, function) in ledger.functions {
-        for name in function.fails_with {
-            thrown.insert(name.clone())
-        }
+        thrown.extend(function.fails_with.clone())
     }
     let mut out: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     for (name, contract) in ledger.types {
@@ -342,9 +338,7 @@ pub fn emit_tables_package_borrowing(units: ref Vec[ParsedView]) -> collections:
             for held in emit_tables_borrowing_structs_beside(unit.words, unit.items, found) {
                 more.push(unit.text(held))
             }
-            for name in more {
-                found.insert(name.clone())
-            }
+            found.extend(more.clone())
         }
         grew = found.len() != before
     }

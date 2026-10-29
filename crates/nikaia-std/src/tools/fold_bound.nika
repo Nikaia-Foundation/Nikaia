@@ -828,9 +828,7 @@ impl FbWalk {
         for (name, _) in self.k {
             out.insert(name.clone())
         }
-        for name in self.dead {
-            out.insert(name.clone())
-        }
+        out.extend(self.dead.clone())
         return out
     }
 
@@ -1168,9 +1166,7 @@ impl FbWalk {
                             bound.push(FbBound { name: ix.text(params[0]), ty: value ?? return })
                         }
                     }
-                    if !self.lambdas.contains_key(at) {
-                        self.lambdas.insert(at, FbLambda { once: once, bound: bound })
-                    }
+                    self.lambdas.entry(at).or_insert(FbLambda { once: once, bound: bound })
                 },
                 else => {},
             }
@@ -1265,12 +1261,8 @@ impl FbMerge {
             env.insert("self", owner.clone())
             env.insert(other.clone(), FbTy::of(ix.words, fun.args[0].ty))
             walk.stmt(host, ix, stmt, env, false)
-            for name in walk.touched() {
-                self.bad.insert(name)
-            }
-            for r in walk.reached {
-                self.reached.insert(r)
-            }
+            self.bad.extend(walk.touched())
+            self.reached.extend(walk.reached.clone())
             if walk.broken {
                 self.broken = true
             }
@@ -1466,9 +1458,7 @@ impl FbUses {
     }
 
     fn name(ref mut self, owner: i64, text: String) {
-        if !self.names.contains_key(owner) {
-            self.names.insert(owner, collections::BTreeSet())
-        }
+        self.names.entry(owner).or_insert(collections::BTreeSet())
         let mut set = self.names[owner] ?? return
         set.insert(text)
     }
@@ -1798,15 +1788,9 @@ pub fn fb_fold_counters[H: FbHost](host: ref H, ix: ref FbIndex, uses: ref FbUse
         return none
     }
     let mut region: collections::BTreeSet[i64] = collections::BTreeSet()
-    for at in init.reached {
-        region.insert(at)
-    }
-    for at in step.reached {
-        region.insert(at)
-    }
-    for at in merge.reached {
-        region.insert(at)
-    }
+    region.extend(init.reached.clone())
+    region.extend(step.reached.clone())
+    region.extend(merge.reached.clone())
     let me = fb_fold_owner(rule_at)
     let mut outside: collections::BTreeSet[i64] = collections::BTreeSet()
     let mut queue: Vec[String] = []

@@ -23,7 +23,7 @@ impl PackageTypes {
 }
 
 pub fn declare_unit(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], package: &mut PackageTypes) {
-    for name in borrowing_types(names, items) { package.borrowing.insert(name.to_string()); }
+    package.borrowing.extend(borrowing_types(names, items));
     for item in items.iter() {
         match &item.node {
             Item::Struct { name, .. } => {

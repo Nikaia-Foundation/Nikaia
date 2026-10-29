@@ -190,9 +190,7 @@ pub fn lg_horn_write(mut arena: TermArena, problem: ref LgLoop) -> String {
     for goal in problem.goals {
         arena.variables(goal, read)
     }
-    for name in problem.state {
-        read.insert(name.clone())
-    }
+    read.extend(problem.state.clone())
     // The head's names: the state and every name the loop does not change.
     let mut primed_names: collections::BTreeSet[String] = collections::BTreeSet()
     for name in problem.state {

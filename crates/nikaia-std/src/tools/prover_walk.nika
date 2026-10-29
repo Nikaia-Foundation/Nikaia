@@ -1254,12 +1254,8 @@ fn prover_join(mut walk: ProverWalk, mut scope: ProverScope, then_scope: ref Pro
     // What the walk knew before the `if`, which each side's own additions
     // are told apart from.
     let mut before: collections::BTreeSet[i64] = collections::BTreeSet()
-    for fact in scope.facts {
-        before.insert(fact)
-    }
-    for fact in scope.history {
-        before.insert(fact)
-    }
+    before.extend(scope.facts.clone())
+    before.extend(scope.history.clone())
     let outer = scope.ints.clone()
     for n in dropped {
         scope.rebind(walk.arena, n)
@@ -2319,9 +2315,7 @@ fn prover_known_calls(mut walk: ProverWalk, expr: ref Expr, scope: ref ProverSco
     let read = claim_names_in(expr, words, holes_of)
     for (bound, calls) in scope.calls_of {
         if read.contains(bound) {
-            for call in calls {
-                found.insert(call.clone())
-            }
+            found.extend(calls.clone())
         }
     }
     return found

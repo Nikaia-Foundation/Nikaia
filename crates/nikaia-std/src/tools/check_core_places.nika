@@ -331,13 +331,9 @@ pub fn check_core_places_stored[H: CheckHost](mut state: CheckState, world: ref 
         check_core_places_code_into(state, world, host, v, stored)
     }
     let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
-    for resolved in stored.resolved {
-        entry.resolved.insert(resolved.clone())
-    }
+    entry.resolved.extend(stored.resolved.clone())
     entry.unresolved = entry.unresolved || stored.unresolved
-    for free in stored.free {
-        entry.free.insert(free.clone())
-    }
+    entry.free.extend(stored.free.clone())
     state.stored_code.insert(key.clone(), entry)
 }
 
@@ -354,13 +350,9 @@ pub fn check_core_places_stored_keys[H: CheckHost](mut state: CheckState, world:
     }
     for key in keys {
         let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
-        for resolved in stored.resolved {
-            entry.resolved.insert(resolved.clone())
-        }
+        entry.resolved.extend(stored.resolved.clone())
         entry.unresolved = entry.unresolved || stored.unresolved
-        for free in stored.free {
-            entry.free.insert(free.clone())
-        }
+        entry.free.extend(stored.free.clone())
         state.stored_code.insert(key.clone(), entry)
     }
 }
@@ -432,9 +424,7 @@ pub fn check_core_places_code_keys(state: ref CheckState, world: ref CheckWorld,
 pub fn check_core_places_code_into[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H, v: ref Expr, mut stored: CheckStoredCode) sync {
     match v {
         Expr::Closure { body, .. } => {
-            for called in host.free_calls(body) {
-                stored.free.insert(called)
-            }
+            stored.free.extend(host.free_calls(body))
         },
         // A function of this program, named: it is what runs. A name of this
         // function that was given code passes on what it was given.
@@ -447,13 +437,9 @@ pub fn check_core_places_code_into[H: CheckHost](state: ref CheckState, world: r
                 let key = f"{current}::{written}"
                 if state.stored_code.contains_key(key) {
                     let entry: CheckStoredCode = state.stored_code[key]?.clone() ?? CheckStoredCode::empty()
-                    for resolved in entry.resolved {
-                        stored.resolved.insert(resolved.clone())
-                    }
+                    stored.resolved.extend(entry.resolved.clone())
                     stored.unresolved = stored.unresolved || entry.unresolved
-                    for free in entry.free {
-                        stored.free.insert(free.clone())
-                    }
+                    stored.free.extend(entry.free.clone())
                 } else if check_core_call_a_param_of(world, current, written) {
                     // **A parameter of code handed on is that parameter's
                     // place** (ADR-351 D4): `@F::p`, so `g(f)` chains `g`'s

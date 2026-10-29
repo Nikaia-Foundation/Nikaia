@@ -24,8 +24,8 @@ impl EmitSeedsTables {
     pub fn is_fixed(&self, name: &str) -> bool { self.fixed.contains(name) }
     pub fn barrier_names(&self) -> collections::BTreeSet<String> {
         let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-        for n in self.barriers.iter() { out.insert(n.to_string()); }
-        for n in self.fixed.iter() { out.insert(n.to_string()); }
+        out.extend(self.barriers.iter().cloned());
+        out.extend(self.fixed.iter().cloned());
         out
     }
     pub fn count(&self, words: &winnow_grammar::InternerContext, ty: &Type) -> i64 {
@@ -135,7 +135,7 @@ pub trait EmitSeedsHost {
 // this was written - see `contracts::sync`.
 pub fn emit_seeds_read<H: EmitSeedsHost>(host: &H, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], described: &[String]) -> EmitSeedsTables {
     let mut tables = emit_seeds_tables();
-    for name in described.iter() { tables.barriers.insert(name.to_string()); }
+    tables.barriers.extend(described.iter().cloned());
     let declared = emit_seeds_structs(units);
     tables.count_types(&declared);
     emit_seeds_read_barriers(&mut tables, units);

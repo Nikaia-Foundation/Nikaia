@@ -234,9 +234,7 @@ impl ProverScope {
                 let mut read: collections::BTreeSet[String] = collections::BTreeSet()
                 arena.variables(fact, read)
                 if ties(read, names) {
-                    for n in read {
-                        names.insert(n.clone())
-                    }
+                    names.extend(read.clone())
                 }
             }
             grown = names.len() != before
@@ -382,9 +380,7 @@ impl ProverScope {
                 let mut read: collections::BTreeSet[String] = collections::BTreeSet()
                 arena.variables(fact, read)
                 if ties(read, names) {
-                    for n in read {
-                        names.insert(n.clone())
-                    }
+                    names.extend(read.clone())
                 }
             }
             grown = names.len() != before

@@ -49,14 +49,14 @@ pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<Str
     look_block(body, Look::Lets, false, around, words, &mut seen);
     look_block(body, Look::Aliases, false, around, words, &mut seen);
     look_block(body, Look::Aliases, false, around, words, &mut seen);
-    for name in pinned.iter() { seen.lost.insert(name.to_string()); }
+    seen.lost.extend(pinned.iter().cloned());
     look_block(body, Look::Lost, false, around, words, &mut seen);
     let mut through: Vec<String> = vec![];
     for name in seen.lost.iter() {
         let key = match seen.shape.aliases.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         through.push(key_root(&key));
     }
-    for root in through.iter() { seen.lost.insert(root.to_string()); }
+    seen.lost.extend(through.iter().cloned());
     let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
     for root in seen.shape.roots.iter() { if !seen.lost.contains(root) { kept.insert(root.to_string()); } }
     seen.shape.roots = kept;

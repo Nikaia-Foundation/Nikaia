@@ -235,9 +235,8 @@ pub(crate) fn check_attributes_at<H: CheckHost>(state: &mut CheckState, world: &
             check_attributes_out_of_place(state, &name, &here, mark, &attribute.span);
             continue;
         }
-        let mut count: i64 = 1;
-        if seen.contains_key(&name) { count = nikaia_std::index::or(seen.get(&name), || 0) + 1; }
-        seen.insert(name.to_string(), count);
+        seen.entry(name.to_string()).and_modify(|__nikaia_slot| { let mut n = *__nikaia_slot; (|| { n += 1; })(); *__nikaia_slot = n; }).or_insert(1);
+        let count = nikaia_std::index::or(seen.get(&name), || 0);
         if count == 2 && !check_attributes_repeats(marks, &name) { check_attributes_written_twice(state, &name, &attribute.span); }
         check_attributes_arguments(state, world, host, &name, &fields, attribute);
     }

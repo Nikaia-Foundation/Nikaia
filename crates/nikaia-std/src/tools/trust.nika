@@ -362,9 +362,7 @@ pub fn trusted_maps(program: ref Program, words: ref winnow_grammar::InternerCon
         bad.insert(mc_find(classes, node))
     }
     let mut plan = MapPlan { lets: collections::BTreeSet(), slots: collections::BTreeSet(), escaped: collections::BTreeSet() }
-    for at in classes.escaped {
-        plan.escaped.insert(at)
-    }
+    plan.escaped.extend(classes.escaped.clone())
     for at in classes.lets {
         let node = f"l:{at}"
         if !bad.contains(mc_find(classes, node)) {
@@ -476,9 +474,7 @@ fn tm_trusted_bindings(given: ref Vec[Vec[KeyDeps]]) -> collections::BTreeSet[i6
     let mut settled = false
     while !settled {
         let mut now: collections::BTreeSet[i64] = collections::BTreeSet()
-        for id in trusted {
-            now.insert(id)
-        }
+        now.extend(trusted)
         let mut next: collections::BTreeSet[i64] = collections::BTreeSet()
         for id in now {
             let mut holds = true

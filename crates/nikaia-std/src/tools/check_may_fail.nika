@@ -30,9 +30,7 @@ impl CheckState {
             let held: CheckGuarded? = self.flow.guarded?.clone()
             let mut outer = held ?? CheckGuarded::nothing()
             outer.fallible = true
-            for error in passing {
-                outer.thrown.insert(error.clone())
-            }
+            outer.thrown.extend(passing.clone())
             self.flow.guarded = outer
         }
         if self.flow.throwing || self.flow.caught {
@@ -72,9 +70,7 @@ impl CheckState {
                 let held: CheckGuarded? = self.flow.guarded?.clone()
                 let mut guarded = held ?? CheckGuarded::nothing()
                 guarded.fallible = true
-                for thrown in contract.fails_with {
-                    guarded.thrown.insert(thrown.clone())
-                }
+                guarded.thrown.extend(contract.fails_with.clone())
                 self.flow.guarded = guarded
             }
             if world.newly_throws.contains_key(key) {

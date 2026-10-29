@@ -596,7 +596,7 @@ impl FbWalk {
     pub(crate) fn touched(&self) -> collections::BTreeSet<String> {
         let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
         for (name, _) in self.k.iter() { out.insert(name.to_string()); }
-        for name in self.dead.iter() { out.insert(name.to_string()); }
+        out.extend(self.dead.iter().cloned());
         out
     }
     pub(crate) fn poison(&mut self, field: String) { self.dead.insert(field); }
@@ -865,7 +865,7 @@ impl FbWalk {
                         let value = self.entry_value(ix, call, env);
                         if value.is_some() { bound.push(FbBound { name: ix.text(*nikaia_std::index::get(&params, 0)), ty: match value { Some(__nikaia_value) => __nikaia_value, None => return } }); }
                     }
-                    if !self.lambdas.contains_key(&at) { self.lambdas.insert(at, FbLambda { once, bound }); }
+                    self.lambdas.entry(at).or_insert(FbLambda { once, bound });
                 },
                 _ => { },
             }
@@ -950,11 +950,8 @@ impl FbMerge {
             env.insert(String::from("self"), owner.clone());
             env.insert(other.to_string(), FbTy::of(ix.words, &nikaia_std::index::get(&fun.args, 0).ty));
             walk.stmt(host, ix, stmt, &env, false);
-            for name in walk.touched() { self.bad.insert(name); }
-            for r in walk.reached.iter() {
-                let r = nikaia_std::num::value(r);
-                self.reached.insert(r);
-            }
+            self.bad.extend(walk.touched());
+            self.reached.extend(walk.reached.iter().cloned());
             if walk.broken { self.broken = true; }
         }
         self.stack.pop();
@@ -1103,7 +1100,7 @@ impl FbUses {
         set.insert(owner);
     }
     pub(crate) fn name(&mut self, owner: i64, text: String) {
-        if !self.names.contains_key(&owner) { self.names.insert(owner, collections::BTreeSet::new()); }
+        self.names.entry(owner).or_insert(collections::BTreeSet::new());
         let set = match nikaia_std::index::get_mut(&mut self.names, &owner) { Some(__nikaia_value) => __nikaia_value, None => return };
         set.insert(text);
     }
@@ -1351,18 +1348,9 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
     }
     if init.broken || step.broken || merge.broken { return none; }
     let mut region: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for at in init.reached.iter() {
-        let at = nikaia_std::num::value(at);
-        region.insert(at);
-    }
-    for at in step.reached.iter() {
-        let at = nikaia_std::num::value(at);
-        region.insert(at);
-    }
-    for at in merge.reached.iter() {
-        let at = nikaia_std::num::value(at);
-        region.insert(at);
-    }
+    region.extend(init.reached.iter().cloned());
+    region.extend(step.reached.iter().cloned());
+    region.extend(merge.reached.iter().cloned());
     let me = fb_fold_owner(rule_at);
     let mut outside: collections::BTreeSet<i64> = collections::BTreeSet::new();
     let mut queue: Vec<String> = vec![];

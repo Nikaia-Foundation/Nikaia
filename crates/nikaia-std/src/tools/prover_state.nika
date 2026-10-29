@@ -790,9 +790,7 @@ pub fn summed_read(arena: ref TermArena, scope: ref ProverScope, claim: i64) -> 
             let mut read: collections::BTreeSet[String] = collections::BTreeSet()
             arena.variables(fact, read)
             if summed_ties(read, names) {
-                for n in read {
-                    names.insert(n.clone())
-                }
+                names.extend(read.clone())
             }
         }
         for (bound, alts) in scope.summed {
@@ -827,9 +825,7 @@ pub fn leaned_notes(arena: ref TermArena, scope: ref ProverScope, names: ref col
             let mut fact_names: collections::BTreeSet[String] = collections::BTreeSet()
             arena.variables(fact, fact_names)
             if summed_ties(fact_names, read) {
-                for n in fact_names {
-                    read.insert(n.clone())
-                }
+                read.extend(fact_names.clone())
             }
         }
         grown = read.len() != before

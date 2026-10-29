@@ -120,7 +120,7 @@ impl ProverScope {
                 let fact = nikaia_std::num::value(fact);
                 let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
                 arena.variables(fact, &mut read);
-                if ties(&read, &names) { for n in read.iter() { names.insert(n.to_string()); } }
+                if ties(&read, &names) { names.extend(read.iter().cloned()); }
             }
             grown = (names.len() as i64) != before;
         }
@@ -220,7 +220,7 @@ impl ProverScope {
                 let fact = nikaia_std::num::value(fact);
                 let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
                 arena.variables(fact, &mut read);
-                if ties(&read, &names) { for n in read.iter() { names.insert(n.to_string()); } }
+                if ties(&read, &names) { names.extend(read.iter().cloned()); }
             }
             grown = (names.len() as i64) != before;
         }

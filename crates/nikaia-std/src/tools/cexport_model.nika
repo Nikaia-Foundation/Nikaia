@@ -914,9 +914,7 @@ pub fn cx_variant_codes(words: ref winnow_grammar::InternerContext, items: ref V
     let mut thrown: collections::BTreeSet[String] = collections::BTreeSet()
     for entry in entries {
         let contract = contracts.functions[entry.key()] ?? continue
-        for error in contract.fails_with {
-            thrown.insert(error.clone())
-        }
+        thrown.extend(contract.fails_with.clone())
     }
     let mut next = 100000
     let mut out: Vec[CxRaising] = []

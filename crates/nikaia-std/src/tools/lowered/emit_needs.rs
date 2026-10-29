@@ -31,7 +31,7 @@ impl EmitNeeds {
     }
     pub fn join(&self, other: &EmitNeeds) -> EmitNeeds {
         let mut traits = self.foreign_traits.to_owned();
-        for path in other.foreign_traits.iter() { traits.insert(path.to_string()); }
+        traits.extend(other.foreign_traits.iter().cloned());
         EmitNeeds { uses_grammar: self.uses_grammar || other.uses_grammar, driver: self.driver || other.driver, uses_std: self.uses_std || other.uses_std, fails: self.fails || other.fails, foreign_traits: traits }
     }
     pub fn preamble(&self) -> String {
@@ -61,7 +61,7 @@ pub fn emit_needs_abort_table(rust: &str, rows: &[(i64, i64, i64)], paths: &[Str
         let generated = emit_needs_line_at(&starts, generated_at);
         if unit < 0 || unit >= nika.len() as i64 { continue; }
         let line = emit_needs_line_at(nikaia_std::index::get(&nika, nikaia_std::index::at(unit)), source_at);
-        if !lines.contains_key(&generated) { lines.insert(generated, (unit, line)); }
+        lines.entry(generated).or_insert((unit, line));
     }
     let mut out: String = String::from("\n// ADR-300 D9: the generated line, and the `.nika` line it came from.\n");
     out.push_str("const __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[\n");

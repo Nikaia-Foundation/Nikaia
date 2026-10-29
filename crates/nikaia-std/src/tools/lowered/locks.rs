@@ -24,7 +24,7 @@ pub fn stored_reaches(field: &str, resolved: &collections::BTreeSet<String>, unr
     let mut reaches = Reaches { itself: Lock::No, callees: collections::BTreeSet::new() };
     if unresolved { reaches.itself = reaches.itself.or(Lock::Undecided); }
     if any_in(resolved, &DOORS) || any_in(free, &MULTI) { reaches.itself = reaches.itself.or(Lock::Holds); }
-    for to in resolved.iter() { reaches.callees.insert(to.to_string()); }
+    reaches.callees.extend(resolved.iter().cloned());
     for to in free.iter() {
         if to.starts_with('@') {
             reaches.itself = reaches.itself.or(Lock::Undecided);
@@ -115,7 +115,7 @@ pub(crate) fn resolved_into(calls: Option<&BodyCalls>, with_fields: bool, reache
     let known = match calls { Some(__nikaia_value) => __nikaia_value, None => return };
     if known.unresolved { reaches.itself = reaches.itself.or(Lock::Undecided); }
     if any_in(&known.resolved, &DOORS) { reaches.itself = reaches.itself.or(Lock::Holds); }
-    for to in known.resolved.iter() { reaches.callees.insert(to.to_string()); }
+    reaches.callees.extend(known.resolved.iter().cloned());
     if with_fields { for field in known.fields_called.iter() { reaches.callees.insert(format!("{}{}", FIELD, field)); } }
 }
 

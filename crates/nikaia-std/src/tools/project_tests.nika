@@ -122,9 +122,7 @@ fn project_tests_stems(dir: ref fs::Path, ending: String, want_dir: bool) -> col
 pub fn output_tests(root: ref fs::Path) -> Vec[OutputTest] throws {
     let dir = root.join("tests")
     let mut names = project_tests_stems(dir, ".stdout", false)
-    for name in project_tests_stems(dir, ".out", true) {
-        names.insert(name)
-    }
+    names.extend(project_tests_stems(dir, ".out", true))
     let mut tests: Vec[OutputTest] = []
     for name in names {
         // A `NAME.nika` beside them makes the files that program's (D22).

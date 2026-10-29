@@ -302,9 +302,7 @@ pub fn emit_holes_fold_callees[H: EmitHolesHost](host: ref H, words: ref winnow_
         }
     }
     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
-    for name in found {
-        names.insert(name.clone())
-    }
+    names.extend(found.clone())
     return names
 }
 

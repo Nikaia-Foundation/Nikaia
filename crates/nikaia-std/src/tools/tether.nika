@@ -52,9 +52,7 @@ impl PackageTypes {
 
 /// One unit's declarations, added to the package's.
 pub fn declare_unit(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], mut package: PackageTypes) {
-    for name in borrowing_types(names, items) {
-        package.borrowing.insert(name.clone())
-    }
+    package.borrowing.extend(borrowing_types(names, items))
     for item in items {
         match item.node {
             Item::Struct { name, .. } => {

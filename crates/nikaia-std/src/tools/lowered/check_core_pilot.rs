@@ -77,7 +77,7 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
         };
         let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
         guarded.fallible = true;
-        for thrown in contract.fails_with.iter() { guarded.thrown.insert(thrown.to_string()); }
+        guarded.thrown.extend(contract.fails_with.iter().cloned());
         state.flow.guarded = Some(guarded);
     }
     let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };

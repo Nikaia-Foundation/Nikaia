@@ -627,7 +627,7 @@ impl CheckState {
         let mut holds: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
         for (name, fields) in members.iter() {
             let mut all: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for f in fields.iter() { for h in f.inline.iter() { all.insert(h.to_string()); } }
+            for f in fields.iter() { all.extend(f.inline.iter().cloned()); }
             holds.insert(name.to_string(), all);
         }
         for (name, fields) in members.iter() {

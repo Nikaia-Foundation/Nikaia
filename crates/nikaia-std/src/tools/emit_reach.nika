@@ -62,9 +62,7 @@ pub fn pausing_reach(words: ref winnow_grammar::InternerContext, aliases: ref co
             let before = entry.len()
             for next in entry.clone() {
                 let more = reaches.get(next) ?? continue
-                for reached in more {
-                    entry.insert(reached.clone())
-                }
+                entry.extend(more.clone())
             }
             if entry.len() != before {
                 changed = true
@@ -138,9 +136,7 @@ fn reach_note(aliases: ref collections::BTreeMap[String, String], pausing: ref c
         return
     }
     let keys = by_last.get(name) ?? return
-    for key in keys {
-        out.insert(key.clone())
-    }
+    out.extend(keys.clone())
 }
 
 fn reach_keys_for(by_last: ref collections::BTreeMap[String, Vec[String]], last: ref String) -> Vec[String] {

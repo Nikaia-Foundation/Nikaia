@@ -73,11 +73,11 @@ impl CheckState {
         match pattern {
             MatchPattern::Or(alternatives) => {
                 let mut first: collections::BTreeSet<String> = collections::BTreeSet::new();
-                for name in pattern_names(world, nikaia_std::index::get(&alternatives, 0)) { first.insert(name); }
+                first.extend(pattern_names(world, nikaia_std::index::get(&alternatives, 0)));
                 let mut at: i64 = 1;
                 while at < alternatives.len() as i64 {
                     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-                    for name in pattern_names(world, nikaia_std::index::get(&alternatives, nikaia_std::index::at(at))) { names.insert(name); }
+                    names.extend(pattern_names(world, nikaia_std::index::get(&alternatives, nikaia_std::index::at(at))));
                     if names != first {
                         let mut missing: Vec<String> = vec![];
                         for name in first.iter() { if !names.contains(name) { missing.push(name.to_string()); } }

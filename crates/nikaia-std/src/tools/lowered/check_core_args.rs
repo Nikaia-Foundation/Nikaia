@@ -110,7 +110,7 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
     }
     if !lends {
         check_core_a_field_of_a_borrowed_subject(state, world, host, arg, span, "passed");
-        if at < expected.len() as i64 && !wants_fn && !(*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).is_unknown() { check_core_a_lent_place_passed(state, world, host, arg, span); }
+        if at < expected.len() as i64 && !wants_fn && !(*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).is_unknown() { check_core_a_lent_place_passed(state, world, host, arg, !check_core_args_runs(callee, at), span); }
     }
     state.flow.lending_let = !wants_fn;
     let found = check_core_expr(state, world, host, arg, span);
@@ -237,10 +237,7 @@ pub fn check_core_fold_form(state: &mut CheckState, world: &CheckWorld<'_, '_, '
             let node = nikaia_std::num::value(node);let binding = nikaia_std::num::value(binding);
             if binding == first && first >= 0 { handed.push(node); }
         }
-        for node in handed.iter() {
-            let node = nikaia_std::num::value(node);
-            state.facts.reborrowed_args.insert(node);
-        }
+        state.facts.reborrowed_args.extend(handed);
     }
     let form = if lent { 2 } else { 1 };
     state.facts.in_place_folds.insert(id_of(part) as i64, form);

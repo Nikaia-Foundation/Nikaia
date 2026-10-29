@@ -71,9 +71,7 @@ fn lg_search(indexed: ref LgIndexed, state: ref LgBranch, budget: ref LgBudget, 
             for step in refutation.steps {
                 match step {
                     LgStep::Hypothesis(i) => {
-                        for one in state.held_why[i] {
-                            relies.insert(one)
-                        }
+                        relies.extend(state.held_why[i].clone())
                         steps.push(LgStep::Hypothesis(state.held_atoms[i]))
                     },
                     else => steps.push(step.clone()),

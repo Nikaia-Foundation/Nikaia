@@ -105,7 +105,7 @@ impl CheckState {
                 if all { joining.push(name.to_string()); }
             }
             if joining.is_empty() { break; }
-            for name in joining.iter() { copies.insert(name.to_string()); }
+            copies.extend(joining.iter().cloned());
         }
         let mut in_package: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();

@@ -37,12 +37,8 @@ pub fn types_checked(names: ref winnow_grammar::InternerContext, items: ref Vec[
     let plain = types_plain_enums(names, items)
     for k in 0..<items.len() {
         let mut here = known.clone()
-        for parameter in generic_names(names, items[k].node) {
-            here.insert(parameter)
-        }
-        for parameter in impl_parameters[k] {
-            here.insert(parameter.clone())
-        }
+        here.extend(generic_names(names, items[k].node))
+        here.extend(impl_parameters[k].clone())
         bounds_of(names, items[k].node, traits, items[k].span, found)
         item_types(names, items[k].node, here, plain, views, "", items[k].span, found)
         inherent_at_home(names, items[k].node, library, declared, items[k].span, found)
@@ -123,9 +119,7 @@ fn known_names(own: ref Ledger, library: ref Ledger, declared: ref collections::
     for (key, _) in own.types {
         with_its_last_segment(key, known)
     }
-    for name in declared {
-        known.insert(name.clone())
-    }
+    known.extend(declared.clone())
     return known
 }
 
@@ -330,9 +324,7 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
             let prefix = f"{names.resolve(target.name)}::"
             for method in methods {
                 let mut here = known.clone()
-                for parameter in generic_names(names, method.node) {
-                    here.insert(parameter)
-                }
+                here.extend(generic_names(names, method.node))
                 item_types(names, method.node, here, plain, views, prefix, method.span, out)
             }
         }

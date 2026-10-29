@@ -922,14 +922,8 @@ pub(crate) fn prover_join(walk: &mut ProverWalk, scope: &mut ProverScope, then_s
         if on_then && on_else { followed.push(n.to_string()); } else { dropped.insert(n.to_string()); }
     }
     let mut before: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for fact in scope.facts.iter() {
-        let fact = nikaia_std::num::value(fact);
-        before.insert(fact);
-    }
-    for fact in scope.history.iter() {
-        let fact = nikaia_std::num::value(fact);
-        before.insert(fact);
-    }
+    before.extend(scope.facts.iter().cloned());
+    before.extend(scope.history.iter().cloned());
     let outer = scope.ints.to_owned();
     for n in dropped.iter() { scope.rebind(&walk.arena, n); }
     let mut earlier: collections::BTreeMap<String, String> = collections::BTreeMap::new();
@@ -1708,7 +1702,7 @@ pub(crate) fn prover_known_calls(walk: &mut ProverWalk, expr: &Expr, scope: &Pro
     }
     if scope.calls_of.is_empty() { return found; }
     let read = claim_names_in(expr, words, holes_of);
-    for (bound, calls) in scope.calls_of.iter() { if read.contains(bound) { for call in calls.iter() { found.insert(call.to_string()); } } }
+    for (bound, calls) in scope.calls_of.iter() { if read.contains(bound) { found.extend(calls.iter().cloned()); } }
     found
 }
 

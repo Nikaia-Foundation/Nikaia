@@ -55,10 +55,7 @@ pub(crate) fn lg_search(indexed: &LgIndexed, state: &LgBranch, budget: &LgBudget
                 let step = *step;
                 match step {
                     LgStep::Hypothesis(i) => {
-                        for one in (*nikaia_std::index::get(&state.held_why, nikaia_std::index::at(i))).iter() {
-                            let one = nikaia_std::num::value(one);
-                            relies.insert(one);
-                        }
+                        relies.extend((*nikaia_std::index::get(&state.held_why, nikaia_std::index::at(i))).iter().cloned());
                         steps.push(LgStep::Hypothesis(*nikaia_std::index::get(&state.held_atoms, nikaia_std::index::at(i))));
                     },
                     _ => { steps.push(step.clone()); },

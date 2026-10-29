@@ -95,9 +95,7 @@ pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref C
         let held: CheckGuarded? = state.flow.guarded?.clone()
         let mut guarded = held ?? CheckGuarded::nothing()
         guarded.fallible = true
-        for thrown in contract.fails_with {
-            guarded.thrown.insert(thrown.clone())
-        }
+        guarded.thrown.extend(contract.fails_with.clone())
         state.flow.guarded = guarded
     }
     let signature = contract.signature ?? return Ty::Unknown

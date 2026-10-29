@@ -758,9 +758,7 @@ pub fn modules_collect_with[H: ModulesHost](entry: ref fs::Path, dependencies: r
     let mut names: collections::BTreeSet[String] = dependencies.iter().map(fn(d) { d.name.clone() }).collect()
     // **A Rust crate is a package a `use` may name** (Part III 15.2's `use
     // image`), under the name a call writes it by (ADR-290 D1).
-    for name in modules_foreign_beside(entry, host) {
-        names.insert(name.clone())
-    }
+    names.extend(modules_foreign_beside(entry, host))
     let mut units = modules_package_at(entry, null, names, collections::BTreeMap(), host)
 
     // **Read, and not emitted** ([ADR-286](../../../docs/specification/adr/adr-286.md)

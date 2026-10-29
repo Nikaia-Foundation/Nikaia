@@ -48,7 +48,7 @@ pub fn pausing_reach(words: &winnow_grammar::InternerContext, aliases: &collecti
             let before = entry.len() as i64;
             for next in entry.to_owned() {
                 let more = match reaches.get(&next) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                for reached in more.iter() { entry.insert(reached.to_string()); }
+                entry.extend(more.iter().cloned());
             }
             if (entry.len() as i64) != before { changed = true; }
             reaches.insert(key.to_string(), entry);
@@ -110,7 +110,7 @@ pub(crate) fn reach_note(aliases: &collections::BTreeMap<String, String>, pausin
         return;
     }
     let keys = match by_last.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
-    for key in keys.iter() { out.insert(key.to_string()); }
+    out.extend(keys.iter().cloned());
 }
 
 pub(crate) fn reach_keys_for(by_last: &collections::BTreeMap<String, Vec<String>>, last: &str) -> Vec<String> {

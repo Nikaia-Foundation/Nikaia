@@ -1716,9 +1716,7 @@ fn rsrc_none() -> collections::BTreeSet[String] {
 }
 
 fn rsrc_join(mut into: collections::BTreeSet[String], more: ref collections::BTreeSet[String]) {
-    for name in more {
-        into.insert(name.clone())
-    }
+    into.extend(more.clone())
 }
 
 // **A source per view** (ADR-353 D1): an entry is a parameter, which every view
@@ -2166,9 +2164,7 @@ fn rsrc_return(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref coll
 
 fn rsrc_record(reach: ref collections::BTreeSet[String], mut flow: ResultSrcFlow) {
     if flow.depth > 0 {
-        for name in reach {
-            flow.inner.insert(name.clone())
-        }
+        flow.inner.extend(reach.clone())
         return
     }
     flow.ways.push(ResultSrcWay { span: Span { start: flow.at.start, end: flow.at.end }, reach: reach.clone() })
@@ -2241,9 +2237,7 @@ fn rsrc_closure(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref col
     flow.depth += 1
     let mut out = rsrc_block(unit, asked, here, known, own_buffer, body, flow)
     flow.depth -= 1
-    for name in flow.inner {
-        out.insert(name.clone())
-    }
+    out.extend(flow.inner.clone())
     flow.inner = saved
     return out
 }
@@ -2858,9 +2852,7 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
             }
             // A walk that did not settle says more, never less (D13).
             if !settled {
-                for source in sources {
-                    reach.insert(source.clone())
-                }
+                reach.extend(sources.clone())
             }
             let before = known[key]?.clone() ?? ResultSrcKnown { declared: false, params: [], reach: rsrc_none() }
             let changed = before.reach.len() != reach.len()

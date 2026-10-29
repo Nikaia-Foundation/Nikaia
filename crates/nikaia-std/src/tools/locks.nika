@@ -57,9 +57,7 @@ pub fn stored_reaches(field: ref String, resolved: ref collections::BTreeSet[Str
     if any_in(resolved, DOORS) || any_in(free, MULTI) {
         reaches.itself = reaches.itself.or(Lock::Holds)
     }
-    for to in resolved {
-        reaches.callees.insert(to.clone())
-    }
+    reaches.callees.extend(resolved.clone())
     for to in free {
         // `@F::p` is a parameter of code handed on (ADR-351 D4): code this
         // walk does not see.
@@ -176,9 +174,7 @@ fn resolved_into(calls: ref BodyCalls?, with_fields: bool, mut reaches: Reaches)
     if any_in(known.resolved, DOORS) {
         reaches.itself = reaches.itself.or(Lock::Holds)
     }
-    for to in known.resolved {
-        reaches.callees.insert(to.clone())
-    }
+    reaches.callees.extend(known.resolved.clone())
     if with_fields {
         for field in known.fields_called {
             reaches.callees.insert(f"{FIELD}{field}")

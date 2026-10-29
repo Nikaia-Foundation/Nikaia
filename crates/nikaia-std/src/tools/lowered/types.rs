@@ -19,8 +19,8 @@ pub fn types_checked(names: &winnow_grammar::InternerContext, items: &[Spanned<I
     let plain = types_plain_enums(names, items);
     for k in 0..items.len() as i64 {
         let mut here = known.to_owned();
-        for parameter in generic_names(names, &nikaia_std::index::get(&items, (k) as usize).node) { here.insert(parameter); }
-        for parameter in (*nikaia_std::index::get(&impl_parameters, (k) as usize)).iter() { here.insert(parameter.to_string()); }
+        here.extend(generic_names(names, &nikaia_std::index::get(&items, (k) as usize).node));
+        here.extend((*nikaia_std::index::get(&impl_parameters, (k) as usize)).iter().cloned());
         bounds_of(names, &nikaia_std::index::get(&items, (k) as usize).node, &traits, &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
         item_types(names, &nikaia_std::index::get(&items, (k) as usize).node, &here, &plain, views, "", &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
         inherent_at_home(names, &nikaia_std::index::get(&items, (k) as usize).node, library, declared, &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
@@ -79,7 +79,7 @@ pub(crate) fn known_names(own: &Ledger, library: &Ledger, declared: &collections
     }
     for (key, _) in library.types.iter() { known.insert(key.to_string()); }
     for (key, _) in own.types.iter() { with_its_last_segment(key, &mut known); }
-    for name in declared.iter() { known.insert(name.to_string()); }
+    known.extend(declared.iter().cloned());
     known
 }
 
@@ -256,7 +256,7 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
             let prefix = format!("{}::", names.resolve(target.name));
             for method in methods.iter() {
                 let mut here = known.to_owned();
-                for parameter in generic_names(names, &method.node) { here.insert(parameter); }
+                here.extend(generic_names(names, &method.node));
                 item_types(names, &method.node, &here, plain, views, &prefix, &method.span, out);
             }
         },

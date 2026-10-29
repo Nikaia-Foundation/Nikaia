@@ -339,9 +339,7 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
             if whole && is_the_buffer(value, ask, walk) {
                 let mut local = local_of(root, walk) ?? return
                 local.buffer = true
-                for origin in origins {
-                    local.origins.insert(origin.clone())
-                }
+                local.origins.extend(origins.clone())
                 set_local(root, local, walk)
             } else if op != null || !is_the_buffer(value, ask, walk) {
                 // **And so is one handed to a field or an element whole** (#686):
@@ -903,9 +901,7 @@ fn flow_into(root: ref String, origins: collections::BTreeSet[(i64, String)], mu
             escape(origin.clone(), Escape::Outer(root.clone()), walk)
         }
     }
-    for origin in origins {
-        local.origins.insert(origin.clone())
-    }
+    local.origins.extend(origins.clone())
     set_local(root, local, walk)
 }
 
@@ -1049,9 +1045,7 @@ fn spawns_in(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[E
 
 fn capture(name: ref String, local: ref Local, mut walk: BufferWalk) {
     let mut held: (i64, collections::BTreeSet[(i64, String)]) = walk.captured[name]?.clone() ?? (local.at, collections::BTreeSet())
-    for origin in local.origins {
-        held.1.insert(origin.clone())
-    }
+    held.1.extend(local.origins.clone())
     walk.captured.insert(name.clone(), held)
 }
 
@@ -1068,9 +1062,7 @@ fn task_names(body: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[
     }
     match body {
         Expr::Spawn { body, .. } => {
-            for name in task_names(body, ask, holes_of) {
-                out.insert(name)
-            }
+            out.extend(task_names(body, ask, holes_of))
         }
         else => {}
     }
@@ -1224,9 +1216,7 @@ fn put_by_method(root: ref String, method: ref String, args: ref Vec[Expr], ask:
         if named != null {
             walk.struct_puts.insert(root.clone(), named ?? "")
         }
-        for origin in of {
-            all.insert(origin.clone())
-        }
+        all.extend(of.clone())
     }
     flow_into(root, all, walk)
 }
@@ -1240,9 +1230,7 @@ fn put_into(root: ref String, at: i64, of: ref collections::BTreeSet[(i64, Strin
     let key = (walk.statement, root.clone())
     let mut by_arg: collections::BTreeMap[i64, collections::BTreeSet[(i64, String)]] = by_arg_of(walk.puts_into[key])
     let mut here: collections::BTreeSet[(i64, String)] = by_arg[at]?.clone() ?? collections::BTreeSet()
-    for origin in of {
-        here.insert(origin.clone())
-    }
+    here.extend(of.clone())
     by_arg.insert(at, here)
     walk.puts_into.insert(key, PutsAt { by_arg: by_arg })
 }
@@ -1374,9 +1362,7 @@ fn a_buffer_local(name: ref String, walk: ref BufferWalk) -> bool {
 }
 
 fn add_all(from: ref collections::BTreeSet[(i64, String)], mut into: collections::BTreeSet[(i64, String)]) {
-    for one in from {
-        into.insert(one.clone())
-    }
+    into.extend(from.clone())
 }
 
 fn items_origins(items: ref Vec[Expr], ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) -> collections::BTreeSet[(i64, String)] {
@@ -2001,9 +1987,7 @@ fn source_at(source: ref Source) -> i64 {
 // The keepers that drop entries hold each view one handle per buffer (D4),
 // and every place that puts a view of this source into one is recorded.
 fn held_one_per_buffer(id: (i64, String), source: ref Source, shedding: ref Vec[String], walk: ref BufferWalk, mut plan: BufferPlan) {
-    for keeper in shedding {
-        plan.element_keepers.insert(keeper.clone())
-    }
+    plan.element_keepers.extend(shedding.clone())
     for (place, puts) in walk.puts_into {
         if !a_name_among(place.1, shedding) {
             continue

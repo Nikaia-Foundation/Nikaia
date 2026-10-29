@@ -124,9 +124,7 @@ impl CheckState {
         if nulls == 0 || lent.len() == 0 {
             return false
         }
-        for node in lent {
-            self.facts.lent_reads.insert(node)
-        }
+        self.facts.lent_reads.extend(lent)
         return true
     }
 
@@ -194,9 +192,7 @@ impl CheckState {
         // owned local is lent as it is, and the whole is a view to lend. Text
         // goes through `EitherText` below: `&String` and `&str` are two types.
         if made.len() == 0 && owned.len() > 0 && !text {
-            for node in owned {
-                self.facts.lent_reads.insert(node)
-            }
+            self.facts.lent_reads.extend(owned)
             return true
         }
         // A literal beside values made there is made one of them by the
@@ -369,9 +365,7 @@ impl CheckState {
         for node in self.choice_nodes(world, value) {
             self.arm_disagreements.remove(node)
         }
-        for node in lent {
-            self.facts.lent_reads.insert(node)
-        }
+        self.facts.lent_reads.extend(lent)
         if owned == 0 {
             // Views only: the literals stay static text, the whole is a view.
             for at in literals {

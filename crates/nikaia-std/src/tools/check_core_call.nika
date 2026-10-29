@@ -386,23 +386,17 @@ fn check_core_call_set_into(world: ref CheckWorld, name: ref String, mut set: co
     if name.starts_with("@") {
         let place: String = (name.strip_prefix("@") ?? "").clone()
         let settled = world.own.code_throws[place] ?? return
-        for error in settled {
-            set.insert(error.clone())
-        }
+        set.extend(settled.clone())
         return
     }
     if world.own.functions.contains_key(name) {
         let own = world.own.functions[name] ?? return
-        for error in own.fails_with {
-            set.insert(error.clone())
-        }
+        set.extend(own.fails_with.clone())
         return
     }
     if world.library.functions.contains_key(name) {
         let contract = world.library.functions[name] ?? return
-        for error in contract.fails_with {
-            set.insert(error.clone())
-        }
+        set.extend(contract.fails_with.clone())
     }
 }
 
@@ -419,13 +413,9 @@ fn check_core_call_feed_params[H: CheckHost](mut state: CheckState, world: ref C
         check_core_places_code_into(state, world, host, args[i], stored)
         let place = f"{key}::{param}"
         let mut entry: CheckStoredCode = state.stored_code.remove(place) ?? CheckStoredCode::empty()
-        for resolved in stored.resolved {
-            entry.resolved.insert(resolved.clone())
-        }
+        entry.resolved.extend(stored.resolved.clone())
         entry.unresolved = entry.unresolved || stored.unresolved
-        for free in stored.free {
-            entry.free.insert(free.clone())
-        }
+        entry.free.extend(stored.free.clone())
         state.stored_code.insert(place, entry)
     }
 }

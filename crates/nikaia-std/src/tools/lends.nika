@@ -183,9 +183,7 @@ fn add_kept(mut kept: collections::BTreeMap[String, collections::BTreeSet[String
     let mut parameters: collections::BTreeSet[String] = collections::BTreeSet()
     if kept.contains_key(name) {
         let held = kept[name] ?? return
-        for one in held {
-            parameters.insert(one.clone())
-        }
+        parameters.extend(held.clone())
     }
     parameters.insert(parameter.clone())
     kept.insert(name.clone(), parameters)

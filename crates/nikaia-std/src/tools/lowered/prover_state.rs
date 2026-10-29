@@ -438,7 +438,7 @@ pub fn summed_read(arena: &TermArena, scope: &ProverScope, claim: i64) -> Vec<St
             let fact = nikaia_std::num::value(fact);
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
             arena.variables(fact, &mut read);
-            if summed_ties(&read, &names) { for n in read.iter() { names.insert(n.to_string()); } }
+            if summed_ties(&read, &names) { names.extend(read.iter().cloned()); }
         }
         for (bound, alts) in scope.summed.iter() {
             if !names.contains(bound) { continue; }
@@ -463,7 +463,7 @@ pub fn leaned_notes(arena: &TermArena, scope: &ProverScope, names: &collections:
             let fact = nikaia_std::num::value(fact);
             let mut fact_names: collections::BTreeSet<String> = collections::BTreeSet::new();
             arena.variables(fact, &mut fact_names);
-            if summed_ties(&fact_names, &read) { for n in fact_names.iter() { read.insert(n.to_string()); } }
+            if summed_ties(&fact_names, &read) { read.extend(fact_names.iter().cloned()); }
         }
         grown = (read.len() as i64) != before;
     }

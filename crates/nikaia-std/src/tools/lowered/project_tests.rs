@@ -92,7 +92,7 @@ pub(crate) fn project_tests_stems(dir: &std::path::Path, ending: &str, want_dir:
 pub async fn output_tests(root: &std::path::Path) -> Result<Vec<OutputTest>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let dir = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests")));
     let mut names = project_tests_stems(&dir, ".stdout", false);
-    for name in project_tests_stems(&dir, ".out", true) { names.insert(name); }
+    names.extend(project_tests_stems(&dir, ".out", true));
     let mut tests: Vec<OutputTest> = vec![];
     for name in names.iter() {
         if project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", name))))) { continue; }

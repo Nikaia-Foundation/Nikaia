@@ -245,6 +245,8 @@ pub mod runtime {
     clippy::type_complexity,
     clippy::explicit_counter_loop,
     clippy::clone_on_copy,
+    clippy::redundant_closure_call,
+    clippy::unwrap_or_default,
     clippy::manual_map,
     clippy::needless_return,
     clippy::needless_question_mark,

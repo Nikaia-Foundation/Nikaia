@@ -129,7 +129,7 @@ pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
         let goal = nikaia_std::num::value(goal);
         arena.variables(goal, &mut read);
     }
-    for name in problem.state.iter() { read.insert(name.to_string()); }
+    read.extend(problem.state.iter().cloned());
     let mut primed_names: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in problem.state.iter() { primed_names.insert(lg_primed(name)); }
     let mut head: Vec<String> = vec![];

@@ -120,9 +120,7 @@ fn with_methods(key: ref String, thrown: ref Thrown, own: ref Ledger, library: r
 // one of a library by its ledger's set.
 fn methods_into(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledger, fatal: ref collections::BTreeSet[String], mut named: collections::BTreeSet[String], mut called: collections::BTreeSet[String], mut fatal_calls: collections::BTreeMap[String, collections::BTreeSet[String]]) {
     let known = resolved ?? return
-    for field in known.fields {
-        called.insert(field.clone())
-    }
+    called.extend(known.fields.clone())
     if known.unseen {
         named.insert(UNNAMED.clone())
     }
@@ -145,9 +143,7 @@ fn methods_into(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledg
         if own.functions.contains_key(callee) {
             called.insert(callee.clone())
         } else {
-            for error in fails_with_of(library, callee) {
-                named.insert(error)
-            }
+            named.extend(fails_with_of(library, callee))
         }
     }
 }
@@ -169,9 +165,7 @@ pub fn stored_throws(field: ref String, resolved: ref collections::BTreeSet[Stri
         } else if own.functions.contains_key(callee) {
             called.insert(callee.clone())
         } else if library.functions.contains_key(callee) {
-            for error in fails_with_of(library, callee) {
-                named.insert(error)
-            }
+            named.extend(fails_with_of(library, callee))
         }
     }
     let known: MethodsCalled? = MethodsCalled { resolved: resolved.clone(), unseen: false, fields: collections::BTreeSet(), swallowed: collections::BTreeMap() }
@@ -191,13 +185,9 @@ pub fn params_as_places(own: ref Ledger, mut stored: collections::BTreeMap[Strin
     let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
     // The functions named as a value anywhere - returned, handed on, kept.
     let named: CheckStoredCode = stored.remove(AS_VALUE) ?? CheckStoredCode::empty()
-    for free in named.free {
-        kept.insert(free.clone())
-    }
+    kept.extend(named.free.clone())
     for (_, code) in stored {
-        for free in code.free {
-            kept.insert(free.clone())
-        }
+        kept.extend(code.free.clone())
     }
     // **A published field of a published type is stored into by packages this
     // one does not see** (ADR-351 D4): its set cannot be named here.
@@ -363,9 +353,7 @@ fn throws_grow(mut sets: collections::BTreeMap[String, collections::BTreeSet[Str
             let before = sets[name]?.clone() ?? collections::BTreeSet()
             let mut grown = before.clone()
             for callee in callees {
-                for error in theirs(sets, own, callee) {
-                    grown.insert(error)
-                }
+                grown.extend(theirs(sets, own, callee))
             }
             let caught = fatal_calls[name]?.clone() ?? collections::BTreeMap()
             for (callee, named) in caught {
@@ -763,12 +751,8 @@ fn a_contribution(expr: ref Expr, names: ref winnow_grammar::InternerContext, co
             if call.len() > 0 {
                 out.calls.insert(call)
             }
-            for handed in given.given {
-                out.calls.insert(handed.clone())
-            }
-            for error in given.errors {
-                out.direct.insert(error.clone())
-            }
+            out.calls.extend(given.given.clone())
+            out.direct.extend(given.errors.clone())
         }
     }
 }

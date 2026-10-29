@@ -131,9 +131,7 @@ pub fn call_joined_throws(words: ref winnow_grammar::InternerContext, aliases: r
             continue
         }
         let errors = found ?? []
-        for error in errors {
-            set.insert(error.clone())
-        }
+        set.extend(errors.clone())
     }
     let mut out: Vec[String] = []
     for error in set {

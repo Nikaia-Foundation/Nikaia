@@ -809,9 +809,7 @@ impl CheckState {
             }
         }
         if !bound_again {
-            for id in named {
-                self.facts.views_handed_on.insert(id)
-            }
+            self.facts.views_handed_on.extend(named)
         }
     }
 }

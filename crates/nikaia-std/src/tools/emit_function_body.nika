@@ -70,9 +70,7 @@ impl EmitState {
                 }
             },
             names => {
-                for name in names {
-                    locals.insert(name.clone())
-                }
+                locals.extend(names.clone())
             },
         }
         walk.nonnegative.insert(key.clone(), locals)

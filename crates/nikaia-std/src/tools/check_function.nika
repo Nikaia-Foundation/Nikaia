@@ -89,12 +89,8 @@ impl CheckState {
     /// collected, because the answer is structural.
     pub fn collect_comparisons(ref mut self, world: ref CheckWorld) sync {
         let found = check_function_compared(world, world.parts_beside, self.structs, self.enums, self.enum_payloads, self.struct_parameters)
-        for name in found.compares {
-            self.facts.compares.insert(name.clone())
-        }
-        for name in found.totally {
-            self.facts.compares_totally.insert(name.clone())
-        }
+        self.facts.compares.extend(found.compares.clone())
+        self.facts.compares_totally.extend(found.totally.clone())
     }
 }
 

@@ -3417,12 +3417,8 @@ fn late_read(name: ref String, mut late: TierLate) {
             }
         }
     }
-    for at in read {
-        late.found.insert(at)
-    }
-    for at in handed {
-        late.args.insert(at)
-    }
+    late.found.extend(read)
+    late.args.extend(handed)
 }
 
 /// A name assigned anew: what an arm took of the old value is not read again.
@@ -4850,20 +4846,14 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
     }
     for (at, kept) in from.literal_lets {
         let mut all: collections::BTreeSet[String] = into.literal_lets[at]?.clone() ?? collections::BTreeSet()
-        for word in kept {
-            all.insert(word.clone())
-        }
+        all.extend(kept.clone())
         into.literal_lets.insert(at.clone(), all)
     }
-    for at in from.owned_lets {
-        into.owned_lets.insert(at.clone())
-    }
+    into.owned_lets.extend(from.owned_lets.clone())
     for (at, hand) in from.wraps {
         into.wraps.insert(at.clone(), hand.clone())
     }
-    for pair in from.param_into {
-        into.param_into.insert(pair.clone())
-    }
+    into.param_into.extend(from.param_into.clone())
     for (at, wraps) in from.hole_wraps {
         let mut all: Vec[HoleWrap] = into.hole_wraps[at]?.clone() ?? []
         for wrap in wraps {
@@ -4871,30 +4861,16 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
         }
         into.hole_wraps.insert(at.clone(), all)
     }
-    for pair in from.links {
-        into.links.insert(pair.clone())
-    }
-    for word in from.unwrappable {
-        into.unwrappable.insert(word.clone())
-    }
-    for word in from.viewed {
-        into.viewed.insert(word.clone())
-    }
-    for pair in from.still_into {
-        into.still_into.insert(pair.clone())
-    }
+    into.links.extend(from.links.clone())
+    into.unwrappable.extend(from.unwrappable.clone())
+    into.viewed.extend(from.viewed.clone())
+    into.still_into.extend(from.still_into.clone())
     for (at, target) in from.adopted {
         into.adopted.insert(at.clone(), target.clone())
     }
-    for word in from.demoted {
-        into.demoted.insert(word.clone())
-    }
-    for word in from.in_maps {
-        into.in_maps.insert(word.clone())
-    }
-    for pair in from.lent_into {
-        into.lent_into.insert(pair.clone())
-    }
+    into.demoted.extend(from.demoted.clone())
+    into.in_maps.extend(from.in_maps.clone())
+    into.lent_into.extend(from.lent_into.clone())
     for (word, kinds) in from.lent_kinds {
         let before = into.lent_kinds[word]?.clone() ?? no_kinds()
         into.lent_kinds.insert(word.clone(), kinds_joined(before, kinds))
@@ -4907,28 +4883,16 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
         let before = into.lent_uses[word] ?? 0
         into.lent_uses.insert(word.clone(), before + count)
     }
-    for pair in from.arg_into {
-        into.arg_into.insert(pair.clone())
-    }
-    for pair in from.read_into {
-        into.read_into.insert(pair.clone())
-    }
-    for word in from.unlinked {
-        into.unlinked.insert(word.clone())
-    }
+    into.arg_into.extend(from.arg_into.clone())
+    into.read_into.extend(from.read_into.clone())
+    into.unlinked.extend(from.unlinked.clone())
     for (word, count) in from.arg_uses {
         let before = into.arg_uses[word] ?? 0
         into.arg_uses.insert(word.clone(), before + count)
     }
-    for word in from.changed {
-        into.changed.insert(word.clone())
-    }
-    for node in from.viewed_arms {
-        into.viewed_arms.insert(node.clone())
-    }
-    for pair in from.kept_through {
-        into.kept_through.insert(pair.clone())
-    }
+    into.changed.extend(from.changed.clone())
+    into.viewed_arms.extend(from.viewed_arms.clone())
+    into.kept_through.extend(from.kept_through.clone())
     for (word, count) in from.arm_uses {
         let before = into.arm_uses[word] ?? 0
         into.arm_uses.insert(word.clone(), before + count)
@@ -5260,9 +5224,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
 /// them, and none is mixed where one of them cannot be.
 fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: collections::BTreeSet[String], mut unlent: collections::BTreeSet[String]) -> collections::BTreeMap[String, Tier] {
     let mut positions = flows.positions.clone()
-    for word in flows.demoted {
-        demoted.insert(word.clone())
-    }
+    demoted.extend(flows.demoted.clone())
     for word in demoted {
         let before = positions[word]?.clone() ?? no_kinds()
         positions.insert(word.clone(), kinds_joined(before, owned_kinds()))
@@ -5586,9 +5548,7 @@ fn tier_kept_into(flows: ref Flows) -> collections::BTreeSet[(String, i64)] {
     let mut out: collections::BTreeSet[(String, i64)] = collections::BTreeSet()
     // **And through a callee that keeps it so** (#740): followed one call
     // further each round, so a chain of any depth settles.
-    for pair in flows.kept_through {
-        out.insert(pair.clone())
-    }
+    out.extend(flows.kept_through.clone())
     for (from, to) in flows.param_into {
         let position = flows.known[to]?.clone() ?? continue
         if position.path.len() == 0 {
@@ -5876,9 +5836,7 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
         }
         let tiers_moved = changed_tier_words(next, walk.tiers)
         let mut keeping_moved = changed_words(keeping, walk.keeping)
-        for word in keepers_moved {
-            keeping_moved.insert(word.clone())
-        }
+        keeping_moved.extend(keepers_moved.clone())
         let arms_moved = changed_nodes(arms, walk.param_arms)
         let adopted_moved = changed_adopted(walk.flows.adopted, walk.adopted)
         let mut v = 0
@@ -5900,9 +5858,7 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     // **A name bound to a literal and kept where text of its own is wanted is
     // declared `String`** (ADR-282 D17).
     let mut lets: collections::BTreeSet[i64] = collections::BTreeSet()
-    for at in walk.flows.owned_lets {
-        lets.insert(at.clone())
-    }
+    lets.extend(walk.flows.owned_lets.clone())
     for (at, kept) in walk.flows.literal_lets {
         for word in kept {
             if !walk.tiers.contains_key(word) {

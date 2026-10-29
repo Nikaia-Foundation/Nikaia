@@ -253,10 +253,7 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
     let mut bad: collections::BTreeSet<String> = collections::BTreeSet::new();
     for node in classes.poisoned.iter() { bad.insert(mc_find(&classes, node)); }
     let mut plan = MapPlan { lets: collections::BTreeSet::new(), slots: collections::BTreeSet::new(), escaped: collections::BTreeSet::new() };
-    for at in classes.escaped.iter() {
-        let at = nikaia_std::num::value(at);
-        plan.escaped.insert(at);
-    }
+    plan.escaped.extend(classes.escaped.iter().cloned());
     for at in classes.lets.iter() {
         let at = nikaia_std::num::value(at);
         let node = format!("l:{}", at);
@@ -337,10 +334,7 @@ pub(crate) fn tm_trusted_bindings(given: &[Vec<KeyDeps>]) -> collections::BTreeS
     let mut settled = false;
     while !settled {
         let mut now: collections::BTreeSet<i64> = collections::BTreeSet::new();
-        for id in trusted.iter() {
-            let id = nikaia_std::num::value(id);
-            now.insert(id);
-        }
+        now.extend(trusted);
         let mut next: collections::BTreeSet<i64> = collections::BTreeSet::new();
         for id in now.iter() {
             let id = nikaia_std::num::value(id);

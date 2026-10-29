@@ -91,7 +91,7 @@ pub fn call_joined_throws(words: &winnow_grammar::InternerContext, aliases: &col
             continue;
         }
         let errors = nikaia_std::index::or(found, || vec![].into());
-        for error in errors.iter() { set.insert(error.to_string()); }
+        set.extend(errors.iter().cloned());
     }
     let mut out: Vec<String> = vec![];
     for error in set.iter() { out.push(error.to_string()); }

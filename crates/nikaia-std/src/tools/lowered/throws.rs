@@ -77,7 +77,7 @@ pub(crate) fn with_methods(key: &str, thrown: &Thrown, own: &Ledger, library: &L
 
 pub(crate) fn methods_into(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, fatal: &collections::BTreeSet<String>, named: &mut collections::BTreeSet<String>, called: &mut collections::BTreeSet<String>, fatal_calls: &mut collections::BTreeMap<String, collections::BTreeSet<String>>) {
     let known = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
-    for field in known.fields.iter() { called.insert(field.to_string()); }
+    called.extend(known.fields.iter().cloned());
     if known.unseen { named.insert(UNNAMED.to_string()); }
     for callee in known.resolved.iter() {
         if known.swallowed.contains_key(callee) {
@@ -88,7 +88,7 @@ pub(crate) fn methods_into(resolved: Option<&MethodsCalled>, own: &Ledger, libra
             if own.functions.contains_key(callee) { if !fatal_calls.contains_key(callee) { fatal_calls.insert(callee.to_string(), taken); } } else { for error in fails_with_of(library, callee) { if fatal.contains(&error) && !taken.contains(&error) { named.insert(error); } } }
             continue;
         }
-        if own.functions.contains_key(callee) { called.insert(callee.to_string()); } else { for error in fails_with_of(library, callee) { named.insert(error); } }
+        if own.functions.contains_key(callee) { called.insert(callee.to_string()); } else { named.extend(fails_with_of(library, callee)); }
     }
 }
 
@@ -96,7 +96,7 @@ pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unre
     let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut called: collections::BTreeSet<String> = collections::BTreeSet::new();
     if unresolved { named.insert(UNNAMED.to_string()); }
-    for callee in free.iter() { if callee.starts_with('@') { called.insert(nikaia_std::index::or(callee.strip_prefix('@'), || "").to_string()); } else if own.functions.contains_key(callee) { called.insert(callee.to_string()); } else if library.functions.contains_key(callee) { for error in fails_with_of(library, callee) { named.insert(error); } } }
+    for callee in free.iter() { if callee.starts_with('@') { called.insert(nikaia_std::index::or(callee.strip_prefix('@'), || "").to_string()); } else if own.functions.contains_key(callee) { called.insert(callee.to_string()); } else if library.functions.contains_key(callee) { named.extend(fails_with_of(library, callee)); } }
     let known: Option<MethodsCalled> = Some(MethodsCalled { resolved: resolved.to_owned(), unseen: false, fields: collections::BTreeSet::new(), swallowed: collections::BTreeMap::new() });
     let mut fatal_calls: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     methods_into((known).as_ref(), own, library, &graph.fatal, &mut named, &mut called, &mut fatal_calls);
@@ -108,8 +108,8 @@ pub fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String,
     let mut open: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
     let named: CheckStoredCode = nikaia_std::index::or(stored.remove(AS_VALUE), || CheckStoredCode::empty());
-    for free in named.free.iter() { kept.insert(free.to_string()); }
-    for (_, code) in stored.iter() { for free in code.free.iter() { kept.insert(free.to_string()); } }
+    kept.extend(named.free.iter().cloned());
+    for (_, code) in stored.iter() { kept.extend(code.free.iter().cloned()); }
     for (owner, contract) in own.types.iter() {
         if !contract.public { continue; }
         for field in contract.fields.iter() {
@@ -222,7 +222,7 @@ pub(crate) fn throws_grow(sets: &mut collections::BTreeMap<String, collections::
                 None => None,
             }, || collections::BTreeSet::new().into());
             let mut grown = before.to_owned();
-            for callee in callees.iter() { for error in theirs(&sets, own, callee) { grown.insert(error); } }
+            for callee in callees.iter() { grown.extend(theirs(&sets, own, callee)); }
             let caught = nikaia_std::index::or(match *nikaia_std::index::get(&fatal_calls, name) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -490,8 +490,8 @@ pub(crate) fn a_contribution(expr: &Expr, names: &winnow_grammar::InternerContex
             let given = contribution_of(expr);
             let call = nikaia_std::index::or(given.call, || "".into());
             if !call.is_empty() { out.calls.insert(call); }
-            for handed in given.given.iter() { out.calls.insert(handed.to_string()); }
-            for error in given.errors.iter() { out.direct.insert(error.to_string()); }
+            out.calls.extend(given.given.iter().cloned());
+            out.direct.extend(given.errors.iter().cloned());
         },
     }
 }

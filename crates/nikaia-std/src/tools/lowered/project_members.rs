@@ -61,7 +61,7 @@ pub fn project_members_packages_of<H: ProjectMembersHost>(manifest: &ProjectMemb
         let dependency = match host.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Manifest, &"project_members_packages_of")) };
         if announce && dependency.has_build { eprintln!("note: `{}`'s own `[build]` is ignored: a package is built with the settings of the program that uses it.", name); }
         let mut reachable: collections::BTreeSet<String> = dependency.keys.iter().map(|x| { x.to_string() }).collect();
-        for name in dependency.foreign.iter() { reachable.insert(name.to_string()); }
+        reachable.extend(dependency.foreign.iter().cloned());
         out.push(ProjectMembersDependency { name: name.to_string(), renames: project_members_renames_in(&dependency, &root, &here, host)?, root, reachable });
     }
     Ok(out)
@@ -195,7 +195,7 @@ pub(crate) fn project_members_crates_beneath<M: ProjectMembersHost>(root: &std::
         seen.insert(nikaia_std::fs::path::clone(&(at)));
         let theirs = manifests.manifest_at(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("nikaia.toml"))));
         match theirs {
-            Some(ref theirs) => { for name in theirs.foreign.iter() { out.insert(name.to_string()); } },
+            Some(ref theirs) => { out.extend(theirs.foreign.iter().cloned()); },
             None => { },
         }
         project_members_crates_beneath(&at, seen, out, manifests);
@@ -228,9 +228,9 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
 impl ProjectMembersForeign {
     pub fn packages(&self, modules: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
         let mut out = modules.to_owned();
-        for x in self.described.iter() { out.insert(x.to_string()); }
-        for x in self.declared.iter() { out.insert(x.to_string()); }
-        for x in self.beneath.iter() { out.insert(x.to_string()); }
+        out.extend(self.described.iter().cloned());
+        out.extend(self.declared.iter().cloned());
+        out.extend(self.beneath.iter().cloned());
         out
     }
 }

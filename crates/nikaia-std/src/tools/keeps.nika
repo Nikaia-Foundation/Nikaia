@@ -164,13 +164,9 @@ fn alias(name: String, reached: ref collections::BTreeSet[String], mut into: col
     let mut all: collections::BTreeSet[String] = collections::BTreeSet()
     if into.contains_key(name) {
         let before = into[name] ?? return
-        for one in before {
-            all.insert(one.clone())
-        }
+        all.extend(before.clone())
     }
-    for one in reached {
-        all.insert(one.clone())
-    }
+    all.extend(reached.clone())
     into.insert(name, all)
 }
 
@@ -181,9 +177,7 @@ fn hand_over_maybe(expr: ref Expr?, interner: ref winnow_grammar::InternerContex
 // This expression's value leaves the call, so every parameter it may be is
 // kept.
 fn hand_over(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
-    for name in reached_of(expr, interner, context, own, library, walk, true) {
-        walk.uses.kept.insert(name)
-    }
+    walk.uses.kept.extend(reached_of(expr, interner, context, own, library, walk, true))
 }
 
 // **The parameters an expression's value may be**, through every way it can
@@ -208,9 +202,7 @@ fn reached_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext, con
         }
         Expr::Match { arms, .. } => {
             for arm in arms {
-                for name in reached_of(arm.body, interner, context, own, library, walk, through_calls) {
-                    found.insert(name)
-                }
+                found.extend(reached_of(arm.body, interner, context, own, library, walk, through_calls))
             }
         }
         Expr::Block(block, _) => reached_by_last(block, interner, context, own, library, walk, through_calls, found),
@@ -220,15 +212,11 @@ fn reached_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext, con
                 found.insert(name.clone())
             }
             let aliased = walk.aliases[name] ?? return found
-            for one in aliased {
-                found.insert(one.clone())
-            }
+            found.extend(aliased.clone())
         }
         Expr::Field { base, name, .. } => {
             if through_calls {
-                for one in keeps_viewed_of(base, interner, context, own, library, walk) {
-                    found.insert(one)
-                }
+                found.extend(keeps_viewed_of(base, interner, context, own, library, walk))
             }
             let parameter = parameter_named(base, interner, context) ?? return found
             if parameter != "self" && !a_field_that_copies(parameter, interner.resolve(name), context) {
@@ -237,9 +225,7 @@ fn reached_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext, con
         }
         Expr::Call { func, args, .. } => {
             if through_calls {
-                for one in through_a_view(func, args, interner, context, own, library, walk) {
-                    found.insert(one)
-                }
+                found.extend(through_a_view(func, args, interner, context, own, library, walk))
             }
         }
         else => {}
@@ -253,9 +239,7 @@ fn reached_by_last(block: ref Block, interner: ref winnow_grammar::InternerConte
     }
     match block.stmts[block.stmts.len() - 1].node {
         Stmt::Expr(value) => {
-            for name in reached_of(value, interner, context, own, library, walk, through_calls) {
-                found.insert(name)
-            }
+            found.extend(reached_of(value, interner, context, own, library, walk, through_calls))
         }
         else => {}
     }
@@ -269,15 +253,11 @@ fn keeps_viewed_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext
     let mut found: collections::BTreeSet[String] = collections::BTreeSet()
     match expr {
         Expr::Call { func, args, .. } => {
-            for one in through_a_view(func, args, interner, context, own, library, walk) {
-                found.insert(one)
-            }
+            found.extend(through_a_view(func, args, interner, context, own, library, walk))
         }
         Expr::Variable(ident, _) => {
             let viewing = walk.views[interner.resolve(ident)] ?? return found
-            for one in viewing {
-                found.insert(one.clone())
-            }
+            found.extend(viewing.clone())
         }
         Expr::Field { base, .. } => return keeps_viewed_of(base, interner, context, own, library, walk),
         Expr::If { then_branch, else_branch, .. } => {
@@ -287,9 +267,7 @@ fn keeps_viewed_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext
         }
         Expr::Match { arms, .. } => {
             for arm in arms {
-                for one in keeps_viewed_of(arm.body, interner, context, own, library, walk) {
-                    found.insert(one)
-                }
+                found.extend(keeps_viewed_of(arm.body, interner, context, own, library, walk))
             }
         }
         Expr::Block(block, _) => viewed_by_last(block, interner, context, own, library, walk, found),
@@ -304,9 +282,7 @@ fn viewed_by_last(block: ref Block, interner: ref winnow_grammar::InternerContex
     }
     match block.stmts[block.stmts.len() - 1].node {
         Stmt::Expr(value) => {
-            for one in keeps_viewed_of(value, interner, context, own, library, walk) {
-                found.insert(one)
-            }
+            found.extend(keeps_viewed_of(value, interner, context, own, library, walk))
         }
         else => {}
     }
@@ -319,9 +295,7 @@ fn through_a_view(func: ref Expr, args: ref Vec[Expr], interner: ref winnow_gram
     let callee = resolved_callee(func, interner, own, library)
     for at in 0..<args.len() {
         if a_position_the_result_points_into(callee, at, own, library) {
-            for one in reached_of(args[at], interner, context, own, library, walk, true) {
-                found.insert(one)
-            }
+            found.extend(reached_of(args[at], interner, context, own, library, walk, true))
         }
     }
     return found
@@ -691,9 +665,7 @@ fn keep_option(setting: ref ConfigArg, callee: ref String?, interner: ref winnow
 // in that entry, which this walk cannot see.
 fn keep_method_options(config: ref Vec[ConfigArg], interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     for setting in config {
-        for name in keeps_handed(setting.value, interner, context, own, library, walk) {
-            walk.uses.kept.insert(name)
-        }
+        walk.uses.kept.extend(keeps_handed(setting.value, interner, context, own, library, walk))
     }
 }
 
@@ -745,9 +717,7 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
     let ours = receiver_taken_in(own, context.own_methods, method, owner)
     let theirs = receiver_taken_in(library, context.library_methods, method, owner)
     if context.unresolved || ours.hit || theirs.hit || (!ours.any && !theirs.any) {
-        for name in names {
-            walk.uses.kept.insert(name.clone())
-        }
+        walk.uses.kept.extend(names.clone())
     }
 }
 
@@ -922,18 +892,14 @@ fn keep_what_a_task_names(body: ref Expr, interner: ref winnow_grammar::Interner
         Expr::Closure { body, .. } => seen_in(body, interner, name_as_it_is, holes_of, no_root, true),
         Expr::Block(block, _) => seen_in(block, interner, name_as_it_is, holes_of, no_root, true),
         else => {
-            for name in context.parameters {
-                walk.uses.kept.insert(name.clone())
-            }
+            walk.uses.kept.extend(context.parameters.clone())
             return
         }
     }
     for one in seen {
         match one {
             Seen::Spawn { .. } => {
-                for name in context.parameters {
-                    walk.uses.kept.insert(name.clone())
-                }
+                walk.uses.kept.extend(context.parameters.clone())
                 return
             }
             else => {}
@@ -960,9 +926,7 @@ fn keep_if_a_parameter(name: ref String, context: ref KeepsBody, mut uses: Uses)
 // into (#697): `a ?? b` hands `a` on, and where it goes this walk does not
 // follow.
 fn keep_named(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
-    for one in keeps_viewed_of(expr, interner, context, own, library, walk) {
-        walk.uses.kept.insert(one)
-    }
+    walk.uses.kept.extend(keeps_viewed_of(expr, interner, context, own, library, walk))
     walk.uses.kept.insert(parameter_named(expr, interner, context) ?? return)
 }
 
@@ -988,9 +952,7 @@ fn keeps_text_as_is(expr: ref Expr, interner: ref winnow_grammar::InternerContex
 
 fn keep_part(expr: ref Expr?, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     let part = expr ?? return
-    for one in keeps_handed(part, interner, context, own, library, walk) {
-        walk.uses.kept.insert(one)
-    }
+    walk.uses.kept.extend(keeps_handed(part, interner, context, own, library, walk))
 }
 
 // **A `String` parameter that is a view below** - lent by the tiers or
@@ -1008,9 +970,7 @@ fn keeps_a_lent_text(name: ref String, context: ref KeepsBody) -> bool {
 // does (#697).
 fn keep_viewed_name(name: ref String, mut walk: KeepsWalk) {
     let viewing = (walk.views[name] ?? return).clone()
-    for one in viewing {
-        walk.uses.kept.insert(one.clone())
-    }
+    walk.uses.kept.extend(viewing.clone())
 }
 
 // **The parameters a value handed somewhere takes with it**: the parameter it

@@ -268,17 +268,17 @@ pub(crate) fn check_core_call_set_into(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     if name.starts_with('@') {
         let place: String = nikaia_std::index::or(name.strip_prefix('@'), || "").to_string();
         let settled = match *nikaia_std::index::get(&world.own.code_throws, &place) { Some(__nikaia_value) => __nikaia_value, None => return };
-        for error in settled.iter() { set.insert(error.to_string()); }
+        set.extend(settled.iter().cloned());
         return;
     }
     if world.own.functions.contains_key(name) {
         let own = match *nikaia_std::index::get(&world.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return };
-        for error in own.fails_with.iter() { set.insert(error.to_string()); }
+        set.extend(own.fails_with.iter().cloned());
         return;
     }
     if world.library.functions.contains_key(name) {
         let contract = match *nikaia_std::index::get(&world.library.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return };
-        for error in contract.fails_with.iter() { set.insert(error.to_string()); }
+        set.extend(contract.fails_with.iter().cloned());
     }
 }
 
@@ -294,9 +294,9 @@ pub(crate) fn check_core_call_feed_params<H: CheckHost>(state: &mut CheckState, 
         check_core_places_code_into(&state, world, host, nikaia_std::index::get(&args, nikaia_std::index::at(i)), &mut stored);
         let place = format!("{}::{}", key, param);
         let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(&place), || CheckStoredCode::empty());
-        for resolved in stored.resolved.iter() { entry.resolved.insert(resolved.to_string()); }
+        entry.resolved.extend(stored.resolved.iter().cloned());
         entry.unresolved = entry.unresolved || stored.unresolved;
-        for free in stored.free.iter() { entry.free.insert(free.to_string()); }
+        entry.free.extend(stored.free.iter().cloned());
         state.stored_code.insert(place, entry);
     }
 }

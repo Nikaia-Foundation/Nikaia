@@ -56,12 +56,8 @@ impl EmitSeedsTables {
     /// The names a call must not hand a fast map to.
     pub fn barrier_names(ref self) -> collections::BTreeSet[String] {
         let mut out: collections::BTreeSet[String] = collections::BTreeSet()
-        for n in self.barriers {
-            out.insert(n.clone())
-        }
-        for n in self.fixed {
-            out.insert(n.clone())
-        }
+        out.extend(self.barriers.clone())
+        out.extend(self.fixed.clone())
         return out
     }
 
@@ -258,9 +254,7 @@ pub trait EmitSeedsHost {
 /// read.
 pub fn emit_seeds_read[H: EmitSeedsHost](host: ref H, units: ref Vec[ParsedView], described: ref Vec[String]) -> EmitSeedsTables sync {
     let mut tables = emit_seeds_tables()
-    for name in described {
-        tables.barriers.insert(name.clone())
-    }
+    tables.barriers.extend(described.clone())
     // Fields of every public struct, then the count of each, until the
     // counts stop growing (a struct holds another one that holds a map).
     let declared = emit_seeds_structs(units)

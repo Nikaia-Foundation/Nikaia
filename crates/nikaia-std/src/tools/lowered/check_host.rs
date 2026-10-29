@@ -591,12 +591,7 @@ impl CheckState {
                 _ => { },
             }
         }
-        if !bound_again {
-            for id in named.iter() {
-                let id = nikaia_std::num::value(id);
-                self.facts.views_handed_on.insert(id);
-            }
-        }
+        if !bound_again { self.facts.views_handed_on.extend(named); }
     }
 }
 

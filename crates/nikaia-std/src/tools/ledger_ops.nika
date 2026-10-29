@@ -233,9 +233,7 @@ pub fn absorb_into(mut ledger: Ledger, module: ref String?, renames: ref collect
 
 fn widen(mut ledger: Ledger, name: String, types: ref collections::BTreeSet[String]) {
     let mut all: collections::BTreeSet[String] = ledger.implementations[name]?.clone() ?? collections::BTreeSet()
-    for ty in types {
-        all.insert(ty.clone())
-    }
+    all.extend(types.clone())
     ledger.implementations.insert(name, all)
 }
 

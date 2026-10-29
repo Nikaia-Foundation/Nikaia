@@ -316,12 +316,8 @@ pub fn tr_methods_of(words: ref winnow_grammar::InternerContext, items: ref Vec[
                 let seen = own.get(owner)
                 if seen != null {
                     let prev = seen ?? continue
-                    for each in prev.all {
-                        all.insert(each.clone())
-                    }
-                    for each in prev.changing {
-                        changing.insert(each.clone())
-                    }
+                    all.extend(prev.all.clone())
+                    changing.extend(prev.changing.clone())
                 }
                 own.insert(owner, TrMethods { all: all, changing: changing })
             },

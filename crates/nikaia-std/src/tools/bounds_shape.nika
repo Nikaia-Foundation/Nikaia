@@ -101,9 +101,7 @@ pub fn shape_of(args: ref Vec[FnArg], body: ref Block, pinned: ref collections::
     // Aliases, in two rounds: one may name another.
     look_block(body, Look::Aliases, false, around, words, seen)
     look_block(body, Look::Aliases, false, around, words, seen)
-    for name in pinned {
-        seen.lost.insert(name.clone())
-    }
+    seen.lost.extend(pinned.clone())
     look_block(body, Look::Lost, false, around, words, seen)
     // A name lost through an alias loses the list it names.
     let mut through: Vec[String] = []
@@ -111,9 +109,7 @@ pub fn shape_of(args: ref Vec[FnArg], body: ref Block, pinned: ref collections::
         let key = seen.shape.aliases.get(name) ?? continue
         through.push(key_root(key))
     }
-    for root in through {
-        seen.lost.insert(root.clone())
-    }
+    seen.lost.extend(through.clone())
     let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
     for root in seen.shape.roots {
         if !seen.lost.contains(root) {

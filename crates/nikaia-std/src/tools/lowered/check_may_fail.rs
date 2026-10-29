@@ -19,7 +19,7 @@ impl CheckState {
             };
             let mut outer = nikaia_std::index::or(held, || CheckGuarded::nothing());
             outer.fallible = true;
-            for error in passing.iter() { outer.thrown.insert(error.to_string()); }
+            outer.thrown.extend(passing.iter().cloned());
             self.flow.guarded = Some(outer);
         }
         if self.flow.throwing || self.flow.caught { return; }
@@ -46,7 +46,7 @@ impl CheckState {
                 };
                 let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
                 guarded.fallible = true;
-                for thrown in contract.fails_with.iter() { guarded.thrown.insert(thrown.to_string()); }
+                guarded.thrown.extend(contract.fails_with.iter().cloned());
                 self.flow.guarded = Some(guarded);
             }
             if world.newly_throws.contains_key(key) {

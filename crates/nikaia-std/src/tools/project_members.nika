@@ -153,9 +153,7 @@ pub fn project_members_packages_of[H: ProjectMembersHost](manifest: ref ProjectM
         // build would read them (ADR-286 D21).
         // A Rust crate among them under the name a call writes it by.
         let mut reachable: collections::BTreeSet[String] = dependency.keys.iter().map(fn(x) { x.clone() }).collect()
-        for name in dependency.foreign.iter() {
-            reachable.insert(name.clone())
-        }
+        reachable.extend(dependency.foreign.clone())
         out.push(ProjectMembersDependency { name: name.clone(), renames: project_members_renames_in(dependency, root, here, host), root: root, reachable: reachable })
     }
     return out
@@ -450,9 +448,7 @@ fn project_members_crates_beneath[M: ProjectMembersHost](root: ref fs::Path, mut
         let theirs = manifests.manifest_at(at.join("nikaia.toml"))
         match theirs {
             theirs => {
-                for name in theirs.foreign.iter() {
-                    out.insert(name.clone())
-                }
+                out.extend(theirs.foreign.clone())
             },
             null => {},
         }
@@ -502,17 +498,11 @@ impl ProjectMembersForeign {
     /// imported it.
     pub fn packages(ref self, modules: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
         let mut out = modules.clone()
-        for x in self.described {
-            out.insert(x.clone())
-        }
+        out.extend(self.described.clone())
         // **A crate the manifest declares is a head** (ADR-286 D31), described
         // or not: an undescribed one is `NK2504`'s to refuse, with its way out.
-        for x in self.declared {
-            out.insert(x.clone())
-        }
-        for x in self.beneath {
-            out.insert(x.clone())
-        }
+        out.extend(self.declared.clone())
+        out.extend(self.beneath.clone())
         return out
     }
 }

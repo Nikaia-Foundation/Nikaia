@@ -272,7 +272,7 @@ pub(crate) fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_,
             if whole && is_the_buffer(value, ask, &walk) {
                 let mut local = match local_of(&root, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
                 local.buffer = true;
-                for origin in origins.iter() { local.origins.insert(origin.clone()); }
+                local.origins.extend(origins.iter().cloned());
                 set_local(&root, local, walk);
             } else if op.is_some() || !is_the_buffer(value, ask, &walk) { flow_into(&root, &origins, walk); }
         },
@@ -695,7 +695,7 @@ pub(crate) fn flow_into(root: &str, origins: &collections::BTreeSet<(i64, String
         let around = (local.path.len() as i64) <= path.len() as i64 && a_prefix(&local.path, &path);
         if around && local.at < origin.0 { escape(origin.clone(), Escape::Outer(root.to_string()), walk); }
     }
-    for origin in origins.iter() { local.origins.insert(origin.clone()); }
+    local.origins.extend(origins.iter().cloned());
     set_local(root, local, walk);
 }
 
@@ -793,7 +793,7 @@ pub(crate) fn capture(name: &str, local: &Local, walk: &mut BufferWalk) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || (local.at.into(), collections::BTreeSet::new().into()));
-    for origin in local.origins.iter() { held.1.insert(origin.clone()); }
+    held.1.extend(local.origins.iter().cloned());
     walk.captured.insert(name.to_string(), held);
 }
 
@@ -808,7 +808,7 @@ pub(crate) fn task_names(body: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
     match body {
         Expr::Spawn { body, .. } => {
             let body = nikaia_std::boxed::open(body);
-            for name in task_names(body, ask, holes_of) { out.insert(name); }
+            out.extend(task_names(body, ask, holes_of));
         },
         _ => { },
     }
@@ -919,7 +919,7 @@ pub(crate) fn put_by_method(root: &str, method: &str, args: &[Expr], ask: &Buffe
         put_into(root, k, &of, walk);
         let named = struct_of(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, &walk);
         if named.is_some() { walk.struct_puts.insert(root.to_string(), nikaia_std::index::or(named, || "".into())); }
-        for origin in of.iter() { all.insert(origin.clone()); }
+        all.extend(of.iter().cloned());
     }
     flow_into(root, &all, walk);
 }
@@ -936,7 +936,7 @@ pub(crate) fn put_into(root: &str, at: i64, of: &collections::BTreeSet<(i64, Str
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || collections::BTreeSet::new().into());
-    for origin in of.iter() { here.insert(origin.clone()); }
+    here.extend(of.iter().cloned());
     by_arg.insert(at, here);
     walk.puts_into.insert(key, PutsAt { by_arg });
 }
@@ -1049,7 +1049,7 @@ pub(crate) fn a_buffer_local(name: &str, walk: &BufferWalk) -> bool {
     local.buffer
 }
 
-pub(crate) fn add_all(from: &collections::BTreeSet<(i64, String)>, into: &mut collections::BTreeSet<(i64, String)>) { for one in from.iter() { into.insert(one.clone()); } }
+pub(crate) fn add_all(from: &collections::BTreeSet<(i64, String)>, into: &mut collections::BTreeSet<(i64, String)>) { into.extend(from.iter().cloned()); }
 
 pub(crate) fn items_origins(items: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let mut out: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
@@ -1480,7 +1480,7 @@ pub(crate) fn source_at(source: &Source) -> i64 {
 }
 
 pub(crate) fn held_one_per_buffer(id: &(i64, String), source: &Source, shedding: &[String], walk: &BufferWalk, plan: &mut BufferPlan) {
-    for keeper in shedding.iter() { plan.element_keepers.insert(keeper.to_string()); }
+    plan.element_keepers.extend(shedding.iter().cloned());
     for (place, puts) in walk.puts_into.iter() {
         if !a_name_among(&place.1, shedding) { continue; }
         for (arg, origins) in puts.by_arg.iter() {

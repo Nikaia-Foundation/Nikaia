@@ -185,9 +185,7 @@ pub fn bm_ensured(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collect
                 }
             }
             let mut names: collections::BTreeSet[String] = collections::BTreeSet()
-            for name in params {
-                names.insert(name.clone())
-            }
+            names.extend(params.clone())
             names.insert("result")
             let mut conditions: Vec[Vec[SolverTerm]] = []
             for text in contract.ensures {

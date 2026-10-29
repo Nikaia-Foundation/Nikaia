@@ -234,12 +234,8 @@ fn mp_named(name: String) -> MpDep {
 
 fn mp_join(one: ref MpDep, other: ref MpDep) -> MpDep {
     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
-    for n in one.names {
-        names.insert(n.clone())
-    }
-    for n in other.names {
-        names.insert(n.clone())
-    }
+    names.extend(one.names.clone())
+    names.extend(other.names.clone())
     return MpDep { unknown: one.unknown || other.unknown, names: names }
 }
 
@@ -1067,16 +1063,12 @@ fn mp_lines(held: ref MpHeld, structs: ref collections::BTreeMap[String, MpStruc
         let seen = b.resolve(b.adds[id])
         let before = how[class]?.clone() ?? MpHow { known: true, names: collections::BTreeSet() }
         let mut merged: collections::BTreeSet[String] = collections::BTreeSet()
-        for n in before.names {
-            merged.insert(n.clone())
-        }
+        merged.extend(before.names.clone())
         let mut known = before.known
         if seen == null {
             known = false
         } else {
-            for n in seen ?? collections::BTreeSet() {
-                merged.insert(n.clone())
-            }
+            merged.extend(seen ?? collections::BTreeSet())
         }
         how.insert(class, MpHow { known: known, names: merged })
     }

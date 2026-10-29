@@ -138,7 +138,7 @@ pub(crate) fn widen(ledger: &mut Ledger, name: String, types: &collections::BTre
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || collections::BTreeSet::new().into());
-    for ty in types.iter() { all.insert(ty.to_string()); }
+    all.extend(types.iter().cloned());
     ledger.implementations.insert(name, all);
 }
 

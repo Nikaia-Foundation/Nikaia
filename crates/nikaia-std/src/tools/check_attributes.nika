@@ -313,11 +313,8 @@ fn check_attributes_at[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             check_attributes_out_of_place(state, name, here, mark, attribute.span)
             continue
         }
-        let mut count: i64 = 1
-        if seen.contains_key(name) {
-            count = (seen.get(name) ?? 0) + 1
-        }
-        seen.insert(name.clone(), count)
+        seen.entry(name.clone()).and_modify(fn(n) { n += 1 }).or_insert(1)
+        let count = seen.get(name) ?? 0
         if count == 2 && !check_attributes_repeats(marks, name) {
             check_attributes_written_twice(state, name, attribute.span)
         }

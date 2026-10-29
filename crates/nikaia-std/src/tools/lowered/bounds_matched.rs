@@ -136,7 +136,7 @@ pub fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeS
                 }
             }
             let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for name in params.iter() { names.insert(name.to_string()); }
+            names.extend(params.iter().cloned());
             names.insert(String::from("result"));
             let mut conditions: Vec<Vec<SolverTerm>> = vec![];
             for text in contract.ensures.iter() {

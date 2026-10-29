@@ -240,8 +240,8 @@ pub fn tr_methods_of(words: &winnow_grammar::InternerContext, items: &[Spanned<I
                 let seen = own.get(&owner);
                 if seen.is_some() {
                     let prev = match seen { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    for each in prev.all.iter() { all.insert(each.to_string()); }
-                    for each in prev.changing.iter() { changing.insert(each.to_string()); }
+                    all.extend(prev.all.iter().cloned());
+                    changing.extend(prev.changing.iter().cloned());
                 }
                 own.insert(owner, TrMethods { all, changing });
             },

@@ -215,7 +215,7 @@ pub fn emit_holes_fold_callees<H: EmitHolesHost>(host: &H, words: &winnow_gramma
         }
     }
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for name in found.iter() { names.insert(name.to_string()); }
+    names.extend(found.iter().cloned());
     names
 }
 

@@ -1237,7 +1237,7 @@ pub(crate) fn rsrc_none() -> collections::BTreeSet<String> {
     empty
 }
 
-pub(crate) fn rsrc_join(into: &mut collections::BTreeSet<String>, more: &collections::BTreeSet<String>) { for name in more.iter() { into.insert(name.to_string()); } }
+pub(crate) fn rsrc_join(into: &mut collections::BTreeSet<String>, more: &collections::BTreeSet<String>) { into.extend(more.iter().cloned()); }
 
 pub(crate) fn rsrc_param_of(entry: &str) -> String {
     let parts = entry.split(':').collect::<Vec<_>>();
@@ -1570,7 +1570,7 @@ pub(crate) fn rsrc_return(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, k
 
 pub(crate) fn rsrc_record(reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
     if flow.depth > 0 {
-        for name in reach.iter() { flow.inner.insert(name.to_string()); }
+        flow.inner.extend(reach.iter().cloned());
         return;
     }
     flow.ways.push(ResultSrcWay { span: Span { start: flow.at.start, end: flow.at.end }, reach: reach.to_owned() });
@@ -1622,7 +1622,7 @@ pub(crate) fn rsrc_closure(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, 
     flow.depth += 1;
     let mut out = rsrc_block(unit, asked, here, known, own_buffer, body, flow);
     flow.depth -= 1;
-    for name in flow.inner.iter() { out.insert(name.to_string()); }
+    out.extend(flow.inner.iter().cloned());
     flow.inner = saved;
     out
 }
@@ -2130,7 +2130,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             }
             let mut reach = rsrc_none();
             for way in flow.ways.iter() { rsrc_join(&mut reach, &way.reach); }
-            if !settled { for source in sources.iter() { reach.insert(source.to_string()); } }
+            if !settled { reach.extend(sources.iter().cloned()); }
             let before = nikaia_std::index::or(match *nikaia_std::index::get(&known, &key) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
