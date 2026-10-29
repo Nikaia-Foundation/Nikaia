@@ -970,6 +970,21 @@ impl EmitState {
                 return
             }
         }
+        // **`s.extend(xs.clone())` is `s.extend(xs.iter().cloned())`** (ADR-collections-1
+        // D4): the elements are the copy, and no list is built in between.
+        if name == "extend" && args.len() == 1 && receiver != null && self.facts.collection_clones.contains(node_key(args[0])) {
+            let target = receiver ?? return
+            match args[0] {
+                Expr::MethodCall { receiver: source, .. } => {
+                    self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)
+                    out.push(".extend(")
+                    self.emit_core_postfix_base(world, walk, out, host, source, depth, flow, scope)
+                    out.push(".iter().cloned())")
+                    return
+                },
+                else => {}
+            }
+        }
         let mut copies = walk.reached_copy
         let mut byte_copy = false
         if receiver != null {

@@ -2303,6 +2303,17 @@ sync = true
 touches = []
 signature = "() -> collections::HashSet[?]"
 
+# Put every element of a list, a set or a sequence in the set, as `insert` would
+# one by one (ADR-collections-1 D2, D3).
+#
+# The set keeps them, so `items` is given away rather than lent.
+[fn."collections::HashSet::extend"]
+pub = true
+sync = true
+touches = []
+keeps = ["items"]
+signature = "[T](mut self: ref collections::HashSet[T], items: ?)"
+
 # Put a value in the set, and say whether it was new.
 #
 # The set keeps the value.
@@ -2347,6 +2358,17 @@ pub = true
 sync = true
 touches = []
 signature = "() -> collections::BTreeSet[?]"
+
+# Put every element of a list, a set or a sequence in the set, as `insert` would
+# one by one (ADR-collections-1 D2, D3).
+#
+# The set keeps them, so `items` is given away rather than lent.
+[fn."collections::BTreeSet::extend"]
+pub = true
+sync = true
+touches = []
+keeps = ["items"]
+signature = "[T](mut self: ref collections::BTreeSet[T], items: ?)"
 
 # Put a value in the set, and say whether it was new.
 #
@@ -2406,6 +2428,17 @@ sync = true
 touches = []
 keeps = ["key", "value"]
 signature = "[K, V](mut self: ref collections::BTreeMap[K, V], key: K, value: V) -> V?"
+
+# The place in the map this key names, whether or not anything is there yet.
+#
+# The same contract as `collections::HashMap::entry` (ADR-collections-1 D1): the
+# map **keeps** the key, and `Entry[V]` is one type for both maps.
+[fn."collections::BTreeMap::entry"]
+pub = true
+sync = true
+touches = []
+keeps = ["key"]
+signature = "[K, V](mut self: ref collections::BTreeMap[K, V], key: ?) -> Entry[V]"
 
 # What this key names, or nothing where the key is not there.
 [fn."collections::BTreeMap::get"]
@@ -3374,12 +3407,14 @@ signature = "[T](mut self: ref Vec[T], length: i64, value: T)"
 # Add every element of another list to the end of this one, in order.
 #
 # The list **keeps** them, so the other list is given away rather than lent.
+# `items` is a list, a set or a sequence of owned `T` (ADR-collections-1 D3),
+# which one parameter type cannot say, so it is `?`.
 [fn."Vec::extend"]
 pub = true
 sync = true
 touches = []
 keeps = ["items"]
-signature = "[T](mut self: ref Vec[T], items: Vec[T])"
+signature = "[T](mut self: ref Vec[T], items: ?)"
 
 # Put the elements in their natural order, in place.
 #

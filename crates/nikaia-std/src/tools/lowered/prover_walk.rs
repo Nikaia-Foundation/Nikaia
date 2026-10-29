@@ -479,7 +479,7 @@ pub(crate) fn prover_pin_divisors(walk: &mut ProverWalk, expr: &Expr, scope: &Pr
                             for alt in alts.iter() { whys.push(alt.why.to_string()); }
                             said.push(format!("`{}` is {}: {}.", nikaia_std::index::get(&alts, 0).call, nikaia_std::index::or(pinned, || 0), whys.join("; ")));
                         }
-                        notes.extend(said.to_owned());
+                        notes.extend(said.iter().cloned());
                         walk.state.divisor_notes.insert(key.to_string(), said);
                     }
                 }

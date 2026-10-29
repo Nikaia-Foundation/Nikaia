@@ -2384,7 +2384,7 @@ pub mod comptime_driver {
 }
 pub mod comptime_tree {
     #[allow(unused_imports)]
-    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_as_built, comptime_undeclared_callee, comptime_declares, comptime_culprit};
+    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_as_built, comptime_undeclared_callee, comptime_declares, comptime_culprit, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package};
 }
 pub mod contract_changes {
     #[allow(unused_imports)]
@@ -2871,7 +2871,7 @@ pub mod types {
 }
 pub mod view_changes {
     #[allow(unused_imports)]
-    pub use super::{VcGiveUps, VcAnswer, VcAsk, vc_analyse, vc_coalesced};
+    pub use super::{VcGiveUps, VcAnswer, VcAsk, vc_analyse, vc_coalesced, vc_mut_viewed};
 }
 pub mod views {
     #[allow(unused_imports)]

@@ -734,7 +734,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let no_options: Vec<(String, Ty)> = vec![];
     let result = check_crossings_arguments(state, world, host, key, &written, contract, args, &found, &no_options, span);
     state.a_lookup_key_lent(world, key, on, args, &found);
-    if key == "collections::HashMap::entry" && args.len() == 1 && found.len() == 1 {
+    if (key == "collections::HashMap::entry" || key == "collections::BTreeMap::entry") && args.len() == 1 && found.len() == 1 {
         let keys: Ty = nikaia_std::index::or(match bound.get("K") {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,

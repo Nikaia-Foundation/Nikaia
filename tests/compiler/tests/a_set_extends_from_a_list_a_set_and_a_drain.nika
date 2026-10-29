@@ -1,0 +1,27 @@
+use std::collections
+
+fn main() {
+    let xs = [3, 1, 2]
+    let mut b: collections::BTreeSet[i64] = collections::BTreeSet()
+    b.extend(xs.clone())
+    println(f"{xs.len()}")
+    let mut other: collections::BTreeSet[i64] = collections::BTreeSet()
+    other.insert(9)
+    other.insert(1)
+    b.extend(other)
+    let ys = [7, 8]
+    b.extend(ys.drain())
+    for x in b {
+        println(f"{x}")
+    }
+    let mut h: collections::HashSet[i64] = collections::HashSet()
+    let zs = [5, 5, 6]
+    h.extend(zs.clone())
+    let mut o2: collections::HashSet[i64] = collections::HashSet()
+    o2.insert(6)
+    o2.insert(10)
+    h.extend(o2)
+    let ws = [11, 5]
+    h.extend(ws.drain())
+    println(f"{h.len()} {zs.len()}")
+}

@@ -1,0 +1,10 @@
+use std::collections
+
+fn main() {
+    let mut s: collections::BTreeSet[i64] = collections::BTreeSet()
+    s.insert(2)
+    s.insert(1)
+    let mut v = [0]
+    v.extend(s)
+    println(f"{v.len()} {v[0]} {v[1]} {v[2]}")
+}

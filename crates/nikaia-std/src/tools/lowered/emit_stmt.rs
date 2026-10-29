@@ -380,6 +380,15 @@ impl EmitState {
                     return Ok(());
                 }
             },
+            Expr::Field { .. } => {
+                if self.facts.mut_view_reads.contains_key(&node_key(value)) {
+                    out.push("&mut ");
+                    self.emit_expr(world, walk, out, host, value, depth, flow.place(), &inner)?;
+                    out.push(&after);
+                    out.push(";");
+                    return Ok(());
+                }
+            },
             _ => { },
         }
         if self.facts.lent_lets.contains(&at) { out.push("&"); }
@@ -696,7 +705,7 @@ impl EmitState {
         out.push(" ");
         let mut unwrap: Option<String> = None;
         if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", names, names)); }
-        let mut copied = String::from("");
+        let mut copied: String = String::from("");
         for one in bindings.iter() {
             let one = *one;
             if self.facts.copied_loop_bindings.contains(&(at, emit_text(world, one))) {

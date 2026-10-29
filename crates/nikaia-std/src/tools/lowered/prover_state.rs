@@ -468,7 +468,7 @@ pub fn leaned_notes(arena: &TermArena, scope: &ProverScope, names: &collections:
         grown = (read.len() as i64) != before;
     }
     let mut notes: Vec<String> = vec![];
-    for (name, said) in scope.leaned.iter() { if read.contains(name) { notes.extend(said.to_owned()); } }
+    for (name, said) in scope.leaned.iter() { if read.contains(name) { notes.extend(said.iter().cloned()); } }
     notes
 }
 

@@ -1,0 +1,10 @@
+error[NK2105]: You're using `xs` again, but it was passed to `extend`, which keeps it.
+  --> tests/a_set_extend_keeps_its_items.nika:7:5
+   |
+ 7 |     println(f"{xs.len()}")
+   |     ^
+   |
+   = note: `xs` is a `Vec[?]`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+   = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+   = help: If both need it, hand over a copy: `xs.clone()`.
+

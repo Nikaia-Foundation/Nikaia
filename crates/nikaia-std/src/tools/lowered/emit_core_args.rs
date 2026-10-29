@@ -325,7 +325,7 @@ impl EmitState {
                 let runs = self.facts.run_lambdas.contains(&node_key(arg));
                 if runs { out.push(&format!("async |{}| ", joined)); } else { out.push(&format!("|{}| Box::pin(async move ", joined)); }
                 let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.to_owned();
-                changed.extend(mutable.to_owned());
+                changed.extend(mutable.iter().cloned());
                 let inner = EmitScope { changed: changed, ..EmitScope::plain() };
                 self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), &inner, EmitTail::Return)?;
                 if !runs { out.push(")"); }

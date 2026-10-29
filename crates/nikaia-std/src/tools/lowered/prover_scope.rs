@@ -134,7 +134,7 @@ impl ProverScope {
     }
     pub fn with_history(&self) -> Vec<i64> {
         let mut all = self.facts.to_owned();
-        all.extend(self.history.to_owned());
+        all.extend(self.history.iter().cloned());
         all
     }
     pub fn has_length(&mut self, arena: &mut TermArena, name: &str, known: Option<i64>) {

@@ -221,6 +221,10 @@ pub struct CheckFacts {
     /// a view** (#676), by the key: built into text of its own, as `insert`'s
     /// is.
     pub owned_entry_keys: collections::BTreeSet[i64],
+    /// **`xs.clone()` of a list or a set**, by the call's id (ADR-collections-1
+    /// D4): as the argument of `extend` it is written `xs.iter().cloned()`,
+    /// no list in between.
+    pub collection_clones: collections::BTreeSet[i64],
     pub kept_lambdas: collections::BTreeMap[i64, (bool, bool)],
     pub kept_hulls: collections::BTreeMap[i64, Vec[String]],
     pub kept_owned: collections::BTreeMap[i64, Vec[String]],
@@ -480,6 +484,7 @@ impl CheckFacts {
             filter_patterns: collections::BTreeSet(),
             copied_entry_lambdas: collections::BTreeSet(),
             owned_entry_keys: collections::BTreeSet(),
+            collection_clones: collections::BTreeSet(),
             kept_lambdas: collections::BTreeMap(),
             kept_hulls: collections::BTreeMap(),
             kept_owned: collections::BTreeMap(),

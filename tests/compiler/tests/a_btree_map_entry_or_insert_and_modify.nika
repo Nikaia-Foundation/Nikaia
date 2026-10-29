@@ -1,0 +1,19 @@
+use std::collections
+
+fn main() {
+    let words = ["b", "a", "b", "c", "a", "b"]
+    let mut counts: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for w in words {
+        counts.entry(w).and_modify(fn(n) { n += 1 }).or_insert(1)
+    }
+    for (k, v) in counts {
+        println(f"{k} {v}")
+    }
+    let mut seen: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    seen.entry("z").or_insert(7)
+    seen.entry("z").or_insert(8)
+    seen.entry("y").or_insert_with(fn() { 3 * 3 })
+    for (k, v) in seen {
+        println(f"{k} {v}")
+    }
+}

@@ -658,6 +658,20 @@ impl EmitState {
                 return Ok(());
             }
         }
+        if name == "extend" && args.len() == 1 && receiver.is_some() && self.facts.collection_clones.contains(&node_key(nikaia_std::index::get(&args, 0))) {
+            let target = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            match nikaia_std::index::get(&args, 0) {
+                Expr::MethodCall { receiver: source, .. } => {
+                    let source = nikaia_std::boxed::open(source);
+                    self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)?;
+                    out.push(".extend(");
+                    self.emit_core_postfix_base(world, walk, out, host, source, depth, flow, scope)?;
+                    out.push(".iter().cloned())");
+                    return Ok(());
+                },
+                _ => { },
+            }
+        }
         let mut copies = walk.reached_copy;
         let mut byte_copy = false;
         if receiver.is_some() {

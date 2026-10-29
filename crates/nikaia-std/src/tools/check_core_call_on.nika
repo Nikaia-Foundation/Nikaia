@@ -961,7 +961,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.a_lookup_key_lent(world, key, on, args, found)
     // **`entry`'s key is the map's** (#676): a literal or a view of text, on a
     // map keyed by owned text, is built into text of its own, as `insert`'s is.
-    if key == "collections::HashMap::entry" && args.len() == 1 && found.len() == 1 {
+    if (key == "collections::HashMap::entry" || key == "collections::BTreeMap::entry") && args.len() == 1 && found.len() == 1 {
         let keys: Ty = bound.get("K")?.clone() ?? Ty::Unknown
         if check_core_call_on_owned_text(keys) && check_core_call_on_text_to_build(world, args[0], found[0]) {
             state.facts.owned_entry_keys.insert(id_of(args[0]) as i64)
