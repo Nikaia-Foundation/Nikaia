@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1285] — 2026-10-29
+
+**A name bound to a text literal and changed in place (`push_str`, `+=`) is declared `String`, and the set, list of tuples or typed `let` it goes into holds `String`, not `&'static str` (ADR-282 D17, Fixes #961).**
+
 ## [0.0.1284] — 2026-10-29
 
 **`Array[T, N]` and a run `ref Array[T]` get `iter()` with the sequence surface of `Vec::iter()`: `zip`, `map`, `filter`, `enumerate` and `rev` follow (ADR-collections-2 D1, Fixes #955).**
