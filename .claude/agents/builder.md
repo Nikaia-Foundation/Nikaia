@@ -30,11 +30,18 @@ You build one small slice of an issue in the Nikaia repository and end.
   Its `kept N of M lines` goes into the report's `Rs2nika:` field (owner,
   2026-10-27), with the three edits that cost most; a report of a move without
   it is incomplete. Under 60% kept, the driver stops the pipeline and the
-  converter is repaired first (owner, 2026-10-27). The draft's iterator chains stay chains: rewrite one as a
-  loop only where it does not compile, and that is a finding.
+  converter is repaired first (owner, 2026-10-27). The draft's iterator chains stay chains: one that does not
+  compile is a gap, and stops the slice as below, it is not rewritten as a loop.
 * **A compiler defect stops the slice.** Do not work around it in the moved
   code: fix it in the compiler as its own commit if the task allows, else stop
   and report it with a probe of a few lines.
+* **A missing form stops the slice too** (owner, 2026-10-29; CLAUDE.md, *A
+  missing form stops the work*). A `std` entry, a method, a syntax or a
+  conversion Nikaia lacks is not written around (no get-clone-insert for
+  `entry`, no `take(16)` for a refused slice, no index loop for `zip`) unless
+  an ADR or Part I-III refuses it, and the report then names that ADR. Without
+  one: commit nothing that routes around it, report `Result: blocked`,
+  `Found:` the gap with a probe, `Needs: owner decision`, and end.
 * **At about 120 turns, or when your context passes about 200k tokens**,
   stop starting new work: commit and push what is verified, and report what
   is left, so a fresh agent can take it from the repository.

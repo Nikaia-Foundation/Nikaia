@@ -86,7 +86,13 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   `target/fast/nikaia lower f.nika` or `nikaia run f.nika`. A defect that shows
   only in `tools/*.nika` needs a throwaway probe function in a tools file and
   `nikaia lower-std`; look at `tools/lowered/<file>.rs`, then restore both.
-* **Syntax gaps** (each cost a build cycle):
+* **Syntax gaps** (each cost a build cycle). Not a licence to write around
+  (owner, 2026-10-29, CLAUDE.md *A missing form stops the work*): a row that
+  is a design (`a..<b`, `else =>`, `String` for text) holds; a row that is a
+  gap or a defect (`BTreeSet` without `extend`, the typed text literal of
+  #943) is an issue, and meeting it again stops the slice instead of
+  repeating the way around. Until the architect has marked each row, ask
+  which it is:
   * no `if let`: use `x ?? default`, or `starts_with` then `strip_prefix(..) ?? ""`;
   * no `*x`; loop variables over a `ref Vec` are values;
   * `.to_owned()` is `NK1189`: write `.clone()`;

@@ -159,6 +159,26 @@ the background in a cloud session.
 
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
 
+* **A missing form stops the work, and is escalated** (owner, 2026-10-29: the
+  P5 moves wrote get-clone-insert for a missing `zip`/`mem::take`,
+  `scalars.take(16)` for a refused slice, a loop for a missing map `.iter()`;
+  each is debt). Whoever meets something Nikaia, `std` or the toolchain lacks
+  sorts it first, before writing a line around it:
+  1. **Absent on purpose**: an ADR or a section of Part I-III refuses it (the
+     *Not gaps, by design* rows of `docs/selfhosting-gaps.md` cite theirs).
+     Then build it the way that ADR says, and name the ADR in the report.
+  2. **Not decided yet** (it did not matter when the part was written) or
+     **missing because nobody thought of it**: stop. Commit nothing that writes
+     around it; the report says `Result: blocked`, `Found:` the gap with a probe
+     of a few lines, `Needs: owner decision`. The architect files it with label
+     `decision` and a decision paper, the owner decides, and the work waits for
+     the build of that decision.
+  3. **A defect** (it is specified, or plainly meant, and does not work): fixed
+     in the compiler, as below.
+
+  No ADR to cite means it is not on purpose: in doubt, it is 2. "It can be
+  written otherwise" is never the reason to go on, and a brief may not order a
+  way around a gap of kind 2 or 3.
 * **Fix, do not work around** (owner's direction): a compiler or lowering
   defect met on the way is fixed in the compiler, with a test, as its own
   commit, before or alongside the move. No workaround goes into our own code
