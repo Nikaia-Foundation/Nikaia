@@ -27,7 +27,7 @@ row stops the move until its issue is decided and built.
 | `std::mem::take(&mut place)` | NK1181; NK1131 for a part of a `let mut` view | decided, ADR-views-1 (#949 `ready`) | nothing until #949 is built |
 | `a.into_iter().zip(b)` | works (`Seq::zip`, ADR-293 D20) | not a gap | `zip`; P5b's index loop is debt (#953) |
 | `s[..16]` on text | NK1214 | design, Part I 2.6 | `s.scalars.take(16).collect()` or `s.bytes[0..<16].text()` |
-| `for mut x in v` | parser error | gap #951 (`decision`) | nothing until #951 is built |
+| `for mut x in v` | parser error | decided, ADR-views-2 (#951 `ready`) | nothing new until #951 is built; then `for mut x in v` replaces `iter_mut()` and the index loops |
 | `set.extend(xs)` on a `BTreeSet` | NK1171 | decided, ADR-collections-1 (#950 `ready`) | nothing new until #950 is built (158 loops already written, listed there) |
 | `array.iter()` on `Array[T, N]` or a run | NK1171 | decided, ADR-collections-2 (#955 `ready`) | nothing until #955 is built |
 

@@ -1096,6 +1096,40 @@ walked as pairs, `for (key, value) in scores`. A `for` head takes the pattern a 
 `for x in xs.drain()` (6.5). A `ref` written in front of the list is refused with
 `NK1137`, because the compiler writes that reference.
 
+**A `for` binding changes only with `mut`, and `mut` means what it means on a
+`let`** ([ADR-views-2](adr/adr-views-2.md)). A change to a binding without it is
+refused with `NK1139`. `mut` stands in front of the head, `for mut p in team`,
+or in front of one name of a tuple, `for (name, mut total) in scores`, as it
+does in a `let`'s pattern. Over a list, an array or a map's values that the
+function may change, the binding is a view of the element, and a change reaches
+the list:
+
+```nika
+struct P { pub n: i64 }
+
+fn main() {
+    let mut v: Vec[P] = [P { n: 1 }, P { n: 2 }]
+    for mut p in v {
+        p.n = p.n + 1                // changes `v`
+    }
+    let mut counts = [1, 2, 3]
+    for mut n in counts { n = n * 2 }   // `counts` is [2, 4, 6]
+    for mut i in 0..<3 {
+        i = i * i                    // a range's number is the turn's own
+        println(f"{i}")
+    }
+}
+```
+
+Over a list the function may not change, `mut` is `NK1139` at the list. Over
+elements the loop owns - `xs.drain()`, a range - the binding is the turn's own,
+as `let mut y = x` is. A map's **key** and a set's element take no `mut`,
+`NK1306`: the key decides where the entry stands, so it is taken out and
+inserted again after the loop. While the element is a view the body uses the
+list neither to change nor to read it (`NK2305`); what it needs of the list is
+read into a name before the loop. The view is given back whole at the end of
+each turn (6.5).
+
 **Leaving a loop early: `break` and `continue`**
 
 `break` leaves the loop. `continue` skips the rest of this turn and starts the
@@ -2674,6 +2708,11 @@ view to something that keeps it is `NK1131`, as for a `mut` parameter.
 
 A `for` **lends** its list, so the list is still there after the loop;
 iteration that takes the elements away is written `for x in xs.drain()`. A
+`for mut` over a list, an array or a map's values the function may change is a
+`let mut` view of each element in turn ([ADR-views-2](adr/adr-views-2.md)),
+lowered as `iter_mut()`, and the rule above holds for each turn: a part taken
+out of `p` in `for mut p in v` is given back before the turn ends, and handing
+`p` whole to something that keeps it is `NK1131`. A
 `let` that annotates a `for` binding with the element's type, `let copy: Row = r`,
 is refused with `NK1183`: the binding is a view, so the annotation comes off,
 or `.clone()` makes the copy. A

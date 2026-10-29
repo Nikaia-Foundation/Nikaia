@@ -124,6 +124,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [views-2](adr-views-2.md) | `mut` on a `for` binding means what it means on a `let`: over a list, an array or a map's values the element is a view that writes through (`iter_mut()`), over owned elements it is the loop's own; a key and a set element are refused with their reason; the list is not used in the body | Accepted | no |
 | [views-1](adr-views-1.md) | A part taken out of a `let mut` view of a place (`let mut c = m[k] ?? continue`) is given back before the view's block is left, as out of a `mut` parameter (`NK2108`); lowered as `mem::take`/`mem::replace`; no `std::mem` | Accepted | no |
 | [312](adr-312.md) | A handle on a shared value is duplicated, never moved; it may go into a task of our own but not into code nothing describes, and at one user thread its count is plain. | Accepted | partly: D9's bridge type |
 | [302](adr-302.md) | A call into C is written inside `unsafe`, and what crosses is a view for the call or an opaque handle that may be absent, never a raw pointer. | Accepted | yes |

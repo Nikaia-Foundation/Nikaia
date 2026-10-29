@@ -118,7 +118,8 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * [design: Part I 4.5, ADR-293] a `T?` local needs `?.clone()` (NK1125);
   * [works] a `ref String?` parameter takes a bare `String` argument (and
     `ref String?` is `NK1261`, write `String?`);
-  * [gap #951] `for mut x in v` is a parser error;
+  * [decided, ADR-views-2; built by #951] `for mut x in v` is a parser error
+    until #951 is built; then it writes through (`iter_mut()`);
   * [design: Part I 3.3] `a..b` includes `b`; the half-open range is `a..<b`;
   * [design: Part I 3.4, ADR-352] the catch-all arm of a `match` is `else =>`;
     `_ =>` and `None =>` are refused;
