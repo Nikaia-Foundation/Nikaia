@@ -1,0 +1,14 @@
+fn keep(mut ns: Vec[String], n: String) {
+    ns.push(n)
+}
+
+fn fill(mut ns: Vec[String]) {
+    keep(ns, f"k{ns.len()}")
+}
+
+fn main() {
+    let mut ns: Vec[String] = []
+    fill(ns)
+    keep(ns, f"k{ns.len()}")
+    println(f"{ns.len()} {ns[1]}")
+}

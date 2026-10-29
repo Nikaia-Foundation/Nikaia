@@ -161,6 +161,14 @@ pub(crate) fn emit_mentions(world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr, name
                 let v = *v;
                 if emit_text(world, v) == name { return true; }
             },
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts.iter() {
+                    match part {
+                        FPart::Hole { expr: hole, .. } => { if emit_mentions(world, hole, name) { return true; } },
+                        FPart::Text(_) => { },
+                    }
+                }
+            },
             _ => { },
         }
     }

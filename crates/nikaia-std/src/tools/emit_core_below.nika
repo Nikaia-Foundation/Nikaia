@@ -190,6 +190,20 @@ fn emit_mentions(world: ref EmitWorld, expr: ref Expr, name: ref String) -> bool
                     return true
                 }
             },
+            // **And a hole of an `f"…"`** (#899): `keep(ns, f"k{ns.len()}")`
+            // reads `ns` as an argument made in the call does.
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts {
+                    match part {
+                        FPart::Hole { expr: hole, .. } => {
+                            if emit_mentions(world, hole, name) {
+                                return true
+                            }
+                        },
+                        FPart::Text(_) => {},
+                    }
+                }
+            },
             else => {},
         }
     }
