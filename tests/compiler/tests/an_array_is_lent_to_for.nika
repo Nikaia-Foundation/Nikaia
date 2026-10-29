@@ -1,0 +1,7 @@
+fn main() {
+    let names: Array[String, 2] = ["ab", "cd"]
+    for x in names {
+        println(x)
+    }
+    println(f"{names[0]} {names[1]}")
+}

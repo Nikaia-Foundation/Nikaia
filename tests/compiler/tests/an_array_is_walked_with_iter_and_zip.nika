@@ -1,0 +1,20 @@
+fn main() {
+    let a: Array[i64, 2] = [1, 2]
+    let b: Array[i64, 2] = [10, 20]
+    let mut total = 0
+    for (x, y) in a.iter().zip(b.iter()) {
+        total = total + x * y
+    }
+    println(f"{total}")
+    let names: Array[String, 3] = ["x", "yy", "zzz"]
+    let lens = names.iter().map(fn(s) { s.len() }).join(", ")
+    println(f"{lens}")
+    let long = names.iter().filter(fn(s) { s.len() > 1 }).count()
+    println(f"{long}")
+    for (i, s) in names.iter().enumerate() {
+        println(f"{i} {s}")
+    }
+    for s in names.iter().rev() {
+        println(s)
+    }
+}

@@ -1,0 +1,16 @@
+fn dot(xs: ref Array[i64], ys: ref Array[i64]) -> i64 {
+    let mut total = 0
+    for (x, y) in xs.iter().zip(ys.iter()) {
+        total = total + x * y
+    }
+    return total
+}
+
+fn main() {
+    let v: Vec[i64] = [1, 2, 3]
+    let w: Vec[i64] = [4, 5, 6]
+    println(f"{dot(v, w)}")
+    let a: Array[i64, 3] = [1, 2, 3]
+    let b: Array[i64, 3] = [7, 8, 9]
+    println(f"{dot(a, b)}")
+}

@@ -2824,6 +2824,15 @@ sync = true
 touches = []
 signature = "(self: ref Array[?, ?], value: ?) -> bool"
 
+# **The elements, one at a time, lent** (ADR-collections-2 D1): what
+# `Vec::iter` gives, on an array and on a run, so `zip`, `map`, `filter`,
+# `enumerate` and `rev` follow.
+[fn."Array::iter"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref Array[T, ?]) -> Seq[ref(self) T] sync ends sized"
+
 # A list with nothing in it. It is written `Vec()`.
 [fn."Vec::new"]
 pub = true
