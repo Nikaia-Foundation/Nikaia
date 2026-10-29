@@ -1006,13 +1006,14 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(&to), || CheckStoredCode::empty());
         if keys.is_empty() { entry.unresolved = true; }
         for from in keys.iter() {
-            let given: CheckStoredCode = nikaia_std::index::or(match *nikaia_std::index::get(&state.stored_code, from) {
-                Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                None => None,
-            }, || CheckStoredCode { resolved: collections::BTreeSet::new(), unresolved: true, free: collections::BTreeSet::new() });
-            for resolved in given.resolved.iter() { entry.resolved.insert(resolved.to_string()); }
-            entry.unresolved = entry.unresolved || given.unresolved;
-            for free in given.free.iter() { entry.free.insert(free.to_string()); }
+            match *nikaia_std::index::get(&state.stored_code, from) {
+                None => { entry.unresolved = true; },
+                Some(given) => {
+                    entry.resolved.extend(given.resolved.iter().cloned());
+                    entry.unresolved = entry.unresolved || given.unresolved;
+                    entry.free.extend(given.free.iter().cloned());
+                },
+            }
         }
         state.stored_code.insert(to, entry);
     }

@@ -1381,13 +1381,15 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
             entry.unresolved = true
         }
         for from in keys {
-            let given: CheckStoredCode = state.stored_code[from]?.clone() ?? CheckStoredCode { resolved: collections::BTreeSet(), unresolved: true, free: collections::BTreeSet() }
-            for resolved in given.resolved {
-                entry.resolved.insert(resolved.clone())
-            }
-            entry.unresolved = entry.unresolved || given.unresolved
-            for free in given.free {
-                entry.free.insert(free.clone())
+            match state.stored_code[from] {
+                null => {
+                    entry.unresolved = true
+                },
+                given => {
+                    entry.resolved.extend(given.resolved.clone())
+                    entry.unresolved = entry.unresolved || given.unresolved
+                    entry.free.extend(given.free.clone())
+                },
             }
         }
         state.stored_code.insert(to, entry)

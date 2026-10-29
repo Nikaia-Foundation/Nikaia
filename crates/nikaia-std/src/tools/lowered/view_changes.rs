@@ -88,40 +88,25 @@ pub fn vc_analyse(ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &im
 pub(crate) fn vc_index(methods: &mut collections::BTreeMap<String, Vec<(bool, String)>>, key: &str, own: bool) {
     if !key.contains("::") { return; }
     let name = nikaia_std::index::or(key.rsplit("::").next(), || "").to_string();
-    let mut held = nikaia_std::index::or(methods.remove(&name), || vec![].into());
-    held.push((own, key.to_string()));
-    methods.insert(name, held);
+    methods.entry(String::from(name)).or_insert(vec![]).push((own, key.to_string()));
 }
 
 pub fn vc_coalesced(facts: &CheckFacts) -> collections::BTreeSet<i64> {
     let mut ids: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for (id, _) in facts.lent_coalesces.iter() {
-        let id = nikaia_std::num::value(id);
-        ids.insert(id);
-    }
-    vc_insert_all(&mut ids, &facts.view_coalesces);
-    vc_insert_all(&mut ids, &facts.text_view_fallbacks);
-    vc_insert_all(&mut ids, &facts.lent_list_reads);
-    vc_insert_all(&mut ids, &facts.lent_map_fallbacks);
-    vc_insert_all(&mut ids, &facts.view_fallbacks);
-    vc_insert_all(&mut ids, &facts.map_read_views);
+    ids.extend(facts.lent_coalesces.keys().copied());
+    ids.extend(facts.view_coalesces.iter().cloned());
+    ids.extend(facts.text_view_fallbacks.iter().cloned());
+    ids.extend(facts.lent_list_reads.iter().cloned());
+    ids.extend(facts.lent_map_fallbacks.iter().cloned());
+    ids.extend(facts.view_fallbacks.iter().cloned());
+    ids.extend(facts.map_read_views.iter().cloned());
     ids
 }
 
 pub fn vc_mut_viewed(facts: &CheckFacts) -> collections::BTreeSet<i64> {
     let mut ids: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for (id, _) in facts.mut_view_reads.iter() {
-        let id = nikaia_std::num::value(id);
-        ids.insert(id);
-    }
+    ids.extend(facts.mut_view_reads.keys().copied());
     ids
-}
-
-pub(crate) fn vc_insert_all(ids: &mut collections::BTreeSet<i64>, set: &collections::BTreeSet<i64>) {
-    for id in set.iter() {
-        let id = nikaia_std::num::value(id);
-        ids.insert(id);
-    }
 }
 
 pub(crate) fn vc_owns(contract: &FnContract, index: i64) -> bool {
@@ -160,8 +145,8 @@ pub(crate) fn vc_through(root: &str, part: String, outer: &[VcView]) -> (collect
     parts.insert(part);
     let at = vc_last_named(outer, root);
     if at >= 0 {
-        for each in nikaia_std::index::get(&outer, nikaia_std::index::at(at)).roots.iter() { roots.insert(each.to_string()); }
-        for each in nikaia_std::index::get(&outer, nikaia_std::index::at(at)).parts.iter() { parts.insert(each.to_string()); }
+        roots.extend(nikaia_std::index::get(&outer, nikaia_std::index::at(at)).roots.iter().cloned());
+        parts.extend(nikaia_std::index::get(&outer, nikaia_std::index::at(at)).parts.iter().cloned());
     }
     (roots, parts)
 }
