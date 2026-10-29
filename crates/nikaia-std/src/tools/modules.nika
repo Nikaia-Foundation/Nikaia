@@ -962,3 +962,179 @@ pub fn modules_believed[H: ModulesLedgerHost](dependency: ref ProjectMembersDepe
 fn modules_shipped_ledger[H: ModulesLedgerHost](root: ref fs::Path, host: ref H) -> Ledger? {
     return host.read_beside(root.join("nikaia.contracts"))
 }
+
+/// What assembling a program's ledgers asks of the compiler (M3b, #125): the
+/// units stay Rust (`Program::units`), so the host infers a run of them,
+/// named by the place of its first unit and the place after its last, and
+/// keeps what the inference learned beside the ledger it gives.
+pub trait ModulesProgramHost {
+    /// A ledger with no entries (`Ledger::empty`).
+    fn empty_ledger(ref self) -> Ledger sync
+    /// `std`'s ledger as the inference reads it (`contracts::std_library`).
+    fn std_library(ref self) -> Ledger sync
+    /// The ledger of the dependency whose units are `from..<to`: the one it
+    /// ships where that may be believed, else its own inference against
+    /// `std` alone. Its own dependencies are deliberately invisible here
+    /// (ADR-286 D21), which is exactly why a ledger derived on this side is
+    /// the second-best answer and D1 prefers the one it shipped.
+    fn package_ledger(ref self, from: i64, to: i64) -> Ledger sync
+    /// The ledger of the program's own units `from..<to`, inferred against
+    /// `library`; the host keeps the checked units and what the `sync`
+    /// inference noted (ADR-288 D29, D32), its pauses placed among all units.
+    fn own_ledger(ref self, from: i64, to: i64, library: ref Ledger) -> Ledger sync
+}
+
+/// A program's ledgers, as `modules_program_of` assembled them.
+pub struct ModulesProgramParts {
+    /// The ledger the lowering reads and the one written beside the program.
+    pub contracts: Ledger,
+    /// Each dependency's ledger as its own files are checked against it.
+    pub as_its_own: collections::BTreeMap[String, Ledger],
+    /// The first unit of the group whose checked units the emitter may read
+    /// rather than inferring the ledger a second time (#727): the one group
+    /// of the program's own files, all of them, against `std` alone. `null`
+    /// where the library held more, or the own files are in more than one.
+    pub own_checked_from: i64?,
+}
+
+/// **The program's ledgers, the dependencies first and its own package last**
+/// (ADR-100 D5). Unit `at` belongs to `packages[at]` (`null` for the
+/// program's own) under `renames[at]`; `reaches` and `their_renames` are each
+/// dependency's words and renames, by its name.
+pub fn modules_program_of[H: ModulesProgramHost](host: ref H, described: ref Ledger, packages: ref Vec[String?], renames: ref Vec[collections::BTreeMap[String, String]], reaches: ref collections::BTreeMap[String, collections::BTreeSet[String]], their_renames: ref collections::BTreeMap[String, collections::BTreeMap[String, String]]) -> ModulesProgramParts {
+    let mut contracts = host.empty_ledger()
+    let mut library = host.std_library()
+    let as_its_own = dependency_ledgers(library, contracts, described, packages, renames, reaches, their_renames, fn(from, to) { host.package_ledger(from, to) })
+
+    // The library is `std`'s exactly when nothing was added to it above.
+    let std_alone = described.functions.is_empty() && described.types.is_empty() && as_its_own.is_empty()
+    let own_units = packages.iter().filter(fn(p) { p == null }).count()
+    let mut own_checked_from: i64? = null
+    let mut own_groups = 0
+    for (from, to) in groups(packages) {
+        if packages[from] != null {
+            continue
+        }
+        own_groups += 1
+        let own = host.own_ledger(from, to, library)
+        // **Kept where it is the join's pass**: the one group of the
+        // program's own files, all of them, against `std` alone.
+        own_checked_from = null
+        if std_alone && to - from == own_units {
+            own_checked_from = from
+        }
+        absorb_own(contracts, renames[from], own)
+    }
+    if own_groups != 1 {
+        own_checked_from = null
+    }
+    return ModulesProgramParts { contracts: contracts, as_its_own: as_its_own, own_checked_from: own_checked_from }
+}
+
+/// What emitting a program asks of the compiler (M3b, #125): the units, the
+/// emitter and the source map stay Rust, so the host answers about them and
+/// keeps the map and what each unit publishes.
+pub trait ModulesEmitHost {
+    /// **The package's trust, not the entry's** (ADR-010 D9, #581): a map is
+    /// one type in every file, so a socket read in any file keys them all.
+    fn trust(ref self) -> Provenance sync
+    /// The functions of dependency `package` whose ledger line is `keyed`, or
+    /// that have none (`contracts::maps::keyed_functions`).
+    fn keyed_functions(ref self, package: ref String) -> Vec[String] sync
+    /// Every name an expression of the program's own files writes.
+    fn own_names(ref self) -> collections::BTreeSet[String] sync
+    /// The barriers the program's own files declare, or with `all` every
+    /// unit's (`emit::barrier_names`).
+    fn barrier_names(ref self, all: bool) -> collections::BTreeSet[String] sync
+    /// The generated file's preamble: what every unit needs, joined.
+    fn preamble(ref self) -> String sync
+    /// The Rust of unit `at`, written at byte `offset` of the generated file:
+    /// the host keeps its lines in the source map and what it publishes. A
+    /// refusal gets its line here (ADR-171 D2); the host holds it.
+    fn emit_unit(ref self, at: i64, provenance: Provenance, offset: i64) -> String sync throws
+    /// Whether the entry declares `main`.
+    fn has_main(ref self) -> bool sync
+    /// The source map's rows so far: generated byte, source byte, unit.
+    fn map_rows(ref self) -> Vec[(i64, i64, i64)] sync
+}
+
+/// **The whole package as one Rust file** (ADR-286 D1): unit `at` belongs to
+/// `packages[at]` (`null` for the program's own), is shown as `shown[at]`
+/// and reads `sources[at]`.
+pub fn modules_emit_reading[H: ModulesEmitHost](host: ref H, packages: ref Vec[String?], shown: ref Vec[String], sources: ref Vec[ref String]) -> String throws {
+    let mut provenance = host.trust()
+    // **A package whose `pub` items hold maps fills them with the hasher of
+    // the program that uses it** (ADR-010 D9), and the ledger says what
+    // each function of it puts in (13.5, `maps`): a program that calls one
+    // whose line is `keyed`, or that has no line, hands its maps to a body
+    // that fills them with keys the program cannot vouch for, so it is no
+    // more trusted than that. `from(..)` adds nothing the program has not
+    // chosen: a trusted program's arguments are trusted, and an untrusted
+    // program's maps are keyed already. The ledger is read, never the
+    // body.
+    if provenance == Provenance::Trusted {
+        let called = host.own_names()
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        for package in packages {
+            let name = package?.clone() ?? continue
+            names.insert(name)
+        }
+        for name in names {
+            let keyed = host.keyed_functions(name)
+            if keyed.iter().any(fn(key) { called.contains((key.rsplit("::").next() ?? key).clone()) }) {
+                provenance = Provenance::Untrusted
+                break
+            }
+        }
+    }
+    // **A call to a barrier** (D9): a method of a trait that holds a map in
+    // its signature, a `pub` function that hands a map to one, a function
+    // of a described Rust crate that takes one. The map arrives there with
+    // std's keyed hasher, so a program that calls one keeps no fast map
+    // across it: its maps that leave a function are keyed.
+    // And a package that declares one - a trait method with a map, a
+    // function that hands a map to one, a method whose result alone holds
+    // one - writes the keyed map in its own bodies where they make it.
+    if provenance == Provenance::Trusted && !host.barrier_names(false).is_empty() {
+        provenance = Provenance::Untrusted
+    }
+    if provenance == Provenance::Trusted {
+        let barriers = host.barrier_names(true)
+        if !barriers.is_empty() {
+            for name in host.own_names() {
+                if barriers.contains(name) {
+                    provenance = Provenance::Untrusted
+                    break
+                }
+            }
+        }
+    }
+
+    let mut rust: String = "// Generated by the Nikaia bootstrap compiler (Stage 0).\n// Edit the .nika source, not this file.\n\n"
+    rust.push_str(host.preamble())
+    rust.push_str("\n")
+    for at in 0..<packages.len() {
+        // **A dependency's files are read and not written** (ADR-286 D19).
+        // They are here so the ledger and the checks know what the package
+        // offers; the crate that offers it is generated beside this one, and
+        // a qualified name needs no help from us - `c::thing()` is emitted
+        // as written and Rust resolves `c` to the crate the manifest names.
+        //
+        // The index is still the units', because a diagnostic about a
+        // dependency's file has to name that file.
+        if packages[at] != null {
+            continue
+        }
+        let body = host.emit_unit(at, provenance, rust.len())
+        rust.push_str(body)
+        rust.push_str("\n")
+    }
+    // **Last, because it names lines** (ADR-300 D9). Only where the program
+    // has an entry point: the table is read by the hook `fn main` installs,
+    // and a package with no `main` is a library whose consumer has one.
+    if host.has_main() {
+        let table = emit_needs_abort_table(rust, host.map_rows(), shown, sources)
+        rust.push_str(table)
+    }
+    return rust
+}
