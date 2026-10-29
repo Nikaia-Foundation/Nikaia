@@ -114,6 +114,17 @@ Rules from the sessions that moved the most; they save tokens, not just time.
     is async and gives `Bytes` (the Rust caller needs `block_on`; a `Vec[u8]`
     is filled by a loop, as `sysroot_cache.nika` does); `read_dir` gives sorted
     names, not paths. Two host parameters `[M: A, H: B]` lower.
+  * a text literal changed in place needs its type: `let mut out: String = "a"`
+    (without it `lower-std` reads `String?`, NK1125/NK1104, #943).
+* **Host traits** (M3b, 2026-10-29): a host method that `throws` lowers to
+  `Result<T, Box<dyn std::error::Error>>`; to hand an `anyhow` refusal back
+  unchanged, keep it in a `RefCell` of the Rust host and return it after the
+  call. A body-less trait method's text parameter reads as owned: write
+  `ref String`. Rust state the host keeps (checked units, a source map) is a
+  `RefCell` field; the Nikaia side names units by `i64` index.
+* **Reading an `it` run:** filter with `grep -E '^test result:|FAILED|panicked'`,
+  anchored: a bare `test result` also matches test names such as
+  `result_source::` and hides the summary (M3b repeated a 2-minute run).
 * **Lowered types:** `String` is `&str` where a view suffices and `String`
   where it is owned (the compiler decides, ADR-282 D2), `ref T` is `&T`, `Vec[String]` is
   `Vec<String>` (a `ref` one a slice), `String?` is `Option<String>`. Most Rust
