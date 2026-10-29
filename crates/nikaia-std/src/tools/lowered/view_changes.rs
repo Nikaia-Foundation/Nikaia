@@ -39,6 +39,7 @@ pub(crate) struct VcView {
     pub(crate) callee: Option<String>,
     pub(crate) shown: Vec<String>,
     pub(crate) help: Option<String>,
+    pub(crate) looped: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,7 +165,7 @@ pub(crate) fn vc_last_named(views: &[VcView], name: &str) -> i64 {
 }
 
 pub(crate) fn vc_first_viewing(views: &[VcView], root: &str) -> i64 {
-    for i in 0..views.len() as i64 { if nikaia_std::index::get(&views, (i) as usize).used.is_some() && nikaia_std::index::get(&views, (i) as usize).roots.contains(root) { return i; } }
+    for i in 0..views.len() as i64 { if nikaia_std::index::get(&views, (i) as usize).used.is_some() && !nikaia_std::index::get(&views, (i) as usize).looped && nikaia_std::index::get(&views, (i) as usize).roots.contains(root) { return i; } }
     -1
 }
 
@@ -186,6 +187,11 @@ pub(crate) fn vc_watches(view: &VcView, root: &str, path: &str) -> bool {
         if part == path || part.starts_with(&format!("{}.", path)) || path.starts_with(&format!("{}.", part)) { return true; }
     }
     !read
+}
+
+pub(crate) fn vc_looped_over(views: &[VcView], root: &str) -> bool {
+    for view in views.iter() { if view.looped && view.roots.contains(root) { return true; } }
+    false
 }
 
 pub(crate) fn vc_any_watches(views: &[VcView], root: &str, path: &str) -> bool {
@@ -425,16 +431,32 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
             let mut shown: Vec<String> = vec![];
             for arg in args.iter() { shown.push(nikaia_std::index::or(root_of(ask.names, arg), || "..".into())); }
             let written = shown.join(", ");
-            return Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is made here by `{}`", name, callee), way_out, used: None, call: Some(format!("{}({})", callee, written)), callee: Some(callee.to_string()), shown, help: None });
+            return Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is made here by `{}`", name, callee), way_out, used: None, call: Some(format!("{}({})", callee, written)), callee: Some(callee.to_string()), shown, help: None, looped: false });
         },
         _ => return None,
     }
 }
 
+pub(crate) fn vc_loop_view(iter: &Expr, at: &Span, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> Option<VcView> {
+    match iter {
+        Expr::Variable(_, _) => { },
+        Expr::Field { .. } => { },
+        _ => { return None; },
+    }
+    let root = match root_of(ask.names, iter) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let path = vc_path_of(iter, ask);
+    let mut roots: collections::BTreeSet<String> = collections::BTreeSet::new();
+    roots.insert(root.to_string());
+    let mut parts: collections::BTreeSet<String> = collections::BTreeSet::new();
+    parts.insert(path.to_string());
+    let help = format!("Collect what the loop wants to add in a list of its own and add it after the loop with `{}.extend(more)`, or walk `0..<n` with `let n = {}.len()` before the loop.", path, path);
+    Some(VcView { name: path.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is lent to this loop", path), way_out: collections::BTreeMap::new(), used: Some(at.clone()), call: None, callee: None, shown: vec![], help: Some(help), looped: true })
+}
+
 pub(crate) fn vc_place_view(at: &Span, name: &str, place: &Expr, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> Option<VcView> {
     let root = match root_of(ask.names, place) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let (roots, parts) = vc_through(&root, vc_path_of(place, ask), outer);
-    Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is a view into `{}`", name, root), way_out: collections::BTreeMap::new(), used: None, call: None, callee: None, shown: vec![], help: None })
+    Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is a view into `{}`", name, root), way_out: collections::BTreeMap::new(), used: None, call: None, callee: None, shown: vec![], help: None, looped: false })
 }
 
 pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_>) -> Vec<VcView> {
@@ -459,7 +481,7 @@ pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcA
         roots.insert(root.to_string());
         let mut way_out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
         way_out.insert(root.to_string(), format!("`{}` keeps views of what it was given as `{}` in `{}`.", callee, source, place));
-        out.push(VcView { name: holder.to_string(), roots, parts: collections::BTreeSet::new(), made: at.clone(), from: format!("`{}` keeps a view of `{}` in `{}` here", callee, root, holder), way_out, used: None, call: None, callee: None, shown: vec![], help: Some(format!("Use `{}` before this change, or hand `{}` a copy: `{}.clone()`.", holder, callee, root)) });
+        out.push(VcView { name: holder.to_string(), roots, parts: collections::BTreeSet::new(), made: at.clone(), from: format!("`{}` keeps a view of `{}` in `{}` here", callee, root, holder), way_out, used: None, call: None, callee: None, shown: vec![], help: Some(format!("Use `{}` before this change, or hand `{}` a copy: `{}.clone()`.", holder, callee, root)), looped: false });
     }
     out
 }
@@ -544,6 +566,15 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
                 if nikaia_std::index::get(&inner_views, nikaia_std::index::at(v)).used.is_none() && vc_mentions_stmt(&stmt.node, &name, ask, holes_of) { inner_views[nikaia_std::index::at(v)].used = Some(nikaia_std::index::or(vc_first_use(&stmt.node, &name, ask, holes_of), || at.clone().into())); }
             }
         }
+        match &stmt.node {
+            Stmt::For { iter, .. } => {
+                match vc_loop_view(iter, &at, ask) {
+                    None => { },
+                    Some(lent) => { inner_views.push(lent); },
+                }
+            },
+            _ => { },
+        }
         for inner in check_visit_stmt_blocks(&stmt.node) { vc_block(inner, &inner_views, ask, holes_of, walk); }
     }
     for (name, entry) in declared.iter() {
@@ -573,7 +604,7 @@ pub(crate) fn vc_assigns_to(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_,
 pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &Span, views: &mut Vec<VcView>, declared: &collections::BTreeMap<String, (i64, bool)>, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
     let root = match root_of(ask.names, target) { Some(__nikaia_value) => __nikaia_value, None => return };
     let viewer = vc_first_viewing(&views, &root);
-    if !whole && vc_any_watches(&views, &root, &vc_path_of(target, ask)) { vc_refuse(&root, at, &views, walk); } else if whole && viewer >= 0 && declared.contains_key(&root) {
+    if whole && vc_looped_over(&views, &root) || !whole && vc_any_watches(&views, &root, &vc_path_of(target, ask)) { vc_refuse(&root, at, &views, walk); } else if whole && viewer >= 0 && declared.contains_key(&root) {
         let mut changed = false;
         for k in j + 1..block.stmts.len() as i64 {
             if vc_changes(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(k)).node, &root, ask, holes_of, &walk) {
@@ -759,6 +790,14 @@ pub(crate) fn vc_refuse(root: &str, at: &Span, views: &[VcView], walk: &mut VcWa
     let view = nikaia_std::index::get(&views, nikaia_std::index::at(held));
     let name = view.name.to_string();
     let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` changes here", root), true), vc_label(view.made.clone(), &name, view.from.to_string(), false)];
+    if view.looped {
+        let looped_help: String = match &view.help {
+            None => String::from(""),
+            Some(written) => written.to_string(),
+        };
+        walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` is changed here, inside the loop that lends it.", root), notes: vec![], help: Some(looped_help), warning: false, labels });
+        return;
+    }
     match view.used {
         None => { },
         Some(used) => { labels.push(vc_label(used.clone(), &name, format!("`{}` is used here, after the change", name), false)); },

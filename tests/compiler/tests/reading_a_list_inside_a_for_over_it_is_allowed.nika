@@ -1,0 +1,9 @@
+// Part I 3.3: reading the list inside the loop that lends it stays allowed.
+fn main() {
+    let v: Vec[i64] = [1, 2, 3]
+    let mut total = 0
+    for x in v {
+        total += x + v.len() + v[0]
+    }
+    println(f"{total}")
+}

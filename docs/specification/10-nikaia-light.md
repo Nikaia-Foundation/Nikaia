@@ -1089,7 +1089,7 @@ list's brackets reads a **run** of it, `ref Array[T]`, whether the range is
 written there or kept in a name.
 
 A `for` over a list **lends** it: the elements are looked at, and the list is
-still there when the loop is over. A binding is a view of its element, so an
+still there when the loop is over. Changing the list inside the loop is refused with `NK2305`; what the loop wants to add is collected and added after it. A binding is a view of its element, so an
 element kept past the turn, text in a field for instance, is kept as a copy,
 `.clone()`; a number, a `bool` and a `scalar` are the element itself. A map is
 walked as pairs, `for (key, value) in scores`. A `for` head takes the pattern a `let` takes, nested tuples and `_` included, `for (name, (line, col)) in places`, and no variant (`NK1259`). Taking the elements away is written,

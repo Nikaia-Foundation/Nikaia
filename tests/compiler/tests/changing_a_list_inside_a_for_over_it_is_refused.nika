@@ -1,0 +1,8 @@
+// Part I 3.3: a `for` lends its list, so changing the list in the body is refused.
+fn main() {
+    let mut v: Vec[i64] = [1, 2]
+    for x in v {
+        v.push(x)
+    }
+    println(f"{v.len()}")
+}

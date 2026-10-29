@@ -84,6 +84,9 @@ struct VcView {
     shown: Vec[String],
     /// The way out the refusal names, where it is not a copy of the view.
     help: String?,
+    /// Whether it is the list a `for` lends to its body (Part I 3.3): any
+    /// change of the list inside the loop is refused.
+    looped: bool,
 }
 
 struct VcWalk {
@@ -249,10 +252,11 @@ fn vc_last_named(views: ref Vec[VcView], name: ref String) -> i64 {
     return -1
 }
 
-/// The first view still to be used that may point into `root`, or `-1`.
+/// The first view still to be used that may point into `root`, or `-1`. The
+/// list a `for` lends is not one: only changing it is refused.
 fn vc_first_viewing(views: ref Vec[VcView], root: ref String) -> i64 {
     for i in 0..<views.len() {
-        if views[i].used != null && views[i].roots.contains(root) {
+        if views[i].used != null && !views[i].looped && views[i].roots.contains(root) {
             return i
         }
     }
@@ -289,6 +293,16 @@ fn vc_watches(view: ref VcView, root: ref String, path: ref String) -> bool {
         }
     }
     return !read
+}
+
+/// Whether a `for` around the statement lends `root`.
+fn vc_looped_over(views: ref Vec[VcView], root: ref String) -> bool {
+    for view in views {
+        if view.looped && view.roots.contains(root) {
+            return true
+        }
+    }
+    return false
 }
 
 fn vc_any_watches(views: ref Vec[VcView], root: ref String, path: ref String) -> bool {
@@ -640,16 +654,34 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
                 shown.push(root_of(ask.names, arg) ?? "..")
             }
             let written = shown.join(", ")
-            return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", callee: callee.clone(), shown: shown, help: null }
+            return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", callee: callee.clone(), shown: shown, help: null, looped: false }
         }
         else => return null,
     }
 }
 
+/// The list a `for` lends to its body (Part I 3.3): a variable or a field
+/// path, watched for the whole body.
+fn vc_loop_view(iter: ref Expr, at: ref Span, ask: ref VcAsk) -> VcView? {
+    match iter {
+        Expr::Variable(_, _) => {}
+        Expr::Field { .. } => {}
+        else => return null,
+    }
+    let root = root_of(ask.names, iter) ?? return null
+    let path = vc_path_of(iter, ask)
+    let mut roots: collections::BTreeSet[String] = collections::BTreeSet()
+    roots.insert(root.clone())
+    let mut parts: collections::BTreeSet[String] = collections::BTreeSet()
+    parts.insert(path.clone())
+    let help = f"Collect what the loop wants to add in a list of its own and add it after the loop with `{path}.extend(more)`, or walk `0..<n` with `let n = {path}.len()` before the loop."
+    return VcView { name: path.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{path}` is lent to this loop", way_out: collections::BTreeMap(), used: at.clone(), call: null, callee: null, shown: [], help: help, looped: true }
+}
+
 fn vc_place_view(at: ref Span, name: ref String, place: ref Expr, outer: ref Vec[VcView], ask: ref VcAsk) -> VcView? {
     let root = root_of(ask.names, place) ?? return null
     let (roots, parts) = vc_through(root, vc_path_of(place, ask), outer)
-    return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is a view into `{root}`", way_out: collections::BTreeMap(), used: null, call: null, callee: null, shown: [], help: null }
+    return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is a view into `{root}`", way_out: collections::BTreeMap(), used: null, call: null, callee: null, shown: [], help: null, looped: false }
 }
 
 /// The views a call keeps in the places its arguments hold (ADR-283 D27):
@@ -678,7 +710,7 @@ fn vc_kept_in_places(at: ref Span, func: ref Expr, args: ref Vec[Expr], ask: ref
         roots.insert(root.clone())
         let mut way_out: collections::BTreeMap[String, String] = collections::BTreeMap()
         way_out.insert(root.clone(), f"`{callee}` keeps views of what it was given as `{source}` in `{place}`.")
-        out.push(VcView { name: holder.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{callee}` keeps a view of `{root}` in `{holder}` here", way_out: way_out, used: null, call: null, callee: null, shown: [], help: f"Use `{holder}` before this change, or hand `{callee}` a copy: `{root}.clone()`." })
+        out.push(VcView { name: holder.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{callee}` keeps a view of `{root}` in `{holder}` here", way_out: way_out, used: null, call: null, callee: null, shown: [], help: f"Use `{holder}` before this change, or hand `{callee}` a copy: `{root}.clone()`.", looped: false })
     }
     return out
 }
@@ -792,6 +824,15 @@ fn vc_block(block: ref Block, outer: ref Vec[VcView], ask: ref VcAsk, holes_of: 
                 }
             }
         }
+        match stmt.node {
+            Stmt::For { iter, .. } => {
+                match vc_loop_view(iter, at, ask) {
+                    null => {}
+                    lent => inner_views.push(lent),
+                }
+            }
+            else => {}
+        }
         for inner in check_visit_stmt_blocks(stmt.node) {
             vc_block(inner, inner_views, ask, holes_of, walk)
         }
@@ -837,7 +878,7 @@ fn vc_assigns_to(stmt: ref Stmt, name: ref String, ask: ref VcAsk) -> bool {
 fn vc_assign(block: ref Block, j: i64, target: ref Expr, whole: bool, at: ref Span, mut views: Vec[VcView], declared: ref collections::BTreeMap[String, (i64, bool)], ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: VcWalk) {
     let root = root_of(ask.names, target) ?? return
     let viewer = vc_first_viewing(views, root)
-    if !whole && vc_any_watches(views, root, vc_path_of(target, ask)) {
+    if (whole && vc_looped_over(views, root)) || (!whole && vc_any_watches(views, root, vc_path_of(target, ask))) {
         vc_refuse(root, at, views, walk)
     } else if whole && viewer >= 0 && declared.contains_key(root) {
         // Given up (D3): the old data lives on under the old binding, the
@@ -1098,6 +1139,14 @@ fn vc_refuse(root: ref String, at: ref Span, views: ref Vec[VcView], mut walk: V
     let view = views[held]
     let name = view.name.clone()
     let mut labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{root}` changes here", true), vc_label(view.made.clone(), name, view.from.clone(), false)]
+    if view.looped {
+        let looped_help: String = match view.help {
+            null => "",
+            written => written.clone(),
+        }
+        walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{root}` is changed here, inside the loop that lends it.", notes: [], help: looped_help, warning: false, labels: labels })
+        return
+    }
     match view.used {
         null => {}
         used => labels.push(vc_label(used.clone(), name, f"`{name}` is used here, after the change", false)),

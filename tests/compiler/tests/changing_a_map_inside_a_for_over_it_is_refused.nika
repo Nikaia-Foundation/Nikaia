@@ -1,0 +1,13 @@
+use std::collections
+
+// Part I 3.3: the map a `for` walks is lent to its body, so `m.insert` there is refused.
+fn main() {
+    let mut m: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    m.insert(1, 10)
+    let mut v: Vec[i64] = [1, 2]
+    for (k, x) in m {
+        v.remove(0)
+        m.insert(k + 1, x)
+    }
+    println(f"{m.len()}")
+}

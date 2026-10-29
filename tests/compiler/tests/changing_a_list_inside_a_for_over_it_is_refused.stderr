@@ -1,0 +1,10 @@
+error[NK2305]: `v` is changed here, inside the loop that lends it.
+  --> tests/changing_a_list_inside_a_for_over_it_is_refused.nika:5:9
+   |
+ 4 |     for x in v {
+   |              - `v` is lent to this loop
+ 5 |         v.push(x)
+   |         ^ `v` changes here
+   |
+   = help: Collect what the loop wants to add in a list of its own and add it after the loop with `v.extend(more)`, or walk `0..<n` with `let n = v.len()` before the loop.
+1 change to data a view still to be used may point into
