@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1298] — 2026-10-29
+
+**A `let` over a part of a `mut` parameter, `ref mut self` or a `let mut` view is a view while the name is only read, and takes the part out with no copy when the name is kept. Inside a loop, the part is given back before the turn ends. A refusal that comes from the taking names the line that keeps the name (ADR-views-1 D6, Part I 6.5, #979). Specified; not built yet.**
+
 ## [0.0.1297] — 2026-10-29
 
 **A lambda handed to a parameter that runs it at most once may give away what it captures; a captured value it hands over is gone after the call (no `NK2105` repeat inside such a lambda). `std` names these parameters with the contract key `once` (`Entry::or_insert_with`, `Entry::and_modify`, `task::scope`, `Locked::access`, `SharedMut::access`; not `update`). For user code, once-ness is inferred, lowered as `impl FnOnce`, and never written (ADR-lambdas-1, Part I 5.4 D, #973). Specified; not built yet.**
