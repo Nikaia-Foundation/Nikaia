@@ -113,6 +113,7 @@ pub(super) fn hollow() -> Box<CheckState> {
         parts_out: Vec::new(),
         gives: Vec::new(),
         ways_out: Vec::new(),
+        cleanups_pending: Vec::new(),
         reading_only: false,
         read_seq: 0,
         task_bindings: Vec::new(),

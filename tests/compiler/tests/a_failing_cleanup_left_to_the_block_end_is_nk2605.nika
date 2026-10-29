@@ -1,0 +1,32 @@
+// #934: the same value left to its block's end: its cleanup can fail there,
+// and the function cannot, so NK2605.
+enum FlushError {
+    Refused(String),
+}
+
+impl Error for FlushError {
+    fn message(ref self) -> String {
+        match self {
+            FlushError::Refused(name) => f"{name} would not flush"
+        }
+    }
+}
+
+struct Flaky {
+    name: String,
+}
+
+impl Cleanup for Flaky {
+    fn cleanup(ref mut self) throws {
+        throw FlushError::Refused(f"{self.name}")
+    }
+}
+
+fn closing() {
+    let f = Flaky { name: f"closed" }
+    println("no close")
+}
+
+fn main() {
+    closing()
+}

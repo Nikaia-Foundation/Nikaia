@@ -548,6 +548,7 @@ fn check_core_expr_jump(mut state: CheckState, word: ref String, span: ref Span)
     if state.flow.loops == 0 {
         state.a_jump_with_nowhere_to_go(word, span)
     }
+    state.failing_cleanups_left(span)
     return Ty::Unknown
 }
 

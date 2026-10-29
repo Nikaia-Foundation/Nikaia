@@ -1414,6 +1414,7 @@ pub fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref S
     if state.flow.loops == 0 {
         state.a_jump_with_nowhere_to_go(word, span)
     }
+    state.failing_cleanups_left(span)
     return Ty::Unknown
 }
 
@@ -1480,6 +1481,7 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
         }
         let ty = check_core_stmt(state, world, host, stmt.node, stmt.span)
         state.coalesces_not_lent_are_taken(world)
+        state.failing_cleanups_bound()
         // **`break i` is two statements, and that is the point**: asked of the
         // next statement's span, because that is what the author would delete.
         if at < last && check_core_stmt_is_a_jump(stmt.node) {
@@ -1491,6 +1493,7 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
         at += 1
     }
     check_crossings_a_bound_handle_is_taken(state, world, block)
+    state.failing_cleanups_settled()
     state.scope.pop()
     return tail
 }

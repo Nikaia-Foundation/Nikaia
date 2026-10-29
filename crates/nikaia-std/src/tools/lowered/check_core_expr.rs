@@ -413,6 +413,7 @@ pub(crate) fn check_core_expr_throw<H: CheckHost>(state: &mut CheckState, world:
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_expr_jump(state: &mut CheckState, word: &str, span: &Span) -> Ty {
     if state.flow.loops == 0 { state.a_jump_with_nowhere_to_go(word, span); }
+    state.failing_cleanups_left(span);
     Ty::Unknown
 }
 

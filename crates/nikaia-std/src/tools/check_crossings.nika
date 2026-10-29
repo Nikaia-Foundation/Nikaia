@@ -269,10 +269,20 @@ pub fn check_crossings_a_value_with_a_cleanup_dying(mut state: CheckState, world
 }
 
 /// **A value with a cleanup, bound by a `let`** (ADR-297 D2, D3): the block
-/// is settled where it ends.
+/// is settled where it ends. A cleanup that can fail is `NK2605` only where
+/// the value is still held there (#934): the refusal waits for the block's
+/// end (`failing_cleanups_settled`), and a `close()` on every path drops it.
 pub fn check_crossings_a_value_with_a_cleanup_bound(mut state: CheckState, world: ref CheckWorld, name: ref String, ty: ref Ty, span: ref Span) sync {
-    let fails = check_crossings_a_value_with_a_cleanup_dying(state, world, name, ty, span) ?? return
-    state.facts.settle_lets.insert(span.start as i64, fails)
+    let held = state.cleanup_of(world, ty) ?? return
+    check_crossings_settle(state, held.fails)
+    state.a_cleanup_that_may_pause(name, span)
+    state.facts.settle_lets.insert(span.start as i64, held.fails)
+    if !held.fails {
+        return
+    }
+    let refused: CheckFinding? = state.a_failing_cleanup_refusal(name, ty, held.owner, span)
+    let finding = refused ?? return
+    state.a_failing_cleanup_held(name, finding, span)
 }
 
 /// `NK1188`'s question, asked of what the state collected (a free function:

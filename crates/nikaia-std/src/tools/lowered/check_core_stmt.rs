@@ -1020,6 +1020,7 @@ pub fn check_core_stmt_return<H: CheckHost>(state: &mut CheckState, world: &Chec
 // this was written - see `contracts::sync`.
 pub fn check_core_stmt_jump(state: &mut CheckState, word: &str, span: &Span) -> Ty {
     if state.flow.loops == 0 { state.a_jump_with_nowhere_to_go(word, span); }
+    state.failing_cleanups_left(span);
     Ty::Unknown
 }
 
@@ -1073,11 +1074,13 @@ pub fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
         }
         let ty = check_core_stmt(state, world, host, &stmt.node, &stmt.span);
         state.coalesces_not_lent_are_taken(world);
+        state.failing_cleanups_bound();
         if at < last && check_core_stmt_is_a_jump(&stmt.node) { state.nothing_follows_a_jump(&stmt.node, &nikaia_std::index::get(&block.stmts, (at + 1) as usize).span); }
         if at == last { tail = ty; }
         at += 1;
     }
     check_crossings_a_bound_handle_is_taken(state, world, block);
+    state.failing_cleanups_settled();
     state.scope.pop();
     tail
 }

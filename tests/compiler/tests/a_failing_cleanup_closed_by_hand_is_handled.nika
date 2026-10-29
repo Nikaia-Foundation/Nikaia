@@ -1,0 +1,33 @@
+// #934: a value whose cleanup can fail, closed by hand with `close()` and a
+// statement `catch`, has nothing left for its block's end: no NK2605.
+enum FlushError {
+    Refused(String),
+}
+
+impl Error for FlushError {
+    fn message(ref self) -> String {
+        match self {
+            FlushError::Refused(name) => f"{name} would not flush"
+        }
+    }
+}
+
+struct Flaky {
+    name: String,
+}
+
+impl Cleanup for Flaky {
+    fn cleanup(ref mut self) throws {
+        throw FlushError::Refused(f"{self.name}")
+    }
+}
+
+fn closing() {
+    let f = Flaky { name: f"closed" }
+    f.close() catch { println(f"close: {error}") }
+    println("after close")
+}
+
+fn main() {
+    closing()
+}

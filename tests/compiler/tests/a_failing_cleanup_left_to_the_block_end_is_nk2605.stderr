@@ -1,0 +1,9 @@
+error[NK2605]: This function can fail, because cleaning up `f` can fail.
+   --> tests/a_failing_cleanup_left_to_the_block_end_is_nk2605.nika:26:5
+    |
+ 26 |     let f = Flaky { name: f"closed" }
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `f` is a `Flaky`. Its cleanup runs at the end of this block and can fail, so the function can fail with it.
+    = help: Declare the function with `throws`, or close it yourself where you want to handle the failure: `f.close() catch { … }`.
+1 place that can fail without saying so

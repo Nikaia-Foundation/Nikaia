@@ -632,6 +632,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
         None => { },
     }
     state.a_sequence_was_walked_twice();
+    state.failing_cleanups_said();
     state.a_part_left_out();
     state.data_handed_over_is_used_again();
     state.reads_on_paths.clear();

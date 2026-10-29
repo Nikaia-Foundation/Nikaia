@@ -197,6 +197,25 @@ pub struct CheckGive {
     pub choices: Vec[(i64, i64)],
 }
 
+/// **A failing cleanup's `NK2605`, held until its block ends** (#934): the
+/// value may still be closed by hand, `name.close() catch { … }`, and then
+/// nothing is left for the block's end to clean up.
+pub struct CheckPendingCleanup {
+    pub name: String,
+    /// The binding the `let` made, once it has made it.
+    pub binding: i64?,
+    /// How deep in `scope` the block the `let` stands in is.
+    pub depth: i64,
+    /// The branch the `let` stands in.
+    pub choices: Vec[(i64, i64)],
+    /// How many loops are around the `let`.
+    pub loops: i64,
+    pub from: i64,
+    /// Where a `break` or `continue` of the loop around it leaves the block.
+    pub leaves: Vec[i64],
+    pub finding: CheckFinding,
+}
+
 /// **A way out of the function, or a call that can fail**, where it stands:
 /// what a part taken out of a `mut` parameter may not be missing at.
 pub struct CheckWayOut {
@@ -796,6 +815,8 @@ pub struct CheckState {
     pub parts_out: Vec[CheckPartOut],
     pub gives: Vec[CheckGive],
     pub ways_out: Vec[CheckWayOut],
+    /// **The `NK2605`s held until their blocks end** (#934).
+    pub cleanups_pending: Vec[CheckPendingCleanup],
     /// A read that does not take what it reads (ADR-293 D19): an assignment's
     /// target, and the operand of a `&`.
     pub reading_only: bool,

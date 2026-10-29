@@ -24,6 +24,36 @@ impl CheckState {
         let binding = self.binding_id(&root);
         CheckTaken { path, ty, from: span.start as i64, at: span.end as i64, seq, choices: self.branch.to_owned(), until: None, to: to.to_string(), binding }
     }
+    pub fn a_failing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: name.to_string(), binding: None, depth: self.scope.len() as i64, choices: self.branch.to_owned(), loops: self.flow.loops, from: span.start as i64, leaves: vec![], finding }); }
+    pub fn failing_cleanups_bound(&mut self) {
+        let depth = self.scope.len() as i64;
+        for at in 0..self.cleanups_pending.len() as i64 {
+            if nikaia_std::index::get(&self.cleanups_pending, (at) as usize).depth == depth && nikaia_std::index::get(&self.cleanups_pending, (at) as usize).binding.is_none() {
+                let name: String = nikaia_std::index::get(&self.cleanups_pending, (at) as usize).name.to_string();
+                self.cleanups_pending[nikaia_std::index::at(at)].binding = self.binding_id(&name);
+            }
+        }
+    }
+    pub fn failing_cleanups_left(&mut self, span: &Span) { for at in 0..self.cleanups_pending.len() as i64 { if nikaia_std::index::get(&self.cleanups_pending, (at) as usize).loops == self.flow.loops { self.cleanups_pending[nikaia_std::index::at(at)].leaves.push(span.start as i64); } } }
+    pub fn failing_cleanups_settled(&mut self) {
+        let depth = self.scope.len() as i64;
+        let pending = self.cleanups_pending.to_owned();
+        let mut kept: Vec<CheckPendingCleanup> = vec![];
+        for held in pending.iter() { if held.depth != depth { kept.push(held.clone()); } else if !self.closed_by_hand(held) { self.findings.push(held.finding.clone()); } }
+        self.cleanups_pending = kept;
+    }
+    pub fn failing_cleanups_said(&mut self) {
+        for held in self.cleanups_pending.iter() { self.findings.push(held.finding.clone()); }
+        self.cleanups_pending = vec![];
+    }
+    pub(crate) fn closed_by_hand(&self, held: &CheckPendingCleanup) -> bool {
+        for taken in self.handed.iter() {
+            if taken.path != held.name || taken.to != "closed by `close`" || taken.binding != held.binding || taken.from < held.from || taken.until.is_some() || taken.choices != held.choices { continue; }
+            let left = held.leaves.iter().copied().any(|at| { at < taken.from }) || self.ways_out.iter().any(|way| { way.how == "return" && way.at > held.from && way.at < taken.from });
+            if !left { return true; }
+        }
+        false
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn taken_so_far(&self) -> (i64, i64) { (self.walked.len() as i64, self.handed.len() as i64) }

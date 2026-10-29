@@ -35,6 +35,74 @@ impl CheckState {
         return CheckTaken { path: path, ty: ty, from: span.start as i64, at: span.end as i64, seq: seq, choices: self.branch.clone(), until: null, to: to.clone(), binding: binding }
     }
 
+    /// **`NK2605` waits for the block's end** (#934): `name`'s cleanup can
+    /// fail, but a `close()` later in the block may leave nothing to clean up.
+    pub fn a_failing_cleanup_held(ref mut self, name: ref String, finding: CheckFinding, span: ref Span) {
+        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.start as i64, leaves: [], finding: finding })
+    }
+
+    /// After a statement of a block: the `let` of a held value has bound its
+    /// name now, and a `close()` of another binding of it is not its close.
+    pub fn failing_cleanups_bound(ref mut self) {
+        let depth = self.scope.len()
+        for at in 0..<self.cleanups_pending.len() {
+            if self.cleanups_pending[at].depth == depth && self.cleanups_pending[at].binding == null {
+                let name: String = self.cleanups_pending[at].name.clone()
+                self.cleanups_pending[at].binding = self.binding_id(name)
+            }
+        }
+    }
+
+    /// A `break` or `continue` of the loop a held value was bound in leaves
+    /// its block, with the value.
+    pub fn failing_cleanups_left(ref mut self, span: ref Span) {
+        for at in 0..<self.cleanups_pending.len() {
+            if self.cleanups_pending[at].loops == self.flow.loops {
+                self.cleanups_pending[at].leaves.push(span.start as i64)
+            }
+        }
+    }
+
+    /// **Where a block ends, the `NK2605`s held in it are said** (#934),
+    /// except of a value closed by hand on every path to here.
+    pub fn failing_cleanups_settled(ref mut self) {
+        let depth = self.scope.len()
+        let pending = self.cleanups_pending.clone()
+        let mut kept: Vec[CheckPendingCleanup] = []
+        for held in pending {
+            if held.depth != depth {
+                kept.push(held.clone())
+            } else if !self.closed_by_hand(held) {
+                self.findings.push(held.finding.clone())
+            }
+        }
+        self.cleanups_pending = kept
+    }
+
+    /// Where the function ends, a held `NK2605` no block settled is said.
+    pub fn failing_cleanups_said(ref mut self) {
+        for held in self.cleanups_pending {
+            self.findings.push(held.finding.clone())
+        }
+        self.cleanups_pending = []
+    }
+
+    /// **Closed on every path**: by a `close()` in the block itself - not in
+    /// one arm of a choice (a loop or a lambda is `NK2105`'s) - with no
+    /// `return`, `break` or `continue` between the `let` and it.
+    fn closed_by_hand(ref self, held: ref CheckPendingCleanup) -> bool {
+        for taken in self.handed {
+            if taken.path != held.name || taken.to != "closed by `close`" || taken.binding != held.binding || taken.from < held.from || taken.until != null || taken.choices != held.choices {
+                continue
+            }
+            let left = held.leaves.iter().any(fn(at) { at < taken.from }) || self.ways_out.iter().any(fn(way) { way.how == "return" && way.at > held.from && way.at < taken.from })
+            if !left {
+                return true
+            }
+        }
+        return false
+    }
+
     /// Where a walk or a hand-over recorded from here on stands.
     pub fn taken_so_far(ref self) -> (i64, i64) sync {
         return (self.walked.len(), self.handed.len())

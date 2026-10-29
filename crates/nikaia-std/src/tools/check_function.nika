@@ -788,6 +788,7 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     // NK2101, once the whole body has been seen: what comes after a `spawn`
     // is a later statement, and a single pass reaches one later.
     state.a_sequence_was_walked_twice()
+    state.failing_cleanups_said()
     state.a_part_left_out()
     state.data_handed_over_is_used_again()
     state.reads_on_paths.clear()

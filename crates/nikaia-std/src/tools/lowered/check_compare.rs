@@ -189,7 +189,11 @@ impl CheckState {
         self.findings.push(check_refusal("NK2204", span, format!("You can't assign to `{}` directly: it holds shared mutable state.", bound), vec![note], Some(format!("Write `{}.set({})`.", bound, written))));
     }
     pub fn a_failing_cleanup_undeclared(&mut self, name: &str, ty: &Ty, owner: &str, span: &Span) {
-        if self.flow.throwing || self.flow.caught || self.current.is_none() { return; }
+        let finding = match self.a_failing_cleanup_refusal(name, ty, owner, span) { Some(__nikaia_value) => __nikaia_value, None => return };
+        self.findings.push(finding);
+    }
+    pub fn a_failing_cleanup_refusal(&self, name: &str, ty: &Ty, owner: &str, span: &Span) -> Option<CheckFinding> {
+        if self.flow.throwing || self.flow.caught || self.current.is_none() { return None; }
         let mut is: &'static str = "holds";
         match ty.unseen() {
             Ty::Named { ref name, .. } => { if compare_base(name) == compare_base(owner) { is = "is"; }; },
@@ -197,7 +201,7 @@ impl CheckState {
         }
         let mut help: String = format!("Declare the function with `throws`, or close the `{}` it holds yourself, with `close() catch {{ … }}`.", owner);
         if is == "is" { help = format!("Declare the function with `throws`, or close it yourself where you want to handle the failure: `{}.close() catch {{ … }}`.", name); }
-        self.findings.push(check_refusal("NK2605", span, format!("This function can fail, because cleaning up `{}` can fail.", name), vec![format!("`{}` {} a `{}`. Its cleanup runs at the end of this block and can fail, so the function can fail with it.", name, is, owner)], Some(help)));
+        Some(check_refusal("NK2605", span, format!("This function can fail, because cleaning up `{}` can fail.", name), vec![format!("`{}` {} a `{}`. Its cleanup runs at the end of this block and can fail, so the function can fail with it.", name, is, owner)], Some(help)))
     }
     pub fn parts_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, parts: &collections::BTreeMap<String, Ty>, from: i64, changed_from: i64) -> collections::BTreeSet<String> {
         let mut lent: collections::BTreeSet<String> = collections::BTreeSet::new();

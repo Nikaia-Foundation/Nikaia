@@ -182,8 +182,14 @@ pub fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, worl
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_crossings_a_value_with_a_cleanup_bound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) {
-    let fails = match check_crossings_a_value_with_a_cleanup_dying(state, world, name, ty, span) { Some(__nikaia_value) => __nikaia_value, None => return };
-    state.facts.settle_lets.insert(span.start as i64, fails);
+    let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
+    check_crossings_settle(state, held.fails);
+    state.a_cleanup_that_may_pause(name, span);
+    state.facts.settle_lets.insert(span.start as i64, held.fails);
+    if !held.fails { return; }
+    let refused: Option<CheckFinding> = state.a_failing_cleanup_refusal(name, ty, &held.owner, span);
+    let finding = match refused { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.a_failing_cleanup_held(name, finding, span);
 }
 
 #[allow(clippy::too_many_arguments)]

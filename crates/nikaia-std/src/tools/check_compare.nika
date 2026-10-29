@@ -316,8 +316,15 @@ impl CheckState {
     /// ADR-297 D2, D3): the value `name` of type `ty` dies here, and `owner`'s
     /// cleanup can fail.
     pub fn a_failing_cleanup_undeclared(ref mut self, name: ref String, ty: ref Ty, owner: ref String, span: ref Span) {
+        let finding = self.a_failing_cleanup_refusal(name, ty, owner, span) ?? return
+        self.findings.push(finding)
+    }
+
+    /// `NK2605` as it would be said here, where the function can fail neither
+    /// by declaring it nor inside a `catch`.
+    pub fn a_failing_cleanup_refusal(ref self, name: ref String, ty: ref Ty, owner: ref String, span: ref Span) -> CheckFinding? {
         if self.flow.throwing || self.flow.caught || self.current == null {
-            return
+            return null
         }
         let mut is: String = "holds"
         match ty.unseen() {
@@ -330,7 +337,7 @@ impl CheckState {
         if is == "is" {
             help = f"Declare the function with `throws`, or close it yourself where you want to handle the failure: `{name}.close() catch {{ … }}`."
         }
-        self.findings.push(check_refusal("NK2605", span, f"This function can fail, because cleaning up `{name}` can fail.", [f"`{name}` {is} a `{owner}`. Its cleanup runs at the end of this block and can fail, so the function can fail with it."], help))
+        return check_refusal("NK2605", span, f"This function can fail, because cleaning up `{name}` can fail.", [f"`{name}` {is} a `{owner}`. Its cleanup runs at the end of this block and can fail, so the function can fail with it."], help)
     }
 
     /// **The parts an arm only reads are lent** (ADR-291): a part that does

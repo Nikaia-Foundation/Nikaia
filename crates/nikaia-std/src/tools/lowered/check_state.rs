@@ -103,6 +103,18 @@ pub struct CheckGive {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckPendingCleanup {
+    pub name: String,
+    pub binding: Option<i64>,
+    pub depth: i64,
+    pub choices: Vec<(i64, i64)>,
+    pub loops: i64,
+    pub from: i64,
+    pub leaves: Vec<i64>,
+    pub finding: CheckFinding,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckWayOut {
     pub how: String,
     pub word: String,
@@ -330,6 +342,7 @@ pub struct CheckState {
     pub parts_out: Vec<CheckPartOut>,
     pub gives: Vec<CheckGive>,
     pub ways_out: Vec<CheckWayOut>,
+    pub cleanups_pending: Vec<CheckPendingCleanup>,
     pub reading_only: bool,
     pub read_seq: i64,
     pub task_bindings: Vec<Vec<(String, Ty, i64)>>,
