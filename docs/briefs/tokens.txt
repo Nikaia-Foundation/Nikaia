@@ -134,3 +134,4 @@
 /home/user/Nikaia/docs/briefs/m3b-modules-program.md 2459391 38
 /home/user/Nikaia/docs/briefs/architect-task.md 3117469 44
 /home/user/Nikaia/docs/briefs/p5d-project-check.md 537796 5
+/home/user/Nikaia/docs/briefs/p5b-project-lower.md 836753 8
