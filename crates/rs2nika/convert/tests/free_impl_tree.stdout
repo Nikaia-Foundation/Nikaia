@@ -1,0 +1,41 @@
+use std::collections
+pub struct Manifest {
+    notes: Vec[String],
+    name: String?,
+}
+pub fn manifest_new() -> Manifest {
+    return Manifest { notes: [], name: null }
+}
+pub fn manifest_notes(manifest: ref Manifest) -> Vec[String] {
+    return manifest.notes
+}
+pub fn manifest_package_name(manifest: ref Manifest) -> String? {
+    return manifest.name
+}
+pub fn manifest_has_notes(manifest: ref Manifest) -> bool {
+    return !manifest_notes(manifest).is_empty()
+}
+pub fn manifest_add(mut manifest: Manifest, n: String) {
+    manifest.notes.push(n)
+}
+fn manifest_helper() -> u32 {
+    return 3
+}
+pub fn manifest_count(manifest: ref Manifest) -> u32 {
+    return manifest_helper() + manifest.notes.len() as u32
+}
+
+pub enum Mode {
+    Yes,
+    No,
+}
+
+impl Mode {
+    pub fn is_on(self) -> bool {
+        return (match self { Mode::Yes => true, else => false })
+    }
+}
+
+pub fn manifest_fresh() -> Manifest {
+    return manifest_new()
+}

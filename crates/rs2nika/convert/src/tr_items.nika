@@ -311,6 +311,22 @@ impl TrEm {
                 }
             }
         }
+        let mut free_fn = false
+        if in_impl && self.free_impl {
+            in_impl = false
+            free_fn = true
+            if has_self {
+                let v = self.self_var.clone()
+                let t = self.self_ty.clone()
+                if ps[0] == "ref self" {
+                    ps[0] = f"{v}: ref {t}"
+                } else if ps[0] == "ref mut self" || ps[0] == "mut self" {
+                    ps[0] = f"mut {v}: {t}"
+                } else {
+                    ps[0] = f"{v}: {t}"
+                }
+            }
+        }
         if self.env_fns.contains(name) && !ps.contains("host: ref H") {
             ps.push("host: ref H")
             let bound = f"H: {self.host_trait()}"
@@ -319,7 +335,7 @@ impl TrEm {
         let mut head: String = ""
         if in_impl && name == "new" && !has_self && self.ctors.contains(self.self_ty.clone()) {
             head = f"{ind}pub fn{gen}({ps.join(", ")}){ret}"
-        } else if !in_impl && self.prefix != "" && self.fns.contains(name) {
+        } else if free_fn || !in_impl && self.prefix != "" && self.fns.contains(name) {
             // a top-level function takes the prefix its calls are written with
             head = f"{ind}{self.vis(n)}fn {tr_prefixed(self.prefix, name)}{gen}({ps.join(", ")}){ret}"
         } else {
@@ -454,6 +470,51 @@ impl TrEm {
 
     // ---- impl, trait, const ----
 
+    /// A `-free` profile with a prefix writes an `impl`'s methods as free
+    /// functions.
+    fn frees_impls(ref self) -> bool {
+        return self.world != "" && self.prefix != ""
+    }
+
+    /// Whether this file declares the struct `ty` (an enum keeps its
+    /// methods, as tools/*.nika do).
+    fn struct_here(ref self, ty: ref String) -> bool {
+        for i in 0..<self.t.nodes.len() {
+            if self.t.nodes[i].kind == "STRUCT" && self.t.name_of(i) == ty {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether this file's `impl ty` (not of a trait) of a struct it
+    /// declares has a function `name`.
+    fn impl_has(ref mut self, ty: ref String, name: ref String) -> bool {
+        if !self.struct_here(ty) {
+            return false
+        }
+        for i in 0..<self.t.nodes.len() {
+            if self.t.nodes[i].kind != "IMPL" || self.t.has_tok(i, "FOR_KW") {
+                continue
+            }
+            let mut last: i64 = -1
+            for k in self.nodes(i) {
+                if self.t.kind(k).ends_with("_TYPE") {
+                    last = k
+                }
+            }
+            if last < 0 || self.last_seg(last) != ty {
+                continue
+            }
+            for k in self.nodes(self.t.kid(i, "ASSOC_ITEM_LIST")) {
+                if self.t.is(k, "FN") && self.t.name_of(k) == name {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     fn impl_item(ref mut self, n: i64, ind: String) -> Vec[String] {
         let types = self.nodes(n)
         let mut tys: Vec[i64] = []
@@ -486,9 +547,25 @@ impl TrEm {
         let state = self.world != "" && !self.t.has_tok(n, "FOR_KW") && (self.self_ty == "Checker" || self.self_ty == "Emitter")
         let saved_state = self.state_impl
         self.state_impl = state
+        // a `-free` profile with a prefix: every method is a free function
+        // over the value (`manifest_notes(manifest: ref Manifest)`)
+        let free = !state && self.frees_impls() && !self.t.has_tok(n, "FOR_KW") && self.struct_here(self.self_ty)
+        let saved_free = self.free_impl
+        let saved_var = self.self_var.clone()
+        let saved_fns = self.impl_fns.clone()
+        self.free_impl = free
+        if free {
+            self.self_var = tr_snake(self.self_ty)
+            self.impl_fns = collections::BTreeSet()
+            for k in self.nodes(self.t.kid(n, "ASSOC_ITEM_LIST")) {
+                if self.t.is(k, "FN") {
+                    self.impl_fns.insert(self.t.name_of(k))
+                }
+            }
+        }
         let mut out: Vec[String] = [head]
         let mut inner: String = f"{ind}    "
-        if state {
+        if state || free {
             out = []
             inner = ind.clone()
         }
@@ -496,6 +573,9 @@ impl TrEm {
         if list < 0 {
             self.self_ty = saved
             self.state_impl = saved_state
+            self.free_impl = saved_free
+            self.self_var = saved_var
+            self.impl_fns = saved_fns
             return self.todo_item("an `impl` without a body", n, ind)
         }
         let mut gap = false
@@ -552,9 +632,12 @@ impl TrEm {
                 }
             }
         }
-        if !state {
+        if !state && !free {
             out.push(f"{ind}}}")
         }
+        self.free_impl = saved_free
+        self.self_var = saved_var
+        self.impl_fns = saved_fns
         self.state_impl = saved_state
         self.self_ty = saved
         if consts.len() > 0 {

@@ -329,6 +329,9 @@ impl TrEm {
                 return "null"
             }
             if name == "self" {
+                if self.free_impl && self.self_var != "" {
+                    return self.self_var.clone()
+                }
                 return "self"
             }
             match self.aliases[name] {
@@ -610,6 +613,10 @@ impl TrEm {
             if ty == "Self" {
                 ty = self.self_ty.clone()
             }
+            if segs.len() == 2 && self.frees_impls() && self.impl_has(ty, last) {
+                // a method of an `impl` written as a free function
+                return f"{tr_prefixed(self.prefix, last)}({self.args(n).join(", ")})"
+            }
             if last == "new" && self.ctors.contains(ty) {
                 return f"{ty}({self.args(n).join(", ")})"
             }
@@ -705,6 +712,14 @@ impl TrEm {
         let recv_n = self.t.nth(n, 0)
         let m = self.src(self.t.kid(n, "NAME_REF"))
         let arg_nodes = self.nodes(self.t.kid(n, "ARG_LIST"))
+        if self.free_impl && self.src(recv_n) == "self" && self.impl_fns.contains(m) {
+            // `self.m(a)` of a method written as a free function: `{prefix}m(value, a)`
+            let mut all: Vec[String] = [self.self_var.clone()]
+            for x in self.args(n) {
+                all.push(x)
+            }
+            return f"{tr_prefixed(self.prefix, m)}({all.join(", ")})"
+        }
         let turbofish = self.t.kid(n, "GENERIC_ARG_LIST")
         let mut r = self.expr(recv_n)
         if r.ends_with(" != null") || r.ends_with(" == null") {

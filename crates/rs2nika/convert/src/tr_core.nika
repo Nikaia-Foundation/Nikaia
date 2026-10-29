@@ -56,6 +56,12 @@ pub struct TrEm {
     pub host_fns: collections::BTreeSet[String],
     /// the methods being written are the state's (`impl Checker`)
     pub state_impl: bool,
+    /// a `-free` profile with a prefix: the methods of the `impl` being
+    /// written are free functions `{prefix}m(value: ref T, ..)`, `self` is
+    /// `self_var`, and `impl_fns` are its methods
+    pub free_impl: bool,
+    pub self_var: String,
+    pub impl_fns: collections::BTreeSet[String],
     /// the type the function being written returns, as Nikaia writes it
     pub ret_ty: String,
     /// a closure's body written as a loop's (`xs.iter().map(|x| { .. })
@@ -96,6 +102,9 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
         world: world,
         host_fns: host_fns.iter().map(fn(h) { h.clone() }).collect(),
         state_impl: false,
+        free_impl: false,
+        self_var: "",
+        impl_fns: collections::BTreeSet(),
         ret_ty: "",
         push_to: "",
         push_opt: false,
@@ -500,4 +509,20 @@ fn tr_prefixed(prefix: ref String, name: ref String) -> String {
         return name.clone()
     }
     return f"{prefix}{name}"
+}
+
+/// `snake` of `CamelCase` (`ProjectMembers` -> `project_members`).
+fn tr_snake(name: ref String) -> String {
+    let mut out: String = ""
+    let mut first = true
+    for c in name.scalars {
+        let s = c.to_string()
+        let low = s.to_lowercase()
+        if low != s && !first {
+            out.push_str("_")
+        }
+        out.push_str(low)
+        first = false
+    }
+    return out
 }
