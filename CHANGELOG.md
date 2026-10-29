@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1300] — 2026-10-29
+
+**Text tiers: an element reached by index, `get` or a `for` binding owns the text changed through it (#967, #981); NK2305 names the list's place (#971).** A text field of a list or map element changed in place through `v[i]`, a `let` of the element or a `for` binding, and a text element of a list or map changed in place through a `let` of `xs[i]`, `m[k]` or `m.get(k)` (also before `??` return), now makes that element text of its own instead of lowering a borrowed text the change cannot write to. NK2305's help for a `for mut` loop whose list is read in the body names the list's place (`for i in 0..<self.pending.len()`), not its root.
+
 ## [0.0.1299] — 2026-10-29
 
 **ADR-error-sets-1 (#625, specified, not built): a code parameter that the function's body does not keep fails, at each call, only with what that call hands it (for private and `pub` functions alike), while a kept parameter keeps the union of everything stored in it (ADR-351 D8).**
