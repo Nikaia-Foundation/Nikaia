@@ -681,7 +681,7 @@ impl EmitState {
             return Ok(());
         }
         let mut copies = walk.reached_copy;
-        let mut byte_copy = false;
+        let mut byte_copy = receiver.is_none() && walk.reached_copy && self.facts.byte_copies.contains(&on_node);
         if receiver.is_some() {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             copies = self.facts.owned_copies.contains(&node_key(on));
@@ -692,7 +692,7 @@ impl EmitState {
             written = String::from("to_owned");
             match receiver {
                 None => { },
-                Some(on) => { if self.facts.text_copies.contains(&node_key(on)) { written = String::from("to_string"); }; },
+                Some(on) => { if self.facts.text_copies.contains(&node_key(on)) { written = String::from("to_string"); } },
             }
         } else if name == "get" && args.len() == 1 && self.facts.mut_view_gets.contains(&on_node) { written = String::from("get_mut"); } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); } else if !limit.is_empty() { written = String::from("join_within"); }
         if name == "fold" && receiver.is_some() {

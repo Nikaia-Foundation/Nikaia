@@ -20,7 +20,7 @@ pub(crate) fn emit_arg_opening_of(ty: &Ty) -> String {
 pub(crate) fn emit_arg_opening_inside(inner: &Ty) -> String {
     if !inner.is_a_view() { return String::from(""); }
     match inner {
-        Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "str" { String::from(".as_deref()") } else { String::from(".as_ref()") },
+        Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "str" || emit_base(name) == "Bytes" { String::from(".as_deref()") } else { String::from(".as_ref()") },
         _ => String::from(".as_ref()"),
     }
 }

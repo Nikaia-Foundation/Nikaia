@@ -1,0 +1,12 @@
+fn as_expected(want: ref Bytes?, got: ref Bytes) -> bool {
+    return match want?.clone() {
+        null => true,
+        expected => expected == got
+    }
+}
+
+fn main() {
+    let w: Bytes? = Bytes([120])
+    let g: Bytes = Bytes([120])
+    println(f"{as_expected(w, g)}")
+}

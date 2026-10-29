@@ -40,7 +40,9 @@ fn emit_arg_opening_inside(inner: ref Ty) -> String {
         return ""
     }
     return match inner {
-        Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "str" { ".as_deref()" } else { ".as_ref()" },
+        // `ref Bytes?` is an `Option<&[u8]>`, as `ref String?` is an
+        // `Option<&str>` (#913).
+        Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "str" || emit_base(name) == "Bytes" { ".as_deref()" } else { ".as_ref()" },
         else => ".as_ref()",
     }
 }
