@@ -152,6 +152,27 @@ impl TrEm {
     /// `X { a: [], b: collections::HashMap(), .. }`; "" where a field's type
     /// has no default the converter knows.
     fn default_of_struct(ref mut self, name: ref String) -> String {
+        // an `impl Default` of its own is written as `impl X { fn default }`
+        for im in self.t.kids_of(0, "IMPL") {
+            let tys = self.t.kids_of(im, "PATH_TYPE")
+            if self.t.has_tok(im, "FOR_KW") && tys.len() == 2 && self.last_seg(tys[0]) == "Default" && self.last_seg(tys[1]) == name {
+                return f"{name}::default()"
+            }
+        }
+        // `#[derive(Default)]` on an enum: the variant marked `#[default]`
+        for en in self.t.kids_of(0, "ENUM") {
+            if self.t.name_of(en) != name {
+                continue
+            }
+            for v in self.t.kids_of(self.t.kid(en, "VARIANT_LIST"), "VARIANT") {
+                for a in self.t.kids_of(v, "ATTR") {
+                    if self.src(a) == "#[default]" {
+                        return f"{name}::{self.t.name_of(v)}"
+                    }
+                }
+            }
+            return ""
+        }
         for st in self.t.kids_of(0, "STRUCT") {
             if self.t.name_of(st) != name {
                 continue
@@ -169,6 +190,79 @@ impl TrEm {
             return f"{name} {{ {parts.join(", ")} }}"
         }
         return ""
+    }
+
+    /// The type a value at `n` is written into, as Nikaia writes it: the
+    /// field of a struct literal, or a `let` with its type; "" when unknown.
+    fn expected_ty(ref mut self, n: i64) -> String {
+        let up = self.t.nodes[n].parent
+        if up >= 0 && self.t.is(up, "RECORD_EXPR_FIELD") {
+            let rec = self.t.up(up, "RECORD_EXPR")
+            let field = self.src(self.t.kid(up, "NAME_REF"))
+            if rec >= 0 {
+                return self.field_ty(self.last_seg(self.t.kid(rec, "PATH")), field)
+            }
+        }
+        if up >= 0 && self.t.is(up, "LET_STMT") {
+            for k in self.nodes(up) {
+                if self.t.nodes[k].kind.ends_with("_TYPE") {
+                    return self.ty(k)
+                }
+            }
+        }
+        return ""
+    }
+
+    /// The type of field `field` of struct `name` (any struct when `name`
+    /// is ""), as Nikaia writes it, or "".
+    fn field_ty(ref mut self, name: ref String, field: ref String) -> String {
+        for i in 0..<self.t.nodes.len() {
+            if self.t.nodes[i].kind != "STRUCT" || (name != "" && self.t.name_of(i) != name) {
+                continue
+            }
+            for f in self.t.kids_of(self.t.kid(i, "RECORD_FIELD_LIST"), "RECORD_FIELD") {
+                if self.t.name_of(f) == field {
+                    return self.ty(self.t.nth(f, self.nodes(f).len() - 1))
+                }
+            }
+        }
+        return ""
+    }
+
+    /// The default of what the optional `n` holds, from the field or the
+    /// function of this file it reads; "" when unknown.
+    fn default_of_optional(ref mut self, n: i64) -> String {
+        let mut at = n
+        while self.t.is(at, "METHOD_CALL_EXPR") {
+            let m = self.src(self.t.kid(at, "NAME_REF"))
+            if m != "as_deref" && m != "as_ref" && m != "cloned" && m != "copied" && m != "clone" {
+                break
+            }
+            at = self.nodes(at)[0]
+        }
+        let mut held: String = ""
+        if self.t.is(at, "FIELD_EXPR") {
+            held = self.field_ty("", self.src(self.t.kid(at, "NAME_REF")))
+        }
+        if self.t.is(at, "METHOD_CALL_EXPR") || self.t.is(at, "CALL_EXPR") {
+            let name = if self.t.is(at, "CALL_EXPR") { self.last_seg(self.nodes(at)[0]) } else { self.src(self.t.kid(at, "NAME_REF")) }
+            if name == "var" && self.src(self.nodes(at)[0]).ends_with("env::var") {
+                return "\"\""
+            }
+            for i in 0..<self.t.nodes.len() {
+                if self.t.nodes[i].kind == "FN" && self.t.name_of(i) == name {
+                    let ret = self.t.kid(i, "RET_TYPE")
+                    if ret >= 0 && self.nodes(ret).len() > 0 {
+                        held = self.ty(self.nodes(ret)[0])
+                    }
+                    break
+                }
+            }
+        }
+        if !held.ends_with("?") {
+            return ""
+        }
+        return self.default_of(held.trim_end_matches("?"))
     }
 
     /// The default value of a type as Nikaia writes it, or "".
@@ -470,7 +564,10 @@ impl TrEm {
                 return f"{ty}({self.args(n).join(", ")})"
             }
             if last == "default" && segs.len() == 2 {
-                let written = self.default_of_struct(ty)
+                if ty == "Default" {
+                    ty = self.expected_ty(n)
+                }
+                let written = self.default_of(ty)
                 if written != "" {
                     return written
                 }
@@ -680,6 +777,10 @@ impl TrEm {
             return f"({r} catch {{ {empty} }})"
         }
         if m == "unwrap_or_default" && a.len() == 0 {
+            let empty = self.default_of_optional(recv_n)
+            if empty != "" {
+                return f"({r} ?? {empty})"
+            }
             return self.todo("`unwrap_or_default` (write the default: `?? 0`, `?? \"\"`, `?? []`)", n)
         }
         // `c.then(|| v)` / `c.then_some(v)` -> `if c { v } else { null }`

@@ -1,0 +1,32 @@
+use std::collections
+pub enum DefMode {
+    Fast,
+    Kept,
+}
+
+pub struct DefCounts {
+    pub mode: DefMode,
+    pub names: Vec[String],
+    pub help: String?,
+    pub size: i64,
+}
+
+fn def_label(n: i64) -> String? {
+    if n > 0 {
+        return f"n{n}"
+    } else {
+        return null
+    }
+}
+
+pub fn def_fresh() -> DefCounts {
+    return DefCounts { mode: DefMode::Kept, names: [], help: null, size: 0 }
+}
+
+pub fn def_help_of(c: ref DefCounts) -> String {
+    return (c.help ?? "").to_string()
+}
+
+pub fn def_label_or_empty(n: i64) -> String {
+    return (def_label(n) ?? "")
+}
