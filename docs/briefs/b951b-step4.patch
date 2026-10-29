@@ -1,0 +1,510 @@
+diff --git a/crates/rs2nika/convert/src/main.nika b/crates/rs2nika/convert/src/main.nika
+index 169eeea9..177da869 100644
+--- a/crates/rs2nika/convert/src/main.nika
++++ b/crates/rs2nika/convert/src/main.nika
+@@ -271,7 +271,7 @@ pub fn rs2nika_rules() -> Vec[String] {
+         "R222 a receiver rust-analyzer finds an `Option`'s `map`/`and_then`/`map_or`/`is_some_and` on (`--facts`) counts as an option for R96: `name.map(|n| f(n))` -> `(match name { n => f(n), null => null })`",
+         "R223 `e == Some(v)` -> `(match e { got => got == v, null => false })`, `!=` with `null => true` (a `T?` is compared with `null` or a `T?` only, NK1102)",
+         "R225 a slice `[T]` without its `&` (`x: &mut [T]`, R3) -> `Vec[T]`: `mut findings: Vec[CheckFinding]`",
+-        "R226 `for x in xs.iter_mut().filter(|f| c) {` -> `for i in 0..<xs.len() {`, `if !c { continue }` with `f` -> `xs[i]`, and `x` -> `xs[i]` in the body (`Seq` lends no element to change); `x`, `f` plain names, `xs` a place",
++        "R226 `for x in xs.iter_mut().filter(|f| c) {` -> `for mut x in xs {`, `if !c { continue }` with `f` -> `x` (ADR-views-2 D2: an adapter hands no changeable element); `x`, `f` plain names, `xs` a place",
+         "R228 `--only` of a method of a type the Rust side keeps (not `Checker`/`Emitter`, not one tools/*.nika define) -> a free function over the fields it reads: `&self` -> `f: ref T` for each `self.f`, typed from the `struct`, `self.f` -> `f`, `self.m(` -> `m(`; over a tools type the `impl` shell stays (R207)",
+         "R229 a `let` Rust wrapped after its `=` (`let x =` then the value on the next line) is one line",
+         "R230 `if let Some(x) = e {` as the last statement of a loop, no `else` -> `let x = e ?? continue` and its body one level out; `e.filter(|_| c)` -> `if !c { continue }` before it",
+@@ -306,7 +306,7 @@ pub fn rs2nika_rules() -> Vec[String] {
+         "R259 `let mut t = BTreeSet::new();` filled only by calls taking `&mut t`, then `acc.extend(t);` -> the calls fill `acc` (the set was there for a closure's borrow)",
+         "R260 `if let Some(x) = v.last() {` -> `if v.len() > 0 {`, `x` -> `v[v.len() - 1]` in its block",
+         "R261 an arm `A { m, .. } | B { m, .. } => ..` whose alternatives bind names -> one arm each with the same body (a Nikaia or-pattern binds nothing)",
+-        "R262 `for item in &mut v { .. item.node = e; }` -> `let mut kept: Vec[Spanned[Item]] = []`, `for item in v.drain()`, `let node = e`, `kept.push(Spanned { node: node, span: item.span, doc: item.doc, attributes: item.attributes })`, the others pushed as they are, `v.extend(kept)` (M2); `*name = x` through a binding gets a TODO",
++        "R262 `for x in &mut v {` (`v` a place) -> `for x in v.iter_mut() {`, written `for mut x in v` (ADR-views-2 D2); `*name = x` through a match binding gets a TODO",
+         "R263 `anyhow::bail!(m)` / `bail!(m)` -> `throw format!(m)` (R12 makes it an f-string), a plain text as it is",
+         "R264 a `match` arm's block closed by `}` before the next arm -> `},`, `_ => {}` -> `else => {},`, as tools/*.nika write them",
+         "R265 a two-arm `match` of one statement and `else => {},` (a Rust `if let`) -> `P => s,`",
+@@ -375,6 +375,7 @@ pub fn rs2nika_rules() -> Vec[String] {
+         "R329 `f(&b)` (`b` a file's bytes, `f` a tools trait method taking `p: ref Vec[u8]`) -> the buffer `p` filled from `b` before it, `f(&p)`",
+         "R330 `for b in n` with `n` bound by `fs::read` -> `for b in n.iter()`: `Bytes` is walked by `iter`",
+         "R331 `[forms]`: `{x}` may stand on the right side again, and `F({a}, {b})` takes two arguments",
++        "R333 `for x in xs.iter_mut() {` and `for x in &mut xs {` (a list or an array) -> `for mut x in xs {` (ADR-views-2 D2); Rust's owned `for mut x in xs` -> `for mut x in xs.drain()` (D3); a map's `iter_mut()` / `values_mut()` and an adapter over `iter_mut()` get a TODO (section 6)",
+         "R227 a local closure with arguments only ever called (`let count = |family: &str| ..;`) -> a function of the module after the file's functions, the locals it captures its first parameters, each call `count(a)` -> `prefix_count(findings, a)`, f-strings too; types from annotations, `--facts`, a `.count()`/`.len()` or text tail; one unknown, the closure stays (R82)",
+         "R224 the project's own rs2nika.names (in the working directory, or `--names FILE`): what was decided converting the files before, read before the converter's table: `old new` renames (R47), `[types]` `Rust type = Nikaia type` (`&'static str = ref String`), a reason after ` #`",
+         "R221 `return match call { Ok(v) => a, Err(e) if g => b, Err(e) => d }` -> `let v = call catch { if g { return b } return d }`, `return a`",
+@@ -13662,7 +13663,8 @@ fn rs2nika_or_arms(mut ctx: Rs2nikaCtx, src: String) -> String {
+ }
+ 
+ /// Whether `name` above line `at` is the element of a `for name in
+-/// v.iter_mut()`, which the tree engine writes as a loop over the indexes.
++/// v.iter_mut()` (or `in &mut v`), which the engines write `for mut name in
++/// v`: a write through it reaches the list (ADR-views-2 D2).
+ fn rs2nika_walked_mut(lines: ref Vec[String], at: i64, name: ref String) -> bool {
+     let mut j = at - 1
+     while j >= 0 {
+@@ -13670,7 +13672,7 @@ fn rs2nika_walked_mut(lines: ref Vec[String], at: i64, name: ref String) -> bool
+         if t.starts_with("fn ") || t.starts_with("pub fn ") {
+             return false
+         }
+-        if t.starts_with(f"for {name} in ") && t.contains(".iter_mut()") {
++        if t.starts_with(f"for {name} in ") && (t.contains(".iter_mut()") || t.contains(" in &mut ")) {
+             return true
+         }
+         j = j - 1
+@@ -13678,11 +13680,26 @@ fn rs2nika_walked_mut(lines: ref Vec[String], at: i64, name: ref String) -> bool
+     return false
+ }
+ 
+-/// R262: `for item in &mut v { .. item.node = e; }` -> M2's rebuild: the
+-/// items drained into `kept`, the changed one pushed as `Spanned { node, span,
+-/// doc, attributes }`, the others as they are, `v.extend(kept)` (a loop
+-/// lends no element to change, ADR-094 D7). A write through a binding
+-/// (`*name = x`) gets a TODO: the value is rebuilt by hand.
++/// R333: the line engine's `for x in xs.iter_mut() {` (`x` a name, `xs` a
++/// place) -> `for mut x in xs {`, a view of each element (ADR-views-2 D2);
++/// a pair stays for its TODO: it may be a map's, whose values changed in
++/// place are not decided yet (section 6).
++fn rs2nika_for_mut(line: String) -> String {
++    let t: String = line.trim().clone()
++    if !t.starts_with("for ") || !t.ends_with(".iter_mut() {") || !t.contains(" in ") {
++        return line
++    }
++    let (x, rest) = t["for ".len()..<t.len() - ".iter_mut() {".len()].split_once(" in ") ?? ("", "")
++    if x == "" || rest == "" || !rs2nika_all_word(x) || !rest.chars().all(fn(ch) { rs2nika_word(ch) || ch == '.' }) {
++        return line
++    }
++    return f"{rs2nika_indent(line)}for mut {x} in {rest} {{"
++}
++
++/// R262: `for x in &mut v {` (`v` a place) -> `for x in v.iter_mut() {`,
++/// which both engines write `for mut x in v` (ADR-views-2 D2; M2 rebuilt
++/// the items by draining them before #951). A write through a match
++/// binding (`*name = x`) gets a TODO: the value is rebuilt by hand.
+ fn rs2nika_drained(mut ctx: Rs2nikaCtx, src: String) -> String {
+     let lines = rs2nika_lines_of(src)
+     let mut out: Vec[String] = []
+@@ -13692,89 +13709,20 @@ fn rs2nika_drained(mut ctx: Rs2nikaCtx, src: String) -> String {
+         let ind = rs2nika_indent(l)
+         let t: String = l.trim().clone()
+         if t.starts_with("*") && t.ends_with(";") && t.contains(" = ") && !t.contains("==") && !rs2nika_walked_mut(lines, i, (t.strip_prefix("*") ?? "").split(" ").next() ?? "") {
+-            out.push(f"{ind}// TODO(rs2nika): a write through a match binding (ADR-094 D7, #576): rebuild the value and put it back, as M2 drains and pushes the items (R262)")
++            out.push(f"{ind}// TODO(rs2nika): a write through a match binding (ADR-094 D7, #576): rebuild the value and put it back (R262)")
+             rs2nika_hit(ctx, "R262")
+         }
+-        let mut item: String = ""
+-        let mut v: String = ""
+         if t.starts_with("for ") && t.contains(" in &mut ") && t.ends_with(" {") {
+-            let (x, rest) = t["for ".len()..<t.len() - " {".len()].split_once(" in &mut ") ?? ("", "")
+-            item = x.clone()
+-            v = rest.clone()
+-        }
+-        let end = if item != "" { rs2nika_close_at(lines, i + 1, f"{ind}}}") } else { -1 }
+-        let bi: String = f"{ind}    "
+-        let mut set_at = -1
+-        let mut k = i + 1
+-        while end > 0 && k < end {
+-            if rs2nika_indent(lines[k]) == bi && lines[k].trim().starts_with(f"{item}.node = ") {
+-                set_at = k
+-            }
+-            k = k + 1
+-        }
+-        if set_at < 0 || !rs2nika_word_ok(item) {
+-            out.push(l)
+-            i = i + 1
+-            continue
+-        }
+-        // where the assignment ends, and whether it is the body's last statement
+-        let mut set_end = set_at
+-        while set_end < end && !(rs2nika_indent(lines[set_end]) == bi && lines[set_end].trim_end().ends_with(";")) {
+-            set_end = set_end + 1
+-        }
+-        let last = set_end + 1 == end
+-        let elem = if v.ends_with("items") { ": Vec<Spanned<Item>>" } else { "" }
+-        out.push(f"{ind}let mut kept{elem} = Vec::new();")
+-        out.push(f"{ind}for {item} in {v}.drain(..) {{")
+-        let keep: String = f"kept.push({item}); continue"
+-        let mut inner_loop = false
+-        let mut inner_ind: String = ""
+-        let mut m = i + 1
+-        while m < end {
+-            let x: String = lines[m].clone()
+-            if m == set_at {
+-                out.push(x.replace(f"{item}.node = ", "let node = "))
+-            } else if m > set_at && m <= set_end {
+-                out.push(x.clone())
+-            } else {
+-                // a `continue` of this loop keeps the item
+-                let depth_in = rs2nika_indent(x).len() >= bi.len()
+-                let alone = x.trim() == "continue;" && rs2nika_indent(x).len() > bi.len() && !inner_loop
+-                let joins = alone && out.len() > 0 && out[out.len() - 1].trim_end().ends_with(" else {") && m + 1 < end && lines[m + 1].trim() == "};"
+-                if joins {
+-                    // a `let .. else {` of one jump is one line, as R60 reads it
+-                    let head: String = out[out.len() - 1].trim_end().clone()
+-                    out[out.len() - 1] = f"{head} kept.push({item}); continue; }};"
+-                    m = m + 2
+-                    continue
+-                } else if alone {
+-                    out.push(f"{rs2nika_indent(x)}kept.push({item}); continue;")
+-                } else {
+-                    out.push(if depth_in && !inner_loop { x.replace("{ continue; }", f"{{ {keep}; }}").replace("{ continue }", f"{{ {keep} }}") } else { x.clone() })
+-                }
+-                let xt: String = x.trim().clone()
+-                if xt.starts_with("for ") || xt.starts_with("while ") || xt.starts_with("loop ") {
+-                    inner_loop = true
+-                    inner_ind = rs2nika_indent(x)
+-                } else if inner_loop && rs2nika_indent(x) == inner_ind && xt.starts_with("}") {
+-                    inner_loop = false
+-                }
+-            }
+-            if m == set_end {
+-                out.push(f"{bi}kept.push(Spanned {{ node: node, span: {item}.span, doc: {item}.doc, attributes: {item}.attributes }});")
+-                if !last {
+-                    out.push(f"{bi}continue;")
+-                }
++            let (x, v) = t["for ".len()..<t.len() - " {".len()].split_once(" in &mut ") ?? ("", "")
++            if x != "" && v != "" && v.chars().all(fn(ch) { rs2nika_word(ch) || ch == '.' }) {
++                out.push(f"{ind}for {x} in {v}.iter_mut() {{")
++                rs2nika_hit(ctx, "R262")
++                i = i + 1
++                continue
+             }
+-            m = m + 1
+         }
+-        if !last {
+-            out.push(f"{bi}kept.push({item});")
+-        }
+-        out.push(lines[end].clone())
+-        out.push(f"{ind}{v}.extend(kept);")
+-        rs2nika_hit(ctx, "R262")
+-        i = end + 1
++        out.push(l)
++        i = i + 1
+     }
+     return out.join("\n")
+ }
+@@ -17241,7 +17189,7 @@ pub fn rs2nika_convert_in(loaded: ref Rs2nikaCtx, given_src: String, profile_giv
+     let done7 = rs2nika_split_chains(ctx, done6)
+     let done8 = rs2nika_empty_ctors(ctx, src, done7)
+     let done9 = rs2nika_new_calls(ctx, done8)
+-    let done10: Vec[String] = done9.iter().map(fn(l) { rs2nika_option_clones(ctx, l) }).collect()
++    let done10: Vec[String] = done9.iter().map(fn(l) { rs2nika_for_mut(rs2nika_option_clones(ctx, l)) }).collect()
+     let done = rs2nika_m2_shapes(ctx, rs2nika_fn_aliases(ctx, done10))
+     // R100 after R45, which drops the `use` of an alias
+     let named = rs2nika_aliases(ctx, rs2nika_join(done, "\n"))
+@@ -17683,11 +17631,11 @@ fn rs2nika_negated(cond: String) -> String {
+     return f"!({c})"
+ }
+ 
+-/// R226: `for x in xs.iter_mut().filter(|f| c) {` .. `}` -> `for i in
+-/// 0..xs.len() {`, `if !c { continue }` with `f` -> `xs[i]`, and `x` ->
+-/// `xs[i]` in the body: Nikaia's `Seq` lends no element to change, its
+-/// index does. `x` and `f` are plain names, `xs` a place; else the line
+-/// stays for its TODO.
++/// R226: `for x in xs.iter_mut().filter(|f| c) {` .. `}` -> `for x in
++/// xs.iter_mut() {`, `if !c { continue }` with `f` -> `x`: the loop is then
++/// a `for mut x in xs` (ADR-views-2 D2), whose element a lending adapter
++/// would not hand out changeable. `x` and `f` are plain names, `xs` a
++/// place; else the line stays for its TODO.
+ fn rs2nika_filter_loops(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+     let mut out: Vec[String] = []
+     let mut i = 0
+@@ -17721,22 +17669,14 @@ fn rs2nika_filter_loops(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Stri
+             i = i + 1
+             continue
+         }
+-        let mut body: String = ""
+-        let mut k = i + 1
+-        while k < end {
+-            body = f"{body}{given[k]}\n"
+-            k = k + 1
+-        }
+-        let index = rs2nika_fresh(f"{cond} {body}", ["i", "k", "at"])
+-        let item = f"{xs}[{index}]"
+-        let skip = rs2nika_negated(rs2nika_free_word(cond, p, item))
+-        out.push(f"{ind}for {index} in 0..{xs}.len() {{")
++        let skip = rs2nika_negated(rs2nika_free_word(cond, p, x))
++        out.push(f"{ind}for {x} in {xs}.iter_mut() {{")
+         out.push(f"{ind}    if {skip} {{")
+         out.push(f"{ind}        continue;")
+         out.push(f"{ind}    }}")
+-        k = i + 1
++        let mut k = i + 1
+         while k < end {
+-            out.push(rs2nika_free_word(given[k], x, item))
++            out.push(given[k].clone())
+             k = k + 1
+         }
+         out.push(given[end].clone())
+diff --git a/crates/rs2nika/convert/src/tr_core.nika b/crates/rs2nika/convert/src/tr_core.nika
+index 0c07e012..2391dd88 100644
+--- a/crates/rs2nika/convert/src/tr_core.nika
++++ b/crates/rs2nika/convert/src/tr_core.nika
+@@ -47,9 +47,6 @@ pub struct TrEm {
+     pub fns: collections::BTreeSet[String],
+     /// nested items, written after the top-level item that holds them
+     pub hoisted: Vec[String],
+-    /// a name that stands for a place while a body is written: the variable
+-    /// of `for x in xs.iter_mut()` is `xs[i]`
+-    pub aliases: collections::BTreeMap[String, String],
+     /// a `-free` profile's world (`CheckWorld`): the state's methods become
+     /// free functions of `state`, `world` (and `host`)
+     pub world: String,
+@@ -107,7 +104,6 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
+         todos: 0,
+         fns: collections::BTreeSet(),
+         hoisted: [],
+-        aliases: collections::BTreeMap(),
+         world: world,
+         host_fns: host_fns.iter().map(fn(h) { h.clone() }).collect(),
+         state_impl: false,
+diff --git a/crates/rs2nika/convert/src/tr_expr.nika b/crates/rs2nika/convert/src/tr_expr.nika
+index 5e8df2b2..82ed7649 100644
+--- a/crates/rs2nika/convert/src/tr_expr.nika
++++ b/crates/rs2nika/convert/src/tr_expr.nika
+@@ -342,12 +342,6 @@ impl TrEm {
+                 }
+                 return "self"
+             }
+-            match self.aliases[name] {
+-                null => {},
+-                place => {
+-                    return place.clone()
+-                },
+-            }
+             // a local or a parameter of that name is not the function
+             if self.prefix != "" && self.fns.contains(name) && !self.binds(self.t.up(n, "FN"), name) {
+                 return tr_prefixed(self.prefix, name)
+@@ -838,7 +832,7 @@ impl TrEm {
+             }
+         }
+         if m == "iter_mut" {
+-            return self.todo("`iter_mut` (index the list: `for i in 0..<xs.len()`)", n)
++            return self.todo("`iter_mut` outside a `for` over the list itself (an adapter, a map): not decided yet (ADR-views-2 section 6); `for mut x in xs` walks a list in place", n)
+         }
+         if m == "unwrap" && a.len() == 0 {
+             if self.t.is(recv_n, "METHOD_CALL_EXPR") && self.src(self.t.kid(recv_n, "NAME_REF")) == "parse" {
+diff --git a/crates/rs2nika/convert/src/tr_stmt.nika b/crates/rs2nika/convert/src/tr_stmt.nika
+index 7bd67021..4948a404 100644
+--- a/crates/rs2nika/convert/src/tr_stmt.nika
++++ b/crates/rs2nika/convert/src/tr_stmt.nika
+@@ -1286,36 +1286,50 @@ impl TrEm {
+                 lead.push(f"{inner}let {x} = {cs}[{i}]")
+             }
+         }
+-        // `for x in xs.iter_mut()` (also `.skip(k)`): an index, and `x` in
+-        // the body is the place `xs[i]` itself, so a change lands in the list
+-        let mut alias: String = ""
+-        let mut was: String? = null
++        // `for x in xs.iter_mut()` and `for x in &mut xs` over a list or an
++        // array: `for mut x in xs`, a view of each element, so a change
++        // lands in the list (ADR-views-2 D2). A map's values changed in
++        // place are not decided yet (section 6): the loop gets a TODO.
+         if head == "" {
+-            let mut from: String = "0"
+-            let mut mut_it = it
+-            if self.t.is(it, "METHOD_CALL_EXPR") && self.src(self.t.kid(it, "NAME_REF")) == "skip" {
+-                let recv = self.t.nth(it, 0)
+-                if self.t.is(recv, "METHOD_CALL_EXPR") && self.src(self.t.kid(recv, "NAME_REF")) == "iter_mut" {
+-                    from = self.args(it).join(", ")
+-                    mut_it = recv
++            let mut lent_mut = false
++            let mut raw = parts[1]
++            while self.t.is(raw, "PAREN_EXPR") {
++                raw = self.t.nth(raw, 0)
++            }
++            if self.t.is(raw, "REF_EXPR") && self.t.has_tok(raw, "MUT_KW") {
++                lent_mut = true
++            }
++            let mut xs_n = -1
++            let mut by_values = false
++            if self.t.is(it, "METHOD_CALL_EXPR") && self.nodes(self.t.kid(it, "ARG_LIST")).len() == 0 {
++                let m = self.src(self.t.kid(it, "NAME_REF"))
++                if m == "iter_mut" {
++                    xs_n = self.t.nth(it, 0)
++                } else if m == "values_mut" {
++                    xs_n = self.t.nth(it, 0)
++                    by_values = true
+                 }
+-            }
+-            if self.t.is(mut_it, "METHOD_CALL_EXPR") && self.src(self.t.kid(mut_it, "NAME_REF")) == "iter_mut" {
+-                let xs = self.expr(self.t.nth(mut_it, 0))
+-                let i = self.fresh("at")
+-                let x = self.pat(p)
+-                head = f"{ind}for {i} in {from}..<{xs}.len() {{"
+-                // keyed by the Rust name, which `path_expr` looks up (`view`
+-                // is written `view_`)
+-                let raw = self.t.name_of(p)
+-                if self.t.is(p, "IDENT_PAT") && !self.binds(body_n, raw) {
+-                    alias = raw.clone()
+-                    was = self.aliases[raw]?.clone()
+-                    self.aliases.insert(raw.clone(), f"{xs}[{i}]")
+-                } else {
++            } else if lent_mut {
++                xs_n = it
++            }
++            if xs_n >= 0 {
++                let xs = self.expr(xs_n)
++                let held = self.held_kind(xs_n)
++                let is_map = by_values || held == "map" || (held == "" && self.t.is(p, "TUPLE_PAT"))
++                if is_map {
+                     self.todos += 1
+-                    lead.push(f"{inner}let {x} = {xs}[{i}] // TODO(rs2nika): `iter_mut`: write the change back, `{xs}[{i}] = ..`")
++                    let walked = if by_values { f"{xs}.values()" } else { xs.clone() }
++                    out.push(f"{ind}// TODO(rs2nika): a map's values changed in place are not decided yet (ADR-views-2 section 6, NK1307): change `{xs}[k]` in a loop over keys taken before it")
++                    head = f"{ind}for {self.pat(p)} in {walked} {{"
++                } else {
++                    head = f"{ind}for mut {self.pat(p)} in {xs} {{"
+                 }
++            } else if self.t.is(p, "IDENT_PAT") && self.t.has_tok(p, "MUT_KW") {
++                // an owned element is the loop's own (ADR-views-2 D3): a
++                // list Rust consumes is drained
++                let place = self.t.is(it, "PATH_EXPR") || self.t.is(it, "FIELD_EXPR")
++                let walked = if place { f"{self.expr(it)}.drain()" } else { self.expr(it) }
++                head = f"{ind}for mut {self.pat(p)} in {walked} {{"
+             } else {
+                 head = f"{ind}for {self.pat(p)} in {self.expr(it)} {{"
+             }
+@@ -1332,20 +1346,46 @@ impl TrEm {
+         for l in self.block(body_n, inner, "stmt") {
+             out.push(l)
+         }
+-        if alias != "" {
+-            match was {
+-                null => {
+-                    self.aliases.remove(alias)
+-                },
+-                w => {
+-                    self.aliases.insert(alias, w)
+-                },
+-            }
+-        }
+         out.push(f"{ind}}}")
+         return out
+     }
+ 
++    /// What the place `n` a `for` walks holds, by the type its declaration
++    /// writes (a parameter or a typed `let` of the function, a field of a
++    /// struct of the file): "map", "list", or "" when unknown.
++    fn held_kind(ref mut self, n: i64) -> String {
++        let mut ty: String = ""
++        if self.t.is(n, "FIELD_EXPR") {
++            ty = self.field_ty("", self.src(self.t.kid(n, "NAME_REF")))
++        } else if self.t.is(n, "PATH_EXPR") {
++            ty = self.declared_ty(self.t.up(n, "FN"), self.src(n))
++        }
++        if ty == "" {
++            return ""
++        }
++        return if ty.contains("Map") { "map" } else { "list" }
++    }
++
++    /// The type text of the parameter or typed `let` named `name` inside `n`, or "".
++    fn declared_ty(ref self, n: i64, name: ref String) -> String {
++        if n < 0 {
++            return ""
++        }
++        if self.t.is(n, "PARAM") || self.t.is(n, "LET_STMT") {
++            let ns = self.nodes(n)
++            if ns.len() >= 2 && self.t.is(ns[0], "IDENT_PAT") && self.t.name_of(ns[0]) == name && self.t.kind(ns[1]).ends_with("_TYPE") {
++                return self.src(ns[1])
++            }
++        }
++        for k in self.nodes(n) {
++            let d = self.declared_ty(k, name)
++            if d != "" {
++                return d
++            }
++        }
++        return ""
++    }
++
+     fn while_expr(ref mut self, n: i64, ind: String) -> Vec[String] {
+         let parts = self.loop_parts(n)
+         let cond = parts[0]
+diff --git a/crates/rs2nika/convert/tests/corpus.stdout b/crates/rs2nika/convert/tests/corpus.stdout
+index 74cfceab..7549c666 100644
+--- a/crates/rs2nika/convert/tests/corpus.stdout
++++ b/crates/rs2nika/convert/tests/corpus.stdout
+@@ -1,6 +1,6 @@
+ attributes: kept 76 of 440 lines
+ defaults: kept 49 of 187 lines
+ function: kept 9 of 49 lines
+-program: kept 33 of 137 lines
++program: kept 32 of 137 lines
+ seeds: kept 53 of 115 lines
+-all: kept 220 of 928 lines
++all: kept 219 of 928 lines
+diff --git a/crates/rs2nika/convert/tests/drained.stdout b/crates/rs2nika/convert/tests/drained.stdout
+index 9abcce64..317e4032 100644
+--- a/crates/rs2nika/convert/tests/drained.stdout
++++ b/crates/rs2nika/convert/tests/drained.stdout
+@@ -1,10 +1,7 @@
+ pub fn as_functions(mut items: Vec[Spanned[Item]]) sync {
+-    let mut kept: Vec[Spanned[Item]] = []
+-    for item in items.drain() {
+-        let (name, body) = match item.node { Item::Test { name, body } => (name, body), else => { kept.push(item); continue } }
+-        let node = Item::Fn { name: name.clone(), body: body.clone() }
+-        kept.push(Spanned { node: node, span: item.span, doc: item.doc, attributes: item.attributes })
++    for mut item in items {
++        let (name, body) = match item.node { Item::Test { name, body } => (name, body), else => continue }
++        item.node = Item::Fn { name: name.clone(), body: body.clone() }
+     }
+-    items.extend(kept)
+ }
+ 
+diff --git a/crates/rs2nika/convert/tests/filter_mut_loop.stdout b/crates/rs2nika/convert/tests/filter_mut_loop.stdout
+index 3e667129..a5282271 100644
+--- a/crates/rs2nika/convert/tests/filter_mut_loop.stdout
++++ b/crates/rs2nika/convert/tests/filter_mut_loop.stdout
+@@ -2,18 +2,18 @@ pub fn soften(mut findings: Vec[Finding], on: String) {
+     if on != "warn" {
+         return
+     }
+-    for i in 0..<findings.len() {
+-        if findings[i].code != "NK1207" {
++    for mut finding in findings {
++        if finding.code != "NK1207" {
+             continue
+         }
+-        findings[i].severity = Severity::Warning
+-        findings[i].notes.push("softened")
++        finding.severity = Severity::Warning
++        finding.notes.push("softened")
+     }
+-    for i in 0..<state.items.len() {
+-        if !(state.items[i].on && state.items[i].code != "x") {
++    for mut item in state.items {
++        if !(item.on && item.code != "x") {
+             continue
+         }
+-        state.items[i].count += 1
++        item.count += 1
+     }
+     for (a, b) in pairs.iter_mut().filter(fn(p) { p.0 == 1 }) {
+         a.push(b)
+diff --git a/crates/rs2nika/convert/tests/tree_places.stdout b/crates/rs2nika/convert/tests/tree_places.stdout
+index 144fb3a9..a6ae4cff 100644
+--- a/crates/rs2nika/convert/tests/tree_places.stdout
++++ b/crates/rs2nika/convert/tests/tree_places.stdout
+@@ -17,8 +17,8 @@ pub fn t_count(names: ref Vec[String]) -> Tally {
+ }
+ 
+ pub fn t_grow(mut views: Vec[Tally], from: i64) {
+-    for at_1 in from..<views.len() {
+-        views[at_1].total += 1
++    for view_ in views.iter_mut() /* TODO(rs2nika): `iter_mut` outside a `for` over the list itself (an adapter, a map): not decided yet (ADR-views-2 section 6); `for mut x in xs` walks a list in place */.skip(from) {
++        view_.total += 1
+     }
+ }
+ 
+diff --git a/crates/rs2nika/convert/tests/tree_shapes.stdout b/crates/rs2nika/convert/tests/tree_shapes.stdout
+index 3d41439e..29f8285a 100644
+--- a/crates/rs2nika/convert/tests/tree_shapes.stdout
++++ b/crates/rs2nika/convert/tests/tree_shapes.stdout
+@@ -104,8 +104,8 @@ impl Bag {
+ }
+ 
+ pub fn shout(mut v: Vec[String]) {
+-    for at_1 in 0..<v.len() {
+-        v[at_1] = v[at_1].to_uppercase()
++    for mut s in v {
++        s = s.to_uppercase()
+     }
+ }
+ pub fn match_jumps(xs: ref Vec[Item]) -> Vec[String] {
