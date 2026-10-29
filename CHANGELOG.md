@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1296] — 2026-10-29
+
+**An assignment or compound assignment to a `let mut` view (`c = v`, `c += 1`) writes through it, and an entry view of a number, `bool` or `char` reads as the value; before, it was `NK1105` or rustc's E0368 (#976). The text an `or_insert_with` lambda ends in is built as the map's value type; before, rustc reported mismatched types (#977).**
+
 ## [0.0.1295] — 2026-10-29
 
 **`let mut x = m.entry(k).or_insert(v)` (or `or_insert_with`) binds the `&mut` that Rust hands back, and lowers with no `mut` (#974). A `let mut` view (an entry's `or_insert`, `m[k] ?? jump`, `m.get(k) ?? jump`, `v[i]`) passed to a `mut` parameter is lent on as `&mut *x`; before, it was `NK1102` or rustc's E0596 (#975).**
