@@ -1,0 +1,41 @@
+// #969: an owned text a call returns, handed whole through an `if` or a
+// `match` arm beside a literal arm, is moved, not viewed: `ps.push(if c { "_" }
+// else { written })` lowers both arms to `String`, as `ps.push(written)` does.
+
+struct Tree { names: Vec[String] }
+
+impl Tree {
+    fn pat(ref self, n: i64) -> String {
+        return f"{self.names[n]}"
+    }
+
+    fn written(ref mut self) -> String {
+        let mut ps: Vec[String] = []
+        for p in [0, 1] {
+            let written = self.pat(p)
+            ps.push(if written == "()" { "_" } else { written })
+        }
+        return ps.join(", ")
+    }
+}
+
+fn pat(n: i64) -> String {
+    return f"{n}"
+}
+
+fn main() {
+    let written = pat(1)
+    let w = if written == "0" { "_" } else { written }
+    println(w)
+    let mut ps: Vec[String] = []
+    let a = pat(0)
+    ps.push(if a == "0" { "_" } else { a })
+    let b = pat(2)
+    ps.push(match b == "0" {
+        true => "_",
+        false => b,
+    })
+    println(ps.join(", "))
+    let mut t = Tree { names: ["()", "x"] }
+    println(t.written())
+}

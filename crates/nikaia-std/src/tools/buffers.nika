@@ -1207,10 +1207,7 @@ fn put_by_method(root: ref String, method: ref String, args: ref Vec[Expr], ask:
     }
     let mut all: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     for k in 0..<args.len() {
-        let mut of: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
-        if !is_the_buffer(args[k], ask, walk) {
-            of = origins_of(args[k], ask, holes_of, unaliased, walk)
-        }
+        let of = moved_origins(args[k], ask, holes_of, unaliased, walk)
         put_into(root, k, of, walk)
         let named = struct_of(args[k], ask, walk)
         if named != null {
@@ -1219,6 +1216,56 @@ fn put_by_method(root: ref String, method: ref String, args: ref Vec[Expr], ask:
         all.extend(of.clone())
     }
     flow_into(root, all, walk)
+}
+
+// **The origins of a value handed over whole** (#969): none where it is the
+// buffer itself, and through an `if`, a `match` or a block, those of each arm
+// that is not: `xs.push(if c { "_" } else { written })` moves `written`, as
+// `xs.push(written)` does, and views nothing of this frame.
+fn moved_origins(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) -> collections::BTreeSet[(i64, String)] {
+    let none: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
+    if is_the_buffer(expr, ask, walk) {
+        return none
+    }
+    return match expr {
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            origins_of(cond, ask, holes_of, unaliased, walk)
+            let mut out = moved_tail_origins(then_branch, ask, holes_of, unaliased, walk)
+            if else_branch != null {
+                add_all(moved_tail_origins(else_branch ?? return out, ask, holes_of, unaliased, walk), out)
+            }
+            out
+        }
+        Expr::Match { value, arms, .. } => {
+            origins_of(value, ask, holes_of, unaliased, walk)
+            let mut out: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
+            for arm in arms {
+                add_all(moved_origins(arm.body, ask, holes_of, unaliased, walk), out)
+            }
+            out
+        }
+        Expr::Block(block, _) => moved_tail_origins(block, ask, holes_of, unaliased, walk),
+        else => origins_of(expr, ask, holes_of, unaliased, walk),
+    }
+}
+
+// `tail_origins` for a value handed over whole: `moved_origins` of the tail.
+fn moved_tail_origins(block: ref Block, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) -> collections::BTreeSet[(i64, String)] {
+    let none: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
+    if block.stmts.len() == 0 {
+        return none
+    }
+    let last = block.stmts[block.stmts.len() - 1]
+    return match last.node {
+        Stmt::Expr(value) => {
+            let outer = walk.statement
+            walk.statement = last.span.start as i64
+            let origins = moved_origins(value, ask, holes_of, unaliased, walk)
+            walk.statement = outer
+            origins
+        }
+        else => none,
+    }
 }
 
 fn by_arg_of(puts: ref PutsAt?) -> collections::BTreeMap[i64, collections::BTreeSet[(i64, String)]] {

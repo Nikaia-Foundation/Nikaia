@@ -914,14 +914,52 @@ pub(crate) fn put_by_method(root: &str, method: &str, args: &[Expr], ask: &Buffe
     if !keeps_what_it_is_given(method) { return; }
     let mut all: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     for k in 0..args.len() as i64 {
-        let mut of: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
-        if !is_the_buffer(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, &walk) { of = origins_of(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, holes_of, unaliased, walk); }
+        let of = moved_origins(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, holes_of, unaliased, walk);
         put_into(root, k, &of, walk);
         let named = struct_of(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, &walk);
         if named.is_some() { walk.struct_puts.insert(root.to_string(), nikaia_std::index::or(named, || "".into())); }
         all.extend(of.iter().cloned());
     }
     flow_into(root, &all, walk);
+}
+
+pub(crate) fn moved_origins(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+    let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
+    if is_the_buffer(expr, ask, &walk) { return none; }
+    match expr {
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            origins_of(cond, ask, holes_of, unaliased, walk);
+            let mut out = moved_tail_origins(then_branch, ask, holes_of, unaliased, walk);
+            if else_branch.is_some() { add_all(&moved_tail_origins(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out }, ask, holes_of, unaliased, walk), &mut out); }
+            out
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            origins_of(value, ask, holes_of, unaliased, walk);
+            let mut out: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
+            for arm in arms.iter() { add_all(&moved_origins(&arm.body, ask, holes_of, unaliased, walk), &mut out); }
+            out
+        },
+        Expr::Block(block, _) => moved_tail_origins(block, ask, holes_of, unaliased, walk),
+        _ => origins_of(expr, ask, holes_of, unaliased, walk),
+    }
+}
+
+pub(crate) fn moved_tail_origins(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+    let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
+    if block.stmts.is_empty() { return none; }
+    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+    match &last.node {
+        Stmt::Expr(value) => {
+            let outer = walk.statement;
+            walk.statement = last.span.start as i64;
+            let origins = moved_origins(value, ask, holes_of, unaliased, walk);
+            walk.statement = outer;
+            origins
+        },
+        _ => none,
+    }
 }
 
 pub(crate) fn by_arg_of(puts: Option<&PutsAt>) -> collections::BTreeMap<i64, collections::BTreeSet<(i64, String)>> {
