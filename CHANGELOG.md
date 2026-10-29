@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1275] — 2026-10-29
+
+**A constructor that moves its text parameter into a view field lends it; a struct or enum result viewing a local takes the caller's keep (#945, #942 steps 2 and 5; ADR-353 D8, D10).**
+- A constructor (`fn new`, `pub fn(..)` or a named method) whose result points into its text parameter writes that parameter with the struct's lifetime and takes a lent argument: `Parser(text)` over a parameter works (Fixes #945).
+- A struct or enum result viewing text the callee made takes the caller's keep instead of owning the field (D10). Not yet: tuple, list and variant literals for D8.
+- A jumping `??` left of a comparison (`(a ?? return false) == "x"`) keeps its parentheses in the lowering.
+
 ## [0.0.1274] — 2026-10-29
 
 **ADR-353 D8-D10, decided (#942, #945): a text moved into a struct, variant, tuple or list while a view of it lives is kept, not copied.**
