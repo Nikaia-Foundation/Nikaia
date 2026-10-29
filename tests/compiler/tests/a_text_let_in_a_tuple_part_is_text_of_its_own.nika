@@ -1,0 +1,20 @@
+// #956: a name bound to text literals (one, or an `if` of two), a part of a
+// tuple put into or looked up in a list or a set of `(i64, String)`, is text
+// of its own there.
+use std::collections
+
+fn main() {
+    let mut set: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
+    set.insert((1, "lhs"))
+    let c = true
+    let other = if c { "rhs" } else { "lhs" }
+    let removed = set.remove((1, other))
+    println(f"{removed}")
+    let back = if c { "lhs" } else { "rhs" }
+    println(f"{set.contains((1, back))}")
+    let one = "q"
+    let mut v: Vec[(i64, String)] = []
+    v.push((2, one.clone()))
+    set.insert((3, one))
+    println(f"{v.len()} {set.len()}")
+}
