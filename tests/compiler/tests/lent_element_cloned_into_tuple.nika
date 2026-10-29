@@ -1,0 +1,11 @@
+// The element copied into the tuple part runs (#909).
+fn main() {
+    let mut names: Vec[String] = []
+    names.push(f"a{1}")
+    let mut files: Vec[(String, i64)] = []
+    for name in names {
+        files.push((name.clone(), 1))
+        files.push(("b", 2))
+    }
+    println(f"{files.len()} {files[0].0} {files[1].0}")
+}

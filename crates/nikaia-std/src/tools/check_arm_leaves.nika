@@ -653,6 +653,41 @@ impl CheckState {
     }
 }
 
+impl CheckState {
+    /// **A view moved into a part of a tuple the receiver keeps** (#909):
+    /// `files.push((name, 1))` with `name` an element the `for` lends
+    /// (ADR-094 D4), into a `Vec[(String, i64)]`. A tuple literal's parts are
+    /// checked against the wanted tuple's, as a struct literal's fields are,
+    /// with the place's code (`NK1102`). A text literal part is built where
+    /// it is kept (ADR-282 D4).
+    fn a_view_kept_in_a_tuple_part(ref mut self, world: ref CheckWorld, key: ref String, name: ref String, value: ref Expr, found: ref Ty, want: ref Ty, span: ref Span) -> bool sync {
+        let given: Vec[Expr] = match value {
+            Expr::Tuple(parts, _) => parts.clone(),
+            else => return false,
+        }
+        let found_parts: Vec[Ty] = match found {
+            Ty::Tuple(parts) => parts.clone(),
+            else => return false,
+        }
+        let wanted: Vec[Ty] = match want {
+            Ty::Tuple(parts) => parts.clone(),
+            else => return false,
+        }
+        if given.len() != found_parts.len() || given.len() != wanted.len() {
+            return false
+        }
+        for (k, part) in found_parts.iter().enumerate() {
+            let whole = wanted[k].clone()
+            if a_text_literal_expr(given[k]) || !(views_into_text(part, whole) || self.a_view_of_what_does_not_copy(world, part, whole)) {
+                continue
+            }
+            self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{name}` to be `{want.text()}` here, but part {k} of the tuple is `{part.text()}`.", [f"This is a view: it points into a `{whole.text()}` that something else owns.", f"`{key}` keeps its `{name}` after the call returns, so its tuple needs a `{whole.text()}` of its own."], "Write `.clone()` to copy it here."))
+            return true
+        }
+        return false
+    }
+}
+
 fn a_type_variable(ty: ref Ty) -> bool sync {
     return match ty {
         Ty::Var { .. } => true,
@@ -687,6 +722,9 @@ impl CheckState {
             let found_here = found[i].clone()
             if generic && kept && self.a_view_of_what_does_not_copy(world, found_here, want) {
                 self.a_view_kept_whole(key, name, found_here, want, span)
+                continue
+            }
+            if generic && kept && i < given.len() && self.a_view_kept_in_a_tuple_part(world, key, name, given[i], found_here, want, span) {
                 continue
             }
             if !generic || !kept || !views_into_text(found_here, want) {

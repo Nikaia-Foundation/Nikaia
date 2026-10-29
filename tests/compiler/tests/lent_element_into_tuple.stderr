@@ -1,0 +1,10 @@
+error[NK1102]: `Vec::push` expects `value` to be `(String, i64)` here, but part 0 of the tuple is `ref String`.
+  --> tests/lent_element_into_tuple.nika:8:9
+   |
+ 8 |         files.push((name, 1))
+   |         ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: This is a view: it points into a `String` that something else owns.
+   = note: `Vec::push` keeps its `value` after the call returns, so its tuple needs a `String` of its own.
+   = help: Write `.clone()` to copy it here.
+1 type error

@@ -1,0 +1,11 @@
+// A `for` over an owned list lends its elements (ADR-094 D4): one moved
+// into a part of a tuple the list keeps is refused as a push of it is (#909).
+fn main() {
+    let mut names: Vec[String] = []
+    names.push(f"a{1}")
+    let mut files: Vec[(String, i64)] = []
+    for name in names {
+        files.push((name, 1))
+    }
+    print(files.len())
+}

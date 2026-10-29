@@ -432,6 +432,34 @@ impl CheckState {
     }
 }
 
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn a_view_kept_in_a_tuple_part(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, name: &str, value: &Expr, found: &Ty, want: &Ty, span: &Span) -> bool {
+        let given: Vec<Expr> = match value {
+            Expr::Tuple(parts, _) => parts.to_owned(),
+            _ => return false,
+        };
+        let found_parts: Vec<Ty> = match found {
+            Ty::Tuple(parts) => parts.to_owned(),
+            _ => return false,
+        };
+        let wanted: Vec<Ty> = match want {
+            Ty::Tuple(parts) => parts.to_owned(),
+            _ => return false,
+        };
+        if (given.len() as i64) != found_parts.len() as i64 || (given.len() as i64) != wanted.len() as i64 { return false; }
+        for (k, part) in found_parts.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+            let whole = (*nikaia_std::index::get(&wanted, nikaia_std::index::at(k))).clone();
+            if a_text_literal_expr(nikaia_std::index::get(&given, nikaia_std::index::at(k))) || !(views_into_text(part, &whole) || self.a_view_of_what_does_not_copy(world, part, &whole)) { continue; }
+            self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be `{}` here, but part {} of the tuple is `{}`.", key, name, want.text(), k, part.text()), vec![format!("This is a view: it points into a `{}` that something else owns.", whole.text()), format!("`{}` keeps its `{}` after the call returns, so its tuple needs a `{}` of its own.", key, name, whole.text())], Some(String::from("Write `.clone()` to copy it here."))));
+            return true;
+        }
+        false
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn a_type_variable(ty: &Ty) -> bool { matches!(ty, Ty::Var { .. }) }
@@ -460,6 +488,7 @@ impl CheckState {
                 self.a_view_kept_whole(key, &name, &found_here, &want, span);
                 continue;
             }
+            if generic && kept && i < given.len() as i64 && self.a_view_kept_in_a_tuple_part(world, key, &name, nikaia_std::index::get(&given, nikaia_std::index::at(i)), &found_here, &want, span) { continue; }
             if !generic || !kept || !views_into_text(&found_here, &want) { continue; }
             let mut ty = found_here.clone();
             if i < given.len() as i64 { ty = nikaia_std::index::or(self.text_literal(world, &want, nikaia_std::index::get(&given, nikaia_std::index::at(i)), true), || found_here.clone().into()); }
