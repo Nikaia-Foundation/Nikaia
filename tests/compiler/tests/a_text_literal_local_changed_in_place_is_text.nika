@@ -1,0 +1,30 @@
+// #943: a `String?` written anywhere in the program (here a field, a
+// parameter and a result) does not make a literal bound with `let` a `String?`.
+struct Holder {
+    note: String?,
+}
+
+fn maybe(flag: bool) -> String? {
+    if flag {
+        return "yes"
+    }
+    return null
+}
+
+fn join_a(extra: String?) -> String {
+    return extra ?? "-"
+}
+
+pub fn modules_probe_a() -> String {
+    let mut out = "a"
+    out.push_str("b")
+    return out
+}
+
+fn main() {
+    println(modules_probe_a())
+    println(maybe(true) ?? "no")
+    println(join_a(null))
+    let h = Holder { note: null }
+    println(h.note ?? "none")
+}

@@ -289,11 +289,11 @@ pub(crate) fn fn_published(key: &str, declared: &TextDeclared) -> bool {
 }
 
 pub(crate) fn string_type(declared: &TextDeclared, names: &winnow_grammar::InternerContext) -> Option<Type> {
-    for (_, field) in declared.fields.iter() { if plain_string(names, &field.ty) { return Some(field.ty.clone()); } }
+    for (_, field) in declared.fields.iter() { if plain_string(names, &field.ty) && !field.ty.is_nullable { return Some(field.ty.clone()); } }
     for (_, function) in declared.fns.iter() {
-        for param in function.params.iter() { if plain_string(names, param) { return Some(param.clone()); } }
+        for param in function.params.iter() { if plain_string(names, param) && !param.is_nullable { return Some(param.clone()); } }
         let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if plain_string(names, result) { return Some(result.clone()); }
+        if plain_string(names, result) && !result.is_nullable { return Some(result.clone()); }
     }
     None
 }

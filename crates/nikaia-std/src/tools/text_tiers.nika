@@ -404,21 +404,22 @@ fn fn_published(key: ref String, declared: ref TextDeclared) -> bool {
     return found.published
 }
 
-/// A written `String`, to declare a binding with.
+/// A written `String`, to declare a binding with: not a `String?`, which a
+/// binding of a literal would then become (#943).
 fn string_type(declared: ref TextDeclared, names: ref winnow_grammar::InternerContext) -> Type? {
     for (_, field) in declared.fields {
-        if plain_string(names, field.ty) {
+        if plain_string(names, field.ty) && !field.ty.is_nullable {
             return field.ty.clone()
         }
     }
     for (_, function) in declared.fns {
         for param in function.params {
-            if plain_string(names, param) {
+            if plain_string(names, param) && !param.is_nullable {
                 return param.clone()
             }
         }
         let result = function.result ?? continue
-        if plain_string(names, result) {
+        if plain_string(names, result) && !result.is_nullable {
             return result.clone()
         }
     }
