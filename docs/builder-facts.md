@@ -126,7 +126,7 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * collections: [works] a `BTreeMap` has `.iter()` (`m.iter().filter_map(..)`)
     and `for (k, v) in m`; [works: ADR-293 D20] `a.iter().zip(b.iter())`;
     [works: ADR-282 D7, #816] in-place change of a map's value is
-    `let mut c = m[k] ?? continue` (the `m.get(k)` spelling: [defect #952]);
+    `let mut c = m[k] ?? continue` (or `m.get(k) ?? continue`, the same `get_mut` since 0.0.1277, #952);
     [gap #950] a `BTreeSet` has no `extend`, a `BTreeMap` no `entry`
     (`HashMap::entry` works); [gap #949] no `mem::take`, and no part taken out
     of a `let mut` view (NK1131); [design: Part I 2.6] a text is cut only at a

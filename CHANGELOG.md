@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1277] — 2026-10-29
+
+**`let mut x = m.get(k) ?? <jump>` over a `mut` map or list is a mutable view of the entry, as `m[k]` is (`get_mut`), instead of Rust code rustc refused (Fixes #952).**
+- `Vec`, `BTreeMap` and `HashMap` of `std`; a copied value (a number, `bool`, `char`, a package's copy type) stays a copy; an immutable receiver is NK1139, as for `m[k]`.
+
 ## [0.0.1276] — 2026-10-29
 
 **A text a live view still reads can be moved into a struct, tuple, list or variant literal (ADR-353 D8-D10, Fixes #942).**
