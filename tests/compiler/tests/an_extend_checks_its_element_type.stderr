@@ -1,0 +1,8 @@
+error[NK1102]: `Vec::extend` expects elements of `i64` here, but you're passing elements of `String`.
+  --> tests/an_extend_checks_its_element_type.nika:3:14
+   |
+ 3 |     v.extend(["a"])
+   |              ^^^^^
+   |
+   = help: Make it an `i64`, or change the declaration to `String`.
+1 type error

@@ -553,6 +553,28 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], span: &Span) {
+    if !(key == "Vec::extend" || key == "collections::HashSet::extend" || key == "collections::BTreeSet::extend") || args.len() != 1 || found.len() != 1 { return; }
+    let want: Ty = unviewed_type(&nikaia_std::index::or(match bound.get("T") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown));
+    let walked: Ty = unviewed_type(&element_walked(nikaia_std::index::get(&found, 0), 1));
+    let have: Ty = if walked.text() == "str" { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { walked };
+    let numbers = match have {
+        Ty::Named { ref name, .. } => a_number_name(name),
+        _ => false,
+    } && match want {
+        Ty::Named { ref name, .. } => a_number_name(name),
+        _ => false,
+    };
+    if numbers || have.fits(&want) { return; }
+    let at = check_span_at(world, nikaia_std::index::get(&args, 0), span);
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects elements of `{}` here, but you're passing elements of `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, key: &str, contract: &FnContract, span: &Span) -> Ty {
     let node = id_of(receiver) as i64;
@@ -743,6 +765,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     }
     state.a_view_kept_where_the_receiver_says_text(world, key, contract, args, &found, &expected, span);
     check_core_call_on_given(state, world, host, key, args, &found, &expected, span);
+    check_core_call_on_extended(state, world, key, &bound, args, &found, span);
     state.a_pattern_of_owned_text(key, args, &found, span);
     for (name, ty) in argument_bindings(contract, &found) { if !bound.contains_key(&name) { bound.insert(name.to_string(), ty.clone()); } }
     state.a_bound_the_argument_does_not_meet(world, key, &bound, span);

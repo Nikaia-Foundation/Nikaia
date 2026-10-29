@@ -708,6 +708,32 @@ fn check_core_call_on_given[H: CheckHost](mut state: CheckState, world: ref Chec
     }
 }
 
+/// **`extend` takes elements of the receiver's type** (ADR-collections-1 D3,
+/// #963): the ledger cannot say "a list, a set or a sequence of `T`" in one
+/// parameter type, so `items` is `?` there and the element is compared here.
+/// Two numbers are left to the literal rules (an `[1, 2]` is not yet `u8`).
+fn check_core_call_on_extended(mut state: CheckState, world: ref CheckWorld, key: ref String, bound: ref collections::BTreeMap[String, Ty], args: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
+    if !(key == "Vec::extend" || key == "collections::HashSet::extend" || key == "collections::BTreeSet::extend") || args.len() != 1 || found.len() != 1 {
+        return
+    }
+    let want: Ty = unviewed_type(bound.get("T")?.clone() ?? Ty::Unknown)
+    let walked: Ty = unviewed_type(element_walked(found[0], 1))
+    // A text literal's element is a `str`; the program calls it `String`.
+    let have: Ty = if walked.text() == "str" { Ty::Named { name: "String", args: [], view: false } } else { walked }
+    let numbers = match have {
+        Ty::Named { name, .. } => a_number_name(name),
+        else => false,
+    } && match want {
+        Ty::Named { name, .. } => a_number_name(name),
+        else => false,
+    }
+    if numbers || have.fits(want) {
+        return
+    }
+    let at = check_span_at(world, args[0], span)
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects elements of `{want.text()}` here, but you're passing elements of `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })
+}
+
 /// **A method call the ledger describes**: reached, asked whether it changes,
 /// takes, walks, fails or pauses, its arguments walked against the
 /// signature the receiver binds, and typed.
@@ -969,6 +995,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     }
     state.a_view_kept_where_the_receiver_says_text(world, key, contract, args, found, expected, span)
     check_core_call_on_given(state, world, host, key, args, found, expected, span)
+    check_core_call_on_extended(state, world, key, bound, args, found, span)
     state.a_pattern_of_owned_text(key, args, found, span)
     // The receiver first (ADR-288), then whatever the arguments can still
     // say (ADR-295 D2).
