@@ -1,10 +1,12 @@
 # ADR-views-2: `mut` on a `for` Binding Means What It Means on a `let`: the Element of a Place Writes Through, an Owned Element Is the Loop's Own
 
 **Status:** Accepted
-**Date:** October 29, 2026 (owner's decision, option 4 of the second decision paper; #951)
+**Date:** October 29, 2026 (owner's decision, option 4 of the second decision paper; #951);
+narrowed the same day by the owner: `mut` in front of one name of a tuple
+pattern, and with it map values written in place, refused now, possible later (section 6)
 **Answers:** what `for mut x in xs` means, which today is a parser error
-(*`mut` is a reserved word*), and how a loop changes the elements of a list,
-an array or a map's values in place without an index loop (#951)
+(*`mut` is a reserved word*), and how a loop changes the elements of a list
+or an array in place without an index loop (#951)
 **Supersedes / Related:**
 [ADR-views-1](adr-views-1.md) D1-D4 (a `let mut` view of a place takes and gives back; applied here to each turn);
 [ADR-356](adr-356.md) (a `for` head is a `let`'s pattern);
@@ -66,19 +68,29 @@ shows in the program's later output, where Go's lost change shows nowhere.
 
 ## 4. Decision
 
-### D1 — A `for` head takes `mut`, where a `let` takes it and before a name in a tuple
+### D1 — A `for` head takes `mut` where a `let` takes it: in front of the whole head
 
 `mut` stands in front of the whole head, `for mut x in xs`,
-`for mut (a, b) in pairs`, or in front of one name inside a tuple pattern,
-`for (k, mut s) in m`, `for (name, (mut line, col)) in places`. The pattern is
-one grammar for `let` and `for` (ADR-356), so `let (tx, mut rx) = …` is
-accepted with the same meaning as `let mut` on that name alone. A `mut` on the
-whole head marks every name in it. The parser's *`mut` is a reserved word* goes.
+`for mut (a, b) in pairs`, as it stands in front of a `let`'s,
+`let mut (a, b) = …`, and marks every name in it. The parser's *`mut` is a
+reserved word* goes.
+
+`mut` in front of **one name inside a tuple pattern** - `let (tx, mut rx) = …`,
+`for (k, mut v) in m`, `for (name, (mut line, col)) in places` - is **refused
+now, and possible later** (owner, 2026-10-29; section 6). It is not refused
+on purpose: it is deferred to keep the pace. The grammar keeps the place:
+the parser reads the `mut` there (one pattern grammar for `let` and `for`,
+ADR-356) and the refusal is a diagnostic of its own, `NK1307` (Part III, to be
+reserved by the supervisor), labelled at the `mut`. Its message says the form
+is not supported yet; its help writes what works today: `mut` in front of the
+whole pattern (`let mut (tx, rx) = …`, `for mut (a, b) in pairs`), which marks
+every name. So no program that compiles today changes meaning when the form
+is added, and no new syntax is needed for it.
 
 ### D2 — Over a place, the element is a `let mut` view of it
 
 When the `for` walks a **place** - a name, a field or an index of a list
-(`Vec`), an `Array` or a map's values, held by something the function may
+(`Vec`) or an `Array`, held by something the function may
 change (a `let mut`, a `mut` parameter, a part of one) - a `mut` binding is a
 view of its element, and a change through it reaches the list. This holds for
 every element type, a number included: `for mut n in counts { n = n * 2 }`
@@ -94,14 +106,15 @@ produces owned values - a `mut` binding is a `let mut` of the element, as in
 
 ### D4 — A key and a set element are not changed: their own refusal
 
-`mut` on a map's key (`for (mut k, v) in m`, or `for mut (k, v) in m`, which
-marks the key) and on the element of a set (`for mut s in seen`) is refused
-with a new code (Part III, to be reserved by the supervisor; this record calls
-it `NK1306`), labelled at the `mut`. Its message says why: the key decides
+`mut` on a map's key (`for mut (k, v) in m`, which marks the key) and on the
+element of a set (`for mut s in seen`) is refused, on purpose, with `NK1306`
+(Part III), labelled at the `mut`. Its message says why: the key decides
 where the entry stands in the map (its order, or its hash), so a key changed in
-place would leave it standing in the wrong place. Its help: name the key
-without `mut` (`for (k, mut v) in m`), or take the entry out and insert it
-again after the loop. Rust has no `iter_mut` over a set for the same reason.
+place would leave it standing in the wrong place. Its help: take the entry out
+and insert it again after the loop; for a map's values, which a loop cannot
+change in place yet (section 6), change `m[k]` in a loop over keys taken
+before it. Rust has no `iter_mut` over a set for the same reason.
+(`for (mut k, v) in m` is `NK1307` first: one name of a tuple, D1.)
 
 ### D5 — Each turn is a view's block: ADR-views-1 holds per turn
 
@@ -123,33 +136,48 @@ form that would lift this.
 ### D7 — Below, it is `iter_mut()`; nothing is copied
 
 `for mut x in v` over a `Vec` or an `Array` lowers to `for x in v.iter_mut()`
-with `*x` at its uses; over a map, `for (k, mut v) in m` lowers to
-`m.iter_mut()`, and `for (_, mut v) in m` to `m.values_mut()`. An owned
+with `*x` at its uses. An owned
 source (D3) lowers to Rust's `for mut x in …`. No copy is inserted
 (ADR-282 D7), and no index or bounds check is written.
 
 ### D8 — `NK1139`'s help names `for mut`
 
-A change to a `for` binding without `mut` stays `NK1139`. Over a place its help
-writes `for mut x in xs` and says that the change reaches `xs`; for a change
+A change to a `for` binding without `mut` stays `NK1139`. Over a list or an array its
+help writes `for mut x in xs` and says that the change reaches `xs`; for a change
 meant for this turn only, `let mut y = x.clone()` (or `let mut y = x` for a
 value that copies).
 
 ## 5. Consequences
 
-* Part I 3.3 states D1-D4 and D6; Part I 6.5 states that a `for mut` element is
-  a `let mut` view of its place (D2, D5); Part III states `NK1139`'s new help
-  and the new code.
-* The parser (`for_stmt`, `tuple_pattern`), the checker (`check_core_stmt_for`,
+* Part I 3.3 states D1-D4 and D6, and that one `mut` name in a tuple is not
+  supported yet; Part I 6.5 states that a `for mut` element is
+  a `let mut` view of its place (D2, D5); Part III states `NK1139`'s new help,
+  `NK1306` and `NK1307`.
+* The parser (`for_stmt`; `tuple_pattern` reads a per-name `mut` only to
+  refuse it, `NK1307`), the checker (`check_core_stmt_for`,
   `view_changes.nika`), the lowering (`emit_stmt_for`) and the converter
-  (`rs2nika`: `for x in &mut v`, `v.iter_mut()`, `m.values_mut()` become
-  `for mut x in v`, `for (_, mut x) in m`) are built from #951's *To build*.
+  (`rs2nika`: `for x in &mut v`, `v.iter_mut()` become `for mut x in v`) are
+  built from #951's *To build*. A map's `iter_mut()` / `values_mut()` stays a
+  gap row until section 6's first point is built.
 * The index loops in `tools/*.nika` that only touch `v[i]` become `for mut`;
   `docs/selfhosting-gaps.md` and `docs/builder-facts.md` drop the gap when it is
   built.
 
 ## 6. What this does not decide
 
+* **`mut` in front of one name of a tuple pattern, open follow-up: refused now,
+  possible later** (owner, 2026-10-29). `let (tx, mut rx) = …`,
+  `for (k, mut v) in m`, `for (name, (mut line, col)) in places` are `NK1307`
+  until it is decided. Deferred to keep the pace, not refused on purpose: the
+  grammar keeps the place (D1), so adding it later breaks nothing. Its reading,
+  when it comes, is the one D1 first wrote: the same as `let mut` on that name
+  alone.
+* **Map values written in place, open follow-up, with the point above.**
+  `for (k, mut v) in m` (lowered `m.iter_mut()`) and `for (_, mut v) in m`
+  (`m.values_mut()`) need a `mut` on one name of the pair, since one on the
+  whole head marks the key (D4). No form without it is decided: `for mut v in
+  m.values()` would be a writable view through an adapter, the point below.
+  Until then a map's value is changed by key, `m[k]`, outside a loop over `m`.
 * **Option 5 of the paper, open follow-up**: lowering to an index loop where
   the body reads the list or changes another element, so that only a change of
   the list's length or order stays refused. Until it is decided, D6 holds.
