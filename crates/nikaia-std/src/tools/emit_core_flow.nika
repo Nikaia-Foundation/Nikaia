@@ -124,6 +124,44 @@ fn emit_flow_a_lit_str(node: ref Expr) -> bool {
     }
 }
 
+/// How a `??` lowers a tuple fallback beside a text split (#908):
+/// `split_once` and `rsplit_once` hand back `(&str, &str)` below. 0: not
+/// such a split; 1: every part is a literal or a place, lent as a view; 2:
+/// a part is owned text of its own, so both halves are made owned.
+fn emit_flow_split_fallback(world: ref EmitWorld, value: ref Expr, fallback: ref Expr) -> i64 {
+    let a_split = match value {
+        Expr::MethodCall { method, .. } => {
+            let name = emit_text(world, method)
+            name == "split_once" || name == "rsplit_once"
+        },
+        else => false,
+    }
+    if !a_split {
+        return 0
+    }
+    return match fallback {
+        Expr::Tuple(parts, _) => if parts.iter().all(fn(part) { emit_flow_a_lit_str(part) || emit_flow_a_place(emit_flow_cloned_place(world, part)) }) { 1 } else { 2 },
+        else => 0,
+    }
+}
+
+/// The place a `x.clone()` copies, or the expression itself.
+fn emit_flow_cloned_place(world: ref EmitWorld, node: ref Expr) -> ref Expr {
+    return match node {
+        Expr::MethodCall { receiver, method, args, .. } => if emit_text(world, method) == "clone" && args.len() == 0 && emit_flow_a_place(receiver) { receiver } else { node },
+        else => node,
+    }
+}
+
+/// A name or a field of a place.
+fn emit_flow_a_place(node: ref Expr) -> bool {
+    return match node {
+        Expr::Variable(_, _) => true,
+        Expr::Field { base, .. } => emit_flow_a_place(base),
+        else => false,
+    }
+}
+
 fn emit_flow_an_empty_list(node: ref Expr) -> bool {
     return match node {
         Expr::ListLit { items, .. } => items.len() == 0,
@@ -763,6 +801,13 @@ impl EmitState {
         if !bare && emit_flow_a_lit_str(fallback) && emit_flow_an_iterator_answer(world, value) {
             out.push(".map(|__nikaia_found| __nikaia_found.to_string())")
         }
+        // **A split's two views beside a fallback of text** (#908): a part
+        // that is a name, a field or its clone is lent as a view; any other
+        // owned part makes both halves owned.
+        let split = if bare { 0 } else { emit_flow_split_fallback(world, value, fallback) }
+        if split == 2 {
+            out.push(".map(|(__nikaia_head, __nikaia_tail)| (__nikaia_head.to_string(), __nikaia_tail.to_string()))")
+        }
         out.push(", || ")
         // **An empty list beside a view of a list** (#812): `&[][..]`, a slice
         // that lives forever, so `index::or` answers `&[T]`.
@@ -807,6 +852,12 @@ impl EmitState {
                             out.push(", ")
                         }
                         at += 1
+                        if split == 1 && !emit_flow_a_lit_str(part) {
+                            out.push("std::convert::AsRef::<str>::as_ref(&")
+                            self.emit_expr(world, walk, out, host, emit_flow_cloned_place(world, part), depth, flow, scope)
+                            out.push(")")
+                            continue
+                        }
                         let plain = a_number(part)
                         let wrapped = !plain && (emit_flow_operated(part) || self.ends_in_a_cast(world, part))
                         if wrapped {

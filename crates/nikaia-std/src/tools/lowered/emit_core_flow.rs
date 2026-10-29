@@ -80,6 +80,37 @@ pub(crate) fn emit_flow_struct_headed(node: &Expr) -> bool {
 
 pub(crate) fn emit_flow_a_lit_str(node: &Expr) -> bool { matches!(node, Expr::LitStr { .. }) }
 
+pub(crate) fn emit_flow_split_fallback(world: &EmitWorld<'_, '_, '_, '_>, value: &Expr, fallback: &Expr) -> i64 {
+    let a_split = match value {
+        Expr::MethodCall { method, .. } => {
+            let method = *method;
+            let name = emit_text(world, method);
+            name == "split_once" || name == "rsplit_once"
+        },
+        _ => false,
+    };
+    if !a_split { return 0; }
+    match fallback {
+        Expr::Tuple(parts, _) => if parts.iter().all(|part| { emit_flow_a_lit_str(part) || emit_flow_a_place(emit_flow_cloned_place(world, part)) }) { 1 } else { 2 },
+        _ => 0,
+    }
+}
+
+pub(crate) fn emit_flow_cloned_place<'r>(world: &EmitWorld<'_, '_, '_, '_>, node: &'r Expr) -> &'r Expr {
+    match node {
+        Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; if emit_text(world, method) == "clone" && args.is_empty() && emit_flow_a_place(receiver) { receiver } else { node } },
+        _ => node,
+    }
+}
+
+pub(crate) fn emit_flow_a_place(node: &Expr) -> bool {
+    match node {
+        Expr::Variable(_, _) => true,
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); emit_flow_a_place(base) },
+        _ => false,
+    }
+}
+
 pub(crate) fn emit_flow_an_empty_list(node: &Expr) -> bool {
     match node {
         Expr::ListLit { items, .. } => items.is_empty(),
@@ -500,6 +531,8 @@ impl EmitState {
             return Ok(());
         }
         if !bare && emit_flow_a_lit_str(fallback) && emit_flow_an_iterator_answer(world, value) { out.push(".map(|__nikaia_found| __nikaia_found.to_string())"); }
+        let split = if bare { 0 } else { emit_flow_split_fallback(world, value, fallback) };
+        if split == 2 { out.push(".map(|(__nikaia_head, __nikaia_tail)| (__nikaia_head.to_string(), __nikaia_tail.to_string()))"); }
         out.push(", || ");
         if self.facts.view_fallbacks.contains(&node_key(fallback)) && emit_flow_an_empty_list(fallback) {
             out.push("&[][..])");
@@ -531,6 +564,12 @@ impl EmitState {
                     for part in parts.iter() {
                         if at > 0 { out.push(", "); }
                         at += 1;
+                        if split == 1 && !emit_flow_a_lit_str(part) {
+                            out.push("std::convert::AsRef::<str>::as_ref(&");
+                            self.emit_expr(world, walk, out, host, emit_flow_cloned_place(world, part), depth, flow, scope)?;
+                            out.push(")");
+                            continue;
+                        }
                         let plain = a_number(part);
                         let wrapped = !plain && (emit_flow_operated(part) || self.ends_in_a_cast(world, part));
                         if wrapped { out.push("("); }

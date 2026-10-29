@@ -1,0 +1,25 @@
+// #908: a `??` fallback of owned text beside a `split_once` or
+// `rsplit_once`, whose halves are views below.
+
+fn first_line(rest: String) -> String {
+    let first = (rest.split_once("\n") ?? (rest.clone(), "")).0
+    return first.clone()
+}
+
+fn shout(s: String) -> String {
+    return s.to_uppercase()
+}
+
+fn main() {
+    let path: String = "a::b"
+    let last: String = (path.rsplit_once("::") ?? ("", path.clone())).1.clone()
+    println(last)
+    let name: String = "a_b"
+    let (_, tail) = name.rsplit_once("_") ?? ("", name)
+    println(tail)
+    println(first_line("x"))
+    println(first_line("y\nz"))
+    let word: String = "plain"
+    let (head, _) = word.split_once("=") ?? (shout(word.clone()), "")
+    println(head)
+}
