@@ -2231,6 +2231,33 @@ fn main() {
 }
 ```
 
+#### D. A Lambda That Runs at Most Once
+
+**A lambda handed to a parameter that runs it at most once may give away what
+it captures** ([ADR-lambdas-1](adr/adr-lambdas-1.md)). Inside any other lambda,
+handing a captured value to something that keeps it is refused (`NK2105`,
+6.5), because a second run would find it gone. A lambda that runs at most once
+has no second run: it may put a captured value into a field, a container or a
+kept argument, and after the call the value is gone, as a kept argument is,
+whether or not the lambda ran.
+
+```nika
+let t: Vec[i64] = [1]
+m.entry("k").or_insert_with fn { H { a: "x", t: t } }   // `t` moves into the new `H`
+// println(t.len())   // NK2105: `t` was handed over in the lambda above
+```
+
+In `std` these parameters are `Entry::or_insert_with`'s and
+`Entry::and_modify`'s lambda, `task::scope`'s body, and the block of
+`Locked::access` and `SharedMut::access`; the contract says so with `once`
+(Part III). `update` is not one: its block may run again (Part II 12.2). For a
+code parameter of user code the answer is **inferred**, as the context is (C):
+it is *once* when the body calls it at most once on every path and hands it on
+only to a parameter that is once. A call in a loop, a second call, or keeping
+it makes it *many*. Nothing is written in the source. Where `NK2105` refuses a
+hand-over inside a lambda, it names the parameter that may run it again, or
+the second call in the callee that made it *many*.
+
 ### 5.5. `main`'s Parameters Are the Command Line
 
 A program starts at `main`. `main` may take parameters; they are the words the
@@ -2762,7 +2789,8 @@ view handed to it is refused (`NK1102`), with `.clone()` as the way out.
 **A value used after it was handed over is refused** with `NK2105`: an argument
 kept, a key or a value written into a container, a field, an element, a `let`
 that renames it, an assignment, and, inside a loop or a lambda, the next turn's
-hand-over of what is already gone. A second use in the **same** statement is
+hand-over of what is already gone; a lambda that runs at most once has no next
+turn (5.4 D). A second use in the **same** statement is
 refused too. A **part** is tracked on its own: after `xs.push(p.name)`, `p.x`
 is still there and `p.name` and `p` are not. A part of something only lent is
 refused where it is handed over, with `NK2106`. A parameter whose part is

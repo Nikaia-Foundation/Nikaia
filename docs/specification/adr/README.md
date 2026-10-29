@@ -220,6 +220,7 @@ implementation.
 | [collections-2](adr-collections-2.md) | An array is read as a list is: `Array[T, N]` and its run have `iter()`, the sequence `Vec::iter()` is (`zip`, `map`, `filter`, `enumerate` follow); a `for` lends an array | Accepted | no |
 | [regex-1](adr-regex-1.md) | `std::regex` is RE2's dialect, linear in the text; a regular expression is `regex::Regex[E]`, typed by its engine (`Literal`, `OnePass`, `Dfa`, `TaggedDfa`, `BitNfa`, `FlatNfa`, `Dynamic`), `regex::Any` for a mix; `regex::compile(comptime p)` chooses the engine while building, `regex::dynamic(p)` compiles at run time on Rust's automata crates; tables lie in the binary as read; `std`'s calls take `comptime? self` and are specialised per known pattern; `--comptime` reports | Accepted | no |
 | [specialization-1](adr-specialization-1.md) | A parameter marked `comptime?` (also `self`) makes a copy of the function per build-time value a call gives it and leaves the function as written for the rest; `@unroll` before a `for` makes the loop variable a build-time value in every turn (`NK1304` where the list is not one), `@unroll(up_to: N)` up to `N` elements, the body checked both ways (`NK1305`); an `if` or `match` on a known value is decided while building; nothing asks whether a value is known; a result type may be computed from `comptime` parameters; `--comptime` reports | Accepted | no |
+| [lambdas-1](adr-lambdas-1.md) | A lambda handed to a parameter that runs it at most once may give away what it captures (no repeat for `NK2105`; gone after the call); `std.contracts` names such parameters with `once` (`or_insert_with`, `and_modify`, `task::scope`, both `access`; not `update`); for user code once-ness is inferred, written to the ledger and lowered as `impl FnOnce`, never written in the source | Accepted | no |
 | [catch-1](adr-catch-1.md) | A `catch` block whose first item is an arm is a `match` over `error`, under the same rules (patterns, a type by its name, completeness, fatal errors only by name); a block holds statements or arms, never both, so every `catch` written today keeps its meaning | Accepted | no |
 | [319](adr-319.md) | A file name is `fs::Path`, the platform's own bytes (Unix raw, Windows WTF-8, UTF-8 where names are Unicode): text stands wherever one is asked, an `f"…"` builds one where its use asks, `to_text()` fails only for a name the operating system handed over, `display()` shows `�` and is not tracked, and a `String` is always valid UTF-8. | Accepted | no |
 | [320](adr-320.md) | Text is UTF-8 and is read through a view that names its unit - `s.bytes`, `s.scalars`, `s.graphemes`; there is no `char` (`scalar` and `u8`), no `s.len()` and no `s[i]`; a position the text hands out cuts it; `find` from a position; `'…'` is a `u8` or a `scalar` by use; graphemes are `std`'s; `==` compares bytes; a `Bytes` reads a word in the order its name says (`u64_le`, `u32_be`), and never past the end: a program pads the end itself (D13). | Accepted | no (#453) |
@@ -342,7 +343,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 ## Topics in use
 
-`catch`, `collections`, `decision-records`, `regex`, `specialization`, `views`.
+`catch`, `collections`, `decision-records`, `lambdas`, `regex`, `specialization`, `views`.
 
 ## Reserved numbers
 

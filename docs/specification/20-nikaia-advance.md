@@ -911,7 +911,7 @@ A change to locked data has four shapes, and each has its own door. Only two of 
 * **`set` needs no block.** Arguments are evaluated before the call, so producing the new value, including waiting for I/O, happens outside, and the lock is open for one store. `get` is the same in the other direction: one load.
 * **`update` is handed the value as `mut v`, changes it, and returns nothing.** It is **where locked data changes**, small or large. What `v` is, is the compiler's decision, by the value's type and by what it meets. It may be a **copy** where the value fits a machine word: the block runs on the copy, the result is swapped in, and the block runs again if another task got there first — which is what a value that crosses a thread gets, unless an `access_all` or `update_all` holds it, since a retry cannot be held. It is the **address** in the lock otherwise, and the block runs once. A program cannot tell the two apart, and `--sharing` says which a value got. Nothing is moved out of the lock in either case. A block that hands a value back is refused with `NK1141`.
 * **`set` takes a witness where the new value came out of the lock.** `after:` makes the store compare, and store only if the lock still holds what was seen. `kasse.set(neu; after: stand)` **is** `kasse.update fn(mut v) { if v == stand { v = neu } else { throw Overtaken } }`, and like every `update` it takes the lock once. The comparison is of the whole value.
-* **`access` is for reading in place.** It hands the block the value where it lies, and the block **may not change it**.
+* **`access` is for reading in place.** It hands the block the value where it lies, and the block **may not change it**. The block runs **once**, so it may give away what it captures from outside (Part I 5.4 D).
 
 **Exactly one lambda in this language is handed something it may change**, and it carries `mut`, the word every changed parameter carries. A change to locked data is written in `update`.
 
@@ -1126,7 +1126,7 @@ At `user_parallelism = no`, `fold` is one sequential fold: one accumulator, ever
 
 A `spawn` task takes its captured variables *with* it (Part I 8.3). A **scoped** task *borrows* them, because the scope waits until every task inside it has finished.
 
-`task::scope` is an **immediate context** (Part I 5.4): it does not return until every task spawned inside it has completed. A task in it that panics cancels the others, and the scope throws `task::Crashed` where it ends. A task inside the scope therefore reads the function's variables without moving or cloning them.
+`task::scope` is an **immediate context** (Part I 5.4): it does not return until every task spawned inside it has completed. A task in it that panics cancels the others, and the scope throws `task::Crashed` where it ends. A task inside the scope therefore reads the function's variables without moving or cloning them. The scope runs its body once, so the body may give away a value it captures (Part I 5.4 D); a task spawned in it is kept, and moves what it captures.
 
 ```nika
 let data = [1, 2, 3]
