@@ -8,6 +8,33 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1270] — 2026-10-29
+
+**; A view result of two ref parameters is lowered with their lifetime (#655); ; rs2nika: `if let Some(x) = &self.f` becomes `if self.f != null` with `x` read as `self.f`; the `let` stays only where the block writes the field (ADR-382 D7); R48 leaves a non-name pattern with code before it to R23. Not yet: `else if let`, let-chains and `&& let` in one-line closures stay TODO. Field row of selfhosting-gaps removed, ADR-382 built (#869); A field read through an index or a call is not a path: its NK1102 says so (ADR-382 D4); Messages and Part I name `scalar`, not `char`, among the types that copy, hash and order (#874); A value with no text form handed to a print call is NK1201, as in an f-string hole (#873); A view handed to a parameter the callee only reads is lent as it is (#872); A binding in a condition is refused with words that name match (ADR-382 D6) (#878); ; buffers: a clone of a cut of a text copies text, so a String moved into it stays owned (Fixes #881); check, emit: a struct field at a `T?` position narrows after its `null` arm (#886); check: a plain value in a tuple literal at a T? part is wrapped (#887); check: a proved name bound whole by a `let` or assignment that owns it is given up (#888); match: a text literal in a tuple pattern; a literal is the same part (#890, #890); keeps: a part moved out by `??` keeps its parameter, a tuple part as a field (#891); check: a value moved in an arm of an `if` or `match` is handed over (NK2105) (#892); check: a proved arm bound at a `T?` let or assignment is given up (#893); emit: an `if`/`match` lent whole with view arms and arms that make a value (#894); to_string() of a String parameter is handed on as the parameter is; check: an owned local in an arm of a lent argument is lent, not moved (#897 step 2); check: a variant's or struct's list-of-text part an arm takes is owned; a drained part asks no mut (#905); **
+- An enum declared in another file of the package, or a library's, with payload variants is no longer taken for a word (false NK1257 on `let h: ref E = given[0]`).
+- A function with two `ref Vec[T]` parameters returning `ref T?` or `ref T` is lowered with one lifetime over both parameters instead of dying in rustc.
+- A `match` over `error` names a type by its bare name or path and is complete when it names every type that can arrive, without `else` (ADR-357 D1, D5).
+- A `null` test of `v[i].f` or `f().x` proves nothing, and NK1102 at a use says the read is not a path; `if let` and `is` bindings in a condition stay refused (ADR-382 D4, D6).
+- A `null` test of `v[i].f` or `f().x` proves nothing, and the NK1102 at a use says the read is not a path (ADR-382 D4).
+- NK2105, NK1260-adjacent `Eq`/`Ord` notes and the `[v; n]` note list `scalar`s, not `char`s; Part I 1695, 1902, 2384 likewise (Nikaia has no `char`).
+- `print`/`println`/`eprint`/`eprintln` of a value with no text form (a struct or enum of the program that is not an error, a list, map, set, range, tuple, SharedMut/Locked) is refused NK1201 before lowering, as `f"{x}"` already was; the help names the fields to print. Part I 2.5 says so; Part III NK1201 row extended.
+- A view (a `for` element of a borrowed list, `v[i]`, a `ref` binding) handed to an owned parameter the body only reads is lent as it is (ADR-094 D1) instead of refused NK1102; where the body keeps the parameter, NK1102 now says it is a view and the callee keeps it, and helps with `.clone()`. Part I 6.6 says so.
+- 0.0.1230
+- A `String` moved into another `String` variable beside a `(x.strip_prefix(..) ?? "").clone()` (trimmed or not) of it is lowered as a move; rustc refused it before (#880).
+- A `String` local moved into a variable that later takes `x[a..].clone()` of itself is lowered as a move; rustc refused it before (#881).
+- A struct field narrows after its `null` arm: in a `match`, `F { name, .. }` after `F { name: null, .. }` binds `name` as the `T`, as a tuple position does (ADR-352 D1, #886); fields of a plain struct pattern are now typed (they were unknown)
+- Fixed: a plain value in a tuple literal at a `T?` part (argument, `let`, `return`, nested tuple) is wrapped as `Some(..)`, as it is when passed to a `T?` parameter (#887).
+- A name proved not `null` and bound whole by a `let`, or assigned to a place that owns it, is the value itself, so `let s: String = if b != null { b } else { "none" }` compiles (#888).
+- a text literal at a String or String? position of a tuple pattern is matched against a view of that position (#890); a literal at a tuple position counts as the same part for narrowing (ADR-352 D1)
+- `??` on a part of a lent tuple parameter (`p.0 ?? ".."`) no longer fails in rustc
+- A value moved in an arm of an `if` or `match` is handed over: reading it after the statement is NK2105, as after `let s = t` (#892).
+- A proved name at an arm tail of a value bound by a `let` or an assignment at a `T?` place is given up and the choice wrapped in `Some(..)`, as `return` already did, instead of a borrowed `&T` that rustc refused (#893).
+- An `if` or a `match` handed to a lent parameter whose arms are a view and a value made in the arm now lowers to code that compiles: every arm is lent through the call.
+- A tuple matched with a list pattern at one of its positions now lowers that position as a slice, and `.to_string()` of a `String` parameter stored in a struct or a list hands the parameter on as the bare name does; both failed in rustc before.
+- An owned local named in an arm of an argument to a lent parameter is lent through the call and stays usable after it.
+- A variant's Vec[String] part taken in a match arm is owned - returned, handed on, drained or made the match's value, it is Vec[String] even where only literals built the variant (also a struct pattern's fields); a drained part no longer lowers to an unused let mut (#905).
+- The parser numbers the nodes of a file in a pass of its own, in input order and without gaps, right after the parse (ADR-383); ids no longer follow the order the grammar made the nodes in.
+
 ## [0.0.1269] — 2026-10-28
 
 **A list of text lent whole to a `ref Vec[String]` parameter keeps text of its own (ADR-282 D25)**
