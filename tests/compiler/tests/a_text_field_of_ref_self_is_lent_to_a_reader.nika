@@ -1,0 +1,22 @@
+// A text field of `ref self` handed to a function that only reads it is lent,
+// not given away (ADR-282 D2, ADR-094 D2, #936): `std`'s `starts_with` and a
+// function of the program's own.
+struct S {
+    pub p: String,
+}
+
+fn size(p: String) -> i64 { return p.len() as i64 }
+
+impl S {
+    fn has(ref self, n: ref String) -> bool {
+        return n.starts_with(self.p) && n.contains(self.p)
+    }
+
+    fn size(ref self) -> i64 { return size(self.p) }
+}
+
+fn main() {
+    let s = S { p: f"a{1}" }
+    let n: String = "a1c"
+    println(f"{s.has(n)} {n.contains(s.p)} {s.size()}")
+}

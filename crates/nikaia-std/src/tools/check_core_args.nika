@@ -23,6 +23,21 @@ fn check_core_args_runs(callee: ref FnContract?, at: i64) -> bool {
     return true
 }
 
+/// Whether the callee is known and keeps nothing of the argument at `at`
+/// (ADR-094 D2): it only reads it.
+fn check_core_args_reads(callee: ref FnContract?, at: i64) -> bool {
+    let contract = callee ?? return false
+    let signature = contract.signature ?? return false
+    let mut i = 0
+    for (name, _) in call_arguments(signature) {
+        if i == at {
+            return !contract.keeps.contains(name)
+        }
+        i += 1
+    }
+    return false
+}
+
 /// Whether `arg` is a lambda landing in a parameter of a function type.
 fn check_core_args_is_lambda(arg: ref Expr, expected: ref Vec[Ty], at: i64) -> bool {
     if at >= expected.len() as i64 {
@@ -141,7 +156,7 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
         }
     }
     if !lends {
-        check_core_a_field_of_a_borrowed_subject(state, world, host, arg, span, "passed")
+        check_core_a_field_of_a_borrowed_subject_given(state, world, host, arg, span, "passed", check_core_args_reads(callee, at))
         if at < expected.len() as i64 && !wants_fn && !expected[at].is_unknown() {
             check_core_a_lent_place_passed(state, world, host, arg, !check_core_args_runs(callee, at), span)
         }

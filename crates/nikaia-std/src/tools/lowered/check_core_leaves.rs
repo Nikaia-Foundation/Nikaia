@@ -13,11 +13,16 @@ pub(crate) fn check_core_field_of_self(world: &CheckWorld<'_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_a_field_of_a_borrowed_subject<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, what: &str) {
+pub fn check_core_a_field_of_a_borrowed_subject<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, what: &str) { check_core_a_field_of_a_borrowed_subject_given(state, world, host, value, span, what, false); }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_a_field_of_a_borrowed_subject_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, what: &str, read: bool) {
     if !state.borrowing_self { return; }
     let field = match check_core_field_of_self(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_unknown() || copies_plainly(&ty) { return; }
+    if read && is_text_type(&ty) { return; }
     let notes: Vec<String> = vec![format!("`ref self` borrows the value, and `{}` is a `{}`. Giving it away would take a piece out of something this method doesn't own.", field, ty.text())];
     let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `self` instead of `ref self` if the method is meant to use up its value.", field);
     if what == "handed back" { help = format!("Declare the result `ref {}` to return a view of it, write `self.{}.clone()` for a copy, or take `self` instead of `ref self` if the method is meant to use up its value.", ty.text(), field); }
@@ -487,14 +492,14 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         let want: Option<Ty> = Some(expected.clone());
         state.constant_fits(world, given, (want).as_ref(), span);
         if in_an_expression {
-            let how = check_widened_slot(state, world, host, &found, &expected, value, span);
+            let how = check_widened_slot(state, world, host, &found, &expected, std::convert::identity(value), span);
             if how.is_some() {
                 let wrap = match how { Some(__nikaia_value) => __nikaia_value, None => return };
                 state.facts.wrapped.insert(id_of(given) as i64, wrap);
             }
         } else {
             state.a_map_read_kept(world, &found, &expected, given, span);
-            let how = check_widened_slot(state, world, host, &found, &expected, value, span);
+            let how = check_widened_slot(state, world, host, &found, &expected, std::convert::identity(value), span);
             if how.is_some() {
                 let wrap = match how { Some(__nikaia_value) => __nikaia_value, None => return };
                 state.facts.nullable_sites.insert(span.start as i64, wrap);

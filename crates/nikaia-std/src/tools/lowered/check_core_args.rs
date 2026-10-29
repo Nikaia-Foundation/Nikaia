@@ -12,6 +12,17 @@ pub(crate) fn check_core_args_runs(callee: Option<&FnContract>, at: i64) -> bool
     true
 }
 
+pub(crate) fn check_core_args_reads(callee: Option<&FnContract>, at: i64) -> bool {
+    let contract = match callee { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let mut i: i64 = 0;
+    for (name, _) in call_arguments(signature) {
+        if i == at { return !nikaia_std::list::contains(&contract.keeps, &name); }
+        i += 1;
+    }
+    false
+}
+
 pub(crate) fn check_core_args_is_lambda(arg: &Expr, expected: &[Ty], at: i64) -> bool {
     if at >= expected.len() as i64 { return false; }
     let mut closure = false;
@@ -109,7 +120,7 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
         }
     }
     if !lends {
-        check_core_a_field_of_a_borrowed_subject(state, world, host, arg, span, "passed");
+        check_core_a_field_of_a_borrowed_subject_given(state, world, host, arg, span, "passed", check_core_args_reads(callee, at));
         if at < expected.len() as i64 && !wants_fn && !(*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).is_unknown() { check_core_a_lent_place_passed(state, world, host, arg, !check_core_args_runs(callee, at), span); }
     }
     state.flow.lending_let = !wants_fn;

@@ -24,12 +24,21 @@ fn check_core_field_of_self(world: ref CheckWorld, value: ref Expr) -> String? {
 /// `self`** (ADR-083 D2). Where it is handed back, a declared view is the
 /// third way out.
 pub fn check_core_a_field_of_a_borrowed_subject[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, what: ref String) sync {
+    check_core_a_field_of_a_borrowed_subject_given(state, world, host, value, span, what, false)
+}
+
+/// The same, where `read` says the callee only reads what it is given: text
+/// it only reads is lent to it, not given away (ADR-282 D2, ADR-094 D2, #936).
+pub fn check_core_a_field_of_a_borrowed_subject_given[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, what: ref String, read: bool) sync {
     if !state.borrowing_self {
         return
     }
     let field = check_core_field_of_self(world, value) ?? return
     let ty = check_core_expr(state, world, host, value, span)
     if ty.is_unknown() || copies_plainly(ty) {
+        return
+    }
+    if read && is_text_type(ty) {
         return
     }
     let notes: Vec[String] = [f"`ref self` borrows the value, and `{field}` is a `{ty.text()}`. Giving it away would take a piece out of something this method doesn't own."]
