@@ -1,0 +1,325 @@
+use std::collections
+use std::fs
+
+/// A refusal, in the words the compiler reports.
+pub enum ProjectCheckRefusal {
+    Refused(String),
+}
+
+impl Error for ProjectCheckRefusal {
+    fn message(ref self) -> String {
+        return match self {
+            ProjectCheckRefusal::Refused(why) => why.clone(),
+        }
+    }
+}
+
+/// `user_parallelism` reaches this and reaches **nothing inside the analyses**.
+/// The verdict of every rule is a property of the program, so no switch may
+/// change it (ADR-005 §1 Group B); what the switch does change is whether a
+/// refusal is about *this* build, and that is a question about severity. See
+/// `project_check_lint_where_nothing_crosses` (`tools/project_check.nika`).
+/// **What a build knows that one unit does not**, handed to the check together.
+///
+/// Two facts, and both are about the *build* rather than about the file being
+/// checked — what the manifest links against and what was described beside it
+/// ([ADR-290](../../docs/specification/adr/adr-290.md) D1), and what a callee
+/// has newly gained since the ledger committed beside it
+/// ([ADR-308](../../docs/specification/adr/adr-308.md) D11). Neither can be read
+/// from a `Parsed`, and neither belongs to it.
+///
+/// **One argument and not two**, because they arrive together and for the same
+/// reason: the day a third fact about the build is needed, it goes here rather
+/// than onto a signature that is already long enough to be read wrong.
+pub struct ProjectCheckAround {
+    pub foreign: ref Foreign,
+    pub newly: ref check::Newly,
+    /// **What this build may read while it builds**
+    /// ([ADR-310](../../docs/specification/adr/adr-310.md)).
+    ///
+    /// The fourth fact, and it belongs beside the other three for the reason
+    /// the doc above gives: it is about the *build* rather than about a file,
+    /// no ledger can carry it, and it binds the whole build — a dependency's
+    /// `asset("…")` is checked against the list of the build that is running,
+    /// never against anything the dependency ships (D6).
+    pub reads: ref Reads,
+    /// **Every file of the program being built.**
+    ///
+    /// The third fact this carries, and the one that had to be a `Parsed`
+    /// rather than a column: a `comptime` calling across a file boundary needs
+    /// the callee's **body**, and a ledger records what a caller has to know
+    /// about a function it cannot see the body of. Each file owns the interner
+    /// its symbols resolve in, so the AST travels rather than the items.
+    pub beside: ref Vec[Parsed],
+}
+
+pub fn project_check_check[H: ProjectCheckHost](parsed: ref Parsed, own: ref Ledger, modules: ref collections::BTreeSet[String], around: ProjectCheckAround, path: ref fs::Path, source: String, user_parallelism: String, refuted_claims: String, unproved_claims: String, building_a_library: bool, facts_out: check::CheckFacts? /* TODO(rs2nika): an option of an option (one `?` only: an enum of the three cases) */, host: ref H) -> String throws {
+    let foreign = around.foreign
+    let newly = around.newly
+    let beside = around.beside
+    let reads = around.reads
+    let library = foreign_library(foreign)
+
+    // A described crate is a package by the spelling rule, which is what
+    // `modules` is: a set of words that appear in front of a `::` and are not
+    // `std`'s ([`Foreign::packages`]).
+    let modules = foreign.packages(modules)
+    let checked = check::check_against(parsed, beside, own, library, modules, newly, reads)
+    let mut all = checked.findings
+    if facts_out != null {
+        let out = facts_out
+        // TODO(rs2nika): a write through a match binding (ADR-094 D7, #576): rebuild the value and put it back, as M2 drains and pushes the items (R262)
+        out = checked.facts
+    }
+    // **`NK1238` is the checker's answer for a build it knows nothing of**
+    // (ADR-284 D4): a library build exports its entry points.
+    if building_a_library {
+        all.retain(fn(finding) { finding.code != "NK1238" })
+    }
+    // A separate walk, for the reason the three inside `check_program` are
+    // separate: it asks about the **boundary** of the build rather than about a
+    // type, and it needs the manifest rather than a ledger.
+    all.extend(project_check_check(parsed, foreign.declared, foreign.described, foreign.moved, host))
+    all.sort_by_key(fn(finding) { finding.span.at() })
+    project_check_lint_where_nothing_crosses(all, user_parallelism)
+    project_check_let_refuted_claims_through(all, refuted_claims)
+    project_check_let_unproved_claims_through(all, unproved_claims)
+    let violations = sync_::check(parsed, own, library)
+    if all.is_empty() && violations.is_empty() {
+        return ""
+    }
+
+    // A warning is printed and does not stop anything: a string that looks
+    // like an `f"…"` (ADR-309 D15), or a `??` or `?.` after a value that
+    // cannot be absent (ADR-279 D13).
+    //
+    // **Once** (#481): the build lowers every member before `cargo` runs, and
+    // the wrapper lowers it again inside, so the wrapper keeps its warnings to
+    // itself. An error is still said - the build has stopped before the
+    // wrapper on any it saw.
+    let in_the_wrapper = host.env_var(WRAPPER_MARKER) != null || WARNED.with(fn(warned) { warned.get() })
+    //
+    // **The warnings are handed back as they were said**, suppressed or not:
+    // the build cache keeps them with the lowering, and a build that reuses
+    // it says them again.
+    let path = path.display().to_string()
+    let mut warnings = ""
+    let lines: Vec[String] = source.split("\n").collect()
+    for finding in all {
+        let rendered = diagnostics::render_finding_in(finding, path, lines)
+        if finding.severity == check::Severity::Warning {
+            warnings.push_str(rendered)
+            if in_the_wrapper {
+                continue
+            }
+        }
+        eprint(f"{rendered}")
+    }
+    if !all.iter().any(fn(f) { f.severity == check::Severity::Error }) && violations.is_empty() {
+        return warnings
+    }
+    for violation in violations {
+        eprint(f"{diagnostics::render_sync_violation(violation, path, source)}")
+    }
+
+    // A refusal and not a failure of this compiler, so it leaves without a
+    // backtrace: the diagnostics above have already said everything, and this is
+    // the tally (`diagnostics::Refused`).
+    throw ProjectCheckRefusal::Refused(project_check_summary(all, violations.len()))
+}
+
+/// **What each function has newly gained in its `throws` set** since the
+/// ledger committed beside it ([ADR-308](../../docs/specification/adr/adr-308.md)
+/// D1).
+///
+/// The ledger records `throws` as a **set** ([ADR-023](../../docs/specification/adr/adr-023.md)
+/// D1), so a callee that gains a failure is a set that gained a member — and
+/// every `catch` over that callee now receives something it did not when it was
+/// written. D1 asks for a line naming each of them; this is the half that
+/// answers *which errors*.
+///
+/// **Three things answer *nothing gained*, and each is right rather than
+/// cheap.** A build with no committed ledger beside it has nothing to compare,
+/// and a first build is not a change. A ledger that does not parse is not an
+/// answer (`ADR-100` D3's rule one file over). And a function the committed
+/// ledger does not name is **new**, so nothing was ever written against its
+/// set — a new function's whole set is not a set that grew.
+pub fn project_check_newly(root: ref fs::Path, inferred: ref Ledger) -> check::Newly {
+    let committed = fs::read_to_string(root.join("nikaia.contracts"), fs::Root::Anywhere).ok().and_then(fn(text) { Ledger::parse(text).ok() }) ?? return check::Newly::new()
+    let mut newly: check::Newly = inferred.functions.iter().filter_map(fn((name, contract)) {
+        let before = committed.functions.get(name)? /* TODO(rs2nika): `?` in a function that hands back neither `Result` nor `Option` */
+        let gained: Vec[String] = contract.fails_with.iter().filter(fn(error) { !before.fails_with.contains(error) }).map(fn(x) { x.clone() }).collect()
+        return (if !gained.is_empty() { (name.clone(), gained) } else { null })
+    }).collect()
+    newly.keeps = project_check_keeps_that_moved(committed, inferred)
+    return newly
+}
+
+/// **The parameters whose `keeps` changed**
+/// ([ADR-297](../../docs/specification/adr/adr-297.md) D12): kept now and not
+/// before, or kept before and only read now. A parameter the old signature
+/// does not have is **new** rather than moved, as a new function's set is not
+/// a set that grew. Whether the type's teardown does anything is the checker's
+/// question, which has both ledgers.
+fn project_check_keeps_that_moved(committed: ref Ledger, inferred: ref Ledger) -> collections::BTreeMap[String, Vec[check::Kept]] {
+    return inferred.functions.iter().filter_map(fn((name, contract)) {
+        let before = committed.functions.get(name)? /* TODO(rs2nika): `?` in a function that hands back neither `Result` nor `Option` */
+        let (now, then) = (contract.signature.as_ref()? /* TODO(rs2nika): `?` in a function that hands back neither `Result` nor `Option` */, before.signature.as_ref()? /* TODO(rs2nika): `?` in a function that hands back neither `Result` nor `Option` */)
+        let moved: Vec[check::Kept] = now.arguments().iter().filter(fn((param, _)) { then.arguments().iter().any(fn((p, _)) { p == param }) }).filter_map(fn((param, ty)) {
+            let kept = contract.keeps.contains(param)
+            return (if kept != before.keeps.contains(param) { check::Kept { param: param.clone(), now: kept, ty: ty.text() } } else { null })
+        }).collect()
+        return (if !moved.is_empty() { (name.clone(), moved) } else { null })
+    }).collect()
+}
+
+/// **Write `nikaia.proofs`, or - under `--locked` - check that it did not
+/// need to change** ([ADR-270](../../docs/specification/adr/adr-270.md) D21,
+/// D22): every question the build asked has an entry that checks, and every
+/// entry is one a question asked, so the file cannot rot. Nothing to do where
+/// the lowering asked nothing - a cache hit, a file outside a project.
+pub fn project_check_write_proofs(root: ref fs::Path, book: Book?, locked: bool) throws {
+    let book = book ?? return
+    if !locked {
+        return book.write(root) catch { throw ProjectCheckRefusal::Refused(f"writing {root.join(FILE).display()}: {error}") }
+    }
+    if book.searched > 0 || !book.as_recorded(root) {
+        let mut places: String = book.searched_at.iter().take(SHOWN).map(fn(place) { f"\n  asked at {place.shown(root)}" }).collect()
+        if book.searched_at.len() > SHOWN {
+            places.push_str(f"\n  and at {book.searched_at.len() - SHOWN} other places")
+        }
+        let why = match book.searched {
+            0 => "it holds entries no question asked",
+            1 => "1 question was searched",
+            n => f"{n} questions were searched",
+        }
+        throw ProjectCheckRefusal::Refused(project_check_locked_proofs(root.join(FILE).display().to_string(), why, places, FILE) /* TODO(rs2nika): a format string that is not a literal */)
+    }
+}
+
+// **Where the questions were asked** (D22), the first few: the file
+// and the function, so the change that asked them can be found.
+comptime SHOWN: i64 = 5
+
+/// Write the ledger, or - under `--locked` - check that it did not need
+/// writing.
+///
+/// The determinism guarantee (13.5) is what lets this compare bytes rather than
+/// meanings: the same sources and the same compiler produce the same file, so a
+/// difference is a change in a contract and never in the formatting.
+pub fn project_check_write_ledger(path: ref fs::Path, ledger: String, locked: bool) throws {
+    if !locked {
+        fs::write(path, fs::Root::Anywhere, ledger)
+        return
+    }
+
+    let committed = fs::read_to_string(path, fs::Root::Anywhere) catch { throw ProjectCheckRefusal::Refused(f"{project_check_locked_ledger_missing(path.display().to_string())}: {error}") }
+
+    if committed != ledger {
+        throw ProjectCheckRefusal::Refused(project_check_locked_ledger_changed(path.display().to_string(), changed_lines(ledger, committed).join("\n")))
+    }
+
+}
+
+// rs2nika: `changed_lines` only forwards to tools/diffs.nika `changed_lines`: its callers call `changed_lines` (R256)
+
+/// Which of the three explanations a run was asked for
+/// ([ADR-292](../../docs/specification/adr/adr-292.md) D2,
+/// [ADR-037](../../docs/specification/adr/adr-037.md) D8,
+/// [ADR-010](../../docs/specification/adr/adr-010.md) D7).
+///
+/// They exist because these analyses **cannot be asked for** - there is no way to
+/// request the cheaper reference count, the overlap or the faster hash; every
+/// fallback is enumerated instead. `--sharing`'s own help says why that is only
+/// fair if the fallbacks can be asked about, *"and this is the asking"*.
+///
+/// So they have to reach a real program, and a person with a real program builds
+/// it with `nikaia build`. They were on the single-file path only, which is
+/// exactly where the asking is not done.
+pub struct Explain {
+    pub overlaps: bool,
+    pub sharing: bool,
+    /// [ADR-283](../../docs/specification/adr/adr-283.md) D4's inverse tool:
+    /// inspection rather than assertion.
+    pub tethers: bool,
+    pub trust: bool,
+    /// [ADR-304](../../docs/specification/adr/adr-304.md) D9's report: what a
+    /// `T::fields` loop was unrolled to, for the types actually used.
+    pub comptime_: bool,
+    /// [ADR-269](../../docs/specification/adr/adr-269.md) D7's report: every
+    /// `assert`, and whether it was proved, refuted or left to run time.
+    pub asserts: bool,
+    /// #389's report: every index and operation whose check the optimizations
+    /// may drop, and whether it was.
+    pub bounds: bool,
+}
+
+pub fn project_check_asked(explain: ref Explain) -> bool {
+    return explain.overlaps
+        || explain.sharing
+        || explain.tethers
+        || explain.trust
+        || explain.comptime
+        || explain.asserts
+        || explain.bounds
+}
+
+/// Print the explanations a run asked for, over every file of the package.
+///
+/// **Against the package's own ledger and not each file's**, which is the
+/// difference from the single-file path doing this three times: `sync`, the touch
+/// sets and the sharing classes are whole-program facts (ADR-288, ADR-292), and a
+/// report built from one file's inferences would answer a different question from
+/// the one the build answers.
+///
+/// The file name is printed where there is more than one, because a slot key
+/// (`zaehle::counts`) does not say which file it is in - one namespace or not.
+pub fn project_check_explain[H: ProjectCheckHost](program: ref modules::Program, settings: ref Settings, want: Explain, reads: ref assets::Reads, host: ref H) throws {
+    if !want.asked() {
+        return
+    }
+    let library = std_ledger()
+    let several = program.units.len() > 1
+
+    // **Once for the program and not once per file**
+    // ([ADR-304](../../docs/specification/adr/adr-304.md) D10), which is the
+    // difference from the four reports below: an unrolling is a fact about a
+    // **call**, and the call may stand in a different file from the function it
+    // names. Printing it per unit would print each one as many times as the
+    // program has files.
+    if want.comptime {
+        let beside: Vec[Parsed] = program.units.iter().map(fn(unit) { unit.parsed }).collect()
+        // **`Reads::none()`**, because what is reported is which types a
+        // function was **used with**, and no file a build reads changes that.
+        // Handing it a real allowlist would run a grammar to answer a question
+        // about call sites ([ADR-177](../../docs/specification/adr/adr-177.md)).
+        print(f"{unrolling_report(beside, program.contracts, Reads::none())}")
+    }
+
+    for unit in program.units {
+        if several {
+            println(f"--- {unit.path.display()}")
+        }
+        if want.overlaps {
+            print(f"{overlap_report(unit.parsed, program.contracts, library, branch_starts_first(unit.parsed, settings.build, program.contracts))}")
+        }
+        if want.sharing {
+            print(f"{report(unit.parsed, program.contracts, library, settings.build.user_parallelism == UserParallelism::Yes)}")
+        }
+        if want.tethers {
+            print(f"{report(unit.parsed, program.contracts)}")
+        }
+        if want.asserts {
+            let hole_1 = claims_report(unit.parsed, unit.source, unit.path.display().to_string(), program.units.iter().map(fn(unit) { unit.parsed }).collect(), program.contracts, library, reads, settings.words.unproved_claims != "warn", host.env_var("NO_COLOR") == null
+                && IsTerminal::is_terminal(stdout()))
+            print(f"{hole_1}")
+        }
+        if want.bounds {
+            print(f"{report(unit.parsed, unit.source, unit.path.display().to_string(), program.contracts, library, settings.build.bounds, settings.build.overflow, settings.build.prove_through_loops)}")
+        }
+        if want.trust {
+            let hole_2 = render(analyse_in(unit.parsed, program.units.iter().filter(fn(u) { u.package == unit.package }).map(fn(u) { u.parsed }).collect(), library), unit.path.display().to_string(), unit.source)
+            print(f"{hole_2}")
+        }
+    }
+}

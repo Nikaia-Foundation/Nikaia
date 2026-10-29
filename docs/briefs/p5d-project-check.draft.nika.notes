@@ -1,0 +1,2 @@
+// rs2nika: `check` may be in Nikaia already: tools/dsl.nika `fn check` (the same name)
+// rs2nika: called but not in Nikaia yet (move them first, or name the equivalent in rs2nika.names): asset, claims_report, foreign_library, std_ledger
