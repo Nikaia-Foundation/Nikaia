@@ -1,0 +1,15 @@
+Result: done
+Files: crates/nikaia-std/src/tools/modules.nika crates/nikaia-std/src/tools/lowered/modules.rs crates/nikaia-std/src/tools/lowered.rs crates/nikaia/src/modules.rs docs/selfhosting-plan.md
+Commit: modules: the program's ledgers and its emission into Nikaia (M3b)
+Body: `Program::of` and `Program::emit_reading` keep their Rust signatures and forward to `modules_program_of` over `ModulesProgramHost` and `modules_emit_reading` over `ModulesEmitHost` (`tools/modules.nika`). Nikaia now holds the ledger assembly (dependency ledgers, the `std_alone` / one-group rule for `own_checked`, `absorb_own`), the trust decision (keyed packages matched by the last `::` segment, both barrier rules), the header, the loop that skips dependency units and the abort table. Rust does the test-block `retain` and `type_rules::across_files` before the call, because they change the units in place and `Parsed` stays Rust. The program host also gives `empty_ledger` and `std_library` (`Ledger::empty` and `std_library` are not Nikaia yet), and it keeps the last own group's checked units and the noted pauses, with `unit += from`. The emit host keeps the source map, `published` and the anyhow refusal of a unit that does not lower; that refusal is handed back unchanged, so its rendering and type stay byte for byte. The trait parameter `keyed_functions(package: ref String)` is `ref` because a body-less trait method's `String` reads as owned. Self-hosting share: 82.2 % (unchanged at one decimal).
+Part: #125
+Tests: it `modules package map_ trust dependency result_source examples` + guard set: 311 passed; `nikaia test --project tests/compiler`: 243 passed; lower-std fixpoint after one build (only lowered/modules.rs and the index changed); clippy clean; pre-push-check ok; no test added (pure move, no fix)
+Gate: green
+Deviation: none
+Found: in a tools/*.nika file, a mutable local set from a text literal and then changed in place (`let mut out = "a"` then `out.push_str("b")`, `return out`) is refused with NK1125 *A `String?` may be missing* and NK1104 *returning `String?`*. A user program run with `nikaia run` accepts the same lines. Probe: add `pub fn modules_probe_a() -> String { let mut out = "a"; out.push_str("b"); return out }` (one statement per line) to modules.nika and run `nikaia lower-std`. The type `: String` written on the local gets past it, and that is the house spelling (445 uses). The refusal message is still wrong. Worth an issue.
+Needs: none
+Changelog: none
+Owner: none
+Disk freed: 0
+Rs2nika: kept 5 of 73 lines (under 60 %). The three costliest edits: 1) the draft's `impl Program` methods work on `Vec[Unit]`, `Parsed`, `SourceMap` and the emitter's Rust calls, so every body had to be rewritten as host calls by unit index (the brief's design); 2) the labelled `'packages:` loop over a `BTreeMap[&str, Vec[Parsed]]` came out as a TODO, rewritten as a `BTreeSet` of names with `break`; 3) `iter_mut`, `SourceMap::default()` and `map_err` with `refusal_at` have no Nikaia form, so they stayed Rust inside the host
+Pushed: 093923cfa5eef56a131a8631c71c1c2790e57618

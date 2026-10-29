@@ -131,3 +131,4 @@
 /home/user/Nikaia/docs/briefs/m3a-modules-collect.md 5034800 61
 /home/user/Nikaia/docs/briefs/architect-task.md 1255139 26
 /home/user/Nikaia/docs/briefs/mf-manifest-file.md 684883 8
+/home/user/Nikaia/docs/briefs/m3b-modules-program.md 2459391 38

@@ -1,0 +1,185 @@
+use std::collections
+
+impl Program {
+    fn of(mut units: Vec[Unit], dependencies: ref Vec[Dependency], described: ref Ledger) -> Program throws {
+        // **A `test` block is compiled only by `nikaia test`** (ADR-269 D1),
+        // which has turned every one it runs into a function by now: what is
+        // left is left out.
+        for unit in units {
+            unit.parsed.program.items.retain(fn(item) { !(match item.node { Item::Test { .. } => true, else => false }) })
+        }
+        // **A type's rule is a fact only where no file of its package, and
+        // no package using it, can break it** (ADR-369 D3).
+        for range in groups(units) {
+            let mut files: Vec[(Parsed, String)] = units[range].iter_mut() /* TODO(rs2nika): `iter_mut` (index the list: `for i in 0..<xs.len()`) */.map(fn(u) { (u.parsed, u.source) }).collect()
+            across_files(files)
+        }
+        // **The dependencies first, and the program's own package last**
+        // (ADR-100 D5): their ledgers, merged in Nikaia
+        // (`tools/modules.nika`, ADR-294, #125).
+        let mut contracts = Ledger::empty()
+        let mut library = std_library()
+        let ranges = groups(units)
+        let mut reaches = collections::BTreeMap()
+        let mut their_renames = collections::BTreeMap()
+        for dependency in dependencies.iter().rev() {
+            reaches.insert(dependency.name.clone(), dependency.reachable.clone())
+            their_renames.insert(dependency.name.clone(), dependency.renames.clone())
+        }
+        let as_its_own = dependency_ledgers(library, contracts, described, packages_of(units), units.iter().map(fn(u) { u.renames.clone() }).collect(), reaches, their_renames, fn(from, to) {
+            let group = units[from as i64..<to as i64]
+            return package_ledger(group, dependencies.iter().find(fn(d) { d.name == group[0].package }), std_library())
+        })
+
+        let mut paused_by_code = collections::BTreeMap()
+        let mut pauses = collections::BTreeMap()
+        // The library is `std`'s exactly when nothing was added to it above.
+        let std_alone = described.functions.is_empty() && described.types.is_empty() && as_its_own.is_empty()
+        let mut own_checked = null
+        let mut own_groups = 0
+        for group in ranges {
+            if units[group.start].package != null {
+                continue
+            }
+            own_groups += 1
+            let renames = units[group.start].renames.clone()
+            let (own, checked, noted) = package_ledger_checked(units[group.clone()], null, library)
+            // **Kept where it is the join's pass**: the one group of the
+            // program's own files, all of them, against `std` alone.
+            own_checked = checked.filter(fn(_) {
+                return std_alone && group.len() == units.iter().filter(fn(u) { u.package == null }).count()
+            })
+            paused_by_code.extend(noted.by_code)
+            pauses.extend(noted.why.iter().map(fn((name, pause)) {
+                pause.unit += group.start as i64
+                return (name, pause)
+            }))
+            absorb_own(contracts, renames, own)
+        }
+
+        return Program {
+            units,
+            entry_shown_as: null,
+            described: Ledger::blank(),
+            contracts,
+            as_its_own,
+            tests: [],
+            paused_by_code,
+            pauses,
+            own_checked: own_checked.filter(fn(_) { own_groups == 1 }),
+            checked_facts: collections::BTreeMap(),
+        }
+    }
+    /// The same, told what this build may read while it builds
+    /// ([ADR-310](../../../docs/specification/adr/adr-310.md)).
+    ///
+    /// **A second entry point and not a field on `Build`**: `Build` is the
+    /// machine and the switches, copied freely, and what a build may read is a
+    /// fact about the invocation with a lifetime on it. A caller with nothing
+    /// to say passes [`crate::assets::Reads::none`], which is D1.
+    pub fn emit_reading(ref self, build: Build, reads: ref Reads) -> Lowered throws {
+        // **The package's trust, not the entry's** (ADR-010 D9, #581): a map is
+        // one type in every file, so a socket read in any file keys them all.
+        let package: Vec[Parsed] = self.units.iter().filter(fn(u) { u.package == null }).map(fn(u) { u.parsed }).collect()
+        // Each question the package's ledger walk asks, in its file.
+        let files = self.units.iter().filter(fn(u) { u.package == null }).map(fn(u) { (u.path.clone(), u.source.clone()) }).collect()
+        let mut trust = with_units(files, fn() { match self.own_checked {
+            null => analyse_package(package, std_ledger()),
+            checked => analyse_package_checked(package, std_ledger(), checked),
+        } })
+        // **A package whose `pub` items hold maps fills them with the hasher of
+        // the program that uses it** (ADR-010 D9), and the ledger says what
+        // each function of it puts in (13.5, `maps`): a program that calls one
+        // whose line is `keyed`, or that has no line, hands its maps to a body
+        // that fills them with keys the program cannot vouch for, so it is no
+        // more trusted than that. `from(..)` adds nothing the program has not
+        // chosen: a trusted program's arguments are trusted, and an untrusted
+        // program's maps are keyed already. The ledger is read, never the
+        // body.
+        let mut packages: collections::BTreeMap[String, Vec[Parsed]] = collections::BTreeMap()
+        for unit in self.units.iter().filter(fn(u) { u.package != null }) {
+            let name = unit.package ?? continue
+            packages.entry(name).or_default().push(unit.parsed)
+        }
+        if trust.provenance == Provenance::Trusted {
+            let called = names_in(package)
+            for 'packages: /* TODO(rs2nika): a pattern */ in (name, files) /* TODO(rs2nika): an expression */ {
+                // TODO(rs2nika): the label `'packages:` (Nikaia has none: a flag, or a function that returns)
+            }
+        }
+        // **A call to a barrier** (D9): a method of a trait that holds a map in
+        // its signature, a `pub` function that hands a map to one, a function
+        // of a described Rust crate that takes one. The map arrives there with
+        // std's keyed hasher, so a program that calls one keeps no fast map
+        // across it: its maps that leave a function are keyed.
+        // And a package that declares one - a trait method with a map, a
+        // function that hands a map to one, a method whose result alone holds
+        // one - writes the keyed map in its own bodies where they make it.
+        if trust.provenance == Provenance::Trusted
+            && !barrier_names(package, self.described).is_empty() {
+            trust.provenance = Provenance::Untrusted
+        }
+        if trust.provenance == Provenance::Trusted {
+            let all: Vec[Parsed] = self.units.iter().map(fn(u) { u.parsed }).collect()
+            let barriers = barrier_names(all, self.described)
+            if !barriers.is_empty() && names_in(package).iter().any(fn(n) { barriers.contains(n) }) {
+                trust.provenance = Provenance::Untrusted
+            }
+        }
+        let needs = self.units.iter().fold(Needs::none(), fn(acc, u) {
+            return acc.join(for_unit(u.path, u.source, u.package != null, fn() { needs_of(u.parsed) }))
+        })
+        // **Every file, for every file.** What a `comptime` came to is the
+        // checker's answer and the emitter writes it, so the two have to be
+        // asked the same question — a unit lowered against fewer files than it
+        // was checked against would refuse an item the check accepted.
+        let beside: Vec[Parsed] = self.units.iter().map(fn(unit) { unit.parsed }).collect()
+
+        let mut rust = ""
+        rust.push_str("// Generated by the Nikaia bootstrap compiler (Stage 0).\n")
+        rust.push_str("// Edit the .nika source, not this file.\n\n")
+        rust.push_str(needs.preamble())
+        rust.push('\n')
+
+        let mut map = SourceMap::default() /* TODO(rs2nika): `Default` (write the value out) */
+        let mut published = collections::BTreeMap()
+        for at in 0..<self.units.len() {
+            let unit = self.units[at]
+            // **A dependency's files are read and not written** (ADR-286 D19).
+            // They are here so the ledger and the checks know what the package
+            // offers; the crate that offers it is generated beside this one, and
+            // a qualified name needs no help from us - `c::thing()` is emitted
+            // as written and Rust resolves `c` to the crate the manifest names.
+            //
+            // The index is still `self.units`', because a diagnostic about a
+            // dependency's file has to name that file.
+            if unit.package != null {
+                continue
+            }
+            let body = for_unit(unit.path, unit.source, false, fn() {
+                return emit_module_body_at(unit.parsed, beside, build, trust.provenance, self.contracts, self.described, at == 0, reads, self.checked_facts.get(at)?.clone())
+            }).map_err(fn(error) { match refusal_at(error) {
+                null => error,
+                (byte, message) => refuse(render_refusal(message, byte, unit.path.display().to_string(), unit.source)),
+            } })
+
+            map.extend(body.map.placed(rust.len(), at))
+            published.extend(body.published)
+            rust.push_str(body.rust)
+            rust.push('\n')
+        }
+        // **Last, because it names lines** (ADR-300 D9). Only where the program
+        // has an entry point: the table is read by the hook `fn main` installs,
+        // and a package with no `main` is a library whose consumer has one.
+        if self.units[0].parsed.program.items.iter().any(fn(item) {
+            return (match item.node { Item::Fn { name, .. } if self.units[0].parsed.text(name) == "main" => true, else => false })
+        }) {
+            let paths = self.shown_paths()
+            let sources: Vec[String] = self.units.iter().map(fn(u) { u.source }).collect()
+            let rows: Vec[(i64, i64, i64)] = map.rows().map(fn((at, from, unit)) { (at as i64, from as i64, unit as i64) }).collect()
+            rust.push_str(emit_needs_abort_table(rust, rows, paths, sources))
+        }
+
+        return Lowered { rust: rust, map: map, published: published }
+    }
+}
