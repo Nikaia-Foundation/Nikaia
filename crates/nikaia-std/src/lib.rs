@@ -240,7 +240,6 @@ pub mod runtime {
     clippy::unnecessary_unwrap,
     clippy::never_loop,
     unused_variables,
-    unused_parens,
     unreachable_code,
     clippy::borrow_deref_ref,
     clippy::type_complexity,

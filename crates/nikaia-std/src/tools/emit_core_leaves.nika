@@ -154,9 +154,16 @@ impl EmitState {
                 else => false,
             }
         }
-        // And a `let mut` view read through (#976).
+        // And a `let mut` view read through (#976), and a `mut` lambda
+        // parameter or `for mut` element, an address (#970).
         if !parenthesise && self.facts.view_derefs.contains(node_key(node)) {
             parenthesise = true
+        }
+        if !parenthesise {
+            parenthesise = match node {
+                Expr::Variable(name, _) => scope.changed.contains(name),
+                else => false,
+            }
         }
         if !parenthesise {
             parenthesise = self.emits_as_cast(world, node)
@@ -299,15 +306,57 @@ impl EmitState {
         head.push_str(format_of(parts))
         head.push_str("\"")
         out.push(head)
+        // **A hole that changes what an earlier one reads** (#937): the parts
+        // are read left to right, each finished before the next, and
+        // `format!` lends them all at once; so every hole before the last
+        // that calls a `ref mut self` method is copied out first.
+        let mut changing = -1
+        let mut n = 0
         for part in parts {
             match part {
-                FPart::Hole { expr, at, .. } => {
-                    out.push(", ")
-                    self.emit_core_hole(world, walk, out, host, at as i64, expr, depth, flow, scope)
+                FPart::Hole { expr, .. } => {
+                    if self.emit_leaf_calls_a_changing_method(world, expr) {
+                        changing = n
+                    }
+                    n += 1
                 },
                 else => {}
             }
         }
+        n = 0
+        for part in parts {
+            match part {
+                FPart::Hole { expr, at, .. } => {
+                    out.push(", ")
+                    let copied = n < changing
+                    n += 1
+                    if copied {
+                        out.push("ToOwned::to_owned(&(")
+                    }
+                    self.emit_core_hole(world, walk, out, host, at as i64, expr, depth, flow, scope)
+                    if copied {
+                        out.push("))")
+                    }
+                },
+                else => {}
+            }
+        }
+    }
+
+    /// Whether `expr` calls a method this unit declares with `ref mut self`
+    /// (#937).
+    fn emit_leaf_calls_a_changing_method(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
+        for inner in visited_in_expr(expr) {
+            match inner {
+                Expr::MethodCall { method, .. } => {
+                    if emit_leaf_a_changing_method(world, emit_text(world, method)) {
+                        return true
+                    }
+                },
+                else => {}
+            }
+        }
+        return false
     }
 
     /// A string literal. Which of the two it is decides what comes out, and
@@ -641,4 +690,28 @@ pub fn emit_bytes_grammar(name: ref String) -> String {
 /// backend writes and nothing can be added to.
 pub fn emit_fold_options(book: ref String, rule: ref String) -> String {
     return f"__nk_fold_{book}_{rule}"
+}
+
+/// Whether a method of this unit called `wanted` takes `ref mut self`.
+fn emit_leaf_a_changing_method(world: ref EmitWorld, wanted: ref String) -> bool {
+    for item in world.items {
+        match item.node {
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, receiver, .. } => {
+                            let called = name ?? continue
+                            let is_mut = receiver?.is_mut ?? false
+                            if is_mut && (receiver?.is_ref ?? false) && world.words.resolve(called) == wanted {
+                                return true
+                            }
+                        },
+                        else => {}
+                    }
+                }
+            },
+            else => {}
+        }
+    }
+    return false
 }

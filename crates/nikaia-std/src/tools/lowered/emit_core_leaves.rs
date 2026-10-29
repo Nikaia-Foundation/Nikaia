@@ -99,6 +99,12 @@ impl EmitState {
             };
         }
         if !parenthesise && self.facts.view_derefs.contains(&node_key(node)) { parenthesise = true; }
+        if !parenthesise {
+            parenthesise = match node {
+                Expr::Variable(name, _) => { let name = *name; scope.changed.contains(&name) },
+                _ => false,
+            };
+        }
         if !parenthesise { parenthesise = self.emits_as_cast(world, node); }
         if !parenthesise {
             parenthesise = match node {
@@ -201,17 +207,45 @@ impl EmitState {
         head.push_str(&format_of(parts));
         head.push_str("\"");
         out.push(&head);
+        let mut changing = -1;
+        let mut n = 0;
+        for part in parts.iter() {
+            match part {
+                FPart::Hole { expr, .. } => {
+                    if self.emit_leaf_calls_a_changing_method(world, expr) { changing = n; }
+                    n += 1;
+                },
+                _ => { },
+            }
+        }
+        n = 0;
         for part in parts.iter() {
             match part {
                 FPart::Hole { expr, at, .. } => {
                     let at = *at;
                     out.push(", ");
+                    let copied = n < changing;
+                    n += 1;
+                    if copied { out.push("ToOwned::to_owned(&("); }
                     self.emit_core_hole(world, walk, out, host, at as i64, expr, depth, flow, scope)?;
+                    if copied { out.push("))"); }
                 },
                 _ => { },
             }
         }
         Ok(())
+    }
+    pub(crate) fn emit_leaf_calls_a_changing_method(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
+        for inner in visited_in_expr(expr) {
+            match inner {
+                Expr::MethodCall { method, .. } => {
+                    let method = *method;
+                    if emit_leaf_a_changing_method(world, &emit_text(world, method)) { return true; }
+                },
+                _ => { },
+            }
+        }
+        false
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -478,4 +512,26 @@ impl EmitState {
 pub fn emit_bytes_grammar(name: &str) -> String { format!("{}OverBytes", name) }
 
 pub fn emit_fold_options(book: &str, rule: &str) -> String { format!("__nk_fold_{}_{}", book, rule) }
+
+pub(crate) fn emit_leaf_a_changing_method(world: &EmitWorld<'_, '_, '_, '_>, wanted: &str) -> bool {
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Impl { methods, .. } => {
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, receiver, .. } => {
+                            let name = *name;
+                            let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                            let is_mut = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
+                            if is_mut && nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false) && world.words.resolve(called) == wanted { return true; }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    false
+}
 

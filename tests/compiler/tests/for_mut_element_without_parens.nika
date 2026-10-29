@@ -1,0 +1,5 @@
+fn main() {
+    let mut ps: Vec[(i64, i64)] = [(1, 2)]
+    for mut (a, b) in ps { a += b }
+    print(ps[0].0)
+}

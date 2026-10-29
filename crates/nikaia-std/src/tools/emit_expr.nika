@@ -426,9 +426,10 @@ impl EmitState {
         let at = node_key(node)
         let text = emit_text(world, name)
         // **A `mut` lambda parameter is an address** (ADR-281 D12), so every
-        // mention of it is dereferenced.
+        // mention of it is dereferenced; a postfix base puts it in
+        // parentheses, and nothing else needs them (#970).
         if scope.changed.contains(name) {
-            out.push(f"(*{self.emit_expr_read_name(world, name, node)})")
+            out.push(f"*{self.emit_expr_read_name(world, name, node)}")
             return
         }
         // **So is a `let mut` view, where it is written or is a number**

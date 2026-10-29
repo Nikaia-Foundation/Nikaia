@@ -1,11 +1,11 @@
-Result: partial
+Result: done
 Pushed:
-Tests: a_mut_argument_read_in_another_argument (new, #899 probe 1; failed unfixed per the issue, immutable borrow while mutably borrowed); tests/compiler --both-settings 348 passed; it guard set 23 passed
-Deviation: #899 step 2 (mismatched_lifetime_syntaxes) does not reproduce on develop with three probes; left open for the supervisor to close or re-probe
+Tests: for_mut_element_without_parens (new, #970 probe; unfixed it printed rustc's unused-parens warning), format_hole_before_changing_method (new, #937 probe; failed unfixed per the issue, borrow of self while mutably borrowed); tests/compiler --both-settings 348 passed; it guard set 23 passed; clippy -D warnings clean without the unused_parens allow
+Deviation: #970 and #937 in one commit (both touch emit_core_leaves.nika); the no-warning check of #970 is clippy over the lowered tools, as tests/compiler compares no rustc warnings
 Found: none
 Needs: none
-Changelog: An argument whose `f"…"` reads a `mut` argument of the same call is made before the `&mut` is taken (#899, step 1). Decided: the hoist's mention scan reads the holes of an interpolated text.
+Changelog: A `mut` lambda or `for mut` element lowers as `*x`, in parentheses only as a postfix base (#970; the `unused_parens` allow on the tools module is gone); an `f"…"` hole read before a hole that calls a `ref mut self` method of the same value is copied first (#937). Decided: holes are evaluated left to right as written; the earlier ones are made owned (`ToOwned::to_owned`) only when a later hole changes the receiver.
 Gate: green
-Files: crates/nikaia-std/src/tools/emit_core_below.nika crates/nikaia-std/src/tools/lowered/emit_core_below.rs tests/compiler/tests/a_mut_argument_read_in_another_argument.nika tests/compiler/tests/a_mut_argument_read_in_another_argument.stdout docs/briefs/lane-e.md.report.md
-Commit: Hoist an argument whose f-string reads a mut argument of the same call
-Part: #899
+Files: crates/nikaia-std/src/tools/emit_core_leaves.nika crates/nikaia-std/src/tools/lowered/emit_core_leaves.rs crates/nikaia-std/src/tools/emit_expr.nika crates/nikaia-std/src/tools/lowered/emit_expr.rs crates/nikaia-std/src/tools/lowered/bounds_walk.rs crates/nikaia-std/src/lib.rs tests/compiler/tests/for_mut_element_without_parens.nika tests/compiler/tests/for_mut_element_without_parens.stdout tests/compiler/tests/format_hole_before_changing_method.nika tests/compiler/tests/format_hole_before_changing_method.stdout docs/briefs/lane-e.md.report.md
+Commit: Lower a changed binding as *x without parens; copy f-string holes read before a mutating hole
+Fixes: #970, #937

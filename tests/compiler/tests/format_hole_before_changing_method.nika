@@ -1,0 +1,20 @@
+struct Em {
+    name: String,
+    n: i64,
+}
+
+impl Em {
+    fn next(ref mut self) -> String {
+        self.n += 1
+        return f"{self.n}"
+    }
+
+    fn both(ref mut self) -> String {
+        return f"{self.name}.{self.next()}"
+    }
+}
+
+fn main() {
+    let mut e = Em { name: "a", n: 0 }
+    println(e.both())
+}

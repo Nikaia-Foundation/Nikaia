@@ -292,7 +292,7 @@ impl EmitState {
         let at = node_key(node);
         let text = emit_text(world, name);
         if scope.changed.contains(&name) {
-            out.push(&format!("(*{})", self.emit_expr_read_name(world, name, node)));
+            out.push(&format!("*{}", self.emit_expr_read_name(world, name, node)));
             return Ok(());
         }
         if self.facts.view_derefs.contains(&at) && !self.facts.reborrowed_args.contains(&at) {
