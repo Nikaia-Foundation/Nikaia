@@ -1215,6 +1215,17 @@ pub(crate) fn changed_in_place(target: &Expr, written: String, ask: &TierAsk<'_,
         }
         return;
     }
+    match target {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = tier_local(ask.names.resolve(name), &walk);
+            if local.is_some() {
+                let bound = match local { Some(__nikaia_value) => __nikaia_value, None => return };
+                if bound.literal >= 0 { walk.flows.owned_lets.insert(bound.literal); }
+            }
+        },
+        _ => { },
+    }
     let place = place_of(target, ask, walk);
     if place.is_some() {
         let found = match place { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -1554,7 +1565,7 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
         },
         Stmt::Assign { target, op, value } => {
             tie_stored(target, value, ask, walk);
-            tier_assign(target, value, ask, walk);
+            tier_assign(target, value, op.is_some(), ask, walk);
             if op.is_some() { changed_in_place(target, tier_written(target, ask), ask, walk); }
         },
         Stmt::For { bindings, iter, body, .. } => {
@@ -1693,7 +1704,7 @@ pub(crate) fn a_literal_tail(block: &Block) -> bool {
     }
 }
 
-pub(crate) fn tier_assign(target: &Expr, value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+pub(crate) fn tier_assign(target: &Expr, value: &Expr, compound: bool, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     let kinds = tier_expr(value, ask, walk);
     match target {
         Expr::Index { base, index, .. } => {
@@ -1743,7 +1754,7 @@ pub(crate) fn tier_assign(target: &Expr, value: &Expr, ask: &TierAsk<'_, '_, '_,
                     flow_word(&read_from, &kinds, walk);
                 }
             }
-            local.literal = -1;
+            if !compound { local.literal = -1; }
             set_tier_local(&name, local, walk);
         },
     }

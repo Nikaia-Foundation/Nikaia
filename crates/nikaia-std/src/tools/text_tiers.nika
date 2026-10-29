@@ -1758,6 +1758,21 @@ fn changed_in_place(target: ref Expr, written: String, ask: ref TierAsk, mut wal
         }
         return
     }
+    // **A name bound to a literal and changed in place is text of its own**
+    // (ADR-282 D17, #961): it is built into a `String`, so wherever it is
+    // kept, that position holds text of its own.
+    match target {
+        Expr::Variable(name, _) => {
+            let local = tier_local(ask.names.resolve(name), walk)
+            if local != null {
+                let bound = local ?? return
+                if bound.literal >= 0 {
+                    walk.flows.owned_lets.insert(bound.literal)
+                }
+            }
+        },
+        else => {}
+    }
     let place = place_of(target, ask, walk)
     if place != null {
         let found = place ?? return
@@ -2219,7 +2234,7 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
         }
         Stmt::Assign { target, op, value } => {
             tie_stored(target, value, ask, walk)
-            tier_assign(target, value, ask, walk)
+            tier_assign(target, value, op != null, ask, walk)
             if op != null {
                 changed_in_place(target, tier_written(target, ask), ask, walk)
             }
@@ -2377,7 +2392,7 @@ fn a_literal_tail(block: ref Block) -> bool {
     }
 }
 
-fn tier_assign(target: ref Expr, value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+fn tier_assign(target: ref Expr, value: ref Expr, compound: bool, ask: ref TierAsk, mut walk: TierWalk) {
     let kinds = tier_expr(value, ask, walk)
     match target {
         // `m[k] = v`: a map's key and value, a run's element.
@@ -2439,8 +2454,11 @@ fn tier_assign(target: ref Expr, value: ref Expr, ask: ref TierAsk, mut walk: Ti
                     flow_word(read_from, kinds, walk)
                 }
             }
-            // Assigned again: no longer the literal it was bound to.
-            local.literal = -1
+            // Assigned again: no longer the literal it was bound to; `x += ..`
+            // changes that literal's text and keeps the binding (#961).
+            if !compound {
+                local.literal = -1
+            }
             set_tier_local(name, local, walk)
         }
     }

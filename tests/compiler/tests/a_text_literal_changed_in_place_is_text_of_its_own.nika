@@ -1,0 +1,21 @@
+// #961: a name bound to a text literal and changed in place (`push_str`,
+// `+=`) is built into a `String`, so a set, a list of tuples or a typed
+// `let` it goes into holds text of its own, not `&'static str` (ADR-282 D17).
+use std::collections
+
+fn main() {
+    let mut set: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut w = "lhs"
+    w.push_str("!")
+    set.insert(w)
+    println(f"{set.len()}")
+    let mut v: Vec[(i64, String)] = []
+    let mut x = "a"
+    x += "b"
+    v.push((1, x))
+    println(f"{v.len()}")
+    let mut y = "q"
+    y.push_str("r")
+    let t: (i64, String) = (2, y)
+    println(f"{t.0} {t.1}")
+}
