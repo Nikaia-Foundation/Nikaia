@@ -98,10 +98,54 @@ struct Unit {
     // or `ref mut self` only reads (#813): a call on a local struct hands
     // nothing on through it.
     readonly: collections::BTreeSet[String],
+    // **The methods whose result is text of its own wherever they are
+    // declared** (#933), by name: every method of the package by that name
+    // hands back a result that holds no view, and `std` has none by it.
+    owned_results: collections::BTreeSet[String],
 }
 
-fn plain_unit(borrowing: collections::BTreeSet[String], fields: collections::BTreeMap[String, Vec[(String, Type)]]) -> Unit {
-    return Unit { borrowing: borrowing, fields: fields, methods: collections::BTreeMap(), kept: collections::BTreeSet(), readonly: collections::BTreeSet() }
+fn plain_unit(asked: ref Asked, borrowing: collections::BTreeSet[String], fields: collections::BTreeMap[String, Vec[(String, Type)]]) -> Unit {
+    return Unit { borrowing: borrowing, fields: fields, methods: collections::BTreeMap(), kept: collections::BTreeSet(), readonly: collections::BTreeSet(), owned_results: owned_result_methods(asked) }
+}
+
+// The names of `Unit::owned_results`: a method called on a receiver whose type
+// the walk does not know (a type parameter, a local bound without a type)
+// still hands back no view of it, nor of its arguments.
+fn owned_result_methods(asked: ref Asked) -> collections::BTreeSet[String] {
+    let mut owned: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut not: collections::BTreeSet[String] = collections::BTreeSet()
+    for (key, contract) in asked.own.functions {
+        if !key.contains("::") {
+            continue
+        }
+        let last = (key.rsplit("::").next() ?? "").clone()
+        let mut holds = true
+        if contract.signature != null {
+            let signature = contract.signature?.clone() ?? continue
+            holds = false
+            if signature.result != null {
+                let result = signature.result?.clone() ?? Ty::Unknown
+                holds = rsrc_ty_holds_view(asked, result)
+            }
+        }
+        if holds {
+            not.insert(last)
+        } else {
+            owned.insert(last)
+        }
+    }
+    for (key, _) in asked.library.functions {
+        if key.contains("::") {
+            not.insert((key.rsplit("::").next() ?? "").clone())
+        }
+    }
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in owned {
+        if !not.contains(name) {
+            out.insert(name.clone())
+        }
+    }
+    return out
 }
 
 // Each method of every `impl` of the unit: its parameters, which of them are
@@ -174,7 +218,7 @@ enum Root {
 /// order. `own_buffer` says whether a `let`'s value is a buffer of its own
 /// (ADR-283) - the compiler's `tether` answers it.
 pub fn views_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Stored] {
-    let mut unit = plain_unit(borrowing_types(asked.names, items), view_fields(asked.names, items))
+    let mut unit = plain_unit(asked, borrowing_types(asked.names, items), view_fields(asked.names, items))
     method_table(asked, items, unit)
     // **The methods to their least fixpoint** (#818): a parameter handed to a
     // method on `self` is kept only if that method keeps it. Nothing is kept
@@ -2377,10 +2421,25 @@ fn rsrc_method(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref coll
             rsrc_bind(flow, local, stored)
         }
     }
-    let known_type = ty ?? return everything
+    // **An owned result reaches nothing** (#933): `host.hex(seed)` on a type
+    // parameter, or on a local bound without a type, hands back text of its
+    // own where every method of that name does.
+    let owned = unit.owned_results.contains(name)
+    let known_type = ty ?? return rsrc_unless(owned, everything)
     let subject = asked.names.resolve(known_type.name)
     let key = f"{subject}::{name}"
+    if owned && !known.contains_key(key) && !asked.own.functions.contains_key(key) && !asked.library.functions.contains_key(key) {
+        return rsrc_none()
+    }
     return rsrc_callee(asked, known, key, positional, everything)
+}
+
+// Nothing where the result is owned, else what the call reaches.
+fn rsrc_unless(owned: bool, reach: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    if owned {
+        return rsrc_none()
+    }
+    return reach.clone()
 }
 
 // **A view kept in a parameter's place** (ADR-283 D27): `v.push(w)`,
@@ -2941,7 +3000,7 @@ pub struct ResultSource {
 /// The answer of D25 for every function of the unit that hands back a view,
 /// the ledger's `ref(..)` (#580 step 5).
 pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
-    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items))
+    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     let mut ignored: Vec[Finding] = []
     rsrc_solve(unit, asked, items, own_buffer, known, ignored)
@@ -2973,7 +3032,7 @@ pub struct PlacesStored {
 /// The answer of D27 for every function of the unit that has a `mut`
 /// parameter and a text parameter lent to it.
 pub fn places_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[PlacesStored] {
-    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items))
+    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     let mut ignored: Vec[Finding] = []
     rsrc_solve(unit, asked, items, own_buffer, known, ignored)
@@ -3110,7 +3169,7 @@ fn rsrc_returns_text(params: ref Vec[String], reach: ref collections::BTreeSet[S
 
 // The refusals of D25 and D26 over a unit: the fixpoint first, then one report.
 fn rsrc_findings(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync, mut out: Vec[Finding]) {
-    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items))
+    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     rsrc_solve(unit, asked, items, own_buffer, known, out)
 }

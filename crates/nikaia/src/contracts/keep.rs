@@ -334,11 +334,13 @@ pub(crate) fn buffer_plans(
     .into_iter()
     .collect();
     let own_methods = nikaia_std::tools::ty::method_index(ledger);
+    let library_methods = nikaia_std::tools::ty::method_index(library);
     let ask = BufferAsk {
         names: &parsed.interner,
         own: ledger,
         own_methods: &own_methods,
         library,
+        library_methods: &library_methods,
         items: &parsed.program.items,
         context: &context,
         given_up: &given_up,

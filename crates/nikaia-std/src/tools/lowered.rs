@@ -2823,7 +2823,7 @@ pub mod template {
 }
 pub mod tether {
     #[allow(unused_imports)]
-    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, carries_a_view, declares_text, makes_a_buffer, tethers_report};
+    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, carries_a_view, declares_text, makes_a_buffer, is_a_buffer, tethers_report};
 }
 pub mod text_tiers {
     #[allow(unused_imports)]

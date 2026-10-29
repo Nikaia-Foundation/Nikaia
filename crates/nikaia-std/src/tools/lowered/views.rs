@@ -37,9 +37,39 @@ pub(crate) struct Unit {
     pub(crate) methods: collections::BTreeMap<String, Vec<String>>,
     pub(crate) kept: collections::BTreeSet<String>,
     pub(crate) readonly: collections::BTreeSet<String>,
+    pub(crate) owned_results: collections::BTreeSet<String>,
 }
 
-pub(crate) fn plain_unit(borrowing: collections::BTreeSet<String>, fields: collections::BTreeMap<String, Vec<(String, Type)>>) -> Unit { Unit { borrowing, fields, methods: collections::BTreeMap::new(), kept: collections::BTreeSet::new(), readonly: collections::BTreeSet::new() } }
+pub(crate) fn plain_unit(asked: &Asked<'_, '_, '_>, borrowing: collections::BTreeSet<String>, fields: collections::BTreeMap<String, Vec<(String, Type)>>) -> Unit { Unit { borrowing, fields, methods: collections::BTreeMap::new(), kept: collections::BTreeSet::new(), readonly: collections::BTreeSet::new(), owned_results: owned_result_methods(asked) } }
+
+pub(crate) fn owned_result_methods(asked: &Asked<'_, '_, '_>) -> collections::BTreeSet<String> {
+    let mut owned: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut not: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (key, contract) in asked.own.functions.iter() {
+        if !key.contains("::") { continue; }
+        let last = nikaia_std::index::or(key.rsplit("::").next(), || "").to_string();
+        let mut holds = true;
+        if contract.signature.is_some() {
+            let signature = match match contract.signature.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => continue };
+            holds = false;
+            if signature.result.is_some() {
+                let result = nikaia_std::index::or(match signature.result.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || Ty::Unknown);
+                holds = rsrc_ty_holds_view(asked, &result);
+            }
+        }
+        if holds { not.insert(last); } else { owned.insert(last); }
+    }
+    for (key, _) in asked.library.functions.iter() { if key.contains("::") { not.insert(nikaia_std::index::or(key.rsplit("::").next(), || "").to_string()); } }
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in owned.iter() { if !not.contains(name) { out.insert(name.to_string()); } }
+    out
+}
 
 pub(crate) fn method_table(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], unit: &mut Unit) {
     for item in items.iter() {
@@ -94,7 +124,7 @@ pub(crate) enum Root {
 }
 
 pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Stored> {
-    let mut unit = plain_unit(borrowing_types(asked.names, items), view_fields(asked.names, items));
+    let mut unit = plain_unit(asked, borrowing_types(asked.names, items), view_fields(asked.names, items));
     method_table(asked, items, &mut unit);
     let mut round: Vec<Stored> = vec![];
     let mut growing = true;
@@ -1758,10 +1788,17 @@ pub(crate) fn rsrc_method(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, k
         let local = nikaia_std::index::or(root.as_deref(), || "").to_string();
         if changes && rsrc_may_hold(unit, asked, &flow, &local) { rsrc_bind(flow, &local, &stored); }
     }
-    let known_type = match ty { Some(__nikaia_value) => __nikaia_value, None => return everything };
+    let owned = unit.owned_results.contains(name);
+    let known_type = match ty { Some(__nikaia_value) => __nikaia_value, None => return rsrc_unless(owned, &everything) };
     let subject = asked.names.resolve(known_type.name);
     let key = format!("{}::{}", subject, name);
+    if owned && !known.contains_key(&key) && !asked.own.functions.contains_key(&key) && !asked.library.functions.contains_key(&key) { return rsrc_none(); }
     rsrc_callee(asked, known, &key, &positional, &everything)
+}
+
+pub(crate) fn rsrc_unless(owned: bool, reach: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    if owned { return rsrc_none(); }
+    reach.to_owned()
 }
 
 pub(crate) fn rsrc_store(asked: &Asked<'_, '_, '_>, place: &Expr, reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
@@ -2196,7 +2233,7 @@ pub struct ResultSource {
 }
 
 pub fn result_sources(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
-    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items));
+    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, &mut ignored);
@@ -2218,7 +2255,7 @@ pub struct PlacesStored {
 }
 
 pub fn places_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<PlacesStored> {
-    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items));
+    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, &mut ignored);
@@ -2322,7 +2359,7 @@ pub(crate) fn rsrc_returns_text(params: &[String], reach: &collections::BTreeSet
 }
 
 pub(crate) fn rsrc_findings(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Finding>) {
-    let unit = plain_unit(package_borrowing_types(asked, items), view_fields(asked.names, items));
+    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, out);
 }

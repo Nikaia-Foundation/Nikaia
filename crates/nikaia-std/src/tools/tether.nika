@@ -231,7 +231,7 @@ fn an_entry(key: ref String, asked: ref Asked) -> FnContract? {
 
 // Owned text or bytes - something a view can point **into**: `String`,
 // `Bytes`, a mapped file, a run of `u8`. A `Vec[Entry]` is not one.
-fn is_a_buffer(ty: ref Ty) -> bool {
+pub fn is_a_buffer(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, .. } => a_buffer_name(name, args),
         else => false,

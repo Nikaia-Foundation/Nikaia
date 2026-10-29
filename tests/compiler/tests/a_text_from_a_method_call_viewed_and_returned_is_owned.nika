@@ -1,0 +1,18 @@
+// #933: a `String` a method call returns, viewed (`trim()`) and handed back,
+// is a view of a local, not of a parameter: the function lowers `-> String`.
+trait Hasher { fn hex(ref self, seed: ref String) -> String }
+struct Plain {}
+impl Hasher for Plain { fn hex(ref self, seed: ref String) -> String { return f"  {seed}  " } }
+fn tag[H: Hasher](seed: String, host: ref H) -> String {
+    let hex = host.hex(seed)
+    return hex.trim()
+}
+fn tag2(seed: String, host: ref Plain) -> String {
+    let hex = host.hex(seed)
+    return hex.trim()
+}
+fn main() {
+    let p = Plain {}
+    println(tag("ab", p))
+    println(tag2("cd", p))
+}

@@ -149,7 +149,7 @@ pub(crate) fn an_entry(key: &str, asked: &Asked<'_, '_, '_>) -> Option<FnContrac
     })
 }
 
-pub(crate) fn is_a_buffer(ty: &Ty) -> bool {
+pub fn is_a_buffer(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, .. } => a_buffer_name(name, args),
         _ => false,

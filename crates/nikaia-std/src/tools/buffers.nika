@@ -89,6 +89,8 @@ pub struct BufferAsk {
     /// `own`'s functions by a method's name.
     pub own_methods: ref MethodIndex,
     pub library: ref Ledger,
+    /// `library`'s functions by a method's name.
+    pub library_methods: ref MethodIndex,
     pub items: ref Vec[Spanned[Item]],
     pub context: ref KeepContext,
     pub given_up: ref collections::BTreeMap[i64, String],
@@ -504,6 +506,10 @@ fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Ty
             if called == "to_string" && formats(receiver, ask, walk) {
                 return Buffer::Named("String")
             }
+            let owned = text_by_every_method(ask, called)
+            if owned != null {
+                return Buffer::Named(owned ?? "")
+            }
         }
         else => {}
     }
@@ -529,6 +535,36 @@ fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Ty
     }
     if !is_the_buffer(value, ask, walk) && declares_text(ask.names, ty) {
         return Buffer::Named("String")
+    }
+    return found
+}
+
+// **Text a method of this package hands back as its own** (#933), as a
+// function's (`a_call_buffer`): every method by that name hands back the same
+// owned text or bytes and takes no keep, and `std` has none by that name.
+// `let hex = host.hex(seed)` is then this frame's buffer, and a view of it
+// that leaves lives in the caller's keep.
+fn text_by_every_method(ask: ref BufferAsk, method: ref String) -> String? {
+    if method_keys(ask.library_methods, method).len() > 0 {
+        return null
+    }
+    let mut found: String? = null
+    for key in method_keys(ask.own_methods, method) {
+        let contract = ask.own.functions[key] ?? return null
+        if takes_a_keep(contract) {
+            return null
+        }
+        let signature = contract.signature ?? return null
+        let result = signature.result ?? return null
+        if !is_a_buffer(result) || a_ledger_type_with_a_view(result) {
+            return null
+        }
+        let text = result.text()
+        let before = found?.clone() ?? ""
+        if found != null && before != text {
+            return null
+        }
+        found = text
     }
     return found
 }
