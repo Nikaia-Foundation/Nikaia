@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1295] — 2026-10-29
+
+**`let mut x = m.entry(k).or_insert(v)` (or `or_insert_with`) binds the `&mut` that Rust hands back, and lowers with no `mut` (#974). A `let mut` view (an entry's `or_insert`, `m[k] ?? jump`, `m.get(k) ?? jump`, `v[i]`) passed to a `mut` parameter is lent on as `&mut *x`; before, it was `NK1102` or rustc's E0596 (#975).**
+
 ## [0.0.1294] — 2026-10-29
 
 **A part of a `let mut` view of a place (`let mut c = m[k] ?? continue`, a `for mut` element) or of a `mut` parameter, handed to something that keeps it, is taken out with no copy (`std::mem::take`, or `mem::replace` with a stand-in) and must be given back by assignment before the view's block is left (`NK2108`, naming the view and its place); the whole view handed over is `NK1131` (ADR-views-1, #949).**
