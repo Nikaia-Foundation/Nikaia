@@ -273,6 +273,13 @@ impl TrEm {
         if els >= 0 {
             return self.let_else(p, init, els, ind)
         }
+        // `let v = match e { Some(v) => v, None => continue };` -> `?? continue`
+        if self.t.is(init, "MATCH_EXPR") && self.t.is(p, "IDENT_PAT") {
+            let jumped = self.match_jump(init)
+            if jumped != "" {
+                return [f"{ind}let {name}{ty} = {jumped}"]
+            }
+        }
         let looped = self.collect_loop(name, ty, init, ind.clone())
         if looped.len() > 0 {
             return looped
@@ -640,6 +647,38 @@ impl TrEm {
 
     /// `let P = e else { .. };`: one jump over an option or a result is
     /// `?? jump` / `catch { jump }`; else a `match` that binds the names.
+    /// `e ?? jump` for a `match e` of two arms, `Some(x) => x` and `None`
+    /// (or `_`) leaving by `continue`, `break` or `return`; "" otherwise.
+    fn match_jump(ref mut self, n: i64) -> String {
+        let arms = self.t.kids_of(self.t.kid(n, "MATCH_ARM_LIST"), "MATCH_ARM")
+        if arms.len() != 2 {
+            return ""
+        }
+        let mut jump: String = ""
+        let mut kept = false
+        for a in arms {
+            if self.t.kid(a, "MATCH_GUARD") >= 0 {
+                return ""
+            }
+            let p = self.t.nth(a, 0)
+            let ns = self.nodes(a)
+            let body = ns[ns.len() - 1]
+            if self.is_some_pat(p) {
+                let inner = self.t.nth(p, 1)
+                kept = self.t.is(inner, "IDENT_PAT") && self.t.is(body, "PATH_EXPR") && self.src(body) == self.src(inner)
+            } else if self.is_none_pat(p) || self.t.is(p, "WILDCARD_PAT") {
+                let lines = self.arm(body, "", "stmt")
+                if lines.len() == 1 && tr_leaves(lines[0]) {
+                    jump = lines[0].trim().clone()
+                }
+            }
+        }
+        if !kept || jump == "" {
+            return ""
+        }
+        return f"{self.expr(self.t.nth(n, 0))} ?? {jump}"
+    }
+
     fn let_else(ref mut self, p: i64, init: i64, els: i64, ind: String) -> Vec[String] {
         let b = self.t.kid(els, "BLOCK_EXPR")
         let body = self.block(b, f"{ind}        ", "stmt")

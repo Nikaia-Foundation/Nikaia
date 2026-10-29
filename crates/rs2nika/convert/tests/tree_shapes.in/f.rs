@@ -94,3 +94,18 @@ fn shout(v: &mut Vec<String>) {
         *s = s.to_uppercase();
     }
 }
+fn match_jumps(xs: &[Item]) -> Vec<String> {
+    let mut out = Vec::new();
+    for x in xs {
+        let Some(n) = x.name() else { continue };
+        let v = match x.value() {
+            Some(v) => v,
+            None => continue,
+        };
+        let Some(w) = x.other() else {
+            return out;
+        };
+        out.push(format!("{n}{v}{w}"));
+    }
+    out
+}

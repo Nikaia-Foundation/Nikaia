@@ -108,3 +108,13 @@ pub fn shout(mut v: Vec[String]) {
         v[at_1] = v[at_1].to_uppercase()
     }
 }
+pub fn match_jumps(xs: ref Vec[Item]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for x in xs {
+        let n = x.name() ?? continue
+        let v = x.value() ?? continue
+        let w = x.other() ?? return out
+        out.push(f"{n}{v}{w}")
+    }
+    return out
+}
