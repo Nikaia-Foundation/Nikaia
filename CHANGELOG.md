@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1297] — 2026-10-29
+
+**A lambda handed to a parameter that runs it at most once may give away what it captures; a captured value it hands over is gone after the call (no `NK2105` repeat inside such a lambda). `std` names these parameters with the contract key `once` (`Entry::or_insert_with`, `Entry::and_modify`, `task::scope`, `Locked::access`, `SharedMut::access`; not `update`). For user code, once-ness is inferred, lowered as `impl FnOnce`, and never written (ADR-lambdas-1, Part I 5.4 D, #973). Specified; not built yet.**
+
 ## [0.0.1296] — 2026-10-29
 
 **An assignment or compound assignment to a `let mut` view (`c = v`, `c += 1`) writes through it, and an entry view of a number, `bool` or `char` reads as the value; before, it was `NK1105` or rustc's E0368 (#976). The text an `or_insert_with` lambda ends in is built as the map's value type; before, rustc reported mismatched types (#977).**
