@@ -277,14 +277,7 @@ pub(crate) fn declare_function(item: &Item, target: Option<String>, names: &winn
     let changes_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
     let own = own_name((name).as_ref(), names);
     let key = tier_key((target).as_deref(), &own);
-    if target.is_some() {
-        let mut keys: Vec<String> = nikaia_std::index::or(match *nikaia_std::index::get(&declared.methods, &own) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        }, || vec![].into());
-        keys.push(key.to_string());
-        declared.methods.insert(own.to_string(), keys);
-    }
+    if target.is_some() { declared.methods.entry(own.to_string()).or_insert(vec![]).push(key.to_string()); }
     let mut params: Vec<Type> = vec![];
     let mut changes: Vec<bool> = vec![];
     for arg in args.iter() {
@@ -461,12 +454,7 @@ pub(crate) fn set_tier_local(name: &str, local: TierLocal, walk: &mut TierWalk) 
 }
 
 pub(crate) fn bind_tier_local(name: String, local: TierLocal, walk: &mut TierWalk) {
-    let mut stack: Vec<TierLocal> = nikaia_std::index::or(match *nikaia_std::index::get(&walk.locals, &name) {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    }, || vec![].into());
-    stack.push(local);
-    walk.locals.insert(name.to_string(), stack);
+    walk.locals.entry(name.to_string()).or_insert(vec![]).push(local);
     if !walk.frames.is_empty() {
         let last = walk.frames.len() as i64 - 1;
         walk.frames[nikaia_std::index::at(last)].push(name);
@@ -1446,12 +1434,7 @@ pub(crate) fn link(from: &Declaring, from_path: &mut Vec<i64>, to: &Declaring, t
 pub(crate) fn hand_value_over(value: &Expr, hand: Hand, walk: &mut TierWalk) {
     if walk.in_hole && walk.hole_text >= 0 {
         let at = walk.hole_text;
-        let mut wraps: Vec<HoleWrap> = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.hole_wraps, &at) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        }, || vec![].into());
-        wraps.push(HoleWrap { value: value.clone(), hand });
-        walk.flows.hole_wraps.insert(at, wraps);
+        walk.flows.hole_wraps.entry(at).or_insert(vec![]).push(HoleWrap { value: value.clone(), hand });
         return;
     }
     walk.flows.wraps.insert(node_key(value), hand);
@@ -2086,12 +2069,7 @@ pub(crate) fn kept_literal(value: &Expr, owner: &TextOwner, path: &[i64], ty: &T
     let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     if local.literal < 0 { return; }
     let word = seen(owner, path, walk);
-    let mut kept: collections::BTreeSet<String> = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.literal_lets, &local.literal) {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    }, || collections::BTreeSet::new().into());
-    kept.insert(word);
-    walk.flows.literal_lets.insert(local.literal, kept);
+    walk.flows.literal_lets.entry(local.literal).or_insert(collections::BTreeSet::new()).insert(word);
 }
 
 pub(crate) fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
@@ -3552,12 +3530,7 @@ pub(crate) fn merge_flows(into: &mut Flows, from: &Flows) {
     for (word, position) in from.known.iter() { if !into.known.contains_key(word) { into.known.insert(word.to_string(), position.clone()); } }
     for (at, kept) in from.literal_lets.iter() {
         let at = nikaia_std::num::value(at);
-        let mut all: collections::BTreeSet<String> = nikaia_std::index::or(match *nikaia_std::index::get(&into.literal_lets, &at) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        }, || collections::BTreeSet::new().into());
-        all.extend(kept.iter().cloned());
-        into.literal_lets.insert(at.clone(), all);
+        into.literal_lets.entry(at.clone()).or_insert(collections::BTreeSet::new()).extend(kept.iter().cloned());
     }
     into.owned_lets.extend(from.owned_lets.iter().cloned());
     for (at, hand) in from.wraps.iter() {
@@ -3567,12 +3540,7 @@ pub(crate) fn merge_flows(into: &mut Flows, from: &Flows) {
     into.param_into.extend(from.param_into.iter().cloned());
     for (at, wraps) in from.hole_wraps.iter() {
         let at = nikaia_std::num::value(at);
-        let mut all: Vec<HoleWrap> = nikaia_std::index::or(match *nikaia_std::index::get(&into.hole_wraps, &at) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        }, || vec![].into());
-        for wrap in wraps.iter() { all.push(wrap.clone()); }
-        into.hole_wraps.insert(at.clone(), all);
+        into.hole_wraps.entry(at.clone()).or_insert(vec![]).extend(wraps.iter().cloned());
     }
     into.links.extend(from.links.iter().cloned());
     into.unwrappable.extend(from.unwrappable.iter().cloned());

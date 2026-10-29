@@ -419,9 +419,7 @@ fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::
     let own = own_name(name, names)
     let key = tier_key(target, own)
     if target != null {
-        let mut keys: Vec[String] = declared.methods[own]?.clone() ?? []
-        keys.push(key.clone())
-        declared.methods.insert(own.clone(), keys)
+        declared.methods.entry(own.clone()).or_insert([]).push(key.clone())
     }
     let mut params: Vec[Type] = []
     let mut changes: Vec[bool] = []
@@ -729,9 +727,7 @@ fn set_tier_local(name: ref String, local: TierLocal, mut walk: TierWalk) {
 }
 
 fn bind_tier_local(name: String, local: TierLocal, mut walk: TierWalk) {
-    let mut stack: Vec[TierLocal] = walk.locals[name]?.clone() ?? []
-    stack.push(local)
-    walk.locals.insert(name.clone(), stack)
+    walk.locals.entry(name.clone()).or_insert([]).push(local)
     if walk.frames.len() > 0 {
         let last = walk.frames.len() - 1
         walk.frames[last].push(name)
@@ -2073,9 +2069,7 @@ fn link(from: ref Declaring, mut from_path: Vec[i64], to: ref Declaring, mut to_
 fn hand_value_over(value: ref Expr, hand: Hand, mut walk: TierWalk) {
     if walk.in_hole && walk.hole_text >= 0 {
         let at = walk.hole_text
-        let mut wraps: Vec[HoleWrap] = walk.flows.hole_wraps[at]?.clone() ?? []
-        wraps.push(HoleWrap { value: value.clone(), hand: hand })
-        walk.flows.hole_wraps.insert(at, wraps)
+        walk.flows.hole_wraps.entry(at).or_insert([]).push(HoleWrap { value: value.clone(), hand: hand })
         return
     }
     walk.flows.wraps.insert(node_key(value), hand)
@@ -2897,9 +2891,7 @@ fn kept_literal(value: ref Expr, owner: ref TextOwner, path: ref Vec[i64], ty: r
         return
     }
     let word = seen(owner, path, walk)
-    let mut kept: collections::BTreeSet[String] = walk.flows.literal_lets[local.literal]?.clone() ?? collections::BTreeSet()
-    kept.insert(word)
-    walk.flows.literal_lets.insert(local.literal, kept)
+    walk.flows.literal_lets.entry(local.literal).or_insert(collections::BTreeSet()).insert(word)
 }
 
 /// The struct a value is of, where the program says so without types: a
@@ -4845,9 +4837,7 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
         }
     }
     for (at, kept) in from.literal_lets {
-        let mut all: collections::BTreeSet[String] = into.literal_lets[at]?.clone() ?? collections::BTreeSet()
-        all.extend(kept.clone())
-        into.literal_lets.insert(at.clone(), all)
+        into.literal_lets.entry(at.clone()).or_insert(collections::BTreeSet()).extend(kept.clone())
     }
     into.owned_lets.extend(from.owned_lets.clone())
     for (at, hand) in from.wraps {
@@ -4855,11 +4845,7 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
     }
     into.param_into.extend(from.param_into.clone())
     for (at, wraps) in from.hole_wraps {
-        let mut all: Vec[HoleWrap] = into.hole_wraps[at]?.clone() ?? []
-        for wrap in wraps {
-            all.push(wrap.clone())
-        }
-        into.hole_wraps.insert(at.clone(), all)
+        into.hole_wraps.entry(at.clone()).or_insert([]).extend(wraps.clone())
     }
     into.links.extend(from.links.clone())
     into.unwrappable.extend(from.unwrappable.clone())
