@@ -272,6 +272,7 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
     if found.is_some() {
         let ty: Ty = nikaia_std::index::or(found, || Ty::Unknown);
         state.a_read(expr, &name, span);
+        if state.a_mut_view_name(world, expr) && a_copy_by_value(&unviewed_type(&ty)) { state.facts.view_derefs.insert(node_key(expr)); }
         if state.facts.comptime_names.contains(&name) && state.frame_holding(&name) > 0 && state.binding(&name).and_then(|__nikaia_it| __nikaia_it.built).is_none() { state.facts.shadowing_reads.insert(node_key(expr)); }
         check_core_expr_an_open_char_read(state, expr, &name, span);
         state.a_sequence_is_taken(&name, &ty, span);

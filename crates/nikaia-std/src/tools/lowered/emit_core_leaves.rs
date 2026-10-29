@@ -98,6 +98,7 @@ impl EmitState {
                 _ => false,
             };
         }
+        if !parenthesise && self.facts.view_derefs.contains(&node_key(node)) { parenthesise = true; }
         if !parenthesise { parenthesise = self.emits_as_cast(world, node); }
         if !parenthesise {
             parenthesise = match node {

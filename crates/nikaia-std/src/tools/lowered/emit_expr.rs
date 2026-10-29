@@ -294,6 +294,10 @@ impl EmitState {
             out.push(&format!("(*{})", self.emit_expr_read_name(world, name, node)));
             return Ok(());
         }
+        if self.facts.view_derefs.contains(&at) && !self.facts.reborrowed_args.contains(&at) {
+            out.push(&format!("*{}", self.emit_expr_read_name(world, name, node)));
+            return Ok(());
+        }
         if self.constructs_by_name(world, &text) {
             out.push(&self.path(world, walk.trusting, walk.unpinned, &vec![text.to_string(), String::from("new")]));
             return Ok(());

@@ -1,0 +1,55 @@
+use std::collections
+
+// An assignment to a `let mut` view, whole or by an operator, writes through
+// it (#976): `*c += 1` below, as every mention of a view of a number is `*c`.
+struct Point { x: i64, y: i64 }
+
+fn bump(mut n: i64) {
+    n += 100
+}
+
+fn twice(n: i64) -> i64 {
+    return n * 2
+}
+
+fn main() {
+    let mut n: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut c = n.entry("q").or_insert(0)
+    c += 1
+    c += 2
+    if c == 3 && c < 10 {
+        println(f"c is {c}, twice {twice(c)}")
+    }
+    let mut d = n.entry("r").or_insert_with(fn() { 7 })
+    d = d * 2
+    let mut b = n.entry("b").or_insert(1)
+    bump(b)
+    b = twice(b) + 1
+    let mut h: collections::HashMap[String, i64] = collections::HashMap()
+    let mut e = h.entry("x").or_insert(1)
+    e -= 5
+    let mut flags: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    let mut f = flags.entry("on").or_insert(false)
+    f = !f
+    let mut g = n.entry("g").or_insert(-3)
+    g = g.abs() + 1
+    let mut s: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let mut t = s.entry("a").or_insert("p")
+    t = "new"
+    t += "!"
+    let mut m: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+    m.insert("a", [1])
+    m.insert("b", [1])
+    let mut v = m["a"] ?? return
+    v = [2, 3]
+    let mut w = m.get("b") ?? return
+    w = [4, 5, 6]
+    let mut points: Vec[Point] = [Point { x: 1, y: 2 }]
+    let mut p = points[0]
+    p = Point { x: 3, y: 4 }
+    for (k, value) in n {
+        println(f"{k} {value}")
+    }
+    println(f"{h["x"] ?? 0} {flags["on"] ?? false} {s["a"] ?? ""}")
+    println(f"{m["a"]?.len() ?? 0} {m["b"]?.len() ?? 0} {points[0].x} {points[0].y}")
+}

@@ -898,6 +898,11 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // (#974): the binding is never reassigned, so it takes no `mut`.
     if mutable && state.flow.std_entry_views.contains(id_of(value) as i64) {
         state.facts.mut_view_reads.insert(id_of(value) as i64, "")
+        // **One of a number is typed as the number** (#976): every mention
+        // of it is `(*c)` below, read or written.
+        if copies_as_a_view(bound) {
+            bound = unviewed_type(bound)
+        }
     }
     if check_core_stmt_a_path(bound) && state.made_from_text(world, value) {
         state.flow.text_paths.insert(id)
@@ -1077,6 +1082,19 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     }
     let mut into = check_core_expr(state, world, host, target, span)
     state.narrowing.target = saved_target
+    // **A `let mut` view is written through** (#976): `*c = v`, `*c += 1`,
+    // and what it is assigned is the value it views. A view of text stays
+    // one: the slot holds what its tier says.
+    if state.a_mut_view_name(world, target) {
+        state.facts.view_derefs.insert(node_key(target))
+        let of_text = match into {
+            Ty::Named { name, .. } => name == "str",
+            else => false,
+        }
+        if !of_text {
+            into = unviewed_type(into)
+        }
+    }
     check_narrow_written_through(state, target)
     if check_core_stmt_an_index(target) {
         let slot: Ty = match into {

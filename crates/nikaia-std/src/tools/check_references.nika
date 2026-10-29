@@ -92,7 +92,7 @@ impl CheckState {
 
     /// Whether the expression is a name a `let mut` bound to a mutable view
     /// of a place (#975), which is the `&mut` already.
-    fn a_mut_view_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    pub fn a_mut_view_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::Variable(symbol, _) => {
                 let name = world.words.resolve(symbol).clone()

@@ -428,6 +428,13 @@ impl EmitState {
             out.push(f"(*{self.emit_expr_read_name(world, name, node)})")
             return
         }
+        // **So is a `let mut` view, where it is written or is a number**
+        // (#976); lent on to a `mut` parameter it is `&mut *c` already.
+        // A postfix base puts it in parentheses.
+        if self.facts.view_derefs.contains(at) && !self.facts.reborrowed_args.contains(at) {
+            out.push(f"*{self.emit_expr_read_name(world, name, node)}")
+            return
+        }
         // **A constructor handed over as a value** (ADR-140 D2): `Summary` in
         // value position is `Summary::new`, where only a type this file
         // declares or one the library publishes with a constructor.

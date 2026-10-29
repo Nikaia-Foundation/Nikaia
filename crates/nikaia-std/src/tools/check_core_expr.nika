@@ -330,6 +330,11 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
     if found != null {
         let ty: Ty = found ?? Ty::Unknown
         state.a_read(expr, name, span)
+        // **A `let mut` view of a number is the `&mut` of it** (#976): every
+        // mention reads through it.
+        if state.a_mut_view_name(world, expr) && a_copy_by_value(unviewed_type(ty)) {
+            state.facts.view_derefs.insert(node_key(expr))
+        }
         // **A binding that shadows a `comptime` is read under its own name**
         // (#703): the constant stands in the outermost frame, and a `comptime`
         // a body declares is a constant too.

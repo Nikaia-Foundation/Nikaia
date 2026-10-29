@@ -154,6 +154,10 @@ impl EmitState {
                 else => false,
             }
         }
+        // And a `let mut` view read through (#976).
+        if !parenthesise && self.facts.view_derefs.contains(node_key(node)) {
+            parenthesise = true
+        }
         if !parenthesise {
             parenthesise = self.emits_as_cast(world, node)
         }
