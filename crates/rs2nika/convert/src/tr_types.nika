@@ -198,6 +198,10 @@ impl TrEm {
             return args[0].clone()
         }
         if name == "Option" && args.len() == 1 {
+            if args[0].ends_with("?") {
+                self.todos += 1
+                return f"{args[0]} /* TODO(rs2nika): an option of an option (one `?` only: an enum of the three cases) */"
+            }
             return f"{args[0]}?"
         }
         if name == "HashMap" || name == "BTreeMap" || name == "HashSet" || name == "BTreeSet" || name == "VecDeque" || name == "BinaryHeap" {

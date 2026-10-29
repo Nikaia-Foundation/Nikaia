@@ -275,7 +275,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R228 `--only` of a method of a type the Rust side keeps (not `Checker`/`Emitter`, not one tools/*.nika define) -> a free function over the fields it reads: `&self` -> `f: ref T` for each `self.f`, typed from the `struct`, `self.f` -> `f`, `self.m(` -> `m(`; over a tools type the `impl` shell stays (R207)",
         "R229 a `let` Rust wrapped after its `=` (`let x =` then the value on the next line) is one line",
         "R230 `if let Some(x) = e {` as the last statement of a loop, no `else` -> `let x = e ?? continue` and its body one level out; `e.filter(|_| c)` -> `if !c { continue }` before it",
-        "R231 `for (k, v) in m.iter_mut() { if c { v.f = x; } }` -> the keys first (`changed.push(k.clone())`), then `let mut v = (m[k] ?? continue).clone()`, `v.f = x`, `m.insert(k.clone(), v)` (a map lends no entry to change)",
+        "R231 `for (k, v) in m.iter_mut() { if c { v.f = x; } }` -> the keys first (`changed.push(k.clone())`), then `let Some(mut v) = m.get(&k).cloned() else { continue }`, `v.f = x`, `m.insert(k.clone(), v)` (a map lends no entry to change)",
         "R232 `x.clone() ?? d` -> `x?.clone() ?? d`, a `filter_map` closure `fn(u) { u.f.clone() }` -> `u.f?.clone()` (an option is cloned through `?.`, NK1125)",
         "R233 `let path = pause_path` (a tools/*.nika function under a local name) goes, its calls `path(..)` -> `pause_path(..)`",
         "R234 `let mut notes = []` whose first `notes.push(..)` pushes a text or an f-string -> `let mut notes: Vec[String] = []`",
@@ -20181,8 +20181,8 @@ fn rs2nika_loop_lets(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]
 /// R231: `for (k, v) in m.iter_mut() { if c { v.f = x; } }` -> the keys
 /// first, then each entry changed and put back (a map lends no entry to
 /// change): `let mut changed: Vec[String] = []`, `for (k, v) in m { if c {
-/// changed.push(k.clone()) } }`, `for k in changed { let mut v = (m[k] ??
-/// continue).clone()`, `v.f = x`, `m.insert(k.clone(), v) }`.
+/// changed.push(k.clone()) } }`, `for k in changed { let Some(mut v) =
+/// m.get(&k).cloned() else { continue }`, `v.f = x`, `m.insert(k.clone(), v) }`.
 fn rs2nika_map_updates(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut i = 0
@@ -20216,7 +20216,7 @@ fn rs2nika_map_updates(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Strin
         out.push(f"{ind}    }}")
         out.push(f"{ind}}}")
         out.push(f"{ind}for {k} in {keys} {{")
-        out.push(f"{ind}    let mut {v} = ({m}[{k}] ?? continue).clone()")
+        out.push(f"{ind}    let mut {v} = match {m}.get(&{k}) {{ Some({v}) => {v}.clone(), None => continue }};")
         out.push(f"{ind}    {set}")
         out.push(f"{ind}    {m}.insert({k}.clone(), {v});")
         out.push(f"{ind}}}")

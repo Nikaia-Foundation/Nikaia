@@ -537,6 +537,9 @@ impl TrEm {
                 self.uses.insert("process")
                 return f"process::exit({self.args(n).join(", ")})"
             }
+            if owner == "String" && last == "from_utf8_lossy" && arg_nodes.len() == 1 {
+                return f"({self.expr(arg_nodes[0])}.text() catch {{ \"\" }})"
+            }
             if owner == "env" && last == "args" {
                 self.uses.insert("cli")
                 return "cli::args()"
@@ -970,11 +973,26 @@ impl TrEm {
     fn closure(ref mut self, n: i64) -> String {
         let mut ps: Vec[String] = []
         for p in self.t.kids_of(self.t.kid(n, "PARAM_LIST"), "PARAM") {
-            ps.push(self.pat(self.t.nth(p, 0)))
+            let written = self.pat(self.t.nth(p, 0))
+            ps.push(if written == "()" { "_" } else { written })
         }
         let ns = self.nodes(n)
         let body = ns[ns.len() - 1]
         let head = f"fn({ps.join(", ")})"
+        // `filter_map(|x| e?)`: the closure hands back an option
+        let up = self.t.nodes[n].parent
+        let called = if up >= 0 { self.t.nodes[up].parent } else { -1 }
+        let by = if called >= 0 && self.t.is(called, "METHOD_CALL_EXPR") { self.src(self.t.kid(called, "NAME_REF")) } else { "" }
+        if !self.t.is(body, "BLOCK_EXPR") && ["filter_map", "find_map", "and_then"].contains(by) && self.t.find(body, "TRY_EXPR") >= 0 {
+            let saved_throws = self.fails
+            let saved_opt = self.opt
+            self.opt = true
+            self.fails = false
+            let e = self.expr(body)
+            self.fails = saved_throws
+            self.opt = saved_opt
+            return f"{head} {{ {e} }}"
+        }
         if self.t.is(body, "BLOCK_EXPR") {
             let ind = self.ind.clone()
             let saved_throws = self.fails

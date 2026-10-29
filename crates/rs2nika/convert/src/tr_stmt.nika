@@ -430,7 +430,8 @@ impl TrEm {
             let jump = body[0].trim().clone()
             let inner = self.t.nth(p, 1)
             if self.is_some_pat(p) && !self.refutable(inner) {
-                return [f"{ind}let {self.pat(inner)} = {e} ?? {jump}"]
+                let m = if self.t.is(inner, "IDENT_PAT") && self.t.has_tok(inner, "MUT_KW") { "mut " } else { "" }
+                return [f"{ind}let {m}{self.pat(inner)} = {e} ?? {jump}"]
             }
             if path == "Ok" && self.t.is(p, "TUPLE_STRUCT_PAT") && !self.refutable(inner) {
                 return [f"{ind}let {self.pat(inner)} = {e} catch {{ {jump} }}"]

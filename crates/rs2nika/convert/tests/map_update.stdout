@@ -7,7 +7,7 @@ pub fn as_promised(mut ledger: Ledger, another: fn(ref String) -> bool sync) -> 
         }
     }
     for key in changed {
-        let mut contract = (ledger.functions[key] ?? continue).clone()
+        let mut contract = match ledger.functions.get(key) { contract => contract.clone(), null => continue }
         contract.sync_claim = Sync::Unpromised
         ledger.functions.insert(key.clone(), contract)
     }
