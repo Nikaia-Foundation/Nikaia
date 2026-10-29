@@ -1,0 +1,14 @@
+error[NK2305]: `c` is changed here, but `v` may point into its data and is used later.
+   --> tests/text_moved_into_a_field_is_watched_while_a_view_is_used.nika:17:5
+    |
+ 14 |     let v = parse(text)
+    |         - `v` is made here by `parse`
+    ...
+ 17 |     c.input.push_str("b")
+    |     ^ `c` changes here
+    ...
+ 19 |     println(v.head)
+    |             - `v` is used here, after the change
+    |
+    = help: Use `v` before this change, or take a copy of it with `v.clone()` before the change.
+1 change to data a view still to be used may point into

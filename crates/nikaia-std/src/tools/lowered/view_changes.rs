@@ -594,6 +594,14 @@ pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView
             return;
         },
     }
+    for (moved, part) in vc_moved_parts(name, value, ask) {
+        for v in 0..views.len() as i64 {
+            if nikaia_std::index::get(&views, (v) as usize).roots.contains(&moved) {
+                views[nikaia_std::index::at(v)].roots.insert(name.to_string());
+                views[nikaia_std::index::at(v)].parts.insert(part.to_string());
+            }
+        }
+    }
     let other = match vc_variable(value, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut viewer: Option<String> = None;
     for v in 0..views.len() as i64 {
@@ -607,6 +615,26 @@ pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView
         let bound = nikaia_std::index::or(*nikaia_std::index::get(&walk.lets, &other), || 0);
         walk.give_ups.kept.insert(bound, first.to_string());
     }
+}
+
+pub(crate) fn vc_moved_parts(name: &str, value: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_>) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = vec![];
+    match value {
+        Expr::StructLit { fields, .. } => {
+            for field in fields.iter() {
+                let label = ask.names.resolve(field.name).to_string();
+                let moved = match &field.value {
+                    None => label.to_string(),
+                    Some(given) => match vc_variable(given, ask) { Some(__nikaia_value) => __nikaia_value, None => continue },
+                };
+                out.push((moved, format!("{}.{}", name, label)));
+            }
+        },
+        Expr::Tuple(items, _) => { for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, name.to_string())); } },
+        Expr::ListLit { items, .. } => { for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, name.to_string())); } },
+        _ => { },
+    }
+    out
 }
 
 pub(crate) fn vc_label(span: Span, word: &str, text: String, main: bool) -> CheckLabel { CheckLabel { span, word: word.to_string(), text, main } }

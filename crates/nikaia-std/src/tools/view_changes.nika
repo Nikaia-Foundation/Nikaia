@@ -864,6 +864,19 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
             return
         }
     }
+    // **A move into a part of a new local** (D3, #942): `Cursor { input:
+    // text }`, `(text, 1)`, `[text]` - the new local holds the same data in
+    // that part, followed as the argument was, so changing it in place is
+    // D4's. A struct's field is watched alone; a tuple's or a list's element
+    // is read as part of its container.
+    for (moved, part) in vc_moved_parts(name, value, ask) {
+        for v in 0..<views.len() {
+            if views[v].roots.contains(moved) {
+                views[v].roots.insert(name.clone())
+                views[v].parts.insert(part.clone())
+            }
+        }
+    }
     // A move into a local (D3): the new name holds the same data, followed
     // as the argument was, and the old buffer lives in the frame's keep from
     // its `let`.
@@ -882,6 +895,37 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
         let bound = walk.lets[other] ?? 0
         walk.give_ups.kept.insert(bound, first.clone())
     }
+}
+
+/// The variables a literal bound to `name` takes whole, each with the place
+/// of `name` it lands in: `c.input` for a struct's field, `name` itself for an
+/// element of a tuple or a list.
+fn vc_moved_parts(name: ref String, value: ref Expr, ask: ref VcAsk) -> Vec[(String, String)] {
+    let mut out: Vec[(String, String)] = []
+    match value {
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                let label = ask.names.resolve(field.name).clone()
+                let moved = match field.value {
+                    null => label.clone(),
+                    given => vc_variable(given ?? continue, ask) ?? continue,
+                }
+                out.push((moved, f"{name}.{label}"))
+            }
+        }
+        Expr::Tuple(items, _) => {
+            for item in items {
+                out.push((vc_variable(item, ask) ?? continue, name.clone()))
+            }
+        }
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                out.push((vc_variable(item, ask) ?? continue, name.clone()))
+            }
+        }
+        else => {}
+    }
+    return out
 }
 
 fn vc_label(span: Span, word: ref String, text: String, main: bool) -> CheckLabel {
