@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1282] — 2026-10-29
+
+**A `for` lends its list: changing it in the body (a mutating method, an element assignment, an assignment of the whole list) is `NK2305` instead of a rustc error; reading stays allowed (Part I 3.3, Fixes #960).**
+
 ## [0.0.1281] — 2026-10-29
 
 **A name bound to text literals, used as a `String` part of a tuple looked up in a container that holds text of its own (`set.remove((1, other))`), or kept in a published `String` field of a struct another file of the package declares, is declared `String`: the tier pass reads the package's own published fields (ADR-282 D17, Fixes #956).**
