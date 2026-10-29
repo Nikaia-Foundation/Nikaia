@@ -92,3 +92,145 @@ pub(crate) fn choices(words: &[String]) -> String {
     out
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManifestItem {
+    pub section: String,
+    pub name: String,
+    pub key: String,
+    pub table: bool,
+    pub text: String,
+    pub word: Option<String>,
+    pub integer: Option<i64>,
+    pub machine: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManifestDependency {
+    pub shape: DependencyShape,
+    pub text: String,
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ManifestFile {
+    pub build: collections::BTreeMap<String, String>,
+    pub package: collections::BTreeMap<String, String>,
+    pub name: Option<String>,
+    pub version: String,
+    pub dependencies: collections::BTreeMap<String, ManifestDependency>,
+    pub codegen: collections::BTreeMap<String, collections::BTreeMap<String, String>>,
+    pub libraries: collections::BTreeMap<String, String>,
+    pub notes: Vec<String>,
+    pub root: Option<fs::Path>,
+}
+
+pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), notes: vec![], root: None } }
+
+pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std::error::Thrown<Refused>> {
+    let mut manifest = manifest_empty();
+    for item in items.iter() { if item.section == "package" && !item.name.is_empty() && item.key.is_empty() { manifest.package.insert(item.name.to_string(), item.text.to_string()); } }
+    manifest.name = manifest_word_at(items, "package", "name", "");
+    manifest.version = nikaia_std::index::or(manifest_word_at(items, "package", "version", ""), || "0.0.0".into());
+    manifest.dependencies = manifest_dependencies(items)?;
+    manifest.libraries = manifest_libraries(items)?;
+    for value in items.iter() {
+        if value.section != "build" || value.name.is_empty() || !value.key.is_empty() { continue; }
+        if value.table {
+            manifest.codegen.insert(value.name.to_string(), manifest_codegen(items, value)?);
+            continue;
+        }
+        let switch = build_key(&value.name)?;
+        match switch {
+            Switch::Moved(note) => { manifest.notes.push(note); },
+            Switch::Kept => { manifest.build.insert(value.name.to_string(), nikaia_std::index::or(match value.word.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || value.text.to_string().into())); },
+        }
+    }
+    Ok(manifest)
+}
+
+pub fn manifest_has_build_section(manifest: &ManifestFile) -> bool { !manifest.build.is_empty() || !manifest.codegen.is_empty() }
+
+pub fn manifest_foreign_crates(manifest: &ManifestFile) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (name, declared) in manifest.dependencies.iter() {
+        match declared.shape {
+            DependencyShape::Rust => { out.insert(crate_name(name)); },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn manifest_text_at(items: &[ManifestItem], section: &str, name: &str, key: &str) -> Option<String> {
+    for item in items.iter() {
+        if item.section == section && item.name == name && item.key == key {
+            return Some(nikaia_std::index::or(match item.word.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || item.text.to_string().into()));
+        }
+    }
+    None
+}
+
+pub(crate) fn manifest_word_at(items: &[ManifestItem], section: &str, name: &str, key: &str) -> Option<String> {
+    for item in items.iter() {
+        if item.section == section && item.name == name && item.key == key {
+            return match item.word.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+        }
+    }
+    None
+}
+
+pub(crate) fn manifest_libraries(items: &[ManifestItem]) -> Result<collections::BTreeMap<String, String>, nikaia_std::error::Thrown<Refused>> {
+    let mut out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    for section in items.iter() { if section.section == "library" && section.name.is_empty() && !section.table { return Err(nikaia_std::error::throwing(Refused::Because(String::from("`library` is a table of libraries: `[library.<name>]` with `pkg-config = \"<name>\"`.")), &"manifest_libraries")); } }
+    for entry in items.iter() {
+        if entry.section != "library" || entry.name.is_empty() || !entry.key.is_empty() { continue; }
+        let name = entry.name.to_string();
+        if !entry.table { return Err(nikaia_std::error::throwing(Refused::Because(format!("`library.{}` is a table: `[library.{}]` with `pkg-config = \"{}\"`.", name, name, name)), &"manifest_libraries")); }
+        for item in items.iter() {
+            if item.section == "library" && item.name == name && !item.key.is_empty() && item.key != "pkg-config" {
+                let key = item.key.to_string();
+                return Err(nikaia_std::error::throwing(Refused::Because(format!("`[library.{}]` takes `pkg-config` and nothing else, not `{}`: the compiler forms the linker's arguments itself (Part III 13.4).", name, key)), &"manifest_libraries"));
+            }
+        }
+        let found_by = match manifest_word_at(items, "library", &name.to_string(), "pkg-config") { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(Refused::Because(format!("`[library.{}]` needs `pkg-config = \"<name>\"`: a library is found only through `pkg-config` (Part III 13.4).", name)), &"manifest_libraries")) };
+        out.insert(name, found_by);
+    }
+    Ok(out)
+}
+
+pub(crate) fn manifest_codegen(items: &[ManifestItem], table: &ManifestItem) -> Result<collections::BTreeMap<String, String>, nikaia_std::error::Thrown<Refused>> {
+    let target = table.name.to_string();
+    if !table.machine { codegen_table(&target)?; }
+    let mut out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    for value in items.iter() {
+        if value.section != "build" || value.name != target || value.key.is_empty() { continue; }
+        codegen_key(&target, &value.key)?;
+        if value.key == "codegen-units" { codegen_units(&target, value.integer, &value.text.to_string())?; }
+        out.insert(value.key.to_string(), value.text.to_string());
+    }
+    Ok(out)
+}
+
+pub(crate) fn manifest_dependencies(items: &[ManifestItem]) -> Result<collections::BTreeMap<String, ManifestDependency>, nikaia_std::error::Thrown<Refused>> {
+    let mut out: collections::BTreeMap<String, ManifestDependency> = collections::BTreeMap::new();
+    for value in items.iter() {
+        if value.section != "dependencies" || value.name.is_empty() || !value.key.is_empty() { continue; }
+        let kind = manifest_text_at(items, "dependencies", &value.name.to_string(), "type");
+        let path = manifest_word_at(items, "dependencies", &value.name.to_string(), "path");
+        let typed = kind.is_some();
+        let has_path = path.is_some();
+        let shape = dependency(&value.name, typed, nikaia_std::index::or(kind.as_deref(), || ""), has_path)?;
+        out.insert(value.name.to_string(), ManifestDependency { shape, text: value.text.to_string(), path });
+    }
+    Ok(out)
+}
+

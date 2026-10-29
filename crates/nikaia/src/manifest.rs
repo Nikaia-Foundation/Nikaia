@@ -26,38 +26,36 @@ use crate::refused;
 
 // **Every decision the manifest makes is Nikaia** (`tools/manifest.nika`,
 // ADR-294): which `[build]` keys exist, have moved or are withdrawn, which
-// machines and keys `[build.<target>]` may carry, and which shape a dependency
-// is. The `toml` crate stays here, behind the adapter (ADR-294): this module
-// reads the file and hands those questions plain text.
+// machines and keys `[build.<target>]` may carry, which shape a dependency
+// is, and the `ManifestFile` the answers make (MF). The `toml` crate stays
+// here, behind the adapter (ADR-294): this module reads the file, hands the
+// document over as `ManifestItem`s of plain text, and keeps the readers'
+// signatures for the callers.
 use nikaia_std::tools::manifest as decide;
 
-/// Where a `nikaia.toml` was found, and what it said.
+/// Where a `nikaia.toml` was found, and what it said: `tools/manifest.nika`'s
+/// `ManifestFile`, and the `Dependency` map derived from it once.
 ///
 /// Absent outside a project, which is not an error: a single `.nika` file
 /// compiles with the built-in defaults and the flags, and littering a manifest
 /// into someone's directory to make that work would be the wrong trade.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Manifest {
-    build: BTreeMap<String, String>,
-    package: BTreeMap<String, toml::Value>,
+    file: decide::ManifestFile,
     dependencies: BTreeMap<String, Dependency>,
-    /// `[build.<target>]` - `opt-level` and `lto`, per machine (Part III 13.3).
-    codegen: BTreeMap<String, BTreeMap<String, toml::Value>>,
-    /// `[library.<name>]`: each system library an `extern(library: …)` block
-    /// names, with the `pkg-config` name it is found by (Part III 13.4,
-    /// [ADR-324](../../../docs/specification/adr/adr-324.md) D2, D3).
-    libraries: BTreeMap<String, String>,
-    /// What this manifest carries that the compiler no longer reads, and where
-    /// it went. Printed once per build rather than returned as an error:
-    /// failing a manifest somebody already wrote to the specification would
-    /// punish them for the move ([ADR-303](../../../docs/specification/adr/adr-303.md) D5).
-    notes: Vec<String>,
-    /// The directory the manifest was found in, and therefore the project root.
-    /// `None` when there was no manifest at all.
-    root: Option<PathBuf>,
 }
 
-/// One entry of `[dependencies]`, and which of the three shapes it is.
+impl Default for Manifest {
+    fn default() -> Manifest {
+        Manifest {
+            file: decide::manifest_empty(),
+            dependencies: BTreeMap::new(),
+        }
+    }
+}
+
+/// One entry of `[dependencies]`, and which of the three shapes it is
+/// (`tools/manifest.nika`'s `ManifestDependency`, in `toml`'s words).
 ///
 /// The distinction is the whole of the translation: a native Rust crate is
 /// passed to Cargo exactly as written (ADR-002 D1), a Nikaia package **by path**
@@ -113,89 +111,49 @@ impl Manifest {
         let mut manifest = Manifest::parse(&text)
             .with_context(|| format!("in {}", path.display()))
             .map_err(|e| refused!("{e:#}"))?;
-        manifest.root = path.parent().map(Path::to_path_buf);
+        manifest.file.root = path.parent().map(Path::to_path_buf);
         Ok(manifest)
     }
 
-    /// Whether this manifest says anything about how to build.
-    ///
-    /// What it is for is a **dependency's** `[build]`, which is ignored:
-    /// a package is built with the settings of the program that uses it
-    /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15 rule 4), and
-    /// anything else would put two answers to the parallelism question in one
-    /// build. Ignored **and said**, which is why there is a question to ask.
+    /// Whether this manifest says anything about how to build
+    /// (`manifest_has_build_section`).
     pub fn has_build_section(&self) -> bool {
-        !self.build.is_empty() || !self.codegen.is_empty()
+        decide::manifest_has_build_section(&self.file)
     }
 
     /// `[package]`, `[dependencies]`, `[build]` and the `[build.<target>]`
-    /// codegen tables.
+    /// codegen tables: the document as `ManifestItem`s, read by
+    /// `manifest_parse`.
     pub fn parse(text: &str) -> Result<Manifest> {
         let document: toml::Value = toml::from_str(text).context("this is not valid TOML")?;
-
-        let mut manifest = Manifest {
-            package: table_of(&document, "package"),
-            dependencies: dependencies(&document)?,
-            libraries: libraries(&document)?,
-            ..Manifest::default()
-        };
-
-        let Some(table) = document.get("build").and_then(toml::Value::as_table) else {
-            return Ok(manifest);
-        };
-
-        let mut build = BTreeMap::new();
-        for (key, value) in table {
-            if let Some(sub) = value.as_table() {
-                manifest.codegen.insert(key.clone(), codegen(key, sub)?);
-                continue;
-            }
-            if let decide::Switch::Moved(note) = decide::build_key(key).map_err(refusal)? {
-                manifest.notes.push(note);
-                // Not carried into `build`: a key nothing reads must not be
-                // reachable through `setting`, or a later reader would resolve
-                // it from the wrong file.
-                continue;
-            }
-            // Every switch is a word, so a bare `no` (TOML's boolean) or a
-            // count is the plausible mistake. Reporting the type here would
-            // hide the *reason* - `Build::parse` explains why a count is not a
-            // count - so the value is stringified and passed on to the
-            // parser that owns the setting.
-            let word = match value {
-                toml::Value::String(word) => word.clone(),
-                other => other.to_string(),
-            };
-            build.insert(key.clone(), word);
-        }
-        manifest.build = build;
-        Ok(manifest)
+        let file = decide::manifest_parse(&items_of(&document)).map_err(refusal)?;
+        let dependencies = file
+            .dependencies
+            .iter()
+            .map(|(name, declared)| (name.clone(), dependency_of(declared)))
+            .collect();
+        Ok(Manifest { file, dependencies })
     }
 
     /// The project root - the directory the manifest sits in.
     pub fn root(&self) -> Option<&Path> {
-        self.root.as_deref()
+        self.file.root.as_deref()
     }
 
     /// What this manifest says that the compiler no longer reads, and where it
     /// went. One line each, for a build to print once.
     pub fn notes(&self) -> &[String] {
-        &self.notes
+        &self.file.notes
     }
 
     /// `[package] name`, which becomes the Cargo package and the binary's name.
     pub fn package_name(&self) -> Option<&str> {
-        self.package.get("name").and_then(toml::Value::as_str)
+        self.file.name.as_deref()
     }
 
-    /// `[package] version`. Cargo requires one, so a project that does not say
-    /// gets `0.0.0` - a version nobody typed, rather than a guess at one they
-    /// meant.
+    /// `[package] version`, `0.0.0` where the project does not say.
     pub fn package_version(&self) -> &str {
-        self.package
-            .get("version")
-            .and_then(toml::Value::as_str)
-            .unwrap_or("0.0.0")
+        &self.file.version
     }
 
     /// Everything `[dependencies]` declared, in the order Cargo will see it.
@@ -204,34 +162,29 @@ impl Manifest {
     }
 
     /// **The Rust crates this build declares**, under the name a program writes
-    /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D1).
-    ///
-    /// `hyper-shim = { type = "rust", … }` is written `hyper_shim::serve_once`
-    /// in a program, because that is the crate name Cargo makes of the key and
-    /// the name the generated Rust carries. The manifest key is what a person
-    /// types and the underscore form is what a call names, so the translation
-    /// belongs here rather than at every reader.
-    ///
-    /// **Only `type = "rust"`.** A Nikaia package by path is read as part of
-    /// this program and has a ledger of its own; what this names is the set at
-    /// whose edge D1's question is asked.
+    /// (`manifest_foreign_crates`, ADR-290 D1).
     pub fn foreign_crates(&self) -> std::collections::BTreeSet<String> {
-        self.dependencies
-            .iter()
-            .filter(|(_, declared)| matches!(declared, Dependency::Rust(_)))
-            .map(|(name, _)| decide::crate_name(name))
-            .collect()
+        decide::manifest_foreign_crates(&self.file)
     }
 
     /// `[library.<name>]`: each library's name and its `pkg-config` name
     /// (ADR-324 D2).
     pub fn libraries(&self) -> &BTreeMap<String, String> {
-        &self.libraries
+        &self.file.libraries
     }
 
     /// The codegen table for one machine, empty where the manifest is silent.
     pub fn codegen_for(&self, target: &str) -> BTreeMap<String, toml::Value> {
-        self.codegen.get(target).cloned().unwrap_or_default()
+        self.file
+            .codegen
+            .get(target)
+            .map(|table| {
+                table
+                    .iter()
+                    .map(|(key, text)| (key.clone(), value_of(text)))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// The effective value: the flag if one was given, else the manifest, else
@@ -242,118 +195,78 @@ impl Manifest {
     /// manifest that the built-in default could override would make a
     /// committed switch a suggestion.
     pub fn setting<'a>(&'a self, key: &str, flag: Option<&'a str>, default: &'a str) -> &'a str {
-        flag.or_else(|| self.build.get(key).map(String::as_str))
+        flag.or_else(|| self.file.build.get(key).map(String::as_str))
             .unwrap_or(default)
     }
 }
 
-/// A top-level table of the manifest, as a map. Absent is empty, because a
-/// manifest without `[package]` is a manifest that only set switches.
-fn table_of(document: &toml::Value, name: &str) -> BTreeMap<String, toml::Value> {
-    document
-        .get(name)
-        .and_then(toml::Value::as_table)
-        .map(|table| {
-            table
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect::<BTreeMap<_, _>>()
-        })
-        .unwrap_or_default()
-}
-
-/// `[library.<name>]`, checked: a table per library with `pkg-config` and
-/// nothing else, because the compiler forms every argument itself (ADR-324 D3,
-/// D4) and a key it does not read would be one somebody thought it did.
-fn libraries(document: &toml::Value) -> Result<BTreeMap<String, String>> {
-    let mut out = BTreeMap::new();
-    let Some(section) = document.get("library") else {
-        return Ok(out);
-    };
-    let Some(table) = section.as_table() else {
-        return Err(refused!(
-            "`library` is a table of libraries: `[library.<name>]` with `pkg-config = \"<name>\"`."
-        ));
-    };
-    for (name, entry) in table {
-        let Some(entry) = entry.as_table() else {
-            return Err(refused!(
-                "`library.{name}` is a table: `[library.{name}]` with `pkg-config = \"{name}\"`."
-            ));
+/// The four sections `tools/manifest.nika` reads, their entries, and the keys
+/// of an entry that is a table, in the file's order: the document in plain
+/// words. Whether `--target` takes a `[build.<target>]` name is
+/// `emit::Target::parse`'s answer, handed over as `machine`.
+fn items_of(document: &toml::Value) -> Vec<decide::ManifestItem> {
+    let mut items = Vec::new();
+    for section in ["package", "dependencies", "library", "build"] {
+        let Some(value) = document.get(section) else {
+            continue;
         };
-        for key in entry.keys() {
-            if key != "pkg-config" {
-                return Err(refused!(
-                    "`[library.{name}]` takes `pkg-config` and nothing else, not `{key}`: the \
-                     compiler forms the linker's arguments itself (Part III 13.4)."
-                ));
+        items.push(item(section, "", "", value, false));
+        for (name, entry) in value.as_table().into_iter().flatten() {
+            let machine = section == "build"
+                && entry.is_table()
+                && crate::emit::Target::parse(name.clone()).is_ok();
+            items.push(item(section, name, "", entry, machine));
+            for (key, inner) in entry.as_table().into_iter().flatten() {
+                items.push(item(section, name, key, inner, false));
             }
         }
-        let Some(found_by) = entry.get("pkg-config").and_then(toml::Value::as_str) else {
-            return Err(refused!(
-                "`[library.{name}]` needs `pkg-config = \"<name>\"`: a library is found only \
-                 through `pkg-config` (Part III 13.4)."
-            ));
-        };
-        out.insert(name.clone(), found_by.to_string());
     }
-    Ok(out)
+    items
 }
 
-/// `[build.<target>]`, checked.
-fn codegen(target: &str, table: &toml::Table) -> Result<BTreeMap<String, toml::Value>> {
-    // Any target `--target` takes may have a table (ADR-037 D9); the refusal
-    // for one that is none of them is `std`'s.
-    if crate::emit::Target::parse(target.to_string()).is_err() {
-        decide::codegen_table(target).map_err(refusal)?;
+fn item(
+    section: &str,
+    name: &str,
+    key: &str,
+    value: &toml::Value,
+    machine: bool,
+) -> decide::ManifestItem {
+    decide::ManifestItem {
+        section: section.to_string(),
+        name: name.to_string(),
+        key: key.to_string(),
+        table: value.is_table(),
+        text: value.to_string(),
+        word: value.as_str().map(str::to_string),
+        integer: value.as_integer(),
+        machine,
     }
-    let mut out = BTreeMap::new();
-    for (key, value) in table {
-        decide::codegen_key(target, key).map_err(refusal)?;
-        if key == "codegen-units" {
-            decide::codegen_units(target, value.as_integer(), &value.to_string())
-                .map_err(refusal)?;
+}
+
+/// A value from the text `toml` wrote of it (`ManifestItem::text`).
+fn value_of(text: &str) -> toml::Value {
+    let mut table: toml::Table =
+        toml::from_str(&format!("v = {text}")).expect("a value's text reads back");
+    table.remove("v").expect("the value is there")
+}
+
+/// The `Dependency` of a `ManifestDependency`: a Rust crate's table without
+/// its `type`, Nikaia's word about which ecosystem the name belongs to, which
+/// Cargo would reject as an unknown key.
+fn dependency_of(declared: &decide::ManifestDependency) -> Dependency {
+    let value = value_of(&declared.text);
+    match (declared.shape, &declared.path) {
+        (decide::DependencyShape::Rust, _) => {
+            let mut table = value
+                .as_table()
+                .cloned()
+                .expect("a value with a `type` key is a table");
+            table.remove("type");
+            Dependency::Rust(toml::Value::Table(table))
         }
-        out.insert(key.clone(), value.clone());
+        (decide::DependencyShape::Path, Some(path)) => Dependency::Path(PathBuf::from(path)),
+        _ => Dependency::Nikaia(value),
     }
-    Ok(out)
-}
-
-/// `[dependencies]`, split into the two shapes 13.3 shows.
-///
-/// `type = "rust"` is the marker, and it is removed on the way through: it is
-/// Nikaia's word about which ecosystem the name belongs to, and Cargo would
-/// reject it as an unknown key.
-fn dependencies(document: &toml::Value) -> Result<BTreeMap<String, Dependency>> {
-    let mut out = BTreeMap::new();
-    for (name, value) in table_of(document, "dependencies") {
-        let kind = value.get("type").map(|kind| match kind {
-            toml::Value::String(word) => word.clone(),
-            other => other.to_string(),
-        });
-        let path = value.get("path").and_then(toml::Value::as_str);
-        let shape = decide::dependency(
-            &name,
-            kind.is_some(),
-            kind.as_deref().unwrap_or(""),
-            path.is_some(),
-        )
-        .map_err(refusal)?;
-        let declared = match (shape, path) {
-            (decide::DependencyShape::Rust, _) => {
-                let mut table = value
-                    .as_table()
-                    .cloned()
-                    .expect("a value with a `type` key is a table");
-                table.remove("type");
-                Dependency::Rust(toml::Value::Table(table))
-            }
-            (decide::DependencyShape::Path, Some(path)) => Dependency::Path(PathBuf::from(path)),
-            _ => Dependency::Nikaia(value.clone()),
-        };
-        out.insert(name, declared);
-    }
-    Ok(out)
 }
 
 #[cfg(test)]
