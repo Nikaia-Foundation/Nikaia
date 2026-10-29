@@ -1,0 +1,11 @@
+Result: partial
+Files: docs/briefs/lane-t.md.report.md
+Commit: lane T report: #967, #981, #971 fixed; #958, #980, #882 left to other lanes
+Body: 57314936 fixes #967 and #981 (text_tiers), 0dac885d fixes #971 (view_changes). #958 text half already fixed, the rest is #938. #980 is blocked on a lowering defect (lane E). #882's String? half lands in emit_function/lends first (lane E).
+Tests: per step reports lane-t.md.step1/step2; 3 new tests/compiler programs, each failed on the unfixed compiler; tests/compiler --both-settings 348 of 348 ok; it touched + guard set 175 ok; clippy clean; pre-push-check ok; lower-std at fixpoint
+Gate: green
+Deviation: #967 and #981 in one commit (both in text_tiers.nika); #958, #980, #882 not built (see Found)
+Found: #958 the text part lowers correctly now; what still fails is for guess in guesses binding &i64, #938 (lane E): close #958 as covered by #938. #980 blocked: a text moved into a mixed (EitherText) parameter in a branch that returns lowers as either(&t), rustc "t does not live long enough" (probe: struct W { items: Vec[String] }; fn bind(name: String, mut w: W) { w.items.push(name) }; fn payload(k: i64, mut w: W) { let mut t: String = "a"; t.push_str("b"); if k > 5 { bind(t, w); return }; bind(t, w) }), emit_core_args.nika either argument (lane E); the #980 tiers change made text_tiers.nika itself hit it, plus invariance of &mut Vec<EitherText<'_>> for nested lists, so it was reverted. #882 step 1 (an inferred lent String? lowered as Option<&str>) is in emit_function.nika/lends.nika (lane E); keeps.nika step 2 waits for it. Lane C: let mut sg = s.get("b") ?? return; sg.push_str("?") false NK1171 (String has no method push_str); let mut lists: Vec[Vec[String]] = [[], ["q"]] does not construct "q" when [0,0] is owned (check_core_args.nika owned_texts). Other agents: lowered/views.rs std::convert::identity(receiver) broke the build for a while (lane E, unfinished); untracked either_text_compare.nika vanished mid-run, compare_kept_and_owned failed once in that run, passes alone
+Needs: #980 and #882 wait on lane E fixes; #971 #967 #981 need issue close via promote
+Changelog: see step reports (#967/#981 one entry, #971 one entry); no version change made
+Rs2nika: none
