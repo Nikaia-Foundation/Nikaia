@@ -1,0 +1,8 @@
+error[NK1102]: `Vec::push` expects `Vec[i64]` here, but you're passing `Vec[String]`.
+  --> tests/a_push_checks_a_list_element.nika:4:15
+   |
+ 4 |     grid.push(row)
+   |               ^^^
+   |
+   = help: Make it a `Vec[i64]`, or change the declaration to `Vec[String]`.
+1 type error

@@ -1,0 +1,8 @@
+error[NK1102]: `collections::HashMap::insert` expects `i64` here, but you're passing `i64?`.
+  --> tests/a_map_insert_checks_an_option_value.nika:6:19
+   |
+ 6 |     m.insert("a", maybe)
+   |                   ^^^^^
+   |
+   = help: Make it an `i64`, or change the declaration to `i64?`.
+1 type error

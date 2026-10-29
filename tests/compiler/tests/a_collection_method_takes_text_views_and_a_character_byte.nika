@@ -1,0 +1,13 @@
+fn main() {
+    let mut words: Vec[String] = []
+    words.push("a")
+    let view: String = "b"
+    words.push(view)
+    let mut pairs: Vec[(String, u8)] = []
+    pairs.push(("k", 1))
+    let mut bytes: Vec[u8] = []
+    bytes.push('x')
+    let mut maybe: Vec[i64?] = []
+    maybe.push(3)
+    println(f"{words.len()} {pairs.len()} {bytes.len()} {maybe.len()}")
+}

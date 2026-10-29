@@ -1,0 +1,6 @@
+fn main() {
+    let mut grid: Vec[Vec[i64]] = []
+    let row: Vec[String] = ["a"]
+    grid.push(row)
+    println(grid.len())
+}

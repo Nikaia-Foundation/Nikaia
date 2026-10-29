@@ -575,31 +575,97 @@ pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckW
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_written(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Named { name, args, .. } => if name == "str" && args.is_empty() { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { Ty::Named { name: name.to_string(), args: args.iter().map(|a| { check_core_call_on_written(a) }).collect::<Vec<_>>(), view: false } },
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|a| { check_core_call_on_written(a) }).collect::<Vec<_>>()),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(Box::new(check_core_call_on_written(inner))) },
+        _ => ty.clone(),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_may_fit(have: &Ty, want: &Ty) -> bool {
+    if have.is_unknown() || want.is_unknown() { return true; }
+    if check_overflow_a_nullable(want) { return check_core_call_on_into_option(have, want); }
+    if check_overflow_a_nullable(have) { return !(check_core_call_on_a_name(want) || a_tuple(want)); }
+    match have {
+        Ty::Named { name, args, .. } => check_core_call_on_named_fits(name, args, want),
+        Ty::Tuple(parts) => check_core_call_on_tuple_fits(parts, want),
+        _ => true,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_a_name(ty: &Ty) -> bool { matches!(ty, Ty::Named { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_into_option(have: &Ty, want: &Ty) -> bool {
+    match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match have {
+            Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); check_core_call_on_may_fit(held, inner) },
+            _ => check_core_call_on_may_fit(have, inner),
+        } },
+        _ => true,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_named_fits(name: &str, args: &[Ty], want: &Ty) -> bool {
+    match want {
+        Ty::Named { name: wanted, args: wanted_args, .. } => check_core_call_on_names_fit(name, args, wanted, wanted_args),
+        _ => !a_tuple(want),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_built_in(name: &str) -> bool { a_number_name(name) || name == "char" || name == "scalar" || name == "bool" || name == "String" || name == "Vec" || name == "Array" || name.starts_with("collections::") }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_names_fit(name: &str, args: &[Ty], wanted: &str, wanted_args: &[Ty]) -> bool {
+    if (a_number_name(name) || name == "char" || name == "scalar") && (a_number_name(wanted) || wanted == "char" || wanted == "scalar") { return true; }
+    let lists = (name == "Vec" || name == "Array") && (wanted == "Vec" || wanted == "Array");
+    if lists {
+        if args.is_empty() || wanted_args.is_empty() { return true; }
+        return check_core_call_on_may_fit(nikaia_std::index::get(&args, 0), nikaia_std::index::get(&wanted_args, 0));
+    }
+    if name != wanted && !(check_core_call_on_built_in(name) && check_core_call_on_built_in(wanted)) { return true; }
+    if name != wanted || (args.len() as i64) != wanted_args.len() as i64 { return false; }
+    for (one, other) in args.iter().zip(wanted_args.iter()) { if !check_core_call_on_may_fit(one, other) { return false; } }
+    true
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_tuple_fits(parts: &[Ty], want: &Ty) -> bool {
+    match want {
+        Ty::Tuple(wanted) => {
+            if (parts.len() as i64) != wanted.len() as i64 { return false; }
+            for (one, other) in parts.iter().zip(wanted.iter()) { if !check_core_call_on_may_fit(one, other) { return false; } }
+            true
+        },
+        Ty::Named { .. } => false,
+        _ => true,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], at: i64, var: &str, span: &Span) {
     if at >= args.len() as i64 || at >= found.len() as i64 { return; }
-    let held: Ty = unviewed_type(&nikaia_std::index::or(match bound.get(var) {
+    let want: Ty = check_core_call_on_written(&nikaia_std::index::or(match bound.get(var) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || Ty::Unknown));
-    let want: Ty = if held.text() == "str" { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { held };
-    let walked: Ty = unviewed_type(nikaia_std::index::get(&found, nikaia_std::index::at(at)));
-    let have: Ty = if walked.text() == "str" { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { walked };
-    let plain = match have {
-        Ty::Named { ref args, .. } => args.is_empty(),
-        _ => false,
-    } && match want {
-        Ty::Named { ref args, .. } => args.is_empty(),
-        _ => false,
-    };
-    let numbers = match have {
-        Ty::Named { ref name, .. } => a_number_name(name),
-        _ => false,
-    } && match want {
-        Ty::Named { ref name, .. } => a_number_name(name),
-        _ => false,
-    };
-    if !plain || numbers || have.fits(&want) { return; }
+    let have: Ty = check_core_call_on_written(nikaia_std::index::get(&found, nikaia_std::index::at(at)));
+    if check_core_call_on_may_fit(&have, &want) { return; }
     let at_span = check_span_at(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), span);
     state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
 }

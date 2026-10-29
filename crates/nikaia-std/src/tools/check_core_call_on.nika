@@ -734,33 +734,128 @@ fn check_core_call_on_extended(mut state: CheckState, world: ref CheckWorld, key
     state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects elements of `{want.text()}` here, but you're passing elements of `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })
 }
 
+/// A type with every view dropped and a text literal's `str` called `String`,
+/// at every depth: the way the program writes it (#965).
+fn check_core_call_on_written(ty: ref Ty) -> Ty sync {
+    return match ty {
+        Ty::Named { name, args, .. } => if name == "str" && args.len() == 0 {
+            Ty::Named { name: "String", args: [], view: false }
+        } else {
+            Ty::Named { name: name.clone(), args: args.iter().map(fn(a) { check_core_call_on_written(a) }).collect(), view: false }
+        },
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(fn(a) { check_core_call_on_written(a) }).collect()),
+        Ty::Nullable(inner) => Ty::Nullable(check_core_call_on_written(inner)),
+        else => ty.clone(),
+    }
+}
+
+/// Whether a value of `have` may be what a slot of `want` holds, read
+/// structurally (#965): tuples part by part, `Vec[T]` and `T?` by their
+/// argument. Two numbers are left to the literal rules; anything that is not
+/// a name, a tuple or an option is left to rustc.
+fn check_core_call_on_may_fit(have: ref Ty, want: ref Ty) -> bool sync {
+    if have.is_unknown() || want.is_unknown() {
+        return true
+    }
+    if check_overflow_a_nullable(want) {
+        return check_core_call_on_into_option(have, want)
+    }
+    if check_overflow_a_nullable(have) {
+        return !(check_core_call_on_a_name(want) || a_tuple(want))
+    }
+    return match have {
+        Ty::Named { name, args, .. } => check_core_call_on_named_fits(name, args, want),
+        Ty::Tuple(parts) => check_core_call_on_tuple_fits(parts, want),
+        else => true,
+    }
+}
+
+fn check_core_call_on_a_name(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { .. } => true,
+        else => false,
+    }
+}
+
+/// A value into an option slot: the option's own value, or a plain one.
+fn check_core_call_on_into_option(have: ref Ty, want: ref Ty) -> bool sync {
+    return match want {
+        Ty::Nullable(inner) => match have {
+            Ty::Nullable(held) => check_core_call_on_may_fit(held, inner),
+            else => check_core_call_on_may_fit(have, inner),
+        },
+        else => true,
+    }
+}
+
+fn check_core_call_on_named_fits(name: ref String, args: ref Vec[Ty], want: ref Ty) -> bool sync {
+    return match want {
+        Ty::Named { name: wanted, args: wanted_args, .. } => check_core_call_on_names_fit(name, args, wanted, wanted_args),
+        else => !a_tuple(want),
+    }
+}
+
+fn check_core_call_on_built_in(name: ref String) -> bool sync {
+    return a_number_name(name) || name == "char" || name == "scalar" || name == "bool" || name == "String" || name == "Vec" || name == "Array" || name.starts_with("collections::")
+}
+
+fn check_core_call_on_names_fit(name: ref String, args: ref Vec[Ty], wanted: ref String, wanted_args: ref Vec[Ty]) -> bool sync {
+    // A character handed where a byte is wanted is a byte, as in an assignment.
+    if (a_number_name(name) || name == "char" || name == "scalar") && (a_number_name(wanted) || wanted == "char" || wanted == "scalar") {
+        return true
+    }
+    let lists = (name == "Vec" || name == "Array") && (wanted == "Vec" || wanted == "Array")
+    if lists {
+        if args.len() == 0 || wanted_args.len() == 0 {
+            return true
+        }
+        return check_core_call_on_may_fit(args[0], wanted_args[0])
+    }
+    // A type the program or a library declares (`Bytes`, `Mapped`) may be
+    // handed where its owner is wanted: only the built-in names clash.
+    if name != wanted && !(check_core_call_on_built_in(name) && check_core_call_on_built_in(wanted)) {
+        return true
+    }
+    if name != wanted || args.len() != wanted_args.len() {
+        return false
+    }
+    for (one, other) in args.iter().zip(wanted_args.iter()) {
+        if !check_core_call_on_may_fit(one, other) {
+            return false
+        }
+    }
+    return true
+}
+
+fn check_core_call_on_tuple_fits(parts: ref Vec[Ty], want: ref Ty) -> bool sync {
+    return match want {
+        Ty::Tuple(wanted) => {
+            if parts.len() != wanted.len() {
+                return false
+            }
+            for (one, other) in parts.iter().zip(wanted.iter()) {
+                if !check_core_call_on_may_fit(one, other) {
+                    return false
+                }
+            }
+            true
+        },
+        Ty::Named { .. } => false,
+        else => true,
+    }
+}
+
 /// **A collection's own element, key or value, handed to a method** (#964):
 /// the argument at `at` is compared with what the receiver binds to `var`
-/// (`T`, `K` or `V`). Only plain named types are compared; two numbers are
-/// left to the literal rules, and a text literal's `str` is a `String`.
+/// (`T`, `K` or `V`), structurally (#965). Two numbers are left to the
+/// literal rules, and a text literal's `str` is a `String`.
 fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, key: ref String, bound: ref collections::BTreeMap[String, Ty], args: ref Vec[Expr], found: ref Vec[Ty], at: i64, var: ref String, span: ref Span) sync {
     if at >= args.len() as i64 || at >= found.len() as i64 {
         return
     }
-    let held: Ty = unviewed_type(bound.get(var)?.clone() ?? Ty::Unknown)
-    let want: Ty = if held.text() == "str" { Ty::Named { name: "String", args: [], view: false } } else { held }
-    let walked: Ty = unviewed_type(found[at])
-    let have: Ty = if walked.text() == "str" { Ty::Named { name: "String", args: [], view: false } } else { walked }
-    let plain = match have {
-        Ty::Named { args, .. } => args.len() == 0,
-        else => false,
-    } && match want {
-        Ty::Named { args, .. } => args.len() == 0,
-        else => false,
-    }
-    let numbers = match have {
-        Ty::Named { name, .. } => a_number_name(name),
-        else => false,
-    } && match want {
-        Ty::Named { name, .. } => a_number_name(name),
-        else => false,
-    }
-    if !plain || numbers || have.fits(want) {
+    let want: Ty = check_core_call_on_written(bound.get(var)?.clone() ?? Ty::Unknown)
+    let have: Ty = check_core_call_on_written(found[at])
+    if check_core_call_on_may_fit(have, want) {
         return
     }
     let at_span = check_span_at(world, args[at], span)

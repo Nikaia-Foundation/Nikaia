@@ -1,0 +1,8 @@
+use std::collections
+
+fn main() {
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    let maybe: i64? = 3
+    m.insert("a", maybe)
+    println(m.len())
+}
