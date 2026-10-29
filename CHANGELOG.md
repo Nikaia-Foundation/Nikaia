@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1276] — 2026-10-29
+
+**A text a live view still reads can be moved into a struct, tuple, list or variant literal (ADR-353 D8-D10, Fixes #942).**
+- The literal views the kept text, also after `let moved = text`; a struct returned with such a text lives in the caller's keep.
+- Where the field must own its text, the move is refused with NK2305 at the move: it labels the change that forces ownership (`c.input.push_str(..)` in `advance`, say) and the read of the view, and its help names `.clone()` or building the value first and taking the view from its field. NK1106 for a view stored in a field stays.
+
 ## [0.0.1275] — 2026-10-29
 
 **A constructor that moves its text parameter into a view field lends it; a struct or enum result viewing a local takes the caller's keep (#945, #942 steps 2 and 5; ADR-353 D8, D10).**
