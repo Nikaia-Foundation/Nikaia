@@ -2756,11 +2756,10 @@ fn tie_leaves(value: ref Expr, depth: i64, into: String?, back: bool, ask: ref T
         }
     }
     let name = into ?? return
-    let mut all: Vec[TextTie] = walk.ties[name]?.clone() ?? []
+    let mut all = walk.ties.entry(name).or_insert([])
     for tie in ties {
         tie_add(all, tie)
     }
-    walk.ties.insert(name, all)
 }
 
 /// **A tie is held once.** A value stored into a place it reads itself

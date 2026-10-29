@@ -674,22 +674,18 @@ fn handle_type(slots: ref Slots, key: ref String) -> Ty {
 fn sites_by_slot(pairs: ref Vec[(String, String)]) -> collections::BTreeMap[String, Vec[String]] {
     let mut out: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     for (key, site) in pairs {
-        let mut sites = out[key]?.clone() ?? []
+        let mut sites = out.entry(key.clone()).or_insert([])
         if !sites.contains(site) {
             sites.push(site.clone())
         }
-        out.insert(key.clone(), sites)
     }
     return out
 }
 
 fn put_in_class(mut classes: collections::BTreeMap[String, collections::BTreeMap[i64, Class]], function: ref String, root: i64, member: ref String, count: Count) {
-    let mut roots = classes[function]?.clone() ?? collections::BTreeMap()
-    let mut class = roots[root]?.clone() ?? Class { members: [], count: count }
+    let mut class = classes.entry(function.clone()).or_insert(collections::BTreeMap()).entry(root).or_insert(Class { members: [], count: count })
     class.members.push(member.clone())
     class.count = class.count.join(count)
-    roots.insert(root, class)
-    classes.insert(function.clone(), roots)
 }
 
 // Why a word-sized value that crosses kept its lock (ADR-281 D18).

@@ -1971,12 +1971,8 @@ pub(crate) fn tie_leaves(value: &Expr, depth: i64, into: Option<String>, back: b
     if ties.is_empty() { return; }
     for tie in ties.iter() { if tie.depth > depth && !(back && tie.depth == 0 && tie.through_text) && !(back && tie.depth > 0 && tie.through_value) { walk.unlent.insert(tie.word.to_string()); } }
     let name = match into { Some(__nikaia_value) => __nikaia_value, None => return };
-    let mut all: Vec<TextTie> = nikaia_std::index::or(match *nikaia_std::index::get(&walk.ties, &name) {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    }, || vec![].into());
-    for tie in ties.iter() { tie_add(&mut all, tie); }
-    walk.ties.insert(name, all);
+    let all = walk.ties.entry(String::from(name)).or_insert(vec![]);
+    for tie in ties.iter() { tie_add(&mut *all, tie); }
 }
 
 pub(crate) fn tie_add(all: &mut Vec<TextTie>, tie: &TextTie) {

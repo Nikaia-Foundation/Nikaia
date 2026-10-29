@@ -464,29 +464,16 @@ pub(crate) fn handle_type(slots: &Slots, key: &str) -> Ty {
 pub(crate) fn sites_by_slot(pairs: &[(String, String)]) -> collections::BTreeMap<String, Vec<String>> {
     let mut out: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for (key, site) in pairs.iter() {
-        let mut sites = nikaia_std::index::or(match *nikaia_std::index::get(&out, key) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        }, || vec![].into());
+        let sites = out.entry(key.to_string()).or_insert(vec![]);
         if !nikaia_std::list::contains(&sites, &site) { sites.push(site.to_string()); }
-        out.insert(key.to_string(), sites);
     }
     out
 }
 
 pub(crate) fn put_in_class(classes: &mut collections::BTreeMap<String, collections::BTreeMap<i64, Class>>, function: &str, root: i64, member: &str, count: Count) {
-    let mut roots = nikaia_std::index::or(match *nikaia_std::index::get(&classes, function) {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    }, || collections::BTreeMap::new().into());
-    let mut class = nikaia_std::index::or(match *nikaia_std::index::get(&roots, &root) {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    }, || Class { members: vec![], count });
+    let class = classes.entry(function.to_string()).or_insert(collections::BTreeMap::new()).entry(root).or_insert(Class { members: vec![], count });
     class.members.push(member.to_string());
     class.count = class.count.join(count);
-    roots.insert(root, class);
-    classes.insert(function.to_string(), roots);
 }
 
 pub(crate) fn lock_kept(count: &Count, a_word: bool, held_together: bool) -> Option<String> {
