@@ -1,11 +1,10 @@
-Result: done
+Result: partial
 Pushed:
-Tests: for_mut_element_without_parens (new, #970 probe; unfixed it printed rustc's unused-parens warning), format_hole_before_changing_method (new, #937 probe; failed unfixed per the issue, borrow of self while mutably borrowed); tests/compiler --both-settings 348 passed; it guard set 23 passed; clippy -D warnings clean without the unused_parens allow
-Deviation: #970 and #937 in one commit (both touch emit_core_leaves.nika); the no-warning check of #970 is clippy over the lowered tools, as tests/compiler compares no rustc warnings
-Found: none
-Needs: none
-Changelog: A `mut` lambda or `for mut` element lowers as `*x`, in parentheses only as a postfix base (#970; the `unused_parens` allow on the tools module is gone); an `f"…"` hole read before a hole that calls a `ref mut self` method of the same value is copied first (#937). Decided: holes are evaluated left to right as written; the earlier ones are made owned (`ToOwned::to_owned`) only when a later hole changes the receiver.
+Tests: per commit (70f3237c 1ff7291e 0500468e 35ff6933 f9b8b094 df388e6f 705725a1); last gate: tests/compiler --both-settings 348/348, it guard set 23 ok, clippy -D warnings clean, pre-push-check ok, lower-std at fixpoint
+Deviation: #915+#910, #930+#940+#918, #970+#937 share commits (one file each); unfixed runs: #908 and #915 tests failed on the unfixed binary, the others are the issues' probes that fail on develop as their issues record (no unfixed rebuild in a shared tree)
+Found: skipped as checker-side (lane C): #907 (check_core_method text_in_lists only for Variable/LitStr args), #947 (compared_views/ordered_texts facts), #938 (copied_loop_bindings for an untyped [1, 2], #931), #896 step 4 (the T? result of a filter_map lambda needs wrap facts on its tail and returns), #980 (check_core_call_lent puts a moved text into lent_args before a `return`, so the either param gets either(&t)); #899 step 2 does not reproduce; #925 rest (out.push of a mixed local into Vec[String]) is text_tiers (lane T); #627 case 1 now shows as E0507 (`Pair { a: words[0] }` into a pub struct's owned field moves out of the list), which needs a checker or owner call, case 2 is masked by it; #882 step 1 (lent String? as Option<&str> in emit_function) cannot be tested until the lent-option inference exists (keeps/lends), so build both together; #958 waits only on #938
+Needs: lane C for #907 #947 #938 #896.4 #980 #627; lane T for #925 rest; one agent for #882 steps 1+2 together
+Changelog: per commit report (#908, #915/#910, #911/#925 part, #913, #930/#940/#918, #899 step 1, #970/#937)
 Gate: green
-Files: crates/nikaia-std/src/tools/emit_core_leaves.nika crates/nikaia-std/src/tools/lowered/emit_core_leaves.rs crates/nikaia-std/src/tools/emit_expr.nika crates/nikaia-std/src/tools/lowered/emit_expr.rs crates/nikaia-std/src/tools/lowered/bounds_walk.rs crates/nikaia-std/src/lib.rs tests/compiler/tests/for_mut_element_without_parens.nika tests/compiler/tests/for_mut_element_without_parens.stdout tests/compiler/tests/format_hole_before_changing_method.nika tests/compiler/tests/format_hole_before_changing_method.stdout docs/briefs/lane-e.md.report.md
-Commit: Lower a changed binding as *x without parens; copy f-string holes read before a mutating hole
-Fixes: #970, #937
+Files: docs/briefs/lane-e.md.report.md
+Commit: lane E report: 14 fixes pushed, rest classified
