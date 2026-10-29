@@ -1,0 +1,18 @@
+enum Bad { Neg, Big }
+impl Error for Bad { fn message(ref self) -> String { return "bad" } }
+
+fn risky(n: i64) -> i64 throws {
+    if n < 0 { throw Bad::Neg }
+    return n
+}
+
+fn main() throws {
+    let v = risky(-1) catch {
+        match error {
+            Bad::Neg => 1
+            Bad::Big => 2
+            else => 3
+        }
+    }
+    println(f"{v}")
+}

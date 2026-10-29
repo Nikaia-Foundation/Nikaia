@@ -196,7 +196,7 @@ impl CheckState {
         if self.flow.throwing || self.flow.caught || self.current.is_none() { return None; }
         let mut is: &'static str = "holds";
         match ty.unseen() {
-            Ty::Named { ref name, .. } => { if compare_base(name) == compare_base(owner) { is = "is"; }; },
+            Ty::Named { ref name, .. } => { if compare_base(name) == compare_base(owner) { is = "is"; } },
             _ => { },
         }
         let mut help: String = format!("Declare the function with `throws`, or close the `{}` it holds yourself, with `close() catch {{ … }}`.", owner);

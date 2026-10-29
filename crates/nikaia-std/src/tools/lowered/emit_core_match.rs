@@ -10,6 +10,61 @@ pub(crate) fn emit_match_is_caught(world: &EmitWorld<'_, '_, '_, '_>, value: &Ex
 
 pub(crate) fn emit_match_is_otherwise(pattern: &MatchPattern) -> bool { matches!(pattern, MatchPattern::Otherwise) }
 
+pub(crate) fn emit_match_else_unreachable(world: &EmitWorld<'_, '_, '_, '_>, arms: &[MatchArm]) -> bool {
+    let count = arms.len() as i64;
+    if count < 2 || !emit_match_is_otherwise(&nikaia_std::index::get(&arms, nikaia_std::index::at(count - 1)).pattern) { return false; }
+    let mut owner: String = String::from("");
+    let mut named: Vec<String> = vec![];
+    for arm in arms.iter() {
+        if arm.guard.is_some() || emit_match_is_otherwise(&arm.pattern) { continue; }
+        let path = match emit_match_whole_variant(&arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if path.len() != 2 { continue; }
+        let first = emit_text(world, *nikaia_std::index::get(&path, 0));
+        if owner == "" { owner = first.to_string(); } else if owner != first { return false; }
+        let variant = emit_text(world, *nikaia_std::index::get(&path, 1));
+        if !nikaia_std::list::contains(&named, &variant) { named.push(variant); }
+    }
+    if owner == "" { return false; }
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Enum { name, variants, .. } => {
+                let name = *name;
+                if emit_text(world, name) == owner {
+                    for each in variants.iter() { if !named.contains(&emit_text(world, each.name)) { return false; } }
+                    return true;
+                }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+
+pub(crate) fn emit_match_whole_variant(pattern: &MatchPattern) -> Option<Vec<winnow_grammar::Symbol>> {
+    match pattern {
+        MatchPattern::Path(path) => Some(path.to_owned()),
+        MatchPattern::Tuple { path, parts } => {
+            for part in parts.iter() { if !emit_match_binds_whole(part) { return None; } }
+            Some(path.to_owned())
+        },
+        MatchPattern::Named { path, fields, .. } => {
+            for field in fields.iter() { if !emit_match_binds_whole(&field.pat) { return None; } }
+            Some(path.to_owned())
+        },
+        _ => None,
+    }
+}
+
+pub(crate) fn emit_match_binds_whole(pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Otherwise => true,
+        MatchPattern::Rest => true,
+        MatchPattern::RestNamed(_) => true,
+        MatchPattern::Path(path) => path.len() == 1,
+        _ => false,
+    }
+}
+
 pub(crate) fn emit_match_bool(expr: &Expr) -> Option<bool> {
     match expr {
         Expr::LitBool(value, _) => { let value = *value; return Some(value); },
@@ -19,6 +74,8 @@ pub(crate) fn emit_match_bool(expr: &Expr) -> Option<bool> {
 }
 
 pub(crate) fn emit_match_is_variable(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
+
+pub(crate) fn emit_match_is_field(expr: &Expr) -> bool { matches!(expr, Expr::Field { .. }) }
 
 pub(crate) fn emit_match_is_match(expr: &Expr) -> bool { matches!(expr, Expr::Match { .. }) }
 
@@ -354,7 +411,7 @@ impl EmitState {
         let mut cloned: Vec<String> = vec![];
         for one in self.facts.cloned_bindings.iter() { if one.0 == node_key(body) { cloned.push(one.1.to_string()); } }
         let statements = flow.arms_are_statements;
-        let inside = EmitFlow { arms_are_statements: false, ..flow };
+        let inside = EmitFlow { arms_are_statements: false, subject_copies: false, ..flow };
         let plain = opened.is_empty() && copied.is_empty() && cloned.is_empty() && nest_count == 0 && lead.is_empty();
         if statements && plain {
             match body {
@@ -367,6 +424,18 @@ impl EmitState {
         }
         let body_flow = if statements && emit_match_is_match(body) { EmitFlow { arms_are_statements: true, ..inside } } else { inside };
         if plain && statements {
+            match body {
+                Expr::If { cond, then_branch, else_branch, .. } => {
+                    let cond = nikaia_std::boxed::open(cond);
+                    out.push("{ ");
+                    self.emit_core_if_expr(world, walk, out, host, cond, then_branch, (else_branch).as_ref(), depth, inside, scope, EmitTail::Statement)?;
+                    out.push(" }");
+                    return Ok(());
+                },
+                _ => { },
+            }
+        }
+        if plain && statements {
             out.push("{ ");
             self.emit_expr(world, walk, out, host, body, depth, body_flow, scope)?;
             out.push("; }");
@@ -374,6 +443,7 @@ impl EmitState {
         }
         if plain {
             self.emit_expr(world, walk, out, host, body, depth, body_flow, scope)?;
+            if flow.subject_copies && emit_match_is_field(body) { out.push(".clone()"); }
             return Ok(());
         }
         match body {
@@ -598,13 +668,16 @@ impl EmitState {
         out.push("match ");
         let text = self.facts.text_scrutinees.contains(&node_key(value));
         if self.facts.lent_scrutinees.contains(&node_key(value)) && !text { out.push("&"); }
-        emit_match_subject(self, world, walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(&node_key(value)))?;
+        let subject_flow = EmitFlow { subject_copies: emit_match_is_match(value), ..flow };
+        emit_match_subject(self, world, walk, out, host, value, arms, depth, subject_flow, scope, &self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(&node_key(value)))?;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let close = "    ".repeat(nikaia_std::count::of(depth));
         out.push(" {\n");
         let mut over_a_list = false;
         for arm in arms.iter() { if emit_match_is_list(&arm.pattern) { over_a_list = true; } }
+        let else_unreachable = emit_match_else_unreachable(world, arms);
         for arm in arms.iter() {
+            if else_unreachable && emit_match_is_otherwise(&arm.pattern) { continue; }
             out.push(&pad);
             if over_a_list && emit_match_is_otherwise(&arm.pattern) { out.push("#[allow(unreachable_patterns)] "); }
             let key = node_key(&arm.body);

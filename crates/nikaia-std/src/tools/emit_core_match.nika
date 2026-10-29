@@ -24,6 +24,96 @@ fn emit_match_is_otherwise(pattern: ref MatchPattern) -> bool {
     }
 }
 
+/// **An `else` after arms that name every variant is not written**
+/// (ADR-357 D5, #918): the last arm is `else`, and the unguarded arms before
+/// it name each variant of one `enum` this file declares, each matched whole
+/// (`Bad::Neg`, `Msg::Write(text)`, `Msg::Move { .. }`). Nothing reaches it,
+/// and `rustc` would warn about it in its own words.
+fn emit_match_else_unreachable(world: ref EmitWorld, arms: ref Vec[MatchArm]) -> bool {
+    let count = arms.len()
+    if count < 2 || !emit_match_is_otherwise(arms[count - 1].pattern) {
+        return false
+    }
+    let mut owner: String = ""
+    let mut named: Vec[String] = []
+    for arm in arms {
+        if arm.guard != null || emit_match_is_otherwise(arm.pattern) {
+            continue
+        }
+        let path = emit_match_whole_variant(arm.pattern) ?? continue
+        if path.len() != 2 {
+            continue
+        }
+        let first = emit_text(world, path[0])
+        if owner == "" {
+            owner = first.clone()
+        } else if owner != first {
+            return false
+        }
+        let variant = emit_text(world, path[1])
+        if !named.contains(variant) {
+            named.push(variant)
+        }
+    }
+    if owner == "" {
+        return false
+    }
+    for item in world.items {
+        match item.node {
+            Item::Enum { name, variants, .. } => {
+                if emit_text(world, name) == owner {
+                    for each in variants {
+                        if !named.contains(emit_text(world, each.name)) {
+                            return false
+                        }
+                    }
+                    return true
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+/// The path of a pattern that matches a variant whatever its values are:
+/// `Bad::Neg`, `Msg::Write(text)` with only bindings and `_` inside, and
+/// `Msg::Move { x, .. }` with only bindings.
+fn emit_match_whole_variant(pattern: ref MatchPattern) -> Vec[winnow_grammar::Symbol]? {
+    return match pattern {
+        MatchPattern::Path(path) => path.clone(),
+        MatchPattern::Tuple { path, parts } => {
+            for part in parts {
+                if !emit_match_binds_whole(part) {
+                    return null
+                }
+            }
+            path.clone()
+        },
+        MatchPattern::Named { path, fields, .. } => {
+            for field in fields {
+                if !emit_match_binds_whole(field.pat) {
+                    return null
+                }
+            }
+            path.clone()
+        },
+        else => null,
+    }
+}
+
+/// Whether a part of a pattern takes whatever value is there: `_`, `..` or a
+/// bare name.
+fn emit_match_binds_whole(pattern: ref MatchPattern) -> bool {
+    return match pattern {
+        MatchPattern::Otherwise => true,
+        MatchPattern::Rest => true,
+        MatchPattern::RestNamed(_) => true,
+        MatchPattern::Path(path) => path.len() == 1,
+        else => false,
+    }
+}
+
 /// What a literal `true` or `false` says, where the expression is one.
 fn emit_match_bool(expr: ref Expr) -> bool? {
     match expr {
@@ -36,6 +126,13 @@ fn emit_match_bool(expr: ref Expr) -> bool? {
 fn emit_match_is_variable(expr: ref Expr) -> bool {
     return match expr {
         Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+fn emit_match_is_field(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Field { .. } => true,
         else => false,
     }
 }
@@ -548,7 +645,7 @@ impl EmitState {
         // Only the arm's own block is a statement; what it holds is emitted as it
         // would be anywhere.
         let statements = flow.arms_are_statements
-        let inside = flow with { arms_are_statements: false }
+        let inside = flow with { arms_are_statements: false, subject_copies: false }
         let plain = opened.len() == 0 && copied.len() == 0 && cloned.len() == 0 && nest_count == 0 && lead.len() == 0
         if statements && plain {
             match body {
@@ -567,6 +664,20 @@ impl EmitState {
         // (`match_patterns::a_statement_arm_that_hands_back_a_value_drops_it`):
         // `k => seen.insert(k, v)` hands back an `Option`, which would make the
         // arms disagree with `else => {}`, so its value is dropped with `;`.
+        // **An arm that is an `if` is a statement too** (#930): `v => if c {
+        // seen.insert(v) }` drops what each branch ends in, as a block arm's
+        // `if` does, and an `if` without an `else` has no value to agree with.
+        if plain && statements {
+            match body {
+                Expr::If { cond, then_branch, else_branch, .. } => {
+                    out.push("{ ")
+                    self.emit_core_if_expr(world, walk, out, host, cond, then_branch, else_branch, depth, inside, scope, EmitTail::Statement)
+                    out.push(" }")
+                    return
+                },
+                else => {}
+            }
+        }
         if plain && statements {
             out.push("{ ")
             self.emit_expr(world, walk, out, host, body, depth, body_flow, scope)
@@ -575,6 +686,9 @@ impl EmitState {
         }
         if plain {
             self.emit_expr(world, walk, out, host, body, depth, body_flow, scope)
+            if flow.subject_copies && emit_match_is_field(body) {
+                out.push(".clone()")
+            }
             return
         }
         // **A block arm opens with the names it binds**, inside its own braces: a
@@ -914,7 +1028,8 @@ impl EmitState {
         if self.facts.lent_scrutinees.contains(node_key(value)) && !text {
             out.push("&")
         }
-        emit_match_subject(self, world, walk, out, host, value, arms, depth, flow, scope, self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(node_key(value)))
+        let subject_flow = flow with { subject_copies: emit_match_is_match(value) }
+        emit_match_subject(self, world, walk, out, host, value, arms, depth, subject_flow, scope, self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(node_key(value)))
         let pad = "    ".repeat(depth + 1)
         let close = "    ".repeat(depth)
         out.push(" {\n")
@@ -924,7 +1039,11 @@ impl EmitState {
                 over_a_list = true
             }
         }
+        let else_unreachable = emit_match_else_unreachable(world, arms)
         for arm in arms {
+            if else_unreachable && emit_match_is_otherwise(arm.pattern) {
+                continue
+            }
             out.push(pad)
             // A slice's lengths may all be named already, `[]` and `[h, ..]`;
             // `else` is still the language's rule (ADR-355 D5).

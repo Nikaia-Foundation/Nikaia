@@ -1,0 +1,13 @@
+use std::collections
+
+fn main() {
+    let mut seen: collections::BTreeSet[i64] = collections::BTreeSet()
+    let x: i64? = 3
+    match x {
+        v => if v > 1 {
+            seen.insert(v)
+        },
+        null => {},
+    }
+    println(f"{seen.len()}")
+}

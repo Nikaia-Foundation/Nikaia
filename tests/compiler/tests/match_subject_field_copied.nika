@@ -1,0 +1,12 @@
+struct P {
+    site: (i64, String)?,
+}
+
+fn what(pause: P?) -> String? {
+    let what = (match (match pause { pause => pause.site, null => null }) { (_, what) => what.clone(), null => null })
+    return what
+}
+
+fn main() {
+    println(what(P { site: (1, "x") }) ?? "none")
+}

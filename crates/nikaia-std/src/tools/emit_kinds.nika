@@ -293,12 +293,16 @@ pub struct EmitFlow {
     /// error; `-1` where no such block is around. A `catch` sets it for the
     /// expression it guards, a function below starts without it.
     pub breaks_to: i64,
+    /// **The `match` written is the subject of another** (#940): an arm that
+    /// reads a field of what it bound hands a copy of it on, since the arm
+    /// binds by reference and the outer `match` would move out of it.
+    pub subject_copies: bool,
 }
 
 impl EmitFlow {
     /// Nothing around: no statement, no flag.
     pub fn plain() -> EmitFlow {
-        return EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1 }
+        return EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1, subject_copies: false }
     }
 
     pub fn inside_a_loop(self) -> EmitFlow {
