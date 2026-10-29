@@ -28,6 +28,14 @@ fn emit_flow_null(node: ref Expr) -> bool {
     }
 }
 
+/// `a ?? return …` and the other `??`s lowered as a `match` (ADR-276 D20).
+fn emit_flow_a_jumping_coalesce(world: ref EmitWorld, node: ref Expr) -> bool {
+    return match node {
+        Expr::Coalesce { fallback, .. } => jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback),
+        else => false,
+    }
+}
+
 fn emit_flow_is_binary_below(node: ref Expr, here: i64) -> bool {
     return match node {
         Expr::Binary { op, .. } => precedence(op) < here,
@@ -503,7 +511,14 @@ impl EmitState {
             return
         }
         if number_right {
+            let jumping = emit_flow_a_jumping_coalesce(world, lhs)
+            if jumping {
+                out.push("(")
+            }
             self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)
+            if jumping {
+                out.push(")")
+            }
             out.push(f" {symbol} nikaia_std::num::value(")
             self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
             out.push(")")
@@ -525,13 +540,18 @@ impl EmitState {
             out.push(")")
             return
         }
-        if self.facts.compared_views.contains((site, "lhs")) {
+        let deref_left = self.facts.compared_views.contains((site, "lhs"))
+        if deref_left {
             out.push("*")
         }
         // **A conversion left of `<<` keeps its parentheses** (#474), as one left of
         // `<` does: `x as i64 << 3` is `i64<..>` to Rust. Only where `nested` would
         // not write them itself.
-        let cast_before_a_shift = op == BinaryOp::Shl && self.ends_in_a_cast(world, lhs) && !emit_flow_is_binary_below(lhs, here)
+        // **A `??` whose fallback jumps is a `match`**, and a `match` at the
+        // start of a statement is a statement to Rust: `match … { … } == "a"`
+        // does not parse, so the left side keeps its parentheses (a `*` in
+        // front already makes it an operand).
+        let cast_before_a_shift = (op == BinaryOp::Shl && self.ends_in_a_cast(world, lhs) && !emit_flow_is_binary_below(lhs, here)) || (!deref_left && emit_flow_a_jumping_coalesce(world, lhs))
         if cast_before_a_shift {
             out.push("(")
         }

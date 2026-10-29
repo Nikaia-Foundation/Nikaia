@@ -1,0 +1,17 @@
+// A `??` whose fallback jumps is lowered as a `match`, and one standing at
+// the left of a comparison that a `return` hands back keeps its parentheses:
+// at the start of a statement Rust reads the `match` as a statement of its own.
+fn same(x: i64?, y: i64) -> bool {
+    return (x ?? return false) == y
+}
+
+fn named(x: String?) -> bool {
+    return (x ?? return false) == "a"
+}
+
+fn main() {
+    println(same(3, 3))
+    println(same(null, 3))
+    println(named("a"))
+    println(named(null))
+}

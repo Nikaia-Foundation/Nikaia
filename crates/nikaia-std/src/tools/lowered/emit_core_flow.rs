@@ -11,6 +11,13 @@ pub(crate) fn emit_flow_null_side(lhs: &Expr, rhs: &Expr) -> i64 {
 
 pub(crate) fn emit_flow_null(node: &Expr) -> bool { matches!(node, Expr::LitNull(_)) }
 
+pub(crate) fn emit_flow_a_jumping_coalesce(world: &EmitWorld<'_, '_, '_, '_>, node: &Expr) -> bool {
+    match node {
+        Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback) },
+        _ => false,
+    }
+}
+
 pub(crate) fn emit_flow_is_binary_below(node: &Expr, here: i64) -> bool {
     match node {
         Expr::Binary { op, .. } => precedence(*op) < here,
@@ -318,7 +325,10 @@ impl EmitState {
             return Ok(());
         }
         if number_right {
+            let jumping = emit_flow_a_jumping_coalesce(world, lhs);
+            if jumping { out.push("("); }
             self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)?;
+            if jumping { out.push(")"); }
             out.push(&format!(" {} nikaia_std::num::value(", symbol));
             self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
             out.push(")");
@@ -334,8 +344,9 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
-        if self.facts.compared_views.contains(&(site, String::from("lhs"))) { out.push("*"); }
-        let cast_before_a_shift = op == BinaryOp::Shl && self.ends_in_a_cast(world, lhs) && !emit_flow_is_binary_below(lhs, here);
+        let deref_left = self.facts.compared_views.contains(&(site, String::from("lhs")));
+        if deref_left { out.push("*"); }
+        let cast_before_a_shift = op == BinaryOp::Shl && self.ends_in_a_cast(world, lhs) && !emit_flow_is_binary_below(lhs, here) || !deref_left && emit_flow_a_jumping_coalesce(world, lhs);
         if cast_before_a_shift { out.push("("); }
         self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)?;
         if cast_before_a_shift { out.push(")"); }
