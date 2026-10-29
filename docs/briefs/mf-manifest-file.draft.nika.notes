@@ -1,0 +1,5 @@
+// rs2nika: `refusal` may be in Nikaia already: tools/findings.nika `fn refusal` (the same name)
+// rs2nika: `find` may be in Nikaia already: tools/ledger.nika `fn find` (the same name)
+// rs2nika: `read` may be in Nikaia already: tools/ledger.nika `fn read` (the same name)
+// rs2nika: `parse` may be in Nikaia already: tools/ty.nika `fn parse` (the same name)
+// rs2nika: called but not in Nikaia yet (move them first, or name the equivalent in rs2nika.names): extern
