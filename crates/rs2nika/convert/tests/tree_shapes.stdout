@@ -37,3 +37,11 @@ pub fn kept(xs: ref Vec[i64]) -> i64 {
 pub fn panics(t: Target) -> String {
     return panic_strategy(t)
 }
+
+fn key(t: String) -> String throws {
+    return t
+}
+
+pub fn keyed(t: String) -> (String, String) {
+    return ((key(t) catch { "" }), t)
+}

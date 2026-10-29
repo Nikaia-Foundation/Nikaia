@@ -27,3 +27,11 @@ fn kept(xs: &[i64]) -> usize {
 fn panics(t: Target) -> String {
     crate::project_settings::panic_strategy(t)
 }
+
+fn key(t: &str) -> Result<String> {
+    Ok(t.to_string())
+}
+
+fn keyed(t: &str) -> (String, OsString) {
+    (key(t).unwrap_or_default(), OsString::from(t))
+}
