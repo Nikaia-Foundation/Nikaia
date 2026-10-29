@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1291] — 2026-10-29
+
+**Collection methods (`push`, `insert`, `contains`, `get`, …) check a composite argument part by part (tuples, lists, options) (#965); a text view fits `String`, a character fits a byte, and declared types fit each other again, which ends the false `NK1102` of 0.0.1289 (#964).**
+
 ## [0.0.1290] — 2026-10-29
 
 **`for mut x in xs` writes through to a list or an array held `mut` (a view of the element, lowered `iter_mut()`), and is a `let mut` of the turn over `drain()` or a range; `mut` before one name of a tuple is NK1307 (not yet supported); `mut` on a map key, a set element or an adapter's element is NK1306; a read of the list in the body is NK2305 (#951, steps 1-3). `extend` of a comptime array of text into a String list or set compiles (rustc E0271, #966).**
