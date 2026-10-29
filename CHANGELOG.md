@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1280] — 2026-10-29
+
+**A `null` in a tuple of a list literal whose declared element holds an option there takes that option, wherever in the list it stands (Fixes #957).**
+- `let c: Vec[(String, String?)] = [("a", "y"), ("b", null)]` was NK1154; `[(null, 1), ("y", 2)]` under `Vec[(String?, i64)]` passed the check and was refused by rustc (the `"y"` not wrapped in `Some`).
+
 ## [0.0.1279] — 2026-10-29
 
 **A pull parser over a moved text runs, and a tuple of `String` takes views, with no `ref` written (ADR-353 D8, ADR-282 D1-D2, #948, #929)**
