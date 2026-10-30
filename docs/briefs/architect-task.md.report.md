@@ -1,3 +1,3 @@
 Result: done
-Batch: b-drive-pushed-on-develop.md b1005-to-string-owned-local.md k3a2-comptime-compute.md
+Batch: k3a2-comptime-compute.md, b1007-sum-typed.md
 Owner: none

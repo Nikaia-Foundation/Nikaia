@@ -1,15 +1,10 @@
-1. **Most cost.** Reading `docs/architect.md` cost the most. It is about 30k tokens, and roughly 110 lines of that are the *State* history, of which I needed only the latest entry. Reading `drive.nika` to find out why `Pushed: rejected` was not rewritten came second.
-2. **What I looked up that could have been handed to me:**
-   - Whether b998's commit was on `origin/develop`, which took a fetch and a log.
-   - Where ADR-282 lives. My first grep used the wrong path, so it took two calls.
-   - The `<full brief path>` placeholder in `common.part`.
-   - b998's brief, used as a template for the new one.
-   - `where.nika` for `method_kinds` and `bind_a_payload`.
-
-   None of this concerned the converter.
+1. **What cost the most:** making the Found reproducible. Before I could write #1007 I had to learn how `sum` is lowered today. That took three greps (`std.contracts`, the `collect` turbofish in `emit_core_calls.nika`, and #931's commit), plus two probe rounds, one for `i64` and one for `f64`. Reading the 434-line `docs/architect.md` cost the most context, since its *State* section alone is about 110 lines.
+2. **What the brief could have handed me:**
+   - That `k3a2-comptime-compute.md` was already re-queued and its first report already renamed `.run1.report.md`. I checked this with `ls`.
+   - Where a method-call turbofish is written (`emit_core_calls.nika`, about line 1183) and that #931 (5162370e) is the related fix. I found both by grep.
+   - That `common.part` has a `<full brief path>` placeholder to fill in. I confirmed it by reading the file.
 3. **Checks:**
-   - **Useful:** the git log showing f2599c1c is `develop`'s tip, the two #1005 probes, and the read of `drive_rewrite`/`drive_commit` that found the cause.
-   - **Wasted:** the first ADR grep and the `cost.txt` tail.
-   - **Weak:** `target/fast/nikaia` was built at 19:17, before f2599c1c (19:29). So my probes ran on a binary without b998's fix. On the second row I relied on the builder's word that it still fails.
-   - **Not checked:** I hid the push output (`-q | tail`) and never confirmed that `origin/develop` reached 84290d72. I also did not test that the hand check in the drive brief's step 2 can be done as written. That breaks the rule to run every test row a brief prescribes.
-4. **The change that would save most:** when the stop line is `Pushed: rejected`, `drive.nika` should write into `architect-input.txt` whether the report's `Commit:` subject is on `origin/develop`, with its sha. It should also note how old `target/fast` is compared with `develop`'s tip. A further saving would be moving *State* history older than two entries out of `architect.md` into a separate log, which would cut the charter read by about two thirds.
+   - Useful: the four probes on `target/fast/nikaia` (they fixed the issue's scope: bare `println`, a `let` with no type, inside `+`; `count` and `max` are fine), the `f64` probe (it confirmed the planned test row), and `git status -sb` after the push.
+   - Wasted: the `nikaia lower` call. It only showed `.copied().sum()`, which the error message had already implied.
+   - Probably extra: tailing k3a2 to look for its Attribution block.
+4. **The change that would save the most:** `architect-task.md` (or `architect-input.txt`) should name the cut brief's report and debrief paths, and say whether the remaining briefs are still queued and their preconditions met. Separately, `docs/architect.md` should keep only the last 5 *State* entries and move older ones to `docs/architect-history.md`. That would roughly halve the startup read.
