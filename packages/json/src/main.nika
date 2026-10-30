@@ -85,7 +85,7 @@ fn peek(r: ref Reader) -> scalar {
     if r.pos < r.cs.len() as i64 {
         return r.cs[r.pos]
     }
-    return 0 as scalar
+    return '\u{0}'
 }
 
 fn blanks(mut r: Reader) {
@@ -203,9 +203,9 @@ fn string(mut r: Reader, path: String) -> String throws {
         } else if e == 'r' {
             out.push('\r')
         } else if e == 'b' {
-            out.push(8 as scalar)
+            out.push('\u{8}')
         } else if e == 'f' {
-            out.push(12 as scalar)
+            out.push('\u{c}')
         } else if e == '"' || e == '\\' || e == '/' {
             out.push(e)
         } else {
