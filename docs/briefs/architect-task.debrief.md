@@ -1,18 +1,20 @@
-1. **Most cost.**
-   - Reading `docs/architect.md` whole took two reads and about 32k tokens. Most of it is the *State* diary (70+ entries), and only the newest entry mattered.
-   - My first `git add` named a file I had already renamed (the old b1007 report path). The whole add failed, so the first commit held only the rename and I had to amend it.
-   - The push was then rejected because `develop` had moved. I couldn't rebase with other agents' unstaged files in the tree, so my commit 778e5034 is still not on `origin/develop`.
-
+1. **What cost the most.** Reading `docs/architect.md` took two reads, about 33k tokens, and most of that is the *State* history. It took four `gh api` calls to get from "RED 8e67ee37 arm64,bootstrap_compiler" to the failing test and the first red push: runs, then jobs, then annotations, then `git log`. Reading the test's long doc comment in `sequences.rs` to find its ceiling and convention also cost time.
 2. **What I had to look up.**
-   - Where the checker hands facts to the emitter: `collected_into`, `std_receivers`, `check_core_method.nika:568`, `node_key`/`id_of`.
-   - Where `.copied()` is written (`check_reads.nika`, `emit_expr.nika`).
-   - The lowered signature for #996.
-   - The brief can't hold these, since it was my job to find them. But a one-line "fact map" in `builder-facts.md` (which checker facts reach emit, and how they are keyed) would have saved about 6 greps, for me and for the b1007 builder.
+   - The failing test's name, and which commits were in the first red push. The driver could put both into `architect-input.txt`.
+   - Where unanswered calls are counted (`check_core_call_on.nika:107`).
+   - The builder gate wording in `builder.md`.
+   - Whether #1012 had been answered (`QUESTION` file plus the issue).
+   - I needed no ADRs or converter facts.
+3. **Checks run.**
+   - Useful: CI run, job and annotation listing; `git log a5663bf6..75e25ed8` with `--stat`; the #994 probe with `target/fast/nikaia`; the `seq` grep.
+   - Wasted:
+     - `git pull --rebase` failed because other agents' changes were unstaged. A plain fetch and push worked.
+     - The broad `seq` grep returned names like `read_seq`.
+     - Listing all `ready` issues was larger than I needed.
+   - Not done: I didn't confirm which calls are unanswered (that needs a build), so the fix-forward brief names its candidates as guesses.
+4. **Change that would save the most:** on RED, `drive.nika` should write into `architect-input.txt`:
+   - the failing test names from the check-run annotations
+   - the last green sha
+   - `git log --stat <last green>..<first red>`
 
-3. **Checks.**
-   - Useful: probes of #1007 and #996 on today's binary. Lowering #996 showed the real cause (the `&'static str` tier), and the owned-value variant showed that NK1102 already refuses it correctly.
-   - Wasted: `nikaia --help` to find `lower`. The grep for RED handling in the scripts led nowhere, because the stop line was a CUT.
-
-4. **One change.**
-   - The architect task should say what to do when the push is rejected and the tree is dirty: leave it to `drive.nika`, or push through a temporary worktree.
-   - `architect.md` should move *State* entries older than a day into an archive file, so the charter fits in one read.
+   That would have saved about six turns. Second: move *State* entries older than a day out of `architect.md`, about 25k tokens per architect run. Third: `architect-task.md` should say "fetch, then push fast-forward; do not `pull --rebase` with others' files unstaged".

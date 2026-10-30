@@ -164,3 +164,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 1835540 31
 /home/user/Nikaia/docs/briefs/b1007-sum-typed.md 897850 24
 /home/user/Nikaia/docs/briefs/b996-map-read-literal-text.md 502377 6
+/home/user/Nikaia/docs/briefs/architect-task.md 1616746 27

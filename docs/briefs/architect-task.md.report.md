@@ -1,5 +1,4 @@
 Result: done
-Batch: b1007-sum-typed.md, b996-map-read-literal-text.md
+Batch: b-fixforward-corpus-unanswered.md, b994-overlap-note-seq.md
 Owner: none
-Commit: 778e5034 (briefs + architect.md rule/State), push rejected: develop moved (yaml lane 43312d30..bd901ee1); the tree holds other agents' unstaged files, so no rebase by the architect; the driver/supervisor rebases and pushes.
-Notes: k3a2 still waits on the owner's answer to #1012 (decision paper written, docs/briefs/QUESTION already holds the question). b1007 rewritten with the missing checker fact (run 1 report kept as .run1.report.md). #996 narrowed by probe (literal-text tier lacks .copied(); owned value correctly NK1102), comment on the issue. Rule added: an emitter fix brief names the checker fact it needs.
+Notes: RED since the push ending 75e25ed8 (last green a5663bf6), arm64 and bootstrap_compiler: sequences::the_corpus_has_no_more_unanswered_method_calls_than_it_had (ceiling 16). Suspect 43312d30 (prover_walk.nika grammar actions); 7cde2178 touches packages/yaml only. Fix-forward is first (Opus); #994 (Sonnet) follows on disjoint files. The scan joined builder.md's guard set. #1007 and #996 are done, version raises owed from their Changelog lines. k3a2 still waits on the owner's #1012 answer (docs/briefs/QUESTION). Pushed 0497d535.
