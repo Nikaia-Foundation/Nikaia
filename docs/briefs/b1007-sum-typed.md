@@ -1,44 +1,57 @@
 ---
 agent: builder
-model: sonnet
-max_turns: 80
-budget_usd: 15
+model: opus
+max_turns: 100
+budget_usd: 20
 ---
-# Brief: #1007, `sum()` of a typed number sequence lowers without a type
+# Brief: #1007, `sum()` of a typed number sequence lowers without a type (run 2)
 
-Score: bug lane, a false acceptance (the checker passes, rustc refuses; S=2) in a one-line form any move that adds numbers writes; touches the emitter's method-call path only. Runs after k3a2 (bootstrap week: moves first; this blocks no move). Builders have no GitHub: the issue text is copied below.
+Score: bug lane, a false acceptance (the checker passes, rustc refuses; S=2) in a one-line form any move that adds numbers writes. K3a part 2 waits on the owner (#1012), so this runs first. Builders have no GitHub: the issue text is copied below. Run 1 (`b1007-sum-typed.md.run1.report.md`) stopped because no checker fact carries the call's result type to the emitter; this run adds that fact (the brief now allows the checker files).
 
 ## Problem
 
-`sum()` over a sequence of a typed number list lowers to a bare `.sum()`; rustc cannot infer the result type when nothing annotates it (found by b1006, 2026-10-30). #931 (5162370e) wrote the type on the `let` only for an *open* number literal list.
+`sum()` over a sequence of a typed number list lowers to a bare `.sum()`; rustc cannot infer the result type when nothing annotates it (found by b1006). #931 (5162370e) wrote the type on the `let` only for an *open* number literal list.
 
-## Probe (run on d2986cd9)
+## Probe (run by the architect on a5663bf6, `target/fast/nikaia run`; all rows but the annotated ones fail)
 
 ```nika
+fn total(v: Vec[i64]) -> i64 {
+    let t: i64 = v.iter().sum()
+    return t
+}
+
 fn main() {
     let v: Vec[i64] = [3, 4]
-    println(v.iter().sum())          // rustc: type annotations needed, Sum<i64>
+    println(v.iter().sum())             // 7
+    let s = v.iter().sum()
+    println(s)                          // 7
+    println(total(v) + v.iter().sum())  // 14
+    let w: Vec[f64] = [1.5, 2.0]
+    let t: f64 = w.iter().sum()
+    println(t)                          // what println prints for 3.5
+    println(w.iter().sum())             // the same
 }
 ```
-* `let s = v.iter().sum(); println(s)`: same error (lowered `let s = v.iter().copied().sum();`).
-* `println(total(v) + v.iter().sum())`: rustc `Cannot satisfy <i64 as Add<_>>::Output == _`.
-* `let t: i64 = v.iter().sum()` works; `count()`, `max() ?? 0` work.
+Today: rustc "type annotations needed" (`Sum<i64>`, `i64: Add<_>`).
 
-## Locations
-* `crates/nikaia-std/src/tools/emit_core_calls.nika` ~1183: `collect`'s turbofish (`::<Vec<_>>`) in `emit_core_method_call_body`; `sum` gets none.
-* #931's fix: `check_core_method.nika`, `check_flow.nika`, `check_numbers4.nika` (the checker knows `sum`'s result type: `Seq::sum` is `[T](self: Seq[T]) -> T` in `std.contracts:3146`).
-* Test beside: `tests/compiler/tests/a_number_list_literal_summed_is_typed.nika`.
+## How the type reaches the emitter (resolved for you)
+
+The emitter reads checker facts by node key (`node_key(e)` = `id_of(e) as i64`); there is **no fact with a call's result type**: `std_receivers` (receiver's ledger type), `open_items` (open literals only, #931) and `collected_into` (a set) do not give `i64` here. Add one:
+
+* `crates/nikaia-std/src/tools/check_facts.nika`: a new field beside `collected_into` (line 218), e.g. `pub summed: collections::BTreeMap[i64, String]` (call node -> Rust number type, `"i64"`, `"f64"`, ...), with its doc comment, and its empty value in the constructor beside line 502.
+* `crates/nikaia-std/src/tools/check_core_method.nika:568`, `check_core_method_called`: `value` is the checked result of `check_core_call_on`. When `name == "sum"` (and only for the core sequence method, not a program's own `sum`) and `value` is a plain number type (`Ty::Named` with no args, a number name), insert `id_of(expr) as i64 -> name` into the new fact.
+* `crates/nikaia-std/src/tools/emit_core_calls.nika` ~1176-1186, `emit_core_method_call_body`: beside `collect`'s `::<Vec<_>>`, push `::<T>` after `sum` when `self.facts.summed[on_node]` holds a type. Check which node `on_node` is at this point (the call's or the receiver's: `emit_core_calls.nika:1480` passes `node_key(receiver)`, so the call node may need to be handed in, or the fact keyed by the receiver; decide by reading, say which in `Body:`).
+* Their lowered twins: `crates/nikaia-std/src/tools/lowered/{check_facts,check_core_method,emit_core_calls}.rs` (written by `lower-std`, never by hand).
+* Test beside: `tests/compiler/tests/a_number_list_literal_summed_is_typed.nika` (must still pass).
 
 ## To build
-1. Lower `sum()` with a turbofish of its checked result type (`.sum::<i64>()`) whenever the call has no declared target, in programs and in `tools/*.nika` (`lower-std` fixpoint: only files that call `sum` change, or none). Test `tests/compiler/tests/a_typed_list_summed_needs_no_annotation.nika` + `.stdout` with the three probe rows and an `f64` row. `Fixes #1007`.
-
-Expected `.stdout` of the new test (rows run by the architect on d2986cd9; all but the annotated ones fail today): `v.iter().sum()` printed `7`; `let s = v.iter().sum()` printed `7`; `total(v) + v.iter().sum()` `14`; `let t: f64 = w.iter().sum()` with `w = [1.5, 2.0]` and the bare `println(w.iter().sum())` print what `println` prints for `3.5` (take it from the run, say so in `Body:`). Any turbofish rustc accepts is fine (`.sum::<i64>()`); a `ref` element type stays `Sum<&i64>` on the Rust side, the turbofish names the result.
+1. The fact, the checker write and the emitter read above; `lower-std` fixpoint (lower-std, build, lower-std: the second run changes nothing; only files that call `sum` or the three edited files change). New test `tests/compiler/tests/a_typed_list_summed_needs_no_annotation.nika` + `.stdout` holding the probe rows (take the `.stdout` from the real run; say so in `Body:` for the `f64` lines). Any turbofish rustc accepts is fine (`.sum::<i64>()`); a `ref` element stays `Sum<&i64>` on the Rust side, the turbofish names the result. `Fixes #1007`.
 
 ## Done when
-The test passes through `nikaia test` (copy it to the scratchpad to `nikaia run` it alone: a file inside `tests/compiler` is not the project's entry), `tests/compiler/tests/a_number_list_literal_summed_is_typed` still passes, the `lower-std` fixpoint is clean, the gate of `.claude/agents/builder.md` is green; pushed. Commit subject: `emit: sum() names its result type (#1007)`, `Fixes #1007`. Changelog: one line (a program that was refused by rustc now runs).
+The new test passes through `nikaia test` (copy it to the scratchpad to `nikaia run` it alone first), `a_number_list_literal_summed_is_typed` still passes, the `lower-std` fixpoint is clean, the gate of `.claude/agents/builder.md` is green; pushed. Commit subject: `check, emit: sum() names its result type (#1007)`, `Fixes #1007`. Changelog: one line (a program that rustc refused now runs).
 
 ## Stop and report if
-The checker has no result type at the call (then the fix is in the checker: `Found:` with the probe); an edit outside `emit_core_calls.nika`, its lowering, `lowered.rs`'s index line and the test; an error in another agent's file.
+An edit outside the three `.nika` files above, their lowered files, `lowered.rs`'s index lines, other lowered files `lower-std` rewrites because they call `sum`, and the test; an error in another agent's file.
 
 **Not yours, never stage**: `crates/rs2nika/convert/nikaia.{contracts,derived,proofs}` and every `docs/briefs/*` file that `git status` shows modified or untracked except your report.
 

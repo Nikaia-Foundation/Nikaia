@@ -1,1 +1,2 @@
 b1007-sum-typed.md
+b996-map-read-literal-text.md
