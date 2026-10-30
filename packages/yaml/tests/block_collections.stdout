@@ -1,0 +1,16 @@
+{str(name): str(winnow), str(tags): [str(parser), str(grammar)], str(owner): {str(login): str(keywan)}}
+[str(a), str(b)]
+[[str(a), str(b)], str(c)]
+[{str(k): str(v), str(l): str(w)}, str(x)]
+{str(a): [str(x), str(y)], str(b): str(z)}
+{str(k): null, str(l): int(2)}
+[null, str(x)]
+{str(single key): int(1), str(double key): int(2)}
+{str(a): int(1), str(b): int(2)}
+{str(a): {str(b): int(1)}}
+error
+{str(a): [str(x), str(y)]}
+error
+error
+{str(a): null, str(b): str(c)}
+{str(a): int(1), str(b): int(2)}

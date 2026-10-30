@@ -1,0 +1,60 @@
+// Every node's span: from its first byte to just after its last, never a
+// trailing space, a comment or the line break. `é` is two bytes.
+use yaml
+
+fn walk(n: ref yaml::Node, depth: i64) {
+	let mut pad = String()
+	let mut i = 0
+	while i < depth {
+		pad.push_str("  ")
+		i += 1
+	}
+	let what = match n.value {
+		yaml::Value::Null => "null"
+		yaml::Value::Bool(b) => f"bool({b})"
+		yaml::Value::Int(t) => f"int({t})"
+		yaml::Value::Float(t) => f"float({t})"
+		yaml::Value::Str(s) => f"str({s.raw})"
+		yaml::Value::Alias(a) => f"alias({a})"
+		yaml::Value::Seq(_items) => "seq"
+		yaml::Value::Map(_entries) => "map"
+	}
+	println(f"{pad}{n.start}..{n.end} {what}")
+	match n.value {
+		yaml::Value::Seq(items) => {
+			for x in items {
+				walk(x, depth + 1)
+			}
+		}
+		yaml::Value::Map(entries) => {
+			for e in entries {
+				walk(e.key, depth + 1)
+				walk(e.value, depth + 1)
+			}
+		}
+		else => {}
+	}
+}
+
+fn spans(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	for d in docs {
+		walk(d, 0)
+	}
+	println("--")
+}
+
+fn main() {
+	// é: [ab, "c d"]   é 0..2, `[` 4, ab 5..7, "c d" 9..14, `]` 14
+	// k:               k 16..17, `:` 17, the empty value at 18
+	// l:               l 19..20
+	//   - x  # c       `-` 24, x 26..27
+	//   - 'y '         'y ' 37..41
+	spans("é: [ab, \"c d\"]\nk:\nl:\n  - x  # c\n  - 'y '\n")
+	// a document after `---`, a plain scalar over two lines
+	spans("--- a\n  b   \n")
+}

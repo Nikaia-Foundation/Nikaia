@@ -1,0 +1,18 @@
+[str(yes), str(no), str(on), str(off), str(y)]
+[null, null, null, null, null, str(nULL)]
+[bool(true), bool(true), bool(true), bool(false), bool(false), bool(false), str(tRUE)]
+[int(0), int(-12), int(+3), int(012), int(0o17), int(0x1F), str(1_000), str(0x), str(0o8), str(1 2)]
+[float(1e3), float(1.5), float(-1.5E-2), float(.5), float(1.), float(.inf), float(-.Inf), float(+.INF), float(.nan), float(.NaN), float(.NAN), str(1e), str(.), str(-.nan)]
+[int(12), bool(true), null, str(x)]
+{int(1): str(a), null: str(b)}
+-12: -12 -12
+012: 12 12
++3: 3 3
+99999999999999999999: i64 refused: `99999999999999999999` does not fit in an i64
+0x1F: i64 refused: `0x1F`: reading a hexadecimal or octal integer waits on a radix parse in std
+1e3: 1000
+.5: 0.5
+1.: 1
+-.Inf: -inf
+.NaN: NaN
+x: f64 refused: not a number

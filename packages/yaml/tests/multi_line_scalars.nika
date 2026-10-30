@@ -1,0 +1,53 @@
+// Plain scalars over several lines (YAML 1.2.2 7.3.3, 6.5): folded into one,
+// continued only on lines indented past the parent, ended by a comment.
+use yaml
+
+fn show(n: ref yaml::Node) -> String {
+	return match n.value {
+		yaml::Value::Null => "null"
+		yaml::Value::Bool(b) => f"bool({b})"
+		yaml::Value::Int(t) => f"int({t})"
+		yaml::Value::Float(t) => f"float({t})"
+		yaml::Value::Str(s) => f"str({yaml::text(s).replace("\n", "\\n").replace("\t", "\\t")})"
+		yaml::Value::Alias(a) => f"alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+
+fn main() {
+	line("a\n  b\n  c\n")
+	line("  a\n b\n")
+	line("k: a\n  b\n\n  c\nl: d\n")
+	line("a:\n  x\n  y\n")
+	line("- a\n  b\n- c\n")
+	// inside flow (suite 9YRD)
+	line("[a\n b, c\n  d]")
+	// a comment ends the scalar; a line that starts with `#` is a comment
+	line("a\n  #b\n")
+	line("k: a # c\n  b\n")
+	// a continuation must be indented past its parent
+	line("- a\nb\n")
+	// `---` at the start of a line is no continuation
+	line("a\n---\nb\n")
+	// trailing spaces are not part of the text
+	line("a   \n  b   \n")
+}

@@ -1,0 +1,57 @@
+// Single- and double-quoted scalars (YAML 1.2.2 7.3): `''`, the escapes,
+// an escaped line break, line folding. A quoted scalar is a string.
+use yaml
+
+fn show(n: ref yaml::Node) -> String {
+	return match n.value {
+		yaml::Value::Null => "null"
+		yaml::Value::Bool(b) => f"bool({b})"
+		yaml::Value::Int(t) => f"int({t})"
+		yaml::Value::Float(t) => f"float({t})"
+		yaml::Value::Str(s) => f"str({yaml::text(s).replace("\n", "\\n").replace("\t", "\\t")})"
+		yaml::Value::Alias(a) => f"alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+
+fn main() {
+	line("'it''s'")
+	line("['', \"\"]")
+	line("\"a\\tb\\\\c\\\"d\\/e\\nf\"")
+	line("\"\\x41\\u00e9\" # the digits are kept as written for now")
+	// spaces kept at both ends of a single line
+	line("\"  lead and trail  \"")
+	line("'# no comment' # a comment")
+	// a quoted scalar is never resolved
+	line("['true', \"12\", '~']")
+	// folding: one break is a space, an empty line a break (suite 7A4E, PRH3)
+	line("'a\n  b'")
+	line("\"a  \n\n  b\"")
+	line("' one\n  two \n\n\n  three '")
+	// an escaped line break joins the lines (suite NP9H)
+	line("\"a \\\n   b\"")
+	// keys and values
+	line("'k': \"v\"\n\"x y\": 'z'\n")
+	// an escape YAML does not name, an unclosed quote
+	line("\"bad \\q\"")
+	line("'unclosed")
+}

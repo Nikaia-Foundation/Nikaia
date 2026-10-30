@@ -1,0 +1,14 @@
+str(it's)
+[str(), str()]
+str(a\tb\c"d/e\nf)
+str(\x41\u00e9)
+str(  lead and trail  )
+str(# no comment)
+[str(true), str(12), str(~)]
+str(a b)
+str(a\nb)
+str( one two\n\nthree )
+str(a b)
+{str(k): str(v), str(x y): str(z)}
+error
+error

@@ -1,0 +1,11 @@
+str(a b c)
+str(a b)
+{str(k): str(a b\nc), str(l): str(d)}
+{str(a): str(x y)}
+[str(a b), str(c)]
+[str(a b), str(c d)]
+str(a)
+error
+error
+str(a) | str(b)
+str(a b)

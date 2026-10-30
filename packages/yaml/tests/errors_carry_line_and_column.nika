@@ -1,0 +1,36 @@
+// A malformed input throws `yaml::Error` with the line and column (from 1, in
+// characters) and the byte offset where reading stopped.
+use yaml
+
+fn fails(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println(f"{error.line}:{error.column} at byte {error.offset}")
+		return
+	}
+	println(f"parsed {docs.len()}")
+}
+
+fn main() {
+	// a tab used as indentation (suite 4EJS)
+	fails("a:\n\t- x\n")
+	// an unclosed flow sequence
+	fails("k: [a, b\n")
+	fails("é: [a, b")
+	// an entry indented one space less than its siblings (suite 9KBC)
+	fails("a:\n  b: 1\n c: 2\n")
+	fails("k:\n  - x\n - y\n")
+	// a byte that is not UTF-8
+	let mut bad: Vec[u8] = []
+	for b in "k: é".bytes() {
+		bad.push(b)
+	}
+	bad.push(255)
+	bad.push(10)
+	let input = Bytes(bad)
+	let docs = yaml::parse(input) catch {
+		println(f"{error.line}:{error.column} at byte {error.offset}: {error.message}")
+		return
+	}
+	println(f"parsed {docs.len()}")
+}

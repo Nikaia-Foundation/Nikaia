@@ -1,0 +1,743 @@
+use std::text
+
+// The official `yaml` package (ADR-yaml-1): YAML text, as `Bytes`, into a tree
+// of `Node`s that points into the input.
+//
+//     use yaml
+//     let docs = yaml::parse(input) catch { ... }
+//
+// A program takes it in by path: `yaml = { path = "../packages/yaml" }`.
+//
+// The input is `ref Bytes` (a mapped file, a buffer), so every position is a
+// byte offset and every `String` in the tree is a view of the input: nothing
+// is copied while parsing (D2, D4). Each `Node` carries its span, `start` to
+// `end`, from its first byte to just after its last, never a trailing space,
+// a comment or the line break. A stream gives one `Node` per document.
+//
+// A scalar keeps its text as written (`raw`) and its `style`; plain scalars
+// resolve by the YAML 1.2 core schema (D5): `yes`, `no`, `on`, `off` are
+// strings. `Int` and `Float` keep their text, as `json` keeps a number. A
+// failure is an `Error`: the line and the column (from 1, in characters) and
+// the byte offset where reading stopped.
+
+pub struct Node {
+	pub start: u32,
+	pub end: u32,
+	pub anchor: String?,
+	pub tag: String?,
+	pub value: Value,
+}
+
+pub enum Value {
+	Null,
+	Bool(bool),
+	Int(String),
+	Float(String),
+	Str(Scalar),
+	Seq(Vec[Node]),
+	Map(Vec[Entry]),
+	Alias(String),
+}
+
+pub struct Entry {
+	pub key: Node,
+	pub value: Node,
+}
+
+pub struct Scalar {
+	pub raw: String,
+	pub style: Style,
+}
+
+pub enum Style {
+	Plain,
+	Single,
+	Double,
+	Literal,
+	Folded,
+}
+
+pub struct Error {
+	pub message: String,
+	pub line: i64,
+	pub column: i64,
+	pub offset: i64,
+}
+
+impl Error for Error {
+	fn message(ref self) -> String {
+		return f"{self.line}:{self.column}: {self.message}"
+	}
+}
+
+// The block contexts that change what a node may be (YAML 1.2.2 4.1): a
+// sequence entry's content may be a compact collection (`- - a`, `- k: v`), a
+// mapping's value may be a sequence at the mapping's own indentation.
+enum Ctx {
+	BlockIn,
+	BlockOut,
+}
+
+// What a plain scalar's text resolves to by the core schema (D5).
+enum Kind {
+	Null,
+	True,
+	False,
+	Int,
+	Float,
+	Str,
+}
+
+fn is_space(x: scalar) -> bool sync {
+	return x == ' ' || x == '\t' || x == '\n' || x == '\r'
+}
+
+fn is_flow_indicator(x: scalar) -> bool sync {
+	return x == ',' || x == '[' || x == ']' || x == '{' || x == '}'
+}
+
+// The characters after `\\` that YAML names (`c-ns-esc-char`), and the line
+// break of an escaped line break.
+fn is_escape(x: scalar) -> bool sync {
+	return x == '0'
+		|| x == 'a'
+		|| x == 'b'
+		|| x == 't'
+		|| x == '\t'
+		|| x == 'n'
+		|| x == 'v'
+		|| x == 'f'
+		|| x == 'r'
+		|| x == 'e'
+		|| x == ' '
+		|| x == '"'
+		|| x == '/'
+		|| x == '\\'
+		|| x == 'N'
+		|| x == '_'
+		|| x == 'L'
+		|| x == 'P'
+		|| x == 'x'
+		|| x == 'u'
+		|| x == 'U'
+		|| x == '\n'
+}
+
+// `c-indicator`: no plain scalar starts with one (`-`, `?`, `:` may, when a
+// safe character follows: `-1`, `:x`).
+fn is_indicator(x: scalar) -> bool sync {
+	return x == '-'
+		|| x == '?'
+		|| x == ':'
+		|| is_flow_indicator(x)
+		|| x == '#'
+		|| x == '&'
+		|| x == '*'
+		|| x == '!'
+		|| x == '|'
+		|| x == '>'
+		|| x == '\''
+		|| x == '"'
+		|| x == '%'
+		|| x == '@'
+		|| x == '`'
+}
+
+// `ns-plain-safe(c)`: inside flow, the flow indicators end a plain scalar.
+fn plain_safe(x: scalar, flow: bool) -> bool sync {
+	return !is_space(x) && !(flow && is_flow_indicator(x))
+}
+
+fn plain_first(x: scalar) -> bool sync {
+	return !is_space(x) && !is_indicator(x)
+}
+
+// `ns-plain-char(c)` other than `:`, which needs a safe character after it;
+// `#` only where no space stands before it.
+fn plain_char(x: scalar, flow: bool, after_space: bool) -> bool sync {
+	return plain_safe(x, flow) && x != ':' && !(after_space && x == '#')
+}
+
+grammar Yaml {
+	// Whitespace is structure: nothing is skipped, every space is written.
+	rule WS = "" -> { }
+
+	// `l-yaml-stream`: documents, with comments and blank lines between them.
+	entry rule stream -> Vec[Node] = Blanks DocEnd* ds:Docs? DocEnd* eof -> { ds ?? [] }
+
+	// A bare document (no `---`) comes first or after `...` (`l-yaml-stream`).
+	rule Docs -> Vec[Node] =
+		first:AnyDoc rest:NextDoc* -> {
+			let mut all = [first]
+			all.extend(rest)
+			all
+		}
+	rule NextDoc -> Node =
+		DocEnd+ v:AnyDoc -> { v }
+		| v:Explicit -> { v }
+	rule AnyDoc -> Node =
+		v:Explicit -> { v }
+		| not(Marker) v:Block(-1) -> { v }
+	rule Explicit -> Node = "---" v:DocAfter -> { v }
+
+	// `c-document-end`.
+	rule DocEnd = "..." Eol Blanks -> { }
+
+	// What follows `---`: a node on that line, on the lines below, or none.
+	rule DocAfter -> Node =
+		s:count(" " | "\t") if(s > 0) v:Inline(-1) Eol Blanks -> { v }
+		| Eol Blanks v:Block(-1) -> { v }
+		| a:here Eol Blanks -> {
+			Node { start: a, end: a, anchor: null, tag: null, value: Value::Null }
+		}
+
+	// `---` or `...` at the start of a line, where a document begins or ends.
+	rule Marker = ("---" | "...") (" " | "\t" | "\n" | eof) -> { }
+
+	// Spaces and tabs inside a line.
+	rule Sp = (" " | "\t")* -> { }
+	// The rest of a line: spaces, a comment, the line break or the end.
+	rule Eol = (" " | "\t")* Comment? ("\n" | eof) -> { }
+	rule Comment = "#" until("\n" | eof) -> { }
+	// Lines holding nothing but spaces and a comment.
+	rule Blanks = Blank* LastBlank? -> { }
+	rule Blank = (" " | "\t")* Comment? "\n" -> { }
+	rule LastBlank = (" " | "\t")* Comment eof -> { }
+
+	// A block node on the lines below its parent at indentation `n`, at the
+	// indentation of its first line, which exceeds `n` (`s-l+block-node`). A
+	// sequence that is a mapping's value may sit at the mapping's own
+	// indentation (`seq-spaces(n, block-out)`).
+	rule Block(n: i64; c: Ctx = Ctx::BlockIn) -> Node =
+		not(Marker) m:count(" ") if(m > n) v:Content(m, n) -> { v }
+		| not(Marker) m:count(" ") if(c == Ctx::BlockOut && m == n) v:Seq(m) -> { v }
+
+	// A node whose first character is at column `m`, under a parent at `n`;
+	// it ends after its last line's break and the blank lines behind it.
+	rule Content(m: i64, n: i64) -> Node =
+		v:Seq(m) -> { v }
+		| v:Map(m) -> { v }
+		| v:Inline(n) Eol Blanks -> { v }
+
+	rule Seq(m: i64) -> Node =
+		a:here first:SeqEntry(m) rest:SeqMore(m)* -> {
+			let mut b = first.end
+			for r in rest {
+				b = r.end
+			}
+			let mut all = [first]
+			all.extend(rest)
+			Node { start: a, end: b, anchor: null, tag: null, value: Value::Seq(all) }
+		}
+	rule SeqMore(m: i64) -> Node = " "{m} e:SeqEntry(m) -> { e }
+	rule SeqEntry(m: i64) -> Node = "-" v:After(m) -> { v }
+
+	rule Map(m: i64) -> Node =
+		first:MapEntry(m) rest:MapMore(m)* -> {
+			let a = first.key.start
+			let mut b = first.value.end
+			for r in rest {
+				b = r.value.end
+			}
+			let mut all = [first]
+			all.extend(rest)
+			Node { start: a, end: b, anchor: null, tag: null, value: Value::Map(all) }
+		}
+	rule MapMore(m: i64) -> Entry = " "{m} e:MapEntry(m) -> { e }
+	rule MapEntry(m: i64) -> Entry = k:Key Sp ":" v:After(m; c: Ctx::BlockOut) -> {
+		Entry { key: k, value: v }
+	}
+
+	// An implicit key: one line, a flow collection, a quoted or a plain scalar.
+	rule Key -> Node =
+		v:FlowSeq -> { v }
+		| v:FlowMap -> { v }
+		| v:Double -> { v }
+		| v:Single -> { v }
+		| v:Plain(-1, false, false) -> { v }
+
+	// What follows `-` or `key:` at indentation `m`: a node on this line, on
+	// the lines below, or none (`Null`, where the indicator ends). After `-`
+	// that may be a compact collection, whose further entries are at the
+	// column it began in.
+	rule After(m: i64; c: Ctx = Ctx::BlockIn) -> Node =
+		s:count(" ") if(s > 0 && c == Ctx::BlockIn) v:Compact(m + 1 + s) -> { v }
+		| s:count(" " | "\t") if(s > 0) v:Inline(m) Eol Blanks -> { v }
+		| Eol Blanks v:Block(m; c: c) -> { v }
+		| a:here Eol Blanks -> {
+			Node { start: a, end: a, anchor: null, tag: null, value: Value::Null }
+		}
+
+	rule Compact(m: i64) -> Node =
+		v:Seq(m) -> { v }
+		| v:Map(m) -> { v }
+
+	// A node in flow style inside a block, under a parent at `n`.
+	rule Inline(n: i64) -> Node =
+		v:FlowSeq -> { v }
+		| v:FlowMap -> { v }
+		| v:Double -> { v }
+		| v:Single -> { v }
+		| v:Plain(n, false, true) -> { v }
+
+	// Flow collections: spaces, comments and line breaks between their parts
+	// (`s-separate-lines`); a trailing comma.
+	rule Fs = Sp (Comment? "\n" Sp)* -> { }
+
+	rule FlowSeq -> Node =
+		a:here "[" Fs first:FlowItem Fs rest:FlowNext* ("," Fs)? "]" b:here -> {
+			let mut all = [first]
+			all.extend(rest)
+			Node { start: a, end: b, anchor: null, tag: null, value: Value::Seq(all) }
+		}
+		| a:here "[" Fs "]" b:here -> {
+			Node { start: a, end: b, anchor: null, tag: null, value: Value::Seq([]) }
+		}
+	rule FlowNext -> Node = "," Fs v:FlowItem Fs -> { v }
+	// A flow sequence's entry may be a single pair, `[a: b]`.
+	rule FlowItem -> Node =
+		p:FlowPair -> {
+			let a = p.key.start
+			let b = p.value.end
+			Node { start: a, end: b, anchor: null, tag: null, value: Value::Map([p]) }
+		}
+		| v:FlowNode -> { v }
+	rule FlowPair -> Entry = k:FlowNode Fs ":" Fs v:FlowNode -> { Entry { key: k, value: v } }
+
+	rule FlowMap -> Node =
+		a:here "{" Fs first:FlowEntry Fs rest:FlowEntryNext* ("," Fs)? "}" b:here -> {
+			let mut all = [first]
+			all.extend(rest)
+			Node { start: a, end: b, anchor: null, tag: null, value: Value::Map(all) }
+		}
+		| a:here "{" Fs "}" b:here -> {
+			Node { start: a, end: b, anchor: null, tag: null, value: Value::Map([]) }
+		}
+	rule FlowEntryNext -> Entry = "," Fs e:FlowEntry Fs -> { e }
+	// `{a: b}`, `{a: }` and `{a}`: a missing value is `Null`.
+	rule FlowEntry -> Entry =
+		e:FlowPair -> { e }
+		| k:FlowNode Fs ":" b:here -> {
+			Entry {
+				key: k,
+				value: Node { start: b, end: b, anchor: null, tag: null, value: Value::Null },
+			}
+		}
+		| k:FlowNode -> {
+			let b = k.end
+			Entry {
+				key: k,
+				value: Node { start: b, end: b, anchor: null, tag: null, value: Value::Null },
+			}
+		}
+
+	rule FlowNode -> Node =
+		v:FlowSeq -> { v }
+		| v:FlowMap -> { v }
+		| v:Double -> { v }
+		| v:Single -> { v }
+		| v:Plain(-1, true, true) -> { v }
+
+	// `c-double-quoted`: `raw` is the text between the quotes, as written.
+	rule Double -> Node = a:here "\"" s:text(DoubleChar*) "\"" b:here -> {
+		Node {
+			start: a,
+			end: b,
+			anchor: null,
+			tag: null,
+			value: Value::Str(Scalar { raw: s, style: Style::Double }),
+		}
+	}
+	// `c-ns-esc-char`: an escape YAML does not name is an error. The digits of
+	// `\x`, `\u` and `\U` are not checked yet: `hex_digit` (Part II 10.8)
+	// does not lower.
+	rule DoubleChar =
+		"\\" x:any if(is_escape(x), "an escape") -> { }
+		| x:any if(x != '"' && x != '\\') -> { }
+
+	// `c-single-quoted`: `''` is a quote.
+	rule Single -> Node = a:here "'" s:text(SingleChar*) "'" b:here -> {
+		Node {
+			start: a,
+			end: b,
+			anchor: null,
+			tag: null,
+			value: Value::Str(Scalar { raw: s, style: Style::Single }),
+		}
+	}
+	rule SingleChar = "''" -> { } | x:any if(x != '\'') -> { }
+
+	// A plain scalar, resolved by the core schema. In flow the flow
+	// indicators end it; `multi` lets it go on over lines indented past `n`.
+	rule Plain(n: i64, flow: bool, multi: bool) -> Node =
+		a:here s:text(PlainFirst(flow) PlainMore(n, flow, multi)*) b:here -> {
+			let v = match plain_kind(s) {
+				Kind::Null => Value::Null
+				Kind::True => Value::Bool(true)
+				Kind::False => Value::Bool(false)
+				Kind::Int => Value::Int(s)
+				Kind::Float => Value::Float(s)
+				Kind::Str => Value::Str(Scalar { raw: s, style: Style::Plain })
+			}
+			Node { start: a, end: b, anchor: null, tag: null, value: v }
+		}
+	rule PlainFirst(flow: bool) =
+		x:any if(plain_first(x)) -> { }
+		| ("-" | "?" | ":") peek(PlainSafe(flow)) -> { }
+	rule PlainSafe(flow: bool) = x:any if(plain_safe(x, flow)) -> { }
+	rule PlainChar(flow: bool; after_space: bool = false) =
+		":" peek(PlainSafe(flow)) -> { }
+		| x:any if(plain_char(x, flow, after_space)) -> { }
+	// What may follow inside the scalar: a character, spaces and a
+	// character, or a line break and a further line (`s-ns-plain-next-line`).
+	rule PlainMore(n: i64, flow: bool, multi: bool) =
+		PlainChar(flow) -> { }
+		| (" " | "\t")+ PlainChar(flow; after_space: true) -> { }
+		| if(multi) (" " | "\t")* "\n" Empty* not(Marker) m:count(" ") if(flow || m > n) (" " | "\t")* PlainChar(flow; after_space: true) -> { }
+	rule Empty = (" " | "\t")* "\n" -> { }
+}
+
+// The core schema's resolution of a plain scalar's text (D5).
+fn plain_kind(s: String) -> Kind sync {
+	if s == "~" || s == "null" || s == "Null" || s == "NULL" {
+		return Kind::Null
+	}
+	if s == "true" || s == "True" || s == "TRUE" {
+		return Kind::True
+	}
+	if s == "false" || s == "False" || s == "FALSE" {
+		return Kind::False
+	}
+	if is_int(s) {
+		return Kind::Int
+	}
+	if is_float(s) {
+		return Kind::Float
+	}
+	return Kind::Str
+}
+
+fn digits_in(s: String, from: i64, radix: i64) -> bool sync {
+	let cs: Vec[scalar] = s.chars().collect()
+	if from >= cs.len() as i64 {
+		return false
+	}
+	let mut i = from
+	while i < cs.len() as i64 {
+		let c = cs[i]
+		let ok = if radix == 8 {
+			c >= '0' && c <= '7'
+		} else if radix == 16 {
+			(c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+		} else {
+			c >= '0' && c <= '9'
+		}
+		if !ok {
+			return false
+		}
+		i += 1
+	}
+	return true
+}
+
+// `[-+]?[0-9]+`, `0o[0-7]+`, `0x[0-9a-fA-F]+`.
+fn is_int(s: String) -> bool sync {
+	if s.starts_with("0o") {
+		return digits_in(s, 2, 8)
+	}
+	if s.starts_with("0x") {
+		return digits_in(s, 2, 16)
+	}
+	if s.starts_with("-") || s.starts_with("+") {
+		return digits_in(s, 1, 10)
+	}
+	return digits_in(s, 0, 10)
+}
+
+// `[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?`, and `.inf`, `.nan`
+// in their three spellings.
+fn is_float(s: String) -> bool sync {
+	let cs: Vec[scalar] = s.chars().collect()
+	let mut i = 0
+	if s.starts_with("-") || s.starts_with("+") {
+		i = 1
+	}
+	let body = s.strip_prefix("-") ?? (s.strip_prefix("+") ?? s)
+	if body == ".inf" || body == ".Inf" || body == ".INF" {
+		return true
+	}
+	if s == ".nan" || s == ".NaN" || s == ".NAN" {
+		return true
+	}
+	let mut whole = 0
+	while i < cs.len() as i64 && cs[i] >= '0' && cs[i] <= '9' {
+		whole += 1
+		i += 1
+	}
+	let mut fraction = 0
+	if i < cs.len() as i64 && cs[i] == '.' {
+		i += 1
+		while i < cs.len() as i64 && cs[i] >= '0' && cs[i] <= '9' {
+			fraction += 1
+			i += 1
+		}
+	}
+	if whole == 0 && fraction == 0 {
+		return false
+	}
+	if i < cs.len() as i64 && (cs[i] == 'e' || cs[i] == 'E') {
+		i += 1
+		if i < cs.len() as i64 && (cs[i] == '-' || cs[i] == '+') {
+			i += 1
+		}
+		let mut exponent = 0
+		while i < cs.len() as i64 && cs[i] >= '0' && cs[i] <= '9' {
+			exponent += 1
+			i += 1
+		}
+		if exponent == 0 {
+			return false
+		}
+	}
+	return i == cs.len() as i64
+}
+
+// The decimal number at the start of `t`, 0 where none is.
+fn leading_number(t: String) -> i64 sync {
+	let mut n = 0
+	for c in t.chars() {
+		if c < '0' || c > '9' {
+			break
+		}
+		n = n * 10 + text::digit_value(c) as i64
+	}
+	return n
+}
+
+// The byte offset of a line and a column (from 1, the column in characters).
+fn offset_of(input: ref Bytes, line: i64, column: i64) -> i64 sync {
+	let n = input.len() as i64
+	let mut at_line = 1
+	let mut at_column = 1
+	let mut i = 0
+	while i < n {
+		let b = input[i]
+		// A byte that is no UTF-8 continuation byte starts a character.
+		let starts = b < 128 || b >= 192
+		if starts && at_line == line && at_column == column {
+			return i
+		}
+		if b == 10 {
+			if at_line == line {
+				return i
+			}
+			at_line += 1
+			at_column = 1
+		} else if starts {
+			at_column += 1
+		}
+		i += 1
+	}
+	return n
+}
+
+// A `ParseError` carries the parser's rendered message and nothing else
+// (Part II 10.8): the message, then `at line L, column C` and the line it
+// stopped in.
+fn error_of(input: ref Bytes, rendered: String) -> Error sync {
+	let parts: Vec[String] = rendered.split(" at line ").collect()
+	if parts.len() < 2 {
+		return Error { message: rendered.clone(), line: 1, column: 1, offset: 0 }
+	}
+	let place: Vec[String] = parts[1].split(", column ").collect()
+	let line = leading_number(place[0].clone())
+	let column = if place.len() > 1 { leading_number(place[1].clone()) } else { 1 }
+	return Error {
+		message: parts[0].clone(),
+		line: line,
+		column: column,
+		offset: offset_of(input, line, column),
+	}
+}
+
+// The stream's documents, one `Node` each.
+pub fn parse(input: ref Bytes) -> Vec[Node] sync throws {
+	return Yaml::stream(input) catch {
+		throw error_of(input, f"{error}")
+	}
+}
+
+// A scalar's value: line folding (YAML 1.2.2 6.5), `''` in a single-quoted
+// scalar and the escapes of a double-quoted one (7.3). A copy of its own,
+// computed on request. `\\x`, `\\u` and `\\U` stay as written: reading
+// their hexadecimal digits waits on a radix parse in `std`.
+pub fn text(s: ref Scalar) -> String sync {
+	return match s.style {
+		Style::Plain => fold(s.raw, false, false)
+		Style::Single => fold(s.raw, true, false)
+		Style::Double => fold(s.raw, false, true)
+		else => s.raw.clone()
+	}
+}
+
+fn escaped(e: scalar) -> scalar sync {
+	return match e {
+		'0' => '\u{0}'
+		'a' => '\u{7}'
+		'b' => '\u{8}'
+		't' => '\t'
+		'n' => '\n'
+		'v' => '\u{b}'
+		'f' => '\u{c}'
+		'r' => '\r'
+		'e' => '\u{1b}'
+		'N' => '\u{85}'
+		'_' => '\u{a0}'
+		'L' => '\u{2028}'
+		'P' => '\u{2029}'
+		else => e
+	}
+}
+
+// Folds the lines of a flow scalar: the spaces around a line break go, one
+// break is a space, each further (empty) line a line break.
+fn fold(raw: String, single: bool, double: bool) -> String sync {
+	let cs: Vec[scalar] = raw.chars().collect()
+	let n = cs.len() as i64
+	let mut out = String()
+	// Spaces and tabs not yet known to stand inside a line.
+	let mut pending = String()
+	let mut i = 0
+	while i < n {
+		let c = cs[i]
+		if c == ' ' || c == '\t' {
+			pending.push(c)
+			i += 1
+			continue
+		}
+		if c == '\n' || c == '\r' {
+			pending = String()
+			i = skip_blanks(cs, i + 1)
+			let mut breaks = 0
+			while i < n && cs[i] == '\n' {
+				breaks += 1
+				i = skip_blanks(cs, i + 1)
+			}
+			if breaks == 0 {
+				out.push(' ')
+			}
+			while breaks > 0 {
+				out.push('\n')
+				breaks -= 1
+			}
+			continue
+		}
+		out.push_str(pending)
+		pending = String()
+		if single && c == '\'' {
+			out.push('\'')
+			i += 2
+			continue
+		}
+		if double && c == '\\' && i + 1 < n {
+			let e = cs[i + 1]
+			if e == '\n' {
+				// An escaped line break: nothing, and the next line's indentation goes.
+				i = skip_blanks(cs, i + 2)
+			} else if e == 'x' || e == 'u' || e == 'U' {
+				out.push(c)
+				i += 1
+			} else {
+				out.push(escaped(e))
+				i += 2
+			}
+			continue
+		}
+		out.push(c)
+		i += 1
+	}
+	out.push_str(pending)
+	return out
+}
+
+// The position after the spaces and tabs from `i` (a line's indentation).
+fn skip_blanks(cs: ref Vec[scalar], from: i64) -> i64 sync {
+	let mut i = from
+	while i < cs.len() as i64 && (cs[i] == ' ' || cs[i] == '\t') {
+		i += 1
+	}
+	return i
+}
+
+// A value asked for as a number it is not, or does not fit.
+pub struct ConvertError {
+	pub message: String,
+}
+
+impl Error for ConvertError {
+	fn message(ref self) -> String {
+		return self.message.clone()
+	}
+}
+
+// An `Int` as an `i64`: `[-+]?[0-9]+`, `012` is 12. `0x` and `0o` wait on a
+// radix parse in `std`.
+pub fn as_i64(v: ref Value) -> i64 sync throws {
+	let t = match v {
+		Value::Int(t) => t.clone()
+		else => throw ConvertError { message: "not an integer" }
+	}
+	if t.starts_with("0x") || t.starts_with("0o") {
+		throw ConvertError {
+			message: f"`{t}`: reading a hexadecimal or octal integer waits on a radix parse in std"
+		}
+	}
+	let n = text::parse_i64(t.clone())
+	if n == null {
+		throw ConvertError { message: f"`{t}` does not fit in an i64" }
+	}
+	return n ?? 0
+}
+
+// An `Int` or a `Float` as an `f64`: YAML's spelling (`.5`, `1.`, `.inf`,
+// `-.Inf`, `.NaN`) rewritten into the one `text::parse_f64` reads (ADR-285
+// D35: no `.5`, no `1.`).
+pub fn as_f64(v: ref Value) -> f64 sync throws {
+	let t = match v {
+		Value::Int(t) => t.clone()
+		Value::Float(t) => t.clone()
+		else => throw ConvertError { message: "not a number" }
+	}
+	if t.starts_with("0x") || t.starts_with("0o") {
+		throw ConvertError {
+			message: f"`{t}`: reading a hexadecimal or octal integer waits on a radix parse in std"
+		}
+	}
+	let mut spelled = String()
+	let cs: Vec[scalar] = t.chars().collect()
+	let mut i = 0
+	if cs.len() > 0 && (cs[0] == '-' || cs[0] == '+') {
+		spelled.push(cs[0])
+		i = 1
+	}
+	if i < cs.len() as i64 && cs[i] == '.' {
+		let word: String = (t.strip_prefix(spelled) ?? "").to_lowercase()
+		if word == ".inf" || word == ".nan" {
+			spelled.push_str(word.strip_prefix(".") ?? "")
+			return text::parse_f64(spelled) ?? 0.0
+		}
+		spelled.push('0')
+	}
+	while i < cs.len() as i64 {
+		spelled.push(cs[i])
+		if cs[i] == '.' && (i + 1 >= cs.len() as i64 || cs[i + 1] < '0' || cs[i + 1] > '9') {
+			spelled.push('0')
+		}
+		i += 1
+	}
+	let x = text::parse_f64(spelled)
+	if x == null {
+		throw ConvertError { message: f"`{t}` is not a number" }
+	}
+	return x ?? 0.0
+}

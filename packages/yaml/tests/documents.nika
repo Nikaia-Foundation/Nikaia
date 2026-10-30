@@ -1,0 +1,55 @@
+// Documents in a stream (YAML 1.2.2 9.1, 9.2): implicit, started by `---`,
+// ended by `...`; one `Node` each.
+use yaml
+
+fn show(n: ref yaml::Node) -> String {
+	return match n.value {
+		yaml::Value::Null => "null"
+		yaml::Value::Bool(b) => f"bool({b})"
+		yaml::Value::Int(t) => f"int({t})"
+		yaml::Value::Float(t) => f"float({t})"
+		yaml::Value::Str(s) => f"str({yaml::text(s)})"
+		yaml::Value::Alias(a) => f"alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(f"{docs.len()}: {parts.join(" | ")}")
+}
+
+fn main() {
+	line("a\n")
+	line("a\n---\nb\n")
+	line("---\na\n...\n---\nb\n")
+	// a node on the `---` line
+	line("--- a\n--- b\n")
+	// an empty document is null
+	line("---\n")
+	line("---\n---\n")
+	line("--- # comment\n")
+	// `...` ends a document; a bare one may follow (suite 6ZKB)
+	line("a\n...\n")
+	line("a\n...\nb\n")
+	line("...\n")
+	line("--- # comment\nk: v\n...\n# trailing\n")
+	// `---` needs a space or the line's end
+	line("---a\n")
+	// a mapping ends where `---` starts the next document
+	line("a: 1\n---\nb: 2\n")
+}

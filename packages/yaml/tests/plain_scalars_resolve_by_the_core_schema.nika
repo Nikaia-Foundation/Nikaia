@@ -1,0 +1,93 @@
+// Plain scalars resolve by the YAML 1.2 core schema (ADR-yaml-1 D5): `yes`,
+// `no`, `on`, `off` are strings; `Int` and `Float` keep their text and
+// convert when asked.
+use yaml
+
+fn show(n: ref yaml::Node) -> String {
+	return match n.value {
+		yaml::Value::Null => "null"
+		yaml::Value::Bool(b) => f"bool({b})"
+		yaml::Value::Int(t) => f"int({t})"
+		yaml::Value::Float(t) => f"float({t})"
+		yaml::Value::Str(s) => f"str({yaml::text(s)})"
+		yaml::Value::Alias(a) => f"alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+
+fn number(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	let i = yaml::as_i64(docs[0].value) catch {
+		println(f"{text}: i64 refused: {error.message}")
+		return
+	}
+	let x = yaml::as_f64(docs[0].value) catch {
+		println(f"{text}: f64 refused: {error.message}")
+		return
+	}
+	println(f"{text}: {i} {x}")
+}
+
+fn float(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	let x = yaml::as_f64(docs[0].value) catch {
+		println(f"{text}: f64 refused: {error.message}")
+		return
+	}
+	println(f"{text}: {x}")
+}
+
+fn main() {
+	// strings in YAML 1.2, booleans only in 1.1
+	line("- yes\n- no\n- on\n- off\n- y\n")
+	// null
+	line("- ~\n- null\n- Null\n- NULL\n-\n- nULL\n")
+	// booleans
+	line("- true\n- True\n- TRUE\n- false\n- False\n- FALSE\n- tRUE\n")
+	// integers: decimal with a sign and leading zeros, octal, hexadecimal
+	line("- 0\n- -12\n- +3\n- 012\n- 0o17\n- 0x1F\n- 1_000\n- 0x\n- 0o8\n- 1 2\n")
+	// floats
+	line("- 1e3\n- 1.5\n- -1.5E-2\n- .5\n- 1.\n- .inf\n- -.Inf\n- +.INF\n- .nan\n- .NaN\n- .NAN\n- 1e\n- .\n- -.nan\n")
+	// inside flow, as keys
+	line("[12, true, ~, x]")
+	line("{1: a, null: b}")
+	// conversions on request
+	number("-12")
+	number("012")
+	number("+3")
+	number("99999999999999999999")
+	number("0x1F")
+	float("1e3")
+	float(".5")
+	float("1.")
+	float("-.Inf")
+	float(".NaN")
+	float("x")
+}

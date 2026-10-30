@@ -1,0 +1,15 @@
+[str(a), str(b), str(c)]
+{str(a): int(1), str(b): int(2)}
+[str(a), [str(b), str(c)], {str(d): str(e)}]
+[]
+{}
+[str(a), str(b), str(c)]
+{str(a): [int(1), int(2)], str(b): {str(c): str(d)}}
+[{str(a): str(b)}, str(c)]
+{str(a): null, str(b): null}
+[str(a:b), {str(k): str(v)}]
+{str(a): int(1)}
+{str(k): [str(x), str(y)], str(l): {str(m): str(n)}}
+{[str(a), str(b)]: str(c)}
+error
+error

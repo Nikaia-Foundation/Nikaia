@@ -1,0 +1,58 @@
+// Flow sequences and mappings (YAML 1.2.2 7.4): nested, across lines, with
+// comments and a trailing comma.
+use yaml
+
+fn show(n: ref yaml::Node) -> String {
+	return match n.value {
+		yaml::Value::Null => "null"
+		yaml::Value::Bool(b) => f"bool({b})"
+		yaml::Value::Int(t) => f"int({t})"
+		yaml::Value::Float(t) => f"float({t})"
+		yaml::Value::Str(s) => f"str({yaml::text(s)})"
+		yaml::Value::Alias(a) => f"alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+
+fn main() {
+	line("[a, b, c]")
+	line("{a: 1, b: 2}")
+	line("[a, [b, c], {d: e}]")
+	line("[]")
+	line("{}")
+	// across lines, a comment inside, a trailing comma (suite 4ABK, 9MMW)
+	line("[\n  a,\n  b, # second\n  c,\n]\n")
+	line("{ a: [1, 2], b: {c: d}, }")
+	// a single pair as a sequence entry (suite 9MMW)
+	line("[a: b, c]")
+	// a key without a value
+	line("{a, b: }")
+	// `:` with no space inside a plain scalar; a quoted key may touch its `:`
+	line("[a:b, \"k\":v]")
+	line("{\"a\":1}")
+	// a flow collection as a block mapping's value and key
+	line("k: [x, y]\nl: {m: n}\n")
+	line("[a, b]: c\n")
+	// unclosed
+	line("[a, b")
+	line("{a: 1")
+}

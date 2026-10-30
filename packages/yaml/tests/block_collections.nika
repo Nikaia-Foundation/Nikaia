@@ -1,0 +1,62 @@
+// Block sequences and mappings (YAML 1.2.2 8.2): indentation, compact
+// nested entries, empty values and comments.
+use yaml
+
+fn show(n: ref yaml::Node) -> String {
+	return match n.value {
+		yaml::Value::Null => "null"
+		yaml::Value::Bool(b) => f"bool({b})"
+		yaml::Value::Int(t) => f"int({t})"
+		yaml::Value::Float(t) => f"float({t})"
+		yaml::Value::Str(s) => f"str({yaml::text(s)})"
+		yaml::Value::Alias(a) => f"alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+
+fn main() {
+	line("name: winnow\ntags:\n  - parser\n  - grammar\nowner:\n  login: keywan\n")
+	line("- a\n- b\n")
+	// a compact sequence or mapping as an entry (suite 3ALJ, V9D5)
+	line("- - a\n  - b\n- c\n")
+	line("- k: v\n  l: w\n- x\n")
+	// a sequence as a mapping's value at the mapping's own indentation (suite 93JH)
+	line("a:\n- x\n- y\nb: z\n")
+	// an empty value is null
+	line("k:\nl: 2\n")
+	line("-\n- x\n")
+	// quoted keys
+	line("'single key': 1\n\"double key\": 2\n")
+	// comments after a value, on their own line, between key and block
+	line("a: 1 # one\n# own line\nb: 2\n")
+	line("a:   # nothing here yet\n  # indented comment\n  b: 1\n")
+	// a mapping value is no compact sequence, and no plain scalar starts with `- `
+	line("a: - x\n")
+	// the indentation is the first line's, and every sibling keeps it
+	line("a:\n    - x\n    - y\n")
+	line("a:\n  b: 1\n   c: 2\n")
+	line("a:\n    - x\n   - y\n")
+	// a mapping at the parent's indentation is no value of `a`
+	line("a:\nb: c\n")
+	// no break at the end
+	line("a: 1\nb: 2")
+}
