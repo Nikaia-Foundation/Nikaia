@@ -56,10 +56,12 @@ You build one small slice of an issue in the Nikaia repository and end.
   nikaia_test::the_compiler_test_package` (P4a debrief, 2026-10-28). Before the run's last
   commit, once, run the gate (#852): besides the touched tests, the guard set: `cargo test --profile fast -p nikaia --test it --
   range_spelling:: shipped_ledger:: contracts::every_std_module
-  dependency_ledger:: fmt::every_nika_file` (repository-wide scans no NK code leads to: they kept
+  dependency_ledger:: fmt::every_nika_file sequences::the_corpus_has_no_more_unanswered` (repository-wide scans no NK code leads to: they kept
   `develop` red for runs 1902-1915; the `fmt` scan formats every `.nika`, and
   P5d's new `tools/project_check.nika` hit a formatter defect it found only
-  in CI, 0f9a525). A change to `check/`, `emit/`,
+  in CI, 0f9a525; the `sequences` scan counts unanswered method calls over every
+  tools file, and 43312d30's new prover code raised it past its ceiling, red
+  from 75e25ed8). A change to `check/`, `emit/`,
   `tools/check_*.nika` or `tools/emit_*.nika` also runs `target/fast/nikaia test
   --both-settings --project tests/compiler`. Report `Gate: green` or `Gate: red
   <tests>`; on red do not commit, report `Needs: fix`.
