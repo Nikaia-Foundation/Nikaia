@@ -362,6 +362,7 @@ the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
+| async-4 | the `async` surface: an expression prefix, handle options, cancelling through handles, the failure levels (#983) | architect, `develop` |
 
 A row here is a claim and nothing else: it says the number is spoken for, not
 what the decision is. Delete the row in the same commit that adds the record.
