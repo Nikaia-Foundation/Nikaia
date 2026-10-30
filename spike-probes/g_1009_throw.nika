@@ -1,0 +1,27 @@
+// #1009 narrowed: a let mut reassigned in an if whose branch can throw.
+enum Bad { No }
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return "bad"
+    }
+}
+
+fn pick(a: i64, b: i64) -> i64 throws {
+    if a < 0 || a > 10 || b < 0 || b > 10 {
+        return 0
+    }
+    let mut cp = a
+    if a > 5 {
+        if b > 7 {
+            throw Bad::No
+        }
+        cp = a + b
+    }
+    assert(cp >= 0 && cp <= 20)
+    return cp
+}
+
+fn main() {
+    let r = pick(3, 4) catch { 0 }
+    println(f"{r}")
+}

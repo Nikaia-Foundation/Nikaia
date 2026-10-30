@@ -1,0 +1,16 @@
+// #1009: a let mut reassigned in an if, read afterwards.
+fn pick(a: i64) -> i64 {
+    if a < 0 || a > 10 {
+        return 0
+    }
+    let mut cp = a
+    if a > 5 {
+        cp = a + 100
+    }
+    assert(cp >= 0 && cp <= 110)
+    return cp
+}
+
+fn main() {
+    println(f"{pick(3)}")
+}

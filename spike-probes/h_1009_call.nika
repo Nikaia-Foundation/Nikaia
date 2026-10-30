@@ -1,0 +1,21 @@
+// #1009 narrowed: a let mut whose first value is a call.
+fn small(a: i64) -> i64 {
+    if a < 0 || a > 10 {
+        return 0
+    }
+    assert(a >= 0 && a <= 10)
+    return a
+}
+
+fn pick(a: i64) -> i64 {
+    let mut cp = small(a)
+    if cp > 5 {
+        cp = cp + 1
+    }
+    assert(cp >= 0 && cp <= 11)
+    return cp
+}
+
+fn main() {
+    println(f"{pick(3)}")
+}

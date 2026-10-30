@@ -1,0 +1,20 @@
+// Accumulation n = n*16 + d, d known in 0..=15 by an early return.
+fn hex(ds: ref Vec[i64]) -> i64 {
+    let mut n = 0
+    let mut k = 0
+    while k < 4 {
+        let d = ds[k]
+        if d < 0 || d > 15 {
+            return 0
+        }
+        n = n * 16 + d
+        k += 1
+    }
+    assert(n >= 0 && n <= 0xFFFF)
+    return n
+}
+
+fn main() {
+    let ds: Vec[i64] = [1, 2, 3, 4]
+    println(f"{hex(ds)}")
+}

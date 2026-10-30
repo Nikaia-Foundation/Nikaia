@@ -1,0 +1,11 @@
+// Constant-step baseline: already proved by closed forms / intervals.
+fn main() {
+    let mut s = 0
+    let mut k = 0
+    while k < 4 {
+        s = s + 3
+        k += 1
+    }
+    assert(s >= 0 && s <= 12)
+    println(f"{s}")
+}

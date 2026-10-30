@@ -31,6 +31,16 @@ pub struct LoopRecord {
     /// name: it starts at the range's start and goes up by one each turn.
     /// Empty for a `while`.
     pub counter: String,
+    /// **Each path that ends a turn**, what it met and each state name's
+    /// value over the head of the turn: the turn-indexed intervals' input
+    /// (spike, #639).
+    pub turns: Vec[LoopTurn],
+}
+
+/// One path through a turn that reaches the next head.
+pub struct LoopTurn {
+    pub constraints: Vec[i64],
+    pub values: collections::BTreeMap[String, i64],
 }
 
 /// **The invariant the strategies found and the three queries proved**
@@ -166,8 +176,16 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
     exits.push(LgExit { kind: "condition", relation: arena.and(same) })
     let mut steps: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
     let mut unsteady: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut kept_turns: Vec[LoopTurn] = []
     for end in ends {
         let mut parts = end.path.constraints.clone()
+        if end.kind == "turn" {
+            let mut values: collections::BTreeMap[String, i64] = collections::BTreeMap()
+            for name in state {
+                values.insert(name.clone(), end.path.values[name] ?? arena.var(name))
+            }
+            kept_turns.push(LoopTurn { constraints: end.path.constraints.clone(), values: values })
+        }
         for name in state {
             let primed = arena.var(lg_primed(name))
             let value = end.path.values[name] ?? arena.var(name)
@@ -200,7 +218,7 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
         step = arena.or(turns)
     }
     let problem = LgLoop { state: state.clone(), fixed: fixed, entry: entry, condition: condition, step: step, exits: exits, goals: [] }
-    return LoopRecord { start: start, problem: problem, steps: steps, counter: counter.clone() }
+    return LoopRecord { start: start, problem: problem, steps: steps, counter: counter.clone(), turns: kept_turns }
 }
 
 /// What a turn adds to `name` where `value` is it plus a constant: the same
@@ -267,7 +285,7 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
                 Stmt::Return(_) => {
                     ended = "return"
                 },
-                Stmt::Let { names, value, .. } => {
+                Stmt::Let { names, ty, value, .. } => {
                     if leaves_stmt(stmt.node, throwing, holes_of, true) {
                         return null
                     }
@@ -287,6 +305,12 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
                         }
                         p.values.remove(n)
                         p.unread.insert(n.clone())
+                    }
+                    if term == null && names.len() == 1 && loop_whole_let(ty, value, words) {
+                        // A whole number nothing here reads: a fresh name,
+                        // so what tests it constrains it (spike).
+                        let n = words.resolve(names[0]).clone()
+                        term = arena.var(f"{n}~{arena.nodes.len()}")
                     }
                     if term != null {
                         let n = words.resolve(names[0]).clone()
@@ -391,6 +415,12 @@ fn loop_expr_stmt(mut arena: TermArena, expr: ref Expr, span: Span, path: ref Lo
             next.extend(after_no)
             return true
         },
+        // **A `throw` leaves the function** as a `return` does: a way out
+        // that never reaches past the loop (spike).
+        Expr::Throw(_, _) => {
+            ends.push(LoopEnd { kind: "return", path: path.clone() })
+            return true
+        },
         Expr::Call { func, args, .. } => {
             if prover_an_assert_call(func, args, span, claims) {
                 // Past an `assert` its claim holds: proved, or checked
@@ -413,7 +443,7 @@ fn loop_expr_stmt(mut arena: TermArena, expr: ref Expr, span: Span, path: ref Lo
 /// - a name a turn changes by one constant on every path is its start plus
 /// that constant times the turns taken, and a counter stops at its bound -
 /// then intervals.
-fn loop_candidates(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, String)] {
+fn loop_candidates(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[(i64, String)] {
     let mut found: Vec[(i64, String)] = []
     let start = record.start
     // Closed forms: each name against its start, each pair against each other.
@@ -550,7 +580,186 @@ fn loop_candidates(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, St
             found.push((arena.ge(here, l), "intervals"))
         }
     }
+    found.extend(loop_unrolled(arena, record, steady, proved))
     return found
+}
+
+/// The turns a loop may take, at most, for the turn-indexed intervals.
+fn loop_turns_most() -> i64 {
+    return 16
+}
+
+/// **Turn-indexed intervals** (spike, #639: unrolling stated as an
+/// invariant): where a counter goes from a known start by one constant to a
+/// constant limit, the loop takes at most `T` turns. For every other state
+/// name with a known start, each turn's paths are evaluated over intervals -
+/// what the path met, and the name's interval after `j` turns - and give its
+/// interval after `j + 1`. The candidates are `counter > start + j·k ||
+/// lo_j <= x <= hi_j`, one per turn, each linear; they are proved or dropped
+/// as every candidate is (D4). `v = v * 16 + d` with `0 <= d <= 15` over four
+/// turns is `0 <= v <= 65535`.
+fn loop_unrolled(mut arena: TermArena, record: ref LoopRecord, steady: ref Vec[(String, i64)], proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[(i64, String)] {
+    let mut found: Vec[(i64, String)] = []
+    let c = record.problem.condition ?? return found
+    let start = record.start
+    // The counter and how many turns it allows.
+    let mut counter: String = ""
+    let mut first = 0
+    let mut step = 0
+    let mut turns = -1
+    for (name, k) in steady {
+        if k <= 0 {
+            continue
+        }
+        let limit = loop_constant_limit(arena, c, name) ?? continue
+        let begins = loop_known_value(arena, record.problem.fixed, loop_before_name(name, start)) ?? continue
+        let mut t = 0
+        if limit.op == "<" {
+            if limit.value > begins {
+                t = (limit.value - begins + k - 1) / k
+            }
+        } else if limit.op == "<=" {
+            if limit.value >= begins {
+                t = (limit.value - begins) / k + 1
+            }
+        } else {
+            continue
+        }
+        if t <= loop_turns_most() {
+            counter = name.clone()
+            first = begins
+            step = k
+            turns = t
+            break
+        }
+    }
+    if turns < 0 {
+        return found
+    }
+    // The paths of a turn that can be taken at all, each as plain atoms.
+    let mut paths: Vec[LoopTurn] = []
+    let falsum = arena.boolean(false)
+    for turn in record.turns {
+        if proved(arena, turn.constraints, falsum) {
+            continue
+        }
+        let mut atoms: Vec[i64] = []
+        for constraint in turn.constraints {
+            loop_atoms(arena, constraint, false, atoms)
+        }
+        paths.push(LoopTurn { constraints: atoms, values: turn.values.clone() })
+    }
+    if paths.is_empty() {
+        return found
+    }
+    let here_counter = arena.var(counter)
+    for name in record.problem.state {
+        if name == counter || record.steps.contains_key(name) {
+            continue
+        }
+        let x0 = loop_known_value(arena, record.problem.fixed, loop_before_name(name, start)) ?? continue
+        let here = arena.var(name)
+        let mut lo = x0
+        let mut hi = x0
+        let mut hull_lo = x0
+        let mut hull_hi = x0
+        for j in 0..<(turns + 1) {
+            let at_most = arena.int(first + j * step)
+            let past = arena.gt(here_counter, at_most)
+            let low = arena.int(hull_lo)
+            let high = arena.int(hull_hi)
+            let above = arena.ge(here, low)
+            let below = arena.le(here, high)
+            let within = arena.and([above, below])
+            found.push((arena.or([past, within]), "turn-indexed intervals"))
+            if j == turns {
+                break
+            }
+            // The interval after one more turn: every path's, joined.
+            let mut next_lo: i64? = null
+            let mut next_hi: i64? = null
+            let mut open = false
+            for path in paths {
+                let value = path.values[name] ?? arena.var(name)
+                let mut facts = path.constraints.clone()
+                let lo_term = arena.int(lo)
+                let hi_term = arena.int(hi)
+                facts.push(arena.ge(here, lo_term))
+                facts.push(arena.le(here, hi_term))
+                let range = candidate(value, facts, fn(at) { arena.at(at) })
+                if range.lo == null || range.hi == null {
+                    open = true
+                    break
+                }
+                let rl = range.lo ?? 0
+                let rh = range.hi ?? 0
+                if next_lo == null || rl < (next_lo ?? 0) {
+                    next_lo = rl
+                }
+                if next_hi == null || rh > (next_hi ?? 0) {
+                    next_hi = rh
+                }
+            }
+            if open {
+                break
+            }
+            lo = next_lo ?? 0
+            hi = next_hi ?? 0
+            if lo < hull_lo {
+                hull_lo = lo
+            }
+            if hi > hull_hi {
+                hull_hi = hi
+            }
+        }
+    }
+    return found
+}
+
+/// **A condition as comparisons it implies**, the negation pushed inward:
+/// a conjunction's parts, a negated disjunction's parts negated, a negated
+/// comparison turned. A disjunction implies none of its parts and is left
+/// out - what is left out only weakens a guess.
+fn loop_atoms(mut arena: TermArena, c: i64, negated: bool, mut out: Vec[i64]) {
+    match arena.at(c) {
+        SolverTerm::And(parts) => {
+            if !negated {
+                for part in parts {
+                    loop_atoms(arena, part, false, out)
+                }
+            }
+        },
+        SolverTerm::Or(parts) => {
+            if negated {
+                for part in parts {
+                    loop_atoms(arena, part, true, out)
+                }
+            }
+        },
+        SolverTerm::Not(a) => loop_atoms(arena, a, !negated, out),
+        SolverTerm::Lt(a, b) => out.push(if negated { arena.ge(a, b) } else { c }),
+        SolverTerm::Le(a, b) => out.push(if negated { arena.gt(a, b) } else { c }),
+        SolverTerm::Gt(a, b) => out.push(if negated { arena.le(a, b) } else { c }),
+        SolverTerm::Ge(a, b) => out.push(if negated { arena.lt(a, b) } else { c }),
+        SolverTerm::Eq(a, b) => {
+            if !negated {
+                out.push(c)
+            }
+        },
+        else => {},
+    }
+}
+
+/// **A `let` that binds a whole number**: its type says so, or its value
+/// converts into one (spike).
+fn loop_whole_let(ty: ref Type?, value: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    let declared = ty ?? {
+        return match value {
+            Expr::Cast { ty, .. } => ty.generics.is_empty() && is_whole_number(words.resolve(ty.name)),
+            else => false,
+        }
+    }
+    return declared.generics.is_empty() && is_whole_number(words.resolve(declared.name))
 }
 
 /// `k · (name - start)`, written as plainly as the start allows: a start
@@ -675,7 +884,7 @@ fn loop_known_value(arena: ref TermArena, facts: ref Vec[i64], name: ref String)
 /// the queries.
 pub fn loop_found(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
     let mut kept: Vec[(i64, String)] = []
-    for (term, origin) in loop_candidates(arena, record) {
+    for (term, origin) in loop_candidates(arena, record, proved) {
         let query = lg_loop_entry_query(record.problem, term)
         asked.push(1)
         if proved(arena, query.facts, query.goal) {
@@ -684,7 +893,7 @@ pub fn loop_found(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref T
     }
     let mut rounds = 0
     let mut changed = true
-    while changed && !kept.is_empty() && rounds < 4 {
+    while changed && !kept.is_empty() && rounds < 4 + loop_turns_most() {
         changed = false
         rounds += 1
         let mut all: Vec[i64] = []

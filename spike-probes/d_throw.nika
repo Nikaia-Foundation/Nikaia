@@ -1,0 +1,40 @@
+// hex4's shape: throw in the loop, a char cast, v set in an if chain.
+enum Bad { Short, NotHex }
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return "bad"
+    }
+}
+
+fn hex(cs: ref Vec[scalar]) -> i64 throws {
+    let mut n = 0
+    let mut k = 0
+    while k < 4 {
+        if k >= cs.len() {
+            throw Bad::Short
+        }
+        let c = cs[k]
+        let d = c as i64
+        let mut v = -1
+        if d >= 48 && d <= 57 {
+            v = d - 48
+        } else if d >= 65 && d <= 70 {
+            v = d - 55
+        } else if d >= 97 && d <= 102 {
+            v = d - 87
+        }
+        if v < 0 {
+            throw Bad::NotHex
+        }
+        n = n * 16 + v
+        k += 1
+    }
+    assert(n >= 0 && n <= 0xFFFF)
+    return n
+}
+
+fn main() {
+    let cs: Vec[scalar] = ['0', '0', 'e', '9']
+    let r = hex(cs) catch { 0 }
+    println(f"{r}")
+}

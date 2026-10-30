@@ -1,0 +1,23 @@
+// #1009 narrowed: the branch binds a call's result and assigns from it.
+fn small(a: i64) -> i64 {
+    if a < 0 || a > 10 {
+        return 0
+    }
+    assert(a >= 0 && a <= 10)
+    return a
+}
+
+fn pick(a: i64, b: i64) -> i64 {
+    let first = small(a)
+    let mut cp = first
+    if cp > 5 {
+        let low = small(b)
+        cp = cp + low
+    }
+    assert(cp >= 0 && cp <= 20)
+    return cp
+}
+
+fn main() {
+    println(f"{pick(3, 4)}")
+}

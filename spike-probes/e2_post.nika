@@ -1,0 +1,20 @@
+// The result's range at the caller (loops in a result summary: ADR-361 leaves it open).
+fn hex(ds: ref Vec[i64]) -> i64 {
+    let mut n = 0
+    for k in 0..<4 {
+        let d: i64 = ds[k]
+        if d < 0 || d > 15 {
+            return 0
+        }
+        n = n * 16 + d
+    }
+    assert(n >= 0 && n <= 0xFFFF)
+    return n
+}
+
+fn main() {
+    let ds: Vec[i64] = [1, 2, 3, 4]
+    let n = hex(ds)
+    assert(n >= 0 && n <= 0xFFFF)
+    println(f"{n}")
+}
