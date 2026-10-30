@@ -160,3 +160,4 @@
 /home/user/Nikaia/docs/briefs/b1008-trait-fn-param.md 403669 5
 /home/user/Nikaia/docs/briefs/b1008b-trait-keeps.md 730855 21
 /home/user/Nikaia/docs/briefs/k3a2-comptime-compute.md 1193450 23
+/home/user/Nikaia/docs/briefs/b1007-sum-typed.md 441527 14
