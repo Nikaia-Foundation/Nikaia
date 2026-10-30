@@ -64,7 +64,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   from 75e25ed8). A change to `check/`, `emit/`,
   `tools/check_*.nika` or `tools/emit_*.nika` also runs `target/fast/nikaia test
   --both-settings --project tests/compiler`. Report `Gate: green` or `Gate: red
-  <tests>`; on red do not commit, report `Needs: fix`.
+  <tests>`; on red do not commit, report `Needs: fix`. A guard listed in
+  `docs/builder-facts.md`, *Red on develop now*, whose figure your change does
+  not worsen, does not make the gate red: say its figure under `Tests:`.
 * **Never run the full suite.** Only the tests your change touches; CI runs
   the rest on every push to `develop`. Measure (callgrind, counts) only when
   your order has a *Measure* line, and then on one file or a small program,

@@ -5,6 +5,18 @@ Fixed facts a builder otherwise looks up itself (counted over 48 builder runs,
 defined; four `pre-push-check` failures on the same badge; seven runs puzzled by
 the same dirty lock file). Read once; the brief adds only what is specific.
 
+## Red on develop now
+
+Guards of the gate that are red on `develop` before your change, with their
+figure; whoever finds such a red or fixes it rewrites this list (y7a,
+2026-10-30: a builder spent a build and two runs on a guard that was red
+without it). A change that leaves the figure where it stands, or better, does
+not make your gate red: report `Gate: green` and the figure under `Tests:`.
+
+* `sequences::the_corpus_has_no_more_unanswered_method_calls_than_it_had`: 18
+  against a ceiling of 16, since 75e25ed8 (43312d30); fix-forward
+  `docs/briefs/b-fixforward-corpus-unanswered.md` (main lane).
+
 ## Where things live
 
 | What | Where |
