@@ -1,2 +1,3 @@
-y5-escapes-and-radix.md
-y2-tree-properties.md
+y6-1013-text-bindings.md
+y5b-escapes.md
+y7a-639-loop-ranges.md

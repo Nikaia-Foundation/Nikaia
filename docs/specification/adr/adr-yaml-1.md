@@ -1,7 +1,7 @@
 # ADR-yaml-1: `yaml` Is an Official Package in `packages/yaml/`: a Grammar Over `Bytes` Builds a Zero-Copy Tree With Spans, YAML 1.2 Core Schema, Limits On by Default; the serde_yaml Facade and `stream` Come Later
 
 **Status:** Accepted
-**Date:** October 30, 2026 (#928; the owner's decisions of 2026-10-28 and 2026-10-29 recorded there; D5's conversion of numbers and D11 are the owner's of 2026-10-30)
+**Date:** October 30, 2026 (#928; the owner's decisions of 2026-10-28 and 2026-10-29 recorded there; D5's conversion of numbers, D11 and D4's private `Scalar` value are the owner's of 2026-10-30)
 **Answers:** where the official package `yaml` lives, what its native API is,
 what it is tested against, and in which order its later layers come (#928)
 **Supersedes / Related:**
@@ -86,7 +86,7 @@ scanner beside it.
 pub struct Node { pub start: u32, pub end: u32, pub anchor: String?, pub tag: String?, pub value: Value }
 pub enum Value { Null, Bool(bool), Int(String), Float(String), Str(Scalar), Seq(Vec[Node]), Map(Vec[Entry]), Alias(String) }
 pub struct Entry { pub key: Node, pub value: Node }
-pub struct Scalar { pub raw: String, pub style: Style }   // Plain, Single, Double, Literal, Folded
+pub struct Scalar { pub raw: String, pub style: Style, value: String }   // Plain, Single, Double, Literal, Folded; `value` read through `text()`
 ```
 
 Names may change in the build; the rules may not:
@@ -97,6 +97,13 @@ Names may change in the build; the rules may not:
   decoded by the grammar (D11); every other scalar's value is a view of the
   input, and folding or a block scalar's indentation is computed on request,
   a copy only then (ADR-282 D12-D14).
+* `Scalar`'s value is a private field, read through `text()` (owner,
+  2026-10-30): whether it is a view or text of its own stays inside the
+  package, as ADR-282 D22 asks of a published field that would hold both
+  kinds. A double-quoted scalar's escapes are decoded in the grammar in one
+  pass, binding inside `text(..)` (`s:text(parts:Part*)`: the raw view and
+  the decoded parts together, Part II 10), not by parsing it twice with
+  `peek(text(..))`.
 * A key is a node, not a string: YAML allows any node as a key.
 * A mapping keeps its entries in the text's order. A document is a `Node`; a
   stream is a list of them.
