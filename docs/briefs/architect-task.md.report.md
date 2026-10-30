@@ -1,5 +1,4 @@
 Result: done
-Batch: k3a1-commit.md, b995-coalesce-map-get.md, k3a2-comptime-compute.md
-Commit: 9d8d0953 (briefs, batch.txt, common.part rule: commit and push before the report, State)
-Issues: filed #995 (ready), #996 (ready)
+Batch: b997-let-lambda-string-param.md, b998-match-owned-text-nk2302.md, k3a2-comptime-compute.md
 Owner: none
+Filed: #997 (let-bound lambda, String param, E0277; blocks K3a part 2), #998 (false NK2302 on match arms handing back new text), both `ready`. #995 done (0cf0b173, Changelog line in b995's report, version raise owed). Commit 76b411a6.
