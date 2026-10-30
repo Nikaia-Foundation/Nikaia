@@ -32,8 +32,8 @@ decides **how** a program is built, never **what** it computes.
 The build options are named below. Each lives under `[build]` in
 `nikaia.toml`; `--target` and `--user-parallelism` override the first two for a
 single build. The specification does not state their number. Statements run in
-the order they are written; a program that wants overlap writes
-`overlap { … }` (8.1.2).
+the order they are written; a program that wants work to run beside the code
+after it writes `async` (8.1.2).
 
 #### `target` — the machine
 `target` names the machine a program is built for. The target decides what the
@@ -155,9 +155,9 @@ A reserved word means one thing wherever it appears. A name may not be a
 reserved word. The reserved words are:
 
 ```text
-as        break     catch     comptime  continue  dsl       else      enum
-extern    false     fn        for       grammar   if        impl      in
-let       match     mut       null      overlap   pub       ref       return
+as        async     break     catch     comptime  continue  dsl       else
+enum      extern    false     fn        for       grammar   if        impl
+in        let       match     mut       null      pub       ref       return
 select    self      spawn     struct    sync      test      throw     throws
 trait     true      unsafe    use       while     with
 ```
@@ -614,7 +614,7 @@ assignment.
 A path of fields is proved like a name, at any depth. Its proof ends at an
 assignment to the path or to a path it is part of (`p.name = …`, `p = …`), at
 a `mut` hand-over of either (a `ref mut self` method called on it, a `mut`
-argument), and at a lambda, task, `overlap` branch or `select` arm that sees
+argument), and at a lambda, task, `async` child or `select` arm that sees
 the root; a write to a sibling (`p.age = 3`) and a call that only reads keep
 it. A read through an index or a call (`v[i].f`, `f().x`) is not a path and
 proves nothing. A binding in a condition (`if let v = x`, `if x is Some(v)`)
@@ -1170,7 +1170,7 @@ Three rules govern them:
   has nothing left to do.
 
 * **A jump does not leave a function.** A `break` whose loop is outside a
-  **lambda**, a **task** (`spawn`), an **`overlap` branch** or a DSL fold's step
+  **lambda**, a **task** (`spawn`), an **`async` child** (8.1.2) or a DSL fold's step
   is refused. Each of those is a function of its own, and a jump is a jump to a
   place in the same function:
 
@@ -2136,8 +2136,12 @@ users.map fn(user) {
 A trailing lambda may follow a method call with or without other arguments, a
 plain call, or a path: `users.map fn(user) { … }`,
 `numbers.reduce(0) fn(acc, n) { … }`, `access_all(a, b) fn(x, y) { … }`
-(Part II, 12.3), `task::scope fn(s) { … }` (Part II, 12.7), and the chain
-above.
+(Part II, 12.3), and the chain above.
+
+**A lambda directly after `async` is run, not bound.** `async let x = fn { … }`
+and `async fn { … }` run the lambda's body as a child (8.1.2); `return` in it
+ends the child with its value. A child whose value is a function is written
+`async let f = fn { fn { … } }`.
 
 **A lambda carries no effect marker.** A parameter list is followed by the body
 and by nothing else; `fn(info) sync { … }` is not one construct (7.2).
@@ -2248,7 +2252,7 @@ m.entry("k").or_insert_with fn { H { a: "x", t: t } }   // `t` moves into the ne
 ```
 
 In `std` these parameters are `Entry::or_insert_with`'s and
-`Entry::and_modify`'s lambda, `task::scope`'s body, and the block of
+`Entry::and_modify`'s lambda and the block of
 `Locked::access` and `SharedMut::access`; the contract says so with `once`
 (Part III). `update` is not one: its block may run again (Part II 12.2). For a
 code parameter of user code the answer is **inferred**, as the context is (C):
@@ -3315,16 +3319,33 @@ warned (`NK2404`): callers that name every type will stop building.
 **Every error carries its site and its chain.** The **site** is where the error
 was raised. The chain holds every error that joined on the way: a cleanup that
 failed while the stack was unwinding is attached to the original as a
-*secondary* error rather than replacing it (6.4), and so are the other failing
-branches of an `overlap` (8.1.2). The joined errors are kept in the order they
+*secondary* error rather than replacing it (6.4), and so are the failures of
+`async` children nobody read when their group ends (8.1.2). The joined errors are kept in the order they
 joined, each with its own site, and a log, an uncaught failure and
 `nikaia explain` show them under the first. They are a diagnostic, not a value:
 a program does not read them, and `throw error` hands them on. A `catch`
 catches one error and chooses by its type. The site costs nothing at run time:
 the compiler writes it into the binary as text.
 
+**An error that crosses an `async` boundary carries where it crossed.** Beside
+its site (where it was **raised**), it records where the child was
+**started** (the `async` form) and where the error **arrived** (the wait
+point, 8.1.2). A chain of bindings gives one started and arrived pair per
+crossing, in order, and each `secondary` error carries its own. Like the site,
+both are text the compiler writes into the binary, and nothing is recorded
+where nothing fails. The long form shows them as lines under the message:
+
+```text
+raised   at fetch.nika:12:9
+started  at main.nika:4:5
+arrived  at main.nika:9:5
+```
+
 **A stack trace is not carried.** `NIKAIA_TRACE=1` asks for one; without it
-there is none, and the long form says so.
+there is none, and the long form says so. Under it, the trace of an error that
+crossed an `async` boundary is the child's trace, a line
+`── started at <site> ──`, and the trace of the code that waited, for each
+crossing.
 
 **Printing it: short is the default.**
 
@@ -3417,7 +3438,7 @@ A function that performs I/O, such as reading a file or downloading a URL,
 Within one task, the order is the written order: `let a = fs::read("x", root)`
 pauses, and the line after it does not run until `a` is there. What runs
 meanwhile is some *other* task; a pause never forks one. A task exists only
-where the program writes one (`spawn`, `par_iter`, `task::scope`), and
+where the program writes one (`spawn`, `par_iter`), and
 `.join()` on a handle is where two tasks meet again. The marker for waiting
 stands where something branches, and nowhere else.
 
@@ -3435,47 +3456,160 @@ spawns, neither side can stop the program, and the `if`s hold only such
 assignments and `if`s, nothing that leaves. It does so in every build
 ([ADR-379](adr/adr-379.md)).
 
-### 8.1.2. Asking for Overlap: `overlap { … }`
+### 8.1.2. Running Work Beside the Code After It: `async`
 
-**Each statement in the block is a branch.** The block starts every branch, waits
-for all of them, and its value is the tuple of their results **in written order**.
+**`async` starts a child.** A child runs beside the statements after it, its
+**window**, and is waited for at its **wait point**. There is no `await`, and
+`async` never stands before a function's declaration (`NK2115`): whether a
+function pauses is inferred (8.1).
 
 ```nika
-let (user, rights, prefs) = overlap {
-    db::load_user(id)
-    db::load_rights(id)
-    cache::load_prefs(id)
-}
+async let user = db::load_user(id)
+async let rights = db::load_rights(id)
+let prefs = cache::load_prefs(id)      // runs while both loads are in flight
+render(user, rights, prefs)            // waits for both first
 ```
 
-**An `overlap` block is not a task.** The block ends before the function
-continues, so nothing outlives it: nothing is moved, borrowing works as it does
-anywhere else, and the crossing rules a `spawn` meets (Part II, 11.2) do not
-apply.
+**The forms.**
 
-**The branches meet on nothing, and the compiler checks it.** A branch pair that
-meets on a resource is refused with `NK2104`, and the message names the
-resource. A branch that **binds** a name is refused the same way, and so is a
-pair where one branch **changes** a binding (a `mut` method, an assignment, a
-`mut` argument) that the other names: the message names the binding. Two
-branches that only read a binding meet on nothing. `--overlaps`
-reports on the blocks a program writes.
+* **`async let x = e`** starts `e` as one child. Its wait point is just before
+  the first statement of the binding's block that names `x` anywhere in it:
+  in a nested block, a loop, a branch whether or not it is taken, a lambda. A
+  binding nothing names is waited for at the end of its group. The binding
+  takes the patterns and the written type a `let` takes (2.1); the first
+  statement naming any of its names waits.
+* **`async let xs = for v in vs { body }`** starts one child per element. `xs`
+  is a `Vec[T]` of the bodies' results, `T` the type of the body's last
+  expression, in the order of the elements, and is waited for as above. A body
+  that hands back nothing is refused (`NK2116`). Only `for … in` takes `async`
+  (`NK2117`).
+* **`async e`** and **`async for v in vs { … }`**, as statements, start children
+  whose value nobody reads; a value `e` hands back is dropped. They are waited
+  for at the end of their group.
+* **`async let x = fn { … }`** and **`async fn { … }`** run the lambda's body as
+  the child (5.3): a child of several steps. `return` in it ends the child,
+  with its value.
+* **`async { … }`** is a **group**: its statements run in order, as any
+  block's, and its `}` waits for every child started inside it. Its value is
+  its last expression's, once every child has ended. An `async { }` that starts
+  no child is refused (`NK2111`).
 
-**A block that joins pauses.** An `overlap` or a `select` hands its branches to the executor and waits there, so a function holding one is not `sync`, whatever its branches do.
+**The group.** A child belongs to the innermost `async { }` around it in the
+same function, loops and branches between them included; where there is none,
+to the innermost block that holds the `async` form. A child whose window is
+empty - nothing runs between its start and its wait point or its group's end,
+as in `for u in us { async fetch(u) }` - is refused (`NK2110`); the help writes
+`async for`.
 
-**A branch that fails makes the block fail.** Where two branches fail, the
-first **in written order** wins. The other failures are attached to the winner
-as its `secondary` list, in written order, and a log or `nikaia explain` shows
-them under it. Per-branch handling is a `catch` inside the branch. Combining
-failures is a `catch` on the block, where the handler has the winner;
-re-thrown with `throw error`, the others go with it. A branch cannot see
-another branch's failure.
+**A child is not a task.** Nothing outlives its group. A child borrows what
+was bound outside its group, and the crossing rules a `spawn` meets (Part II,
+11.2) do not apply. What was bound inside the group, in a block that ends
+before the group does, such as an iteration's own names, the child takes with
+it as a task does (8.3). A `break`, `continue` or `return` that would leave a
+child is `NK1132`.
 
-**A branch is an expression.** Several steps in one branch are a block
-expression inside it.
+**A child and the code beside it meet on nothing, and the compiler checks it.**
+A child is checked against every statement of its window, other children's
+starts included, and an iteration of an `async` loop against the other
+iterations. A pair that meets on a resource is refused with `NK2104`, and the
+message names the resource: an `async for` whose body writes to stdout is
+refused. A binding that the window changes - a `mut` method, an assignment, a
+`mut` argument - while a child names it is refused the same way, naming the
+binding. An iteration that changes a name bound outside it is `NK2107`. Two
+reads meet on nothing. A child this compiler cannot account for is not refused
+(Part III C.4). `--overlaps` reports each child, its window, its wait point and
+its group.
+
+**A pending binding named in another child is waited for in that child.**
+
+```nika
+async let a = load(id)
+async let b = enrich(a)                // b's child waits for a
+show(b)
+```
+
+`b`'s child reads `a` beside a main line that reads it too; the main line
+waits for `a` where it first names it. Where `b`'s child takes `a` by value,
+`a` is handed over where `b` starts, and a later mention of `a` is `NK2105`.
+Two children that read `a` read the one value. Where `a` fails, the first
+mention of it in written order receives the failure, and every other child that
+waits for `a` is cancelled.
+
+**Options.** `async(limit: n, within: d, admission: s)` stands before `let`,
+`for`, `{`, `fn` or the expression.
+
+* **`limit: i64`**: at most `n` children of the form at once; the others wait,
+  unstarted, in written and input order. A child is under every `limit` around
+  it. Below `1` it panics, naming the option. A form that starts one child does
+  not take it (`NK2112`). `limit: 1` written as the literal runs the children
+  one at a time, in order, and they are not checked against each other.
+* **`within: time::Duration`**: counted from where the form starts. When it runs
+  out, its children still running are cancelled, and the wait point throws
+  `task::TimedOut`; for a statement form and a group, the group's end does.
+* **`admission: task::Admission`**: who decides when the next child starts
+  (Part II, Chapter 12).
+
+**Admission.** Every child allocates from a memory block of its own, as a task
+does (Part II, Chapter 12). A child starts only where its block fits the budget of
+the task that runs the group and a descriptor is free; otherwise it waits,
+unstarted, until a sibling ends. `limit:` caps on top of that. At the
+system's ceiling of descriptors a child waits; it never fails for it.
+
+**A failure is held until the wait point, and three places can handle it.**
+
+```nika
+async let page = http::get(url) catch { Page::empty() }   // the binding's fallback
+let size = page.len() catch { 0 }                          // a catch at the use
+```
+
+1. **In the child.** A `catch` inside the child's expression or lambda is the
+   child's own and runs when the child fails.
+2. **At the use.** Otherwise the failure is held, and nothing runs for it until
+   the wait point. It arrives where the mention of `x` that runs is evaluated;
+   a `catch` that encloses that mention and lies inside the binding's block
+   handles it.
+3. **At the declaration.** Otherwise the `catch` written directly after the
+   initializer of the `async let` runs there, late: its value becomes `x`'s
+   and the statement goes on with it.
+
+With none of them the failure leaves from the wait point as a thrown error
+does. Which handler runs depends on the path that reaches the mention. Once a
+`catch` at a use has taken the failure, a later mention of `x` on that path is
+refused unless the binding has a fallback (`NK2118`). The function throws what
+the fallback throws, or the child's whole set where there is no fallback.
+
+**A failure nobody read is thrown at the end of the group.** It is a failure
+of a statement form, of a binding nothing names, or of one whose mention did
+not run; a binding's fallback runs for it there. Where the group ends normally
+(its last statement, a `return`, a `break`), the first such failure in written
+order (for an `async` loop, input order) is thrown, and the others travel as
+its `secondary` list, in written order. Where a failure leaves the group, the
+group waits for every child, and that failure leads; the unread failures are
+its `secondary` list, in written order. Leaving a group waits for its children
+and cancels none.
+
+**A child that panics cancels its siblings**, and the group throws
+`task::Crashed` where it ends. A child whose memory block is full ends with
+`task::OverBudget` (Part II, Chapter 12) and fails only itself.
+
+**`task::cancel(x)`** stops a pending binding: one child, or every child of an
+`async let … = for`. It is the one mention of `x` that does not wait. The
+child stops at its current pause and its values are torn down; its outcome,
+a failure included, is dropped. The group's end waits until it has stopped,
+its cleanups included. A mention of `x` after it on any path is refused
+(`NK2114`), and so is an argument that is not a pending `async let` binding
+(`NK2113`).
+
+**A body that holds an `async` form pauses**, so it is not `sync`, whatever
+its children do (Part II, 12.1). A child that never pauses runs on the pool
+where children run in parallel; at `no`, it runs when the main line next
+pauses or waits, so that the pausing children written before that point are
+started first. A child that pauses is run by its group, on the group's thread,
+and is never handed to the runtime. An `async` form inside an open lock is
+refused (`NK2203`).
 
 **The meaning is the same at both values of `user_parallelism`; the duration
-differs.** At `no`, a branch that computes still overlaps with another branch's
+differs.** At `no`, a child that computes still overlaps with another child's
 *waiting*, because the waiting is not user code. Computation beside I/O
 overlaps under both values; computation beside computation overlaps only under
 `yes` (1.2).

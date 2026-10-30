@@ -1,11 +1,13 @@
 # ADR-async-1: `async` Starts a Child That Runs Beside the Code After It and Is Waited For Where Its Name Is First Used; `overlap` and `task::scope` Are Removed
 
 **Status:** Accepted
-**Date:** October 30, 2026 (owner's decision in a design round with the main session; the details in §7 are open, [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983))
+**Date:** October 30, 2026 (owner's decisions in two design rounds with the main session, [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983))
 **Answers:** how a program asks for work to run beside the code that follows it, for one value, for a list of values and for work with no value, without coloring functions and without `await`; and what becomes of `overlap { … }` and `task::scope`, which ask for the same thing in two shapes
 **Supersedes / Related:**
 [ADR-292](adr-292.md) D2, D3, D4, D9, D15, D16 and §6 (changed: the joining form is `async`; D1, D5, D6, D8, D10-D14 and D17-D20 stand and are read for `async` where they said `overlap`);
-[ADR-346](adr-346.md) D7 (changed: `task::scope` is gone; which error leads when a group is left by a failure is D9 here);
+[ADR-346](adr-346.md) D7 (changed: `task::scope` is gone; where a group is left by a failure, that failure leads, D9);
+[ADR-327](adr-327.md) D5-D7 (D6 changed: a full block ends a task or a child with `task::OverBudget`, D15; D5 and D7 hold for a child as for a task);
+[ADR-326](adr-326.md) D2, D3 (admission by an exchangeable strategy, and the ceilings the runtime enforces, taken for children, D14);
 [ADR-328](adr-328.md) D8, D10 (changed: what they say of a scope's tasks holds for a group's children);
 [ADR-276](adr-276.md) D13 (stands for every loop but one: `async let xs = for …` has a value, D3) and D16 (a child is one more boundary no jump leaves);
 [ADR-277](adr-277.md) D16 (a child is a block, not a callable, as an `overlap` branch was);
@@ -18,7 +20,7 @@
 [ADR-005](adr-005.md) §1 Group B (the crossing check a child does not meet);
 [ADR-037](adr-037.md), [ADR-303](adr-303.md) (`user_parallelism`; I/O the runtime performs is not user code);
 [ADR-235](adr-235.md) (`par_iter`, the form for computation over data, apart);
-Part I 3.3, 8.1, 8.1.2, 8.3; Part II 12.4, 12.6, 12.7; Part III C.4, the `NK21xx` and `NK22xx` rows
+Part I 3.3, 5.3, 7.1, 8.1, 8.1.2, 8.3; Part II Chapter 12, 12.2, 12.4, 12.6, 12.7; Part III 13.3b, 17.1's `std::task`, C.4, C.5, the `NK21xx` and `NK22xx` rows
 
 ## 1. Question
 
@@ -58,6 +60,21 @@ cancel-and-drop at scope end, because every error has a receiver (ADR-346 D1);
 completion order, because the written order is the only reproducible one
 (ADR-292 D5).
 
+**Where an error crossed** (D17), also from memory:
+
+| Language / runtime | What a failure in a child shows | Cost |
+| :--- | :--- | :--- |
+| C# / .NET | the trace is stitched across each `await`, with a line `--- End of stack trace from previous location ---` | captured on every throw |
+| Swift | async frames in the debugger and in crash reports; a thrown error carries no site | none on the success path, little in the error |
+| Java | an exception from a forked subtask is wrapped (`ExecutionException`) with the subtask's trace as the cause; the fork site is not named | a trace per exception |
+| tokio | no async trace by default; `async-backtrace`, `tokio-console` add one by instrumenting | instrumentation on every poll |
+| V8 | "zero-cost" async stack traces: `at async f` frames, only across `await` | none until an error is thrown |
+
+What transfers: C#'s stitching, behind `NIKAIA_TRACE=1` as every trace here is,
+and V8's rule that the success path pays nothing. The two sites a child adds,
+where it was started and where its failure arrived, are text the compiler
+writes, as the raise site already is (Part I 7.1).
+
 ## 3. Options, weighed
 
 | Option | What a program writes | Why it lost, or won |
@@ -83,10 +100,10 @@ exception is visible in the first word of the line. Every other loop keeps D13.
 `async` is a reserved word (ADR-298 D1, D8: a word the language uses is
 reserved, and only for its construct); `overlap` is released (ADR-298 D7).
 `async` stands in front of a binding, a loop, a block or an expression
-statement, never in front of a function: whether a function pauses is still
-inferred, there is no `await`, and a caller does not change when a callee
-starts to pause. `async fn` is refused, and the message says that pausing is
-inferred. What `async` starts is a **child**; the region whose end waits for
+statement or a lambda it runs (D18), never in front of a function's
+declaration: whether a function pauses is still inferred, there is no `await`,
+and a caller does not change when a callee starts to pause. `async fn name(…)`
+is refused (`NK2115`), and the message says that pausing is inferred. What `async` starts is a **child**; the region whose end waits for
 it is its **group**.
 
 ### D2 - `async let x = e` starts one child at the binding and waits for it before the first statement that names `x`.
@@ -151,11 +168,17 @@ that is not itself a group - belongs to the innermost `async { }` around it.
 It is a block expression: its value is its last expression's, available once
 every child has ended. It replaces `task::scope fn(s) { s.spawn … }`.
 
-Where no `async { }` encloses a child, its group is the block that holds the
-`async` form - *open: whether that is the innermost block or the function's
-body, §7 Q2*.
+Where no `async { }` encloses a child, its group is the innermost block that
+holds the `async` form. A child whose window is empty - nothing runs between
+its start and its wait point or its group's end, as `async fetch(u)` alone in a
+loop's body, where each iteration would wait for its own child - is refused
+(`NK2110`), and the help writes `async for`. An `async { }` that starts no
+child is refused (`NK2111`): it waits for nothing. A child takes with it, as a
+task does (Part I 8.3), what was bound inside its group in a block that ends
+before the group does, an iteration's own names among them; what was bound
+outside its group it borrows.
 
-### D6 - Every form takes the options `limit:` and `within:`, written after the word.
+### D6 - Every form takes the options `limit:`, `within:` and `admission:`, written after the word.
 
 `async(limit: n, within: d) let …`, `async(limit: n) for …`,
 `async(within: d) { … }`: options without a positional zone, as
@@ -165,7 +188,8 @@ body, §7 Q2*.
   others wait for a place, unstarted, in written and input order. A child is
   under every `limit` around it. A value below `1` panics, naming the option,
   as `workers:` does (Part II 12.6). It is refused on a form that starts one
-  child (`async let x = e`, `async e`). The default is *open, §7 Q1*.
+  child (`async let x = e`, `async e`; `NK2112`). Without it, no number
+  applies: admission decides (D14).
 * **`limit: 1`** written as the literal runs the children one at a time, in
   order, in the background. Children that never run at once cannot meet, so
   they are not checked against each other (D8); each is still checked against
@@ -175,6 +199,7 @@ body, §7 Q2*.
   mechanism) and the wait throws `task::TimedOut`: at the first statement
   that names the binding, or at the group's end for a statement form and a
   block.
+* **`admission: task::Admission`** - the strategy of D14 for this form.
 
 ### D7 - A pending binding named inside another child is waited for in that child.
 
@@ -221,8 +246,8 @@ form are not checked against each other (D6).
 
 ### D9 - A failure is received by whoever reads the child; an unread one waits for the group's end, and every one is kept.
 
-A child's failure is its outcome, received where its binding is read (the
-place is *open, §7 Q3*). A failure nobody reads - a statement form, a binding
+A child's failure is its outcome, received where its binding is read (D16).
+A failure nobody reads - a statement form, a binding
 nothing names, a mention in a branch not taken - is received at the end of the
 group:
 
@@ -233,12 +258,15 @@ group:
   unread failure throws instead of returning.
 * **The group is left by a failure** (a `throw`, a `?`, a failed read): the
   group first waits for every child, then that failure leaves, and every
-  unread failure is attached to it as its `secondary`, in written order. *This
+  unread failure is attached to it as its `secondary`, in written order. This
   places the leaving error first, where ADR-346 D7 put a scope's own error
-  last; §7 Q4.*
+  last: the error the code chose to throw is the one its handlers are written
+  for, and the order is still the source's.
 
 Early exit waits; it does not cancel. A child that panics cancels its siblings,
-and the group throws `task::Crashed` where it ends (ADR-328 D8). A cleanup's
+and the group throws `task::Crashed` where it ends (ADR-328 D8); a child whose
+block is full fails only itself (D15). A binding's fallback (D16) runs for an
+unread failure at the group's end. A cleanup's
 failure attaches as ADR-292 D10 says.
 
 ### D10 - `task::cancel(x)` cancels a pending binding, and takes it.
@@ -248,11 +276,11 @@ failure attaches as ADR-292 D10 says.
 The child stops at its current pause and its values are torn down (ADR-292
 D13); its outcome is dropped, a failure included, as `h.cancel()` drops a
 task's (ADR-292 D14). It takes the binding as `cancel()` takes a handle: a
-mention after it, on any path, is refused. The group's end waits until a
+mention after it, on any path, is refused (`NK2114`). The group's end waits until a
 cancelled child has stopped, its cleanups included, because the child may
 borrow from the group (D8); a pausing cleanup is not adopted by the runtime as
 a `select` loser's is. An argument that is not a pending `async let` binding is
-refused. It is a function and not `x.cancel()`, because `x` names a value of
+refused (`NK2113`). It is a function and not `x.cancel()`, because `x` names a value of
 the result's type, which may have a `cancel()` of its own.
 
 `select` stays a race (Part II 12.4). Whether a pending binding may be a
@@ -293,6 +321,111 @@ says what it reports - what runs beside what - and no keyword.
 `async` and `select` are the pair ADR-292 D15 named: both start every child;
 `async` keeps every result, `select` the first.
 
+### D14 - Admission, not a number, decides when a child starts.
+
+Each child allocates from a memory block of its own, as a task does under
+[ADR-327](adr-327.md) D5: for ownership and borrowing it is not a task (D8),
+for memory it is. Without `limit:`, a strategy decides: a value implementing
+`task::Admission`, with the shape of [ADR-326](adr-326.md) D2's
+`net::Admission` (`decide(ref mut self, load: task::Load) -> task::Decision
+sync`, on the runtime's beat). `std` provides the default; a package may
+provide another; `admission:` names one for a form. A new child starts only
+where its block fits the budget of the task that runs the group and a
+descriptor is free; otherwise it waits, unstarted, until a sibling ends.
+`limit: n` caps on top of the strategy. What no strategy can change, the
+runtime enforces (ADR-326 D3): never more descriptors than the system allows,
+and at the ceiling a child waits; it never fails for it.
+
+**What this guarantees:** no crash from fan-out, and none from memory a child
+allocates through Nikaia. **What it does not cover:** memory a Rust crate or a
+C library keeps (ADR-327 D8), other processes, the kernel's buffers.
+
+**Rejected:** a default number, unbounded or `task::cores()` - unbounded fails
+at the system's ceiling at run time, and the cores are the wrong measure for
+children that wait; a configured key - ADR-326 D2 refused one for connections
+for the same reasons.
+
+### D15 - A full block ends a task or a child with `task::OverBudget`, and only it.
+
+*Changes [ADR-327](adr-327.md) D6 for tasks.*
+
+A full block unwinds the task or the child like a panic, from the allocation
+site, and its cleanups run. At every boundary it arrives as its own error,
+`task::OverBudget`, beside `task::Crashed`: `h.join()` throws it, an `async
+let` hands it on as any failure of its child (D16), a supervisor counts it in
+its child's failures, and `http` under `serve` answers `503` where the
+response has not begun. In a group only a panic, a bug, cancels the siblings;
+`task::OverBudget` fails only its child. The panic hook does not run for it; it
+is reported through the boundary's error, and for an unbound `spawn` on
+standard error (ADR-346 D6). Inside the task or the child it cannot be caught:
+an allocation declares no `throws`. A shared value whose block is full is
+still poisoned (ADR-327 D6).
+
+**Why its own error:** a full block is load, not a bug; a receiver that can
+tell them apart answers `503` or tries later where a panic would be reported
+as a defect, and a group that cancelled the siblings of a child that only ran
+out of room would turn one refusal into many.
+
+### D16 - A failure is handled in the child, at the use, or at the declaration, in that order.
+
+```nika
+async let page = http::get(url) catch { Page::empty() }   // fallback, at the declaration
+let size = page.len() catch { 0 }                          // a catch at the use
+```
+
+1. **In the child.** A `catch` inside the child's expression or lambda is the
+   child's own and runs at once, when the child fails.
+2. **At the use.** Otherwise the failure is held; no handler runs. At the wait
+   point it arrives where the mention of `x` that runs is evaluated, and a
+   `catch` that encloses that mention and lies inside the binding's block
+   handles it.
+3. **At the declaration.** Otherwise the `catch` written directly after the
+   initializer of the `async let` - the binding's **fallback** - runs, late,
+   where the failure arrived; its value becomes `x`'s, and the statement goes
+   on with it.
+
+With none of them the failure leaves from the wait point. Once a `catch` at a
+use has taken the failure, a later mention of `x` on that path is refused
+unless the binding has a fallback (`NK2118`), because `x` has no value there.
+The `throws` walk: the function throws what the fallback throws, or the
+child's whole set where there is no fallback.
+
+**What it costs, named:** a name can throw - `page.len()` above fails without a
+call that fails being written there, toward a `catch` at the use; and which
+handler runs depends on the path that reaches the mention, so a reader looks
+in three places. The precedence is fixed and the three places are lexical,
+which is what keeps it readable.
+
+### D17 - An error that crosses an `async` boundary records where the child was started and where the failure arrived.
+
+Beside its raise site, such an error records a **started** site (the `async`
+form) and an **arrived** site (the wait point), as text the compiler writes,
+like the raise site, so the success path costs nothing. A chain of bindings
+gives one started and arrived pair per crossing, in order; each `secondary`
+error carries its own. The long form shows `raised`, `started` and `arrived`
+lines. Under `NIKAIA_TRACE=1` the child's trace and the waiting function's are
+stitched, with a line `── started at <site> ──` between them, per crossing.
+
+### D18 - A child of several steps is a lambda, run where it stands.
+
+`async let x = fn { … }` and `async fn { … }` run the lambda's body as the
+child; `return` in it ends the child with its value, as in `spawn fn { … }`.
+`async { … }` stays the group (D5). A bare block would leave `return` and
+`break` without a meaning; the lambda body settles them. **The cost:** a lambda
+literal directly after `async` is run, not bound; a child whose value is a
+function is written `async let f = fn { fn { … } }`.
+
+### D19 - The refusals have codes of their own.
+
+`NK2110` a child with an empty window; `NK2111` an `async { }` that starts no
+child; `NK2112` `limit:` on a form that starts one child; `NK2113`
+`task::cancel` of what is not a pending binding; `NK2114` a mention after
+`task::cancel`; `NK2115` `async` before a function's declaration; `NK2116`
+`async let xs = for` whose body hands back nothing; `NK2117` `async` before a
+loop that is not `for … in`; `NK2118` a mention after a use-site `catch` took
+the failure, without a fallback. `NK2104` loses its case for a branch that
+binds; the `overlap` arity refusal goes with `overlap`.
+
 ## 5. Consequences
 
 * Five fewer things to learn: no `overlap` block, no tuple of two to eight, no
@@ -303,12 +436,16 @@ says what it reports - what runs beside what - and no keyword.
 * A program that printed from several `task::scope` tasks no longer compiles
   as an `async for`: two iterations meet on stdout. The way out is the value
   (`async let lines = for …`, then print), or `limit: 1`.
-* An `async { }` whose statements a reader takes for background work runs them
-  in order; the shape of a child of several steps is *open, §7 Q5*.
+* An `async { }` whose statements a reader takes for background work and that
+  starts no child is refused (`NK2111`); a child of several steps is a lambda
+  (D18).
+* A task's full block is no longer a panic: `task::OverBudget` reaches its
+  receiver, and the panic hook stays for bugs.
 * **What it costs:** one reserved word for one released; the window, wait and
   group analysis in the checker; a loop with a value; `task::cancel` as a
   function the checker knows by name; `std`'s vehicles per arity
-  (`overlap<n>`) replaced by a group runtime with a limit.
+  (`overlap<n>`) replaced by a group runtime with a limit and admission; two
+  sites more on an error that crosses; a name that can throw (D16).
 
 ## 6. What this does not decide
 
@@ -317,77 +454,23 @@ says what it reports - what runs beside what - and no keyword.
   option, if it comes).
 * A group whose children are added while it runs from a value that arrives
   later (a stream); `async for` takes a list known where it starts.
-* `async` in front of `while`.
+* `async` in front of `while` (refused, `NK2117`).
+* An option on `async` that puts a child in another group than D5's.
+* What a full block does in `main` beyond what an uncaught error does.
 
-## 7. Open questions (the owner's; [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983))
+## 7. Answered (owner, 2026-10-30)
 
-* **Q1 - The default of `limit`.** Unbounded (the main session's lean, and
-  Swift's, Go's, `Promise.all`'s), or `task::cores()`. *Recommendation:*
-  unbounded: a child that computes already runs on the pool, so computation is
-  bounded by the cores without a limit, and a child that waits costs a slot of
-  memory, not a core; `cores()` would hold eight downloads in flight on an
-  eight-core machine, the wrong measure. The risk: a loop over a million URLs
-  opens a million connections and fails with the system's limit on open
-  files, at run time.
-* **Q2 - The group of a bare `async`.** (a) The innermost block; (b) the
-  function's body; (c) the innermost block, but a loop body does not count, so
-  a loop's children wait at the block around the loop. *Recommendation:* (a),
-  with a refusal for a child whose window is empty (`for u in us { async
-  fetch(u) }`, where each iteration's group ends right after the child, so the
-  iterations run one after the other), whose help writes `async for`.
-* **Q3 - Where a failure of a pending binding is thrown.** (a) At the mention
-  of `x`, though the wait was before the statement, so a `catch` around the
-  mention takes it; (b) at the start of the statement, so only a `catch` around
-  the whole statement takes it. *Recommendation:* (a).
-* **Q4 - Which error leads when the group is left by a failure.** (a) The
-  leaving error, the children's as its `secondary` (the owner's words in the
-  round; changes ADR-346 D7); (b) written order, the earliest child's first
-  (ADR-346 D7, ADR-292 D5). *Recommendation:* (a).
-* **Q5 - A child of several steps.** (a) `async let _ = { … }`, and an
-  `async { }` that starts no child is refused, because it would only wait for
-  nothing; (b) another spelling for the group, so that `async { … }` is a child.
-  *Recommendation:* (a).
+The first round left five details open; the owner answered them in a second:
+the default of `limit` (no number: admission, D14, with D15 added); the group
+of a bare `async` (the innermost block, with `NK2110`, D5); where a failure is
+thrown (three levels, D16, with D17); which error leads (the leaving one, D9);
+a child of several steps (a lambda, D18).
 
-## 8. Draft of the specification text
+## 8. Where it is specified
 
-The text below goes into Part I 8.1.2 (replacing *Asking for Overlap*), Part
-II 12.4 and 12.7, and Part III's rows once §7 is answered; the step is [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983)'s
-first. It is kept here and not in Part I-III because Q2-Q5 change its central
-sentences, and until it is built `overlap` is what the compiler accepts.
-
-> ### 8.1.2. Running Work Beside the Code After It: `async`
->
-> **`async` starts a child.** `async let x = e` starts `e` and goes on; the
-> statements after it run beside it, up to the first statement of the block
-> that names `x`, where the program waits for it. `async e` and `async for v
-> in vs { … }` start children whose value nobody reads. `async let xs = for v
-> in vs { body }` starts one child per element, and `xs` is the list of their
-> results in the order of the elements. `async { … }` waits at its `}` for
-> every child started inside it. A child nobody waits for by name is waited
-> for at the end of its group. There is no `await`, and no function is
-> `async`.
->
-> **A child is not a task.** Nothing outlives its group: a child borrows, and
-> the crossing rules a `spawn` meets (Part II, 11.2) do not apply.
->
-> **A child and the code beside it meet on nothing, and the compiler checks
-> it.** A child and a statement of its window, or two iterations of an `async`
-> loop, that meet on a resource are refused with `NK2104`, naming it; so is a
-> binding the window changes while a child names it. Two reads meet on
-> nothing. `limit: 1` runs a form's children one at a time, and they are not
-> checked against each other. `--overlaps` reports the children and their
-> windows.
->
-> **Options.** `async(limit: n, within: d)`: at most `n` children of the form at
-> once; after `d`, the children still running are cancelled and the wait
-> throws `task::TimedOut`.
->
-> **A failure is the reader's.** A child's failure is thrown where its binding
-> is read. One nobody reads is thrown at the end of the group, the first in
-> written order, the others as its `secondary` list; where the group is left
-> by a failure, the group waits for its children and their failures are that
-> failure's `secondary`. `task::cancel(x)` stops a pending child and drops its
-> outcome; `x` may not be named after it.
->
-> **The meaning is the same at both values of `user_parallelism`; the duration
-> differs.**
+Part I 5.3 (a lambda after `async`), 7.1 (started and arrived sites), 8.1.2
+(the forms, the group, the check, failures, `task::cancel`, admission), the
+reserved words; Part II Chapter 12 (the memory budget, `task::OverBudget`,
+admission), 12.2, 12.4, 12.7; Part III 13.3b, 17.1's `std::task`, C.5, the
+`NK2104`, `NK2107`, `NK2110`-`NK2118`, `NK2203`, `NK2209` and `NK1132` rows, and
+`--overlaps`.

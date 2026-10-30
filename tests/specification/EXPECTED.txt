@@ -100,15 +100,17 @@
 10-nikaia-light.md #100 refused (a body) [NK1117,NK1181]  let n = run() catch { 0 }                    // an `Abo…
 10-nikaia-light.md #101 refused (a body) [NK1117]  eprintln(f"{error}")           // the message, and noth…
 10-nikaia-light.md #102 refused (as written) [NK1117]  use std::panic
-10-nikaia-light.md #103 refused (a body) [NK1117,NK1181]  let (user, rights, prefs) = overlap {
-10-nikaia-light.md #104 lowered (a body)  spawn fn { println("I am running in the background!") }
-10-nikaia-light.md #105 refused (a body) [NK1117]  let h = spawn fn { fetch(url) }
-10-nikaia-light.md #106 lowered (a body) [about-a-refusal]  let message = "Hello"
-10-nikaia-light.md #107 lowered (a body)  let message = "Hello"
-10-nikaia-light.md #108 lowered (as written)  // file: src/parse.nika      (the same package as src/m…
-10-nikaia-light.md #109 refused (as written) [NK1117,NK1135]  // file: src/main.nika
-10-nikaia-light.md #110 refused (as written) [NK1245]  use http
-10-nikaia-light.md #111 lowered (as written)  // file: network.nika
+10-nikaia-light.md #103 fragment (as written)  async let user = db::load_user(id)
+10-nikaia-light.md #104 fragment (as written)  async let a = load(id)
+10-nikaia-light.md #105 fragment (as written)  async let page = http::get(url) catch { Page::empty() }…
+10-nikaia-light.md #106 lowered (a body)  spawn fn { println("I am running in the background!") }
+10-nikaia-light.md #107 refused (a body) [NK1117]  let h = spawn fn { fetch(url) }
+10-nikaia-light.md #108 lowered (a body) [about-a-refusal]  let message = "Hello"
+10-nikaia-light.md #109 lowered (a body)  let message = "Hello"
+10-nikaia-light.md #110 lowered (as written)  // file: src/parse.nika      (the same package as src/m…
+10-nikaia-light.md #111 refused (as written) [NK1117,NK1135]  // file: src/main.nika
+10-nikaia-light.md #112 refused (as written) [NK1245]  use http
+10-nikaia-light.md #113 lowered (as written)  // file: network.nika
 20-nikaia-advance.md #1 refused (as written) [NK1117,NK1135,NK1181]  grammar Json {
 20-nikaia-advance.md #2 refused (as written) [NK1175,NK1181]  // The compiler runs the Json grammar at build time.
 20-nikaia-advance.md #3 refused (as written) [NK1181]  fn parse_input(input: String) throws {
@@ -126,22 +128,21 @@
 20-nikaia-advance.md #15 refused (a body) [NK1117,NK1181,NK2605]  let data = fs::map(path, fs::Root::Anywhere)
 20-nikaia-advance.md #16 fragment (as written) [sketch]  grammar Yml {
 20-nikaia-advance.md #17 fragment (as written) [about-a-refusal sketch]  fn process_image(path: String) -> Image { ... }
-20-nikaia-advance.md #18 refused (items, then a body) [about-a-refusal NK1117,NK1135]  use std::fs
-20-nikaia-advance.md #19 refused (as written) [NK1135]  fn bonus(score: i32) -> i32 { score * 2 + 1 }   // no `…
-20-nikaia-advance.md #20 refused (a body) [NK1117]  counter.access fn(n) { n + xs.sort_by_key fn(x) { x } }…
-20-nikaia-advance.md #21 refused (a body) [NK1117,NK2605]  counter.access fn(n) { xs.map fn(x) { fs::read("log", f…
-20-nikaia-advance.md #22 lowered (as written)  fn apply(f: fn(i64) -> i64, x: i64) -> i64 sync(f) {
-20-nikaia-advance.md #23 lowered (as written)  fn charge(kasse: SharedMut[i64], wieviel: i64) throws {
-20-nikaia-advance.md #24 lowered (a body) [about-a-refusal]  let counter = SharedMut(0)
-20-nikaia-advance.md #25 fragment (as written) [about-a-refusal sketch]  let account_a = SharedMut(Account(…))
-20-nikaia-advance.md #26 refused (items, then a body) [NK1117,NK1181]  use std::time
-20-nikaia-advance.md #27 lowered (items, then a body)  use std::channel
-20-nikaia-advance.md #28 refused (a body) [NK1245]  let pixels = [/* 1 million pixels */]
-20-nikaia-advance.md #29 refused (a body) [NK1117,NK1181]  let summary = rows.par_iter().fold(Summary, fn(acc, r) …
-20-nikaia-advance.md #30 fragment (as written)  let table = b.par_pieces(b'\n').fold(Table, fn(t, piece…
-20-nikaia-advance.md #31 refused (a body) [NK1117,NK1201,NK2605]  let data = [1, 2, 3]
-20-nikaia-advance.md #32 refused (a body) [NK1117,NK2605]  let config = load_config()
-20-nikaia-advance.md #33 fragment (as written) [sketch]  use std::supervisor
+20-nikaia-advance.md #18 lowered (as written)  pub trait Admission {
+20-nikaia-advance.md #19 refused (items, then a body) [about-a-refusal NK1117,NK1135]  use std::fs
+20-nikaia-advance.md #20 refused (as written) [NK1135]  fn bonus(score: i32) -> i32 { score * 2 + 1 }   // no `…
+20-nikaia-advance.md #21 refused (a body) [NK1117]  counter.access fn(n) { n + xs.sort_by_key fn(x) { x } }…
+20-nikaia-advance.md #22 refused (a body) [NK1117,NK2605]  counter.access fn(n) { xs.map fn(x) { fs::read("log", f…
+20-nikaia-advance.md #23 lowered (as written)  fn apply(f: fn(i64) -> i64, x: i64) -> i64 sync(f) {
+20-nikaia-advance.md #24 lowered (as written)  fn charge(kasse: SharedMut[i64], wieviel: i64) throws {
+20-nikaia-advance.md #25 lowered (a body) [about-a-refusal]  let counter = SharedMut(0)
+20-nikaia-advance.md #26 fragment (as written) [about-a-refusal sketch]  let account_a = SharedMut(Account(…))
+20-nikaia-advance.md #27 refused (items, then a body) [NK1117,NK1181]  use std::time
+20-nikaia-advance.md #28 lowered (items, then a body)  use std::channel
+20-nikaia-advance.md #29 refused (a body) [NK1245]  let pixels = [/* 1 million pixels */]
+20-nikaia-advance.md #30 refused (a body) [NK1117,NK1181]  let summary = rows.par_iter().fold(Summary, fn(acc, r) …
+20-nikaia-advance.md #31 fragment (as written)  let table = b.par_pieces(b'\n').fold(Table, fn(t, piece…
+20-nikaia-advance.md #32 fragment (as written) [sketch]  use std::supervisor
 30-nikaia-tooling.md #1 lowered (as written)  extern(library: "sqlite3") {
 30-nikaia-tooling.md #2 refused (as written) [NK1117]  test "a blank line is counted" {
 30-nikaia-tooling.md #3 lowered (as written)  fn divide(a: i64, b: i64) -> i64 sync {

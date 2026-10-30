@@ -776,7 +776,19 @@ fn main() {
 At `user_parallelism = yes` user code runs on several CPU cores at once. The rules of this chapter keep shared data intact.
 
 
-**A task has a memory budget** ([ADR-327](adr/adr-327.md)). What a task allocates comes from a block of its own, and what a door of a `SharedMut` or the construction of a `Shared` allocates comes from that value's block. The budget counts what the task holds: memory it frees, it can allocate again. A value that can outlive the task - sent on a channel, stored into a shared value outside its door, handed to Rust to own, the task's result - is not in the block: it is counted against the task while the task holds it, and the block is emptied whole when the task ends. From the hand-over it counts against its receiver - the task that takes it from a channel or joins the task that produced it, the shared value it is stored into - and a receiver it does not fit is a full block. A full block is a panic in the task, which ends it; a shared value whose block is full is poisoned (Part I 6.3). How large a block is, a strategy of the runtime decides; a package may provide another. Memory a Rust crate or a C library allocates and keeps for itself is in no block.
+**A task has a memory budget** ([ADR-327](adr/adr-327.md)). What a task allocates comes from a block of its own, and what a door of a `SharedMut` or the construction of a `Shared` allocates comes from that value's block. The budget counts what the task holds: memory it frees, it can allocate again. A value that can outlive the task - sent on a channel, stored into a shared value outside its door, handed to Rust to own, the task's result - is not in the block: it is counted against the task while the task holds it, and the block is emptied whole when the task ends. From the hand-over it counts against its receiver - the task that takes it from a channel or joins the task that produced it, the shared value it is stored into - and a receiver it does not fit is a full block. A shared value whose block is full is poisoned (Part I 6.3). How large a block is, a strategy of the runtime decides; a package may provide another. Memory a Rust crate or a C library allocates and keeps for itself is in no block.
+
+**A full block ends the task with `task::OverBudget`.** The task unwinds from the allocation that did not fit, as a panic does, and its cleanups run; inside the task it cannot be caught, and an allocation declares no `throws`. The panic hook does not run for it. Where the task meets its receiver it arrives as its own error, beside `task::Crashed`: `h.join()` throws it, an `async let` hands it on as any failure of its child (Part I 8.1.2), a supervisor counts it in the child's failures (12.8), and `http` under `serve` answers `503` where the response has not begun. A task nobody waits for prints it on standard error (Part I 8.2). An `async` child allocates from a block of its own in the same way and ends the same way; in a group, `task::OverBudget` fails only that child, and only a panic cancels its siblings.
+
+**Admission decides when a child starts.** A child of an `async` form (Part I 8.1.2) starts only where its block fits the budget of the task that runs the group and a descriptor is free; otherwise it waits, unstarted, until a sibling ends. Who decides is a strategy, a value implementing `task::Admission`, passed as `admission:`; without it `std`'s decides, and a package may provide another. No number is configured. `limit:` caps on top of the strategy. What no strategy can change, the runtime enforces: never more descriptors than the system allows; at the ceiling a child waits and never fails.
+
+```nika
+pub trait Admission {
+    fn decide(ref mut self, load: task::Load) -> task::Decision sync
+}
+```
+
+`decide` runs on the runtime's side, on a beat it chooses; `Load` carries what the runtime counts (children running and waiting, the budget left, descriptors in use and allowed), and `Decision` how many children may start until the next decision. **What this guarantees:** no fan-out, and no memory a child allocates through Nikaia, ends the program. **What it does not cover:** memory a Rust crate or a C library keeps, other processes, and the kernel's buffers.
 
 ### 12.1. The `sync` Keyword (CPU Constraints)
 Every function in Nikaia may pause unless it says otherwise. The `sync` keyword marks a function that **never pauses** and is never moved between threads mid-execution.
@@ -980,9 +992,9 @@ the compiler does not read silence fail-closed
 
 Re-entering the *same* lock through a chain of calls is refused by 12.3 when the program is compiled, at both values of the option. The runtime check described above is **self-control of that refusal rather than error handling**. No input can make it fire. It is a build option a program may decline (Part I 1.2), and poisoning on several threads is left as it is.
 
-**A lock is a resource, so two doors onto the same lock keep their order where both of them write.** Two operations whose touch sets are disjoint have no order between them *inside an `overlap { … }`* (Part I 8.1.2), and a touch set can name a lock. **`get` and `access` are reads; `set` and `update` are writes.** Two reads of one resource are unordered, so two `get`s, or two `access`es, on one lock may run in either order. Any two of the writing forms are ordered by the rule that orders two `println`s. Two doors onto *different* locks need not wait for each other.
+**A lock is a resource, so two doors onto the same lock keep their order where both of them write.** Two operations whose touch sets are disjoint have no order between them *where one is an `async` child and the other runs beside it* (Part I 8.1.2), and a touch set can name a lock. **`get` and `access` are reads; `set` and `update` are writes.** Two reads of one resource are unordered, so two `get`s, or two `access`es, on one lock may run in either order. Any two of the writing forms are ordered by the rule that orders two `println`s. Two doors onto *different* locks need not wait for each other.
 
-Where two doors would meet on something the touch sets cannot see, a program writes them as ordinary statements rather than as branches of an `overlap`: statement order is the written order (Part I 8.1.1).
+Where two doors would meet on something the touch sets cannot see, a program writes them as ordinary statements rather than as a child and its window: statement order is the written order (Part I 8.1.1).
 
 ### 12.3. Deadlock Prevention: Atomic Composition
 Taking a lock while a lock is held is **always** a compile-time error. What is refused is the nesting of lock *acquisitions*, one door (12.2) opened while another is still open. One door on its own is one acquisition, whatever it opens.
@@ -1053,7 +1065,7 @@ select {
 ```
 `select` is a block whose arms bind. The first branch to finish wins. The losers are cancelled by being dropped. The handle `spawn` returns has `cancel()`, which is the same mechanism, and cancelling takes the handle. `5.seconds()` is a `std::time::Duration`, made by a `std` extension on the integers; there is no suffix literal. `sleep` lives in `std::time` and is written with it; nothing in the prelude pauses (Part I 1.3). An error type is an `enum`, so the error a branch throws is an **enum variant**.
 
-`select` and `overlap` are a **pair**: both start every branch at once; `overlap` keeps every result, `select` keeps the first. A block needs at least two arms and at most eight.
+`select` and `async` are a **pair**: both start every child at once; `async` keeps every result, `select` keeps the first. A `select` block needs at least two arms and at most eight.
 
 **What "cleaned up" means.** The losing task stops at its current pause point and its values are torn down. A resource with a pausable `cleanup` (Part I 6.4) is not awaited by the *winner*. The runtime **adopts** such `cleanup` runs and finishes them in the background ("parked cleanup"). The program does not exit before parked cleanups are done, bounded by the runtime configuration `cleanup-deadline` (Part III 13.3b). An error from a parked cleanup has no caller and is said on standard error.
 
@@ -1122,41 +1134,9 @@ let table = b.par_pieces(b'\n').fold(Table, fn(t, piece) { scan(t, piece) }, Tab
 
 At `user_parallelism = no`, `fold` is one sequential fold: one accumulator, every element in order, `merge` never called. The options are read and do nothing.
 
-### 12.7. Scoped Tasks (@immediate Parallelism)
+### 12.7. Work That Borrows: `async`
 
-A `spawn` task takes its captured variables *with* it (Part I 8.3). A **scoped** task *borrows* them, because the scope waits until every task inside it has finished.
-
-`task::scope` is an **immediate context** (Part I 5.4): it does not return until every task spawned inside it has completed. A task in it that panics cancels the others, and the scope throws `task::Crashed` where it ends. A task inside the scope therefore reads the function's variables without moving or cloning them. The scope runs its body once, so the body may give away a value it captures (Part I 5.4 D); a task spawned in it is kept, and moves what it captures.
-
-```nika
-let data = [1, 2, 3]
-
-// 'task::scope' waits for all inner tasks before it returns.
-task::scope fn(s) {
-    // Note: s.spawn is tied to the scope, unlike global spawn.
-    s.spawn fn { println(f"Reading: {data}") } // Safe Borrow
-    s.spawn fn { println(f"Reading: {data}") } // Safe Borrow
-}
-// 'data' is still valid here
-```
-
-**A scope may not be opened while a lock is open.** Because the scope waits for its tasks, their bodies belong to the function that writes the scope. Whatever a task touches, the surrounding function touches, including a lock (12.3). Opening a scope inside an open lock is therefore refused. A task started with `spawn` is the other case (11.2).
-
-**A task's effect decides how the scope runs it**, at every setting of `user_parallelism`:
-
-* **A task that never pauses** (`sync`, 12.1) runs on the thread pool where tasks run in parallel, and where it is started at `no`.
-* **A task that may pause** is run by the scope itself: the scope holds the task and lets it go on whenever what it waits for is ready, together with the scope's other pausing tasks. It is never handed to the runtime, so it cannot outlive what it borrows. A scope with a pausing task pauses where it is written.
-
-```nika
-let config = load_config()
-task::scope fn(s) {
-    for url in urls {
-        s.spawn fn { fetch(url, config) } // pauses, borrows `config`
-    }
-}
-```
-
-The scope waits for both kinds. A task that panics cancels the others, and the scope throws `task::Crashed` where it ends. A task that ends with an error hands it to the scope as an `overlap` branch does (Part I 8.1.2): where the scope ends it throws the first error in the order the tasks were started, and the others travel as its secondary errors (Part I 7.1). The scope's function may throw too: its error is the scope's in the place after every task it started, and the scope throws it once those tasks have ended. Where tasks run in parallel, the pausing tasks of one scope take turns on one thread: they run at the same time as each other, but not on separate cores, so a pausing task that computes long between its pauses holds back the others. Computation that should use the cores belongs in a task that does not pause.
+Work that runs beside the code after it and borrows what the function holds is an `async` child (Part I 8.1.2). Its group waits for it, so nothing it borrows ends before it does. A child that never pauses (12.1) runs on the pool; a child that may pause is run by its group. Where children run in parallel, the pausing children of one group take turns on one thread: they run at the same time as each other, but not on separate cores, so a pausing child that computes long between its pauses holds back the others. Computation that should use the cores belongs in a child that does not pause, or in `par_iter` (12.6).
 
 ### 12.8. Supervision Trees
 A **supervisor** runs tasks and restarts them when they end ([ADR-328](adr/adr-328.md)).
