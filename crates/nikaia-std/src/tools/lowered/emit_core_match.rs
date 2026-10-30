@@ -479,11 +479,11 @@ impl EmitState {
         let mut home: Vec<i64> = vec![];
         let mut catch_all = 0;
         for arm in arms.iter() {
-            let mut at = -1;
+            let mut at: i64 = -1;
             let member = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
             if member.is_some() {
                 let named = match member { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                let mut k = 0;
+                let mut k: i64 = 0;
                 for each in members.iter() {
                     if *each == named && at < 0 { at = k; }
                     k += 1;
@@ -559,11 +559,11 @@ impl EmitState {
         let mut home: Vec<i64> = vec![];
         let mut catch_all = 0;
         for arm in arms.iter() {
-            let mut at = -1;
+            let mut at: i64 = -1;
             let member = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
             if member.is_some() {
                 let named = match member { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                let mut k = 0;
+                let mut k: i64 = 0;
                 for each in members.iter() {
                     if *each == named && at < 0 { at = k; }
                     k += 1;

@@ -524,7 +524,7 @@ pub(crate) fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds
         return;
     }
     if a_container(ask.names, ty) {
-        let mut at = 0;
+        let mut at: i64 = 0;
         let keyed = a_map(ask.names, ty);
         for arg in ty.generics.iter() {
             path.push(at);
@@ -540,7 +540,7 @@ pub(crate) fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds
     }
     if a_followed_tuple(ask.names, ty) {
         tie_parts(owner, ty, &path.to_owned(), ask, walk);
-        let mut at = 0;
+        let mut at: i64 = 0;
         for part in ty.generics.iter() {
             path.push(at);
             flow_type(owner, part, path, kinds, ask, walk);
@@ -557,7 +557,7 @@ pub(crate) fn tie_parts(owner: &TextOwner, ty: &Type, path: &[i64], ask: &TierAs
 }
 
 pub(crate) fn tuple_text_words(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
-    let mut at = 0;
+    let mut at: i64 = 0;
     for part in ty.generics.iter() {
         path.push(at);
         if part.is_tuple && !part.is_view && !part.is_nullable { tuple_text_words(owner, part, &mut path.to_owned(), ask, walk, out); } else if plain_string(ask.names, part) { out.push(seen(owner, &path, walk)); }
@@ -1145,7 +1145,7 @@ pub(crate) fn demote_inside(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, a
         return;
     }
     if !a_followed(ask.names, ty) { return; }
-    let mut at = 0;
+    let mut at: i64 = 0;
     for arg in ty.generics.iter() {
         path.push(at);
         demote_inside(owner, arg, &mut path.to_owned(), ask, walk);
@@ -1161,7 +1161,7 @@ pub(crate) fn unlinked_inside(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>,
         return;
     }
     if !a_followed(ask.names, ty) { return; }
-    let mut at = 0;
+    let mut at: i64 = 0;
     for arg in ty.generics.iter() {
         path.push(at);
         unlinked_inside(owner, arg, &mut path.to_owned(), ask, walk);
@@ -1476,7 +1476,7 @@ pub(crate) fn kinds_of(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &
     if ty.is_view && ask.names.resolve(ty.name) == "String" { return view_kinds(); }
     if a_container(ask.names, ty) || a_followed_tuple(ask.names, ty) {
         let mut out = no_kinds();
-        let mut at = 0;
+        let mut at: i64 = 0;
         for arg in ty.generics.iter() {
             path.push(at);
             out = kinds_joined(&out, &kinds_of(owner, arg, &mut path.to_owned(), ask, walk));

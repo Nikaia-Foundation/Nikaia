@@ -44,7 +44,7 @@ fn a_mut_lambda_parameter_is_dereferenced() {
          \x20   counter.update fn(mut n) { n += 1 }\n\
          }\n",
     );
-    assert!(rust.contains("(*n) += 1"), "{rust}");
+    assert!(rust.contains("*n += 1"), "{rust}");
 }
 
 /// **And a lambda parameter without the word is not**, which is the half that
@@ -59,7 +59,7 @@ fn a_plain_lambda_parameter_is_left_alone() {
          \x20   println(f\"{counter.access fn(n) { n + 1 }}\")\n\
          }\n",
     );
-    assert!(!rust.contains("(*n)"), "{rust}");
+    assert!(!rust.contains("*n"), "{rust}");
 }
 
 /// **A lambda inside the block still means the address**, which is why the list
@@ -76,7 +76,7 @@ fn a_nested_lambda_keeps_the_dereference() {
          \x20   }\n\
          }\n",
     );
-    assert!(rust.contains("(*n) + x"), "{rust}");
+    assert!(rust.contains("*n + x"), "{rust}");
 }
 
 /// Every finding the checker has about a source.

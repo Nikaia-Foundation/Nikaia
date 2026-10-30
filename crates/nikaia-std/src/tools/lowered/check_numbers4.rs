@@ -342,12 +342,12 @@ pub(crate) fn a_lit_int(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn number_position_code(what: &str) -> Option<&'static str> {
-    if what == "let" { return Some("NK1103"); }
-    if what == "returns" { return Some("NK1104"); }
-    if what == "assign" { return Some("NK1105"); }
-    if what == "field" { return Some("NK1106"); }
-    if what == "argument" { return Some("NK1102"); }
+pub(crate) fn number_position_code(what: &str) -> Option<String> {
+    if what == "let" { return Some(String::from("NK1103")); }
+    if what == "returns" { return Some(String::from("NK1104")); }
+    if what == "assign" { return Some(String::from("NK1105")); }
+    if what == "field" { return Some(String::from("NK1106")); }
+    if what == "argument" { return Some(String::from("NK1102")); }
     None
 }
 
@@ -466,7 +466,7 @@ impl CheckState {
         let text = said.replace(&format!("`{}`", hole), &"a number");
         let mut note: String = String::from("A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.");
         if a_float_type(want) { note = String::from("A number nothing typed takes one of the integer types its uses ask for, and a float is none of them (Part I 2.4)."); }
-        self.findings.push(check_refusal(code, span, text, vec![note], Some(format!("Make it a `{}`, or give the number to a place that holds one.", wanted))));
+        self.findings.push(check_refusal(&code, span, text, vec![note], Some(format!("Make it a `{}`, or give the number to a place that holds one.", wanted))));
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -626,12 +626,18 @@ impl CheckState {
     pub fn open_walk_result(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, args: &[Expr], items: Option<i64>) {
         self.flow.walk_open = None;
         self.flow.walk_view = false;
+        self.flow.walk_item = None;
         let number: i64 = match items { Some(__nikaia_value) => __nikaia_value, None => return };
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         let result: Ty = match match signature.result.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return };
+        let item_held = nikaia_std::index::or(open_walk_variable(signature), || "".into());
+        if open_walk_the_item(&result, &item_held) {
+            self.flow.walk_item = Some(self.open_root(number));
+            return;
+        }
         let made: Ty = match open_walk_made(&result) { Some(__nikaia_value) => __nikaia_value, None => return };
         let name = match open_walk_named(&made) { Some(__nikaia_value) => __nikaia_value, None => return };
         let view = open_walk_a_view(&made);
