@@ -6,7 +6,7 @@ budget_usd: 30
 ---
 # Brief: K3a part 2 - `computed` and `worked_out_ahead` move into Nikaia (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1, row K3a of `docs/selfhosting-plan.md`. Precondition: `k3a1-commit.md` (K3a part 1, the `ComptimeLowerHost`) and `b995-coalesce-map-get.md` (#995, `a ?? m.get(k)`) are on `origin/develop`; if either is not, stop with `Result: blocked`, `Needs:` the missing one.
+Score: self-hosting lane, bootstrap week lane 1, row K3a of `docs/selfhosting-plan.md`. Precondition: `k3a1-commit.md` (K3a part 1, the `ComptimeLowerHost`) `b995-coalesce-map-get.md` (#995, `a ?? m.get(k)`, 0cf0b173) and `b997-let-lambda-string-param.md` (#997, the let-bound `known` lambda of :393) are on `origin/develop`; if one is not, stop with `Result: blocked`, `Needs:` the missing one.
 
 Cut: crates/nikaia/src/comptime_run.rs:276-536
 Cut: crates/nikaia/src/comptime_run.rs:544-555
@@ -26,7 +26,7 @@ A trait `ComptimeComputeHost` in `comptime_tree.nika`, all methods `sync`, units
 Where a step is already Nikaia (`comptime_sub_program`, `comptime_constants_of`, `comptime_drop_readers`, `comptime_undeclared_callee`, `comptime_culprit`, `comptime_lowered_units`, ...), call it from Nikaia instead of through the host.
 
 ## Forms to watch (CLAUDE.md, *A missing form stops the work*)
-* `known(name) ?? ahead.get(name)` needs #995 (b995 in this batch). Another `??`/`get` mismatch: stop, `Found:` with a probe.
+* `known(name) ?? ahead.get(name)` needs #995 (done, 0cf0b173): a text or `BuildValue` element is written `ahead.get(name)?.clone()` (ADR-293 D15). The `let`-bound lambda of :393 needs #997 (b997 in this batch). A `match` handing back text refused NK2302 is #998 (b998 in this batch). Another `??`/`get` mismatch: stop, `Found:` with a probe.
 * Sets have no `iter`/`filter` in `std.contracts` (not decided by any ADR). Write `absent` with `difference` (it exists and returns a sequence): `files_constants.difference(carried).map(fn(s) { s.clone() }).collect()`. Do not write a `for` loop over a set to stand in for a missing `filter`; if a step needs a set form that does not exist, stop: `Result: blocked`, `Found:` + probe, `Needs: owner decision`.
 * A defect of the lowering (a wrong Rust type, a missing clone): stop and report it under `Found:` with a probe; do not write around it.
 
