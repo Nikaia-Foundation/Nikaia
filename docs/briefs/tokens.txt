@@ -155,3 +155,4 @@
 /home/user/Nikaia/docs/briefs/k3a2-comptime-compute.md 1101462 21
 /home/user/Nikaia/docs/briefs/b1006-set-iter.md 896490 28
 /home/user/Nikaia/docs/briefs/architect-task.md 1274284 27
+/home/user/Nikaia/docs/briefs/k3a2-comptime-compute.md 2605132 35
