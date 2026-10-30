@@ -2727,6 +2727,14 @@ call carries (7.1, 8.1). A `ref` written at a call, `serve(ref db)`, is refused
 with `NK1137`. A `ref` in a parameter type is an assertion, *this is a view*, as
 `sync` is (Part II, 12.1).
 
+**A trait method keeps what its default body and the impls in its own package
+keep**, position by position, and with neither it keeps nothing
+([ADR-277](adr/adr-277.md) D17). This holds for every parameter it takes by
+value, code or data, and for every impl and every call through a bound. An impl
+in another package, or under the package's `tests/`, counts for nothing: one
+that keeps what the method does not is refused with `NK1264`, since only the
+trait's package widens it.
+
 A parameter the function changes in place says `mut` in the declaration,
 `fn fill(mut out: Vec[i64])`, and is passed as `ref mut`; the call shows
 nothing, as `xs.push(1)` shows nothing. A parameter the body changes without

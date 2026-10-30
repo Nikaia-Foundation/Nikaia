@@ -1,2 +1,6 @@
 b-fixforward-corpus-unanswered.md
 b994-overlap-note-seq.md
+b1012a-trait-column-fn.md
+k3a2-comptime-compute.md
+b1012b-trait-column-refusals.md
+b1012c-trait-column-data.md
