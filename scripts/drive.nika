@@ -146,7 +146,9 @@ fn drive_paths(dir: String, brief: String) -> Vec[String] throws {
 
 // The report with `Pushed:` rewritten when `Result: done`, `Pushed:` is
 // `rejected` or `none`, and a log line `<sha>\t<subject>` has the report's
-// `Commit:` as its subject; else the report as it is.
+// `Commit:` as its subject; else the report as it is. The log is the last 40
+// commits of both `HEAD` and `origin/develop` (drive_commit), so a commit
+// already on `origin/develop` is found too.
 fn drive_rewrite(report: String, log: String) -> String {
     if drive_word(drive_field(report.clone(), "Result")) != "done" { return report }
     let pushed = drive_word(drive_field(report.clone(), "Pushed"))
@@ -198,7 +200,8 @@ fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throw
     let report_path = f"{brief}.report.md"
     if fs::exists(report_path.clone(), fs::Root::Anywhere) {
         let old = drive_read(report_path.clone())
-        let log = process::run("git", ["log", "--format=%h%x09%s", "origin/develop..HEAD"]).stdout.clone()
+        process::run("git", ["fetch", "--quiet", "origin", "develop"])
+        let log = process::run("git", ["log", "-40", "--format=%h%x09%s", "HEAD", "origin/develop"]).stdout.clone()
         let fresh = drive_rewrite(old.clone(), log)
         if fresh != old {
             drive_say(dry, f"rewrite Pushed: in {report_path}")
