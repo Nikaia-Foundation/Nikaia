@@ -586,7 +586,7 @@ let totals = Measurements::file(data)
 
 **`par_fold` is written, never inferred.** The compiler does not turn a `fold` into a `par_fold`, even where the step looks associative. A written `par_fold` states that a different chunk count gives the same result.
 
-`par_fold` takes the options of `Par::fold` after a `;`: `order:`, `workers:`, and `piece:` in bytes (12.6). `par_fold(MEASUREMENT, Summary, fn(acc, m) { acc.record(m) }, Summary::merge; order: par::Order::Any)` keeps one accumulator per worker.
+`par_fold` takes the options of `Par::fold` after a `;`: `order:`, `limit:`, and `piece:` in bytes (12.6). `par_fold(MEASUREMENT, Summary, fn(acc, m) { acc.record(m) }, Summary::merge; order: par::Order::Any)` keeps one accumulator per worker.
 
 At `user_parallelism = no`, `par_fold` runs as an ordinary sequential `fold`: same accumulator, same merge, same result, no threads. A grammar written this way compiles unchanged for `wasm32`.
 
@@ -693,7 +693,7 @@ and `rule WS = "" { }` skips nothing.
 | `recover(p, sync)` | `p`, and where `p` fails, skips to `sync` and reports the failure without stopping the parse | `p`'s value or the report |
 | `list(item, sep)` | `item`, separated by `sep`, zero or more | a list |
 | `fold(p, init, step)` | `p` repeated, each value folded into an accumulator started from `init`; nothing is collected | the accumulator |
-| `par_fold(F, init, step, merge; order:, workers:, piece:)` | `fold` over the `@frame` rule `F`, cut into pieces while it runs and joined with `merge`; the whole body of its rule (10.7, 12.6) | the accumulator |
+| `par_fold(F, init, step, merge; order:, limit:, piece:)` | `fold` over the `@frame` rule `F`, cut into pieces while it runs and joined with `merge`; the whole body of its rule (10.7, 12.6) | the accumulator |
 
 **Doc comments are a rule.** A grammar has no state of its own and no rule
 written outside it. `"///" until(line_ending)` is a rule like any other, used
@@ -723,29 +723,29 @@ The syntax is identical at both values of the option. A function definition carr
 * **At `no`:** functions yield on I/O events, cooperatively, on one thread.
 * **At `yes`:** the runtime runs tasks on a pool of worker threads; `user-pool` in the runtime configuration sets their number.
 
-User code is written in direct style, as if it were synchronous. The compiler places the suspension points. `async` and `await` are not words of the language.
+User code is written in direct style, as if it were synchronous. The compiler places the suspension points. `await` is not a word of the language, and `async` never marks a function: it starts a task (Part I 8.1.2).
 
-### 11.2. Parallelism via spawn
-Calling a function runs it now. A task that runs concurrently or in parallel is started with `spawn`.
+### 11.2. Parallelism via `async`
+Calling a function runs it now. A task that runs concurrently or in parallel is started with `async` (Part I 8.1.2). This section is about the free task, `async(detached)` (Part I 8.2), which may outlive the function that starts it; a child task borrows and is waited for by its group, so the crossing rules below ask only what it hands back (Part III C.5).
 
 #### The @detached Contract
-`spawn` is declared with the `@detached` attribute, which gives it **implicit move semantics**: a captured value moves into the task. The parent scope cannot use the captured data while the detached task owns it. A use after the move is refused with `NK2101` (Part I 8.3).
-* **Ordinary data is cloned.** A program that keeps **data** in the parent, a string, a number, a struct or a collection of those, calls `.clone()` before spawning, and the copy is what the task takes (Part I 8.3).
+`async(detached)` is a `@detached` context, which gives it **implicit move semantics**: a captured value moves into the task. The parent scope cannot use the captured data while the detached task owns it. A use after the move is refused with `NK2101` (Part I 8.3).
+* **Ordinary data is cloned.** A program that keeps **data** in the parent, a string, a number, a struct or a collection of those, calls `.clone()` before starting the task, and the copy is what the task takes (Part I 8.3).
 * **A handle is duplicated.** A handle on a `Shared[T]` is **duplicated** where it is handed to the task, so the name in the parent keeps working and there is nothing to call. Copying a handle copies none of the data (Part I 6.2). `--sharing` names the duplication site.
 
-A move is refused only where the type is **known** and a move takes the value away. A number, a `bool`, a `scalar` and a view are *copied*, so the parent keeps them: `let message = "Hello"` is not this case, and `let message: String = "Hello"` is. A value whose type nothing describes is not refused (Part III C.4). An assignment between the spawn and the later use clears the refusal.
+A move is refused only where the type is **known** and a move takes the value away. A number, a `bool`, a `scalar` and a view are *copied*, so the parent keeps them: `let message = "Hello"` is not this case, and `let message: String = "Hello"` is. A value whose type nothing describes is not refused (Part III C.4). An assignment between the start and the later use clears the refusal.
 
 #### What a task may take with it
 At `yes` a task runs on a thread of its own, so **everything it uses must be able to cross a thread**. The compiler checks that structurally, with no syntax to write. A type built out of plain data may cross, and so may a struct or collection of those. A value that counts its owners may cross when **what it holds** may cross; which count it gets follows that answer. **A lock may cross** into a task of the program's own. A `SharedMut[T]` may therefore be used by a task, and a struct holding one is no worse than the field. A lock may **not** go to code nothing written down describes (Part III 15.2): there the caller opens the lock and hands over the value inside it, so the called code sees an ordinary value and no lock.
 
 The answer is **the same at both values of the option**. The question is asked of a value **and a destination**, and each destination gets one answer that does not depend on the option. The option changes only whether the build performs the crossing: at `no` nothing in user code runs concurrently, and the refusal is a lint rather than an error. The diagnostic is `NK2501` (Part III C.5). At the foreign destination a lock is refused with `NK2503` (Part III C.6) and a `Shared[T]` with `NK2502`.
 
-**The nesting rule does not reach into a spawned task.** A `spawn`'s body runs later and elsewhere, not during the call. The rule that refuses a lock taken while a lock is held (12.3) does not reach into it. A scope is the other case, because it waits for its tasks (12.7).
+**The nesting rule does not reach into a free task.** An `async(detached)` body runs later and elsewhere, not during the call. The rule that refuses a lock taken while a lock is held (12.3) does not reach into it. A child task is the other case, because its group waits for it (12.7).
 
-**A lock may be handed to a spawned task.** A `SharedMut[T]` may be captured by a `spawn` at both values of the option, and the counter of 12.2 is a program user code can write. Two handles are two places at one lock. A task may also build a lock of its own, which shares nothing.
+**A lock may be handed to a free task.** A `SharedMut[T]` may be captured by an `async(detached)` at both values of the option, and the counter of 12.2 is a program user code can write. Two handles are two places at one lock. A task may also build a lock of its own, which shares nothing.
 
 #### Return Values & Handles
-`spawn` returns a `TaskHandle`. At `yes` it represents a running thread; at `no` a scheduled event. `.join()` on it behaves identically at both, which is what the *uniform API* below means.
+`async(detached)` hands back a `TaskHandle`. At `yes` it represents a running thread; at `no` a scheduled event. `.join()` on it behaves identically at both, which is what the *uniform API* below means.
 
 **`.join()` is the one spelling, and there is no `.await`.** A Nikaia program contains the word `await` nowhere (Part I 8.1). `.join()` is where two **tasks** meet again, and it is a suspension point. The compiler writes the `.await` in the emitted Rust.
 
@@ -755,9 +755,9 @@ fn process_image(path: String) -> Image { ... }
 fn main() {
     let img_path = "a.jpg"
 
-    // 'spawn' is a @detached context.
+    // 'async(detached)' is a @detached context.
     // 'img_path' is implicitly moved into the task.
-    let handle = spawn fn { process_image(img_path) }
+    let handle = async(detached) fn { process_image(img_path) }
 
     // Compiler Error: img_path is gone.
     // println("Processing: " + img_path) 
@@ -767,7 +767,7 @@ fn main() {
 }
 ```
 
-`join` hands back the body's last value, and a body that can fail hands back a value that says so, as any other function does. A task that panicked makes `join` throw `task::Crashed`, which carries the message and the site and is caught as any error is ([ADR-328](adr/adr-328.md) D8). A task nobody joins reports its crash through the panic hook only.
+`join` hands back the body's last value, and a body that can fail hands back a value that says so, as any other function does. A task that panicked makes `join` throw `task::Crashed`, which carries the message and the site and is caught as any error is ([ADR-328](adr/adr-328.md) D8). A task nobody joins reports its crash through the panic hook only. A child task's handle, `async(handle)`, joins the same way and borrows instead (Part I 8.1.2).
 
 ---
 
@@ -778,9 +778,9 @@ At `user_parallelism = yes` user code runs on several CPU cores at once. The rul
 
 **A task has a memory budget** ([ADR-327](adr/adr-327.md)). What a task allocates comes from a block of its own, and what a door of a `SharedMut` or the construction of a `Shared` allocates comes from that value's block. The budget counts what the task holds: memory it frees, it can allocate again. A value that can outlive the task - sent on a channel, stored into a shared value outside its door, handed to Rust to own, the task's result - is not in the block: it is counted against the task while the task holds it, and the block is emptied whole when the task ends. From the hand-over it counts against its receiver - the task that takes it from a channel or joins the task that produced it, the shared value it is stored into - and a receiver it does not fit is a full block. A shared value whose block is full is poisoned (Part I 6.3). How large a block is, a strategy of the runtime decides; a package may provide another. Memory a Rust crate or a C library allocates and keeps for itself is in no block.
 
-**A full block ends the task with `task::OverBudget`.** The task unwinds from the allocation that did not fit, as a panic does, and its cleanups run; inside the task it cannot be caught, and an allocation declares no `throws`. The panic hook does not run for it. Where the task meets its receiver it arrives as its own error, beside `task::Crashed`: `h.join()` throws it, an `async let` hands it on as any failure of its child (Part I 8.1.2), a supervisor counts it in the child's failures (12.8), and `http` under `serve` answers `503` where the response has not begun. A task nobody waits for prints it on standard error (Part I 8.2). An `async` child allocates from a block of its own in the same way and ends the same way; in a group, `task::OverBudget` fails only that child, and only a panic cancels its siblings.
+**A full block ends the task with `task::OverBudget`.** The task unwinds from the allocation that did not fit, as a panic does, and its cleanups run; inside the task it cannot be caught, and an allocation declares no `throws`. The panic hook does not run for it. Where the task meets its receiver it arrives as its own error, beside `task::Crashed`: `h.join()` throws it, an `async` value or a child handle hands it on as any failure of its task (Part I 8.1.2), a supervisor counts it in the child's failures (12.8), and `http` under `serve` answers `503` where the response has not begun. A free task nobody waits for prints it on standard error, unless its fallback handles it (Part I 8.2). Every task - a child task of an `async` form, an element of a pausing `par_iter` chain, a `select` arm - allocates from a block of its own in the same way and ends the same way; in a group, `task::OverBudget` fails only that task, and only a panic cancels its siblings. **What the block costs is paid only where it is needed:** a `par_iter` lambda that never pauses shares its piece's block, reset between elements only where the lambda allocates and keeps memory ([ADR-async-2](adr/adr-async-2.md) D6).
 
-**Admission decides when a child starts.** A child of an `async` form (Part I 8.1.2) starts only where its block fits the budget of the task that runs the group and a descriptor is free; otherwise it waits, unstarted, until a sibling ends. Who decides is a strategy, a value implementing `task::Admission`, passed as `admission:`; without it `std`'s decides, and a package may provide another. No number is configured. `limit:` caps on top of the strategy. What no strategy can change, the runtime enforces: never more descriptors than the system allows; at the ceiling a child waits and never fails.
+**Admission decides when a task starts.** A child task of an `async` form (Part I 8.1.2), or an element of a `par_iter` chain whose lambda may pause (12.6), starts only where its block fits the budget of the task that runs the group and a descriptor is free; otherwise it waits, unstarted, until a sibling ends. Who decides is a strategy, a value implementing `task::Admission`, passed as `admission:`; without it `std`'s decides, and a package may provide another. No number is configured. `limit:` caps on top of the strategy. What no strategy can change, the runtime enforces: never more descriptors than the system allows; at the ceiling a child waits and never fails.
 
 ```nika
 pub trait Admission {
@@ -992,7 +992,7 @@ the compiler does not read silence fail-closed
 
 Re-entering the *same* lock through a chain of calls is refused by 12.3 when the program is compiled, at both values of the option. The runtime check described above is **self-control of that refusal rather than error handling**. No input can make it fire. It is a build option a program may decline (Part I 1.2), and poisoning on several threads is left as it is.
 
-**A lock is a resource, so two doors onto the same lock keep their order where both of them write.** Two operations whose touch sets are disjoint have no order between them *where one is an `async` child and the other runs beside it* (Part I 8.1.2), and a touch set can name a lock. **`get` and `access` are reads; `set` and `update` are writes.** Two reads of one resource are unordered, so two `get`s, or two `access`es, on one lock may run in either order. Any two of the writing forms are ordered by the rule that orders two `println`s. Two doors onto *different* locks need not wait for each other.
+**A lock is a resource, so two doors onto the same lock keep their order where both of them write.** Two operations whose touch sets are disjoint have no order between them *where one is a task an `async` form starts and the other runs beside it* (Part I 8.1.2), and a touch set can name a lock. **`get` and `access` are reads; `set` and `update` are writes.** Two reads of one resource are unordered, so two `get`s, or two `access`es, on one lock may run in either order. Any two of the writing forms are ordered by the rule that orders two `println`s. Two doors onto *different* locks need not wait for each other.
 
 Where two doors would meet on something the touch sets cannot see, a program writes them as ordinary statements rather than as a child and its window: statement order is the written order (Part I 8.1.1).
 
@@ -1050,7 +1050,7 @@ The property is not 12.2's ordering rule. That rule needs to know *which* lock, 
 **A function handed outward is judged by its body, never by its type.** Where a rule asks whether a lambda touches a lock and the lambda is not run on the spot, because it is handed to foreign code or kept by the callee, the answer is computed from the body. A lambda is its captures, and no type writes those down.
 
 ### 12.4. Racing Tasks (`select`)
-`select` runs several tasks and keeps the result of the one that finishes *first*.
+`select` runs several tasks and keeps the result of the one that finishes *first*. Each arm is a child task whose group is the block (Part I 8.1.2); the policy is that the first wins.
 
 ```nika
 use std::time
@@ -1063,14 +1063,14 @@ select {
     _ = time::sleep(5.seconds()) => { throw Timeout::TooSlow }
 }
 ```
-`select` is a block whose arms bind. The first branch to finish wins. The losers are cancelled by being dropped. The handle `spawn` returns has `cancel()`, which is the same mechanism, and cancelling takes the handle. `5.seconds()` is a `std::time::Duration`, made by a `std` extension on the integers; there is no suffix literal. `sleep` lives in `std::time` and is written with it; nothing in the prelude pauses (Part I 1.3). An error type is an `enum`, so the error a branch throws is an **enum variant**.
+`select` is a block whose arms bind. The first branch to finish wins. The losers are cancelled by being dropped. A handle's `cancel()` (Part I 8.1.2, 8.2) is the same mechanism, and cancelling takes the handle; a task is cancelled only through a handle or by losing. `5.seconds()` is a `std::time::Duration`, made by a `std` extension on the integers; there is no suffix literal. `sleep` lives in `std::time` and is written with it; nothing in the prelude pauses (Part I 1.3). An error type is an `enum`, so the error a branch throws is an **enum variant**.
 
-`select` and `async` are a **pair**: both start every child at once; `async` keeps every result, `select` keeps the first. A `select` block needs at least two arms and at most eight.
+`select` and `async` are a **pair**: both start every task at once; `async` keeps every result, `select` keeps the first. A `select` block needs at least two arms and at most eight.
 
 **What "cleaned up" means.** The losing task stops at its current pause point and its values are torn down. A resource with a pausable `cleanup` (Part I 6.4) is not awaited by the *winner*. The runtime **adopts** such `cleanup` runs and finishes them in the background ("parked cleanup"). The program does not exit before parked cleanups are done, bounded by the runtime configuration `cleanup-deadline` (Part III 13.3b). An error from a parked cleanup has no caller and is said on standard error.
 
 ### 12.5. Channels (Message Passing)
-Nikaia offers **message passing** beside shared memory. A channel is `std`'s and not the language's. A channel is **bounded**; there is no `unbounded()`, and a capacity below one is refused. `send` pauses when the channel is full, so a `sync` body cannot send on one, and the ledger's column says so. `recv` hands back a `T?`; `null` means every sender is gone. The value type must `crosses`, checked where `tx` moves into the `spawn` as any move is.
+Nikaia offers **message passing** beside shared memory. A channel is `std`'s and not the language's. A channel is **bounded**; there is no `unbounded()`, and a capacity below one is refused. `send` pauses when the channel is full, so a `sync` body cannot send on one, and the ledger's column says so. `recv` hands back a `T?`; `null` means every sender is gone. The value type must `crosses`, checked where `tx` moves into the free task as any move is.
 
 ```nika
 use std::channel
@@ -1079,7 +1079,7 @@ use std::channel
 let (tx, rx) = channel::bounded(100)
 
 // Implicit Move transfers 'tx' into the background task
-spawn fn {
+async(detached) fn {
     tx.send("Calculation complete")
 }
 
@@ -1087,13 +1087,13 @@ let msg = rx.recv() // Waits (non-blocking yield) for the message
 ```
 
 ### 12.6. Data Parallelism (`par_iter`)
-`par_iter` (parallel iterator) processes a large list on all CPU cores.
+`par_iter` (parallel iterator) runs the work per element of a list at once: computation on all CPU cores, and work that waits one task per element. It is the one form for fan-out over a collection ([ADR-async-2](adr/adr-async-2.md)); `async` starts only tasks whose number stands in the source (Part I 8.1.2).
 
 ```nika
 let pixels = [/* 1 million pixels */]
 
-// The compiler splits the array into chunks and distributes them
-// across all cores. The closure may not pause (NK2209) or change a name outside it (NK2107).
+// The lambdas never pause, so the compiler splits the array into pieces and
+// distributes them across all cores. A lambda may not change a name outside it (NK2107).
 // Methods chained with trailing lambdas. A block ends at its `}`, so the chain
 // continues after it and means what it reads as.
 let bright_pixels = pixels.par_iter()
@@ -1102,7 +1102,17 @@ let bright_pixels = pixels.par_iter()
     .collect()
 ```
 
-**`fold` combines with nothing shared.** `xs.par_iter().fold(init, step, merge)` folds the elements into accumulators and merges them into one, which it returns. `init` is a type, called with no arguments, or a function `fn { … }`; it is called once per accumulator. `step` takes an accumulator and an element and returns the accumulator, `merge` takes two and returns one. Either may instead return nothing and change its first argument in place: a function of type `fn(ref mut A, T)` or `fn(ref mut A, A)`, or a lambda whose body returns nothing, whose first parameter is then `ref mut` (`fn(acc, m) { acc.record(m) }`). The result type says which, the two choose independently, and any other result type is `NK1102` ([ADR-372](adr/adr-372.md) D9). The same holds for `par_fold` and `fold` in a grammar (10.7). Both are lambdas of the walk and are asked what any other is (`NK2209`, `NK2107`). An accumulator is folded by one worker at a time, so `step` changes it without a lock. Over no elements the result is one made by `init`.
+**A lambda of `map`, `filter` or `for_each` may pause, and the compiler picks the execution from it.** A chain whose lambdas never pause runs in pieces on the cores, as below. A chain with a lambda that may pause runs one task per element, under admission and `limit:` (Chapter 12), polled by the call; the call is the tasks' group and returns when every one has ended (Part I 8.1.2). The meaning does not depend on which; `--overlaps` reports, per call, the execution chosen and the call that makes a lambda pause.
+
+```nika
+let pages = urls.par_iter(limit: 8).map fn(u) { http::get(u) }.collect()
+```
+
+**One rule set for every chain, the same as for `async`.** The results come back in input order. Every failure is kept: the first in input order is thrown where the call returns, the others are its `secondary` list in input order (Part I 7.1). A full block fails only its element, with `task::OverBudget`; a panic cancels the other elements, and the call throws `task::Crashed`. A lambda is checked as two of its runs at once would be: one that writes stdout or another resource is refused (`NK2104`), naming it, unless the chain is `limit: 1` written as the literal; one that changes a name bound outside it is `NK2107`. Where the committed ledger had a chain running in pieces and its lambda can now pause, the build warns (`NK2119`) at the call that made it pause; committing the ledger acknowledges it. What the rules add is paid only where the compiler knows it is needed: a failure slot only for a lambda that can throw, its list allocated on the failure path; a block reset only for a lambda that allocates and keeps memory; every check at compile time.
+
+**A chain beside the code after it** is one task: `let pages = async urls.par_iter().map fn(u) { http::get(u) }.collect()` runs the chain while the next statements run, and is waited for where `pages` is first named (Part I 8.1.2).
+
+**`fold` combines with nothing shared.** `xs.par_iter().fold(init, step, merge)` folds the elements into accumulators and merges them into one, which it returns. `init` is a type, called with no arguments, or a function `fn { … }`; it is called once per accumulator. `step` takes an accumulator and an element and returns the accumulator, `merge` takes two and returns one. Either may instead return nothing and change its first argument in place: a function of type `fn(ref mut A, T)` or `fn(ref mut A, A)`, or a lambda whose body returns nothing, whose first parameter is then `ref mut` (`fn(acc, m) { acc.record(m) }`). The result type says which, the two choose independently, and any other result type is `NK1102` ([ADR-372](adr/adr-372.md) D9). The same holds for `par_fold` and `fold` in a grammar (10.7). Both are lambdas of the walk and are asked what any other is (`NK2104`, `NK2107`); unlike a `map` lambda, they may not pause (`NK2209`), and neither may a `par_pieces` lambda. An accumulator is folded by one worker at a time, so `step` changes it without a lock. Over no elements the result is one made by `init`.
 
 ```nika
 let summary = rows.par_iter().fold(Summary, fn(acc, r) { acc.record(r) }, Summary::merge)
@@ -1118,10 +1128,12 @@ let summary = rows.par_iter().fold(Summary, fn(acc, r) { acc.record(r) }, Summar
 | Option | On | Default | Meaning |
 | :--- | :--- | :--- | :--- |
 | `order: par::Order` | `fold`, `par_fold` | `Kept` | as above |
-| `workers: i64` | `fold`, `par_fold` | `task::cores()` | at most this many accumulators are folded at once |
+| `limit: i64` | `par_iter`, `fold`, `par_fold` | `task::cores()` for a chain that computes; admission for one that pauses | at most this many pieces, accumulators or tasks at once |
+| `within: time::Duration` | `par_iter` | none | when it runs out, the call's running tasks are cancelled and it throws `task::TimedOut` |
+| `admission: task::Admission` | `par_iter` | `std`'s | who decides when the next task starts, for a chain that pauses (Chapter 12) |
 | `piece: i64` | `par_iter`, `par_pieces`, `par_fold` | the runtime's | the size a piece is cut near: elements of a list, bytes of `Bytes` or of a grammar's input |
 
-`workers:` and `piece:` change no result of a fold that keeps its order's promise. A value below `1` panics, naming the option.
+`limit:` and `piece:` change no result of a fold that keeps its order's promise. A value below `1` panics, naming the option. `limit:` replaces `workers:`, which is gone ([ADR-async-2](adr/adr-async-2.md) D4).
 
 **`Bytes` is cut at a separator.** `b.par_pieces(sep)` is a `Par[Bytes]` over `b` in pieces that each end just after a byte `sep`, the last at `b`'s end. Every byte is in exactly one piece and no piece is empty. A scan written by hand folds over them:
 
@@ -1136,7 +1148,7 @@ At `user_parallelism = no`, `fold` is one sequential fold: one accumulator, ever
 
 ### 12.7. Work That Borrows: `async`
 
-Work that runs beside the code after it and borrows what the function holds is an `async` child (Part I 8.1.2). Its group waits for it, so nothing it borrows ends before it does. A child that never pauses (12.1) runs on the pool; a child that may pause is run by its group. Where children run in parallel, the pausing children of one group take turns on one thread: they run at the same time as each other, but not on separate cores, so a pausing child that computes long between its pauses holds back the others. Computation that should use the cores belongs in a child that does not pause, or in `par_iter` (12.6).
+Work that runs beside the code after it and borrows what the function holds is a child task of an `async` form (Part I 8.1.2). Its group waits for it, so nothing it borrows ends before it does; a child handle, `async(handle)`, points at the task's slot in its group and needs no `Send` and no heap. A task that never pauses (12.1) runs on the pool; a task that may pause is run by its group. Where tasks run in parallel, the pausing tasks of one group take turns on one thread: they run at the same time as each other, but not on separate cores, so a pausing task that computes long between its pauses holds back the others. Computation over a list that should use the cores is a `par_iter` chain whose lambdas do not pause (12.6); a lambda that starts to pause turns it into one task per element, and `NK2119` says so.
 
 ### 12.8. Supervision Trees
 A **supervisor** runs tasks and restarts them when they end ([ADR-328](adr/adr-328.md)).
@@ -1155,7 +1167,7 @@ fn main() throws {
 }
 ```
 
-**`supervisor::run` runs the supervisor until it gives up.** It returns only then, and throws `supervisor::Escalated`, or a child's fatal error (below). Before it does, it stops every child in reverse order and their cleanups run. A supervisor in the background is `spawn fn { supervisor::run(…) }`; a child whose function calls `supervisor::run` is a supervisor below, and its giving up is a crash to the one above.
+**`supervisor::run` runs the supervisor until it gives up.** It returns only then, and throws `supervisor::Escalated`, or a child's fatal error (below). Before it does, it stops every child in reverse order and their cleanups run. A supervisor in the background is `async(detached) fn { supervisor::run(…) }`; a child whose function calls `supervisor::run` is a supervisor below, and its giving up is a crash to the one above.
 
 **The list's order is the start order and the dependency.** A child depends on every child before it; children start in list order and stop in reverse. The strategy says which siblings restart with a crashed child: `OneForOne` the child alone; `OneForAll` all of them; `RestForOne` the child and every child after it. Those that restart are stopped in reverse order and started in list order.
 

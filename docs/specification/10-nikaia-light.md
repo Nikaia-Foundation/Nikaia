@@ -190,6 +190,10 @@ waits and takes the first to finish (Part II, 12.4).
 
 **`break` and `continue` are reserved for their constructs** (3.3).
 
+**`async` is reserved for its construct**: the prefix that starts a task (8.1.2).
+
+**`spawn` stays reserved until the move to `async(detached)` is built** (8.2): `spawn fn { … }` is still accepted and means `async(detached) fn { … }`, and the commit that removes the form releases the word ([ADR-async-3](adr/adr-async-3.md) D5).
+
 **`test` is reserved for its construct**: a `test "name" { … }` block of the
 package it stands in (Part III 14.1).
 
@@ -208,7 +212,7 @@ Three further rules about the list:
   a `grammar` (Part II, 10.1) and ordinary names everywhere else.
 * **After a `::` or a `.`, a reserved word is a name.** A segment follows a `::`
   and a member follows a `.`, and no construct begins in either position, so
-  `Self::dsl` (Part II, 10.5) and `scope.spawn fn { … }` (Part II, 12.5) are
+  `Self::dsl` (Part II, 10.5) and `h.start()` on a handle named `start` are
   what they look like.
 * **`self` is on the list and is also a name**: the receiver of a method.
   A method body uses it; user code may not declare it. Declaring `self` at a
@@ -614,7 +618,7 @@ assignment.
 A path of fields is proved like a name, at any depth. Its proof ends at an
 assignment to the path or to a path it is part of (`p.name = …`, `p = …`), at
 a `mut` hand-over of either (a `ref mut self` method called on it, a `mut`
-argument), and at a lambda, task, `async` child or `select` arm that sees
+argument), and at a lambda or a task (an `async` form, a `par_iter` element, a `select` arm) that sees
 the root; a write to a sibling (`p.age = 3`) and a call that only reads keep
 it. A read through an index or a call (`v[i].f`, `f().x`) is not a path and
 proves nothing. A binding in a condition (`if let v = x`, `if x is Some(v)`)
@@ -1170,7 +1174,7 @@ Three rules govern them:
   has nothing left to do.
 
 * **A jump does not leave a function.** A `break` whose loop is outside a
-  **lambda**, a **task** (`spawn`), an **`async` child** (8.1.2) or a DSL fold's step
+  **lambda**, a **task** (an `async` form, 8.1.2) or a DSL fold's step
   is refused. Each of those is a function of its own, and a jump is a jump to a
   place in the same function:
 
@@ -2138,10 +2142,11 @@ plain call, or a path: `users.map fn(user) { … }`,
 `numbers.reduce(0) fn(acc, n) { … }`, `access_all(a, b) fn(x, y) { … }`
 (Part II, 12.3), and the chain above.
 
-**A lambda directly after `async` is run, not bound.** `async let x = fn { … }`
-and `async fn { … }` run the lambda's body as a child (8.1.2); `return` in it
-ends the child with its value. A child whose value is a function is written
-`async let f = fn { fn { … } }`.
+**A lambda directly after `async` is run, not bound.** `let x = async fn { … }`,
+`async fn { … }` and the handle forms `async(handle) fn { … }`,
+`async(deferred) fn { … }` and `async(detached) fn { … }` run the lambda's body
+as a task (8.1.2); `return` in it ends the task with its value. A task whose
+value is a function is written `let f = async fn { fn { … } }`.
 
 **A lambda carries no effect marker.** A parameter list is followed by the body
 and by nothing else; `fn(info) sync { … }` is not one construct (7.2).
@@ -2175,14 +2180,14 @@ thread or task is a **detached context**.
 * **Behavior:** implicit move (ownership transfer) for ordinary data. A handle
   on a shared value is **duplicated** rather than moved, so the name outside
   stays usable (6.2).
-* **Examples:** `spawn`, `defer`, `set_timeout`, `channel.on_receive`.
+* **Examples:** `async(detached)`, `defer`, `set_timeout`, `channel.on_receive`.
 
 ```nika
 let prefix = "Log: "
 
-// 'spawn' is @detached. The lambda might outlive the current function.
+// 'async(detached)' is @detached. The lambda might outlive the current function.
 // 'prefix' is implicitly moved into the background task to ensure safety.
-spawn fn { println(prefix + "System started") }
+async(detached) fn { println(prefix + "System started") }
 
 // Compiler Error: 'prefix' has been moved!
 // println(prefix)
@@ -2191,7 +2196,7 @@ spawn fn { println(prefix + "System started") }
 #### C. Where the Distinction Lives
 
 The context belongs to the **function that takes the lambda**, not to the call.
-`map` is immediate for every caller and `spawn` is detached for every caller,
+`map` is immediate for every caller and `async(detached)` is detached wherever it is written,
 so the capture is decided where the lambda is written.
 
 **A function in user code declares a code parameter with a function type.** The
@@ -2210,7 +2215,7 @@ whether the call may pause, and the shape it is lowered to, follow the
 parameter's type. `std`'s own lambda-taking entries, such as `map`, are written
 by hand and follow the lambda in everything. For a kept parameter the
 callee's promises about pausing follow the type, so a `listen` that calls a stored
-`fn(Request) -> Response` may pause. The capture at a `spawn` is reported with
+`fn(Request) -> Response` may pause. The capture at an `async(detached)` is reported with
 `NK2101` (8.3).
 
 **A function type stands wherever a type does**: a struct field, a result, a
@@ -3320,7 +3325,7 @@ warned (`NK2404`): callers that name every type will stop building.
 was raised. The chain holds every error that joined on the way: a cleanup that
 failed while the stack was unwinding is attached to the original as a
 *secondary* error rather than replacing it (6.4), and so are the failures of
-`async` children nobody read when their group ends (8.1.2). The joined errors are kept in the order they
+tasks nobody read when their group ends (8.1.2). The joined errors are kept in the order they
 joined, each with its own site, and a log, an uncaught failure and
 `nikaia explain` show them under the first. They are a diagnostic, not a value:
 a program does not read them, and `throw error` hands them on. A `catch`
@@ -3330,7 +3335,7 @@ the compiler writes it into the binary as text.
 **An error that crosses an `async` boundary carries where it crossed.** Beside
 its site (where it was **raised**), it records where the child was
 **started** (the `async` form) and where the error **arrived** (the wait
-point, 8.1.2). A chain of bindings gives one started and arrived pair per
+point or the `join`, 8.1.2). A chain of bindings gives one started and arrived pair per
 crossing, in order, and each `secondary` error carries its own. Like the site,
 both are text the compiler writes into the binary, and nothing is recorded
 where nothing fails. The long form shows them as lines under the message:
@@ -3437,10 +3442,12 @@ A function that performs I/O, such as reading a file or downloading a URL,
 
 Within one task, the order is the written order: `let a = fs::read("x", root)`
 pauses, and the line after it does not run until `a` is there. What runs
-meanwhile is some *other* task; a pause never forks one. A task exists only
-where the program writes one (`spawn`, `par_iter`), and
-`.join()` on a handle is where two tasks meet again. The marker for waiting
-stands where something branches, and nowhere else.
+meanwhile is some *other* task; a pause never starts one. A task exists only
+where the program starts one: with `async` (8.1.2), as an element of a
+`par_iter` chain (Part II 12.6), as a `select` arm (Part II 12.4), or under a
+supervisor or a server. Where the program waits for one - the first use of its
+value, `h.join()`, its group's end - is where two tasks meet again. The marker
+for waiting stands where something branches, and nowhere else.
 
 ### 8.1.1. Statement Order Is the Written Order
 
@@ -3458,200 +3465,265 @@ assignments and `if`s, nothing that leaves. It does so in every build
 
 ### 8.1.2. Running Work Beside the Code After It: `async`
 
-**`async` starts a child.** A child runs beside the statements after it, its
-**window**, and is waited for at its **wait point**. There is no `await`, and
-`async` never stands before a function's declaration (`NK2115`): whether a
-function pauses is inferred (8.1).
+**What a task is.** Every task is started in a **group** and lives at most as
+long as the group. A **child task**'s group is a block or a call; a **free
+task**'s group is the process (8.2). A task borrows what outlives its group and
+takes what does not: a child task borrows what was bound outside its group, a
+free task takes everything it uses (8.3). Every task allocates from a memory
+block of its own (Part II, Chapter 12), and ends in one of four ways: with a
+value, a failure, a crash (`task::Crashed`) or a full block
+(`task::OverBudget`). That end goes to its group's receiver. Each form that
+starts tasks states only its group's policy:
+
+| Form | Its group | Policy |
+| :--- | :--- | :--- |
+| `async` (here) | the enclosing `async { }` or block | wait for all, keep every failure |
+| `par_iter` (Part II 12.6) | the call | per element: results in input order, every failure kept |
+| `select` (Part II 12.4) | the block | the first wins, the rest are cancelled |
+| `supervisor::run` (Part II 12.8) | the call | restart by strategy and policy |
+| `serve` (Part III) | the server | one per connection, by admission |
+| `async(detached)` (8.2) | the process | nobody waits but `main`'s end; a bound handle is the receiver |
+
+**`async` starts a task.** It is a prefix of an expression: it stands on the
+right of a `=`, as an argument, as an operand, or as an expression statement,
+and never before a `let`, a loop or a function's declaration (`NK2115`):
+whether a function pauses is inferred (8.1). The task runs beside the code after
+its start, its **window**, and is waited for at its **wait point**. There is no
+`await`.
 
 ```nika
-async let user = db::load_user(id)
-async let rights = db::load_rights(id)
+let user = async db::load_user(id)
+let rights = async db::load_rights(id)
 let prefs = cache::load_prefs(id)      // runs while both loads are in flight
 render(user, rights, prefs)            // waits for both first
 ```
 
-**The forms.**
+**The value form, `async e`,** starts `e` at once and hands back its value, waited
+for where the value is first needed:
 
-* **`async let x = e`** starts `e` as one child. Its wait point is just before
-  the first statement of the binding's block that names `x` anywhere in it:
-  in a nested block, a loop, a branch whether or not it is taken, a lambda. A
-  binding nothing names is waited for at the end of its group. The binding
-  takes the patterns and the written type a `let` takes (2.1); the first
-  statement naming any of its names waits.
-* **`async let xs = for v in vs { body }`** starts one child per element. `xs`
-  is a `Vec[T]` of the bodies' results, `T` the type of the body's last
-  expression, in the order of the elements, and is waited for as above. A body
-  that hands back nothing is refused (`NK2116`). Only `for … in` takes `async`
-  (`NK2117`).
-* **`async e`** and **`async for v in vs { … }`**, as statements, start children
-  whose value nobody reads; a value `e` hands back is dropped. They are waited
-  for at the end of their group.
-* **`async let x = fn { … }`** and **`async fn { … }`** run the lambda's body as
-  the child (5.3): a child of several steps. `return` in it ends the child,
-  with its value.
-* **`async { … }`** is a **group**: its statements run in order, as any
-  block's, and its `}` waits for every child started inside it. Its value is
-  its last expression's, once every child has ended. An `async { }` that starts
-  no child is refused (`NK2111`).
+* **A binding**, `let x = async e`: just before the first statement of the
+  binding's block that names `x` anywhere in it: in a nested block, a loop, a
+  branch whether or not it is taken, a lambda. A binding nothing names is
+  waited for at the end of its group. The binding takes the patterns and the
+  written type a `let` takes (2.1); the first statement naming any of its names
+  waits.
+* **An argument**: before the call that receives it. `f(async g(), async h())`
+  runs `g` and `h` beside each other and calls `f` when both are done;
+  `f(async g(), h())` runs `g` while `h()` computes on the main line.
+* **An operand**: before the operation, `let t = async a() + async b()`.
+* **A tuple**: `let (a, b) = (async g(), async h())` runs both.
 
-**The group.** A child belongs to the innermost `async { }` around it in the
-same function, loops and branches between them included; where there is none,
-to the innermost block that holds the `async` form. A child whose window is
-empty - nothing runs between its start and its wait point or its group's end,
-as in `for u in us { async fetch(u) }` - is refused (`NK2110`); the help writes
-`async for`.
+The callee never sees a pending value: `f` is handed a plain `T`, so no
+function's signature says whether its arguments were computed beside it. The
+value form has no handle and cannot be cancelled. Tasks start in the written
+order, left to right.
 
-**A child is not a task.** Nothing outlives its group. A child borrows what
-was bound outside its group, and the crossing rules a `spawn` meets (Part II,
-11.2) do not apply. What was bound inside the group, in a block that ends
-before the group does, such as an iteration's own names, the child takes with
-it as a task does (8.3). A `break`, `continue` or `return` that would leave a
-child is `NK1132`.
+**A task with nothing beside it is refused** (`NK2110`): `f(async g())` with no
+other argument computed beside it, a binding named in the very next statement,
+an `async` statement that ends its group. The help removes the word.
 
-**A child and the code beside it meet on nothing, and the compiler checks it.**
-A child is checked against every statement of its window, other children's
-starts included, and an iteration of an `async` loop against the other
-iterations. A pair that meets on a resource is refused with `NK2104`, and the
-message names the resource: an `async for` whose body writes to stdout is
-refused. A binding that the window changes - a `mut` method, an assignment, a
-`mut` argument - while a child names it is refused the same way, naming the
-binding. An iteration that changes a name bound outside it is `NK2107`. Two
-reads meet on nothing. A child this compiler cannot account for is not refused
-(Part III C.4). `--overlaps` reports each child, its window, its wait point and
-its group.
+**The handle forms.** An option after the word hands back a handle instead of
+the value. The option names `handle`, `deferred` and `detached`, and
+`task::ChildHandle`, are placeholders until the naming round.
 
-**A pending binding named in another child is waited for in that child.**
+* **`async(handle) fn { … }`** starts at once and hands back a
+  `task::ChildHandle[T]`, bound to the group. It borrows and needs no `Send` and
+  no heap: it points at the task's slot in its group. It has `join()` and
+  `cancel()`, which take it, and no `detach()`. A child handle that leaves its
+  group - returned past it, stored in a value that outlives it - is refused
+  (`NK2122`). One neither joined nor cancelled is waited for at its group's end,
+  and its failure goes to the group as an unread failure does.
+* **`async(deferred) fn { … }`** hands back a child handle whose task does not
+  run until `h.start()`. A deferred handle not started or cancelled on some
+  path, or started twice, is refused (`NK2121`). Its window begins at
+  `start()`.
+* **`async(detached) fn { … }`** starts a free task and hands back a
+  `TaskHandle[T]` (8.2). `detached` and `deferred` combine,
+  `async(detached, deferred) fn { … }`.
+
+**A task of several steps is a lambda.** `let x = async fn { … }`, `async fn {
+… }` and the handle forms run the lambda's body as the task (5.3): `return` in
+it ends the task with its value. A lambda that names an argument is refused
+(`NK2103`): a task is handed nothing.
+
+**`async e` as a statement** starts a task whose value nobody reads; a value it
+hands back is dropped. It is waited for at the end of its group.
+**`async xs.par_iter() … .collect()`** is one task that runs the whole chain
+(Part II 12.6) beside the code after it.
+
+**`async { … }` is a group**: its statements run in order, as any block's, and
+its `}` waits for every task started inside it. Its value is its last
+expression's, once every task has ended. An `async { }` that starts no task is
+refused (`NK2111`).
+
+**The group.** A child task belongs to the innermost `async { }` around it in the
+same function, branches between them included; where there is none, to the
+innermost block that holds the `async` form. **`async` starts only tasks whose
+number stands in the source**: an `async` form inside a loop's body is refused
+(`NK2120`), and the help writes `xs.par_iter().for_each fn(x) { … }`. A
+lambda's body is a function of its own (5.3), so a lambda written in a loop may
+hold one. What was bound inside the group, in a block that ends before the
+group does, the task takes with it as a free task does (8.3). A `break`,
+`continue` or `return` that would leave a task is `NK1132`.
+
+**A task and the code beside it meet on nothing, and the compiler checks it.**
+A bound task is checked against every statement of its window, other tasks'
+starts included; the tasks of one call's arguments and of one operation's
+operands are checked against each other and against what is computed beside
+them on the main line. A pair that meets on a resource is refused with
+`NK2104`, and the message names the resource: two tasks that both write to
+stdout are refused. A binding that the window changes - a `mut` method, an
+assignment, a `mut` argument - while a task names it is refused the same way,
+naming the binding. Two reads meet on nothing. A task this compiler cannot
+account for is not refused (Part III C.4). `--overlaps` reports each task, its
+window, its wait point and its group.
+
+**A pending binding named in another task is waited for in that task.**
 
 ```nika
-async let a = load(id)
-async let b = enrich(a)                // b's child waits for a
+let a = async load(id)
+let b = async enrich(a)                // b's task waits for a
 show(b)
 ```
 
-`b`'s child reads `a` beside a main line that reads it too; the main line
-waits for `a` where it first names it. Where `b`'s child takes `a` by value,
+`b`'s task reads `a` beside a main line that reads it too; the main line
+waits for `a` where it first names it. Where `b`'s task takes `a` by value,
 `a` is handed over where `b` starts, and a later mention of `a` is `NK2105`.
-Two children that read `a` read the one value. Where `a` fails, the first
-mention of it in written order receives the failure, and every other child that
+Two tasks that read `a` read the one value. Where `a` fails, the first
+mention of it in written order receives the failure, and every other task that
 waits for `a` is cancelled.
 
-**Options.** `async(limit: n, within: d, admission: s)` stands before `let`,
-`for`, `{`, `fn` or the expression.
+**Options.** `async(limit: n, within: d, admission: s)` stands before `{` and
+before the task's expression; options and the handle options are written in
+one list, without a positional zone.
 
-* **`limit: i64`**: at most `n` children of the form at once; the others wait,
-  unstarted, in written and input order. A child is under every `limit` around
-  it. Below `1` it panics, naming the option. A form that starts one child does
-  not take it (`NK2112`). `limit: 1` written as the literal runs the children
-  one at a time, in order, and they are not checked against each other.
-* **`within: time::Duration`**: counted from where the form starts. When it runs
-  out, its children still running are cancelled, and the wait point throws
-  `task::TimedOut`; for a statement form and a group, the group's end does.
-* **`admission: task::Admission`**: who decides when the next child starts
+* **`limit: i64`** on an `async { }`: at most `n` of its tasks at once; the
+  others wait, unstarted, in written order. A task is under every `limit`
+  around it. Below `1` it panics, naming the option. A form that starts one
+  task does not take it (`NK2112`). `limit: 1` written as the literal runs the
+  tasks one at a time, in order, and they are not checked against each other.
+* **`within: time::Duration`**: counted from where the form starts. When it
+  runs out, its tasks still running are cancelled, and `task::TimedOut`
+  arrives where the value or the join is; for a statement form and a group,
+  at the group's end. Whether it should count from where the wait starts
+  instead is open ([ADR-async-3](adr/adr-async-3.md) §7).
+* **`admission: task::Admission`**: who decides when the next task starts
   (Part II, Chapter 12).
 
-**Admission.** Every child allocates from a memory block of its own, as a task
-does (Part II, Chapter 12). A child starts only where its block fits the budget of
-the task that runs the group and a descriptor is free; otherwise it waits,
-unstarted, until a sibling ends. `limit:` caps on top of that. At the
-system's ceiling of descriptors a child waits; it never fails for it.
+**Admission.** A child task starts only where its block fits the budget of the
+task that runs the group and a descriptor is free; otherwise it waits,
+unstarted, until a sibling ends. `limit:` caps on top of that. At the system's
+ceiling of descriptors a task waits; it never fails for it.
 
-**A failure is held until the wait point, and three places can handle it.**
+**Cancelling is through a handle only.** `h.cancel()` stops the task at its
+current pause; its values are torn down and its outcome, a failure included,
+is dropped. It takes the handle. The group's end waits until a cancelled child
+task has stopped, its cleanups included. A value form cannot be cancelled; a
+program that may want to writes `async(handle) fn { e }`. `within:` cancels by
+itself.
+
+**A failure is held until it arrives, and the same handlers meet it in every
+form, in this order.**
 
 ```nika
-async let page = http::get(url) catch { Page::empty() }   // the binding's fallback
-let size = page.len() catch { 0 }                          // a catch at the use
+let page = async http::get(url) catch { Page::empty() }   // the fallback
+let size = page.len() catch { 0 }                          // a catch where it arrives
+let h = async(handle) fn { crawl(site) } catch { [] }     // a handle's fallback
+let found = h.join() catch { [] }                          // a catch where it arrives
 ```
 
-1. **In the child.** A `catch` inside the child's expression or lambda is the
-   child's own and runs when the child fails.
-2. **At the use.** Otherwise the failure is held, and nothing runs for it until
-   the wait point. It arrives where the mention of `x` that runs is evaluated;
-   a `catch` that encloses that mention and lies inside the binding's block
-   handles it.
-3. **At the declaration.** Otherwise the `catch` written directly after the
-   initializer of the `async let` runs there, late: its value becomes `x`'s
-   and the statement goes on with it.
+1. **In the task.** A `catch` inside the task's expression or lambda is the
+   task's own and runs at once, when the task fails.
+2. **Where it arrives.** Otherwise the failure is held, and nothing runs for it
+   until it arrives: at the mention that waits, for the value form, or at
+   `h.join()`, for a handle. A `catch` that encloses that point handles it.
+3. **The fallback.** Otherwise the `catch` written directly after the `async`
+   expression runs, the last handler before the receiver: for the value form
+   at the wait point, its value becoming the value; for a handle inside the
+   join, its value becoming the join's; for a detached task nobody joins, in
+   the task itself when it fails.
+4. **The receiver.** Otherwise the failure leaves from the wait point or the
+   join as a thrown error does, or, read by nobody, it is the group's at its
+   end (below); a detached task's goes to standard error (8.2).
 
-With none of them the failure leaves from the wait point as a thrown error
-does. Which handler runs depends on the path that reaches the mention. Once a
-`catch` at a use has taken the failure, a later mention of `x` on that path is
-refused unless the binding has a fallback (`NK2118`). The function throws what
-the fallback throws, or the child's whole set where there is no fallback.
+A cancellation is not a failure and runs no fallback; `task::OverBudget` is
+one and runs it. Which handler runs depends on the path that reaches the
+mention. Once a `catch` where the failure arrived has taken it, a later mention
+of `x` on that path is refused unless the binding has a fallback (`NK2118`).
+The function throws what the fallback throws, or the task's whole set where
+there is no fallback.
 
 **A failure nobody read is thrown at the end of the group.** It is a failure
-of a statement form, of a binding nothing names, or of one whose mention did
-not run; a binding's fallback runs for it there. Where the group ends normally
-(its last statement, a `return`, a `break`), the first such failure in written
-order (for an `async` loop, input order) is thrown, and the others travel as
-its `secondary` list, in written order. Where a failure leaves the group, the
-group waits for every child, and that failure leads; the unread failures are
-its `secondary` list, in written order. Leaving a group waits for its children
+of a statement form, of a binding nothing names, of one whose mention did
+not run, or of a child handle nobody joined; a fallback runs for it there.
+Where the group ends normally (its last statement, a `return`, a `break`), the
+first such failure in written order is thrown, and the others travel as its
+`secondary` list, in written order. Where a failure leaves the group, the
+group waits for every task, and that failure leads; the unread failures are
+its `secondary` list, in written order. Leaving a group waits for its tasks
 and cancels none.
 
-**A child that panics cancels its siblings**, and the group throws
-`task::Crashed` where it ends. A child whose memory block is full ends with
+**A task that panics cancels its siblings**, and the group throws
+`task::Crashed` where it ends. A task whose memory block is full ends with
 `task::OverBudget` (Part II, Chapter 12) and fails only itself.
 
-**`task::cancel(x)`** stops a pending binding: one child, or every child of an
-`async let … = for`. It is the one mention of `x` that does not wait. The
-child stops at its current pause and its values are torn down; its outcome,
-a failure included, is dropped. The group's end waits until it has stopped,
-its cleanups included. A mention of `x` after it on any path is refused
-(`NK2114`), and so is an argument that is not a pending `async let` binding
-(`NK2113`).
-
 **A body that holds an `async` form pauses**, so it is not `sync`, whatever
-its children do (Part II, 12.1). A child that never pauses runs on the pool
-where children run in parallel; at `no`, it runs when the main line next
-pauses or waits, so that the pausing children written before that point are
-started first. A child that pauses is run by its group, on the group's thread,
-and is never handed to the runtime. An `async` form inside an open lock is
-refused (`NK2203`).
+its tasks do (Part II, 12.1). A task that never pauses runs on the pool
+where tasks run in parallel; at `no`, it runs when the main line next
+pauses or waits, so that the pausing tasks written before that point are
+started first. A child task that pauses is run by its group, on the group's
+thread, and is never handed to the runtime. An `async` form inside an open lock
+is refused (`NK2203`).
 
 **The meaning is the same at both values of `user_parallelism`; the duration
-differs.** At `no`, a child that computes still overlaps with another child's
+differs.** At `no`, a task that computes still overlaps with another task's
 *waiting*, because the waiting is not user code. Computation beside I/O
 overlaps under both values; computation beside computation overlaps only under
 `yes` (1.2).
 
-### 8.2. Spawning Tasks
-`spawn` starts a new independent task. It takes a lambda holding the code to
-run: the one lambda form (5.3), whose body is a block whether it holds one line
-or several.
+### 8.2. Free Tasks: `async(detached)`
+`async(detached)` starts a **free task**: its group is the process, so it may
+keep running after the function that started it has ended. It takes a lambda
+holding the code to run: the one lambda form (5.3), whose body is a block
+whether it holds one line or several.
 
 ```nika
-spawn fn { println("I am running in the background!") }
+async(detached) fn { println("I am running in the background!") }
 ```
 
-A task does not end the program. An error that arrives in a task ends the task, `process::Exit` (7.1) included, and every such error has a receiver ([ADR-346](adr/adr-346.md)):
+`spawn fn { … }`, the form this replaces, is still accepted and means the same
+until every program is moved; then `spawn` is released ([ADR-async-3](adr/adr-async-3.md) D5).
 
-* **A `spawn` whose result is not bound is detached:** nobody waits for it. If it ends with an error, the error is printed on standard error in the long form of an uncaught error; a fatal one (7.1) also replaces the exit status, at the end of `main` and not earlier, the first one counting (Part III A.2).
-* **A bound handle is used up before it leaves its scope.** `let h = spawn fn { … }` binds a `TaskHandle[T]`, and on every path out of the scope it is taken by `h.join()`, `h.join(within: d)`, `h.detach()` or `h.cancel()`, or handed on: returned, stored in a field or a container, or passed to a function. A handle taken in only one branch is not taken; otherwise `NK2109`.
-* **`h.join()` throws what the task's body throws**, beside `task::Crashed` for a task that panicked, and takes the ordinary way: a `catch`, or `throws` on the joiner. A fatal error nobody catches reaches `main` and sets the exit status there.
+A free task does not end the program. An error that arrives in a task ends the task, `process::Exit` (7.1) included, and every such error has a receiver ([ADR-346](adr/adr-346.md)):
+
+* **An `async(detached)` whose result is not bound is detached:** nobody waits for it. If it ends with an error that its fallback (8.1.2) does not handle, the error is printed on standard error in the long form of an uncaught error; a fatal one (7.1) also replaces the exit status, at the end of `main` and not earlier, the first one counting (Part III A.2).
+* **A bound handle is used up before it leaves its scope.** `let h = async(detached) fn { … }` binds a `TaskHandle[T]`, and on every path out of the scope it is taken by `h.join()`, `h.join(within: d)`, `h.detach()` or `h.cancel()`, or handed on: returned, stored in a field or a container, or passed to a function. A handle taken in only one branch is not taken; otherwise `NK2109`.
+* **`h.join()` throws what the task's body throws**, beside `task::Crashed` for a task that panicked and `task::OverBudget` for one whose block was full, and takes the ordinary way: a `catch`, or `throws` on the joiner. A fatal error nobody catches reaches `main` and sets the exit status there.
 * **`h.join(within: d)` waits at most `d`.** When it runs out, the task is cancelled as `cancel()` cancels it, its cleanups run, and the call throws `task::TimedOut`.
-* **`h.detach()`** makes a bound handle's task detached, as an unbound `spawn` is.
+* **`h.detach()`** makes a bound handle's task detached, as an unbound one is.
+* **`async(detached, deferred) fn { … }`** does not run until `h.start()`, as a deferred child task does (8.1.2).
 
 ```nika
-let h = spawn fn { fetch(url) }
+let h = async(detached) fn { fetch(url) }
 let page = h.join(within: 5.seconds()) catch {
     match error { task::TimedOut => "", else => throw error }
 }
-spawn fn { log_forever() }            // detached
-let w = spawn fn { watch() }
+async(detached) fn { log_forever() }  // detached
+let w = async(detached) fn { watch() }
 w.detach()                            // detached as well
 ```
 
-### 8.3. Data Ownership in Tasks (Implicit Move)
-A background task may keep running after the function that started it has
+### 8.3. Data Ownership in Free Tasks (Implicit Move)
+A free task may keep running after the function that started it has
 finished, so it does not borrow. Under the contextual capture rules (5.4),
-`spawn` is a **detached context**: a variable used inside the task is **moved**
-into it. There is no `move` keyword.
+`async(detached)` is a **detached context**: a variable used inside the task is
+**moved** into it. There is no `move` keyword.
 
 ```nika
 let message = "Hello"
 
-// 'message' is implicitly moved into the task (spawn is @detached)
-spawn fn { println(message) }
+// 'message' is implicitly moved into the task (detached)
+async(detached) fn { println(message) }
 
 // Compiler Error: 'message' now belongs to the task.
 // println(message)
@@ -3670,7 +3742,7 @@ task's own copy and leaves nothing for the parent.
 ```nika
 let message = "Hello"
 let copy = message.clone()   // made here, while `message` is still ours
-spawn fn { println(copy) }   // the copy is what moves into the task
+async(detached) fn { println(copy) }   // the copy is what moves into the task
 println(message)             // OK: `message` never left
 ```
 
@@ -3683,7 +3755,7 @@ error[NK2101]: You're using `message` after a background task took it.
  4 |     println(message)
    |     ^
    |
-   = note: A task started with `spawn` may outlive this function, so it takes the variables it uses with it. `message` is a `String`, so it went to the task.
+   = note: A task started with `async(detached)` may outlive this function, so it takes the variables it uses with it. `message` is a `String`, so it went to the task.
    = note: Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.
    = help: Make a copy before starting the task and give the task the copy: `let copy = message.clone()`, then use `copy` inside the task.
 ```
@@ -3695,7 +3767,7 @@ after the task is built is not refused, and no `.clone()` is written.
 away. A number, a `bool`, a `scalar` and a **view** are copied, so
 `let message = "Hello"` is not this case and `let message: String = "Hello"`
 is. An **assignment** between the task and the later use clears it. The form
-above is the one spelling of a `spawn`, the trailing lambda of 5.3. A lambda
+above is the one spelling of a free task, the trailing lambda of 5.3. A lambda
 that **names** an argument is refused with `NK2103`: a task is handed nothing.
 
 **A task means the same thing at both values of `user_parallelism`.** At `yes`
