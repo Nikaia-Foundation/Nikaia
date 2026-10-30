@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1314] — 2026-10-30
+
+**ADR-grammar-2 accepted: a grammar entry takes a type and is emitted per type; members[S] builds the struct; json::read forwards to the grammar (#604)**
+- A grammar rule or entry may take type parameters in brackets (`Json::read[Contact](bytes)`); the grammar is emitted once per list of type arguments, and a `match` on `T::kind` in a rule body chooses the pattern, only the arm the type takes emitted (Part II 10.8, ADR-grammar-2 D1, D2).
+- `members[S](key, value, sep; name:, null:, unknown:)` builds a struct from named members; the compiler matches keys to fields and builds the value by one mapping rule, shared with SQL's `dsl … -> T` (ADR-299 D16-D18), so no construction from reflected fields is needed (D3-D5, D9).
+- `json::read[T]` forwards to the package grammar's entry `Json::read[T]`; `parse` is its second entry; `write[T]` stays a function over `T::fields` (ADR-344 D3, D6a changed; D8, D10).
+- `NK1233` is narrowed: no warning where the brackets alone name the type (ADR-330 D9 changed; ADR-grammar-2 D11). `NK1250` covers a type no arm of a grammar's kind match takes, or that an arm `refuse`s, a type with a text form of its own and an enum variant with a payload (D6, D12, D13); an enum variant without payload is written as its name.
+- New codes, specified and not built: `NK1310` a `match` in a pattern on a value not known while building, `NK1311` two fields with one name in the input, `NK1312` a field `name:` leaves unread with no default and not a `T?`.
+- Not built: the build waits on #859; the grammar of the `json` package also on a grammar exported by a package (#520).
+
 ## [0.0.1313] — 2026-10-30
 
 **ADR-277 D17: a trait method's keeps column (#1012); sum() names its type (#1007); a returned map read of literal text is copied (#996); a binding inside a bound text(..) is kept (#1013)**

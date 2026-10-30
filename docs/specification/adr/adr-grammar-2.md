@@ -1,7 +1,7 @@
 # ADR-grammar-2: A Grammar Entry May Take a Type, and the Compiler Builds a Parser per Type; `members[S]` Fills a Struct by the Compiler's Rules, So a Typed Read Is a Grammar and Not a Library Walk
 
-**Status:** Open (the proposal below is the recommendation; four points in §6 need the owner)
-**Date:** October 30, 2026
+**Status:** Accepted
+**Date:** October 30, 2026 (owner's decision on the architect's proposal, with the four recommendations of D11-D13 and D10)
 **Answers:** how an official package offers a typed read, `json::read[T](text)`,
 so that it is a parser specialised for `T` built from the package's grammar,
 rather than a library function that walks `T::fields` and needs a way to build
@@ -116,7 +116,7 @@ works as any build-time call does (Part II 10.2).
 
 Each arm is a pattern with its own actions, checked under the kind its pattern
 names (ADR-330 D4). The match need not name every kind (D6). A `match` in a
-pattern on a value not known while building is refused (new code).
+pattern on a value not known while building is refused (`NK1310`).
 
 ### D3 — `members[S](key, value, sep; name:, null:, unknown:)` builds an `S: Struct` from named members; the compiler owns the matching and the building.
 
@@ -130,13 +130,14 @@ Part II and shared with ADR-299 D16-D18:
 
 * a missing member takes the field's default, else `null` in a `T?`, else it
   is an error;
-* a member that matches `null:` goes only into a `T?` (ADR-344 D4);
+* a member that matches `null:` goes into a `T?`, into any other field it
+  takes the field's default, else it is an error (ADR-344 D4);
 * a member given twice is an error;
 * an unknown member is an error unless `unknown:` names a rule that skips it.
 
-Refused while building, at the call: two fields with one wire name (new code);
-a field that `name:` leaves unread, with no default and not a `T?` (new code); a
-field type no arm covers (D6). While running, a failure is the grammar's
+Refused while building, at the call: two fields with one wire name
+(`NK1311`); a field that `name:` leaves unread, with no default and not a `T?`
+(`NK1312`); a field type no arm covers (D6). While running, a failure is the grammar's
 `ParseError`; the field names and indices on its stack are the path
 (`$.contacts[3].email`, ADR-344 D3). No half-built struct exists in the
 language, and `field.set` stays `NK1180`.
@@ -189,12 +190,42 @@ driver, so there is no text to parse while running. SQL keeps its strict
 settings (no extra columns, no missing fields, ADR-299 D17) and checks them
 while building; JSON uses its own and checks them while running.
 
-### D10 — The `json` package offers `pub grammar Json` with the entries `read[T]` and `parse`.
+### D10 — The `json` package offers `pub grammar Json` with the entries `read[T]` and `parse`, and `json::read` stays, forwarding to it.
 
 `json::read[T](input; comptime schema: …)` is a `pub fn` of one line that runs
-ADR-344 D6's schema check while building and calls `Json::read[T]`. `parse`
-stays the entry for JSON of unknown shape (ADR-344 D6a). The hand-written
-reader is retired.
+ADR-344 D6's schema check while building and calls `Json::read[T]`: the
+spelling programs write does not change, and it is where `schema:` stands.
+`parse` stays the entry for JSON of unknown shape (ADR-344 D6a). The
+hand-written reader is retired.
+
+### D11 — A type argument is written in brackets, and a call whose type argument fills no value parameter's type is not warned.
+
+```nika
+let c = json::read[Contact](bytes)        // no NK1233: nothing else says what T is
+let n = parse[Config](text)               // still warning[NK1233] where the form is not needed
+```
+
+ADR-330 D9's `NK1233` is narrowed to calls where a value argument's type could
+have said the type. `read(Contact, bytes)`, a type in a value's place, stays
+`NK1230`: a type and a value are told apart by where they stand.
+
+### D12 — A type with a text form of its own is refused as a field, until a record decides how a grammar meets it.
+
+`json::Value` as a field, `time::Instant`, a `@json::Rest` field collecting the
+skipped members: each needs an arm that names an exact type or is guarded by a
+bound, which D2 does not have. Until that is decided such a field is `NK1250`
+at the call, with its path.
+
+### D13 — An enum variant without a payload is written as its name; a variant that carries one is refused for now.
+
+```nika
+enum Mode { Fast, Safe }
+struct Job { mode: Mode }      // {"mode": "Fast"}
+```
+
+The name is the wire name of D4 (an attribute may rename it). A variant with a
+payload is `NK1250` until its form (a tag member, an object of one member) is
+decided.
 
 **Rejected.** A library walk with a constructor from fields (Option A): a
 second way to build a struct, and a scanner outside the grammar. `field.set`:
@@ -207,14 +238,14 @@ there is no text to parse while running.
 
 ## 5. Consequences
 
-* ADR-344 D3, D6a and §5 are rewritten when this is accepted; its D4, D5 and
-  D8 become JSON's settings of D3. ADR-330 D7's reason gains a sentence: a
+* ADR-344 D3, D6a and §5 say what holds now; its D4, D5 and D8 are JSON's
+  settings of D3. ADR-330 D7's reason gains a sentence: a
   grammar still names no type of the program, it receives one from its caller,
   as a generic function in a package does. ADR-299 D16-D18 point to D3's rule.
 * Part II gains text in 10.8 (type parameters on rules, `match` in a pattern,
   `members`, `refuse`, `@stream`, `Value[_]`), the mapping rule in 10.3 or a
   section of its own, and generic frames in 10.7; Part III 17.3 and Appendix
-  C.3 follow. `NK1250` is widened and three codes are new.
+  C.3 follow. `NK1250` is widened, `NK1233` narrowed (D11), and `NK1310`-`NK1312` are new.
 * The build waits on #859 steps 1-4; the package step also on a grammar
   exported by a package (#520, #485). The first slice is a grammar local to the
   program. Its speed is shown by a benchmark in `benches/json/` against
@@ -227,19 +258,7 @@ there is no text to parse while running.
 
 ## 6. What this does not decide
 
-Four points for the owner, each with the recommendation:
-
-1. **The call's spelling**: `Json::read[Contact](bytes)` or
-   `read(Contact, bytes)`. Recommended: brackets, with `NK1233` narrowed so it
-   does not warn where the type parameter fills no value parameter (the use
-   case #514 collects).
-2. **Types with a text form of their own** (`json::Value` as a field,
-   `time::Instant`, `@json::Rest`): an arm guarded by a bound, or one naming an
-   exact type. Recommended: a decision round of its own; until then such a
-   field is `NK1250`.
-3. **How an enum looks in JSON.** Recommended: a variant without a payload by
-   its name now; variants that carry one later.
-4. **Whether `json::read` stays a forwarding function.** Recommended: yes; the
-   spelling is stable and it carries `schema:`.
-
-A reader input (a pipe, a socket) is left to a later record (D7).
+* **How a grammar meets a type with a text form of its own** (D12): an arm
+  naming an exact type, or one guarded by a bound. A decision round of its own.
+* **The JSON form of a variant that carries a payload** (D13).
+* **A reader input** (a pipe, a socket) for an entry (D7).

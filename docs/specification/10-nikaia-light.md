@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1313 (Draft)
+**Version:** 0.0.1314 (Draft)
 **Date:** 2026-10-30
 
 ---
@@ -1867,8 +1867,10 @@ A type parameter is written, never inferred. **Inside the body it is a type**:
 list may hold the type itself, `fn schema[T](T)`; the call then writes a type
 there, `schema(User)`, and the function needs no value of it (Part II 10.3).
 A call may also name a function's type arguments in brackets, `parse[Config](text)`;
-the types fill the type parameters in order, and the call is warned with
-`NK1233` ([ADR-330](adr/adr-330.md) D9).
+the types fill the type parameters in order. The call is warned with `NK1233`
+([ADR-330](adr/adr-330.md) D9) where a value argument's type could have said
+the type, and not where the brackets are the only place that says it,
+`json::read[Contact](bytes)` ([ADR-grammar-2](adr/adr-grammar-2.md) D11).
 
 **A type may take values as well as types in its brackets** ([ADR-333](adr/adr-333.md)), as
 `Array[f64, 3]` takes its length. A value parameter is marked `comptime` and written with its

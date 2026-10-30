@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1313 (Draft)
+**Version:** 0.0.1314 (Draft)
 **Date:** 2026-10-30
 
 ---
@@ -422,7 +422,7 @@ The `dsl` keyword embeds **foreign syntax** in a Nikaia file: SQL, HTML, regex, 
 
 **How a row's fields are named** ([ADR-299](adr/adr-299.md) D12-D14). The row has one field per table of the query, named by its alias or its table, holding that table's columns, and one flat field per column whose name is unique in the row: `u.a.id`, and `u.name` where only one column is called `name`. Where two columns share a name, or a column is named as a table or an alias is, neither is a flat field, and reading it is `NK1107`, whose help names the qualified paths and `AS`. A column named with `AS` is a flat field. A column whose name cannot be a field is refused at the query, asking for `AS`. A database driver's grammar reads the statement and the schema and declares one column per result column. The schema is a build-time argument of the block, `dsl sqlite::Sql(schema: APP) { … } eod`, resolved from a `comptime` value. A column the schema lacks is refused by the grammar at the query, while the program is built. The compiler does not understand SQL; the driver owns the grammar, and a vendor's database is a package.
 
-**A block may name the struct its rows are** ([ADR-299](adr/adr-299.md) D15-D19): `dsl sqlite::Sql(schema: APP) -> Contact { … } eod`, and each row is a `Contact`. Columns match fields by name, never by position: a field of a scalar type matches the flat column of its name, a field of a struct type named like an alias or a table matches that table's columns, by the same rules. Every column needs a field (`NK1219`) and every field a column (`NK1220`); `extra_columns: true` leaves a column without a field unread, and `missing_fields: true` makes a `T?` field without a column `null`. Both are the compiler's, taken from any block with `-> T` and never handed to the grammar. A flat field whose name two tables' columns share is `NK1222`. A column that may be `NULL` goes only into a `T?` field (`NK1221`); one that cannot may go into either. A `NULL` that reaches a field that is not a `T?` while the program runs makes `execute` fail with an error naming the field, the column and its table. A field is a scalar, its `T?`, or a struct for a group; anything else is `NK1218`.
+**A block may name the struct its rows are** ([ADR-299](adr/adr-299.md) D15-D19): `dsl sqlite::Sql(schema: APP) -> Contact { … } eod`, and each row is a `Contact`. Columns match fields by name, never by position: a field of a scalar type matches the flat column of its name, a field of a struct type named like an alias or a table matches that table's columns, by the same rules. Every column needs a field (`NK1219`) and every field a column (`NK1220`); `extra_columns: true` leaves a column without a field unread, and `missing_fields: true` makes a `T?` field without a column `null`. Both are the compiler's, taken from any block with `-> T` and never handed to the grammar. A flat field whose name two tables' columns share is `NK1222`. A column that may be `NULL` goes only into a `T?` field (`NK1221`); one that cannot may go into either. A `NULL` that reaches a field that is not a `T?` while the program runs makes `execute` fail with an error naming the field, the column and its table. A field is a scalar, its `T?`, or a struct for a group; anything else is `NK1218`. These are the mapping rule of 10.8's `members[S]` with SQL's settings: the strictest, checked while building ([ADR-grammar-2](adr/adr-grammar-2.md) D9).
 
 **Example: Embedding SQL**
 SQL written in a `dsl` block is verified while the program is built, against the
@@ -557,7 +557,9 @@ rule MEASUREMENT -> Reading =
     name:NAME ";" => temp:TENTHS frame_end { Reading { name, temp } }
 ```
 
-A bare `@frame` takes the boundary from the rule's trailing literal. A frame that ends in `frame_end` names the boundary in the attribute. A frame must end in its boundary. A frame is usually a **lexical** (uppercase) rule. A syntactic one, and a syntactic rule a frame reaches, is accepted where the whitespace it skips cannot consume the boundary: a grammar's own `WS` is walked like any other rule, and the default `WS` is refused for a boundary it can match, such as `"\n"`.
+A frame may take types, as any rule may (10.8): `par_fold` over a generic
+`@frame` rule folds one copy per type, `init`, `step` and `merge` handed in as
+the rule's values. A bare `@frame` takes the boundary from the rule's trailing literal. A frame that ends in `frame_end` names the boundary in the attribute. A frame must end in its boundary. A frame is usually a **lexical** (uppercase) rule. A syntactic one, and a syntactic rule a frame reaches, is accepted where the whitespace it skips cannot consume the boundary: a grammar's own `WS` is walked like any other rule, and the default `WS` is refused for a boundary it can match, such as `"\n"`.
 
 **The declaration is checked, and a pattern is never rewritten.** The boundary may not appear *inside* a frame. The compiler walks everything the rule can reach, and each element that consumes input is one of two things:
 
@@ -629,6 +631,64 @@ grammar Yml {
 }
 ```
 
+**A rule may take types** ([ADR-grammar-2](adr/adr-grammar-2.md) D1, D2), in
+brackets before its values: `entry rule read[T] -> T = v:Value[T] eof -> { v }`.
+A call of the entry writes them, `Json::read[Contact](bytes)`, and a rule hands
+them on, `Value[A]`; a bound may stand on one (`[S: Struct]`), and a value
+where a type belongs is `NK1230`. The grammar is emitted once per list of type
+arguments the program calls it with, the copies shared between calls and
+counted against the build's budget; the generic rule itself is not emitted. In
+a rule body, **a `match` on a kind chooses the pattern**: each arm is a pattern
+with its own actions, checked under the kind it names (Part I 4.7, `T::kind`),
+and only the arm the type takes is emitted. It need not name every kind: a
+type that reaches no arm is refused at the call with `NK1250`, naming the
+field's path and the rule, and an arm may say why with `refuse("…")`. A
+`match` in a pattern on a value not known while building is `NK1310`.
+
+```nika
+pub grammar Json {
+    entry rule read[T] -> T = v:Value[T] eof -> { v }
+    rule Value[T] -> T = match T::kind {
+        Struct(_) => Object[T]
+        List(A)   => "[" xs:list(Value[A], ",") "]" -> { xs }
+        Maybe(A)  => "null" -> { null } | v:Value[A] -> { v }
+        Text      => Str
+        Map(K, V) => match K::kind { Text => MapObj[K, V], _ => refuse("a JSON object's keys are text") }
+    }
+    rule Object[S: Struct] -> S =
+        "{" => m:members[S](Key, Value[_], ","; name: wire_name, null: Null, unknown: Skip) "}" -> { m }
+    …
+}
+```
+
+**`members[S]` builds a struct, and the compiler owns it** ([ADR-grammar-2](adr/adr-grammar-2.md) D3-D5).
+`members[S](key, value, sep; name:, null:, unknown:)` reads members `key value`
+separated by `sep`, in any order, and yields an `S`. `value` is a rule with
+`_` for its type, applied with each field's type. `name:` is a build-time
+function over a reflected field giving its name in the input, or `null` for a
+field the input never names; the format reads its own attributes there
+(`f.attribute(Name)`). How a key is matched to its field is the compiler's
+(Part II 10.2), and `unknown:`'s rule builds nothing. A text with no escape is
+a view of the input. **The mapping rule**, one for every format and for SQL's
+`-> T` (10.5):
+
+* a field the input does not give takes its default, else `null` in a `T?`,
+  else the parse fails;
+* a member that matches `null:` goes into a `T?`; into any other field it
+  takes the field's default, else the parse fails;
+* a member given twice fails the parse;
+* a member no field takes fails the parse, unless `unknown:` names a rule that
+  skips it.
+
+Refused at the call, while building: two fields with one name in the input
+(`NK1311`); a field `name:` leaves unread with no default and not a `T?`
+(`NK1312`). While running a failure is the entry's `ParseError`; the field
+names and list indices on its stack are the value's path (`$.contacts[3].email`).
+
+**An entry marked `@stream`**, whose body repeats an item on a fixed path,
+hands its items over one at a time instead of a list (D7); a generic `@frame`
+rule may be folded in parallel (10.7).
+
 **An action may not pause.** A call that can pause is refused where it stands
 with `NK2209`. A fold's `init`, `step` and `merge` are action code. An action
 may **fail**, which is what an entry's `throws` is about: an entry throws
@@ -690,6 +750,8 @@ and `rule WS = "" { }` skips nothing.
 | `eof` | the end of the input | nothing |
 | `frame_end` | the boundary of the enclosing `@frame` (10.7) | nothing |
 | `fail("message")` | never; fails with the message | — |
+| `refuse("why")` | in an arm of a `match` on a kind: the type that takes this arm is refused at the call with `NK1250` and the reason | — |
+| `members[S](key, value, sep; name:, null:, unknown:)` | members of the struct `S` in any order, by the mapping rule above | an `S` |
 | `recover(p, sync)` | `p`, and where `p` fails, skips to `sync` and reports the failure without stopping the parse | `p`'s value or the report |
 | `list(item, sep)` | `item`, separated by `sep`, zero or more | a list |
 | `fold(p, init, step)` | `p` repeated, each value folded into an accumulator started from `init`; nothing is collected | the accumulator |
