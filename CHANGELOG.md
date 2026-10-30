@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1309] — 2026-10-30
+
+**check, emit: a let-bound lambda takes its parameter types from its first use (#997); text tiers: `to_string()` of a number, bool or char is new text, also of a part a pattern binds (#998)**
+- A lambda bound by `let` without types takes its parameter types from the first call it is handed to, and a map read as its last value is copied out.
+- `.to_string()` of a number, `bool` or `char`, also one a `match` arm binds, now hands back text of its own instead of a view that NK2302 or NK1104 refused.
+
 ## [0.0.1308] — 2026-10-30
 
 **The concurrency design is closed (ADR-async-2 D9, ADR-async-3 D7, ADR-async-4 D13-D15, #983).** `async` and `sync` stay, and the option names `handle`, `deferred`, `detached` and `on_timeout` are final. `within:` on `async(...)` is a deadline from the start on every form; the `task::TimedOut` it gives is a failure and meets the use-site `catch`, then the fallback, then the receiver. `h.join(within: d)` limits that wait: when it runs out, `task::TimedOut` belongs to the join, the task keeps running and the handle stays live (`NK2109` asks for it to be taken on that path too); `on_timeout: task::OnTimeout::Cancel` cancels it instead (changes ADR-346 D3, D4). The lambdas of `fold`, `par_pieces` and `par_fold` never pause (`NK2209`, whose help names `map` then `fold`). Part I 8.1 is now "Pausing Without Marking Functions", and Part II 11.1 "Implicit Pausing and the Scheduler". Nothing of it is built yet (#984-#991).
