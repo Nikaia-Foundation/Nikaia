@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1312] — 2026-10-30
+
+**an impl's method keeps what its trait method keeps (#1008)**
+- Programs that hand a callback through a trait method now run: an impl's method keeps the fn parameters its trait method keeps (#1008).
+
 ## [0.0.1311] — 2026-10-30
 
 **sets are walked by `iter()`; a kept function value is handed on more than once (#1006, #1008)**
