@@ -1,0 +1,195 @@
+use std::collections
+
+/// **Compile and run an initialiser** (ADR-321 D1): `value`, standing in
+/// `files[here]`, of type `ty`, with every file of the program around it and
+/// `known` for what earlier `comptime`s came to. The rule is asked first
+/// (D2), of the ledger entry derived for the function that hands the value
+/// back: every call it reaches, by name or on a value.
+pub fn comptime_compute(files: ref Vec[Parsed], here: i64, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> Value? sync, typed: fn(ref String) -> Ty? sync, library: ref Ledger, workshop: ref Workshop, bounds: Bounds, outer: Ledger?) -> Computed {
+    // **The sub-program's own inference and lowering compute no default
+    // again**: they read the same functions, and a default compiled while a
+    // default is compiled is the same question asked without end. Where the
+    // program's ledger is at hand, they read what it recorded (#468).
+    return defaults_known_from(outer, fn() {
+        return defaults_compiled_in(null, fn() {
+            return comptime_computed(files, here, bound, value, ty, known, typed, library, workshop, bounds)
+        })
+    })
+}
+
+fn comptime_computed(files: ref Vec[Parsed], here: i64, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> Value? sync, typed: fn(ref String) -> Ty? sync, library: ref Ledger, workshop: ref Workshop, bounds: Bounds) -> Computed {
+    let not_here = fn(why) { Computed::NotHere(why.to_string()) }
+    let sub = match sub_program(files[here], bound, value, ty, known, typed) {
+        sub => sub
+        else => {
+            // **A callee nothing declares is named** (0.0.113): its result has no
+            // type, so neither has the value, and the callee is why.
+            match undeclared_callee(files, here, value, library) {
+                callee => {
+                    return Computed::NotHere(f"It calls `{callee}`, which no file of your program declares and `std` doesn't have")
+                },
+                null => {}
+            }
+            // The earlier constants, or else the type, had no written form.
+            return match unit_without_its_constants(files[here], bound, known, typed) {
+                null => not_here(COMPTIME_NOT_CARRIED),
+                else => not_here("Its type has no form this compiler writes into the program that computes it"),
+            }
+        },
+    }
+    let mut sub = sub
+    let mut units: Vec[Parsed] = []
+    for at in 0..<files.len() {
+        let unit = match at == here {
+            true => sub.take(),
+            false => unit_without_its_constants(files[at], bound, known, typed),
+        }
+        match unit {
+            null => return not_here(COMPTIME_NOT_CARRIED),
+            unit => units.push(unit),
+        }
+    }
+    let carried = constants_of(units)
+    let absent: collections::BTreeSet[String] = constants_of(files.iter()).iter().filter(fn(name) { !carried.contains(name) }).collect()
+    let left_out: collections::BTreeSet[String] = without_readers(units, absent.clone()).difference(absent)?.clone().collect()
+    // **A value that reads what went** - a constant not worked out yet (one
+    // that is, it holds as a `let`), or a function that reads one - has it
+    // worked out first, here, as an item
+    // read before its declaration is (Part II 10.2), and runs again with it.
+    if units[here].program.items.iter().any(fn(item) { match item.node {
+        Item::Fn { name, body, .. } if units[here].text(name) == VALUE_FN => {
+            let mut named = collections::BTreeSet()
+            names_in_block(body, units[here].interner, named)
+            named.iter().any(fn(name) {
+                return left_out.contains(name) || (absent.contains(name) && known(name) == null)
+            })
+        },
+        else => false,
+    } }) {
+        let ahead = comptime_worked_out_ahead(files, bound, absent, known, typed, library, workshop, bounds)
+        // **Only a constant worked out anew is a reason to run again**: one
+        // that stays out stays out, and asking again went round without end.
+        if ahead.keys().all(fn(name) { known(name) != null }) {
+            return not_here("It reads a `comptime` that can't be computed before it: one that reads it in turn")
+        }
+        let known = fn(name) { (known(name) ?? ahead.get(name)?.clone()) }
+        return comptime_computed(files, here, bound, value, ty, known, typed, library, workshop, bounds)
+    }
+    // **A dependency's functions are the program's to call** (ADR-321 D13):
+    // each package's units are derived on their own, and the program's
+    // against `std` and those entries, under the package's name - as the
+    // program's own ledger has them.
+    // **The run's home is the package of the file it stands in**: a default
+    // of a dependency's function is computed in that dependency, where the
+    // program's own files are not visible and the other packages are.
+    let home = units[here].package.clone()
+    let others: Vec[Parsed] = units.iter().filter(fn(u) { u.package != null && u.package != home }).collect()
+    let packages = by_package(others)
+    let mut with_packages = library.clone()
+    for (name, ledger) in packages {
+        with_packages.absorb(name, ledger.clone())
+    }
+    let unit_refs: Vec[Parsed] = units.iter().filter(fn(u) { u.package == home }).collect()
+    let derived = Ledger::infer_package(unit_refs, with_packages)
+    match derived.functions.get(VALUE_FN).and_then(may_not_run) {
+        because => {
+            let callee = (culprit(files[here], value, derived, library) ?? bound)
+            return Computed::Forbidden { callee: callee, because: because.to_string() }
+        },
+        null => {}
+    }
+    let counted = Default::default() /* TODO(rs2nika): `Default` (write the value out) */ with {
+        counts_steps: true,
+    }
+    let lowered = match units.len() {
+        1 => emit_program(units[here], counted).ok(),
+        else => lowered_units(units, here, counted, derived, packages, library),
+    }
+    let lowered = lowered ?? return not_here(COMPTIME_NOT_LOWERED)
+    let dump = dumper(units[here], ty) catch {
+        match error {
+            Wall::NoCrossedForm { ty, because } => {
+                return Computed::NotHere(f"Its type `{ty}` can't be handed back from the program that computes it: {because}")
+            },
+            else => {
+                return not_here("Its type can't be handed back from the program that computes it")
+            },
+        }
+    }
+    let program = with_driver(lowered, dump, bounds) ?? return not_here(COMPTIME_NOT_LOWERED)
+    // TODO(rs2nika): `match` on `Ok`/`Err`: a guard on an `Ok`/`Err` arm: `let v = call catch { <the Err arms> }`, a guard of `Err` as an `if` inside the block, one of `Ok` as an `if` after it
+    return match workshop.run_comptime(program, bound) {
+        Ok(text) => {
+            match decode(text) {
+                Ok(computed) => Computed::Value(computed),
+                Err(_) => not_here(COMPTIME_NOT_READ),
+            }
+        },
+        Err(Wall::Refused { detail: detail }) if detail.contains(NOT_COMPUTED_YET) => not_here("It leaves out an option whose default isn't computed"),
+        Err(Wall::Refused { detail: detail }) => Computed::Stopped(detail),
+        Err(Wall::NowhereToBuild) => not_here(NOWHERE),
+        Err(Wall::InsideAnother { .. }) => not_here("It is met while another build-time program is built, and one isn't built inside another"),
+        Err(Wall::NoCrossedForm { ty: ty, because: because }) => Computed::NotHere(f"`{ty}` has no form that crosses from build time: {because}"),
+        Err(Wall::DidNotBuild { .. }) => not_here(COMPTIME_NOT_LOWERED),
+        Err(Wall::Unreadable { .. }) => not_here(COMPTIME_NOT_READ),
+    }
+}
+
+/// **The constants a run reads before their turn**, worked out ahead
+/// (Part II 10.2: an item-level `comptime` may read one declared below it): a
+/// constant of literals folded, one that runs code and writes its type
+/// compiled and run as any `comptime` is. One already being worked out
+/// further up is left alone, which is how a ring ends: its run stays without
+/// it and is refused.
+fn comptime_worked_out_ahead(files: ref Vec[Parsed], bound: String, absent: ref collections::BTreeSet[String], known: fn(ref String) -> Value? sync, typed: fn(ref String) -> Ty? sync, library: ref Ledger, workshop: ref Workshop, bounds: Bounds) -> collections::BTreeMap[String, Value] {
+    let mut ahead = collections::BTreeMap()
+    let entered = AHEAD.with(fn(held) { held.insert(bound) })
+    if !entered {
+        return ahead
+    }
+    let reads = Reads::none()
+    for at in 0..<files.len() {
+        let file = files[at]
+        for item in file.program.items {
+            let (name, ty, value) = match item.node {
+                Item::Comptime { name, ty, value, .. } => (name, ty, value)
+                else => {
+                    continue
+                },
+            }
+            let named = file.text(name)
+            if !absent.contains(named) || AHEAD.with(fn(held) { held.contains(named) }) {
+                continue
+            }
+            let so_far = fn(name) { known(name) }
+            let folded = BuildTime::new(file, files, reads, so_far).evaluate(value).ok()
+            let worked = match (folded, ty) {
+                (value, _) => value,
+                (null, written) => {
+                    let ty = <Ty as TyOps>::from_ast(file, written)
+                    match comptime_computed(files, at, named, value, ty, known, typed, library, workshop, bounds) {
+                        Computed::Value(value) => value,
+                        else => null,
+                    }
+                },
+                (null, null) => null,
+            }
+            let value = worked ?? continue
+            ahead.insert(named.to_string(), value)
+        }
+    }
+    AHEAD.with(fn(held) { held.remove(bound) })
+    return ahead
+}
+
+/// Why a value is not computed, where this compiler cannot build its program.
+comptime COMPTIME_NOT_LOWERED: ref String = "This compiler couldn't build the program that computes it, which is this compiler's fault"
+
+/// Why a value is not computed, where its run's answer could not be read.
+comptime COMPTIME_NOT_READ: ref String = "What the program that computed it handed back couldn't be read"
+
+/// Why a value is not computed, where an earlier `comptime` has no literal.
+comptime COMPTIME_NOT_CARRIED: ref String = "A `comptime` declared beside it came to a value this compiler can't write into the program that computes it"
+
+/// **ADR-321 D19's note**: a check with no place to compile build-time code.
+pub comptime NOWHERE: ref String = "This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it"
