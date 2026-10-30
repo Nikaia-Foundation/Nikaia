@@ -132,6 +132,9 @@ the background in a cloud session.
 * **Builders**: `.claude/agents/builder.md` (the cycle and the gate) and
   `docs/builder-facts.md` (where things live, traps, and the self-hosting
   rules: slices, syntax gaps of `tools/*.nika`, lowering).
+* **Whoever writes for the website, `README.md` or `guide/`**:
+  `docs/writing-guide.md` (lead with safety, no absolute claims, natural prose
+  without bold lead-ins, nothing shown as runnable before it is built).
 
 ## Measuring performance
 
