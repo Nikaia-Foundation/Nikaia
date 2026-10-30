@@ -7,7 +7,7 @@
 [ADR-async-1](adr-async-1.md) D1, D2, D4, D6, D7, D10, D16, D18, D19 (changed: `async` is an expression prefix, there is no `async let`, `task::cancel` is removed, the failure levels hold for every form; D5, D8, D9, D11, D12, D14, D15, D17 stand and are read for the forms here);
 [ADR-async-3](adr-async-3.md) D5 (one word starts every task; this record writes its options);
 [ADR-async-2](adr-async-2.md) D7, D8 (no `async` loop; `async` starts only children whose number stands in the source);
-[ADR-346](adr-346.md) D1-D6 (every error has a receiver; a free handle is taken; `join(within:)`; detached tasks; they hold for `async(detached)`; D3, D4 changed by D14: a timed-out `join` keeps the task and the handle unless `on_timeout: cancel`);
+[ADR-346](adr-346.md) D1-D6 (every error has a receiver; a free handle is taken; `join(within:)`; detached tasks; they hold for `async(detached)`; D3, D4 changed by D14: a timed-out `join` keeps the task and the handle unless `on_timeout: task::OnTimeout::Cancel`);
 [ADR-292](adr-292.md) D3, D13, D14 (touch sets; one cancel mechanism; `cancel()` takes the handle);
 [ADR-327](adr-327.md) D5 (a block per task);
 [ADR-328](adr-328.md) D10 (a pausing child is polled by its group);
@@ -203,7 +203,7 @@ writes `async(handle) fn { e }`.
 still running are cancelled and `task::TimedOut` arrives where the value or the
 join is. `within:` on the form is a deadline counted from its start
 ([ADR-async-3](adr-async-3.md) D7); `join(within:)` is a limit on that one wait
-and cancels only with `on_timeout: cancel` (D14).
+and cancels only with `on_timeout: task::OnTimeout::Cancel` (D14).
 
 ### D11 - A failure meets the same handlers in every form, in this order.
 
@@ -230,8 +230,9 @@ let n = h.join() catch { [] }                               // a catch where it 
    (ADR-async-1 D9); for a detached task nobody joins, standard error
    (ADR-346 D6).
 
-A cancellation is not a failure: it runs no fallback. `task::OverBudget` is a
-failure and runs it (ADR-async-1 D15). `NK2118` stands: a later mention after a
+A cancellation the program asks for is not a failure: it runs no fallback.
+`task::OverBudget` is a failure and runs it (ADR-async-1 D15), and so is
+`task::TimedOut` from a deadline (D15). `NK2118` stands: a later mention after a
 `catch` where the failure arrived took it, without a fallback, is refused. The
 started and arrived sites (ADR-async-1 D17) are recorded for every form; for a
 handle the arrived site is the `join`.
@@ -264,7 +265,7 @@ The word *async* names the keyword and nothing else: a text about pausing says
 Tasks": a `select` arm is a task (ADR-async-3 D1). Part II 12.7 keeps "Work
 That Borrows: `async`".
 
-### D14 - `h.join(within: d)` is a limit on this wait; with `on_timeout: cancel` it cancels the task.
+### D14 - `h.join(within: d)` is a limit on this wait; with `on_timeout: task::OnTimeout::Cancel` it cancels the task.
 
 *Owner's decision, 2026-10-30. Changes [ADR-346](adr-346.md) D3, D4.*
 
@@ -277,7 +278,7 @@ let page = h.join(within: 2.seconds()) catch {
     }
 }
 let quick = async(detached) fn { fetch(mirror) }
-let other = quick.join(within: 2.seconds(), on_timeout: cancel) catch { "" }
+let other = quick.join(within: 2.seconds(), on_timeout: task::OnTimeout::Cancel) catch { "" }
 ```
 
 `within:` on `join` is an option of the wait, not of the task: `d` counts from
@@ -286,27 +287,53 @@ the call. When it runs out:
 * **By default** `join` throws `task::TimedOut`, the task keeps running, and the
   handle stays live: it can be joined again, cancelled, or, a `TaskHandle`,
   detached.
-* **With `on_timeout: cancel`** the task is cancelled as `h.cancel()` cancels it,
+* **With `on_timeout: task::OnTimeout::Cancel`** the task is cancelled as `h.cancel()` cancels it,
   its cleanups run, `join` throws `task::TimedOut`, and the handle is used up.
-  `cancel` is the option's one value.
+  The option's type is `task::OnTimeout`, `Keep | Cancel`, `Keep` by default,
+  qualified as every `std` option's case is (`order: par::Order::Any`).
 
 Both handles take the option (`ChildHandle` and `TaskHandle`). Where the task's
 own `within:` (ADR-async-3 D7) runs out first, `join` throws `task::TimedOut`
 as well; a handle still live after it is joined again with the same error, or
 cancelled, which does nothing more.
 
-**`NK2109`.** A `join(within:)` without `on_timeout: cancel` takes a
+**`NK2109`.** A `join(within:)` without `on_timeout: task::OnTimeout::Cancel` takes a
 `TaskHandle` only on its success path, and on a failure of the task's body. On
 the path where it throws `task::TimedOut` the handle is still live, and must be
 taken on every path out of the handler: in a `match error` arm for
 `task::TimedOut`, in an `else` or binding arm that can match it, and in the
 whole handler where it does not match on the error. A `join(within:,
-on_timeout: cancel)` takes it on both paths. A `ChildHandle` left live is
+on_timeout: task::OnTimeout::Cancel)` takes it on both paths. A `ChildHandle` left live is
 waited for at its group's end, as D4 says, and is not `NK2109`.
 
 **Why.** A limit on a wait is the waiter's: the waiter may want to do something
 else and come back, and the task, which another part of the program may also
 wait for, is not ended by one impatient waiter unless that waiter says so.
+
+### D15 - A deadline that ends a task is a failure, `task::TimedOut`, and meets the handlers of D11.
+
+*Owner's decision, 2026-10-30.*
+
+```nika
+let page = async(within: 5.seconds()) http::get(url) catch { Page::empty() }
+```
+
+Where `within:` on `async(…)` runs out (ADR-async-3 D7), the task ends with
+the failure `task::TimedOut`, and it arrives as any failure does (D11): a
+`catch` where it arrives first, then the fallback written after the `async`
+expression, then the receiver. Above, the fallback's `Page::empty()` becomes
+`page`. Only a cancellation the program asks for, `h.cancel()` or the losing
+arm of a `select`, is no failure and runs no fallback.
+
+The `task::TimedOut` a `join(within:)` throws when its own limit runs out
+(D14) is the join's error, not the task's, which has not failed: it meets a
+`catch` around the join and otherwise leaves from it. With
+`on_timeout: task::OnTimeout::Cancel` the task's end is a cancellation the program asked for.
+No fallback runs for either.
+
+**Why.** A deadline is part of what the task was asked to do, so running out
+of it is the task failing; a program that writes a fallback expects it to
+stand in for a value that did not come in time.
 
 ## 5. Consequences
 

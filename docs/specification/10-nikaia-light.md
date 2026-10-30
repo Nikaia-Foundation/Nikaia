@@ -3605,7 +3605,10 @@ one list, without a positional zone.
   starts, on every form, value or handle. When it runs out, its tasks still
   running are cancelled, and `task::TimedOut` arrives where the value is first
   needed or at the join; for a statement form and a group, at the group's end.
-  A limit on one wait is `join`'s option, not the task's (8.2).
+  It is a failure and meets the handlers below, the fallback included:
+  `async(within: 5.seconds()) http::get(url) catch { Page::empty() }` gives
+  `Page::empty()` when the deadline runs out. A limit on one wait is `join`'s
+  option, not the task's (8.2).
 * **`admission: task::Admission`**: who decides when the next task starts
   (Part II, Chapter 12).
 
@@ -3645,8 +3648,12 @@ let found = h.join() catch { [] }                          // a catch where it a
    join as a thrown error does, or, read by nobody, it is the group's at its
    end (below); a detached task's goes to standard error (8.2).
 
-A cancellation is not a failure and runs no fallback; `task::OverBudget` is
-one and runs it. Which handler runs depends on the path that reaches the
+A cancellation the program asks for, `h.cancel()` or a `select` arm that loses,
+is not a failure and runs no fallback. `task::OverBudget` is one and runs it,
+and so is `task::TimedOut` from a deadline (`within:` above). The
+`task::TimedOut` of a `join(within:)` whose own limit ran out is the join's
+error, not the task's: it meets a `catch` around the join, and no fallback runs
+for it (8.2). Which handler runs depends on the path that reaches the
 mention. Once a `catch` where the failure arrived has taken it, a later mention
 of `x` on that path is refused unless the binding has a fallback (`NK2118`).
 The function throws what the fallback throws, or the task's whole set where
@@ -3698,8 +3705,8 @@ A free task does not end the program. An error that arrives in a task ends the t
 * **An `async(detached)` whose result is not bound is detached:** nobody waits for it. If it ends with an error that its fallback (8.1.2) does not handle, the error is printed on standard error in the long form of an uncaught error; a fatal one (7.1) also replaces the exit status, at the end of `main` and not earlier, the first one counting (Part III A.2).
 * **A bound handle is used up before it leaves its scope.** `let h = async(detached) fn { … }` binds a `TaskHandle[T]`, and on every path out of the scope it is taken by `h.join()`, `h.join(within: d)` (below), `h.detach()` or `h.cancel()`, or handed on: returned, stored in a field or a container, or passed to a function. A handle taken in only one branch is not taken; otherwise `NK2109`.
 * **`h.join()` throws what the task's body throws**, beside `task::Crashed` for a task that panicked and `task::OverBudget` for one whose block was full, and takes the ordinary way: a `catch`, or `throws` on the joiner. A fatal error nobody catches reaches `main` and sets the exit status there.
-* **`h.join(within: d)` limits this wait to `d`, counted from the call.** When `d` runs out, `join` throws `task::TimedOut`, the task keeps running, and the handle stays live: it can be joined again, cancelled or detached. With **`on_timeout: cancel`**, `h.join(within: d, on_timeout: cancel)`, the task is cancelled as `cancel()` cancels it, its cleanups run, the call throws `task::TimedOut`, and the handle is used up. The task's own `within:` (8.1.2) also ends in `task::TimedOut` at the join.
-* **A `join(within:)` without `on_timeout: cancel` takes the handle only where it does not time out.** On the path where it throws `task::TimedOut`, the handle is still live and must be taken on every path out of the handler: in a `match error` arm for `task::TimedOut`, in an `else` or binding arm that can match it, and in the whole handler where it does not match on the error; otherwise `NK2109`. With `on_timeout: cancel` it is taken on both paths. A child handle (8.1.2) left live is waited for at its group's end.
+* **`h.join(within: d)` limits this wait to `d`, counted from the call.** When `d` runs out, `join` throws `task::TimedOut`, the task keeps running, and the handle stays live: it can be joined again, cancelled or detached. With **`on_timeout: task::OnTimeout::Cancel`** (`task::OnTimeout` is `Keep | Cancel`, `Keep` by default), the task is cancelled as `cancel()` cancels it, its cleanups run, the call throws `task::TimedOut`, and the handle is used up. The task's own `within:` (8.1.2) also ends in `task::TimedOut` at the join.
+* **A `join(within:)` without `on_timeout: task::OnTimeout::Cancel` takes the handle only where it does not time out.** On the path where it throws `task::TimedOut`, the handle is still live and must be taken on every path out of the handler: in a `match error` arm for `task::TimedOut`, in an `else` or binding arm that can match it, and in the whole handler where it does not match on the error; otherwise `NK2109`. With `on_timeout: task::OnTimeout::Cancel` it is taken on both paths. A child handle (8.1.2) left live is waited for at its group's end.
 * **`h.detach()`** makes a bound handle's task detached, as an unbound one is.
 * **`async(detached, deferred) fn { … }`** does not run until `h.start()`, as a deferred child task does (8.1.2).
 
@@ -3712,7 +3719,7 @@ let page = h.join(within: 5.seconds()) catch {
     }
 }
 let m = async(detached) fn { fetch(mirror) }
-let copy = m.join(within: 5.seconds(), on_timeout: cancel) catch { "" }
+let copy = m.join(within: 5.seconds(), on_timeout: task::OnTimeout::Cancel) catch { "" }
 async(detached) fn { log_forever() }  // detached
 let w = async(detached) fn { watch() }
 w.detach()                            // detached as well
