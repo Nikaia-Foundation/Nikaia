@@ -5,7 +5,7 @@
 **Answers:** can the things that run beside other code - an `async` child, a `spawn` task with its `TaskHandle`, a `select` arm, a supervisor's child, a connection task under `serve` - be one kind of task, whose lifetime, captures and wait point follow from where it is started or from an option, instead of five concepts with their own rules?
 **Supersedes / Related:**
 [ADR-async-1](adr-async-1.md) D1, D5, D8, D13 (changed: a child is a task of its group; the five forms are the policies of D4);
-[ADR-async-4](adr-async-4.md) (the surface of D5: `async e`, `async(handle)`, `async(deferred)`, `async(detached)`; cancelling through handles);
+[ADR-async-4](adr-async-4.md) (the surface of D5: `async e`, `async(handle)`, `async(deferred)`, `async(detached)`; cancelling through handles; D13 the names, D14 `join(within:)`, beside D7 here);
 [ADR-346](adr-346.md) D1-D6 (every task error has a receiver; the handle must be taken; `join(within:)`; detached tasks; they hold for `async(detached)`);
 [ADR-292](adr-292.md) D12-D15 (`select`; one cancel mechanism; `h.cancel()`; the pair);
 [ADR-328](adr-328.md) D1, D7, D8, D10 (supervisors; a child keeps no state; a crash is an error to the waiter; how a group runs its tasks);
@@ -247,8 +247,8 @@ A task with a handle, one that waits for a start and one that outlives its
 group are options of `async`: `async(handle)`, `async(deferred)`,
 `async(detached)`, written out in [ADR-async-4](adr-async-4.md) D4-D6. `spawn
 fn { … }` is `async(detached) fn { … }`; `let h = spawn fn { … }` is `let h =
-async(detached) fn { … }`. The option names are placeholders for the naming
-round.
+async(detached) fn { … }`. The option names are final ([ADR-async-4](adr-async-4.md)
+D13).
 
 `spawn` stays a reserved word, and `spawn fn { … }` stays accepted, until the
 migration is built (every `spawn` in the repository rewritten); the commit that
@@ -263,6 +263,23 @@ and every other section that starts tasks (8.2, Part II 12.4, 12.6, 12.8, the
 *The paper's rule 4 (`task::cancel` for every task, `h.cancel()` removed) was
 not taken: ADR-async-4 D10 keeps `h.cancel()` and removes `task::cancel`, so a
 task is cancelled only through its handle.*
+
+### D7 - `within:` on `async(…)` is a deadline counted from the start, on every form.
+
+*Owner's decision, 2026-10-30, closing §7's first point.*
+
+`async(within: d) …` counts `d` from where the form starts: on the value form,
+on the handle forms and on `async { }` alike (ADR-async-1 D6). When `d` runs
+out, the form's tasks still running are cancelled as `h.cancel()` cancels them
+([ADR-async-4](adr-async-4.md) D10), and `task::TimedOut` arrives where the
+value is first needed, or at the `join` of a handle; for a statement form and
+an `async { }`, at the group's end; for a detached task nobody joins, at its
+receiver (D3). A limit on one wait is not the task's option but `join`'s
+(ADR-async-4 D14).
+
+**Why.** An option of `async` sits where the task starts and says what holds
+for the task; a deadline is such a fact. A limit on one wait is written where
+the wait is, so the two meanings no longer share one place.
 
 ### The paper's recommendation, as it was put
 
@@ -296,6 +313,10 @@ The rules B would write, for the owner to accept or change (not yet `Dn`):
    because its wait has no syntax of its own. The owner may prefer to keep the
    start for `async`, and then the word should differ: a naming point.)
 6. "A child is not a task" becomes "a child task borrows; a free task takes".
+
+*Rule 5 was not taken: `within:` on `async` is a deadline from the start (D7),
+and `join(within:)` is a limit on that one wait ([ADR-async-4](adr-async-4.md)
+D14).*
 
 ## 5. Risks, named
 
@@ -334,22 +355,10 @@ stated, the same output first:
 
 ## 7. What this does not decide
 
-* **From where `within:` counts** - the next small question, not yet put to the
-  owner. On `async` it counts from where the form starts (ADR-async-1 D6), on
-  `join(within:)` from the call (ADR-346 D4), and both stand until it is
-  decided. **Recommended:** a limit on the wait, counted from where the wait
-  starts, on `join` and at an `async` value's wait point alike, because a
-  reader sees `within:` where the program waits on a handle, and an `async`
-  form's options sit at its start only because its wait has no syntax of its
-  own. The alternative, a deadline from the start on both, changes ADR-346 D4;
-  if the owner keeps the start for `async`, the two should have different
-  words (a naming point).
+*Answered (owner, 2026-10-30): from where `within:` counts (D7, ADR-async-4
+D14), and the names (ADR-async-4 D13); the naming round is closed.*
+
 * A pending value or a handle as a `select` arm (ADR-async-1 §6).
 * Cancelling siblings at the first failure (ADR-292 §6).
 * Naming any group other than the enclosing one and the process (Trio's passed
   nursery); `detached` names only the process.
-* The names, for the naming round: the options `handle`, `deferred`,
-  `detached`; `task::ChildHandle`; when `spawn` is released (D5); `sync` /
-  `async` as a false pair (`sync` is a function property, `async` means "run
-  beside"); Part I 8.1's title "Async by Default"; Part II 12.4's "Racing
-  Tasks"; 12.7's "Work That Borrows"; `--overlaps`.

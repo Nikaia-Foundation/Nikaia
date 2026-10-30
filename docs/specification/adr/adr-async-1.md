@@ -192,7 +192,7 @@ outside its group it borrows.
 
 ### D6 - Every form takes the options `limit:`, `within:` and `admission:`, written after the word.
 
-*Changed by [ADR-async-4](adr-async-4.md) D7 and [ADR-async-2](adr-async-2.md) D4: the loop forms are gone; `limit:` stands on `async { … }` and on the `par_iter` chain, where it replaces `workers:`.*
+*Changed by [ADR-async-4](adr-async-4.md) D7 and [ADR-async-2](adr-async-2.md) D4: the loop forms are gone; `limit:` stands on `async { … }` and on the `par_iter` chain, where it replaces `workers:`. `within:` is a deadline from the form's start on every form, value or handle ([ADR-async-3](adr-async-3.md) D7); `join(within:)` is a limit on one wait ([ADR-async-4](adr-async-4.md) D14).*
 
 `async(limit: n, within: d) let …`, `async(limit: n) for …`,
 `async(within: d) { … }`: options without a positional zone, as

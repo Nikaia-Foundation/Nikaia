@@ -7,7 +7,7 @@
 [ADR-async-1](adr-async-1.md) D1, D2, D4, D6, D7, D10, D16, D18, D19 (changed: `async` is an expression prefix, there is no `async let`, `task::cancel` is removed, the failure levels hold for every form; D5, D8, D9, D11, D12, D14, D15, D17 stand and are read for the forms here);
 [ADR-async-3](adr-async-3.md) D5 (one word starts every task; this record writes its options);
 [ADR-async-2](adr-async-2.md) D7, D8 (no `async` loop; `async` starts only children whose number stands in the source);
-[ADR-346](adr-346.md) D1-D6 (every error has a receiver; a free handle is taken; `join(within:)`; detached tasks; they hold for `async(detached)`);
+[ADR-346](adr-346.md) D1-D6 (every error has a receiver; a free handle is taken; `join(within:)`; detached tasks; they hold for `async(detached)`; D3, D4 changed by D14: a timed-out `join` keeps the task and the handle unless `on_timeout: cancel`);
 [ADR-292](adr-292.md) D3, D13, D14 (touch sets; one cancel mechanism; `cancel()` takes the handle);
 [ADR-327](adr-327.md) D5 (a block per task);
 [ADR-328](adr-328.md) D10 (a pausing child is polled by its group);
@@ -64,8 +64,7 @@ starts is a **task** of its group (ADR-async-3 D1); the forms below differ in
 what they hand back. Options are written in parentheses directly after the
 word, without a positional zone: `async(limit: 4) { … }`, `async(detached) fn { … }`.
 
-The option names `handle`, `deferred` and `detached`, and the type name
-`task::ChildHandle`, are **placeholders** for the naming round.
+The names are final (D13).
 
 ### D2 - `async e` starts at once and hands back the value, waited for where the value is first needed.
 
@@ -202,9 +201,9 @@ writes `async(handle) fn { e }`.
 
 `within:` on any form cancels by itself: when it runs out, the form's tasks
 still running are cancelled and `task::TimedOut` arrives where the value or the
-join is. From where `within:` counts is open ([ADR-async-3](adr-async-3.md)
-§7); until it is decided, it counts from the form's start on `async` and from
-the call on `join(within:)`, as ADR-async-1 D6 and ADR-346 D4 say.
+join is. `within:` on the form is a deadline counted from its start
+([ADR-async-3](adr-async-3.md) D7); `join(within:)` is a limit on that one wait
+and cancels only with `on_timeout: cancel` (D14).
 
 ### D11 - A failure meets the same handlers in every form, in this order.
 
@@ -245,7 +244,69 @@ handle the arrived site is the `join`.
 D7). New: `NK2119` (warning) a `par_iter` lambda starts to pause (ADR-async-2
 D5); `NK2120` `async` inside a loop's body (ADR-async-2 D8); `NK2121` a deferred
 handle not started, or started twice, on some path (D5); `NK2122` a child handle
-that leaves its group (D4). None reuses a retired number.
+that leaves its group (D4). None reuses a retired number. `NK2109` is asked of a `join(within:)` as D14
+says.
+
+### D13 - The names are final.
+
+*Owner's decision, 2026-10-30: the naming round is closed.*
+
+The keywords `async` and `sync` stay. The options `handle`, `deferred`,
+`detached` and `on_timeout` (D14), the type `task::ChildHandle` and
+`h.start()` are final, as are the other names these records use (`par_iter`,
+`Par`, `piece:`, `--overlaps`). `spawn` stays reserved only until the move to
+`async(detached)` is built ([#991](https://github.com/Nikaia-Foundation/Nikaia/issues/991)),
+as ADR-async-3 D5 says.
+
+The word *async* names the keyword and nothing else: a text about pausing says
+*pause*. Part I 8.1's heading is "Pausing Without Marking Functions"; Part II
+11.1's is "Implicit Pausing and the Scheduler". Part II 12.4 keeps "Racing
+Tasks": a `select` arm is a task (ADR-async-3 D1). Part II 12.7 keeps "Work
+That Borrows: `async`".
+
+### D14 - `h.join(within: d)` is a limit on this wait; with `on_timeout: cancel` it cancels the task.
+
+*Owner's decision, 2026-10-30. Changes [ADR-346](adr-346.md) D3, D4.*
+
+```nika
+let h = async(detached) fn { fetch(url) }
+let page = h.join(within: 2.seconds()) catch {
+    match error {
+        task::TimedOut => { println("slow"); h.join() }   // the task kept running
+        else => throw error
+    }
+}
+let quick = async(detached) fn { fetch(mirror) }
+let other = quick.join(within: 2.seconds(), on_timeout: cancel) catch { "" }
+```
+
+`within:` on `join` is an option of the wait, not of the task: `d` counts from
+the call. When it runs out:
+
+* **By default** `join` throws `task::TimedOut`, the task keeps running, and the
+  handle stays live: it can be joined again, cancelled, or, a `TaskHandle`,
+  detached.
+* **With `on_timeout: cancel`** the task is cancelled as `h.cancel()` cancels it,
+  its cleanups run, `join` throws `task::TimedOut`, and the handle is used up.
+  `cancel` is the option's one value.
+
+Both handles take the option (`ChildHandle` and `TaskHandle`). Where the task's
+own `within:` (ADR-async-3 D7) runs out first, `join` throws `task::TimedOut`
+as well; a handle still live after it is joined again with the same error, or
+cancelled, which does nothing more.
+
+**`NK2109`.** A `join(within:)` without `on_timeout: cancel` takes a
+`TaskHandle` only on its success path, and on a failure of the task's body. On
+the path where it throws `task::TimedOut` the handle is still live, and must be
+taken on every path out of the handler: in a `match error` arm for
+`task::TimedOut`, in an `else` or binding arm that can match it, and in the
+whole handler where it does not match on the error. A `join(within:,
+on_timeout: cancel)` takes it on both paths. A `ChildHandle` left live is
+waited for at its group's end, as D4 says, and is not `NK2109`.
+
+**Why.** A limit on a wait is the waiter's: the waiter may want to do something
+else and come back, and the task, which another part of the program may also
+wait for, is not ended by one impatient waiter unless that waiter says so.
 
 ## 5. Consequences
 
@@ -266,11 +327,9 @@ that leaves its group (D4). None reuses a retired number.
 
 ## 6. What this does not decide
 
-* From where `within:` counts (ADR-async-3 §7; the next small question).
-* The names: `handle`, `deferred`, `detached`, `ChildHandle`, `start()`; the
-  release of `spawn`; the false pair `sync`/`async`; Part I 8.1's title
-  "Async by Default"; Part II 12.4's "Racing Tasks" and 12.7's title;
-  `--overlaps`. They go to the naming round.
+*Answered (owner, 2026-10-30): from where `within:` counts (D14 here,
+ADR-async-3 D7), the names and the headings (D13).*
+
 * A pending value or a handle as a `select` arm (ADR-async-1 §6).
 
 ## 7. Where it is specified

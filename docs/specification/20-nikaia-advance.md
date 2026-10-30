@@ -718,12 +718,12 @@ to use.
 
 The build option `user_parallelism = yes` (1.2) turns the same source into a program that uses more than one core. Nothing in the source changes.
 
-### 11.1. Implicit Async & The Scheduler
+### 11.1. Implicit Pausing and the Scheduler
 The syntax is identical at both values of the option. A function definition carries no `async` keyword.
 * **At `no`:** functions yield on I/O events, cooperatively, on one thread.
 * **At `yes`:** the runtime runs tasks on a pool of worker threads; `user-pool` in the runtime configuration sets their number.
 
-User code is written in direct style, as if it were synchronous. The compiler places the suspension points. `await` is not a word of the language, and `async` never marks a function: it starts a task (Part I 8.1.2).
+User code is written in direct style: nothing marks where it pauses. The compiler places the suspension points. `await` is not a word of the language, and `async` never marks a function: it starts a task (Part I 8.1.2).
 
 ### 11.2. Parallelism via `async`
 Calling a function runs it now. A task that runs concurrently or in parallel is started with `async` (Part I 8.1.2). This section is about the free task, `async(detached)` (Part I 8.2), which may outlive the function that starts it; a child task borrows and is waited for by its group, so the crossing rules below ask only what it hands back (Part III C.5).
@@ -1112,7 +1112,7 @@ let pages = urls.par_iter(limit: 8).map fn(u) { http::get(u) }.collect()
 
 **A chain beside the code after it** is one task: `let pages = async urls.par_iter().map fn(u) { http::get(u) }.collect()` runs the chain while the next statements run, and is waited for where `pages` is first named (Part I 8.1.2).
 
-**`fold` combines with nothing shared.** `xs.par_iter().fold(init, step, merge)` folds the elements into accumulators and merges them into one, which it returns. `init` is a type, called with no arguments, or a function `fn { … }`; it is called once per accumulator. `step` takes an accumulator and an element and returns the accumulator, `merge` takes two and returns one. Either may instead return nothing and change its first argument in place: a function of type `fn(ref mut A, T)` or `fn(ref mut A, A)`, or a lambda whose body returns nothing, whose first parameter is then `ref mut` (`fn(acc, m) { acc.record(m) }`). The result type says which, the two choose independently, and any other result type is `NK1102` ([ADR-372](adr/adr-372.md) D9). The same holds for `par_fold` and `fold` in a grammar (10.7). Both are lambdas of the walk and are asked what any other is (`NK2104`, `NK2107`); unlike a `map` lambda, they may not pause (`NK2209`), and neither may a `par_pieces` lambda. An accumulator is folded by one worker at a time, so `step` changes it without a lock. Over no elements the result is one made by `init`.
+**`fold` combines with nothing shared.** `xs.par_iter().fold(init, step, merge)` folds the elements into accumulators and merges them into one, which it returns. `init` is a type, called with no arguments, or a function `fn { … }`; it is called once per accumulator. `step` takes an accumulator and an element and returns the accumulator, `merge` takes two and returns one. Either may instead return nothing and change its first argument in place: a function of type `fn(ref mut A, T)` or `fn(ref mut A, A)`, or a lambda whose body returns nothing, whose first parameter is then `ref mut` (`fn(acc, m) { acc.record(m) }`). The result type says which, the two choose independently, and any other result type is `NK1102` ([ADR-372](adr/adr-372.md) D9). The same holds for `par_fold` and `fold` in a grammar (10.7). Both are lambdas of the walk and are asked what any other is (`NK2104`, `NK2107`); unlike a `map` lambda, they never pause (`NK2209`), and neither does a `par_pieces` lambda. A fold over values that need a pause is a pausing `map` followed by the `fold`, `xs.par_iter().map fn(u) { http::get(u) }.fold(…)`, and `NK2209`'s help names that chain ([ADR-async-2](adr/adr-async-2.md) D9). An accumulator is folded by one worker at a time, so `step` changes it without a lock. Over no elements the result is one made by `init`.
 
 ```nika
 let summary = rows.par_iter().fold(Summary, fn(acc, r) { acc.record(r) }, Summary::merge)

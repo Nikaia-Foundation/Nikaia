@@ -3434,9 +3434,9 @@ on the lambda; a lambda carries no promise of its own (5.3).
 
 A program performs several tasks concurrently at both values of
 `user_parallelism`, such as waiting for a download while answering input. The
-mechanism is **asynchronous execution**.
+mechanism is the **pause** (8.1).
 
-### 8.1. Async by Default
+### 8.1. Pausing Without Marking Functions
 A function that performs I/O, such as reading a file or downloading a URL,
 **pauses** without blocking the program. There is no `await` keyword.
 
@@ -3523,13 +3523,12 @@ other argument computed beside it, a binding named in the very next statement,
 an `async` statement that ends its group. The help removes the word.
 
 **The handle forms.** An option after the word hands back a handle instead of
-the value. The option names `handle`, `deferred` and `detached`, and
-`task::ChildHandle`, are placeholders until the naming round.
+the value.
 
 * **`async(handle) fn { … }`** starts at once and hands back a
   `task::ChildHandle[T]`, bound to the group. It borrows and needs no `Send` and
-  no heap: it points at the task's slot in its group. It has `join()` and
-  `cancel()`, which take it, and no `detach()`. A child handle that leaves its
+  no heap: it points at the task's slot in its group. It has `join()`,
+  `join(within: d)` (8.2) and `cancel()`, which take it, and no `detach()`. A child handle that leaves its
   group - returned past it, stored in a value that outlives it - is refused
   (`NK2122`). One neither joined nor cancelled is waited for at its group's end,
   and its failure goes to the group as an unread failure does.
@@ -3602,11 +3601,11 @@ one list, without a positional zone.
   around it. Below `1` it panics, naming the option. A form that starts one
   task does not take it (`NK2112`). `limit: 1` written as the literal runs the
   tasks one at a time, in order, and they are not checked against each other.
-* **`within: time::Duration`**: counted from where the form starts. When it
-  runs out, its tasks still running are cancelled, and `task::TimedOut`
-  arrives where the value or the join is; for a statement form and a group,
-  at the group's end. Whether it should count from where the wait starts
-  instead is open ([ADR-async-3](adr/adr-async-3.md) §7).
+* **`within: time::Duration`**: a deadline counted from where the form
+  starts, on every form, value or handle. When it runs out, its tasks still
+  running are cancelled, and `task::TimedOut` arrives where the value is first
+  needed or at the join; for a statement form and a group, at the group's end.
+  A limit on one wait is `join`'s option, not the task's (8.2).
 * **`admission: task::Admission`**: who decides when the next task starts
   (Part II, Chapter 12).
 
@@ -3697,17 +3696,23 @@ until every program is moved; then `spawn` is released ([ADR-async-3](adr/adr-as
 A free task does not end the program. An error that arrives in a task ends the task, `process::Exit` (7.1) included, and every such error has a receiver ([ADR-346](adr/adr-346.md)):
 
 * **An `async(detached)` whose result is not bound is detached:** nobody waits for it. If it ends with an error that its fallback (8.1.2) does not handle, the error is printed on standard error in the long form of an uncaught error; a fatal one (7.1) also replaces the exit status, at the end of `main` and not earlier, the first one counting (Part III A.2).
-* **A bound handle is used up before it leaves its scope.** `let h = async(detached) fn { … }` binds a `TaskHandle[T]`, and on every path out of the scope it is taken by `h.join()`, `h.join(within: d)`, `h.detach()` or `h.cancel()`, or handed on: returned, stored in a field or a container, or passed to a function. A handle taken in only one branch is not taken; otherwise `NK2109`.
+* **A bound handle is used up before it leaves its scope.** `let h = async(detached) fn { … }` binds a `TaskHandle[T]`, and on every path out of the scope it is taken by `h.join()`, `h.join(within: d)` (below), `h.detach()` or `h.cancel()`, or handed on: returned, stored in a field or a container, or passed to a function. A handle taken in only one branch is not taken; otherwise `NK2109`.
 * **`h.join()` throws what the task's body throws**, beside `task::Crashed` for a task that panicked and `task::OverBudget` for one whose block was full, and takes the ordinary way: a `catch`, or `throws` on the joiner. A fatal error nobody catches reaches `main` and sets the exit status there.
-* **`h.join(within: d)` waits at most `d`.** When it runs out, the task is cancelled as `cancel()` cancels it, its cleanups run, and the call throws `task::TimedOut`.
+* **`h.join(within: d)` limits this wait to `d`, counted from the call.** When `d` runs out, `join` throws `task::TimedOut`, the task keeps running, and the handle stays live: it can be joined again, cancelled or detached. With **`on_timeout: cancel`**, `h.join(within: d, on_timeout: cancel)`, the task is cancelled as `cancel()` cancels it, its cleanups run, the call throws `task::TimedOut`, and the handle is used up. The task's own `within:` (8.1.2) also ends in `task::TimedOut` at the join.
+* **A `join(within:)` without `on_timeout: cancel` takes the handle only where it does not time out.** On the path where it throws `task::TimedOut`, the handle is still live and must be taken on every path out of the handler: in a `match error` arm for `task::TimedOut`, in an `else` or binding arm that can match it, and in the whole handler where it does not match on the error; otherwise `NK2109`. With `on_timeout: cancel` it is taken on both paths. A child handle (8.1.2) left live is waited for at its group's end.
 * **`h.detach()`** makes a bound handle's task detached, as an unbound one is.
 * **`async(detached, deferred) fn { … }`** does not run until `h.start()`, as a deferred child task does (8.1.2).
 
 ```nika
 let h = async(detached) fn { fetch(url) }
 let page = h.join(within: 5.seconds()) catch {
-    match error { task::TimedOut => "", else => throw error }
+    match error {
+        task::TimedOut => { h.cancel(); "" }   // the handle is still live here
+        else => throw error
+    }
 }
+let m = async(detached) fn { fetch(mirror) }
+let copy = m.join(within: 5.seconds(), on_timeout: cancel) catch { "" }
 async(detached) fn { log_forever() }  // detached
 let w = async(detached) fn { watch() }
 w.detach()                            // detached as well

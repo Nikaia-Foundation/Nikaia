@@ -203,8 +203,7 @@ let pages = urls.par_iter(limit: 8).map fn(u) { http::get(u) }.collect()
 longer asked of them. The tasks a chain runs belong to the call: the call is
 their group, and it returns when every one has ended (ADR-async-3 D4). A
 lambda of `fold` (`init`, `step`, `merge`), `par_pieces` and `par_fold` is
-still action code and may not pause (`NK2209`); whether it may is not decided
-here (§7).
+still action code and may not pause (`NK2209`, D9).
 
 ### D2 - The compiler picks the execution from the lambda's pause property.
 
@@ -280,6 +279,21 @@ without an allocation.
 
 *The paper recommended option B: two spellings (the `async` loop and the chain) over one mechanism. The owner took D: one spelling, the chain.*
 
+### D9 - The lambdas of `fold`, `par_pieces` and `par_fold` never pause.
+
+*Owner's decision, 2026-10-30, closing §7's first point.*
+
+`init`, `step` and `merge` of `fold` and `par_fold`, and a `par_pieces`
+lambda, are action code and may not pause (`NK2209`, [ADR-235](adr-235.md)).
+A fold over values that need a pause is written as a pausing `map` followed by
+the `fold`: `xs.par_iter().map fn(u) { http::get(u) }.fold(…)`. The help of
+`NK2209` on a `fold` lambda names that chain.
+
+**Why.** An accumulator is folded by one worker at a time without a lock
+(Part II 12.6); a step that pauses would hold the accumulator across the pause,
+or fold it by tasks that meet. The pausing part has a place of its own in the
+chain already.
+
 ## 5. Risks, named
 
 * **A silent performance cliff.** One call in the body that may pause - a log
@@ -324,11 +338,10 @@ for byte first (CLAUDE.md, *Measuring performance*):
 
 ## 7. What this does not decide
 
-* Whether a lambda of `fold`, `par_pieces` or `par_fold` may pause, and how an
-  accumulator is folded by tasks that pause (D1).
+*Answered (owner, 2026-10-30): a lambda of `fold`, `par_pieces` or `par_fold`
+never pauses (D9); the names are final ([ADR-async-4](adr-async-4.md) D13).*
 
 * Whether a pausing child may run on the pool instead of its group's thread
   (ADR-328 D10's limit); it would shrink §5's cliff, and is a runtime question
   of its own.
-* The names (`par_iter`, `Par`, `piece:`): the naming round.
 * `order: Any` on `map` and `collect`; results keep input order (D3).
