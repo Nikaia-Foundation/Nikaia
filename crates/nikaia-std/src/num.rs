@@ -61,18 +61,6 @@ fn to_int<T: TryFrom<i128>>(value: f64) -> T {
     }
 }
 
-/// An integer as a `scalar` (a Unicode scalar value), or an abort: a negative
-/// value, a surrogate and a value beyond U+10FFFF are no character.
-#[inline]
-#[track_caller]
-pub fn to_char<T: Into<i128> + Copy + std::fmt::Display>(value: T) -> char {
-    let wide: i128 = value.into();
-    match u32::try_from(wide).ok().and_then(char::from_u32) {
-        Some(c) => c,
-        None => panic!("the value is not a character: {value}"),
-    }
-}
-
 /// **`scalar::from(n)`** (Part I 2.2, #1003): the Unicode scalar value `n`
 /// is. Its precondition is published in `std.contracts` (ADR-269 D5): `n` is
 /// not negative, not a surrogate and not above U+10FFFF. A caller proves it or

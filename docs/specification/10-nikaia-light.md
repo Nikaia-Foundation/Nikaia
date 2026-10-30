@@ -268,7 +268,7 @@ Nikaia provides basic types to represent simple values.
       both are; a published field or result is never the third. What a
       published field, parameter or result is - a view, and of which
       parameter, or text of its own; lent or kept - is recorded in the ledger
-      (Part III 13.5).
+      (Part III 14.2).
     * `ref String`: a view of text, written in an `extern "C"` declaration and
       on a `pub extern fn` (Part III 15.1), where it is required and the
       body is held to it. Anywhere else it says what `String` already says,
@@ -284,7 +284,8 @@ Nikaia provides basic types to represent simple values.
       not negative, not a surrogate (`0xD800` to `0xDFFF`), not above
       `0x10FFFF`. It is held as every precondition is (Part III 14.2): shown
       by the caller's facts, a literal, an `if` or an `assert`, or refused
-      (`NK1300`).
+      (`NK1300`). Only a `u8` becomes one by `as`, since every byte value is
+      one: `b as scalar`.
 * **A run of elements:**
     * `ref Array[T]`: a **view** of a run of `T`, with the promise
       `ref String` carries — *this points at elements somebody else keeps, no
@@ -466,7 +467,10 @@ is written `as` only where it is shown to fit. A constant that does not fit is
 refused with `NK1116`. A value the compiler proves within the destination's
 range converts. Any other such `as` is refused with `NK1241`, and the program
 says by name what it means: the low digits, or whether it fits. This does not
-depend on a build option.
+depend on a build option. An integer becomes a `scalar` by `as` only from a `u8`; from
+any other integer type, a variable or a literal alike, `as scalar` is refused
+with `NK1241`, and the program writes `scalar::from(n)` (2.2) or the
+character, `'\u{8}'`.
 
 **Where a program means to keep only the low digits, it says so by name**, as
 it does for wrapping. The name carries the type it converts to:
@@ -1721,7 +1725,7 @@ The standard library provides types for groups of values.
     `map` hands back a list, but where its result goes straight into the next
     step - another `map`, `iter()`, a `for`, `len()` - no list is built between
     them, as none is between the steps of `xs.iter().map(…).filter(…)`. This
-    holds where every lambda of the chain touches nothing (Part III 13.5) and
+    holds where every lambda of the chain touches nothing (Part III 14.2) and
     changes no name outside it; a chain with a lambda that prints, reads or
     takes a lock runs step after step, as written. In a chain that qualifies,
     the order in which the lambdas reach the elements is not fixed. Where more

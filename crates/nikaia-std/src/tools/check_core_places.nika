@@ -99,6 +99,18 @@ pub fn check_core_places_beyond_f32(value: ref Expr) -> bool {
 }
 
 /// The integer types a `char` is cast into as its code (`INTEGERS`).
+/// What an integer cast `as scalar` is, for the refusal: a literal, or a
+/// value of its type.
+fn check_core_places_what_casts(from: ref Ty, written_out: bool) -> String {
+    if written_out {
+        return "an integer literal"
+    }
+    return match from {
+        Ty::Named { name, .. } => f"an `{name}`",
+        else => "a whole number",
+    }
+}
+
 fn check_core_places_an_integer(name: ref String) -> bool {
     return name == "u8" || name == "u32" || name == "u64" || name == "i32" || name == "i64"
 }
@@ -1147,6 +1159,28 @@ pub fn check_core_cast[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let from = check_core_expr(state, world, host, inner, span)
     let into = host.declared(state, ty, span)
     state.a_cast_over_a_lent_binding(world, inner, span)
+    // **An integer becomes a `scalar` by `as` only from a `u8`** (Part I
+    // 2.2, #1003): every byte value is a scalar value, and no wider integer
+    // type's every value is one - a variable, an open number or a literal
+    // alike. The program says by name what it means: `scalar::from(n)`, whose
+    // precondition is proved or refused, or the character itself.
+    let into_a_scalar = match into {
+        Ty::Named { name, args, .. } => (name == "scalar" || name == "char") && args.len() == 0,
+        else => false,
+    }
+    if into_a_scalar {
+        let written_out = match inner {
+            Expr::LitInt { .. } => true,
+            else => false,
+        }
+        let wider = match from {
+            Ty::Named { name, .. } => check_core_places_an_integer(name) && name != "u8",
+            else => written_out || (from.is_unknown() && state.open_numbers_in(world, inner).len() > 0),
+        }
+        if wider {
+            state.findings.push(check_refusal("NK1241", span, f"An integer is a `scalar` by `as` only from a `u8`, and this is {check_core_places_what_casts(from, written_out)}.", ["Every byte value is a scalar value; a wider integer may be a surrogate (`0xD800` to `0xDFFF`), negative or above `0x10FFFF`, which no character is."], "Write `scalar::from(n)`, whose precondition the compiler proves where the call stands or refuses, or the character itself, as `'\\u{2028}'`."))
+        }
+    }
     match into {
         Ty::Named { name, .. } => {
             if !check_core_places_offered(name) {
