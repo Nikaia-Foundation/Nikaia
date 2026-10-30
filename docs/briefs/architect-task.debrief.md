@@ -1,11 +1,18 @@
-1. **Most turns:** finding where the lowering decides between `impl Fn` and `Kept`. I spent about five grep and sed calls across `emit_core_types.nika` and `emit_function.nika` before finding `emit_fn_keeps` and `code_parameter_runs`. Building the probe matrix (p1–p4) took four runs. Each was needed, but writing p4 first would have covered most of what I learned.
-2. **What I had to look up that the task could have handed me:**
-   - That RED was the empty state file again, not a failed job. That cost two `gh api` calls.
-   - Whether the saved k3a2 patch in another session's `/tmp` still existed.
-   - The trait and `fn`-parameter lowering path (ADR-277 D11, `emit_fn_keeps`).
-   - The format and placeholder of `common.part`.
-3. **Checks:**
-   - Useful: the CI run list and the failed-job query (they showed no red), probes p1–p4 (they turned one Found into two defects plus a control row), the patch existence check, and the check that the push reached `origin/develop`.
-   - Wasted: two failed git calls (a pathspec after `git mv`, and `git status --cached`), plus re-reading the long *State* history in `architect.md` when only the newest entry mattered.
-   - Not done: I did not probe the recursive trait row; the brief says so.
-4. **The change that would save the most:** have `drive.nika` write the CI state into `architect-input.txt` (red job names, or "in progress, none failed") instead of a bare `RED` from an empty file. Second: show only the three newest *State* entries in `architect.md` and move the rest to an archive file, which would save about 25k tokens per architect run.
+1. **Most cost.**
+   - Reading `docs/architect.md` whole took two reads and about 32k tokens. Most of it is the *State* diary (70+ entries), and only the newest entry mattered.
+   - My first `git add` named a file I had already renamed (the old b1007 report path). The whole add failed, so the first commit held only the rename and I had to amend it.
+   - The push was then rejected because `develop` had moved. I couldn't rebase with other agents' unstaged files in the tree, so my commit 778e5034 is still not on `origin/develop`.
+
+2. **What I had to look up.**
+   - Where the checker hands facts to the emitter: `collected_into`, `std_receivers`, `check_core_method.nika:568`, `node_key`/`id_of`.
+   - Where `.copied()` is written (`check_reads.nika`, `emit_expr.nika`).
+   - The lowered signature for #996.
+   - The brief can't hold these, since it was my job to find them. But a one-line "fact map" in `builder-facts.md` (which checker facts reach emit, and how they are keyed) would have saved about 6 greps, for me and for the b1007 builder.
+
+3. **Checks.**
+   - Useful: probes of #1007 and #996 on today's binary. Lowering #996 showed the real cause (the `&'static str` tier), and the owned-value variant showed that NK1102 already refuses it correctly.
+   - Wasted: `nikaia --help` to find `lower`. The grep for RED handling in the scripts led nowhere, because the stop line was a CUT.
+
+4. **One change.**
+   - The architect task should say what to do when the push is rejected and the tree is dirty: leave it to `drive.nika`, or push through a temporary worktree.
+   - `architect.md` should move *State* entries older than a day into an archive file, so the charter fits in one read.
