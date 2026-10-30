@@ -281,6 +281,9 @@ pub struct CheckFlow {
     pub walk_lent: bool,
     /// The `fn` type the place a lambda stands in declares (#497).
     pub lambda_expected: Ty?,
+    /// The `fn` type a lambda bound by the `let` about to be checked is first
+    /// handed to (#997), found by the block it stands in.
+    pub let_lambda_use: Ty?,
     /// The leaves of a function's last value that are a place of a borrowed
     /// parameter, found while its scope stands (#738), by their nodes.
     pub lent_tail_leaves: collections::BTreeSet[i64],
@@ -400,6 +403,7 @@ impl CheckFlow {
             lent_text_params: collections::BTreeSet(),
             walk_lent: false,
             lambda_expected: null,
+            let_lambda_use: null,
             lent_tail_leaves: collections::BTreeSet(),
             open_calls: collections::BTreeMap(),
             unknown_bound: collections::BTreeSet(),

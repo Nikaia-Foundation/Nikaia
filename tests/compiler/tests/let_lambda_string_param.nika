@@ -1,0 +1,56 @@
+// #997: a lambda bound by `let` with an untyped `String` parameter, handed on
+// as `fn(String) -> T? sync`, takes its parameter's type from that use, and a
+// map read as its last value is copied out as a `return` of it is.
+use std::collections
+
+enum Val {
+    Num(i64),
+    Txt(String),
+}
+
+fn known(n: String) -> i64? {
+    if n == "a" {
+        return 1
+    }
+    return null
+}
+
+fn ask(f: fn(String) -> i64? sync, k: String) -> i64? {
+    return f(k)
+}
+
+fn ask_text(f: fn(String) -> String? sync, k: String) -> String? {
+    return f(k)
+}
+
+fn ask_val(f: fn(String) -> Val? sync, k: String) -> Val? {
+    return f(k)
+}
+
+fn main() {
+    // Row 1: the parameter handed on to a function.
+    let w = fn(n) { known(n) }
+    println(ask(w, "a") ?? 0)
+    // Row 2: a map read as the fallback, and as the whole tail.
+    let mut more: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    more.insert("b", 2)
+    let x = fn(n) { known(n) ?? more.get(n) }
+    let v = fn(n) { more.get(n) }
+    println(ask(x, "a") ?? 0)
+    println(ask(x, "b") ?? 0)
+    println(ask(v, "b") ?? 0)
+    println(ask(v, "c") ?? 0)
+    // Row 3: the element text, and an enum with a text part.
+    let mut texts: collections::BTreeMap[String, String] = collections::BTreeMap()
+    texts.insert("b", "bee")
+    let mut vals: collections::BTreeMap[String, Val] = collections::BTreeMap()
+    vals.insert("t", Val::Txt("tee"))
+    let t = fn(n) { texts.get(n)?.clone() }
+    let u = fn(n) { vals.get(n)?.clone() }
+    println(ask_text(t, "b") ?? "none")
+    println(ask_text(t, "z") ?? "none")
+    match ask_val(u, "t") ?? Val::Num(0) {
+        Val::Txt(s) => println(s),
+        Val::Num(k) => println(k),
+    }
+}

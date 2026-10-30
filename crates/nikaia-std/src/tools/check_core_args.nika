@@ -10,7 +10,7 @@ use std::collections
 
 /// Whether the callee only **runs** its `at`th parameter: the absence of
 /// `keeps`, and run where no contract was resolved.
-fn check_core_args_runs(callee: ref FnContract?, at: i64) -> bool {
+pub fn check_core_args_runs(callee: ref FnContract?, at: i64) -> bool {
     let contract = callee ?? return true
     let signature = contract.signature ?? return true
     let mut i = 0

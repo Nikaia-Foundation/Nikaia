@@ -172,7 +172,13 @@ impl EmitState {
         if a_task && !fails { if pauses { out.push("nikaia_std::task::plain_paused("); } else { out.push("nikaia_std::task::plain("); } }
         if pauses { out.push("async "); }
         let pattern = self.facts.filter_patterns.contains(&node_key(node));
-        if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *nikaia_std::index::get(&names, 0))); } else if self.facts.copied_entry_lambdas.contains(&node_key(node)) && names.len() == 1 { out.push("|__nikaia_slot| "); } else { out.push(&format!("|{}| ", names.join(", "))); }
+        if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *nikaia_std::index::get(&names, 0))); } else if self.facts.copied_entry_lambdas.contains(&node_key(node)) && names.len() == 1 { out.push("|__nikaia_slot| "); } else {
+            let by_use: Vec<Ty> = nikaia_std::index::or(match self.facts.lambda_params_by_use.get(&node_key(node)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into());
+            out.push(&format!("|{}| ", emit_core_flow_typed_names(&names, &by_use).join(", ")));
+        }
         let copied = self.facts.copied_entry_lambdas.contains(&node_key(node)) && names.len() == 1;
         let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.to_owned();
         for each in mutable.iter() {
@@ -902,4 +908,16 @@ pub(crate) fn emit_catch_is_a_join(world: &EmitWorld<'_, '_, '_, '_>, guarded: &
 }
 
 pub(crate) fn emit_flow_operated(expr: &Expr) -> bool { matches!(expr, Expr::Binary { .. } | Expr::Unary { .. }) }
+
+pub(crate) fn emit_core_flow_typed_names(names: &[String], given: &[Ty]) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    let mut at: i64 = 0;
+    for name in names.iter() {
+        let mut spelled: String = String::from("_");
+        if at < given.len() as i64 { spelled = plain_rust_spelling(nikaia_std::index::get(&given, (at) as usize)); }
+        if spelled == "_" { out.push(name.to_string()); } else { out.push(format!("{}: {}", name, spelled)); }
+        at += 1;
+    }
+    out
+}
 

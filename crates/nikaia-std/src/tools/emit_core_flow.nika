@@ -264,7 +264,10 @@ impl EmitState {
         } else if self.facts.copied_entry_lambdas.contains(node_key(node)) && names.len() == 1 {
             out.push("|__nikaia_slot| ")
         } else {
-            out.push(f"|{names.join(", ")}| ")
+            // **A lambda bound by `let`, typed by its first use** (#997):
+            // its parameters' types are written, as nothing else says them.
+            let by_use: Vec[Ty] = self.facts.lambda_params_by_use.get(node_key(node))?.clone() ?? []
+            out.push(f"|{emit_core_flow_typed_names(names, by_use).join(", ")}| ")
         }
         // **The `mut` ones reach inward** (ADR-281 D12), and the list is the
         // enclosing one plus this lambda's rather than this lambda's alone.
@@ -1380,4 +1383,24 @@ fn emit_flow_operated(expr: ref Expr) -> bool {
         Expr::Unary { .. } => true,
         else => false,
     }
+}
+
+/// A lambda's parameter names, each with the type `given` says where plain
+/// Rust can spell it (#997).
+fn emit_core_flow_typed_names(names: ref Vec[String], given: ref Vec[Ty]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut at = 0
+    for name in names {
+        let mut spelled: String = "_"
+        if at < given.len() as i64 {
+            spelled = plain_rust_spelling(given[at])
+        }
+        if spelled == "_" {
+            out.push(name.clone())
+        } else {
+            out.push(f"{name}: {spelled}")
+        }
+        at += 1
+    }
+    return out
 }

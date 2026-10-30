@@ -735,6 +735,7 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     let saved = state.enter_boundary("lambda");
     let outer = check_core_lambda_enter(state);
     let walked = check_core_block(state, world, host, body);
+    state.a_map_read_handed_back(world, &walked, body);
     check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
     state.leave_boundary(&saved);
     state.scope.pop();

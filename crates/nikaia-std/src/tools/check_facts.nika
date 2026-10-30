@@ -222,6 +222,10 @@ pub struct CheckFacts {
     /// map** (#684), by the lambda: its parameter is the value, read out of
     /// the slot and written back when the lambda ends.
     pub copied_entry_lambdas: collections::BTreeSet[i64],
+    /// **A lambda bound by `let` without a type, typed by its first use**
+    /// (#997), by the lambda: the types of its parameters, written on them
+    /// below, where nothing else says them.
+    pub lambda_params_by_use: collections::BTreeMap[i64, Vec[Ty]],
     /// **The key of `entry` on a map keyed by owned text, given a literal or
     /// a view** (#676), by the key: built into text of its own, as `insert`'s
     /// is.
@@ -499,6 +503,7 @@ impl CheckFacts {
             copied_walks: collections::BTreeSet(),
             filter_patterns: collections::BTreeSet(),
             copied_entry_lambdas: collections::BTreeSet(),
+            lambda_params_by_use: collections::BTreeMap(),
             owned_entry_keys: collections::BTreeSet(),
             collection_clones: collections::BTreeSet(),
             text_extends: collections::BTreeSet(),

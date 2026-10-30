@@ -1082,6 +1082,9 @@ pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref Ch
     let saved = state.enter_boundary("lambda")
     let outer = check_core_lambda_enter(state)
     let walked = check_core_block(state, world, host, body)
+    // **A map's read as its last value is copied out** (#997), as a lambda's
+    // handed to a call is.
+    state.a_map_read_handed_back(world, walked, body)
     check_core_lambda_leave(state, outer, walked, body)
     state.leave_boundary(saved)
     state.scope.pop()

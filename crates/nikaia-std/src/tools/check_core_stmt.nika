@@ -469,6 +469,9 @@ pub fn check_core_stmt_holds_code(ty: ref Ty) -> bool {
 }
 
 pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
+    let by_use: Ty? = state.flow.let_lambda_use?.clone()
+    state.flow.let_lambda_use = null
+    let typed_by_use = ty == null && by_use != null
     check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
     check_core_a_mut_parameter_given_away(state, world, host, value, span, "bound")
     let outer_read = state.flow.read_a_map
@@ -477,6 +480,27 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if ty != null && (check_core_stmt_expects_a_lambda(value) || check_simd_a_call(world, value)) {
         let t: ref Type = ty ?? return check_core_stmt_unit()
         state.flow.lambda_expected = written_ty(world.words, world.here.aliases, t)
+    }
+    // **A lambda bound without a type takes the one of its first use** (#997).
+    if typed_by_use {
+        let want: Ty = by_use ?? Ty::Unknown
+        match want {
+            Ty::Fn { params, .. } => {
+                state.facts.lambda_params_by_use.insert(id_of(value) as i64, params.clone())
+            },
+            else => {}
+        }
+        state.flow.lambda_expected = want
+    }
+    // Such a lambda is code run in place, as a parameter that is (#997);
+    // another `let` of the name is not.
+    if names.len() == 1 {
+        let bound: String = world.words.resolve(names[0]).clone()
+        if typed_by_use {
+            state.run_code.insert(bound)
+        } else {
+            let removed = state.run_code.remove(bound)
+        }
     }
     // **A name bound to a function value is a place of the error-set
     // calculation** (ADR-351 D1): what it is given is what a call through it
@@ -1684,6 +1708,95 @@ pub fn check_core_stmt_body_discarded(mut state: CheckState, body: ref Block) sy
 }
 
 /// **Walk a block and hand back the type of its tail.**
+/// **A lambda bound by `let` without a type takes it from its first use**
+/// (#997), as an empty list takes its element type from its first (ADR-135
+/// D2): the `fn` type of the parameter of a function it is first handed to,
+/// in the rest of the block. Its body is then checked, and lowered, as the
+/// same lambda written into that call is.
+fn check_core_stmt_lambda_by_use(world: ref CheckWorld, stmt: ref Stmt, block: ref Block, at: i64) -> Ty? sync {
+    let name: String = match stmt {
+        Stmt::Let { names, ty, value, .. } => {
+            if ty != null || names.len() != 1 || !check_core_stmt_an_untyped_lambda(value) {
+                return null
+            }
+            world.words.resolve(names[0]).clone()
+        },
+        else => return null,
+    }
+    let mut i = at + 1
+    while i < block.stmts.len() as i64 {
+        let found: Ty? = check_core_stmt_handed_to(world, name, block.stmts[i].node)
+        if found != null {
+            return found
+        }
+        i += 1
+    }
+    return null
+}
+
+/// Whether `value` is a lambda that names parameters.
+fn check_core_stmt_an_untyped_lambda(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Closure { params, .. } => params.len() > 0,
+        else => false,
+    }
+}
+
+/// The `fn` type a statement first hands `name` to as an argument, in it or
+/// in a block it holds.
+fn check_core_stmt_handed_to(world: ref CheckWorld, name: ref String, stmt: ref Stmt) -> Ty? sync {
+    for expr in check_visit_stmt(stmt) {
+        match expr {
+            Expr::Call { func, args, .. } => {
+                let mut at = 0
+                for arg in args {
+                    let named = match arg {
+                        Expr::Variable(n, _) => world.words.resolve(n) == name,
+                        else => false,
+                    }
+                    if named {
+                        let want: Ty? = check_core_stmt_code_parameter(world, func, at)
+                        if want != null {
+                            return want
+                        }
+                    }
+                    at += 1
+                }
+            },
+            else => {},
+        }
+    }
+    for inner in check_visit_stmt_blocks(stmt) {
+        for each in inner.stmts {
+            let found: Ty? = check_core_stmt_handed_to(world, name, each.node)
+            if found != null {
+                return found
+            }
+        }
+    }
+    return null
+}
+
+/// The type of the parameter at `at` of the function `func` names, where it
+/// is a `fn` type.
+fn check_core_stmt_code_parameter(world: ref CheckWorld, func: ref Expr, at: i64) -> Ty? sync {
+    let callee: String = match func {
+        Expr::Variable(n, _) => world.words.resolve(n).clone(),
+        else => return null,
+    }
+    let resolved: CheckResolved = resolve_call(world, callee) ?? return null
+    let expected = expected_arguments(resolved.contract)
+    // A callee that keeps it wants it kept, and a kept lambda's type is
+    // written on the `let`.
+    if at >= expected.len() as i64 || !check_core_args_runs(resolved.contract, at) {
+        return null
+    }
+    return match expected[at] {
+        Ty::Fn { .. } => expected[at].clone(),
+        else => null,
+    }
+}
+
 pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block) -> Ty sync {
     state.scope.push([])
     let mut tail = check_core_stmt_unit()
@@ -1702,6 +1815,7 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
                 else => {},
             }
         }
+        state.flow.let_lambda_use = check_core_stmt_lambda_by_use(world, stmt.node, block, at)
         let ty = check_core_stmt(state, world, host, stmt.node, stmt.span)
         state.coalesces_not_lent_are_taken(world)
         state.failing_cleanups_bound()

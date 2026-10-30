@@ -2128,7 +2128,7 @@ pub mod check_copies {
 }
 pub mod check_core_args {
     #[allow(unused_imports)]
-    pub use super::{check_core_arguments_given, check_core_arguments_bound, check_core_fold_form, check_core_locks, check_core_list_literal, check_core_list_repeat, check_core_args_a_field_called, check_core_args_code_said, check_core_a_called_field, check_core_fold_option};
+    pub use super::{check_core_args_runs, check_core_arguments_given, check_core_arguments_bound, check_core_fold_form, check_core_locks, check_core_list_literal, check_core_list_repeat, check_core_args_a_field_called, check_core_args_code_said, check_core_a_called_field, check_core_fold_option};
 }
 pub mod check_core_call {
     #[allow(unused_imports)]
