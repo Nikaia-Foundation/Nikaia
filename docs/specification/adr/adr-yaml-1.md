@@ -152,8 +152,11 @@ file of its own (it is generated from `main` at tag `v2022-01-17`, whose
 `License` is the MIT text); the owner confirmed that `main`'s licence covers
 it, with that `License` beside it (2026-10-30, #928).
 
-**The vendored suite is never changed** (owner, 2026-10-30): it is copied byte
-for byte and stays so. No case is edited, reformatted, renamed, re-encoded,
+**The vendored suite is never changed** (owner, 2026-10-28, again 2026-10-30): it
+is copied byte for byte and stays so. The reason is a licence, not only honest
+tests: the suite's Spec Example cases are copied from the YAML 1.2
+specification, whose terms allow copying it only unmodified; MIT alone would
+allow changes, the specification's terms do not. No case is edited, reformatted, renamed, re-encoded,
 trimmed or deleted, not even one the parser fails or one that looks wrong; no
 `cargo fmt`, `nikaia fmt`, line-ending or whitespace fix touches the directory.
 What the package does not pass goes into the pass list beside it, never into the
