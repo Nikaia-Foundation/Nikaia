@@ -64,6 +64,10 @@ impl CheckState {
             Ty::Nullable(read) => { let read = nikaia_std::boxed::open(read); read.clone() },
             _ => return,
         };
+        if inner.is_a_view() && read.is_a_view() && self.flow.view_reads.contains(&node) {
+            let viewed = self.facts.copied_reads.insert(node);
+            return;
+        }
         if inner.is_a_view() || inner.is_unknown() || read.is_a_view() || read.is_unknown() { return; }
         if self.copied(world, &inner) || !self.takes_away(world, &inner) {
             let added = self.facts.copied_reads.insert(node);

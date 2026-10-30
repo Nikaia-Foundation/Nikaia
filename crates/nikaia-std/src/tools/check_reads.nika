@@ -101,6 +101,12 @@ impl CheckState {
             Ty::Nullable(read) => read.clone(),
             else => return,
         }
+        // **A view the map holds is copied out as a view** (#996): a map of
+        // literal text holds `&'static str`, and its `get` is a view of it.
+        if inner.is_a_view() && read.is_a_view() && self.flow.view_reads.contains(node) {
+            let viewed = self.facts.copied_reads.insert(node)
+            return
+        }
         if inner.is_a_view() || inner.is_unknown() || read.is_a_view() || read.is_unknown() {
             return
         }

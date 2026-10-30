@@ -704,6 +704,11 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         } else {
             bound = found.clone()
         }
+        // **A `let` of a map's read of views binds the view itself** (#996):
+        // the read is a view of what the map holds, copied out.
+        if state.flow.view_reads.contains(id_of(value) as i64) {
+            let viewed = state.facts.copied_reads.insert(id_of(value) as i64)
+        }
     }
     // **A proved name bound whole by a `let` that owns its value is given
     // up** (ADR-382, #888), as one handed back by `return` is: the arm of

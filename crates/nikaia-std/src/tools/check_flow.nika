@@ -198,6 +198,10 @@ pub struct CheckFlow {
     /// A `get` of a `std` list or map, by the call's id: the read a `let mut`
     /// past a jump turns into a mutable view of the entry (#952).
     pub std_gets: collections::BTreeSet[i64],
+    /// A map's read whose element is itself a view, by the read's id: Rust's
+    /// read is a view of that view (`Option<&&str>`), so where a `T?` of the
+    /// view is kept the read is copied out (ADR-293 D15, #996).
+    pub view_reads: collections::BTreeSet[i64],
     /// An `Entry`'s `or_insert` or `or_insert_with`, by the call's id: the
     /// value in the map, which a `let mut` binds as the `&mut` itself (#974).
     pub std_entry_views: collections::BTreeSet[i64],
@@ -374,6 +378,7 @@ impl CheckFlow {
             map_views: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
             std_gets: collections::BTreeSet(),
+            view_reads: collections::BTreeSet(),
             std_entry_views: collections::BTreeSet(),
             mut_view_bindings: collections::BTreeSet(),
             last_resolved: null,

@@ -522,6 +522,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             let lent = state.lent_arms_bound(world, value);
             bound = nikaia_std::index::or(lent, || found.clone().into());
         } else { bound = found.clone(); }
+        if state.flow.view_reads.contains(&(id_of(value) as i64)) { let viewed = state.facts.copied_reads.insert(id_of(value) as i64); }
     }
     if element_view == 0 && !seen_through && !bytes_view && check_core_stmt_owns_whole(&bound) { state.narrowed_reads_given_back(value); }
     let mut open: Option<i64> = None;

@@ -1,0 +1,24 @@
+// A map of literal text holds `&'static str`, and its read is a view of that
+// view: a `String?` handed back is the read copied out (#996, ADR-293 D15).
+use std::collections
+
+fn word(m: collections::BTreeMap[String, String], k: String) -> String? {
+    return m.get(k)
+}
+
+fn word_bound(m: collections::BTreeMap[String, String], k: String) -> String? {
+    let r = m.get(k)
+    return r
+}
+
+fn word_indexed(m: collections::BTreeMap[String, String], k: String) -> String? {
+    return m[k]
+}
+
+fn main() {
+    let mut w: collections::BTreeMap[String, String] = collections::BTreeMap()
+    w.insert("b", "two")
+    println(word(w, "b") ?? "none")
+    println(word_bound(w, "b") ?? "none")
+    println(word_indexed(w, "b") ?? "none")
+}

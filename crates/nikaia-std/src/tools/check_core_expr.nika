@@ -87,6 +87,11 @@ pub fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let ty = check_core_expr_flat_get(state, world, expr, opened)
     if state.flow.read_a_map && check_core_expr_a_map_read(world, expr) {
         state.flow.map_read_sites.insert(id_of(expr) as i64)
+        // **A read of a map whose element is a view** (#996), through the
+        // brackets or `get`: a view of that view below.
+        if ty.is_a_view() {
+            state.flow.view_reads.insert(id_of(expr) as i64)
+        }
     }
     // **A value with a cleanup made here may die in this function**
     // (ADR-297 D2): by a call or a literal, which is where one comes from.

@@ -69,7 +69,10 @@ pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     let said_inside = state.flow.unknown_said > said_before;
     let opened = check_core_expr_open_receiver(state, expr, walked);
     let ty = check_core_expr_flat_get(state, world, expr, opened);
-    if state.flow.read_a_map && check_core_expr_a_map_read(world, expr) { state.flow.map_read_sites.insert(id_of(expr) as i64); }
+    if state.flow.read_a_map && check_core_expr_a_map_read(world, expr) {
+        state.flow.map_read_sites.insert(id_of(expr) as i64);
+        if ty.is_a_view() { state.flow.view_reads.insert(id_of(expr) as i64); }
+    }
     if check_core_expr_makes_a_value(expr) { check_crossings_a_value_with_a_cleanup_made(state, world, &ty); }
     state.a_member_of_an_unknown_lambda_parameter(world, expr, span);
     if ty.is_unknown() && !said_inside { state.a_value_of_no_known_type(world, expr, span); }

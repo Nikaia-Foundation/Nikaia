@@ -66,7 +66,7 @@ impl<'a> FbWidths<'a> {
         if found.is_some() { return nikaia_std::index::or(found, || 0); }
         if self.open.contains(&name) { return 0u64; }
         self.open.insert(name.to_string());
-        let held = self.rules.get(&name);
+        let held = self.rules.get(&name).copied();
         if held.is_none() {
             self.open.remove(&name);
             return 0u64;
