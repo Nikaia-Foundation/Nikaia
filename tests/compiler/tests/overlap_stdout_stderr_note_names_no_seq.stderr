@@ -1,0 +1,10 @@
+error[NK2104]: These two branches can't run at the same time.
+  --> tests/overlap_stdout_stderr_note_names_no_seq.nika:6:9
+   |
+ 6 |         b()
+   |         ^^^
+   |
+   = note: One touches stdout and the other stderr, which might be the same place.
+   = note: `overlap` runs its branches at once, so they can't depend on each other.
+   = help: If they should run in order, write them as ordinary statements.
+1 branch that cannot run beside the others

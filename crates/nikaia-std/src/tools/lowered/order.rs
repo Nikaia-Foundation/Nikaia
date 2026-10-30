@@ -66,7 +66,7 @@ impl Verdict {
             Verdict::DataDependency(name) => format!("the second uses `{}`", name),
             Verdict::Shadowed(name) => format!("both bind `{}`", name),
             Verdict::SameResource { kind, named, unnameable } => { let unnameable = *unnameable; same_resource(kind, (named).as_deref(), unnameable) },
-            Verdict::SameDestination { one, other } => format!("one touches {} and the other {}, which might be the same place. Use `seq` to run them in order", one, other),
+            Verdict::SameDestination { one, other } => format!("one touches {} and the other {}, which might be the same place", one, other),
             Verdict::NotAccountedFor => String::from("the compiler can't tell what one of them does"),
         }
     }

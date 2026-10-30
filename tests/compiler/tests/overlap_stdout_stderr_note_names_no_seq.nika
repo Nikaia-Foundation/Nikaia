@@ -1,0 +1,9 @@
+fn a() -> i64 { println("a"); 1 }
+fn b() -> i64 { eprintln("b"); 2 }
+fn main() {
+    let (x, y) = overlap {
+        a()
+        b()
+    }
+    println(f"{x} {y}")
+}

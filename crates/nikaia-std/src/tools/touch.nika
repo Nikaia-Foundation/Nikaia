@@ -59,7 +59,7 @@ impl Reached {
 /// The family a kind belongs to, which is what two resources are compared
 /// on: the two console handles are one, and every other kind is its own.
 /// Deliberately not the claim that any two resources might coincide - D2
-/// names the file the program named, and D7's `seq` is the escape for
+/// names the file the program named, and ordinary statements (ADR-292 D1) are the escape for
 /// resources that look disjoint and are not.
 fn family(kind: ref String) -> String {
     if kind == "stderr" {

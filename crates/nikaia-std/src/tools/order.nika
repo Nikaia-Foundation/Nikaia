@@ -116,7 +116,7 @@ impl Verdict {
             Verdict::DataDependency(name) => f"the second uses `{name}`",
             Verdict::Shadowed(name) => f"both bind `{name}`",
             Verdict::SameResource { kind, named, unnameable } => same_resource(kind, named, unnameable),
-            Verdict::SameDestination { one, other } => f"one touches {one} and the other {other}, which might be the same place. Use `seq` to run them in order",
+            Verdict::SameDestination { one, other } => f"one touches {one} and the other {other}, which might be the same place",
             Verdict::NotAccountedFor => "the compiler can't tell what one of them does",
         }
     }
