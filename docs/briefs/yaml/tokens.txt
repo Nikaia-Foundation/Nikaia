@@ -5,3 +5,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y6-1013-text-bindings.md 583717 5
 /home/user/Nikaia/docs/briefs/yaml/y5b-escapes.md 1669722 34
 /home/user/Nikaia/docs/briefs/yaml/y7a-639-loop-ranges.md 6876914 78
+/home/user/Nikaia/docs/briefs/yaml/architect-task.md 5644680 64
