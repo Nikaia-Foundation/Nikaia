@@ -1,0 +1,21 @@
+// A whole-number `let` in a loop body whose value the prover does not read
+// (`ds[k]`) is a name of its own when its type says it is a whole number,
+// so the guard that tests it constrains it: over three turns `s` grows by a
+// `d` between 0 and 3 each (ADR-361 D12).
+fn total(ds: ref Vec[i64]) -> i64 {
+    let mut s = 0
+    for k in 0..<3 {
+        let d: i64 = ds[k]
+        if d < 0 || d > 3 {
+            return 0
+        }
+        s = s + d
+    }
+    assert(s >= 0 && s <= 9)
+    return s
+}
+
+fn main() {
+    let ds: Vec[i64] = [1, 2, 3]
+    println(f"{total(ds)}")
+}

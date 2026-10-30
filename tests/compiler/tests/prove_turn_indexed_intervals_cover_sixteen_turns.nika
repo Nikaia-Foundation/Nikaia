@@ -1,0 +1,21 @@
+// Sixteen turns are as many as the turn-indexed intervals cover
+// (ADR-361 D12): each turn doubles `n` and adds a bit.
+fn bits(ds: ref Vec[i64]) -> i64 {
+    let mut n = 0
+    let mut k = 0
+    while k < 16 {
+        let d: i64 = ds[k]
+        if d < 0 || d > 1 {
+            return 0
+        }
+        n = n * 2 + d
+        k += 1
+    }
+    assert(n >= 0 && n <= 0xFFFF)
+    return n
+}
+
+fn main() {
+    let ds: Vec[i64] = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
+    println(f"{bits(ds)}")
+}

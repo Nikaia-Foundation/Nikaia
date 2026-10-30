@@ -1,0 +1,30 @@
+// A `throw` in a loop body is a way out of the loop, as a `return` is, not
+// a turn (ADR-361 D12): the loop is still stated, and the claim past it is
+// proved through it.
+enum Short { Input }
+
+impl Error for Short {
+    fn message(ref self) -> String {
+        return "short"
+    }
+}
+
+fn total(cs: ref Vec[i64]) -> i64 throws {
+    let mut s = 0
+    let mut k = 0
+    while k < 4 {
+        if k >= cs.len() {
+            throw Short::Input
+        }
+        s = s + 3
+        k += 1
+    }
+    assert(s >= 0 && s <= 12)
+    return s
+}
+
+fn main() {
+    let cs: Vec[i64] = [1, 2, 3, 4]
+    let r = total(cs) catch { 0 }
+    println(f"{r}")
+}
