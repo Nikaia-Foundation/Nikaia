@@ -1,0 +1,2 @@
+# Append-only tables two drivers write at once: keep both sides
+docs/tokenspeed.md merge=union
