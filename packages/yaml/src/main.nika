@@ -44,8 +44,14 @@ pub struct Entry {
 	pub value: Node,
 }
 
+// `raw` is the text as written; `value` is what it says where the grammar
+// already knows it: for a double-quoted scalar with an escape or a line break
+// its decoded text, of its own (D11); for every other scalar a view of the
+// input, `raw` again, folded on request by `text()` (D4). `value` is private
+// and read through `text()`, since it holds either kind (ADR-282 D22).
 pub struct Scalar {
 	pub raw: String,
+	value: String,
 	pub style: Style,
 }
 
@@ -96,8 +102,8 @@ fn is_flow_indicator(x: scalar) -> bool sync {
 	return x == ',' || x == '[' || x == ']' || x == '{' || x == '}'
 }
 
-// The characters after `\\` that YAML names (`c-ns-esc-char`), and the line
-// break of an escaped line break.
+// The characters after `\\` that YAML names (`c-ns-esc-char`) and that stand
+// for one character each; `x`, `u`, `U` and the line break are rules.
 fn is_escape(x: scalar) -> bool sync {
 	return x == '0'
 		|| x == 'a'
@@ -117,10 +123,46 @@ fn is_escape(x: scalar) -> bool sync {
 		|| x == '_'
 		|| x == 'L'
 		|| x == 'P'
-		|| x == 'x'
-		|| x == 'u'
-		|| x == 'U'
-		|| x == '\n'
+}
+
+// The character an escape of `is_escape` stands for.
+fn escaped(e: scalar) -> String sync {
+	let c = match e {
+		'0' => '\u{0}'
+		'a' => '\u{7}'
+		'b' => '\u{8}'
+		't' => '\t'
+		'n' => '\n'
+		'v' => '\u{b}'
+		'f' => '\u{c}'
+		'r' => '\r'
+		'e' => '\u{1b}'
+		'N' => '\u{85}'
+		'_' => '\u{a0}'
+		'L' => '\u{2028}'
+		'P' => '\u{2029}'
+		else => e
+	}
+	return one(c)
+}
+
+fn one(c: scalar) -> String sync {
+	let mut out = String()
+	out.push(c)
+	return out
+}
+
+// `n` line breaks.
+fn breaks(n: i64) -> String sync {
+	let mut out = String()
+	for _ in 0..<n {
+		out.push('\n')
+	}
+	return out
+}
+
+fn is_hex(x: scalar) -> bool sync {
+	return (x >= '0' && x <= '9') || (x >= 'a' && x <= 'f') || (x >= 'A' && x <= 'F')
 }
 
 // `c-indicator`: no plain scalar starts with one (`-`, `?`, `:` may, when a
@@ -338,22 +380,64 @@ grammar Yaml {
 		| v:Single -> { v }
 		| v:Plain(-1, true, true) -> { v }
 
-	// `c-double-quoted`: `raw` is the text between the quotes, as written.
-	rule Double -> Node = a:here "\"" s:text(DoubleChar*) "\"" b:here -> {
-		Node {
-			start: a,
-			end: b,
-			anchor: null,
-			tag: null,
-			value: Value::Str(Scalar { raw: s, style: Style::Double }),
+	// `c-double-quoted`: `raw` is the text between the quotes, as written. A
+	// scalar with neither an escape nor a line break is its own value, a view;
+	// any other is read in one pass part by part, `raw` the text the parts
+	// cover, each escape checked and decoded once, here (D11): its digits by
+	// a guard per digit, its range by a guard on its value, so that an invalid
+	// escape is a parse error with its line and column, and `scalar::from` is
+	// proved by the guard before it.
+	rule Double -> Node =
+		a:here "\"" s:text(DoublePlain*) "\"" b:here -> {
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				value: Value::Str(Scalar { raw: s, value: s, style: Style::Double }),
+			}
 		}
-	}
-	// `c-ns-esc-char`: an escape YAML does not name is an error. The digits of
-	// `\x`, `\u` and `\U` are not checked yet: `hex_digit` (Part II 10.8)
-	// does not lower.
-	rule DoubleChar =
-		"\\" x:any if(is_escape(x), "an escape") -> { }
-		| x:any if(x != '"' && x != '\\') -> { }
+		| a:here "\"" s:text(parts:DoublePart*) "\"" b:here -> {
+			let mut v = String()
+			for p in parts {
+				v.push_str(p)
+			}
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				value: Value::Str(Scalar { raw: s, value: v, style: Style::Double }),
+			}
+		}
+	rule DoublePlain = x:any if(x != '"' && x != '\\' && x != '\n') -> { }
+	// One part of a double-quoted scalar's value (YAML 1.2.2 7.3.1): a run of
+	// characters, spaces inside a line, a folded line break (6.5), an escaped
+	// line break, an escape.
+	rule DoublePart -> String =
+		t:text(DoubleWord+) -> { t.clone() }
+		| w:text((" " | "\t")+) not("\n") -> { w.clone() }
+		| (" " | "\t")* "\n" n:count(Empty) (" " | "\t")* -> {
+			if n == 0 {
+				" "
+			} else {
+				breaks(n)
+			}
+		}
+		| "\\\n" n:count(Empty) (" " | "\t")* -> { breaks(n) }
+		| "\\x" v:Hex2 if(v >= 0 && v <= 0xFF) -> { one(scalar::from(v)) }
+		| "\\u" v:Hex4 if(v >= 0 && v <= 0xFFFF && (v < 0xD800 || v > 0xDFFF)) -> {
+			one(scalar::from(v))
+		}
+		| "\\U" v:Hex8 if(v >= 0 && v <= 0x10FFFF && (v < 0xD800 || v > 0xDFFF)) -> {
+			one(scalar::from(v))
+		}
+		| "\\" x:any if(is_escape(x), "an escape") -> { escaped(x) }
+	rule DoubleWord = x:any if(x != '"' && x != '\\' && x != '\n' && x != ' ' && x != '\t') -> { }
+	rule Hex -> i64 = x:any if(is_hex(x)) -> { hex_value(x) }
+	rule Hex2 -> i64 = a:Hex b:Hex -> { a * 16 + b }
+	rule Hex4 -> i64 = a:Hex2 b:Hex2 -> { a * 256 + b }
+	rule Hex8 -> i64 = a:Hex4 b:Hex4 -> { a * 65536 + b }
 
 	// `c-single-quoted`: `''` is a quote.
 	rule Single -> Node = a:here "'" s:text(SingleChar*) "'" b:here -> {
@@ -362,7 +446,7 @@ grammar Yaml {
 			end: b,
 			anchor: null,
 			tag: null,
-			value: Value::Str(Scalar { raw: s, style: Style::Single }),
+			value: Value::Str(Scalar { raw: s, value: s, style: Style::Single }),
 		}
 	}
 	rule SingleChar = "''" -> { } | x:any if(x != '\'') -> { }
@@ -377,7 +461,7 @@ grammar Yaml {
 				Kind::False => Value::Bool(false)
 				Kind::Int => Value::Int(s)
 				Kind::Float => Value::Float(s)
-				Kind::Str => Value::Str(Scalar { raw: s, style: Style::Plain })
+				Kind::Str => Value::Str(Scalar { raw: s, value: s, style: Style::Plain })
 			}
 			Node { start: a, end: b, anchor: null, tag: null, value: v }
 		}
@@ -567,41 +651,21 @@ pub fn parse(input: ref Bytes) -> Vec[Node] sync throws {
 	}
 }
 
-// A scalar's value: line folding (YAML 1.2.2 6.5), `''` in a single-quoted
-// scalar and the escapes of a double-quoted one (7.3). A copy of its own,
-// computed on request. `\\x`, `\\u` and `\\U` stay as written: reading
-// their hexadecimal digits waits on a radix parse in `std`.
+// A scalar's value: for a double-quoted one what the grammar decoded (D11);
+// line folding (YAML 1.2.2 6.5) and `''` of a plain or a single-quoted one,
+// a copy of its own computed on request.
 pub fn text(s: ref Scalar) -> String sync {
 	return match s.style {
-		Style::Plain => fold(s.raw, false, false)
-		Style::Single => fold(s.raw, true, false)
-		Style::Double => fold(s.raw, false, true)
+		Style::Plain => fold(s.raw, false)
+		Style::Single => fold(s.raw, true)
+		Style::Double => s.value.clone()
 		else => s.raw.clone()
-	}
-}
-
-fn escaped(e: scalar) -> scalar sync {
-	return match e {
-		'0' => '\u{0}'
-		'a' => '\u{7}'
-		'b' => '\u{8}'
-		't' => '\t'
-		'n' => '\n'
-		'v' => '\u{b}'
-		'f' => '\u{c}'
-		'r' => '\r'
-		'e' => '\u{1b}'
-		'N' => '\u{85}'
-		'_' => '\u{a0}'
-		'L' => '\u{2028}'
-		'P' => '\u{2029}'
-		else => e
 	}
 }
 
 // Folds the lines of a flow scalar: the spaces around a line break go, one
 // break is a space, each further (empty) line a line break.
-fn fold(raw: String, single: bool, double: bool) -> String sync {
+fn fold(raw: String, single: bool) -> String sync {
 	let cs: Vec[scalar] = raw.chars().collect()
 	let n = cs.len() as i64
 	let mut out = String()
@@ -637,20 +701,6 @@ fn fold(raw: String, single: bool, double: bool) -> String sync {
 		if single && c == '\'' {
 			out.push('\'')
 			i += 2
-			continue
-		}
-		if double && c == '\\' && i + 1 < n {
-			let e = cs[i + 1]
-			if e == '\n' {
-				// An escaped line break: nothing, and the next line's indentation goes.
-				i = skip_blanks(cs, i + 2)
-			} else if e == 'x' || e == 'u' || e == 'U' {
-				out.push(c)
-				i += 1
-			} else {
-				out.push(escaped(e))
-				i += 2
-			}
 			continue
 		}
 		out.push(c)

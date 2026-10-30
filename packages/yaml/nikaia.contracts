@@ -43,6 +43,11 @@ touches = []
 views = ["v: borrowed"]
 signature = "(v: ref Value) -> i64"
 
+[fn."breaks"]
+sync = true
+touches = []
+signature = "(n: i64) -> String"
+
 [fn."digits_in"]
 sync = true
 keeps = ["from"]
@@ -60,13 +65,13 @@ signature = "(input: ref Bytes, rendered: String) -> Error"
 sync = true
 keeps = ["e"]
 touches = []
-signature = "(e: scalar) -> scalar"
+signature = "(e: scalar) -> String"
 
 [fn."fold"]
 sync = true
 touches = []
 views = ["raw: borrowed"]
-signature = "(raw: ref String, single: bool, double: bool) -> String"
+signature = "(raw: ref String, single: bool) -> String"
 
 [fn."hex_value"]
 sync = true
@@ -85,6 +90,11 @@ views = ["s: borrowed"]
 signature = "(s: ref String) -> bool"
 
 [fn."is_flow_indicator"]
+sync = true
+touches = []
+signature = "(x: scalar) -> bool"
+
+[fn."is_hex"]
 sync = true
 touches = []
 signature = "(x: scalar) -> bool"
@@ -116,6 +126,12 @@ sync = true
 touches = []
 views = ["input: borrowed"]
 signature = "(input: ref Bytes, line: i64, column: i64) -> i64"
+
+[fn."one"]
+sync = true
+keeps = ["c"]
+touches = []
+signature = "(c: scalar) -> String"
 
 [fn."parse"]
 pub = true
@@ -198,8 +214,8 @@ tethered = ["value"]
 
 [type."Scalar"]
 pub = true
-fields = ["pub raw: ref String", "pub style: Style"]
-tethered = ["raw"]
+fields = ["pub raw: ref String", "value: String", "pub style: Style"]
+tethered = ["raw", "value"]
 
 [type."Style"]
 pub = true
