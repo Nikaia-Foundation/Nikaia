@@ -53,6 +53,7 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
     let mut settled = false
     while !settled {
         walk.held = collections::BTreeMap()
+        walk.std_claims = collections::BTreeMap()
         walk.reaches = collections::BTreeMap()
         walk.findings = []
         walk.state.broken = collections::BTreeSet()

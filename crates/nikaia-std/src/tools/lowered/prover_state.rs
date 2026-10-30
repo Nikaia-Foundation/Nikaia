@@ -284,8 +284,8 @@ impl ProverState {
         outcome
     }
     #[allow(clippy::too_many_arguments)]
-    pub fn precondition_call(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, callee: &str, params: &[String], claims: &[PreClaim], args: &[Expr], span: Span, scope: &ProverScope, at: &ProverWhere, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String) -> CallOutcome {
-        let mut outcome = CallOutcome { reach: CallReach::Proved, findings: vec![] };
+    pub fn precondition_call(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, callee: &str, params: &[String], claims: &[PreClaim], args: &[Expr], of_std: bool, span: Span, scope: &ProverScope, at: &ProverWhere, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String) -> CallOutcome {
+        let mut outcome = CallOutcome { reach: CallReach::Proved, findings: vec![], held: vec![] };
         for index in 0..claims.len() as i64 {
             let pre = nikaia_std::index::get(&claims, (index) as usize);
             let mut given_by: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
@@ -313,15 +313,23 @@ impl ProverState {
             given_paths(arena, words, &read, params, args, scope, &self.pinned, &mut given_by);
             let mut goal: Option<i64> = None;
             if every_given(&read, &given_by) { goal = Some(arena.substitute(pre.term, &given_by)); }
-            if goal.is_some() && is_proved(ask(&arena, &scope.facts, nikaia_std::index::or(goal, || 0))) { continue; }
+            if goal.is_some() && is_proved(ask(&arena, &scope.facts, nikaia_std::index::or(goal, || 0))) {
+                if of_std { outcome.held.push(ClaimHeld::Proved); }
+                continue;
+            }
             let site = CarriedFrom { at: span.start as i64, callee: callee.to_string(), place: index };
+            if of_std && self.in_test { outcome.held.push(ClaimHeld::ByTheTest); }
             if self.collecting {
                 let mut carrying: Option<String> = None;
                 if at.no_precondition.is_none() { carrying = carrying_function((at.function).as_deref()); }
                 self.carry_back(arena, goal, &pre, callee, site, scope, (carrying).as_deref(), &at.params, &ask, &model);
                 continue;
             }
-            if self.carried_here((at.function).as_deref(), &site) { continue; }
+            if self.carried_here((at.function).as_deref(), &site) {
+                if of_std { outcome.held.push(ClaimHeld::Precondition(nikaia_std::index::or(carrying_function((at.function).as_deref()), || "".into()), 0)); }
+                continue;
+            }
+            let told = outcome.findings.len() as i64;
             let mut always: Option<collections::BTreeMap<String, i64>> = None;
             if goal.is_some() { always = refuting_values(arena, &scope.facts, nikaia_std::index::or(goal, || 0), &ask, &model); }
             let broken_always = always.is_some();
@@ -354,6 +362,7 @@ impl ProverState {
                     outcome.findings.push(Finding { code: String::from("NK1207"), span, message: format!("This call breaks `{}`'s precondition `{}` when {}.", callee, written, shown(&values)), notes, help: Some(format!("Pass `{}` arguments for which `{}` holds, or check them with a guard before the call.", callee, written)), warning: false, labels: vec![] });
                 }
             }
+            if of_std && !self.in_test { if (outcome.findings.len() as i64) != told { outcome.held.push(ClaimHeld::AtRunTime(String::from("it is false at this call"))); } else if goal.is_none() { outcome.held.push(ClaimHeld::AtRunTime(String::from("an argument is not a whole number the prover reads"))); } else { outcome.held.push(ClaimHeld::AtRunTime(String::from("nothing before the call shows it"))); } }
             let mut this_reach = CallReach::Through;
             if goal.is_some() {
                 let mut operands: Vec<(String, String)> = vec![];
@@ -607,6 +616,7 @@ impl ProverWhere {
 pub struct CallOutcome {
     pub reach: CallReach,
     pub findings: Vec<Finding>,
+    pub held: Vec<ClaimHeld>,
 }
 
 pub(crate) fn is_proved(answer: SolverAnswer) -> bool { matches!(answer, SolverAnswer::Proved) }

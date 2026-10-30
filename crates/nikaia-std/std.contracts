@@ -1200,6 +1200,23 @@ sync = true
 touches = []
 signature = "(self) -> String"
 
+# The character whose code point `n` is: `scalar::from(0x41)` is `'A'`. `n` is
+# a Unicode scalar value, not negative, not a surrogate and not above
+# `0x10FFFF`, and the caller shows it: a call that does not is refused, or
+# checked where the call runs under `unproved-claims = "warn"` (Part I 2.2).
+# An integer is no `scalar` by `as`, but for a `u8`, which always is one.
+#
+# **Written here and not inferred** (ADR-269 D5): the function is Rust's
+# (`num::scalar_from`), since the one Nikaia way from an integer to a `scalar`
+# is this function, and its body states the same three conditions.
+[fn."scalar::from"]
+pub = true
+sync = true
+touches = []
+requires = ["n >= 0 && n <= 0x10FFFF && (n < 0xD800 || n > 0xDFFF)"]
+from = ["assert(n >= 0 && n <= 0x10FFFF && (n < 0xD800 || n > 0xDFFF))"]
+signature = "(n: i64) -> scalar"
+
 # The smaller of two `i64`s.
 [fn."i64::min"]
 pub = true

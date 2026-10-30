@@ -564,8 +564,13 @@ impl ProverState {
     /// reaches the call (D8) - or checked by the call itself; where an
     /// argument is one the prover does not read, the call reaches the checked
     /// entry (D20). `escape` writes a name as the language below does.
-    pub fn precondition_call(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], claims: ref Vec[PreClaim], args: ref Vec[Expr], span: Span, scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync) -> CallOutcome {
-        let mut outcome = CallOutcome { reach: CallReach::Proved, findings: [] }
+    /// `of_std`: a precondition `std`'s ledger publishes (`scalar::from`,
+    /// #1003). No `assert` of the program stands for it, so the call is the
+    /// claim: the outcome says how each condition is held there - proved,
+    /// carried back to the caller's entry, or checked at run time, which the
+    /// build refuses (`NK1300`, ADR-380 D1) as it refuses such an `assert`.
+    pub fn precondition_call(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], claims: ref Vec[PreClaim], args: ref Vec[Expr], of_std: bool, span: Span, scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync) -> CallOutcome {
+        let mut outcome = CallOutcome { reach: CallReach::Proved, findings: [], held: [] }
         for index in 0..<claims.len() {
             let pre = claims[index]
             // Each parameter's term as this call gives it, and a list's
@@ -602,9 +607,15 @@ impl ProverState {
                 goal = arena.substitute(pre.term, given_by)
             }
             if goal != null && is_proved(ask(arena, scope.facts, goal ?? 0)) {
+                if of_std {
+                    outcome.held.push(ClaimHeld::Proved)
+                }
                 continue
             }
             let site = CarriedFrom { at: span.start as i64, callee: callee.clone(), place: index }
+            if of_std && self.in_test {
+                outcome.held.push(ClaimHeld::ByTheTest)
+            }
             if self.collecting {
                 let mut carrying: String? = null
                 if at.no_precondition == null {
@@ -616,8 +627,12 @@ impl ProverState {
             // **Carried back to this function's entry** in the first pass:
             // its callers prove it, so the call needs no check of its own.
             if self.carried_here(at.function, site) {
+                if of_std {
+                    outcome.held.push(ClaimHeld::Precondition(carrying_function(at.function) ?? "", 0))
+                }
                 continue
             }
+            let told = outcome.findings.len()
             // **A call that breaks the precondition every time** (D8): what is
             // known at the call rules it out. The values shown are the
             // parameters', as this call gives them.
@@ -666,6 +681,15 @@ impl ProverState {
             // one the prover reads, which also makes it pure, so evaluating it
             // once more for the check changes nothing. Where one is not, the
             // call reaches the checked entry (D20).
+            if of_std && !self.in_test {
+                if outcome.findings.len() != told {
+                    outcome.held.push(ClaimHeld::AtRunTime("it is false at this call"))
+                } else if goal == null {
+                    outcome.held.push(ClaimHeld::AtRunTime("an argument is not a whole number the prover reads"))
+                } else {
+                    outcome.held.push(ClaimHeld::AtRunTime("nothing before the call shows it"))
+                }
+            }
             let mut this_reach = CallReach::Through
             if goal != null {
                 let mut operands: Vec[(String, String)] = []
@@ -1023,6 +1047,9 @@ impl ProverWhere {
 pub struct CallOutcome {
     pub reach: CallReach,
     pub findings: Vec[Finding],
+    /// How each condition of a `std` precondition is held at the call
+    /// (#1003); empty for any other callee.
+    pub held: Vec[ClaimHeld],
 }
 
 fn is_proved(answer: SolverAnswer) -> bool {

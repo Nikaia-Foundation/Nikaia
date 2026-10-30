@@ -9,6 +9,7 @@ pub struct ProverWalk {
     pub reaches: collections::BTreeMap<(String, String), CallReach>,
     pub findings: Vec<Finding>,
     pub claims: collections::BTreeSet<(i64, i64)>,
+    pub std_claims: collections::BTreeMap<(i64, i64), String>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1020,7 +1021,7 @@ pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, sc
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = prover_called(func, words, unaliased);
-            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, config, span, scope, at, program, words, own, ask, model, escape, written_of, condition); }
+            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), node_key(expr), args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition); }
         },
         _ => { },
     }
@@ -1182,7 +1183,7 @@ pub(crate) fn prover_nested(walk: &mut ProverWalk, block: &Block, lambda: Option
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_a_call(walk: &mut ProverWalk, callee: &str, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_a_call(walk: &mut ProverWalk, callee: &str, call: i64, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     if scope.locals.contains(callee) { return; }
     let caller = carrying_function((at.function).as_deref());
     if caller.is_some() { walk.state.edges.insert((nikaia_std::index::or(caller, || "".into()), callee.to_string())); }
@@ -1191,11 +1192,16 @@ pub(crate) fn prover_a_call(walk: &mut ProverWalk, callee: &str, args: &[Expr], 
         let function = match free_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return };
         let found = nikaia_std::index::or(pre, || Precondition::none());
         let all = arguments_in_order(&function, args, config, words);
-        prover_record_call(walk, callee, &function.params, &found.claims, &all, span, scope, at, words, ask, model, escape, written_of);
+        prover_record_call(walk, callee, &function.params, &found.claims, &all, None, span, scope, at, words, ask, model, escape, written_of);
+        return;
+    }
+    if !own.functions.contains_key(callee) {
+        let std = match prover_std_requires(walk, callee, library, condition) { Some(__nikaia_value) => __nikaia_value, None => return };
+        prover_record_call(walk, callee, &std.params, &std.requires, args, Some(call), span, scope, at, words, ask, model, escape, written_of);
         return;
     }
     let foreign = match prover_foreign_contract(walk, callee, own, condition) { Some(__nikaia_value) => __nikaia_value, None => return };
-    if !foreign.requires.is_empty() { prover_record_call(walk, callee, &foreign.params, &foreign.requires, args, span, scope, at, words, ask, model, escape, written_of); }
+    if !foreign.requires.is_empty() { prover_record_call(walk, callee, &foreign.params, &foreign.requires, args, None, span, scope, at, words, ask, model, escape, written_of); }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1211,13 +1217,20 @@ pub(crate) fn prover_a_method_call(walk: &mut ProverWalk, receiver: &Expr, metho
     let found = match pre { Some(__nikaia_value) => __nikaia_value, None => return };
     let target = match own_method(program, words, &owner, &name) { Some(__nikaia_value) => __nikaia_value, None => return };
     let all = arguments_in_order(&target, args, config, words);
-    prover_record_call(walk, &callee, &target.params, &found.claims, &all, span, scope, at, words, ask, model, escape, written_of);
+    prover_record_call(walk, &callee, &target.params, &found.claims, &all, None, span, scope, at, words, ask, model, escape, written_of);
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_record_call(walk: &mut ProverWalk, callee: &str, params: &[String], claims: &[PreClaim], args: &[Expr], span: Span, scope: &ProverScope, at: &ProverWhere, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String) {
-    let outcome = walk.state.precondition_call(&mut walk.arena, words, callee, params, claims, args, span, scope, at, ask, model, escape);
+pub(crate) fn prover_record_call(walk: &mut ProverWalk, callee: &str, params: &[String], claims: &[PreClaim], args: &[Expr], std_call: Option<i64>, span: Span, scope: &ProverScope, at: &ProverWhere, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String) {
+    let outcome = walk.state.precondition_call(&mut walk.arena, words, callee, params, claims, args, std_call.is_some(), span, scope, at, ask, model, escape);
     for found in outcome.findings.iter() { walk.findings.push(found.clone()); }
+    if std_call.is_some() && !outcome.held.is_empty() {
+        let key = (span.start as i64, nikaia_std::index::or(std_call, || 0));
+        let mut conditions: Vec<String> = vec![];
+        for pre in claims.iter() { conditions.push(nikaia_std::index::or(claim_text_of((pre.computed).as_deref()), || pre.written.to_string().into())); }
+        walk.std_claims.insert(key, format!("{}: {}", callee, conditions.join(" && ")));
+        walk.held.insert(key, prover_std_held(&outcome.held));
+    }
     let mut written: String = String::from("");
     for arg in args.iter() {
         if !written.is_empty() { written.push_str(", "); }
@@ -1240,6 +1253,27 @@ pub(crate) fn prover_foreign_contract(walk: &mut ProverWalk, key: &str, own: &Le
     let foreign = foreign_from(contract, shape, &requires, &ensures);
     walk.state.foreign.insert(key.to_string(), Some(foreign.clone()));
     Some(foreign)
+}
+
+pub(crate) fn prover_std_requires(walk: &mut ProverWalk, key: &str, library: &Ledger, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> Option<Foreign> {
+    let contract = match *nikaia_std::index::get(&library.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if contract.requires.is_empty() { return None; }
+    let shape = foreign_shape(contract);
+    let mut requires: Vec<i64> = vec![];
+    for text in contract.requires.iter() { requires.push(prover_condition_term(&mut walk.arena, text, &shape.names, condition)); }
+    Some(foreign_from(contract, shape, &requires, &vec![]))
+}
+
+pub(crate) fn prover_std_held(helds: &[ClaimHeld]) -> ClaimHeld {
+    let mut worst = ClaimHeld::Proved;
+    for held in helds.iter() {
+        match held {
+            ClaimHeld::AtRunTime(_) => { return held.clone(); },
+            ClaimHeld::Proved => { },
+            _ => { worst = held.clone(); },
+        }
+    }
+    worst
 }
 
 pub(crate) fn prover_condition_term(arena: &mut TermArena, text: &str, names: &collections::BTreeSet<String>, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> i64 {

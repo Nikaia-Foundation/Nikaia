@@ -149,7 +149,7 @@ pub fn check_walked_seed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, 
     let mut prefixes: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (key, _) in world.library.functions.iter() { check_walked_prefix_into(key, &mut prefixes); }
     for (key, _) in world.library.types.iter() { check_walked_prefix_into(key, &mut prefixes); }
-    for prefix in prefixes.iter() { if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(&format!("{}::new", prefix)) { state.std_modules.insert(prefix.to_string()); } }
+    for prefix in prefixes.iter() { if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(&format!("{}::new", prefix)) && prefix != "scalar" { state.std_modules.insert(prefix.to_string()); } }
 }
 
 pub(crate) fn check_walked_prefix_into(key: &str, prefixes: &mut collections::BTreeSet<String>) {

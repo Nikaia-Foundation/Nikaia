@@ -73,6 +73,25 @@ pub fn to_char<T: Into<i128> + Copy + std::fmt::Display>(value: T) -> char {
     }
 }
 
+/// **`scalar::from(n)`** (Part I 2.2, #1003): the Unicode scalar value `n`
+/// is. Its precondition is published in `std.contracts` (ADR-269 D5): `n` is
+/// not negative, not a surrogate and not above U+10FFFF. A caller proves it or
+/// is refused (`NK1300`); under `unproved-claims = "warn"` it is checked here,
+/// and a value that is no character stops the program as a false `assert`
+/// does.
+#[inline]
+#[track_caller]
+pub fn scalar_from(n: i64) -> char {
+    match u32::try_from(n).ok().and_then(char::from_u32) {
+        Some(c) => c,
+        None => crate::abort::assertion_failed(
+            "n >= 0 && n <= 0x10FFFF && (n < 0xD800 || n > 0xDFFF)",
+            None,
+            &[("n", Some(n.to_string()))],
+        ),
+    }
+}
+
 /// A float as an `i32`, or an abort.
 ///
 /// `#[track_caller]`, so the abort names the line the conversion was written on

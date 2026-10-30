@@ -395,6 +395,11 @@ impl EmitState {
     /// because an alias is this file's name for a package and the head segment
     /// is where one can stand.
     pub fn path(ref self, world: ref EmitWorld, trusting: bool, unpinned: bool, segments: ref Vec[String]) -> String {
+        // **`scalar::from` is `std`'s** (Part I 2.2, #1003): below, `scalar` is
+        // Rust's `char`, which has no `from` over an `i64`.
+        if segments.len() == 2 && segments[0] == "scalar" && segments[1] == "from" {
+            return "nikaia_std::num::scalar_from"
+        }
         if segments.len() == 2 && segments[1] == "new" {
             if unpinned && (segments[0] == "HashMap" || segments[0] == "HashSet") {
                 return f"{segments[0]}::default"

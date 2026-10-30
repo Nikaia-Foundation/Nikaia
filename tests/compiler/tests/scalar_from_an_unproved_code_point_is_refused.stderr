@@ -1,0 +1,19 @@
+error[NK1300]: `scalar::from: n >= 0 && n <= 0x10FFFF && (n < 0xD800 || n > 0xDFFF)` is not proved: nothing before the call shows it.
+   --> tests/scalar_from_an_unproved_code_point_is_refused.nika:12:9
+    |
+ 12 |         out.push(scalar::from(n))
+    |         ^^^^^^
+    |
+    = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+    = note: `nikaia check --asserts` lists every claim and why it is not proved.
+    = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+error[NK1300]: `scalar::from: n >= 0 && n <= 0x10FFFF && (n < 0xD800 || n > 0xDFFF)`, the precondition of `one`, is not proved: one call does not prove it.
+   --> tests/scalar_from_an_unproved_code_point_is_refused.nika:18:5
+    |
+ 18 |     return scalar::from(n)
+    |     ^^^^^^
+    |
+    = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+    = note: `nikaia check --asserts` lists every claim and why it is not proved.
+    = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+2 type errors

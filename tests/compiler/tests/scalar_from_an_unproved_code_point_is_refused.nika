@@ -1,0 +1,32 @@
+// `scalar::from(n)`'s precondition, that `n` is a scalar value, is `std`'s
+// (Part I 2.2, #1003), and a claim of the program at each call, as an
+// `assert` standing there would be (ADR-269 D5, ADR-380 D1). Where nothing
+// shows it, the build refuses it (`NK1300`): in `repeated`, the call stands
+// in a loop, so the claim is not carried to the function's entry; through
+// `one`, it is `one`'s precondition, which the call in `twice`'s loop does
+// not prove. Under `unproved-claims = "warn"` both are checked at run time.
+
+fn repeated(n: i64, times: i64) -> String {
+    let mut out = String()
+    for k in 0..<times {
+        out.push(scalar::from(n))
+    }
+    return out
+}
+
+fn one(n: i64) -> scalar {
+    return scalar::from(n)
+}
+
+fn twice(n: i64) -> String {
+    let mut out = String()
+    for k in 0..<2 {
+        out.push(one(n))
+    }
+    return out
+}
+
+fn main() {
+    println(repeated(65, 2))
+    println(twice(66))
+}
