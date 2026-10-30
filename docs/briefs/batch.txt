@@ -1,3 +1,1 @@
-b1008b-trait-keeps.md
-k3a2-comptime-compute.md
 b1007-sum-typed.md
