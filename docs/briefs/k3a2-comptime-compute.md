@@ -6,7 +6,7 @@ budget_usd: 30
 ---
 # Brief: K3a part 2 - `computed` and `worked_out_ahead` move into Nikaia (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1, row K3a of `docs/selfhosting-plan.md`. Precondition: `k3a1-commit.md` (K3a part 1, the `ComptimeLowerHost`) `b995-coalesce-map-get.md` (#995, `a ?? m.get(k)`, 0cf0b173) `b997-let-lambda-string-param.md` (#997, the let-bound `known` lambda of :393) and `b1005-to-string-owned-local.md` (#1005) are on `origin/develop`; if one is not, stop with `Result: blocked`, `Needs:` the missing one.
+Score: self-hosting lane, bootstrap week lane 1, row K3a of `docs/selfhosting-plan.md`. Precondition: `k3a1-commit.md` (K3a part 1, the `ComptimeLowerHost`) `b995-coalesce-map-get.md` (#995, `a ?? m.get(k)`, 0cf0b173) `b997-let-lambda-string-param.md` (#997, the let-bound `known` lambda of :393) `b1005-to-string-owned-local.md` (#1005) and `b1006-set-iter.md` (#1006, `iter()` on both sets, ADR-collections-2 D3) are on `origin/develop`; if one is not, stop with `Result: blocked`, `Needs:` the missing one.
 
 Cut: crates/nikaia/src/comptime_run.rs:276-536
 Cut: crates/nikaia/src/comptime_run.rs:544-555
@@ -27,7 +27,7 @@ Where a step is already Nikaia (`comptime_sub_program`, `comptime_constants_of`,
 
 ## Forms to watch (CLAUDE.md, *A missing form stops the work*)
 * `known(name) ?? ahead.get(name)` needs #995 (done, 0cf0b173): a text or `BuildValue` element is written `ahead.get(name)?.clone()` (ADR-293 D15). The `let`-bound lambda of :393 needs #997 (done, 7029fe65). A `match` handing back text refused NK2302 is #998 (done, f2599c1c); `let s = ...; return s.to_string()` refused NK1104/NK2302 is #1005 (b1005 in this batch). Another `??`/`get` mismatch: stop, `Found:` with a probe.
-* Sets have no `iter`/`filter` in `std.contracts` (not decided by any ADR). Write `absent` with `difference` (it exists and returns a sequence): `files_constants.difference(carried).map(fn(s) { s.clone() }).collect()`. Do not write a `for` loop over a set to stand in for a missing `filter`; if a step needs a set form that does not exist, stop: `Result: blocked`, `Found:` + probe, `Needs: owner decision`.
+* Sets have `iter()` (ADR-collections-2 D3, #1006; the first run stopped on its absence, report `k3a2-comptime-compute.md.run1.report.md`): write `computed`'s test as the Rust has it, `named.iter().any(fn(name) { ... })`. Write `absent` with `difference` (it returns a sequence): `files_constants.difference(carried).map(fn(s) { s.clone() }).collect()`. Pipeline methods on the set itself (`s.any(f)`) do not exist on purpose (D3). Do not write a `for` loop over a set to stand in for a sequence method; if a step needs a set form that does not exist, stop: `Result: blocked`, `Found:` + probe, `Needs: owner decision`.
 * A defect of the lowering (a wrong Rust type, a missing clone): stop and report it under `Found:` with a probe; do not write around it.
 
 ## To build
