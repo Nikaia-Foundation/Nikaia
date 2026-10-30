@@ -1183,6 +1183,14 @@ impl EmitState {
         if name == "collect" && args.len() == 0 && !declared && !self.method_pauses(on_node) {
             out.push("::<Vec<_>>")
         }
+        // **And a sequence's `sum` names what it hands back** (#1007): Rust
+        // infers no result type for it where nothing annotates it.
+        if name == "sum" && args.len() == 0 && receiver != null {
+            let summed = self.facts.summed[on_node] ?? ""
+            if summed != "" {
+                out.push(f"::<{summed}>")
+            }
+        }
         if kind == 0 {
             out.push("(")
         }

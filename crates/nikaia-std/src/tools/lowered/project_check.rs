@@ -45,7 +45,7 @@ pub fn project_check_summary(findings: &[CheckFinding], violations: i64) -> Stri
     if under_a_lock > 0 { refused.push(format!("{} read{} of a file with a lock held", under_a_lock, project_check_plural(under_a_lock))); }
     let rules = project_check_count(findings, "NK2605") + project_check_count(findings, "NK2701");
     if rules > 0 { refused.push(format!("{} place{} that can fail without saying so", rules, project_check_plural(rules))); }
-    let locks = vec!["NK2203", "NK2204", "NK2205", "NK2207", "NK2208"].iter().map(|code| { project_check_count(findings, code) }).sum();
+    let locks = vec!["NK2203", "NK2204", "NK2205", "NK2207", "NK2208"].iter().map(|code| { project_check_count(findings, code) }).sum::<i64>();
     if locks > 0 { refused.push(format!("{} mistake{} with a lock", locks, project_check_plural(locks))); }
     let others = findings.iter().filter(|&f| { f.severity == CheckSeverity::Error }).count() as i64 - locks - rules - refuted - types - crossings - reaching - undescribed - stale - aliases - changed_under - tethered - untethered - tasks - walked - pausing - paused_in_a_door - pauses_forbidden - under_a_lock;
     if others > 0 { refused.push(format!("{} other error{}", others, project_check_plural(others))); }

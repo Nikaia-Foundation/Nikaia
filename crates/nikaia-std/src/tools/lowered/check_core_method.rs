@@ -294,6 +294,22 @@ pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWo
     if counts && !world.own.functions.contains_key(&key) { state.facts.counted.insert(id_of(receiver) as i64); }
 }
 
+pub(crate) fn check_core_method_summed(name: &str, on: &Ty, value: &Ty) -> String {
+    if name != "sum" { return String::from(""); }
+    match on {
+        Ty::Seq { .. } => { },
+        _ => { return String::from(""); },
+    }
+    match value {
+        Ty::Named { name: number, args, view } => {
+            let view = *view;
+            if args.is_empty() && !view && a_number_name(number) { return number.to_string(); }
+            return String::from("");
+        },
+        _ => return String::from(""),
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
@@ -407,6 +423,8 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.flow.walk_open = None;
     state.flow.walk_lent = false;
     let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span);
+    let summed = check_core_method_summed(&name, &on, &value);
+    if summed != "" { state.facts.summed.insert(id_of(receiver) as i64, summed); }
     let walk_open: Option<i64> = state.flow.walk_open;
     state.flow.walk_open = None;
     let walk_item: Option<i64> = state.flow.walk_item;

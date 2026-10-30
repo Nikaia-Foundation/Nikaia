@@ -216,6 +216,10 @@ pub struct CheckFacts {
     pub arm_subjects: collections::BTreeMap[i64, i64],
     pub guards_inside_boxes: collections::BTreeMap[i64, collections::BTreeSet[String]],
     pub collected_into: collections::BTreeSet[i64],
+    /// **A sequence's `sum`, by the receiver: the number type it hands
+    /// back** (#1007). The language below infers no result type for `sum`
+    /// where nothing annotates it, so the call names it (`.sum::<i64>()`).
+    pub summed: collections::BTreeMap[i64, String],
     pub copied_walks: collections::BTreeSet[i64],
     pub filter_patterns: collections::BTreeSet[i64],
     /// **An `and_modify` lambda handed a number, `bool` or `char` in the
@@ -500,6 +504,7 @@ impl CheckFacts {
             arm_subjects: collections::BTreeMap(),
             guards_inside_boxes: collections::BTreeMap(),
             collected_into: collections::BTreeSet(),
+            summed: collections::BTreeMap(),
             copied_walks: collections::BTreeSet(),
             filter_patterns: collections::BTreeSet(),
             copied_entry_lambdas: collections::BTreeSet(),

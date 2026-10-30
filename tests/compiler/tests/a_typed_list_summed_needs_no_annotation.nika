@@ -1,0 +1,19 @@
+// A sequence's `sum` over a typed number list names its result type (#1007):
+// rustc refused the bare `.sum()` where nothing annotated it.
+
+fn total(v: Vec[i64]) -> i64 {
+    let t: i64 = v.iter().sum()
+    return t
+}
+
+fn main() {
+    let v: Vec[i64] = [3, 4]
+    println(v.iter().sum())
+    let s = v.iter().sum()
+    println(s)
+    println(total(v) + v.iter().sum())
+    let w: Vec[f64] = [1.5, 2.0]
+    let t: f64 = w.iter().sum()
+    println(t)
+    println(w.iter().sum())
+}

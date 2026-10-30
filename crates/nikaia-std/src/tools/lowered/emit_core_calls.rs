@@ -782,6 +782,10 @@ impl EmitState {
             declared = self.facts.collected_into.contains(&node_key(on));
         }
         if name == "collect" && args.is_empty() && !declared && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
+        if name == "sum" && args.is_empty() && receiver.is_some() {
+            let summed = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.summed, &on_node), || "");
+            if summed != "" { out.push(&format!("::<{}>", summed)); }
+        }
         if kind == 0 { out.push("("); }
         let takes = self.takes_a_handle(world, &name);
         self.emit_call_hold(world, walk, host, receiver, scope, flow);

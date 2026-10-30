@@ -414,6 +414,28 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, rece
 
 /// The half after the receiver is typed and the witness has joined the
 /// arguments (`args`), with the door's flags set around the call.
+/// The number type a sequence's `sum` hands back, or `""` where the call is
+/// no `sum` of a sequence or what it hands back is no number Part I 2.2
+/// offers (#1007).
+fn check_core_method_summed(name: ref String, on: ref Ty, value: ref Ty) -> String {
+    if name != "sum" {
+        return ""
+    }
+    match on {
+        Ty::Seq { .. } => {},
+        else => return "",
+    }
+    match value {
+        Ty::Named { name: number, args, view } => {
+            if args.len() == 0 && !view && a_number_name(number) {
+                return number.clone()
+            }
+            return ""
+        },
+        else => return "",
+    }
+}
+
 fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, on: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], written: ref String, span: ref Span) -> Ty sync {
     let name: String = f"{world.words.resolve(method)}"
     // **A `set` given a stamped value** (D4): the receiver's name, carried.
@@ -566,6 +588,12 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     state.flow.walk_open = null
     state.flow.walk_lent = false
     let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span)
+    // **What a sequence's `sum` hands back is named** (#1007): the
+    // language below infers no type for it where nothing annotates it.
+    let summed = check_core_method_summed(name, on, value)
+    if summed != "" {
+        state.facts.summed.insert(id_of(receiver) as i64, summed)
+    }
     let walk_open: i64? = state.flow.walk_open
     state.flow.walk_open = null
     let walk_item: i64? = state.flow.walk_item
