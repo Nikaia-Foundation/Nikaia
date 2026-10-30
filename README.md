@@ -42,11 +42,27 @@ how to spread work over several cores. You write what should happen, and the com
 how.
 
 * **An `assert` is checked by the compiler**, as a contract every caller must meet.
-* **Every function can be async, without colouring.** A call that waits pauses its function; the program goes on.
-* **Races, unchecked missing values and unhandled errors are refused** at compile time.
+* **Unchecked missing values and unhandled errors are refused** at compile time.
 * **No garbage collector and no `free`.** Memory is released at a point you can see.
 * **One core or many is one line** in `nikaia.toml`; the code stays the same.
 * **Formats are part of the language**: a log or a protocol is described as a grammar.
+
+Tasks that run at the same time are checked as well. Two tasks that would change the same
+value at once, or both write to standard output, are refused when the program is built, and
+the message names what they share; where the compiler cannot tell what a call touches, as in
+a Rust crate or a C library, it does not refuse. A task's error is thrown where the program
+waits for the task, and the compiler asks for it to be handled there, as for any call that can
+fail. A task handle that is never joined, cancelled or detached is refused. Each task is to
+get a memory budget of its own, so that a task that uses it up ends alone while the rest runs
+on; that is specified, not built yet, and memory a Rust crate or a C library allocates for
+itself is not counted.
+
+You do not need to mark the functions that wait, because the compiler finds where a function
+pauses: a call that waits is written like any other, and a function that starts to wait leaves
+its callers as they are. The specification writes concurrent work with `async` before an
+expression, `f(async g(), async h())` running `g` and `h` beside each other; that form is being
+built ([#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983)), and today the same is
+written with `overlap { … }` and `spawn`.
 
 Nikaia checks your program, and Rust's compiler checks memory safety again. The name comes from my
 daughter, **Nika**: in Persian, *nik* means *good*, so the motto is *good wins*. The longer

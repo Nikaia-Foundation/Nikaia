@@ -1,6 +1,6 @@
 ---
 layout: home
-title: Every function can be async
+title: Code that waits needs no marking
 description: >-
   Code that waits looks like any other code.
 ---
@@ -13,23 +13,24 @@ description: >-
 <section class="home-section" id="check">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/easy/#async" | relative_url }}">Easy to understand</a></p>
-    <h1 class="home-heading">Every function can be <code>async</code></h1>
+    <h1 class="home-heading">Code that waits needs no marking</h1>
     <div class="limit-class">
-        <dl class="limit-steps">
-          <dt>The problem</dt>
-          <dd><strong>In many languages, code that waits has to be marked everywhere it touches: <code>async</code> here, <code>await</code> there.</strong></dd>
-          <dt>An example</dt>
-          <dd>Read two files and add up their sizes. Reading a file waits for the disk.</dd>
-          <dt>What Nikaia checks</dt>
-          <dd>Every function in Nikaia can run asynchronously, without being marked: a call that waits pauses its function, and the program goes on with other work. You write it as an ordinary call. Being asynchronous does not colour a function, so it never forces its callers to change. That is decided and stable.</dd>
-          <dt>The limit</dt>
-          <dd>Every function may pause unless it says otherwise. A function marked <code>sync</code> never pauses and may call only other <code>sync</code> functions, which is how you say that a piece of code must not wait.</dd>
-          <dt>Still open</dt>
-          <dd>How tasks are orchestrated is being worked out. The exact forms are being examined: today's <code>overlap</code> and <code>par_iter</code>, and forms like <code>thread::scope</code> and <code>par</code>. Under discussion are <code>let async</code> and other forms, aiming for a syntax that is familiar, safe and expressive, and so more uniform. The example below uses today's <code>overlap</code>.</dd>
-        </dl>
+        <h3>A call that waits is an ordinary call</h3>
+        <p>In JavaScript, Python or C#, a function that waits for a file or the network is marked <code>async</code>, every call to it says <code>await</code>, and when a function starts to wait, its callers have to change as well. In Nikaia you do not need <code>await</code>, because the compiler finds where a function pauses. A call that waits pauses its function, the program goes on with other work, and the call is written like any other. A function that starts to wait leaves its callers as they are. Where a piece of code must not wait, the function says <code>sync</code>; the compiler holds it to that, and it may call only other <code>sync</code> functions.</p>
+        <h3>Running two things at once today</h3>
+        <p>Lines run in the order they are written. To read two files at the same time, the program below puts both reads in an <code>overlap</code> block, which runs its lines together and waits for all of them. It compiles with today&rsquo;s compiler. If one read fails, its error is thrown out of the block, and the compiler asks for it to be handled there, as for any call that can fail: here by <code>throws</code> on <code>main</code>.</p>
+        <h3>The design being built</h3>
+        <p>The specification replaces <code>overlap</code> and <code>spawn</code> with one word, <code>async</code>, written before an expression (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/983">#983</a>, not built yet). <code>async e</code> starts <code>e</code> at once, and the program waits for its value where the value is first needed:</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let user = async db::load_user(id)
+let rights = async db::load_rights(id)
+let prefs = cache::load_prefs(id)      // runs while both loads are in flight
+render(user, rights, prefs)            // waits for both first</code></pre></div>
+        <p>In the same way <code>f(async g(), async h())</code> runs <code>g</code> and <code>h</code> beside each other and calls <code>f</code> when both are done, and a <code>catch</code> written after an <code>async</code> expression is its fallback. A task that is to be joined or cancelled later is started with <code>async(handle)</code>, and one that may outlive the function that started it with <code>async(detached)</code>, which takes the place of <code>spawn</code>; a task is cancelled only through such a handle. Work over every element of a list is <code>xs.par_iter()</code>, whose lambdas may pause. The option names <code>handle</code>, <code>deferred</code> and <code>detached</code> are placeholders until the names are settled.</p>
+        <h3>What the compiler checks about tasks</h3>
+        <p>Two tasks that would change the same value at once, or both write to standard output, are refused, naming what they share (<a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a>); where the compiler cannot tell what a call touches, it does not refuse. A task&rsquo;s error is thrown where the program waits for the task. A task handle that is never joined, cancelled or detached is refused, and the tasks a block starts are waited for at its end. Each task is to get a memory budget of its own, so that a task that uses it up ends with <code>task::OverBudget</code> and the rest of the program runs on; that is specified and not built yet, and memory a Rust crate or a C library allocates for itself is not counted (<a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a>).</p>
 
         <details class="limit-details home-code markdown-body" open>
-          <summary>Reading two files at once</summary>
+          <summary>Reading two files at once, as it compiles today</summary>
 <pre><code class="language-nika">use std::fs
 
 fn size_of(path: String) -&gt; int throws {
@@ -49,7 +50,7 @@ fn main() throws {
       </div>
     <div class="safe-reading">
       <h2>Go deeper</h2>
-      <ul><li><a href="{{ "/guide/syntax.html" | relative_url }}">Guide: a tour of the syntax</a></li><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II: running at once</a></li></ul>
+      <ul><li><a href="{{ "/guide/syntax.html" | relative_url }}">Guide: a tour of the syntax</a></li><li><a href="{{ "/docs/specification/10-nikaia-light.html#chapter-8-concurrency-doing-things-at-the-same-time" | relative_url }}">Specification, Part I Chapter 8: concurrency</a></li><li><a href="{{ "/docs/specification/adr/adr-async-4.html" | relative_url }}">ADR-async-4: <code>async</code> before an expression</a></li><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II: running at once</a></li></ul>
     </div>
     <p class="safe-others">More under Easy to understand: <a href="{{ "/easy/readable-errors.html" | relative_url }}">Readable errors</a><a href="{{ "/easy/formats-as-grammar.html" | relative_url }}">Formats are part of the language</a></p>
   </div>

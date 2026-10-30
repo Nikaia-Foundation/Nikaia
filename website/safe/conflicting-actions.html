@@ -15,46 +15,46 @@ description: >-
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#conflicts" | relative_url }}">Very safe</a></p>
     <h1 class="home-heading">Conflicting actions</h1>
     <div class="limit-class">
-        <dl class="limit-steps">
-          <dt>The problem</dt>
-          <dd><strong><strong>When tasks interfere with each other, results can go wrong.</strong></strong></dd>
-          <dt>An example</dt>
-          <dd>Two tasks update the same account balance. One update can overwrite the other, and money appears to disappear.</dd>
-          <dt>What Nikaia checks</dt>
-          <dd>Nikaia restricts how tasks access and change shared data. A task that changes a value the other tasks also use is rejected when the program is built, with the way out named: give each task a value of its own, or keep the value in shared state that is changed through a lock.</dd>
-          <dt>The limit</dt>
-          <dd>Code outside Nikaia can create its own threads. When Nikaia cannot establish the necessary guarantees, you provide a safe boundary, such as passing a copy instead of shared data. The rules reject unsafe constructions; they are not a proof that every conceivable race is found.</dd>
-        </dl>
+        <h3>Two tasks that change the same balance</h3>
+        <p>Two tasks update the same account balance. When they run at the same time, one update can overwrite the other, and money appears to disappear. Nikaia looks at what each task touches when the program is built. Two tasks that change the same value are refused, and so are two tasks that both write to standard output; standard output and standard error count as one destination, because they often end up in the same place. The message names what the two share. Two tasks that only read the same value are accepted. A lambda of <code>par_iter</code>, which runs on several cores at once, is held to the same rule: one that changes a name outside it is refused.</p>
+        <h3>How to write it instead</h3>
+        <p>The message names the ways out. Give each task a value of its own and combine the results afterwards, keep the balance in a <code>SharedMut</code> and change it through <code>update</code>, which takes the lock for you, or, where the order matters, write the two changes as ordinary statements one after the other.</p>
+        <h3>Where the check stops</h3>
+        <p>The compiler refuses what it can see. Where it cannot tell what a call touches, for example code in a Rust crate or a C library that starts threads of its own, it does not refuse, so the check is not a proof that every race is found. At such a boundary you hand over a copy rather than shared data. Today it also does not tell two writes to the same file from writes to two files: both are accepted.</p>
+        <h3>Today's form and the design being built</h3>
+        <p>The program below uses <code>overlap</code>, which the compiler accepts today. The specification replaces it with <code>async</code> written before an expression, which runs that expression beside the code after it (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/983">#983</a>, not built yet). The same check then runs between a task and everything that runs beside it, other tasks included:</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let mut balance = 100
+let deposit = async fn { balance = balance + 50 }
+let charge = async fn { balance = balance - 30 }   // refused (NK2104): both change `balance`</code></pre></div>
 
         <details class="limit-details home-code markdown-body" open>
-          <summary>Show the program and what Nikaia says</summary>
-<pre><code class="language-nika">use std::task
-
-fn main() throws {
+          <summary>Show the program and what Nikaia says today</summary>
+<pre><code class="language-nika">fn main() throws {
     let mut balance = 100
-    task::scope fn(s) {
-        s.spawn fn { balance = balance + 50 }
-        s.spawn fn { balance = balance - 30 }
+    overlap {
+        balance = balance + 50
+        balance = balance - 30
     }
     println(f"{balance}")
 }
 </code></pre>
 <pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
-<span class="d-error">error[NK2107]</span><b>: You're changing `balance` in a task of `task::scope`, and the scope's tasks all share `balance`.</b>
-<span class="d-gutter">  --&gt;</span> main.nika:6:22
+<span class="d-error">error[NK2104]</span><b>: These two branches can't run at the same time.</b>
+<span class="d-gutter">  --&gt;</span> main.nika:5:9
 <span class="d-gutter">   |</span>
-<span class="d-gutter"> 6 |</span>         s.spawn fn { balance = balance + 50 }
-<span class="d-gutter">   |</span>                      <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="d-gutter"> 5 |</span>         balance = balance - 30
+<span class="d-gutter">   |</span>         <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^</span>
 <span class="d-gutter">   |</span>
-<span class="d-gutter">   =</span> <span class="d-note">note:</span> A scope's tasks run at the same time, each on a core of its own, so they would write `balance` at once.
-<span class="d-gutter">   =</span> <span class="d-help">help:</span> Give each task a value of its own and combine them after the scope, or keep `balance` in a `SharedMut` and change it through `update`.</code></pre>
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> Both change `balance`.
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> `overlap` runs its branches at once, so a binding one changes can't be touched by the other.
+<span class="d-gutter">   =</span> <span class="d-help">help:</span> If they should run in order, write them as ordinary statements.</code></pre>
         </details>
       </div>
     <div class="safe-reading">
       <h2>Go deeper</h2>
-      <ul><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II: running at once</a></li><li><a href="{{ "/docs/specification/adr/adr-328.html" | relative_url }}">ADR-328: tasks and scopes</a></li><li><a href="{{ "/docs/specification/30-nikaia-tooling.html" | relative_url }}">Specification, Part III: what a refused crossing looks like</a></li></ul>
+      <ul><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II: running at once</a></li><li><a href="{{ "/docs/specification/10-nikaia-light.html#812-running-work-beside-the-code-after-it-async" | relative_url }}">Specification, Part I 8.1.2: running work beside the code after it</a></li><li><a href="{{ "/docs/specification/adr/adr-async-4.html" | relative_url }}">ADR-async-4: <code>async</code> before an expression</a></li><li><a href="{{ "/docs/specification/30-nikaia-tooling.html" | relative_url }}">Specification, Part III: what a refused crossing looks like</a></li></ul>
     </div>
-    <p class="safe-others">More under Very safe: <a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">One task cannot take all your memory</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
+    <p class="safe-others">More under Very safe: <a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
   </div>
 </section>
 

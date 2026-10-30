@@ -25,15 +25,15 @@ description: >-
     <div class="home-split-text">
       <span class="safe-chip safe-chip-build">Refused when built</span>
       <h2>Conflicting actions</h2>
-      <p><strong><strong>When tasks interfere with each other, results can go wrong.</strong></strong></p>
-      <p><span class="lead-in">What Nikaia checks.</span> Nikaia restricts how tasks access and change shared data. A task that changes a value the other tasks also use is rejected when the program is built, with the way out named: give each task a value of its own, or keep the value in shared state that is changed through a lock.</p>
-      <p><span class="lead-in">The limit.</span> Code outside Nikaia can create its own threads. When Nikaia cannot establish the necessary guarantees, you provide a safe boundary, such as passing a copy instead of shared data. The rules reject unsafe constructions; they are not a proof that every conceivable race is found.</p>
+      <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches when the program is built, and refuses two tasks that change the same value or both write to standard output, naming what they share. The way out is in the message: a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
+      <p>Where the compiler cannot tell what a call touches, as in a Rust crate or a C library that starts its own threads, it does not refuse, so this is not a proof that every race is found. The example uses today's <code>overlap</code>; the specification writes it with <code>async</code> before an expression, which is being built (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/983">#983</a>).</p>
     </div>
     <div class="home-code-side">
-<div class="home-code markdown-body"><pre><code class="language-nika">task::scope fn(s) {
-    s.spawn fn { balance = balance + 50 }
-    s.spawn fn { balance = balance - 30 }
-}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: You're changing `balance` in a task of `task::scope`, and the scope's tasks all share `balance`.</b></code></pre></div>
+<div class="home-code markdown-body"><pre><code class="language-nika">overlap {
+    balance = balance + 50
+    balance = balance - 30
+}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error[NK2104]</span><b>: These two branches can't run at the same time.</b>
+<span class="d-note">note:</span> Both change `balance`.</code></pre></div>
         
     </div>
     <p class="home-split-more"><a class="safe-in-depth" href="{{ "/safe/conflicting-actions.html" | relative_url }}">In depth →</a></p>
@@ -64,10 +64,10 @@ description: >-
   <div class="home-inner home-split">
     <div class="home-split-text">
       <span class="safe-chip safe-chip-run">Specified, not built yet</span>
-      <h2>One task cannot take all your memory</h2>
-      <p><strong><strong>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine.</strong> In most languages nothing stands in its way. Erlang and Elixir are known for isolating work so that this cannot happen; Nikaia is specified to do the same.</strong></p>
+      <h2>A memory budget for every task</h2>
+      <p><strong><strong>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine.</strong> In most languages nothing stands in its way. Erlang and Elixir are known for isolating work in this way; Nikaia is specified to do the same.</strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> Every task gets a memory budget of its own. A task that spends it ends on its own, and the rest of the program, your main application included, runs on. A shared value has a budget of its own too. This is decided and written into the specification. A calculation that runs while the program is built is already bounded in steps and in memory.</p>
-      <p><span class="lead-in">The limit.</span> <strong>The per-task budget is not built yet.</strong> Today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof: Nikaia will not show at build time that a task stays within its budget, it makes sure that a task which does not can only end itself.</p>
+      <p><span class="lead-in">The limit.</span> <strong>The per-task budget is not built yet.</strong> Today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof: Nikaia will not show at build time that a task stays within its budget, it makes sure that a task which does not ends with <code>task::OverBudget</code>, an error like any other, and only that task ends. Memory that a Rust crate or a C library allocates and keeps for itself is in no budget.</p>
     </div>
     <div class="home-code-side">
         <p class="safe-note">Decided and specified, not built yet: today a task can still take memory from the whole program.</p>
@@ -84,7 +84,7 @@ description: >-
       <span class="safe-chip safe-chip-build">Refused when built</span>
       <h2>Errors that go unhandled</h2>
       <p><strong><strong>When something fails, the program needs a way to deal with it.</strong></strong></p>
-      <p><span class="lead-in">What Nikaia checks.</span> Functions declare when they can fail, and what they can fail with is worked out from their bodies. A function that calls something that can fail, and neither declares it nor handles it, is rejected when the program is built.</p>
+      <p><span class="lead-in">What Nikaia checks.</span> Functions declare when they can fail, and what they can fail with is worked out from their bodies. A function that calls something that can fail, and neither declares it nor handles it, is rejected when the program is built. Tasks are held to the same rule. A task&rsquo;s error is thrown where the program waits for the task, at <code>h.join()</code> or at the end of an <code>overlap</code>, and the compiler asks for it to be handled there as for any call that can fail. A task handle that is never joined, cancelled or detached is refused (<code>NK2109</code>), so the error has a place to arrive.</p>
       <p><span class="lead-in">The limit.</span> For functions from outside Nikaia that nothing describes, Nikaia cannot know every way they fail. A description of the library closes that gap. The check shows where failures are not accounted for; it does not make the handling itself correct.</p>
     </div>
     <div class="home-code-side">

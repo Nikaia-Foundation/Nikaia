@@ -273,12 +273,43 @@ fn main() throws {
 }
 ```
 
-Unlike JavaScript, Python or C#, Nikaia has no `async` and no `await`. Reading a file
-pauses the function without blocking the program. You write
-it as an ordinary call, and the compiler works out which functions can pause.
+In JavaScript, Python or C#, a function that waits is marked `async` and its calls say
+`await`. In Nikaia you do not need either, because the compiler finds which functions can
+pause. Reading a file pauses the function without blocking the program, you write it as an
+ordinary call, and a function that starts to wait leaves its callers as they are.
 
-Lines run in the order they are written. `overlap { … }` runs its lines at the same time
-and waits for all of them, and `spawn` starts a task that runs on its own.
+Lines run in the order they are written. In the program above, `overlap { … }` runs its lines
+at the same time and waits for all of them, and `spawn` starts a task that runs on its own.
+Both compile today. The specification replaces them with one word, `async`, written before an
+expression; this is the design being built
+([#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983)), not yet accepted by the
+compiler:
+
+```nika
+let user = async db::load_user(id)
+let rights = async db::load_rights(id)
+let prefs = cache::load_prefs(id)      // runs while both loads are in flight
+render(user, rights, prefs)            // waits for both first
+```
+
+`async e` starts `e` at once, and the program waits for its value where the value is first
+needed, so `f(async g(), async h())` runs `g` and `h` beside each other and then calls `f`. A
+`catch` written after an `async` expression is its fallback. `async(handle)` gives a handle
+with `join` and `cancel`, `async(detached)` starts a task that may outlive its function and
+takes the place of `spawn`, and work over every element of a list is `xs.par_iter()`, whose
+lambdas may pause. The option names `handle`, `deferred` and `detached` are placeholders.
+
+### What the compiler checks about tasks
+
+Two tasks that would change the same value at once, or both write to standard output, are
+refused when the program is built, and the message names what they share. Where the compiler
+cannot tell what a call touches, it does not refuse; today it also accepts two tasks that write
+the same file. A task's error is thrown where the program waits for it, at `handle.join()` or
+at the end of `overlap`, and the compiler asks for it to be handled there as for any call that
+can fail: `main` above says `throws`. A task handle that is never joined, cancelled or detached
+is refused. Each task is to get a memory budget of its own, and a task that uses it up ends
+with `task::OverBudget` while the rest of the program runs on; this is specified and not built
+yet, and memory a Rust crate or a C library allocates for itself is not counted.
 
 **Specification:** [Part I, Chapter 8 Concurrency](../docs/specification/10-nikaia-light.md#chapter-8-concurrency-doing-things-at-the-same-time)
 

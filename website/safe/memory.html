@@ -1,8 +1,8 @@
 ---
 layout: home
-title: One task cannot take all your memory
+title: A memory budget for every task
 description: >-
-  A runaway task cannot crash your whole program. Every task gets a memory budget of its own, as in Erlang and Elixir.
+  A task that uses up its memory ends alone, and the rest of the program runs on. Every task gets a memory budget of its own, as in Erlang and Elixir.
 ---
 <!--
   Level 3: the topic in full. It links on to the specification, the decisions and
@@ -13,17 +13,17 @@ description: >-
 <section class="home-section" id="check">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#memory" | relative_url }}">Very safe</a></p>
-    <h1 class="home-heading">One task cannot take all your memory</h1>
+    <h1 class="home-heading">A memory budget for every task</h1>
     <div class="limit-class">
         <dl class="limit-steps">
           <dt>The problem</dt>
-          <dd><strong><strong>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine.</strong> In most languages nothing stands in its way. Erlang and Elixir are known for isolating work so that this cannot happen; Nikaia is specified to do the same.</strong></dd>
+          <dd><strong><strong>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine.</strong> In most languages nothing stands in its way. Erlang and Elixir are known for isolating work in this way; Nikaia is specified to do the same.</strong></dd>
           <dt>An example</dt>
           <dd>A background task reads a large upload into memory, and keeps reading. Your main application, which was serving requests, runs out of memory with it.</dd>
           <dt>What Nikaia checks</dt>
           <dd>Every task gets a memory budget of its own. A task that spends it ends on its own, and the rest of the program, your main application included, runs on. A shared value has a budget of its own too. This is decided and written into the specification. A calculation that runs while the program is built is already bounded in steps and in memory.</dd>
           <dt>The limit</dt>
-          <dd><strong>The per-task budget is not built yet.</strong> Today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof: Nikaia will not show at build time that a task stays within its budget, it makes sure that a task which does not can only end itself.</dd>
+          <dd><strong>The per-task budget is not built yet.</strong> Today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof: Nikaia will not show at build time that a task stays within its budget, it makes sure that a task which does not ends with <code>task::OverBudget</code>, an error like any other, and only that task ends. Memory that a Rust crate or a C library allocates and keeps for itself is in no budget.</dd>
         </dl>
 
 

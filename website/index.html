@@ -53,10 +53,11 @@ description: >-
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>
         <h3>Very safe</h3>
-        <p>Catch mistakes before they become failures. Nikaia checks how tasks interact, how
-        much memory they can use, how errors are handled, and whether parts of your program keep
-        their promises. It catches problems at compile time wherever it can, showing you where
-        things can go wrong and why.
+        <p>Catch mistakes before they become failures. Nikaia checks how tasks interact: two
+        tasks that would change the same value at once, a task nobody waits for, an error a task
+        throws that nobody handles. A memory budget for every task is specified and not built yet.
+        It checks how errors are handled and whether parts of your program keep their promises,
+        at compile time wherever it can, and shows you where its checks stop.
         <a href="#safe">How it works — and where the limits are ↓</a></p>
       </div>
       <div class="feature">
@@ -96,10 +97,11 @@ description: >-
         <span class="safe-chip safe-chip-build">Refused when built</span>
         <h3>Conflicting actions</h3>
         <p>Two tasks change the same value at once. One update overwrites the other.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">task::scope fn(s) {
-    s.spawn fn { balance = balance + 50 }
-    s.spawn fn { balance = balance - 30 }
-}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: You're changing `balance` in a task of `task::scope`, and the scope's tasks all share `balance`.</b></code></pre></div>
+<div class="home-code markdown-body"><pre><code class="language-nika">overlap {
+    balance = balance + 50
+    balance = balance - 30
+}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error[NK2104]</span><b>: These two branches can't run at the same time.</b>
+<span class="d-note">note:</span> Both change `balance`.</code></pre></div>
         
         <span class="safe-more">Read more →</span>
       </a>
@@ -116,8 +118,8 @@ description: >-
       </a>
       <a class="safe-tile safe-tile-b" href="{{ "/safe/#memory" | relative_url }}">
         <span class="safe-chip safe-chip-run">Specified, not built yet</span>
-        <h3>One task cannot take all your memory</h3>
-        <p>A runaway task cannot crash your whole program. Every task gets a memory budget of its own, as in Erlang and Elixir.</p>
+        <h3>A memory budget for every task</h3>
+        <p>A task that uses up its memory ends alone, and the rest of the program runs on. Every task gets a memory budget of its own, as in Erlang and Elixir.</p>
         <p class="safe-note">Decided and specified, not built yet: today a task can still take memory from the whole program.</p>
 
         
@@ -197,12 +199,13 @@ optimization = "remove-bounds-checks:on,remove-overflow-checks:on"</code></pre><
     <div class="safe-tiles">
       <a class="safe-tile safe-tile-a" href="{{ "/easy/#async" | relative_url }}">
         <span class="safe-chip safe-chip-build">Plain calls</span>
-        <h3>No <code>async</code>, no <code>await</code></h3>
-        <p>Code that waits looks like any other code.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">let (a, b) = overlap {
-    size_of(&quot;a.txt&quot;)
-    size_of(&quot;b.txt&quot;)
-}</code></pre></div>
+        <h3>Code that waits needs no marking</h3>
+        <p>The compiler finds where a function pauses, so a call that waits is written like any other, and its callers stay as they are.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let user = async db::load_user(id)
+let rights = async db::load_rights(id)
+let prefs = cache::load_prefs(id)
+render(user, rights, prefs)   // waits for both</code></pre></div>
+        <p class="safe-note">The <code>async</code> form is the design being built (#983); today the same is written with <code>overlap</code>.</p>
         <span class="safe-more">Read more →</span>
       </a>
       <a class="safe-tile safe-tile-a" href="{{ "/easy/#errors" | relative_url }}">
