@@ -141,6 +141,35 @@ pub fn infer(
     let own_methods = nikaia_std::tools::ty::method_index(ledger);
     let library_methods = nikaia_std::tools::ty::method_index(library);
     let indexed = (&own_methods, &library_methods);
+    // **An `impl`'s method keeps what its trait's method keeps**, by position
+    // (ADR-277 D11): the trait's signature lowers its by-value `fn` parameter
+    // as kept, and an `impl` must match it, so a body that only calls the
+    // callback cannot say it keeps nothing (#1008). Read once, from every
+    // unit, before the walk: the trait may be declared after its `impl`.
+    let mut trait_keeps: BTreeMap<(String, String), Vec<usize>> = BTreeMap::new();
+    for parsed in units.iter().copied() {
+        for item in &parsed.program.items {
+            if let Item::Trait { name, methods, .. } = &item.node {
+                for method in methods {
+                    let positions = method
+                        .node
+                        .args
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, arg)| !arg.ty.is_view && !arg.mutable)
+                        .map(|(at, _)| at)
+                        .collect();
+                    trait_keeps.insert(
+                        (
+                            parsed.text(*name).to_string(),
+                            parsed.text(method.node.name).to_string(),
+                        ),
+                        positions,
+                    );
+                }
+            }
+        }
+    }
     for parsed in units.iter().copied() {
         for item in &parsed.program.items {
             match &item.node {
@@ -152,11 +181,14 @@ pub fn infer(
                     }
                 }
                 Item::Impl {
-                    target, methods, ..
+                    trait_name,
+                    target,
+                    methods,
                 } => {
                     let target = parsed.text(target.name).to_string();
+                    let trait_name = trait_name.map(|t| parsed.text(t).to_string());
                     for method in methods {
-                        if let Some((name, uses)) = uses_of(
+                        if let Some((name, mut uses)) = uses_of(
                             parsed,
                             &method.node,
                             Some(&target),
@@ -165,6 +197,22 @@ pub fn infer(
                             indexed,
                             resolved,
                         ) {
+                            if let (
+                                Some(owner),
+                                Item::Fn {
+                                    name: Some(own),
+                                    args,
+                                    ..
+                                },
+                            ) = (&trait_name, &method.node)
+                            {
+                                let key = (owner.clone(), parsed.text(*own).to_string());
+                                for &at in trait_keeps.get(&key).into_iter().flatten() {
+                                    if let Some(arg) = args.get(at) {
+                                        uses.kept.insert(parsed.text(arg.name).to_string());
+                                    }
+                                }
+                            }
                             graph.insert(name, uses);
                         }
                     }

@@ -1,0 +1,30 @@
+// #1008: a body-less trait method keeps its `fn` parameters (ADR-277 D11),
+// and the impl's method keeps what its trait method keeps, so the impl
+// matches the trait and a callback is handed through it more than once.
+trait H {
+    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync
+}
+struct Plain { base: i64 }
+impl H for Plain {
+    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync {
+        return known("a")
+    }
+}
+fn twice[T: H](host: ref T, known: fn(ref String) -> i64? sync) -> i64 {
+    let a = host.ask(known) ?? 0
+    let b = host.ask(known) ?? 0
+    return a + b
+}
+fn down[T: H](host: ref T, n: i64, known: fn(ref String) -> i64? sync) -> i64 {
+    if n == 0 {
+        return 0
+    }
+    return (host.ask(known) ?? 0) + down(host, n - 1, known)
+}
+fn main() {
+    let p = Plain { base: 1 }
+    println(twice(p, fn(name) { if name == "a" { 3 } else { null } }))
+    let known: fn(ref String) -> i64? sync = fn(name) { if name == "a" { 3 } else { null } }
+    println(p.ask(known) ?? 0)
+    println(down(p, 3, known))
+}
