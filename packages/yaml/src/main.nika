@@ -680,28 +680,71 @@ impl Error for ConvertError {
 	}
 }
 
-// An `Int` as an `i64`: `[-+]?[0-9]+`, `012` is 12. `0x` and `0o` wait on a
-// radix parse in `std`.
+// An `Int` as an `i64`. **`Value::Int` is built only by the core schema's
+// resolution** (`plain_kind`, in the grammar's action on a plain scalar), so
+// its text has one of the shapes D5 names, checked there, and is converted
+// for that shape without checking a digit again (D5): `[-+]?[0-9]+` by
+// `text::parse_i64` (`012` is 12), `0x…` and `0o…` by `radix_value`. A
+// `Value::Int` a program builds itself with other text is read as if it had
+// that shape.
 pub fn as_i64(v: ref Value) -> i64 sync throws {
 	let t = match v {
 		Value::Int(t) => t.clone()
 		else => throw ConvertError { message: "not an integer" }
 	}
-	if t.starts_with("0x") || t.starts_with("0o") {
-		throw ConvertError {
-			message: f"`{t}`: reading a hexadecimal or octal integer waits on a radix parse in std"
-		}
+	let n = if t.starts_with("0x") {
+		radix_value(t, 16)
+	} else if t.starts_with("0o") {
+		radix_value(t, 8)
+	} else {
+		text::parse_i64(t.clone())
 	}
-	let n = text::parse_i64(t.clone())
 	if n == null {
 		throw ConvertError { message: f"`{t}` does not fit in an i64" }
 	}
 	return n ?? 0
 }
 
+// The value of `0x…` (`radix` 16) or `0o…` (8), whose digits the core
+// schema's resolution has checked. Whether it fits an `i64` is decided by the
+// count of its significant digits, leading zeros not counted, never by
+// checked arithmetic: `0x` up to 15 always, 16 where the first is at most
+// `7`, 17 or more never (`i64::MAX` is `0x7FFFFFFFFFFFFFFF`); `0o` up to 21
+// (63 bits, `0o777777777777777777777`), 22 or more never. A digit's value is
+// `hex_value`'s, branch free.
+fn radix_value(t: String, radix: i64) -> i64? sync {
+	let cs: Vec[scalar] = t.chars().collect()
+	let n = cs.len() as i64
+	let mut i = 2
+	while i < n && cs[i] == '0' {
+		i += 1
+	}
+	let digits = n - i
+	if radix == 16 && (digits > 16 || (digits == 16 && cs[i] > '7')) {
+		return null
+	}
+	if radix == 8 && digits > 21 {
+		return null
+	}
+	let mut value = 0
+	while i < n {
+		value = value * radix + hex_value(cs[i])
+		i += 1
+	}
+	return value
+}
+
+// A hexadecimal digit's value, branch free over a digit already checked
+// (`benches/brc/fast.nika`): `0`-`9` are their low four bits, `a`-`f` and
+// `A`-`F` have one to six there, and bit 6 set, which adds nine.
+fn hex_value(x: scalar) -> i64 sync {
+	let c = x as i64
+	return (c & 15) + 9 * (c >> 6)
+}
+
 // An `Int` or a `Float` as an `f64`: YAML's spelling (`.5`, `1.`, `.inf`,
 // `-.Inf`, `.NaN`) rewritten into the one `text::parse_f64` reads (ADR-285
-// D35: no `.5`, no `1.`).
+// D35: no `.5`, no `1.`); `0x…` and `0o…` as `as_i64` reads them.
 pub fn as_f64(v: ref Value) -> f64 sync throws {
 	let t = match v {
 		Value::Int(t) => t.clone()
@@ -709,9 +752,7 @@ pub fn as_f64(v: ref Value) -> f64 sync throws {
 		else => throw ConvertError { message: "not a number" }
 	}
 	if t.starts_with("0x") || t.starts_with("0o") {
-		throw ConvertError {
-			message: f"`{t}`: reading a hexadecimal or octal integer waits on a radix parse in std"
-		}
+		return as_i64(v) as f64
 	}
 	let mut spelled = String()
 	let cs: Vec[scalar] = t.chars().collect()

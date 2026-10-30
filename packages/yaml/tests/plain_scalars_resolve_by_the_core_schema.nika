@@ -83,7 +83,18 @@ fn main() {
 	number("012")
 	number("+3")
 	number("99999999999999999999")
+	// hexadecimal and octal, converted for their shape: whether they fit is
+	// the count of significant digits
 	number("0x1F")
+	number("0o17")
+	number("0xff")
+	number("0x7FFFFFFFFFFFFFFF")
+	number("0o777777777777777777777")
+	number("0x000000000000000001F")
+	number("0o0000000000000000000000017")
+	number("0x8000000000000000")
+	number("0xFFFFFFFFFFFFFFFFF")
+	number("0o1000000000000000000000")
 	float("1e3")
 	float(".5")
 	float("1.")

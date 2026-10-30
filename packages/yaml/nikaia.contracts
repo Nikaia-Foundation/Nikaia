@@ -68,6 +68,11 @@ touches = []
 views = ["raw: borrowed"]
 signature = "(raw: ref String, single: bool, double: bool) -> String"
 
+[fn."hex_value"]
+sync = true
+touches = []
+signature = "(x: scalar) -> i64"
+
 [fn."is_escape"]
 sync = true
 touches = []
@@ -142,6 +147,12 @@ signature = "(s: ref String) -> Kind"
 sync = true
 touches = []
 signature = "(x: scalar, flow: bool) -> bool"
+
+[fn."radix_value"]
+sync = true
+touches = []
+views = ["t: borrowed"]
+signature = "(t: String, radix: i64) -> i64?"
 
 [fn."skip_blanks"]
 sync = true
