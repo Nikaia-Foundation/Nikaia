@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1310] — 2026-10-30
+
+**text tiers: `.to_string()` of an owned or number local stays owned (#1005)**
+- `.to_string()` of a local holding text of its own or a number is owned text again, so a `-> String` function may return it (ADR-282 D8, #1005).
+
 ## [0.0.1309] — 2026-10-30
 
 **check, emit: a let-bound lambda takes its parameter types from its first use (#997); text tiers: `to_string()` of a number, bool or char is new text, also of a part a pattern binds (#998)**
