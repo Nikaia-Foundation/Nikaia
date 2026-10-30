@@ -1479,6 +1479,14 @@ fn bind_a_payload(part: ref MatchPattern, owner: TextOwner, ty: ref Type, ask: r
         let mut local = plain_local(kinds_of_declared(declared, ask, walk))
         local.declared = declared
         bind_tier_local(name, local, walk)
+        return false
+    }
+    // **A number a pattern binds is known as one** (#998): its text form
+    // is new text.
+    if tier_scalar_type(ask, ty) {
+        let mut local = plain_local(owned_kinds())
+        local.declared = Declaring { owner: owner, ty: ty.clone() }
+        bind_tier_local(name, local, walk)
     }
     return false
 }
@@ -4694,6 +4702,12 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
         if handed_parameter(receiver, ask, walk) != null {
             return received
         }
+        // **The text form of a number, a `bool` or a `char` is new text**
+        // (ADR-282 D8, #998): a name declared as one, a parameter or a part a
+        // pattern binds, is no view of anything.
+        if tier_scalar_name(receiver, ask, walk) {
+            return owned_kinds()
+        }
         // **A view of a call's result does not outlive the statement**: the
         // text it hands back is a temporary, so `a(n).trim().to_string()`
         // is text of its own, unless only static text flows in.
@@ -4844,6 +4858,25 @@ fn a_text_read_whole(receiver: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -
         }
         else => false,
     }
+}
+
+/// Whether a receiver is a name declared as a number, a `bool` or a `char`.
+fn tier_scalar_name(receiver: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+    let local = match receiver {
+        Expr::Variable(name, _) => tier_local(ask.names.resolve(name), walk) ?? return false,
+        else => return false,
+    }
+    let declared = local.declared ?? return false
+    return tier_scalar_type(ask, declared.ty)
+}
+
+/// Whether a written type is a number, `bool` or `char`.
+fn tier_scalar_type(ask: ref TierAsk, ty: ref Type) -> bool {
+    if ty.generics.len() > 0 || ty.is_view || ty.is_nullable || ty.is_tuple || ty.is_slice || ty.code != null {
+        return false
+    }
+    let w = ask.names.resolve(ty.name)
+    return w == "i8" || w == "i16" || w == "i32" || w == "i64" || w == "isize" || w == "u8" || w == "u16" || w == "u32" || w == "u64" || w == "usize" || w == "f32" || w == "f64" || w == "bool" || w == "char"
 }
 
 fn viewed(received: ref Kinds) -> Kinds {

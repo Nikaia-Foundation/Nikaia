@@ -991,6 +991,12 @@ pub(crate) fn bind_a_payload(part: &MatchPattern, owner: TextOwner, ty: &Type, a
         let mut local = plain_local(kinds_of_declared(&declared, ask, walk));
         local.declared = Some(declared);
         bind_tier_local(name, local, walk);
+        return false;
+    }
+    if tier_scalar_type(ask, ty) {
+        let mut local = plain_local(owned_kinds());
+        local.declared = Some(Declaring { owner, ty: ty.clone() });
+        bind_tier_local(name, local, walk);
     }
     false
 }
@@ -3399,6 +3405,7 @@ pub(crate) fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &T
     if method == "filter" || method == "rev" || method == "skip" || method == "take" || method == "step_by" { return received; }
     if method == "to_string" && args.is_empty() && (!no_text(&received) || a_text_read_whole(receiver, ask, &walk)) {
         if handed_parameter(Some(receiver), ask, &walk).is_some() { return received; }
+        if tier_scalar_name(receiver, ask, &walk) { return owned_kinds(); }
         let kept = viewed(&received);
         if kept.view && read_off_a_call(receiver, ask) { return owned_kinds(); }
         return kept;
@@ -3505,6 +3512,21 @@ pub(crate) fn a_text_read_whole(receiver: &Expr, ask: &TierAsk<'_, '_, '_, '_, '
         },
         _ => false,
     }
+}
+
+pub(crate) fn tier_scalar_name(receiver: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> bool {
+    let local = match receiver {
+        Expr::Variable(name, _) => { let name = *name; match tier_local(ask.names.resolve(name), walk) { Some(__nikaia_value) => __nikaia_value, None => return false } },
+        _ => return false,
+    };
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return false };
+    tier_scalar_type(ask, &declared.ty)
+}
+
+pub(crate) fn tier_scalar_type(ask: &TierAsk<'_, '_, '_, '_, '_>, ty: &Type) -> bool {
+    if !ty.generics.is_empty() || ty.is_view || ty.is_nullable || ty.is_tuple || ty.is_slice || (*ty.code).is_some() { return false; }
+    let w = ask.names.resolve(ty.name);
+    w == "i8" || w == "i16" || w == "i32" || w == "i64" || w == "isize" || w == "u8" || w == "u16" || w == "u32" || w == "u64" || w == "usize" || w == "f32" || w == "f64" || w == "bool" || w == "char"
 }
 
 pub(crate) fn viewed(received: &Kinds) -> Kinds {

@@ -1,0 +1,37 @@
+// #998: a match whose arms hand back new text (`i.to_string()`, `t.clone()`)
+// is text of its own, not a view of the scrutinee taken by value (ADR-282 D8).
+enum BV { Int(i64), Text(String) }
+
+fn cloned(got: BV) -> String {
+    return match got { BV::Int(i) => i.to_string(), BV::Text(t) => t.clone() }
+}
+
+fn moved_out(got: BV) -> String {
+    return match got { BV::Int(i) => i.to_string(), BV::Text(t) => t }
+}
+
+fn lent(got: ref BV) -> String {
+    return match got { BV::Int(i) => i.to_string(), BV::Text(t) => t.clone() }
+}
+
+fn bound(got: BV) -> String {
+    let r = match got { BV::Int(i) => i.to_string(), BV::Text(t) => t.clone() }
+    return r
+}
+
+fn number(i: i64) -> String {
+    return i.to_string()
+}
+
+fn main() {
+    println(cloned(BV::Text("x")))
+    println(cloned(BV::Int(3)))
+    println(moved_out(BV::Text("y")))
+    println(moved_out(BV::Int(4)))
+    let v = BV::Text("z")
+    println(lent(v))
+    println(lent(BV::Int(5)))
+    println(bound(BV::Text("w")))
+    println(bound(BV::Int(6)))
+    println(number(7))
+}
