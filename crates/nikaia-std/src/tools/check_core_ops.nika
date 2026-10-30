@@ -952,6 +952,10 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     // **`a ?? b` where `b` may be `null` too is a `T?`** (Part I 3.5).
     if nullable && check_core_ops_nullable(other) {
         state.facts.optional_fallbacks.insert(id_of(expr) as i64)
+        // **A map's read as that fallback is kept beside a `T?` of its own**
+        // (ADR-293 D15, #995): copied out where `T` copies, else refused
+        // with the `?.clone()` to write (ADR-282 D7).
+        state.a_map_read_kept(world, other, left, fallback, span)
         return other
     }
     // **`a ?? b` on a `T?` is a `T`** (Part I 3.5, ADR-233 D4, #497).

@@ -1,0 +1,96 @@
+// `a ?? m.get(k)` with an owned `a: T?` (#995, ADR-293 D15): a number or a
+// value that copies is copied out of the map; text and a struct are copied
+// where the program writes `?.clone()` (ADR-282 D7).
+use std::collections
+
+enum Kind {
+    Small,
+    Large,
+}
+
+enum BuildValue {
+    Int(i64),
+    Text(String),
+}
+
+fn first(a: i64?, m: collections::BTreeMap[String, i64], k: String) -> i64? {
+    return a ?? m.get(k)
+}
+
+fn kind(a: Kind?, m: collections::BTreeMap[String, Kind], k: String) -> Kind? {
+    return a ?? m.get(k)
+}
+
+fn word(a: String?, m: collections::BTreeMap[String, String], k: String) -> String? {
+    return a ?? m.get(k)?.clone()
+}
+
+fn value(a: BuildValue?, m: collections::BTreeMap[String, BuildValue], k: String) -> BuildValue? {
+    return a ?? m.get(k)?.clone()
+}
+
+fn known(n: String) -> i64? {
+    if n == "a" {
+        return 1
+    }
+    return null
+}
+
+fn known_value(n: String) -> BuildValue? {
+    if n == "a" {
+        return BuildValue::Int(1)
+    }
+    return null
+}
+
+fn ask(look: fn(String) -> i64? sync, n: String) -> i64 {
+    return look(n) ?? 0
+}
+
+fn ask_value(look: fn(String) -> BuildValue? sync, n: String) {
+    show(look(n))
+}
+
+fn show(v: BuildValue?) {
+    match v ?? BuildValue::Text("none") {
+        BuildValue::Int(i) => println(i.to_string()),
+        BuildValue::Text(t) => println(t),
+    }
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    m.insert("b", 2)
+    println((first(null, m, "b") ?? 0).to_string())
+    println((first(5, m, "b") ?? 0).to_string())
+    println((first(null, m, "c") ?? 0).to_string())
+
+    let mut ks: collections::BTreeMap[String, Kind] = collections::BTreeMap()
+    ks.insert("b", Kind::Large)
+    match kind(null, ks, "b") ?? Kind::Small {
+        Kind::Small => println("small"),
+        Kind::Large => println("large"),
+    }
+
+    let mut w: collections::BTreeMap[String, String] = collections::BTreeMap()
+    w.insert("b", "two")
+    println(word(null, w, "b") ?? "none")
+    println(word("one", w, "b") ?? "none")
+
+    let mut v: collections::BTreeMap[String, BuildValue] = collections::BTreeMap()
+    v.insert("b", BuildValue::Text("three"))
+    show(value(null, v, "b"))
+    show(value(null, v, "c"))
+
+    let mut more: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    more.insert("b", 4)
+    println(ask(fn(n) { known(n) ?? more.get(n) }, "a").to_string())
+    println(ask(fn(n) { known(n) ?? more.get(n) }, "b").to_string())
+    println(ask(fn(n) { known(n) ?? more.get(n) }, "c").to_string())
+
+    let mut ahead: collections::BTreeMap[String, BuildValue] = collections::BTreeMap()
+    ahead.insert("b", BuildValue::Text("five"))
+    ask_value(fn(n) { known_value(n) ?? ahead.get(n)?.clone() }, "a")
+    ask_value(fn(n) { known_value(n) ?? ahead.get(n)?.clone() }, "b")
+    ask_value(fn(n) { known_value(n) ?? ahead.get(n)?.clone() }, "c")
+}

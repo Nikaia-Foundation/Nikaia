@@ -1,0 +1,9 @@
+error[NK1102]: This keeps a `String?` of its own, and a map's read is a view of what the map keeps.
+  --> tests/coalesce_map_get_fallback_of_text_is_refused.nika:7:5
+   |
+ 7 |     return a ?? m.get(k)
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Nikaia never makes a copy behind your back, so the copy is written where it happens.
+   = help: Write `?.clone()` after the read: `m[k]?.clone()`.
+1 type error

@@ -635,6 +635,7 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     }
     if nullable && check_core_ops_nullable(&other) {
         state.facts.optional_fallbacks.insert(id_of(expr) as i64);
+        state.a_map_read_kept(world, &other, &left, fallback, span);
         return other;
     }
     if !nullable { return Ty::Unknown; }
