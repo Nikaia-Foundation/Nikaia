@@ -66,7 +66,7 @@
 10-nikaia-light.md #66 refused (a body) [NK1117]  Routes()
 10-nikaia-light.md #67 refused (a body) [NK1117]  // The count comes from the list, so a local may be cal…
 10-nikaia-light.md #68 lowered (a body)  let prefix = "User: "
-10-nikaia-light.md #69 refused (a body) [about-a-refusal NK1117]  let prefix = "Log: "
+10-nikaia-light.md #69 fragment (as written) [about-a-refusal]  let prefix = "Log: "
 10-nikaia-light.md #70 lowered (as written)  struct Button { label: String, on_click: fn(i64) -> i64…
 10-nikaia-light.md #71 refused (a body) [about-a-refusal NK1117,NK1135]  let t: Vec[i64] = [1]
 10-nikaia-light.md #72 lowered (as written)  /// Multiplies a positive number.
@@ -103,10 +103,10 @@
 10-nikaia-light.md #103 fragment (as written)  let user = async db::load_user(id)
 10-nikaia-light.md #104 fragment (as written)  let a = async load(id)
 10-nikaia-light.md #105 fragment (as written)  let page = async http::get(url) catch { Page::empty() }…
-10-nikaia-light.md #106 refused (a body) [NK1117]  async(detached) fn { println("I am running in the backg…
-10-nikaia-light.md #107 refused (a body) [NK1117]  let h = async(detached) fn { fetch(url) }
-10-nikaia-light.md #108 refused (a body) [about-a-refusal NK1117]  let message = "Hello"
-10-nikaia-light.md #109 refused (a body) [NK1117]  let message = "Hello"
+10-nikaia-light.md #106 fragment (as written)  async(detached) fn { println("I am running in the backg…
+10-nikaia-light.md #107 fragment (as written)  let h = async(detached) fn { fetch(url) }
+10-nikaia-light.md #108 fragment (as written) [about-a-refusal]  let message = "Hello"
+10-nikaia-light.md #109 fragment (as written)  let message = "Hello"
 10-nikaia-light.md #110 lowered (as written)  // file: src/parse.nika      (the same package as src/m…
 10-nikaia-light.md #111 refused (as written) [NK1117,NK1135]  // file: src/main.nika
 10-nikaia-light.md #112 refused (as written) [NK1245]  use http
@@ -138,7 +138,7 @@
 20-nikaia-advance.md #25 lowered (a body) [about-a-refusal]  let counter = SharedMut(0)
 20-nikaia-advance.md #26 fragment (as written) [about-a-refusal sketch]  let account_a = SharedMut(Account(…))
 20-nikaia-advance.md #27 refused (items, then a body) [NK1117,NK1181]  use std::time
-20-nikaia-advance.md #28 refused (items, then a body) [NK1117]  use std::channel
+20-nikaia-advance.md #28 fragment (as written)  use std::channel
 20-nikaia-advance.md #29 refused (a body) [NK1245]  let pixels = [/* 1 million pixels */]
 20-nikaia-advance.md #30 refused (a body) [NK1117,NK1181]  let pages = urls.par_iter(limit: 8).map fn(u) { http::g…
 20-nikaia-advance.md #31 refused (a body) [NK1117,NK1181]  let summary = rows.par_iter().fold(Summary, fn(acc, r) …

@@ -29,9 +29,9 @@ use nikaia::parser::parse_to_ast;
 /// that takes its input from the code under test cannot notice the code losing
 /// an entry.
 const RESERVED_BELOW: &[&str] = &[
-    "abstract", "async", "await", "become", "box", "const", "do", "dyn", "final", "gen", "loop",
-    "macro", "mod", "move", "override", "priv", "static", "try", "type", "typeof", "unsized",
-    "virtual", "where", "yield",
+    "abstract", "await", "become", "box", "const", "do", "dyn", "final", "gen", "loop", "macro",
+    "mod", "move", "override", "priv", "static", "try", "type", "typeof", "unsized", "virtual",
+    "where", "yield",
 ];
 
 /// The words that have left the sweep since: reserved words of **this** language
@@ -65,7 +65,11 @@ const RESERVED_BELOW: &[&str] = &[
 /// leaving the list is what put it back where a Nikaia name can be one — so the
 /// escape can fire for it again. `const` and `loop` joined it there, and `quote`
 /// is a keyword in neither language and needs nothing.
-const RESERVED_HERE_TOO: &[&str] = &["trait", "extern", "unsafe", "ref"];
+///
+/// **`async` joined them at 0.0.1305**
+/// ([ADR-async-4](../../../docs/specification/adr/adr-async-4.md)): the
+/// prefix that starts a task, reserved in both languages now.
+const RESERVED_HERE_TOO: &[&str] = &["trait", "extern", "unsafe", "ref", "async"];
 
 /// The words Rust takes as identifiers, which must therefore **not** be escaped.
 ///
