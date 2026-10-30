@@ -326,3 +326,85 @@ pub(crate) fn comptime_written_types(tys: &[Ty], intern: &impl Fn(&str) -> winno
 
 pub(crate) fn comptime_plain(name: String, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Type { Type { name: intern(&name), generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false } }
 
+pub trait ComptimeLowerHost {
+    fn unit_count(&self) -> i64;
+    fn package_of(&self, at: i64) -> Option<String>;
+    fn preamble(&self) -> String;
+    fn emit_unit(&self, at: i64, beside: &[i64], contracts: &Ledger, entry: bool, placed_at: Option<i64>) -> Option<String>;
+    fn infer_package(&self, at: &[i64]) -> Ledger;
+}
+
+pub fn comptime_lowered_units<H: ComptimeLowerHost>(host: &H, entry: i64, contracts: &Ledger, packages: &collections::BTreeMap<String, Ledger>) -> Option<String> {
+    let home = host.package_of(entry);
+    let beside: Vec<i64> = (nikaia_std::range::span(0, host.unit_count())).filter(|&u| { host.package_of(u) == home }).collect::<Vec<_>>();
+    let mut rust: String = String::from("// Generated: a `comptime`'s program (ADR-321).\n\n");
+    rust.push_str(&host.preamble());
+    rust.push('\n');
+    for at in beside.iter() {
+        let at = nikaia_std::num::value(at);
+        let body = match host.emit_unit(at, &beside, contracts, at == entry, Some(rust.len() as i64)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        rust.push_str(&body);
+        rust.push('\n');
+    }
+    rust.push_str(&match comptime_dependency_modules(host, packages) { Some(__nikaia_value) => __nikaia_value, None => return None });
+    rust.push_str("\nconst __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[];\n");
+    Some(rust)
+}
+
+pub fn comptime_without_foreign(items: &mut Vec<Spanned<Item>>, words: &winnow_grammar::InternerContext, runs: &impl Fn(&str) -> bool) {
+    let mut kept: Vec<Spanned<Item>> = vec![];
+    for item in items.drain(..) {
+        match item.node {
+            Item::Extern { .. } => { },
+            Item::Impl { trait_name, target, methods } => {
+                let owner = format!("{}::", a_symbols_text(words, Some(target.name)));
+                let mut left = methods;
+                left.retain(|method| { comptime_runs(&method.node, words, &owner, runs) });
+                let node = Item::Impl { trait_name, target, methods: left };
+                kept.push(Spanned { node, span: item.span, doc: item.doc, attributes: item.attributes });
+            },
+            other => { if comptime_runs(&other, words, "", runs) { kept.push(Spanned { node: other, span: item.span, doc: item.doc, attributes: item.attributes }); } },
+        }
+    }
+    items.extend(kept);
+}
+
+pub(crate) fn comptime_runs(item: &Item, words: &winnow_grammar::InternerContext, owner: &str, runs: &impl Fn(&str) -> bool) -> bool {
+    match item {
+        Item::Fn { name, .. } => {
+            let name = *name;
+            if name.is_none() { return true; }
+            return runs(&format!("{}{}", owner, a_symbols_text(words, std::convert::identity(name))));
+        },
+        _ => return true,
+    }
+}
+
+pub fn comptime_dependency_modules<H: ComptimeLowerHost>(host: &H, packages: &collections::BTreeMap<String, Ledger>) -> Option<String> {
+    let mut rust: String = String::from("");
+    for (name, own) in packages.iter() {
+        let wanted: Option<String> = Some(name.to_string());
+        let theirs: Vec<i64> = (nikaia_std::range::span(0, host.unit_count())).filter(|&u| { host.package_of(u) == wanted }).collect::<Vec<_>>();
+        rust.push_str(&format!("pub mod {} {{\n#[allow(unused_imports)]\nuse nikaia_std::prelude::*;\n", name));
+        for at in theirs.iter() {
+            let at = nikaia_std::num::value(at);
+            let body = match host.emit_unit(at, &theirs, own, false, None) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            rust.push_str(&body);
+            rust.push('\n');
+        }
+        rust.push_str("}\n");
+    }
+    Some(rust)
+}
+
+pub fn comptime_by_package<H: ComptimeLowerHost>(host: &H) -> collections::BTreeMap<String, Ledger> {
+    let names: collections::BTreeSet<String> = (nikaia_std::range::span(0, host.unit_count())).filter_map(|u| { host.package_of(u) }).collect();
+    let mut out: collections::BTreeMap<String, Ledger> = collections::BTreeMap::new();
+    for name in names.iter() {
+        let wanted: Option<String> = Some(name.to_string());
+        let theirs: Vec<i64> = (nikaia_std::range::span(0, host.unit_count())).filter(|&u| { host.package_of(u) == wanted }).collect::<Vec<_>>();
+        out.insert(name.to_string(), host.infer_package(&theirs));
+    }
+    out
+}
+

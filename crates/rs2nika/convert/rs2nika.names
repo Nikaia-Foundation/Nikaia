@@ -130,3 +130,14 @@ Ledger::parse( = host.parse_ledger( # `Ledger::parse` is the compiler's, behind 
 
 [hosts project_lower_]
 host = H: ProjectLowerHost # P5b: the program, the cache, the check and the emitter stay Rust behind project.rs's LowerHost
+
+[forms comptime_]
+Ledger::infer_package(theirs, std_ledger()) = host.infer_package(theirs) # `Ledger::infer_package` reads the units, which stay Rust: the host derives them by index (ComptimeLowerHost, K3a)
+units[entry].package = host.package_of(entry) # the units stay Rust, held by comptime_run.rs's LowerHost; Nikaia names them by index (K3a)
+needs.preamble() = host.preamble() # `Needs` stays Rust (emit): the host joins every unit's needs and writes the preamble (K3a)
+emit_module_body_at(unit, beside, build, provenance, contracts, Ledger::blank(), at == entry, Reads::none(), null).ok() = host.emit_unit(at, beside, contracts, at == entry, rust.len()) # the emitter stays Rust (lane 2): the host drops the unit's foreign parts, emits it and keeps its lines in the source map at the byte given (K3a)
+emit_module_body_at(unit, theirs, build, provenance, own, Ledger::blank(), false, Reads::none(), null).ok() = host.emit_unit(at, theirs, own, false, null) # the same, a dependency's unit: no source map lines (K3a)
+body.rust = body # the host hands back the emitted text only (K3a)
+
+[hosts comptime_]
+host = H: ComptimeLowerHost # K3a: the units, the emitter, the build's trust and the source map stay Rust behind comptime_run.rs's LowerHost

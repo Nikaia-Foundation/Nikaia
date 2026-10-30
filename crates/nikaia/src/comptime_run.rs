@@ -21,6 +21,7 @@
 //! the value in the encoding a grammar run already uses
 //! ([`crate::grammar_run::decode`]).
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -116,9 +117,93 @@ pub(crate) fn constants_of<'a>(files: impl IntoIterator<Item = &'a Parsed>) -> B
     out
 }
 
-/// **A program of several files, lowered as one** (Part I 9.1): each file
-/// against all of them, in order, as `modules::Program` lowers a package -
-/// `entry` is the file that holds the value function and so the `fn main`.
+/// **The units of a build-time program, as `ComptimeLowerHost` answers
+/// about them** (`tools/comptime_tree.nika`, K3a): the files, the emitter,
+/// the build's trust and the source map stay here; Nikaia names the units by
+/// index and assembles the text.
+struct LowerHost<'a> {
+    units: &'a [&'a Parsed],
+    build: crate::emit::Build,
+    provenance: crate::contracts::Provenance,
+    map: RefCell<crate::emit::SourceMap>,
+}
+
+impl<'a> LowerHost<'a> {
+    fn new(
+        units: &'a [&'a Parsed],
+        build: crate::emit::Build,
+        provenance: crate::contracts::Provenance,
+    ) -> Self {
+        LowerHost {
+            units,
+            build,
+            provenance,
+            map: RefCell::new(crate::emit::SourceMap::default()),
+        }
+    }
+
+    fn those(&self, at: &[i64]) -> Vec<&'a Parsed> {
+        at.iter().map(|&at| self.units[at as usize]).collect()
+    }
+}
+
+impl tree::ComptimeLowerHost for LowerHost<'_> {
+    fn unit_count(&self) -> i64 {
+        self.units.len() as i64
+    }
+
+    fn package_of(&self, at: i64) -> Option<String> {
+        self.units[at as usize].package.clone()
+    }
+
+    fn preamble(&self) -> String {
+        let needs = self
+            .units
+            .iter()
+            .fold(crate::emit::Needs::none(), |acc, unit| {
+                acc.join(&crate::emit::needs_of(unit))
+            });
+        needs.preamble()
+    }
+
+    fn emit_unit(
+        &self,
+        at: i64,
+        beside: &[i64],
+        contracts: &crate::contracts::Ledger,
+        entry: bool,
+        placed_at: Option<i64>,
+    ) -> Option<String> {
+        let unit = &without_foreign(self.units[at as usize], contracts);
+        let body = crate::emit::emit_module_body_at(
+            unit,
+            &self.those(beside),
+            self.build,
+            self.provenance,
+            contracts,
+            &crate::contracts::Ledger::blank(),
+            entry,
+            &crate::assets::Reads::none(),
+            None,
+        )
+        .ok()?;
+        if let Some(placed_at) = placed_at {
+            self.map
+                .borrow_mut()
+                .extend(body.map.placed(placed_at as usize, at as usize));
+        }
+        Some(body.rust)
+    }
+
+    fn infer_package(&self, at: &[i64]) -> crate::contracts::Ledger {
+        use crate::contracts::LedgerOps;
+        crate::contracts::Ledger::infer_package(&self.those(at), crate::contracts::std_ledger())
+    }
+}
+
+/// **A program of several files, lowered as one** (Part I 9.1,
+/// `comptime_lowered_units`): `entry` is the file that holds the value
+/// function and so the `fn main`.
 pub(crate) fn lowered_units(
     units: &[Parsed],
     entry: usize,
@@ -127,147 +212,54 @@ pub(crate) fn lowered_units(
     packages: &BTreeMap<String, crate::contracts::Ledger>,
     library: &crate::contracts::Ledger,
 ) -> Option<crate::emit::Lowered> {
-    use crate::emit::{Lowered, Needs, SourceMap};
     let home = &units[entry].package;
     let beside: Vec<&Parsed> = units.iter().filter(|u| &u.package == home).collect();
     let provenance = crate::contracts::trust::analyse_package(&beside, library).provenance;
-    let needs = units.iter().fold(Needs::none(), |acc, unit| {
-        acc.join(&crate::emit::needs_of(unit))
-    });
-    let mut rust = String::from("// Generated: a `comptime`'s program (ADR-321).\n\n");
-    rust.push_str(&needs.preamble());
-    rust.push('\n');
-    let mut map = SourceMap::default();
-    for (at, unit) in units.iter().enumerate() {
-        if &unit.package != home {
-            continue;
-        }
-        let unit = &without_foreign(unit, contracts);
-        let body = crate::emit::emit_module_body_at(
-            unit,
-            &beside,
-            build,
-            provenance,
-            contracts,
-            &crate::contracts::Ledger::blank(),
-            at == entry,
-            &crate::assets::Reads::none(),
-            None,
-        )
-        .ok()?;
-        map.extend(body.map.placed(rust.len(), at));
-        rust.push_str(&body.rust);
-        rust.push('\n');
-    }
     let refs: Vec<&Parsed> = units.iter().collect();
-    rust.push_str(&dependency_modules(&refs, packages, build, provenance)?);
-    rust.push_str("\nconst __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[];\n");
-    Some(Lowered {
+    let host = LowerHost::new(&refs, build, provenance);
+    let rust = tree::comptime_lowered_units(&host, entry as i64, contracts, packages)?;
+    Some(crate::emit::Lowered {
         rust,
-        map,
+        map: host.map.into_inner(),
         published: Default::default(),
     })
 }
 
-/// **A file without its foreign parts** (ADR-321 D14): no `extern` block, and
-/// no function or method whose entry in `ledger` may not run while the
-/// program is built - which is every one that reaches C or a Rust crate, and
-/// what D9 refuses a build-time call to anyway. So the build-time program
-/// neither links a foreign library nor names a Rust crate.
+/// **A file without its foreign parts** (ADR-321 D14,
+/// `comptime_without_foreign`): what `ledger` says may not run while the
+/// program is built (`build_time::may_not_run`) goes.
 pub(crate) fn without_foreign(parsed: &Parsed, ledger: &crate::contracts::Ledger) -> Parsed {
-    let runs = |key: String| {
+    let runs = |key: &str| {
         ledger
             .functions
-            .get(&key)
+            .get(key)
             .is_none_or(|contract| crate::build_time::may_not_run(contract).is_none())
     };
-    let mut kept = parsed.keeping(|item| match item {
-        Item::Extern { .. } => false,
-        Item::Fn {
-            name: Some(name), ..
-        } => runs(parsed.text(*name).to_string()),
-        _ => true,
-    });
-    for item in &mut kept.program.items {
-        if let Item::Impl {
-            target, methods, ..
-        } = &mut item.node
-        {
-            let target = parsed.text(target.name).to_string();
-            methods.retain(|method| match &method.node {
-                Item::Fn {
-                    name: Some(name), ..
-                } => runs(format!("{target}::{}", parsed.text(*name))),
-                _ => true,
-            });
-        }
-    }
+    let mut kept = parsed.keeping(|_| true);
+    tree::comptime_without_foreign(&mut kept.program.items, &parsed.interner, &runs);
     kept
 }
 
-/// **Each dependency, as the module the program names it by** (ADR-321 D13):
-/// `lib::tripled` is `crate::lib::tripled`, lowered against the package's own
-/// entries and with the prelude its files are written for. Empty where the
-/// build reads no dependency.
+/// **Each dependency, as the module the program names it by** (ADR-321 D13,
+/// `comptime_dependency_modules`).
 pub(crate) fn dependency_modules(
     units: &[&Parsed],
     packages: &BTreeMap<String, crate::contracts::Ledger>,
     build: crate::emit::Build,
     provenance: crate::contracts::Provenance,
 ) -> Option<String> {
-    let mut rust = String::new();
-    for (name, own) in packages {
-        let theirs: Vec<&Parsed> = units
-            .iter()
-            .copied()
-            .filter(|u| u.package.as_deref() == Some(name.as_str()))
-            .collect();
-        rust.push_str(&format!(
-            "pub mod {name} {{\n#[allow(unused_imports)]\nuse nikaia_std::prelude::*;\n"
-        ));
-        for unit in &theirs {
-            let unit = &without_foreign(unit, own);
-            let body = crate::emit::emit_module_body_at(
-                unit,
-                &theirs,
-                build,
-                provenance,
-                own,
-                &crate::contracts::Ledger::blank(),
-                false,
-                &crate::assets::Reads::none(),
-                None,
-            )
-            .ok()?;
-            rust.push_str(&body.rust);
-            rust.push('\n');
-        }
-        rust.push_str("}\n");
-    }
-    Some(rust)
+    tree::comptime_dependency_modules(&LowerHost::new(units, build, provenance), packages)
 }
 
 /// **Each dependency's units, derived as the package they are** (ADR-321
-/// D13), by the name the program reaches it by.
+/// D13, `comptime_by_package`), by the name the program reaches it by.
 pub(crate) fn by_package(units: &[&Parsed]) -> BTreeMap<String, crate::contracts::Ledger> {
-    use crate::contracts::LedgerOps;
-    let mut names: Vec<&str> = units.iter().filter_map(|u| u.package.as_deref()).collect();
-    names.sort();
-    names.dedup();
-    names
-        .into_iter()
-        .map(|name| {
-            let theirs: Vec<&Parsed> = units
-                .iter()
-                .copied()
-                .filter(|u| u.package.as_deref() == Some(name))
-                .collect();
-            (
-                name.to_string(),
-                crate::contracts::Ledger::infer_package(&theirs, crate::contracts::std_ledger()),
-            )
-        })
-        .collect()
+    let host = LowerHost::new(
+        units,
+        crate::emit::Build::default(),
+        crate::contracts::Provenance::Trusted,
+    );
+    tree::comptime_by_package(&host)
 }
 
 /// **What a compiled build-time run came to**: the checker's own
