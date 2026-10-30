@@ -166,3 +166,4 @@
 /home/user/Nikaia/docs/briefs/b996-map-read-literal-text.md 502377 6
 /home/user/Nikaia/docs/briefs/architect-task.md 1616746 27
 /home/user/Nikaia/docs/briefs/b-fixforward-corpus-unanswered.md 323498 6
+/home/user/Nikaia/docs/briefs/b994-overlap-note-seq.md 353638 13
