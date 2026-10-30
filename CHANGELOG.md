@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1306] — 2026-10-30
+
+**`async` is reserved, `overlap` leaves the reserved-word list (ADR-async-4).** `let async = 3` is refused as a reserved word, with `async_` suggested; the grammar has no `async` expression yet. `overlap { … }` still parses through its own rule and stays refused as a name until it is removed (#991). The compiler's list matches Part I's again.
+
 ## [0.0.1305] — 2026-10-30
 
 **`async` is an expression prefix and the one way to start a task (ADR-async-2, -3, -4, #983).** `async e` starts at once and yields the value, waited where it is first needed - a mention, the call that receives it as an argument, an operation - so `f(async g(), async h())` runs both beside each other; it cannot be cancelled. `async(handle)` gives a group-bound handle with `join` and `cancel`, `async(deferred)` one that runs on `start()`, `async(detached)` a free handle that may outlive its group (it replaces `spawn`, which stays accepted until the build). Cancelling is `.cancel()` on a handle only; `task::cancel` is gone. A `catch` after an `async` expression is the last handler before the receiver, for every form. Every task is a child of a group with one capture, failure and memory rule. Fan-out over a collection is `par_iter`, whose lambdas may now pause, under the same rules (`NK2104`, kept failures, `limit:` replaces `workers:`); the `async` loop is removed, and `async` inside a loop body is `NK2120`. Codes NK2119-NK2122 added, NK2113, NK2114, NK2116, NK2117 retired. Option names are placeholders until the naming round.
