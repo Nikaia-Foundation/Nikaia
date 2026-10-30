@@ -1,0 +1,35 @@
+// A guard at the top of an alternative holds where its action runs
+// (ADR-grammar-1 D4), so a claim in the action leans on it: `scalar::from(v)`
+// is proved by the guard on `v`, a whole number a rule of the grammar
+// declares (ADR-yaml-1 D11, #1003). A text the guard refuses is a parse error.
+
+fn is_hex(x: scalar) -> bool sync {
+	return (x >= '0' && x <= '9') || (x >= 'a' && x <= 'f') || (x >= 'A' && x <= 'F')
+}
+
+fn hex_value(x: scalar) -> i64 sync {
+	let c = x as i64
+	return (c & 15) + 9 * (c >> 6)
+}
+
+grammar Escape {
+	rule WS = "" -> { }
+	entry rule top -> String = "\\u" v:Hex4 if(v >= 0 && v <= 0x10FFFF && (v < 0xD800 || v > 0xDFFF)) eof -> {
+		let mut out = String()
+		out.push(scalar::from(v))
+		out
+	}
+	rule Hex4 -> i64 = a:Hex b:Hex c:Hex d:Hex -> { a * 4096 + b * 256 + c * 16 + d }
+	rule Hex -> i64 = x:any if(is_hex(x)) -> { hex_value(x) }
+}
+
+fn main() {
+	for t in ["\\u0041", "\\u00e9", "\\uD800"] {
+		let b = Bytes(t.bytes().collect())
+		let r = Escape::top(b) catch {
+			println("error")
+			continue
+		}
+		println(r)
+	}
+}

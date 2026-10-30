@@ -1,0 +1,23 @@
+// A claim in a grammar rule's action is a claim of the program like any
+// other (ADR-269 D5): with no guard that shows `v` is a scalar value,
+// `scalar::from(v)` is refused (`NK1300`), not left to run time.
+
+fn hex_value(x: scalar) -> i64 sync {
+	let c = x as i64
+	return (c & 15) + 9 * (c >> 6)
+}
+
+grammar Escape {
+	rule WS = "" -> { }
+	entry rule top -> String = "\\u" a:Hex b:Hex eof -> {
+		let mut out = String()
+		out.push(scalar::from(a * 16 + b))
+		out
+	}
+	rule Hex -> i64 = x:any -> { hex_value(x) }
+}
+
+fn main() {
+	let b = Bytes("\\u41".bytes().collect())
+	println(Escape::top(b) catch { "error" })
+}

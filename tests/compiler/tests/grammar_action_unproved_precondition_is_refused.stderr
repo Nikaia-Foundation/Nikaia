@@ -1,0 +1,10 @@
+error[NK1300]: `scalar::from: n >= 0 && n <= 0x10FFFF && (n < 0xD800 || n > 0xDFFF)` is not proved: nothing before the call shows it.
+   --> tests/grammar_action_unproved_precondition_is_refused.nika:14:3
+    |
+ 14 | 		out.push(scalar::from(a * 16 + b))
+    |   ^^^^^^
+    |
+    = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+    = note: `nikaia check --asserts` lists every claim and why it is not proved.
+    = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+1 type error

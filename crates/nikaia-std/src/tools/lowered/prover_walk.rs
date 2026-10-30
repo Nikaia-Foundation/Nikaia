@@ -12,6 +12,8 @@ pub struct ProverWalk {
     pub std_claims: collections::BTreeMap<(i64, i64), String>,
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub fn prover_bodies(walk: &mut ProverWalk, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     for item in program.items.iter() {
@@ -24,9 +26,105 @@ pub fn prover_bodies(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
             },
             Item::Test { body, .. } => { prover_test(walk, body, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
             Item::Bench { body, .. } => { prover_test(walk, body, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
+            Item::Grammar(def) => {
+                for rule in def.rules.iter() {
+                    for alt in rule.alts.iter() {
+                        let action = match alt.action.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        prover_action(walk, def, rule, &alt.pattern.node, action, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+                    }
+                }
+            },
             _ => { },
         }
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prover_action(walk: &mut ProverWalk, def: &GrammarDef, rule: &GrammarRule, pattern: &Pattern, action: &Block, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+    let at = ProverWhere { function: None, params: collections::BTreeSet::new(), no_precondition: Some(String::from("a grammar action has no callers")), top: true, free: false, posts: false, lambda: true, throws_out: true };
+    let mut scope = ProverScope::unknown();
+    for arg in rule.args.iter() {
+        let name = words.resolve(arg.name).to_string();
+        scope.locals.insert(name.to_string());
+        let ty = words.resolve(arg.ty.name);
+        if !arg.mutable && arg.ty.generics.is_empty() && is_whole_number(ty) { prover_action_number(walk, &mut scope, &name, ty); }
+    }
+    for option in rule.config.iter() { scope.locals.insert(words.resolve(option.name).to_string()); }
+    let mut parts: Vec<Pattern> = vec![];
+    match pattern {
+        Pattern::Seq(items) => { for item in items.iter() { parts.push(item.node.clone()); } },
+        _ => { parts.push(pattern.clone()); },
+    }
+    for part in parts.iter() {
+        prover_action_locals(part, &mut scope, words);
+        match part {
+            Pattern::Bind { name, pat } => {
+                let pat = nikaia_std::boxed::open(pat); let name = *name;
+                let ty = prover_bound_number(def, &pat.node, words);
+                if ty.is_some() { prover_action_number(walk, &mut scope, &words.resolve(name).to_string(), nikaia_std::index::or(ty.as_deref(), || "")); }
+            },
+            _ => { },
+        }
+    }
+    for part in parts.iter() {
+        match part {
+            Pattern::Guard { cond, .. } => {
+                let holds = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                if holds.is_some() { scope.facts.push(nikaia_std::index::or(holds, || 0)); }
+            },
+            _ => { },
+        }
+    }
+    prover_block(walk, action, &mut scope, &at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+}
+
+pub(crate) fn prover_action_number(walk: &mut ProverWalk, scope: &mut ProverScope, name: &str, ty: &str) {
+    scope.ints.insert(name.to_string());
+    if ty.starts_with('u') { scope.not_negative(&mut walk.arena, name); }
+}
+
+pub(crate) fn prover_action_locals(pattern: &Pattern, scope: &mut ProverScope, words: &winnow_grammar::InternerContext) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            let pat = nikaia_std::boxed::open(pat); let name = *name;
+            scope.locals.insert(words.resolve(name).to_string());
+            prover_action_locals(&pat.node, scope, words);
+        },
+        Pattern::Seq(items) => { for item in items.iter() { prover_action_locals(&item.node, scope, words); } },
+        Pattern::Choice(items) => { for item in items.iter() { prover_action_locals(&item.node, scope, words); } },
+        Pattern::Ref { args, .. } => { for arg in args.iter() { prover_action_locals(&arg.node, scope, words); } },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); prover_action_locals(&pat.node, scope, words); },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); prover_action_locals(&pat.node, scope, words); },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); prover_action_locals(&pat.node, scope, words); },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn prover_bound_number(def: &GrammarDef, pattern: &Pattern, words: &winnow_grammar::InternerContext) -> Option<String> {
+    let (called, generics, args) = match pattern {
+        Pattern::Ref { name, generics, args } => { let name = *name; (words.resolve(name).to_string(), generics.to_owned(), args.len() as i64) },
+        Pattern::Call { name, .. } => { let name = *name; (words.resolve(name).to_string(), vec![], 0) },
+        _ => return None,
+    };
+    for rule in def.rules.iter() {
+        if words.resolve(rule.name) == called {
+            let ret = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let ty = words.resolve(ret.name).to_string();
+            if ret.generics.is_empty() && is_whole_number(&ty) { return Some(ty); }
+            return None;
+        }
+    }
+    if called == "count" && args == 1 { return Some(String::from("i64")); }
+    if called == "here" && args == 0 { return Some(String::from("u32")); }
+    if called == "dec" && generics.len() == 1 && nikaia_std::index::get(&generics, 0).generics.is_empty() {
+        let ty = words.resolve(nikaia_std::index::get(&generics, 0).name).to_string();
+        if is_whole_number(&ty) { return Some(ty); }
+    }
+    None
 }
 
 #[allow(clippy::too_many_arguments)]

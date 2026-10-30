@@ -19,7 +19,7 @@ pub struct ProverAnswers {
 
 /// **Every claim of the program, proved** - the walk's `held`, `reaches` and
 /// `findings` are the last walk's - and what the passes make of it.
-pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> ProverAnswers {
+pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> ProverAnswers sync {
     // Pass 1: which parameter claims are preconditions (D5) - a function's
     // own `assert`s, and what its calls ask that it cannot show (D15). The
     // second depends on the callees' preconditions, so the pass repeats with

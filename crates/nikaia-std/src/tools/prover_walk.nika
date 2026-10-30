@@ -38,7 +38,7 @@ pub struct ProverWalk {
 
 /// **Every body of the program, walked once**: each function and method,
 /// and each test and bench, which have no callers.
-pub fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+pub fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) sync {
     for item in program.items {
         match item.node {
             Item::Fn { .. } => prover_function(walk, item, null, false, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
@@ -50,9 +50,142 @@ pub fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winn
             },
             Item::Test { body, .. } => prover_test(walk, body, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
             Item::Bench { body, .. } => prover_test(walk, body, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
+            Item::Grammar(def) => {
+                for rule in def.rules {
+                    for alt in rule.alts {
+                        let action = alt.action ?? continue
+                        prover_action(walk, def, rule, alt.pattern.node, action, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+                    }
+                }
+            },
             else => {},
         }
     }
+}
+
+/// **A grammar rule's action, with what its pattern has shown** (ADR-grammar-1
+/// D4, ADR-yaml-1 D11): the rule's whole-number values and the whole numbers
+/// its pattern binds at its top are variables of the proof, and each guard at
+/// the top holds where the action runs. An action has no callers, so a claim
+/// in it is proved there or refused.
+fn prover_action(mut walk: ProverWalk, def: ref GrammarDef, rule: ref GrammarRule, pattern: ref Pattern, action: ref Block, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) sync {
+    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a grammar action has no callers", top: true, free: false, posts: false, lambda: true, throws_out: true }
+    let mut scope = ProverScope::unknown()
+    for arg in rule.args {
+        let name = words.resolve(arg.name).clone()
+        scope.locals.insert(name.clone())
+        let ty = words.resolve(arg.ty.name)
+        if !arg.mutable && arg.ty.generics.is_empty() && is_whole_number(ty) {
+            prover_action_number(walk, scope, name, ty)
+        }
+    }
+    for option in rule.config {
+        scope.locals.insert(words.resolve(option.name).clone())
+    }
+    let mut parts: Vec[Pattern] = []
+    match pattern {
+        Pattern::Seq(items) => {
+            for item in items {
+                parts.push(item.node.clone())
+            }
+        },
+        else => parts.push(pattern.clone()),
+    }
+    for part in parts {
+        prover_action_locals(part, scope, words)
+        match part {
+            Pattern::Bind { name, pat } => {
+                let ty = prover_bound_number(def, pat.node, words)
+                if ty != null {
+                    prover_action_number(walk, scope, words.resolve(name).clone(), ty ?? "")
+                }
+            },
+            else => {},
+        }
+    }
+    for part in parts {
+        match part {
+            Pattern::Guard { cond, .. } => {
+                let holds = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                if holds != null {
+                    scope.facts.push(holds ?? 0)
+                }
+            },
+            else => {},
+        }
+    }
+    prover_block(walk, action, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+}
+
+/// A whole number the action reads, of type `ty`.
+fn prover_action_number(mut walk: ProverWalk, mut scope: ProverScope, name: ref String, ty: ref String) {
+    scope.ints.insert(name.clone())
+    if ty.starts_with("u") {
+        scope.not_negative(walk.arena, name)
+    }
+}
+
+/// Every name a pattern binds, at any depth: a local of the action.
+fn prover_action_locals(pattern: ref Pattern, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            scope.locals.insert(words.resolve(name).clone())
+            prover_action_locals(pat.node, scope, words)
+        },
+        Pattern::Seq(items) => {
+            for item in items {
+                prover_action_locals(item.node, scope, words)
+            }
+        },
+        Pattern::Choice(items) => {
+            for item in items {
+                prover_action_locals(item.node, scope, words)
+            }
+        },
+        Pattern::Ref { args, .. } => {
+            for arg in args {
+                prover_action_locals(arg.node, scope, words)
+            }
+        },
+        Pattern::Repeat { pat, .. } => prover_action_locals(pat.node, scope, words),
+        Pattern::Counted { pat, .. } => prover_action_locals(pat.node, scope, words),
+        Pattern::Group(pat) => prover_action_locals(pat.node, scope, words),
+        else => {},
+    }
+}
+
+/// The whole-number type a bound pattern yields, if it yields one: a rule of
+/// the grammar declared so, `count(p)` (an `i64`), `here` (a `u32`) or
+/// `dec[T]` of a whole-number `T` (ADR-grammar-1 D5, ADR-339 D1).
+fn prover_bound_number(def: ref GrammarDef, pattern: ref Pattern, words: ref winnow_grammar::InternerContext) -> String? sync {
+    let (called, generics, args) = match pattern {
+        Pattern::Ref { name, generics, args } => (words.resolve(name).clone(), generics.clone(), args.len()),
+        Pattern::Call { name, .. } => (words.resolve(name).clone(), [], 0),
+        else => return null,
+    }
+    for rule in def.rules {
+        if words.resolve(rule.name) == called {
+            let ret = rule.ret_type ?? return null
+            let ty = words.resolve(ret.name).clone()
+            if ret.generics.is_empty() && is_whole_number(ty) {
+                return ty
+            }
+            return null
+        }
+    }
+    if called == "count" && args == 1 {
+        return "i64"
+    }
+    if called == "here" && args == 0 {
+        return "u32"
+    }
+    if called == "dec" && generics.len() == 1 && generics[0].generics.is_empty() {
+        let ty = words.resolve(generics[0].name).clone()
+        if is_whole_number(ty) {
+            return ty
+        }
+    }
+    return null
 }
 
 /// A test's or a bench's body: every claim in it is the test's verdict (D11).
