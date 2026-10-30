@@ -157,3 +157,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 1274284 27
 /home/user/Nikaia/docs/briefs/k3a2-comptime-compute.md 2605132 35
 /home/user/Nikaia/docs/briefs/architect-task.md 1702031 28
+/home/user/Nikaia/docs/briefs/b1008-trait-fn-param.md 403669 5
