@@ -1,0 +1,35 @@
+use std::collections
+
+// ADR-collections-2 D3: `iter()` lends a set's elements, smallest first on a
+// `BTreeSet`, in no order on a `HashSet` (#1006).
+fn main() {
+    let mut s: collections::BTreeSet[String] = collections::BTreeSet()
+    s.insert("b")
+    s.insert("a")
+    s.insert("cc")
+    println(s.iter().any(fn(n) { n == "a" }))
+    println(s.iter().all(fn(n) { n.len() == 1 }))
+    println(s.iter().filter(fn(n) { n.len() == 1 }).count())
+    let names: Vec[String] = s.iter().map(fn(n) { n.clone() }).collect()
+    println(names.join(","))
+    println(s.iter().rev().next() ?? "none")
+
+    let mut h: collections::HashSet[i64] = collections::HashSet()
+    h.insert(3)
+    h.insert(4)
+    h.insert(3)
+    println(h.iter().count())
+    let total: i64 = h.iter().sum()
+    println(total)
+
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut left_out: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut absent: collections::BTreeSet[String] = collections::BTreeSet()
+    named.insert("x")
+    named.insert("y")
+    absent.insert("y")
+    println(named.iter().any(fn(name) { left_out.contains(name) || absent.contains(name) }))
+    left_out.insert("q")
+    absent.remove("y")
+    println(named.iter().any(fn(name) { left_out.contains(name) || absent.contains(name) }))
+}

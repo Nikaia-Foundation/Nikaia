@@ -2352,6 +2352,14 @@ sync = true
 touches = []
 signature = "(self: ref collections::HashSet[?]) -> bool"
 
+# The elements, one at a time, lent; a set has no order of its own, so a program
+# that prints them says which order it means (ADR-collections-2 D3).
+[fn."collections::HashSet::iter"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref collections::HashSet[T]) -> Seq[ref(self) T] sync sized"
+
 # A set with nothing in it, kept in order. It is written `collections::BTreeSet()`.
 [fn."collections::BTreeSet::new"]
 pub = true
@@ -2409,6 +2417,13 @@ pub = true
 sync = true
 touches = []
 signature = "(self: ref collections::BTreeSet[?]) -> bool"
+
+# The elements, one at a time, lent, smallest first (ADR-collections-2 D3).
+[fn."collections::BTreeSet::iter"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref collections::BTreeSet[T]) -> Seq[ref(self) T] sync ends sized"
 
 # A map with nothing in it, kept in the keys' order. It is written
 # `collections::BTreeMap()`.
@@ -2523,8 +2538,6 @@ sync = true
 touches = []
 signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> collections::BTreeMap[K, V]"
 
-# A copy of the ordered set, owned by whoever asked for it (#125: without an entry a
-# `.clone()` of one resolved to nothing and read as a call that may pause).
 # The smallest element, or nothing where the set is empty.
 [fn."collections::BTreeSet::first"]
 pub = true
@@ -2566,6 +2579,8 @@ sync = true
 touches = []
 signature = "[T](self: ref collections::BTreeSet[T], other: ref collections::BTreeSet[T]) -> Seq[ref(self) T] sync"
 
+# A copy of the ordered set, owned by whoever asked for it (#125: without an entry a
+# `.clone()` of one resolved to nothing and read as a call that may pause).
 [fn."collections::BTreeSet::clone"]
 pub = true
 sync = true
