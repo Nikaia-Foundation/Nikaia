@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1304] — 2026-10-30
+
+**The grammar engine is winnow-grammar 3b2dd3d: reading from a `Read` (its ADR 27)**
+- Upstream adds `parse_<rule>_reader` for a `par_fold` rule (blocks cut past the last frame boundary, merged in order) and `#[stream]` for a fold reached through a static path, one item at a time (YAML's documents, one long top-level sequence, a JSON array, an XML root's children), with `#[stream(each)]` to see every item. Errors of a stream carry their line.
+- A grammar without these generates what it did: no Nikaia program changes. Nikaia does not yet write `#[stream]` or call the reader entries; that comes with the `yaml` package (#928).
+
 ## [0.0.1303] — 2026-10-30
 
 **`async` replaces `overlap` and `task::scope` (ADR-async-1, #983).** The specification now writes structured concurrency with one keyword and no `await`. `async let x = e` starts a child that runs beside the code after it and is waited for before the first statement naming `x`; `async let xs = for … { … }` is a group whose value is the list in input order; `async e`, `async fn { … }` and `async for` start children without a value; `async { … }` is a group boundary. Options `limit:`, `within:` and `admission:`; without `limit:` an exchangeable admission strategy starts a child only where its memory block and a descriptor fit. Failures: a use-site `catch` first, then the binding's fallback `catch`, else the error leaves from the wait point; every crossing error records `started` and `arrived` sites. `task::cancel(x)`; a full memory block arrives as `task::OverBudget` at every boundary, and only a bug panic cancels siblings (changes ADR-327 D6); the leaving error leads (changes ADR-346 D7). New codes NK2110-NK2118. The compiler is built in #984-#991; until then it still takes `overlap`.
