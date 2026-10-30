@@ -79,8 +79,8 @@ node_modules/
 packages/*/target
 
 # Session state of the main-session scripts (agent.nika, cycle.nika, drive.nika)
-docs/briefs/RED
-docs/briefs/ESCALATE
-docs/briefs/QUESTION
-docs/briefs/STOP
-docs/briefs/architect-input.txt
+docs/briefs/**/RED
+docs/briefs/**/ESCALATE
+docs/briefs/**/QUESTION
+docs/briefs/**/STOP
+docs/briefs/**/architect-input.txt
