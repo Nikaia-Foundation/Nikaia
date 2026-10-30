@@ -162,3 +162,4 @@
 /home/user/Nikaia/docs/briefs/k3a2-comptime-compute.md 1193450 23
 /home/user/Nikaia/docs/briefs/b1007-sum-typed.md 441527 14
 /home/user/Nikaia/docs/briefs/architect-task.md 1835540 31
+/home/user/Nikaia/docs/briefs/b1007-sum-typed.md 897850 24
