@@ -134,7 +134,9 @@ the background in a cloud session.
   rules: slices, syntax gaps of `tools/*.nika`, lowering).
 * **Whoever writes for the website, `README.md` or `guide/`**:
   `docs/writing-guide.md` (lead with safety, no absolute claims, natural prose
-  without bold lead-ins, nothing shown as runnable before it is built).
+  without bold lead-ins, nothing shown as runnable before it is built). Its
+  last section is for whoever writes the specification: compact for models
+  that read it whole, one rule in one place, one meaning per word.
 
 ## Measuring performance
 

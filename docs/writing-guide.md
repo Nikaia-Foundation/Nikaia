@@ -2,9 +2,8 @@
 
 This guide is for the website, `README.md` and the guide (`guide/`), the text a
 newcomer reads before deciding whether Nikaia is worth a closer look. The owner
-set these rules on 2026-10-30. The specification (`docs/specification/`) is not
-covered here; it keeps its own style, which states the rule and nothing else
-(`docs/supervisor.md`, *Decision rounds*).
+set these rules on 2026-10-30. The specification follows other measures, set
+out in the last section.
 
 ## What we lead with
 
@@ -62,3 +61,22 @@ A page never presents syntax or behaviour as runnable before the compiler
 builds it. Where a page describes a design that is specified but not yet built,
 it says so plainly and links the issue that builds it. Runnable examples are
 checked against the current compiler before they are published.
+
+## The specification is written for a different reader
+
+Parts I-III of `docs/specification/` are read in full by models that take them
+into their context, so they are written for that reader and not for a
+newcomer. Each rule is stated once, in one place, and other places point to it.
+A word has one meaning across all three parts; when a keyword takes over a
+word, older text that used the word in another sense is changed, headings
+included. Nothing goes in that is not a rule: reasons, history, comparisons and
+anything that argues for the language belong in the ADR that decided it
+(`docs/supervisor.md`, *Decision rounds*). Text is kept short, because every
+sentence costs every reader its tokens.
+
+The opening sentence of a paragraph may state the rule in bold, with the
+conditions and limits after it. Unlike on the website, this pattern helps here,
+because a model reading the part finds the rule first. The claims of the
+specification are rules the compiler enforces, so they are as absolute as the
+rule is, and their limits are stated with them.
+
