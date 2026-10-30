@@ -233,3 +233,48 @@ impl Span {
         }
     }
 }
+
+/// **The text a bound `text(p)` covered, where `p` binds names** (Part II 10,
+/// #1013): the backend's `(p) @ at` keeps what `p` binds, and the action reads
+/// the covered range from the input here - a view of it, one pass, no second
+/// parse.
+#[doc(hidden)]
+pub fn covered<'a, S>(
+    input: &winnow_grammar::ParseInput<'a, S>,
+    at: std::ops::Range<usize>,
+) -> &'a str {
+    let mut whole = input.input;
+    whole.reset_to_start();
+    let all: &'a str = *whole;
+    &all[at]
+}
+
+/// [`covered`] over a `Bytes`: the covered bytes checked as UTF-8 where they
+/// become text, failing as the backend's `text(p)` does (ADR-366 D2).
+#[doc(hidden)]
+pub fn covered_bytes<'a, S, E>(
+    input: &mut winnow_grammar::ParseBytes<'a, S>,
+    at: std::ops::Range<usize>,
+) -> Result<&'a str, winnow_grammar::winnow::error::ErrMode<E>>
+where
+    S: Clone + std::fmt::Debug,
+    E: winnow_grammar::error::Diagnostics,
+{
+    use winnow_grammar::winnow::stream::Stream;
+    let mut whole = input.input;
+    whole.reset_to_start();
+    let all: &'a [u8] = *whole;
+    match std::str::from_utf8(&all[at.clone()]) {
+        Ok(text) => Ok(text),
+        Err(bad) => {
+            input.input = whole;
+            let _ = input.next_slice(at.start);
+            let start = input.checkpoint();
+            Err(winnow_grammar::rt::bytes::invalid_utf8(
+                input,
+                &start,
+                bad.valid_up_to(),
+            ))
+        }
+    }
+}

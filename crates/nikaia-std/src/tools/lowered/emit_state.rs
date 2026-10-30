@@ -85,6 +85,7 @@ pub struct EmitWalk {
     pub grammar_values: collections::BTreeMap<String, GrammarRule>,
     pub grammar_bytes: bool,
     pub grammar_raw: bool,
+    pub grammar_nested: bool,
     pub preluded: collections::BTreeSet<i64>,
     pub wrappers: Vec<String>,
     pub holding: Option<i64>,
@@ -109,6 +110,6 @@ pub struct EmitWalk {
 }
 
 impl EmitWalk {
-    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), grammar_rules: collections::BTreeSet::new(), grammar_values: collections::BTreeMap::new(), grammar_bytes: false, grammar_raw: false, preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, method_callee: None, hoisted_args: None, hoisted_lets: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false } }
+    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), grammar_rules: collections::BTreeSet::new(), grammar_values: collections::BTreeMap::new(), grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, method_callee: None, hoisted_args: None, hoisted_lets: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false } }
 }
 

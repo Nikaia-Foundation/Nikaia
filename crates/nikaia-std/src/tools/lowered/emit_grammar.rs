@@ -55,6 +55,30 @@ pub(crate) fn emit_span_bindings(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitW
     }
 }
 
+pub(crate) fn emit_text_bindings(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, found: &mut Vec<String>, ranges: &mut Vec<String>) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            let pat = nikaia_std::boxed::open(pat); let name = *name;
+            match &pat.node {
+                Pattern::Ref { args, .. } => {
+                    if emit_is_a_binding_text(world, walk, &pat.node) {
+                        let said = emit_text(world, name);
+                        let from = emit_text_edge(world, walk, &said, args, "from");
+                        let to = emit_text_edge(world, walk, &said, args, "to");
+                        found.push(said);
+                        ranges.push(format!("{}.start..{}.end", from, to));
+                        for arg in args.iter() { emit_text_bindings(world, walk, &arg.node, found, ranges); }
+                    }
+                },
+                _ => { },
+            }
+        },
+        Pattern::Seq(parts) => { for part in parts.iter() { emit_text_bindings(world, walk, &part.node, found, ranges); } },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); emit_text_bindings(world, walk, &pat.node, found, ranges); },
+        _ => { },
+    }
+}
+
 pub(crate) fn emit_bytes_bindings(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Pattern, found: &mut Vec<String>) {
     match pattern {
         Pattern::Bind { name, pat } => {
@@ -248,6 +272,10 @@ impl EmitState {
                     let mut prelude = String::from("");
                     for name in as_bytes.iter() { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); }
                     for name in as_spans.iter() { prelude = format!("{}let {} = ::nikaia_std::text::Span::of({}); ", prelude, name, name); }
+                    let mut as_texts: Vec<String> = vec![];
+                    let mut covered: Vec<String> = vec![];
+                    emit_text_bindings(world, &walk, &alt.pattern.node, &mut as_texts, &mut covered);
+                    for (name, range) in as_texts.iter().zip(covered.iter()) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, E>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
                     if self.emit_action_can_fail(world, action) {
                         if prelude != "" { out.push(&format!("{{ {}", prelude)); }
                         self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?;

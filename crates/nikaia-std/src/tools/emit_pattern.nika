@@ -9,7 +9,17 @@ impl EmitState {
     /// One pattern, its span recorded in the source map.
     pub fn emit_pattern[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref Spanned[Pattern]) sync throws {
         let st = out.mark()
+        // What a sequence, a group or a binding binds is the alternative's;
+        // below anything else it stays there (#1013).
+        let nested = walk.grammar_nested
+        walk.grammar_nested = match pattern.node {
+            Pattern::Seq(_) => nested,
+            Pattern::Group(_) => nested,
+            Pattern::Bind { .. } => nested,
+            else => true,
+        }
         self.emit_pattern_body(world, walk, out, host, pattern)
+        walk.grammar_nested = nested
         out.record(pattern.span, st)
     }
 
@@ -40,6 +50,22 @@ impl EmitState {
                         else => {},
                     }
                     return
+                }
+                // **`s:text(p)` where `p` binds names** (#1013): the backend's
+                // `text(p)` drops what `p` binds, and its `(a b) @ at` scopes
+                // them too, so `p` is written as without the `text(..)`, its
+                // first and last element each with the range it covered
+                // (`(a) @ from b (c) @ to`); the action reads the text from
+                // the one's start to the other's end before it runs
+                // (`emit_text_bindings`). One pass over the input.
+                match pat.node {
+                    Pattern::Ref { args, .. } => {
+                        if emit_is_a_binding_text(world, walk, pat.node) {
+                            self.emit_text_parts(world, walk, out, host, emit_text(world, name), args)
+                            return
+                        }
+                    },
+                    else => {},
                 }
                 out.push(f"{emit_text(world, name)}:")
                 // A literal's capture is text in Nikaia; over bytes the backend
@@ -124,6 +150,39 @@ impl EmitState {
                 }
                 out.push(")")
             },
+        }
+    }
+
+    /// The elements of a bound `text(..)` whose pattern binds names
+    /// (#1013): a nested one as itself, the first and the last element of
+    /// the rest with the range each covered.
+    fn emit_text_parts[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: String, args: ref Vec[Spanned[Pattern]]) sync throws {
+        // several arguments are a sequence, and so is one sequence
+        if args.len() == 1 {
+            match args[0].node {
+                Pattern::Seq(parts) => {
+                    self.emit_text_run(world, walk, out, host, name, parts)
+                    return
+                },
+                else => {},
+            }
+        }
+        self.emit_text_run(world, walk, out, host, name, args)
+    }
+
+    fn emit_text_run[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: String, parts: ref Vec[Spanned[Pattern]]) sync throws {
+        for k in 0..<parts.len() {
+            if k > 0 {
+                out.push(" ")
+            }
+            let at = if k == 0 { "from" } else if k == parts.len() - 1 { "to" } else { "" }
+            if at == "" || emit_text_nested(world, walk, parts[k].node) {
+                self.emit_pattern(world, walk, out, host, parts[k])
+            } else {
+                out.push("(")
+                self.emit_pattern(world, walk, out, host, parts[k])
+                out.push(f") @ __nikaia_{name}_{at}")
+            }
         }
     }
 
@@ -276,4 +335,68 @@ fn emit_is_a_span(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern
         Pattern::Ref { name, generics, args } => emit_text(world, name) == "span" && generics.len() == 0 && args.len() == 1 && !walk.grammar_rules.contains("span"),
         else => false,
     }
+}
+
+/// Whether a pattern is the built-in `text(p)` and `p` binds a name
+/// (#1013): the grammar declares no rule of that name.
+fn emit_is_a_binding_text(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Ref { name, generics, args } => emit_text(world, name) == "text" && generics.len() == 0 && args.len() >= 1 && !walk.grammar_nested && !walk.grammar_rules.contains("text") && args.iter().any(fn(arg) { emit_binds_a_name(arg.node) }),
+        else => false,
+    }
+}
+
+/// Whether a pattern binds a name anywhere in it.
+fn emit_binds_a_name(pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Bind { .. } => true,
+        Pattern::Seq(parts) => parts.iter().any(fn(part) { emit_binds_a_name(part.node) }),
+        Pattern::Choice(parts) => parts.iter().any(fn(part) { emit_binds_a_name(part.node) }),
+        Pattern::Ref { args, .. } => args.iter().any(fn(arg) { emit_binds_a_name(arg.node) }),
+        Pattern::Repeat { pat, .. } => emit_binds_a_name(pat.node),
+        Pattern::Counted { pat, .. } => emit_binds_a_name(pat.node),
+        Pattern::Group(pat) => emit_binds_a_name(pat.node),
+        else => false,
+    }
+}
+
+/// Whether an element of a bound `text(..)` is itself a bound `text(..)`
+/// whose pattern binds names: it writes its own ranges.
+fn emit_text_nested(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Bind { pat, .. } => emit_is_a_binding_text(world, walk, pat.node),
+        else => false,
+    }
+}
+
+/// **Where the text bound to `name` starts or ends** (`at` is `from` or
+/// `to`, #1013): the range of its first or last element, or of the nested
+/// bound `text(..)` that element is.
+fn emit_text_edge(world: ref EmitWorld, walk: ref EmitWalk, name: String, args: ref Vec[Spanned[Pattern]], at: String) -> String {
+    if args.len() == 1 {
+        match args[0].node {
+            Pattern::Seq(parts) => return emit_text_edge_of(world, walk, name, parts, at),
+            else => {},
+        }
+    }
+    return emit_text_edge_of(world, walk, name, args, at)
+}
+
+fn emit_text_edge_of(world: ref EmitWorld, walk: ref EmitWalk, name: String, parts: ref Vec[Spanned[Pattern]], at: String) -> String {
+    let k = if at == "from" { 0 } else { parts.len() - 1 }
+    match parts[k].node {
+        Pattern::Bind { name: inner, pat } => {
+            if emit_is_a_binding_text(world, walk, pat.node) {
+                match pat.node {
+                    Pattern::Ref { args: within, .. } => return emit_text_edge(world, walk, emit_text(world, inner), within, at),
+                    else => {},
+                }
+            }
+        },
+        else => {},
+    }
+    if parts.len() == 1 {
+        return f"__nikaia_{name}_from"
+    }
+    return f"__nikaia_{name}_{at}"
 }

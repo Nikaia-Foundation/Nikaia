@@ -1,0 +1,30 @@
+// A binding inside `text(..)` (Part II 10, #1013): the outer name is the text
+// `text(..)` covered, a view of the input; the names inside are bound as they
+// would be without the `text(..)` around them, in the same one pass. Nested,
+// each `text(..)` is the text it covered.
+grammar G {
+    entry rule top -> String = s:text(ps:WORD*) ";" -> {
+        f"[{s}] {ps.len()} {ps.join("+")}"
+    }
+    entry rule nested -> String = o:text(i:text(a:WORD "-" b:WORD) "/" c:WORD) -> {
+        f"[{o}] [{i}] {a} {b} {c}"
+    }
+    entry rule plain -> String = s:text(WORD "-" WORD) -> { f"[{s}]" }
+    rule WORD -> String = w:alpha1 -> { w }
+}
+
+fn bytes_of(text: String) -> Bytes {
+    let mut all: Vec[u8] = []
+    for b in text.bytes() {
+        all.push(b)
+    }
+    return Bytes(all)
+}
+
+fn main() {
+    println(G::top("ab  cd ef ;") catch { "refused" })
+    println(G::top(bytes_of("gh ij;")) catch { "refused" })
+    println(G::nested("ab - cd / ef") catch { "refused" })
+    println(G::nested(bytes_of("x-y/z")) catch { "refused" })
+    println(G::plain("ab - cd") catch { "refused" })
+}

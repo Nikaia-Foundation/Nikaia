@@ -195,6 +195,10 @@ pub struct EmitWalk {
     pub grammar_bytes: bool,
     /// The pattern is inside `bytes(...)`: `any` is the raw `byte`.
     pub grammar_raw: bool,
+    /// The pattern is under a repeat, a choice or a built-in's argument,
+    /// where a name it binds stays there: a bound `text(..)` is the
+    /// backend's own (#1013).
+    pub grammar_nested: bool,
     /// The statements whose keeps have been declared.
     pub preluded: collections::BTreeSet[i64],
     /// The wrapper functions a tether needs, written after the items.
@@ -244,6 +248,6 @@ pub struct EmitWalk {
 impl EmitWalk {
     /// Nothing written yet.
     pub fn fresh() -> EmitWalk {
-        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_bytes: false, grammar_raw: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", nonnegative: collections::BTreeMap(), specialising: null, at_field: null, code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false }
+        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", nonnegative: collections::BTreeMap(), specialising: null, at_field: null, code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false }
     }
 }

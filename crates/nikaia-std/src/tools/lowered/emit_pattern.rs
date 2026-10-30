@@ -6,7 +6,15 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub fn emit_pattern<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), Box<dyn std::error::Error>> {
         let st = out.mark();
+        let nested = walk.grammar_nested;
+        walk.grammar_nested = match &pattern.node {
+            Pattern::Seq(_) => nested,
+            Pattern::Group(_) => nested,
+            Pattern::Bind { .. } => nested,
+            _ => true,
+        };
         self.emit_pattern_body(world, walk, out, host, pattern)?;
+        walk.grammar_nested = nested;
         out.record(&pattern.span, st);
         Ok(())
     }
@@ -37,6 +45,15 @@ impl EmitState {
                         _ => { },
                     }
                     return Ok(());
+                }
+                match &pat.node {
+                    Pattern::Ref { args, .. } => {
+                        if emit_is_a_binding_text(world, &walk, &pat.node) {
+                            self.emit_text_parts(world, walk, out, host, emit_text(world, name), args)?;
+                            return Ok(());
+                        }
+                    },
+                    _ => { },
                 }
                 out.push(&format!("{}:", emit_text(world, name)));
                 let literal = matches!(pat.node, Pattern::Literal(_));
@@ -96,6 +113,35 @@ impl EmitState {
                 }
                 out.push(")");
             },
+        }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_text_parts<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: String, args: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
+        if args.len() == 1 {
+            match &nikaia_std::index::get(&args, 0).node {
+                Pattern::Seq(parts) => {
+                    self.emit_text_run(world, walk, out, host, name, parts)?;
+                    return Ok(());
+                },
+                _ => { },
+            }
+        }
+        self.emit_text_run(world, walk, out, host, name, args)?;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_text_run<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: String, parts: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
+        for k in 0..parts.len() as i64 {
+            if k > 0 { out.push(" "); }
+            let at = if k == 0 { "from" } else if k == parts.len() as i64 - 1 { "to" } else { "" };
+            if at == "" || emit_text_nested(world, &walk, &nikaia_std::index::get(&parts, (k) as usize).node) { self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&parts, (k) as usize))?; } else {
+                out.push("(");
+                self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&parts, (k) as usize))?;
+                out.push(&format!(") @ __nikaia_{}_{}", name, at));
+            }
         }
         Ok(())
     }
@@ -226,5 +272,60 @@ pub(crate) fn emit_is_a_span(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk,
         Pattern::Ref { name, generics, args } => { let name = *name; emit_text(world, name) == "span" && generics.is_empty() && args.len() == 1 && !walk.grammar_rules.contains("span") },
         _ => false,
     }
+}
+
+pub(crate) fn emit_is_a_binding_text(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Ref { name, generics, args } => { let name = *name; emit_text(world, name) == "text" && generics.is_empty() && !args.is_empty() && !walk.grammar_nested && !walk.grammar_rules.contains("text") && args.iter().any(|arg| { emit_binds_a_name(&arg.node) }) },
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_binds_a_name(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Bind { .. } => true,
+        Pattern::Seq(parts) => parts.iter().any(|part| { emit_binds_a_name(&part.node) }),
+        Pattern::Choice(parts) => parts.iter().any(|part| { emit_binds_a_name(&part.node) }),
+        Pattern::Ref { args, .. } => args.iter().any(|arg| { emit_binds_a_name(&arg.node) }),
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_binds_a_name(&pat.node) },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_binds_a_name(&pat.node) },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); emit_binds_a_name(&pat.node) },
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_text_nested(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_is_a_binding_text(world, walk, &pat.node) },
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_text_edge(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, args: &[Spanned<Pattern>], at: &str) -> String {
+    if args.len() == 1 {
+        match &nikaia_std::index::get(&args, 0).node {
+            Pattern::Seq(parts) => { return emit_text_edge_of(world, walk, name, parts, at); },
+            _ => { },
+        }
+    }
+    emit_text_edge_of(world, walk, name, args, at)
+}
+
+pub(crate) fn emit_text_edge_of(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, parts: &[Spanned<Pattern>], at: &str) -> String {
+    let k = if at == "from" { 0 } else { parts.len() as i64 - 1 };
+    match &nikaia_std::index::get(&parts, nikaia_std::index::at(k)).node {
+        Pattern::Bind { name: inner, pat } => {
+            let pat = nikaia_std::boxed::open(pat); let inner = *inner;
+            if emit_is_a_binding_text(world, walk, &pat.node) {
+                match &pat.node {
+                    Pattern::Ref { args: within, .. } => { return emit_text_edge(world, walk, &emit_text(world, inner), within, at); },
+                    _ => { },
+                }
+            }
+        },
+        _ => { },
+    }
+    if parts.len() == 1 { return format!("__nikaia_{}_from", name); }
+    format!("__nikaia_{}_{}", name, at)
 }
 

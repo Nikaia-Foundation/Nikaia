@@ -1,0 +1,5 @@
+[ab  cd ef] 3 ab+cd+ef
+[gh ij] 2 gh+ij
+[ab - cd / ef] [ab - cd] ab cd ef
+[x-y/z] [x-y] x y z
+[ab - cd]

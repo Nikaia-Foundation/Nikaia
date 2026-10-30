@@ -96,6 +96,40 @@ fn emit_span_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pat
     }
 }
 
+/// **The names bound to a `text(p)` whose `p` binds names** (#1013), each
+/// with the ranges it starts and ends in (`emit_text_edge`): the action reads
+/// the text between them.
+fn emit_text_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, mut found: Vec[String], mut ranges: Vec[String]) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            match pat.node {
+                Pattern::Ref { args, .. } => {
+                    if emit_is_a_binding_text(world, walk, pat.node) {
+                        let said = emit_text(world, name)
+                        let from = emit_text_edge(world, walk, said, args, "from")
+                        let to = emit_text_edge(world, walk, said, args, "to")
+                        found.push(said)
+                        ranges.push(f"{from}.start..{to}.end")
+                        for arg in args {
+                            emit_text_bindings(world, walk, arg.node, found, ranges)
+                        }
+                    }
+                },
+                else => {},
+            }
+        },
+        Pattern::Seq(parts) => {
+            for part in parts {
+                emit_text_bindings(world, walk, part.node, found, ranges)
+            }
+        },
+        Pattern::Group(pat) => emit_text_bindings(world, walk, pat.node, found, ranges),
+        // below a repeat, a choice or a built-in a bound `text(..)` is the
+        // backend's own (`grammar_nested`)
+        else => {},
+    }
+}
+
 /// **The names bound to a `bytes(p)`** in a pattern, for a text grammar's
 /// action to see as bytes (ADR-366 D4).
 fn emit_bytes_bindings(world: ref EmitWorld, pattern: ref Pattern, mut found: Vec[String]) {
@@ -352,6 +386,16 @@ impl EmitState {
                     }
                     for name in as_spans {
                         prelude = f"{prelude}let {name} = ::nikaia_std::text::Span::of({name}); "
+                    }
+                    let mut as_texts: Vec[String] = []
+                    let mut covered: Vec[String] = []
+                    emit_text_bindings(world, walk, alt.pattern.node, as_texts, covered)
+                    for (name, range) in as_texts.iter().zip(covered.iter()) {
+                        if bytes {
+                            prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered_bytes::<_, E>(input, {range})?; "
+                        } else {
+                            prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered(input, {range}); "
+                        }
                     }
                     // A grammar action is the rule's own body: what it ends
                     // in is what the rule hands back, so a `return` there is
