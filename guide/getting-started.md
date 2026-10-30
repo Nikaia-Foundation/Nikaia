@@ -177,5 +177,4 @@ example exposed, and which are still open.
 * [Specification, Part II](../docs/specification/20-nikaia-advance.md): concurrency,
   parallelism and grammars.
 * Working on the compiler itself: [toolchain architecture](../docs/toolchain_architecture.md),
-  and `cargo test -p nikaia` (not the whole workspace, see the
-  [roadmap](../docs/project_status_and_roadmap.md#the-walls-you-will-hit)).
+  and `cargo test -p nikaia` (not the whole workspace).

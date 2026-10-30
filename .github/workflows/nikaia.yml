@@ -67,7 +67,6 @@ jobs:
         if: steps.decide.outputs.docs == 'true'
         run: |
           python3 scripts/check-adr-refs.py
-          python3 scripts/check-roadmap-numbers.py
           python3 scripts/badges.py --check
 
   # The oldest Rust Nikaia claims (ADR-305), with the whole suite run on it:
@@ -339,13 +338,6 @@ jobs:
       # live in the compiler's own comments and tests.
       - name: Check ADR citations resolve
         run: python3 scripts/check-adr-refs.py
-
-      # The roadmap's percentages are counted from its own boxes. That table is
-      # the one thing on the page nothing else would catch going stale: every
-      # box below it is a sentence somebody edits, and the number at the top is
-      # a sentence nobody re-derives.
-      - name: Check the roadmap's numbers
-        run: python3 scripts/check-roadmap-numbers.py
 
       # The README's badges are drawn from the specification's version line and
       # the self-hosting count. The pre-commit hook redraws them, but a session
