@@ -79,7 +79,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   Catch Rust slips with `cargo check --release -p nikaia --message-format
   short` (under a minute). Then **the cycle, as one tool call**, exactly:
 
-      target/fast/nikaia lower-std 2>&1 | grep -E '^error|-->' | head -30; cargo build --profile fast -p nikaia --message-format short 2>&1 | grep -E '^error' | head; target/fast/nikaia lower-std 2>&1 | grep -E '^error|-->' | head; git status --short crates/nikaia-std/src/tools/lowered crates/nikaia-std/src/tools/lowered.rs
+      target/fast/nikaia lower-std 2>&1 | grep -E '^(error|Error)|-->' | head -30; cargo build --profile fast -p nikaia --message-format short 2>&1 | grep -E '^error' | head; target/fast/nikaia lower-std 2>&1 | grep -E '^(error|Error)|-->' | head; git status --short crates/nikaia-std/src/tools/lowered crates/nikaia-std/src/tools/lowered.rs
 
   The first `lower-std` (old binary) reports refusals in `.nika` in seconds:
   fix them all before the next cycle. If the second `lower-std` changed a
