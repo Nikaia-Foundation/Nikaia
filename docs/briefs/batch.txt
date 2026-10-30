@@ -1,2 +1,3 @@
-p5e-project-tag-copy.md
-k3a1-comptime-lower.md
+k3a1-commit.md
+b995-coalesce-map-get.md
+k3a2-comptime-compute.md
