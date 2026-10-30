@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1313] — 2026-10-30
+
+**ADR-277 D17: a trait method's keeps column (#1012); sum() names its type (#1007); a returned map read of literal text is copied (#996); a binding inside a bound text(..) is kept (#1013)**
+- ADR-277 D17: a trait method keeps what its default body and the impls in its own package keep, and nothing with neither; a foreign impl that keeps more is refused (NK1264); a change to a `pub` trait method's `keeps` warns (NK1265).
+- `sum()` names its result type, so a sum of a typed sequence compiles where the type is not otherwise written (#1007).
+- A map read of literal text returned from a function is copied out (#996).
+- A binding inside a bound `text(..)` of the grammar is kept (#1013 point 1).
+
 ## [0.0.1312] — 2026-10-30
 
 **an impl's method keeps what its trait method keeps (#1008)**
