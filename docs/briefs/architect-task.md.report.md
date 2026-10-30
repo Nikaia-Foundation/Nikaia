@@ -1,4 +1,5 @@
 Result: done
-Batch: p5e-project-tag-copy.md, k3a1-comptime-lower.md
+Batch: k3a1-commit.md, b995-coalesce-map-get.md, k3a2-comptime-compute.md
+Commit: 9d8d0953 (briefs, batch.txt, common.part rule: commit and push before the report, State)
+Issues: filed #995 (ready), #996 (ready)
 Owner: none
-Cut b933 was false (brief's `-> String` contradicted ADR-353 D10); #933 done in 34519e7, Changelog line in its report, version raise owed. Rules: common.part (ADR-governed lowering is no deviation), architect.md (check expected lowering against its ADR), builder-facts (`--tethers`, `nikaia.contracts`, `nikaia test` output to a file). K3a split; part 2 next. Committed 3b6f889.

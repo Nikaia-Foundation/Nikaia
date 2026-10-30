@@ -1,13 +1,12 @@
-1. **Most turns and time:** designing the new Rust host for K3a part 1 (`ComptimeLowerHost`). I read about 480 lines of `comptime_run.rs`, `comptime_tree.nika`'s API, `Parsed::keeping`, `may_not_run`, the M3b host pattern and P5b's step for the converter rows (`[forms]`/`[hosts]`), about 8 tool calls. The second biggest cost was reading `docs/architect.md` whole: about 29k tokens, three quarters of it the *State* diary, which I needed only for the newest two entries.
-2. **What the brief could have handed me:**
-   - The cut report's `Deviation:` text with the governing ADR next to it (D10), so I didn't have to reason out whether the cut was false.
-   - The current *State* entry alone, instead of a pointer to the whole file.
-   - The plan row's `Cut:`/`Convert:` line for the next move, with ranges checked against today's tree. I had to re-check that K1 landed after a4b33a0 and re-grep the function lines.
+1. **What cost the most:** writing the probes for #995. Several of them failed on syntax I had wrong, like `BTreeSet::new`, `.to_string()` on a literal, typed lambda parameters and `.copied()` on `T?`. After those, the next biggest cost was reading `comptime_run.rs` and `comptime_tree.nika` to sketch the K3a part 2 host. A `git log -S` search also timed out and had to finish in the background.
+2. **What I had to look up:**
+   - Syntax for probes: constructors are `collections::BTreeSet()`, and lambda parameters are written without types.
+   - Where `Wall`, `Bounds`, `LedgerOps::absorb`, `run_comptime`, `dumper` and `with_driver` live.
+   - That sets have no `iter`/`filter` in `std.contracts`.
+   - Why k3a1 left its work uncommitted (the 30bdbc66/9538c0b0 history).
+
+   A cut report that showed `git status` for the cut builder's files, plus a "probe syntax" cheat sheet in `builder-facts.md`, would have covered most of it.
 3. **Checks:**
-   - Useful: `git log` on `project.rs` (p5e's ranges still hold), the grep of callers (`grammar_run.rs`, and none in `it/`), and the `--tethers` flag existing before I wrote a rule naming it.
-   - Wasted: none really. The CI query only showed runs in progress, so it decided nothing.
-   - Not run, so the k3a1 brief carries unverified claims:
-     - that the `it` filters `comptime grammar_at_build_time` match any tests;
-     - that `String.len()` counts bytes (I handed that check to the builder);
-     - that P5b's convert command still works.
-4. **One change:** split `docs/architect.md` so that *State* keeps only the last 3 entries and the older ones move to `docs/architect-history.md`. Also, `drive.nika` should write the cut brief's report and debrief paths into `architect-input.txt`. That would have saved about 25k tokens and two calls.
+   - Run: the probes through `nikaia`, greps for who calls the constants and adapters, `git status` and the diff stat, and the issue bodies through `gh api`.
+   - Partly wasted: the `git log -S` search, since `git log` on the file was enough. The probes ran on a `target/fast/nikaia` built before 0.0.1307, so they may be stale; the briefs tell builders to re-probe on a fresh build.
+4. **The change that would have saved the most:** have `batch.nika` refuse a report with no `Pushed:` sha or with a placeholder (`TC`, `DISK`) left in, and say why in the cut line (for example `CUT ...: not committed`). It should also attach the cut builder's `git status --short` to `architect-input.txt`. That would have saved my whole diagnosis. I already added the matching builder-side rule to `common.part`.

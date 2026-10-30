@@ -144,3 +144,4 @@
 /home/user/Nikaia/docs/briefs/b933-method-result-owned.md 455334 4
 /home/user/Nikaia/docs/briefs/architect-task.md 1582820 25
 /home/user/Nikaia/docs/briefs/p5e-project-tag-copy.md 999005 13
+/home/user/Nikaia/docs/briefs/architect-task.md 3454914 48
