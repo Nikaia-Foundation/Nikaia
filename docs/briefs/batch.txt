@@ -1,2 +1,2 @@
-b1006-set-iter.md
 k3a2-comptime-compute.md
+b1007-sum-typed.md
