@@ -198,6 +198,8 @@ pub(crate) fn check_core_flow_meet(state: &mut CheckState, world: &CheckWorld<'_
     if text.is_some() { return nikaia_std::index::or(text, || Ty::Unknown); }
     let at_null = state.arms_meet_at_null(world, arms);
     if at_null.is_some() { return nikaia_std::index::or(at_null, || Ty::Unknown); }
+    let with_holes = arms_meet_with_holes(arms);
+    if with_holes.is_some() { return nikaia_std::index::or(with_holes, || Ty::Unknown); }
     check_core_flow_disagree(state, world, expr, arms, span);
     Ty::Unknown
 }
@@ -811,6 +813,43 @@ pub(crate) fn check_core_flow_copied_parts(state: &mut CheckState, world: &Check
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_copied_in_views(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, at: i64, pattern: &MatchPattern, typed: &Ty, body: &Expr) { for (name, inner) in check_core_flow_names_in_views(&state, world, pattern, typed, body) { if (state.copied(world, &inner) || inner.is_a_view()) && !check_core_flow_a_slice(&inner) { state.facts.copied_bindings.insert((at, name.to_string())); } } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_names_in_views(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty, body: &Expr) -> collections::BTreeMap<String, Ty> {
+    let mut names: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+    let (path, parts) = match pattern {
+        MatchPattern::Tuple { path, parts } => (path.to_owned(), parts.to_owned()),
+        _ => return names,
+    };
+    let types: Vec<Ty> = match typed {
+        Ty::Tuple(types) => types.to_owned(),
+        _ => return names,
+    };
+    if !path.is_empty() || (parts.len() as i64) != types.len() as i64 { return names; }
+    for (part, ty) in parts.iter().zip(types.iter()) { if ty.is_a_view() && check_core_flow_takes_apart(part) { for (name, inner) in check_core_flow_arm_pattern_parts(state, world, part, ty, body) { names.insert(name.to_string(), inner.clone()); } } else if !ty.is_a_view() { for (name, inner) in check_core_flow_names_in_views(state, world, part, ty, body) { names.insert(name.to_string(), inner.clone()); } } }
+    names
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_unlend_views(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty, body: &Expr) {
+    let at = id_of(body) as i64;
+    let mut lent: collections::BTreeSet<String> = match match state.facts.lent_bindings.get(&at) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    for (name, _) in check_core_flow_names_in_views(&state, world, pattern, typed, body) { lent.remove(&name); }
+    if lent.is_empty() { state.facts.lent_bindings.remove(&at); } else { state.facts.lent_bindings.insert(at, lent); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_takes_apart(pattern: &MatchPattern) -> bool { matches!(pattern, MatchPattern::Tuple { .. } | MatchPattern::Named { .. }) }
+
 pub(crate) fn check_core_flow_binds_the_payload(pattern: &MatchPattern, typed: &Ty) -> bool {
     let nullable = match typed {
         Ty::Nullable(_) => true,
@@ -940,7 +979,7 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     let parts = check_core_flow_parts(state, world, &arm.pattern, typed, lendable, &arm.body);
     let a_list = check_core_flow_a_list(&arm.pattern);
     let listed = state.flow.lent_list_reads.contains(&(id_of(value) as i64));
-    if typed.is_a_view() || through_the_reference || a_list || listed { check_core_flow_copied_parts(state, world, arm, typed, through_the_reference); }
+    if typed.is_a_view() || through_the_reference || a_list || listed { check_core_flow_copied_parts(state, world, arm, typed, through_the_reference); } else { check_core_flow_copied_in_views(state, world, id_of(&arm.body) as i64, &arm.pattern, typed, &arm.body); }
     let lent_parts = !lendable && (typed.is_a_view() || listed);
     let mut owned_text: collections::BTreeSet<String> = collections::BTreeSet::new();
     if lent_parts { owned_text = check_core_flow_owned_texts(state, world, &arm.pattern, typed, &arm.body); }
@@ -964,6 +1003,7 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     let a_map_read = state.flow.map_read_sites.contains(&(id_of(value) as i64));
     let by_reference = through_the_reference || a_list || a_map_read || listed || name != "" && (on.is_a_view() || state.got_past_a_jump.contains(&name));
     check_core_flow_lent_parts(state, world, host, &arm.body, &parts, handed_from, changed_from, by_reference, a_list);
+    check_core_flow_unlend_views(state, world, &arm.pattern, typed, &arm.body);
     let leaves = state.exits(world, &arm.body);
     state.a_branch_that_leaves(from, leaves, span);
     check_core_flow_changed_copies(state, &arm.body, changed_from, &in_place, mut_subject.is_some());

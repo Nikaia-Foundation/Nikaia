@@ -245,6 +245,10 @@ fn check_core_flow_meet(mut state: CheckState, world: ref CheckWorld, expr: ref 
     if at_null != null {
         return at_null ?? Ty::Unknown
     }
+    let with_holes = arms_meet_with_holes(arms)
+    if with_holes != null {
+        return with_holes ?? Ty::Unknown
+    }
     check_core_flow_disagree(state, world, expr, arms, span)
     return Ty::Unknown
 }
@@ -1005,6 +1009,73 @@ fn check_core_flow_copied_parts(mut state: CheckState, world: ref CheckWorld, ar
     }
 }
 
+/// **A part copied out of a view a tuple holds** (the fix forward of
+/// 43312d30): `match (a, b) { (T::N { view: x }, ..) => .. }` over two
+/// `ref T` takes each `ref T` apart as the arm over one does, so a number or
+/// a `bool` bound inside it is copied out at the head of the arm.
+fn check_core_flow_copied_in_views(mut state: CheckState, world: ref CheckWorld, at: i64, pattern: ref MatchPattern, typed: ref Ty, body: ref Expr) sync {
+    for (name, inner) in check_core_flow_names_in_views(state, world, pattern, typed, body) {
+        if (state.copied(world, inner) || inner.is_a_view()) && !check_core_flow_a_slice(inner) {
+            state.facts.copied_bindings.insert((at, name.clone()))
+        }
+    }
+}
+
+/// **The names a tuple's pattern binds inside a view it holds**, with their
+/// types: bound by reference already, as over the one view, so they are
+/// neither written `ref` nor taken. A part of the tuple bound whole, `(a, b)`,
+/// is the view itself and is not among them.
+fn check_core_flow_names_in_views(state: ref CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty, body: ref Expr) -> collections::BTreeMap[String, Ty] sync {
+    let mut names: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    let (path, parts) = match pattern {
+        MatchPattern::Tuple { path, parts } => (path.clone(), parts.clone()),
+        else => return names,
+    }
+    let types: Vec[Ty] = match typed {
+        Ty::Tuple(types) => types.clone(),
+        else => return names,
+    }
+    if !path.is_empty() || parts.len() != types.len() {
+        return names
+    }
+    for (part, ty) in parts.iter().zip(types.iter()) {
+        if ty.is_a_view() && check_core_flow_takes_apart(part) {
+            for (name, inner) in check_core_flow_arm_pattern_parts(state, world, part, ty, body) {
+                names.insert(name.clone(), inner.clone())
+            }
+        } else if !ty.is_a_view() {
+            for (name, inner) in check_core_flow_names_in_views(state, world, part, ty, body) {
+                names.insert(name.clone(), inner.clone())
+            }
+        }
+    }
+    return names
+}
+
+/// The names lent where they are bound by reference already
+/// (`check_core_flow_names_in_views`) are not written `ref` as well.
+fn check_core_flow_unlend_views(mut state: CheckState, world: ref CheckWorld, pattern: ref MatchPattern, typed: ref Ty, body: ref Expr) sync {
+    let at = id_of(body) as i64
+    let mut lent: collections::BTreeSet[String] = state.facts.lent_bindings.get(at)?.clone() ?? return
+    for (name, _) in check_core_flow_names_in_views(state, world, pattern, typed, body) {
+        lent.remove(name)
+    }
+    if lent.is_empty() {
+        state.facts.lent_bindings.remove(at)
+    } else {
+        state.facts.lent_bindings.insert(at, lent)
+    }
+}
+
+/// Whether a pattern looks inside the value rather than naming it whole.
+fn check_core_flow_takes_apart(pattern: ref MatchPattern) -> bool sync {
+    return match pattern {
+        MatchPattern::Tuple { .. } => true,
+        MatchPattern::Named { .. } => true,
+        else => false,
+    }
+}
+
 /// Whether `pattern` names the whole payload of a nullable `typed`.
 fn check_core_flow_binds_the_payload(pattern: ref MatchPattern, typed: ref Ty) -> bool {
     // Beside a `null` arm the arms are typed as what is inside, which is the
@@ -1176,6 +1247,8 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let listed = state.flow.lent_list_reads.contains(id_of(value) as i64)
     if typed.is_a_view() || through_the_reference || a_list || listed {
         check_core_flow_copied_parts(state, world, arm, typed, through_the_reference)
+    } else {
+        check_core_flow_copied_in_views(state, world, id_of(arm.body) as i64, arm.pattern, typed, arm.body)
     }
     let lent_parts = !lendable && (typed.is_a_view() || listed)
     let mut owned_text: collections::BTreeSet[String] = collections::BTreeSet()
@@ -1216,6 +1289,7 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let a_map_read = state.flow.map_read_sites.contains(id_of(value) as i64)
     let by_reference = through_the_reference || a_list || a_map_read || listed || (name != "" && (on.is_a_view() || state.got_past_a_jump.contains(name)))
     check_core_flow_lent_parts(state, world, host, arm.body, parts, handed_from, changed_from, by_reference, a_list)
+    check_core_flow_unlend_views(state, world, arm.pattern, typed, arm.body)
     let leaves = state.exits(world, arm.body)
     state.a_branch_that_leaves(from, leaves, span)
     check_core_flow_changed_copies(state, arm.body, changed_from, in_place, mut_subject != null)

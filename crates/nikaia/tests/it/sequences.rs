@@ -302,6 +302,13 @@ fn a_loop_over_standard_input_binds_a_string_and_still_costs_throws() {
 /// **16 with ADR-352 D5**: the 37 `Some(x) =>` arms of the tools are `x =>`
 /// beside `null =>`, and the nested pattern that left `x` untyped is gone; one
 /// call that asked a method of such an `x` is answered.
+///
+/// **14 when arms meet where each is known**: 43312d30 raised it to 18 with
+/// `prover_bound_number`'s `let (called, generics, args) = match ..`, whose
+/// arms hand `generics.clone()` and `[]`. Arms whose types differ only where
+/// one is not known yet (`Vec[TypeRef]` beside a `Vec` of nothing typed,
+/// part by part in a tuple) now meet at the known type, which answers those
+/// two calls and two more - measured: 18 without it, 14 with.
 #[test]
 fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -401,8 +408,8 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
     }
     assert!(files >= 18, "only {files} programs were read");
     assert!(
-        unanswered <= 16,
-        "{unanswered} unanswered method calls in {files} programs, and 16 is the \
+        unanswered <= 14,
+        "{unanswered} unanswered method calls in {files} programs, and 14 is the \
          ceiling this was last measured at - a rise means a receiver stopped \
          being typed, and a fall means this number goes down with a sentence \
          saying what answered them"

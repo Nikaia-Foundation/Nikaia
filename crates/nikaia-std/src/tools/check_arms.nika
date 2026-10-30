@@ -73,6 +73,76 @@ fn the_type_inside(ty: ref Ty) -> Ty {
     }
 }
 
+/// **Two arm types that agree where both are known** (the fix forward of
+/// 43312d30): `xs.clone()` beside `[]` or `[5]`, a `Vec[i64]` beside a
+/// `Vec` whose element nothing typed yet, meet at `Vec[i64]`; a tuple meets
+/// part by part. An unknown part takes the other's; any other difference is
+/// no meeting (`null`).
+fn the_types_meet_with_holes(a: ref Ty, b: ref Ty) -> Ty? {
+    if a.is_unknown() {
+        return b.clone()
+    }
+    if b.is_unknown() {
+        return a.clone()
+    }
+    return match (a, b) {
+        (Ty::Named { name: x, args: xa, view: xv }, Ty::Named { name: y, args: ya, view: yv }) => {
+            if x != y || xv != yv || xa.len() != ya.len() {
+                return null
+            }
+            let args = the_parts_meet_with_holes(xa, ya) ?? return null
+            Ty::Named { name: x.clone(), args: args, view: xv }
+        },
+        (Ty::Tuple(xs), Ty::Tuple(ys)) => {
+            if xs.len() != ys.len() {
+                return null
+            }
+            let parts = the_parts_meet_with_holes(xs, ys) ?? return null
+            Ty::Tuple(parts)
+        },
+        (Ty::Nullable(x), Ty::Nullable(y)) => {
+            let inner = the_types_meet_with_holes(x, y) ?? return null
+            Ty::Nullable(inner)
+        },
+        else => {
+            if a != b {
+                return null
+            }
+            a.clone()
+        },
+    }
+}
+
+/// The parts of two types of as many parts, met one by one.
+fn the_parts_meet_with_holes(xs: ref Vec[Ty], ys: ref Vec[Ty]) -> Vec[Ty]? {
+    let mut met: Vec[Ty] = []
+    for (x, y) in xs.iter().zip(ys.iter()) {
+        let part = the_types_meet_with_holes(x, y) ?? return null
+        met.push(part)
+    }
+    return met
+}
+
+/// **Arms that meet where each is known** (`the_types_meet_with_holes`): the
+/// type of the choice, or `null` where two arms differ in a known part or
+/// an arm is of no known type at all.
+pub fn arms_meet_with_holes(arms: ref Vec[CheckArm]) -> Ty? {
+    if arms.len() < 2 {
+        return null
+    }
+    let mut met: Ty = Ty::Unknown
+    for arm in arms {
+        // **A hole is a part of an arm's type, never the whole arm**: an arm
+        // of no known type - a number a use types, a choice whose own arms
+        // disagree - is the position's to settle, as before.
+        if arm.ty.is_unknown() {
+            return null
+        }
+        met = the_types_meet_with_holes(met, arm.ty) ?? return null
+    }
+    return met
+}
+
 /// Whether the type seen so far, if any, is this one.
 fn the_plain_type_agrees(plain: ref Ty?, inner: ref Ty) -> bool {
     let seen = plain ?? return true

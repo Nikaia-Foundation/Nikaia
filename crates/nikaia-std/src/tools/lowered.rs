@@ -2082,7 +2082,7 @@ pub mod check_arm_leaves {
 }
 pub mod check_arms {
     #[allow(unused_imports)]
-    pub use super::{CheckArm, arms_that_disagree};
+    pub use super::{CheckArm, arms_meet_with_holes, arms_that_disagree};
 }
 pub mod check_attributes {
     #[allow(unused_imports)]

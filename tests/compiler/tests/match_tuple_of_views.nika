@@ -1,0 +1,37 @@
+// A `match` over a tuple of two views takes each view apart as a `match`
+// over one does: a `bool` or a number bound inside it is copied out, and a
+// text is read through the view (fix forward of 43312d30).
+enum Shape {
+    Named { name: String, view: bool, size: i64 },
+    Unknown,
+}
+
+fn meet(a: ref Shape, b: ref Shape) -> Shape? {
+    return match (a, b) {
+        (Shape::Named { name: x, view: xv, size: xs }, Shape::Named { name: y, view: yv, size: ys }) => {
+            if x != y || xv != yv {
+                return null
+            }
+            Shape::Named { name: x.clone(), view: xv, size: xs + ys }
+        },
+        (Shape::Unknown, other) => other.clone(),
+        else => null,
+    }
+}
+
+fn describe(s: Shape?) -> String {
+    return match s {
+        null => "none",
+        Shape::Named { name, view, size } => f"{name} {view} {size}",
+        Shape::Unknown => "unknown",
+    }
+}
+
+fn main() {
+    let a = Shape::Named { name: "list", view: true, size: 2 }
+    let b = Shape::Named { name: "list", view: true, size: 3 }
+    let c = Shape::Named { name: "map", view: false, size: 1 }
+    println(describe(meet(a, b)))
+    println(describe(meet(a, c)))
+    println(describe(meet(Shape::Unknown, c)))
+}

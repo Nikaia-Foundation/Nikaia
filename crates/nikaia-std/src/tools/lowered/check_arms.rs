@@ -47,6 +47,52 @@ pub(crate) fn the_type_inside(ty: &Ty) -> Ty {
     }
 }
 
+pub(crate) fn the_types_meet_with_holes(a: &Ty, b: &Ty) -> Option<Ty> {
+    if a.is_unknown() { return Some(b.clone()); }
+    if b.is_unknown() { return Some(a.clone()); }
+    Some(match (a, b) {
+        (Ty::Named { name: x, args: xa, view: xv }, Ty::Named { name: y, args: ya, view: yv }) => {
+            let xv = *xv; let yv = *yv;
+            if *x != *y || xv != yv || (xa.len() as i64) != ya.len() as i64 { return None; }
+            let args = match the_parts_meet_with_holes(xa, ya) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Ty::Named { name: x.to_string(), args, view: xv }
+        },
+        (Ty::Tuple(xs), Ty::Tuple(ys)) => {
+            if (xs.len() as i64) != ys.len() as i64 { return None; }
+            let parts = match the_parts_meet_with_holes(xs, ys) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Ty::Tuple(parts)
+        },
+        (Ty::Nullable(x), Ty::Nullable(y)) => {
+            let x = nikaia_std::boxed::open(x); let y = nikaia_std::boxed::open(y);
+            let inner = match the_types_meet_with_holes(x, y) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Ty::Nullable(Box::new(inner))
+        },
+        _ => {
+            if a != b { return None; }
+            a.clone()
+        },
+    })
+}
+
+pub(crate) fn the_parts_meet_with_holes(xs: &[Ty], ys: &[Ty]) -> Option<Vec<Ty>> {
+    let mut met: Vec<Ty> = vec![];
+    for (x, y) in xs.iter().zip(ys.iter()) {
+        let part = match the_types_meet_with_holes(x, y) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        met.push(part);
+    }
+    Some(met)
+}
+
+pub fn arms_meet_with_holes(arms: &[CheckArm<'_>]) -> Option<Ty> {
+    if arms.len() < 2 { return None; }
+    let mut met: Ty = Ty::Unknown;
+    for arm in arms.iter() {
+        if arm.ty.is_unknown() { return None; }
+        met = match the_types_meet_with_holes(&met, &arm.ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    }
+    Some(met)
+}
+
 pub(crate) fn the_plain_type_agrees(plain: Option<&Ty>, inner: &Ty) -> bool {
     let seen = match plain { Some(__nikaia_value) => __nikaia_value, None => return true };
     seen == inner
