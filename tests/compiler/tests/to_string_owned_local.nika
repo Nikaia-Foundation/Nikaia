@@ -1,0 +1,42 @@
+enum BV { Int(i64), Text(String) }
+
+fn f(n: i64) -> String {
+    let s = f"a{n}"
+    return s.to_string()
+}
+
+fn g(got: BV) -> String {
+    let s = match got { BV::Int(i) => i, else => 0 }
+    return s.to_string()
+}
+
+fn h() -> String {
+    let a = "x"
+    let s = a + "y"
+    return s.to_string()
+}
+
+fn k(n: i64) -> String {
+    let s: String = f"b{n}"
+    return s.to_string()
+}
+
+fn m(n: i64) -> String {
+    let s = n + 1
+    return s.to_string()
+}
+
+fn c(t: String) -> String {
+    let s = t.clone()
+    return s.to_string()
+}
+
+fn main() {
+    println(f(3))
+    println(g(BV::Int(4)))
+    println(g(BV::Text("q")))
+    println(h())
+    println(k(5))
+    println(m(6))
+    println(c("z"))
+}

@@ -515,6 +515,9 @@ struct TierLocal {
     /// Bound by `Some(a)` over a place a `ref` parameter lends: a view of it
     /// where it is handed back (#808).
     lent: bool,
+    /// Bound by a `let` to a value made there, not read out of a name, a
+    /// field or an element, or by a pattern to a number (#1005).
+    made: bool,
 }
 
 /// What one walk found, every position by its word.
@@ -759,7 +762,7 @@ fn tier_arm_read(node: i64, mut walk: TierWalk) -> bool {
 }
 
 fn plain_local(kinds: Kinds) -> TierLocal {
-    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false }
+    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false }
 }
 
 fn tier_at(word: ref String, mut walk: TierWalk) -> Tier {
@@ -1486,6 +1489,7 @@ fn bind_a_payload(part: ref MatchPattern, owner: TextOwner, ty: ref Type, ask: r
     if tier_scalar_type(ask, ty) {
         let mut local = plain_local(owned_kinds())
         local.declared = Declaring { owner: owner, ty: ty.clone() }
+        local.made = true
         bind_tier_local(name, local, walk)
     }
     return false
@@ -2389,7 +2393,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         }
     }
     if names.len() == 1 {
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false }
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false, made: !a_read(value) }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
@@ -4708,6 +4712,12 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
         if tier_scalar_name(receiver, ask, walk) {
             return owned_kinds()
         }
+        // **An owned local's text form is owned** (ADR-282 D8, #1005): a
+        // name bound to text of its own (`f"..."`, `+`, `clone`) or to a
+        // number keeps it through `.to_string()`.
+        if owned_local(receiver, received, ask, walk) {
+            return owned_kinds()
+        }
         // **A view of a call's result does not outlive the statement**: the
         // text it hands back is a temporary, so `a(n).trim().to_string()`
         // is text of its own, unless only static text flows in.
@@ -4856,6 +4866,30 @@ fn a_text_read_whole(receiver: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -
             let local = tier_local(ask.names.resolve(name), walk) ?? return false
             local.from != null
         }
+        else => false,
+    }
+}
+
+/// Whether a receiver is a local made where it is bound, holding text of
+/// its own and nothing read out of another position.
+fn owned_local(receiver: ref Expr, received: ref Kinds, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+    if !received.owned || received.view || received.lasting || received.still || received.either {
+        return false
+    }
+    let local = match receiver {
+        Expr::Variable(name, _) => tier_local(ask.names.resolve(name), walk) ?? return false,
+        else => return false,
+    }
+    return local.made && local.from == null && local.through.len() == 0 && !local.lent
+}
+
+/// Whether a value is a name, a field or an element read as it is.
+fn a_read(value: ref Expr) -> bool {
+    return match value {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        Expr::SafeField { .. } => true,
+        Expr::Index { .. } => true,
         else => false,
     }
 }
@@ -5299,7 +5333,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         let owner = TextOwner::Param(key.clone(), at)
         let kinds = kinds_of(owner, arg.ty, [], ask, walk)
         let of: String = ask.names.resolve(arg.ty.name).clone()
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: arg.ty.clone() }, from: null, empty: -1, through: [], lent: false }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: arg.ty.clone() }, from: null, empty: -1, through: [], lent: false, made: false }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
@@ -5312,7 +5346,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     walk.lent_self = false
     if receiver != null && target != null {
         walk.lent_self = receiver?.is_ref ?? false
-        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false }
+        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false }
         bind_tier_local("self", local, walk)
     }
     walk.handed_back = -1
