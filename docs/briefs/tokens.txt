@@ -151,3 +151,4 @@
 /home/user/Nikaia/docs/briefs/b997-let-lambda-string-param.md 690886 6
 /home/user/Nikaia/docs/briefs/architect-task.md 950976 20
 /home/user/Nikaia/docs/briefs/b-drive-pushed-on-develop.md 196894 9
+/home/user/Nikaia/docs/briefs/b1005-to-string-owned-local.md 317760 5
