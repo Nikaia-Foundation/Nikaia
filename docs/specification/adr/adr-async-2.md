@@ -1,22 +1,23 @@
-# ADR-async-2: Open - Whether `par_iter` and the `async` Loop Become One Mechanism
+# ADR-async-2: Fan-Out Over a Collection Is the `par_iter` Chain, Whose Lambdas May Pause; the Compiler Picks Pieces or One Task per Element, Under One Rule Set; the `async` Loop Is Removed
 
-**Status:** Open
-**Date:** October 30, 2026 (decision paper for the owner, [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983))
+**Status:** Accepted
+**Date:** October 30, 2026 (owner's decision, option D, in the third design round, [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983))
 **Answers:** can a loop over data that runs on the cores (`xs.par_iter() …`) and a loop that starts one child per element (`async for`, `async let xs = for …`) be one mechanism, with the compiler choosing how it runs, instead of two forms with two rule sets and a warning between them?
 **Supersedes / Related:**
-[ADR-async-1](adr-async-1.md) D3, D4, D6, D8, D11, D14, D15 (the `async` loop: its value, its options, its check, how it runs, its memory);
-[ADR-235](adr-235.md) D1, D2 (`par_iter`: a `Par[ref T]`, no pause, no write to an outer name);
+[ADR-async-1](adr-async-1.md) D3, D4, D6, D8, D11, D13 (changed: the `async` loop is removed; fan-out is `par_iter`'s; D14, D15 hold for its tasks);
+[ADR-235](adr-235.md) D1, D2 (changed: a `par_iter` lambda may pause; a write to an outer name is still `NK2107`);
+[ADR-276](adr-276.md) D13 (stands again for every loop: no loop has a value);
 [ADR-372](adr-372.md) D9 (`fold`'s `step` and `merge` may change their first argument);
 [ADR-327](adr-327.md) D5, D9, D10 (a block per task; what outlives a task is not in it; a budget counts what is held);
 [ADR-328](adr-328.md) D10 (a pausing child is polled by its group, on the group's thread);
-[ADR-288](adr-288.md) D32 (`NK2211`, the warning when a function starts to pause);
+[ADR-288](adr-288.md) D32 (`NK2211`, the warning when a function starts to pause; `NK2119` is its shape for a `par_iter` lambda);
+[ADR-async-4](adr-async-4.md) D8 (`async xs.par_iter() …` is one task that fans out);
 [ADR-258](adr-258.md) D1-D4 (the four weights);
-Part I 8.1.2; Part II 12.6, 12.7
+Part I 8.1.2; Part II 12.6, 12.7; Part III the `NK2104`, `NK2107`, `NK2119`, `NK2120`, `NK2209` rows, `--overlaps`
 
-*This record decides nothing yet. It is the decision basis for the owner: one
-question, answerable on its own. The companion question - whether the task
-concepts become one - is [ADR-async-3](adr-async-3.md), and the names come after
-both.*
+*The owner chose option D (§3) over the recommended B: fewer forms, and the
+chain already says what a loop cannot (`filter`, `fold`, pieces of `Bytes`).
+Sections 1-3 are the decision paper as it was put; §4 is the decision.*
 
 ## 1. Question
 
@@ -189,32 +190,95 @@ child that fans out.
 | **C** | a fold pays a new `std` type the checker knows by name | yes | as B, plus a reducer's view per piece | most: one form; but a reducer is a value the body writes, an exception to `NK2107` | high: removes a built, tested form (`par_iter`, `fold`, `par_pieces`, ADR-372 D9) and every program on it |
 | **D** | a loop beside the window pays a lambda and a chain | yes | as B | one form, but the window becomes one child around a chain; ADR-async-1 option G was rejected for this shape | high: undoes the `async` loop just accepted; the checker sees calls, not iterations |
 
-## 4. Recommendation
+## 4. Decision
 
-**Option B.** It answers the owner's first question with yes for the
-mechanism: one set of rules, one runtime, and the execution read off what the
-compiler already knows. It keeps two spellings only where they say different
-things - a loop with a window and a value per element, a chain with `filter`,
-`fold` and pieces of bytes - and adds no syntax. C is the step after B, if a
-reducer proves natural; it can be taken later without undoing B. D undoes a
-decision a day old for the shape that decision rejected.
+### D1 - Fan-out over a collection is `std`'s `par_iter` chain, and its lambdas may pause.
 
-The rules B would write, for the owner to accept or change (not yet `Dn`):
+```nika
+let bright = pixels.par_iter().map fn(p) { p.brightness * 1.5 }.collect()
+let pages = urls.par_iter(limit: 8).map fn(u) { http::get(u) }.collect()
+```
 
-1. An `async` loop whose body never pauses runs in pieces on the pool; one whose
-   body may pause runs one child per element. The meaning does not depend on
-   which, and `--overlaps` names it.
-2. Per element: a result in input order, every failure kept, a full block fails
-   that element; a piece's block is emptied between its elements.
-3. A `par_iter` lambda is checked as an iteration of an `async` loop
-   (`NK2104` is asked of it), and its failures follow the same rule.
-4. `limit:` is the one option for how many at once, on both; `workers:` goes.
-   Without it, a computing loop runs at most `task::cores()` pieces, and a
-   pausing one is under admission.
-5. `async let xs = for …` named in the very next statement is allowed
-   (`NK2110` is about one child, not a loop).
-6. A loop whose execution changes because its body started to pause is a
-   warning naming the call that made it pause.
+`map`, `filter` and `for_each` take a lambda that may pause; `NK2209` is no
+longer asked of them. The tasks a chain runs belong to the call: the call is
+their group, and it returns when every one has ended (ADR-async-3 D4). A
+lambda of `fold` (`init`, `step`, `merge`), `par_pieces` and `par_fold` is
+still action code and may not pause (`NK2209`); whether it may is not decided
+here (§7).
+
+### D2 - The compiler picks the execution from the lambda's pause property.
+
+* **A lambda that never pauses** runs in pieces on the cores, claimed while the
+  work runs (Part II 12.6), at most `task::cores()` at once.
+* **A lambda that may pause** runs one task per element, under admission and
+  `limit:` (ADR-async-1 D14), polled by the call's group (ADR-328 D10).
+
+The meaning does not depend on which: D3's rules hold for both, and the
+setting of `user_parallelism` changes the duration only.
+
+### D3 - One rule set, the same as for `async` tasks.
+
+* Results come back in input order, whatever order the elements end in.
+* Every failure is kept: the first in input order is thrown where the call
+  returns, the others are its `secondary` list in input order (ADR-async-1 D9).
+* A full block fails only its element, with `task::OverBudget` (ADR-async-1
+  D15); only a panic cancels the other elements, and the call throws
+  `task::Crashed`.
+* `NK2104` is asked of a `par_iter` lambda as of an iteration: the lambda
+  against itself, so a lambda that writes stdout or another resource is
+  refused, naming it. `limit: 1` written as the literal exempts it, as it
+  exempted an `async` loop's iterations.
+* `NK2107` as before: a lambda that changes a name bound outside it.
+
+### D4 - `limit:` replaces `workers:`; `within:` and `admission:` are taken by the chain.
+
+`xs.par_iter(limit: n, within: d, admission: s, piece: k)`, and `limit:` on
+`fold` and `par_fold` where `workers:` stood. `limit: i64` caps how many pieces
+or tasks run at once; below `1` it panics, naming the option. `within:` cancels
+the call's running tasks when it runs out and the call throws `task::TimedOut`.
+`admission:` names the strategy for a pausing chain; a computing one ignores it.
+
+### D5 - `--overlaps` reports the execution per site, and a lambda that starts to pause is a warning.
+
+`--overlaps` lists every `par_iter` call with the execution chosen (pieces or
+one task per element) and why: the call that makes the lambda pause, or none.
+Where the committed ledger recorded a site as running in pieces and its lambda
+can now pause, the build warns (`NK2119`) at the call that made it pause, as
+`NK2211` does for a function (ADR-288 D32); committing the ledger acknowledges
+it. It is not a refusal: a lambda written to pause, `http::get` in it, gets no
+warning, because nothing changed.
+
+### D6 - What the shared rules add is paid only where the compiler knows it is needed.
+
+* A failure slot only for a lambda that can throw, and its list is allocated on
+  the failure path; a lambda that cannot throw has no slot.
+* A block reset per element only for a lambda that allocates and keeps memory
+  past its element; one that does not shares its piece's block untouched.
+* Every check (`NK2104`, `NK2107`, `NK2119`) is compile-time only.
+
+**Measurements owed** before the lowering is accepted (callgrind counts only,
+release builds on both sides, LTO stated, the same output first):
+`par_iter().map(…).collect()` over 10^6 elements against Rayon, once with a
+lambda that can throw and once with one that allocates; and §6's rows 2-4.
+
+### D7 - The `async` loop is removed.
+
+`async let xs = for …` and `async for` are gone, and with them the one loop
+that had a value: ADR-276 D13 holds for every loop again. `NK2116` and
+`NK2117` are retired, not reused. A list of results computed beside the code
+after it is `let xs = async vs.par_iter().map fn(v) { … }.collect()`
+(ADR-async-4 D8).
+
+### D8 - `async` starts only tasks whose number stands in the source.
+
+An `async` form inside a loop's body - the same function, a nested block of it
+included - is refused (`NK2120`), and the help names
+`xs.par_iter().for_each fn(x) { … }`. A lambda's body is a function of its own
+(Part I 5.3), so a lambda written inside a loop may hold an `async` form. So a
+group's tasks are counted in the source, and a group of fixed size is laid out
+without an allocation.
+
+*The paper recommended option B: two spellings (the `async` loop and the chain) over one mechanism. The owner took D: one spelling, the chain.*
 
 ## 5. Risks, named
 
@@ -260,9 +324,11 @@ for byte first (CLAUDE.md, *Measuring performance*):
 
 ## 7. What this does not decide
 
+* Whether a lambda of `fold`, `par_pieces` or `par_fold` may pause, and how an
+  accumulator is folded by tasks that pause (D1).
+
 * Whether a pausing child may run on the pool instead of its group's thread
   (ADR-328 D10's limit); it would shrink §5's cliff, and is a runtime question
   of its own.
-* The names (`par_iter`, `Par`, `workers:`, `piece:`): after ADR-async-3.
-* `order: Any` on a loop with a value; under B a loop's results keep input
-  order.
+* The names (`par_iter`, `Par`, `piece:`): the naming round.
+* `order: Any` on `map` and `collect`; results keep input order (D3).

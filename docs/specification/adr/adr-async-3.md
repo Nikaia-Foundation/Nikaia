@@ -1,21 +1,23 @@
-# ADR-async-3: Open - Whether Every Task Is a Child of a Group, With Its Lifetime and Captures Following From the Group
+# ADR-async-3: Every Task Is Started in a Group and Lives at Most as Long as It; One Word, `async`, Starts Every Task, and `spawn` Becomes Its Option
 
-**Status:** Open
-**Date:** October 30, 2026 (decision paper for the owner, [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983))
+**Status:** Accepted
+**Date:** October 30, 2026 (owner's decision, option C, in the third design round, [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983))
 **Answers:** can the things that run beside other code - an `async` child, a `spawn` task with its `TaskHandle`, a `select` arm, a supervisor's child, a connection task under `serve` - be one kind of task, whose lifetime, captures and wait point follow from where it is started or from an option, instead of five concepts with their own rules?
 **Supersedes / Related:**
-[ADR-async-1](adr-async-1.md) D1, D5, D8, D10, D13, D14 (children, groups, what a child takes and borrows, `task::cancel`, the five forms, admission);
-[ADR-346](adr-346.md) D1-D6 (every task error has a receiver; the handle must be taken; `join(within:)`; detached tasks);
+[ADR-async-1](adr-async-1.md) D1, D5, D8, D13 (changed: a child is a task of its group; the five forms are the policies of D4);
+[ADR-async-4](adr-async-4.md) (the surface of D5: `async e`, `async(handle)`, `async(deferred)`, `async(detached)`; cancelling through handles);
+[ADR-346](adr-346.md) D1-D6 (every task error has a receiver; the handle must be taken; `join(within:)`; detached tasks; they hold for `async(detached)`);
 [ADR-292](adr-292.md) D12-D15 (`select`; one cancel mechanism; `h.cancel()`; the pair);
 [ADR-328](adr-328.md) D1, D7, D8, D10 (supervisors; a child keeps no state; a crash is an error to the waiter; how a group runs its tasks);
 [ADR-326](adr-326.md) D2, D3 (admission for connections, the shape ADR-async-1 D14 took);
 [ADR-327](adr-327.md) D5 (a block per task);
+[ADR-298](adr-298.md) D7 (`spawn` is released once the migration is built);
 [ADR-258](adr-258.md) D1-D4 (the four weights);
-Part I 5.4, 8.1, 8.1.2, 8.2, 8.3; Part II 12.4, 12.8; Part III A.2
+Part I 5.4, 8.1, 8.1.2, 8.2, 8.3; Part II 11.2, 12.4, 12.8; Part III A.2, 17.1
 
-*This record decides nothing yet. It is the decision basis for the owner, and
-it stands on its own: its answer does not depend on
-[ADR-async-2](adr-async-2.md)'s. The names come after both.*
+*The owner chose option C (§3) over the recommended B: one word starts every
+task now, not after the naming round. Sections 1-3 are the decision paper as it
+was put; §4 is the decision.*
 
 ## 1. Question
 
@@ -199,7 +201,70 @@ fn start(cache: Shared[Cache]) -> TaskHandle[()] {
 | **C** | a free task pays an option, the common child pays nothing | as B | as B | most: one word starts a task, the option names the group | moderate: `spawn` is built in part and used in `tools/` and tests; the move is mechanical |
 | **D** | nobody writes anything | the most: an escape analysis on the binding | a child that turns free pays `Send`, a heap and the executor, without a word in the source saying so | one word, but whether a line borrows depends on a later line | high: a `return h` added at the bottom moves captures at the top and refuses uses (`NK2101`) far away; an unbound `async fn { … }` cannot say "detached", so D still needs an option for that case |
 
-## 4. Recommendation
+## 4. Decision
+
+### D1 - Every task is started in a group and lives at most as long as the group.
+
+A **task** is whatever runs beside other code: an `async` form's, a `select`
+arm, an element of a `par_iter` chain that runs as one, a supervisor's child, a
+connection under `serve`. It is started in a **group** and ends before the
+group does. A **child task**'s group is a block (`async { }`, the innermost
+block, `select`) or a call (`par_iter`, `supervisor::run`, `serve`); a **free
+task**'s group is the process, which nobody waits for but `main`'s drain
+(Part III A.2). "A child is not a task" is withdrawn: a child task borrows, a
+free task takes.
+
+### D2 - One capture rule: a task borrows what outlives its group and takes what does not.
+
+A child task borrows what was bound outside its group and takes what was bound
+in a block that ends before its group does (ADR-async-1 D5). For a free task
+every local ends before the process does, so it takes everything it uses:
+Part I 8.3's move, with `NK2101`, is this rule where the group is the process.
+
+### D3 - Every task has a memory block and ends in one of four ways, and its end goes to the group's receiver.
+
+Each task allocates from a block of its own (ADR-327 D5). It ends with a value,
+a failure, a crash (`task::Crashed`) or a full block (`task::OverBudget`,
+ADR-async-1 D15), and that end reaches its group's receiver: the wait point or
+the join (ADR-async-4 D11), the group's end, the supervisor's policy, the
+protocol, standard error for a free task nobody joins (ADR-346 D6). Only a
+crash cancels the siblings of a child task (ADR-async-1 D9, D15).
+
+### D4 - Each form states only its group's policy.
+
+| Form | Its group | Policy |
+| :--- | :--- | :--- |
+| `async` (Part I 8.1.2) | the enclosing `async { }` or block | wait for all, keep every failure |
+| `par_iter` (Part II 12.6) | the call | per element: results in input order, every failure kept (ADR-async-2 D3) |
+| `select` (Part II 12.4) | the block | the first wins, the rest are cancelled |
+| `supervisor::run` (Part II 12.8) | the call | restart by strategy and policy |
+| `serve` (ADR-326) | the server | one per connection, by admission |
+| `async(detached)` (Part I 8.2) | the process | nobody waits but `main`'s drain; a bound handle is the receiver |
+
+### D5 - One word, `async`, starts every task; `spawn` becomes its option.
+
+A task with a handle, one that waits for a start and one that outlives its
+group are options of `async`: `async(handle)`, `async(deferred)`,
+`async(detached)`, written out in [ADR-async-4](adr-async-4.md) D4-D6. `spawn
+fn { … }` is `async(detached) fn { … }`; `let h = spawn fn { … }` is `let h =
+async(detached) fn { … }`. The option names are placeholders for the naming
+round.
+
+`spawn` stays a reserved word, and `spawn fn { … }` stays accepted, until the
+migration is built (every `spawn` in the repository rewritten); the commit that
+removes the form releases the word (ADR-298 D7) and takes it off Part I's list.
+
+### D6 - The rules are written once.
+
+Part I 8.1.2 states the model - group, capture, block, four ends, receiver -
+and every other section that starts tasks (8.2, Part II 12.4, 12.6, 12.8, the
+`serve` text) states its policy and refers to it.
+
+*The paper's rule 4 (`task::cancel` for every task, `h.cancel()` removed) was
+not taken: ADR-async-4 D10 keeps `h.cancel()` and removes `task::cancel`, so a
+task is cancelled only through its handle.*
+
+### The paper's recommendation, as it was put
 
 **Option B now; C as the naming round's question.** B is what the five forms
 already mean, written once: the capture, failure, memory and admission rules
@@ -269,12 +334,22 @@ stated, the same output first:
 
 ## 7. What this does not decide
 
-* A pending binding as a `select` arm (ADR-async-1 §6); under B it is natural,
-  but it is its own question.
+* **From where `within:` counts** - the next small question, not yet put to the
+  owner. On `async` it counts from where the form starts (ADR-async-1 D6), on
+  `join(within:)` from the call (ADR-346 D4), and both stand until it is
+  decided. **Recommended:** a limit on the wait, counted from where the wait
+  starts, on `join` and at an `async` value's wait point alike, because a
+  reader sees `within:` where the program waits on a handle, and an `async`
+  form's options sit at its start only because its wait has no syntax of its
+  own. The alternative, a deadline from the start on both, changes ADR-346 D4;
+  if the owner keeps the start for `async`, the two should have different
+  words (a naming point).
+* A pending value or a handle as a `select` arm (ADR-async-1 §6).
 * Cancelling siblings at the first failure (ADR-292 §6).
 * Naming any group other than the enclosing one and the process (Trio's passed
-  nursery); C names only the process.
-* The names: `sync` / `async` as a false pair (`sync` is a function property,
-  `async` means "run beside"); `spawn`; Part I 8.1's title "Async by Default";
-  12.4's "Racing Tasks"; 12.7's "Work That Borrows"; `--overlaps`. These go to
-  the naming round after this record and ADR-async-2.
+  nursery); `detached` names only the process.
+* The names, for the naming round: the options `handle`, `deferred`,
+  `detached`; `task::ChildHandle`; when `spawn` is released (D5); `sync` /
+  `async` as a false pair (`sync` is a function property, `async` means "run
+  beside"); Part I 8.1's title "Async by Default"; Part II 12.4's "Racing
+  Tasks"; 12.7's "Work That Borrows"; `--overlaps`.

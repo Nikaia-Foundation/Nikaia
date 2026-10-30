@@ -1,6 +1,6 @@
 # ADR-async-1: `async` Starts a Child That Runs Beside the Code After It and Is Waited For Where Its Name Is First Used; `overlap` and `task::scope` Are Removed
 
-**Status:** Accepted
+**Status:** Accepted (D1-D8, D10, D12, D13, D16, D18, D19 changed or withdrawn by [ADR-async-2](adr-async-2.md), [ADR-async-3](adr-async-3.md) and [ADR-async-4](adr-async-4.md); the notes under each say what holds)
 **Date:** October 30, 2026 (owner's decisions in two design rounds with the main session, [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983))
 **Answers:** how a program asks for work to run beside the code that follows it, for one value, for a list of values and for work with no value, without coloring functions and without `await`; and what becomes of `overlap { … }` and `task::scope`, which ask for the same thing in two shapes
 **Supersedes / Related:**
@@ -87,6 +87,8 @@ writes, as the raise site already is (Part I 7.1).
 | **F - wait at the first mention inside an expression** (Swift's `await x`) | the same text | **lost** to the statement rule (D2): a wait in the middle of a statement would run half the statement, then pause; with the wait before the statement, a statement is never split, and the window is a list of whole statements the touch-set check compares |
 | **G - the loop's value through a lambda** (`async let xs = vs.map fn(v) { … }`) | a `map` the word sees into | **lost**: `async` would have to know which calls run their lambda once per element; a `for` is syntax the checker already reads as iterations |
 
+*Changed by [ADR-async-2](adr-async-2.md) D7: the `async` loop is removed, so the exception below is gone.*
+
 The cost B pays, named: **a loop with a value.** Part I 3.3 and ADR-276 D13
 say a loop is a statement and hands back nothing. `async let xs = for …` is the
 one exception. It is bounded: the value is not a `break`'s (D3 refuses every
@@ -96,6 +98,8 @@ exception is visible in the first word of the line. Every other loop keeps D13.
 ## 4. Decision
 
 ### D1 - `overlap` and `task::scope` are removed; `async` is the structured form, and it colors nothing.
+
+*Changed by [ADR-async-4](adr-async-4.md) D1 and [ADR-async-3](adr-async-3.md) D1, D5: `async` is a prefix of an expression, never before a `let` or a loop; what it starts is a task of its group, and it starts every task, `spawn`'s included.*
 
 `async` is a reserved word (ADR-298 D1, D8: a word the language uses is
 reserved, and only for its construct); `overlap` is released (ADR-298 D7).
@@ -107,6 +111,8 @@ is refused (`NK2115`), and the message says that pausing is inferred. What `asyn
 it is its **group**.
 
 ### D2 - `async let x = e` starts one child at the binding and waits for it before the first statement that names `x`.
+
+*Changed by [ADR-async-4](adr-async-4.md) D1, D2: the form is `let x = async e`; the statement rule for a binding's wait point stands, and an argument or an operand is waited for before its call or operation.*
 
 ```nika
 async let user = db::load_user(id)
@@ -126,6 +132,8 @@ another child is not a wait of the main line (D7).
 
 ### D3 - `async let xs = for v in vs { body }` is a group with a value: each iteration is a child, and the value is the list of their results in input order.
 
+*Withdrawn by [ADR-async-2](adr-async-2.md) D7: the `async` loop is removed; fan-out over a list is `let xs = async vs.par_iter().map fn(v) { … }.collect()`, and no loop has a value. The paragraph on jumps stands for every task: a jump that would leave one is `NK1132`.*
+
 ```nika
 async(limit: 8) let pages = for url in urls { http::get(url) }
 log(f"{urls.len()} requests started")
@@ -144,6 +152,8 @@ of an `overlap` branch today (ADR-276 D16).
 
 ### D4 - `async e` and `async for … { … }` as statements start children with no value, waited for at the end of their group.
 
+*Changed by [ADR-async-2](adr-async-2.md) D7, D8: `async for` is removed; `async e` as a statement stands ([ADR-async-4](adr-async-4.md) D7), and an `async` inside a loop's body is `NK2120`.*
+
 ```nika
 async for file in files { compress(file) }
 async audit::log(event)
@@ -153,6 +163,8 @@ report()                               // runs beside every compress and the log
 A value `e` hands back is dropped, as an expression statement's is.
 
 ### D5 - `async { … }` is a group, and its `}` waits for every child started inside it.
+
+*Changed by [ADR-async-4](adr-async-4.md) D3 and [ADR-async-2](adr-async-2.md) D8: `NK2110` covers every task with nothing beside it, and its help removes the word; the loop case is `NK2120`. The capture rule is [ADR-async-3](adr-async-3.md) D2's.*
 
 ```nika
 async {
@@ -180,6 +192,8 @@ outside its group it borrows.
 
 ### D6 - Every form takes the options `limit:`, `within:` and `admission:`, written after the word.
 
+*Changed by [ADR-async-4](adr-async-4.md) D7 and [ADR-async-2](adr-async-2.md) D4: the loop forms are gone; `limit:` stands on `async { … }` and on the `par_iter` chain, where it replaces `workers:`.*
+
 `async(limit: n, within: d) let …`, `async(limit: n) for …`,
 `async(within: d) { … }`: options without a positional zone, as
 `join(within:)` (ADR-346 D4).
@@ -202,6 +216,8 @@ outside its group it borrows.
 * **`admission: task::Admission`** - the strategy of D14 for this form.
 
 ### D7 - A pending binding named inside another child is waited for in that child.
+
+*Changed by [ADR-async-4](adr-async-4.md) D2: read `let b = async enrich(a)` for `async let b = enrich(a)`; the rules stand.*
 
 ```nika
 async let a = load(id)
@@ -231,6 +247,8 @@ its window:
   receiver (ADR-346 D1).
 
 ### D8 - The touch-set check runs between a child and its window, and between the children of a group.
+
+*Changed by [ADR-async-2](adr-async-2.md) D3 and [ADR-async-4](adr-async-4.md) D3: the iteration cases are asked of a `par_iter` lambda; the check runs between whatever runs beside, arguments and operands included.*
 
 ADR-292 D3 carries over, pair by pair: a child against every statement of its
 window, another child's start included; an iteration of an `async` loop
@@ -271,6 +289,8 @@ failure attaches as ADR-292 D10 says.
 
 ### D10 - `task::cancel(x)` cancels a pending binding, and takes it.
 
+*Withdrawn by [ADR-async-4](adr-async-4.md) D10: `task::cancel` is removed and `NK2113`, `NK2114` are retired; a task is cancelled only through its handle, `h.cancel()`; the value form cannot be cancelled.*
+
 `std::task::cancel` takes a pending `async let` binding - one child, or a whole
 `async let … = for` group - and is the one mention of it that does not wait.
 The child stops at its current pause and its values are torn down (ADR-292
@@ -304,11 +324,15 @@ the result's type, which may have a `cancel()` of its own.
 
 ### D12 - `--overlaps` keeps its name and reports children.
 
+*Changed by [ADR-async-2](adr-async-2.md) D5: it also reports, per `par_iter` call, the execution chosen and why.*
+
 It lists each child, its window (the first and last line), where it is waited
 for and its group's end, and which children are started first (D11). The name
 says what it reports - what runs beside what - and no keyword.
 
 ### D13 - The concurrency forms are five, each for one need.
+
+*Replaced by [ADR-async-3](adr-async-3.md) D4: every form is a task's group with a policy; `spawn` is `async(detached)`.*
 
 | Form | For | Outlives the code that starts it | Borrows |
 | :--- | :--- | :--- | :--- |
@@ -368,6 +392,8 @@ out of room would turn one refusal into many.
 
 ### D16 - A failure is handled in the child, at the use, or at the declaration, in that order.
 
+*Changed by [ADR-async-4](adr-async-4.md) D11: the levels hold for every form - in the task, where the failure arrives (a mention or a `join`), the fallback written after the `async` expression, the receiver; a cancellation runs no fallback.*
+
 ```nika
 async let page = http::get(url) catch { Page::empty() }   // fallback, at the declaration
 let size = page.len() catch { 0 }                          // a catch at the use
@@ -408,6 +434,8 @@ stitched, with a line `── started at <site> ──` between them, per crossi
 
 ### D18 - A child of several steps is a lambda, run where it stands.
 
+*Changed by [ADR-async-4](adr-async-4.md) D9: written `let x = async fn { … }`.*
+
 `async let x = fn { … }` and `async fn { … }` run the lambda's body as the
 child; `return` in it ends the child with its value, as in `spawn fn { … }`.
 `async { … }` stays the group (D5). A bare block would leave `return` and
@@ -416,6 +444,8 @@ literal directly after `async` is run, not bound; a child whose value is a
 function is written `async let f = fn { fn { … } }`.
 
 ### D19 - The refusals have codes of their own.
+
+*Changed by [ADR-async-4](adr-async-4.md) D12: `NK2113`, `NK2114`, `NK2116`, `NK2117` are retired; `NK2119`-`NK2122` are added.*
 
 `NK2110` a child with an empty window; `NK2111` an `async { }` that starts no
 child; `NK2112` `limit:` on a form that starts one child; `NK2113`
