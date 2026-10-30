@@ -79,6 +79,8 @@ rest.
 
 ### D2 — In `std`, the contract names the parameters that run at most once.
 
+*Changed by [ADR-async-1](adr-async-1.md) D1: `task::scope` is removed, so its entry leaves the list.*
+
 `std.contracts` gets the key `once`, beside `keeps`: `once = ["f"]` names the
 lambda parameters the entry runs at most once. It stands on five entries:
 `Entry::or_insert_with` (`f`), `Entry::and_modify` (`f`), `task::scope`
