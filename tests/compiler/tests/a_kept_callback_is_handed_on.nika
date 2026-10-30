@@ -1,0 +1,41 @@
+// A kept callback handed on to a function that keeps it, more than once
+// (#1008): twice, in a loop, and to itself.
+struct Holder { f: fn(ref String) -> i64? sync }
+
+fn hold(known: fn(ref String) -> i64? sync) -> Holder {
+    return Holder { f: known }
+}
+
+fn ask(h: ref Holder) -> i64 {
+    return h.f("a") ?? 0
+}
+
+fn twice(known: fn(ref String) -> i64? sync) -> i64 {
+    let a = hold(known)
+    let b = hold(known)
+    return ask(a) + ask(b)
+}
+
+fn looped(known: fn(ref String) -> i64? sync) -> i64 {
+    let mut total = 0
+    for i in 0..<3 {
+        total += ask(hold(known)) + i
+    }
+    return total
+}
+
+fn down(n: i64, known: fn(ref String) -> i64? sync) -> i64 {
+    let here = ask(hold(known))
+    if n == 0 {
+        return here
+    }
+    return here + down(n - 1, known)
+}
+
+fn main() {
+    println(twice(fn(name) { if name == "a" { 3 } else { null } }))
+    let known: fn(ref String) -> i64? sync = fn(name) { if name == "a" { 3 } else { null } }
+    println(ask(hold(known)) + ask(hold(known)))
+    println(looped(known))
+    println(down(2, known))
+}

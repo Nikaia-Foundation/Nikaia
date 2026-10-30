@@ -68,6 +68,17 @@ fn emit_runs(contract: ref FnContract, i: i64) -> bool {
     return true
 }
 
+/// Whether the argument at `i` is code the callee keeps (ADR-277 D11): it
+/// takes a `Kept` of its own.
+fn emit_keeps_code(contract: ref FnContract, i: i64) -> bool {
+    let argument = emit_argument(contract, i) ?? return false
+    let is_code = match argument.ty {
+        Ty::Fn { .. } => true,
+        else => false,
+    }
+    return is_code && !emit_runs(contract, i)
+}
+
 fn emit_changes(contract: ref FnContract, i: i64) -> bool {
     let argument = emit_argument(contract, i) ?? return false
     let signature = contract.signature?.clone() ?? return false
@@ -148,6 +159,19 @@ fn emit_a_conversion(how: ref FactWrap?) -> bool {
 impl EmitState {
     /// Whether the argument `i` of `callee` is code the callee runs and does
     /// not keep: this unit's entry, or else every method of that name.
+    /// Whether every callee the name can mean keeps the code at `i`.
+    pub fn keeps_code_at(ref self, callee: ref String, i: i64) -> bool {
+        let contract = self.own_contracts.functions.get(callee)
+        if contract != null {
+            return emit_keeps_code(contract ?? return false, i)
+        }
+        let candidates = emit_candidates(self.own_contracts, callee)
+        if candidates.len() == 0 {
+            return false
+        }
+        return candidates.iter().all(fn(candidate) { emit_keeps_code(candidate, i) })
+    }
+
     pub fn runs_code_at(ref self, callee: ref String, i: i64) -> bool {
         let contract = self.own_contracts.functions.get(callee)
         if contract != null {

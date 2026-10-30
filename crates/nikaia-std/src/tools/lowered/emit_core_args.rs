@@ -49,6 +49,8 @@ pub(crate) fn emit_arg_through_index(arg: &Expr) -> bool {
 
 pub(crate) fn emit_arg_is_closure(arg: &Expr) -> bool { matches!(arg, Expr::Closure { .. }) }
 
+pub(crate) fn emit_arg_is_variable(arg: &Expr) -> bool { matches!(arg, Expr::Variable(..)) }
+
 pub(crate) fn emit_arg_is_null(arg: &Expr) -> bool { matches!(arg, Expr::LitNull(_)) }
 
 pub(crate) fn emit_arg_is_text_literal(arg: &Expr) -> bool { matches!(arg, Expr::LitStr { .. }) }
@@ -224,7 +226,12 @@ impl EmitState {
                 return Ok(());
             }
         }
-        let duplicate = i < takes_a_handle.len() as i64 && *nikaia_std::index::get(&takes_a_handle, nikaia_std::index::at(i)) && emit_arg_names_a_place(arg);
+        let shares_a_handle = i < takes_a_handle.len() as i64 && *nikaia_std::index::get(&takes_a_handle, nikaia_std::index::at(i)) && emit_arg_names_a_place(arg);
+        let hands_on_kept = emit_arg_is_variable(arg) && !self.facts.named_fn_values.contains_key(&node) && self.keeps_code_at(&nikaia_std::index::or(match method_callee {
+            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+            None => None,
+        }, || callee.to_string().into()), i);
+        let duplicate = shares_a_handle || hands_on_kept;
         let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node, arg);
         let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
         let count = wants_a_size && !only_literals(arg);

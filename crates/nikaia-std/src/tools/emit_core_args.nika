@@ -87,6 +87,13 @@ fn emit_arg_is_closure(arg: ref Expr) -> bool {
     }
 }
 
+fn emit_arg_is_variable(arg: ref Expr) -> bool {
+    return match arg {
+        Expr::Variable(..) => true,
+        else => false,
+    }
+}
+
 fn emit_arg_is_null(arg: ref Expr) -> bool {
     return match arg {
         Expr::LitNull(_) => true,
@@ -336,7 +343,12 @@ impl EmitState {
         }
         // ADR-312 D1: a handle on a shared value is **duplicated, never moved**,
         // where it is handed on by value, and only where the argument names one.
-        let duplicate = i < takes_a_handle.len() && takes_a_handle[i] && emit_arg_names_a_place(arg)
+        let shares_a_handle = i < takes_a_handle.len() && takes_a_handle[i] && emit_arg_names_a_place(arg)
+        // **A kept function value handed to code that keeps it is cloned**
+        // (#1008): a `Kept` is an `Arc`, and the name may be read again
+        // (a second call, a loop, a recursive call).
+        let hands_on_kept = emit_arg_is_variable(arg) && !self.facts.named_fn_values.contains_key(node) && self.keeps_code_at(method_callee?.clone() ?? callee.clone(), i)
+        let duplicate = shares_a_handle || hands_on_kept
         // Part I 2.3: a plain value in a parameter the callee declares nullable.
         let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node, arg)
         // **A count the language below wants in `usize`** (ADR-285 D15), not

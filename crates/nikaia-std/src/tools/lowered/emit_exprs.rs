@@ -43,6 +43,12 @@ pub(crate) fn emit_runs(contract: &FnContract, i: i64) -> bool {
     true
 }
 
+pub(crate) fn emit_keeps_code(contract: &FnContract, i: i64) -> bool {
+    let argument = match emit_argument(contract, i) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let is_code = matches!(argument.ty, Ty::Fn { .. });
+    is_code && !emit_runs(contract, i)
+}
+
 pub(crate) fn emit_changes(contract: &FnContract, i: i64) -> bool {
     let argument = match emit_argument(contract, i) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let signature = match match contract.signature.as_ref() {
@@ -101,6 +107,13 @@ pub(crate) fn emit_a_conversion(how: Option<&FactWrap>) -> bool {
 }
 
 impl EmitState {
+    pub fn keeps_code_at(&self, callee: &str, i: i64) -> bool {
+        let contract = self.own_contracts.functions.get(callee);
+        if contract.is_some() { return emit_keeps_code(match contract { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
+        let candidates = emit_candidates(&self.own_contracts, callee);
+        if candidates.is_empty() { return false; }
+        candidates.iter().all(|candidate| { emit_keeps_code(candidate, i) })
+    }
     pub fn runs_code_at(&self, callee: &str, i: i64) -> bool {
         let contract = self.own_contracts.functions.get(callee);
         if contract.is_some() { return emit_runs(match contract { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
