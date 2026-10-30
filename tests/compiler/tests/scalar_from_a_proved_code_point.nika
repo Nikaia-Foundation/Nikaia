@@ -1,0 +1,27 @@
+// `scalar::from(n)` is the character whose code point `n` is, where the call
+// shows `n` is one: not negative, not a surrogate, not above `0x10FFFF`
+// (Part I 2.2, #1003). A literal shows it, so does an `if` that tests it and
+// an `assert` that states it; `nikaia check --asserts` lists the three calls
+// as proved.
+
+fn checked(n: i64) -> scalar? {
+    if n >= 0 && n <= 0x10FFFF && (n < 0xD800 || n > 0xDFFF) {
+        return scalar::from(n)
+    }
+    return null
+}
+
+fn stated(n: i64) -> scalar {
+    assert(n >= 0x20 && n < 0xD800)
+    return scalar::from(n)
+}
+
+fn main() {
+    let mut out = String()
+    out.push(scalar::from(0x41))
+    out.push(checked(233) ?? '?')
+    out.push(checked(0xD800) ?? '?')
+    out.push(checked(128512) ?? '?')
+    out.push(stated(8364))
+    println(out)
+}

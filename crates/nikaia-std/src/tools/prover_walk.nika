@@ -30,6 +30,10 @@ pub struct ProverWalk {
     /// The checker's `assert`s, by statement and the id of the condition: a call is an
     /// `assert` exactly where the checker recognised the prelude's.
     pub claims: collections::BTreeSet[(i64, i64)],
+    /// **`std`'s preconditions at the calls the walk reached** (ADR-269 D5,
+    /// #1003), keyed as `held` is, by statement and the call's id: each is a
+    /// claim the program makes there, written `callee: condition`.
+    pub std_claims: collections::BTreeMap[(i64, i64), String],
 }
 
 /// **Every body of the program, walked once**: each function and method,
@@ -1382,7 +1386,7 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
         Expr::Call { func, args, config, .. } => {
             let callee = prover_called(func, words, unaliased)
             if callee != null {
-                prover_a_call(walk, callee ?? "", args, config, span, scope, at, program, words, own, ask, model, escape, written_of, condition)
+                prover_a_call(walk, callee ?? "", node_key(expr), args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition)
             }
         },
         else => {},
@@ -1593,7 +1597,7 @@ fn prover_nested(mut walk: ProverWalk, block: ref Block, lambda: Vec[String]?, s
 /// **A call by name**: an edge of the call graph, and where the callee has a
 /// precondition - its own, as the walk before found it in the first pass, or
 /// another package's ledger's - what the call shows of it.
-fn prover_a_call(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     if scope.locals.contains(callee) {
         return
     }
@@ -1608,12 +1612,22 @@ fn prover_a_call(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], 
         let function = free_function(program, words, callee) ?? return
         let found = pre ?? Precondition::none()
         let all = arguments_in_order(function, args, config, words)
-        prover_record_call(walk, callee, function.params, found.claims, all, span, scope, at, words, ask, model, escape, written_of)
+        prover_record_call(walk, callee, function.params, found.claims, all, null, span, scope, at, words, ask, model, escape, written_of)
+        return
+    }
+    // **`std`'s ledger is read where the program's is silent** (ADR-269
+    // D5, #1003): `scalar::from` publishes its precondition there, and a
+    // call by name is held to it as to another package's - and the
+    // precondition at the call is a claim of the program, as an `assert`
+    // standing there would be (ADR-380 D1): `call` keys it.
+    if !own.functions.contains_key(callee) {
+        let std = prover_std_requires(walk, callee, library, condition) ?? return
+        prover_record_call(walk, callee, std.params, std.requires, args, call, span, scope, at, words, ask, model, escape, written_of)
         return
     }
     let foreign = prover_foreign_contract(walk, callee, own, condition) ?? return
     if !foreign.requires.is_empty() {
-        prover_record_call(walk, callee, foreign.params, foreign.requires, args, span, scope, at, words, ask, model, escape, written_of)
+        prover_record_call(walk, callee, foreign.params, foreign.requires, args, null, span, scope, at, words, ask, model, escape, written_of)
     }
 }
 
@@ -1634,15 +1648,26 @@ fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow
     let found = pre ?? return
     let target = own_method(program, words, owner, name) ?? return
     let all = arguments_in_order(target, args, config, words)
-    prover_record_call(walk, callee, target.params, found.claims, all, span, scope, at, words, ask, model, escape, written_of)
+    prover_record_call(walk, callee, target.params, found.claims, all, null, span, scope, at, words, ask, model, escape, written_of)
 }
 
 /// What a call shows of its callee's precondition, recorded: its findings,
 /// and how it reaches the callee, joined with any call that reads the same.
-fn prover_record_call(mut walk: ProverWalk, callee: ref String, params: ref Vec[String], claims: ref Vec[PreClaim], args: ref Vec[Expr], span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync) {
-    let outcome = walk.state.precondition_call(walk.arena, words, callee, params, claims, args, span, scope, at, ask, model, escape)
+/// `std_call`, the call's id where the precondition is `std`'s: then it is
+/// also a claim of its own, held and listed as an `assert` is (#1003).
+fn prover_record_call(mut walk: ProverWalk, callee: ref String, params: ref Vec[String], claims: ref Vec[PreClaim], args: ref Vec[Expr], std_call: i64?, span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync) {
+    let outcome = walk.state.precondition_call(walk.arena, words, callee, params, claims, args, std_call != null, span, scope, at, ask, model, escape)
     for found in outcome.findings {
         walk.findings.push(found.clone())
+    }
+    if std_call != null && !outcome.held.is_empty() {
+        let key = (span.start as i64, std_call ?? 0)
+        let mut conditions: Vec[String] = []
+        for pre in claims {
+            conditions.push(claim_text_of(pre.computed) ?? pre.written.clone())
+        }
+        walk.std_claims.insert(key, f"{callee}: {conditions.join(" && ")}")
+        walk.held.insert(key, prover_std_held(outcome.held))
     }
     let mut written: String = ""
     for arg in args {
@@ -1683,6 +1708,40 @@ fn prover_foreign_contract(mut walk: ProverWalk, key: ref String, own: ref Ledge
     let foreign = foreign_from(contract, shape, requires, ensures)
     walk.state.foreign.insert(key.clone(), foreign.clone())
     return foreign
+}
+
+/// **A `std` function's contract, where it has a precondition** (ADR-269
+/// D5): only then, and kept out of the cache of other packages' contracts,
+/// so that what a call to `std` is known to give stays what the bounds walk
+/// reads of it.
+fn prover_std_requires(mut walk: ProverWalk, key: ref String, library: ref Ledger, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> Foreign? {
+    let contract = library.functions[key] ?? return null
+    if contract.requires.is_empty() {
+        return null
+    }
+    let shape = foreign_shape(contract)
+    let mut requires: Vec[i64] = []
+    for text in contract.requires {
+        requires.push(prover_condition_term(walk.arena, text, shape.names, condition))
+    }
+    return foreign_from(contract, shape, requires, [])
+}
+
+/// **How a `std` precondition at one call is held**, from how each of its
+/// conditions is: the least proved of them - checked at run time before a
+/// precondition of the caller, before proved.
+fn prover_std_held(helds: ref Vec[ClaimHeld]) -> ClaimHeld {
+    let mut worst = ClaimHeld::Proved
+    for held in helds {
+        match held {
+            ClaimHeld::AtRunTime(_) => return held.clone(),
+            ClaimHeld::Proved => {},
+            else => {
+                worst = held.clone()
+            },
+        }
+    }
+    return worst
 }
 
 /// A condition read back into the arena: its term, or `-1` where it does not

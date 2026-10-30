@@ -60,6 +60,10 @@ pub struct Proved {
     pub reaches: Reaches,
     /// By the ledger's key: what the ledger publishes (ADR-269 D18).
     pub published: BTreeMap<String, Published>,
+    /// **`std`'s preconditions at the calls** (ADR-269 D5, #1003): claims
+    /// no `assert` states, keyed as `held` is, each written
+    /// `callee: condition`.
+    pub std_claims: BTreeMap<(usize, usize), String>,
 }
 
 /// **What the build computed for each integer `comptime`** (ADR-359 D7): an
@@ -347,6 +351,7 @@ fn walked(
             .iter()
             .map(|(at, node)| (*at as i64, *node as i64))
             .collect(),
+        std_claims: BTreeMap::new(),
     };
     let answers = prover_passes::prover_passes(
         &mut walk,
@@ -380,6 +385,11 @@ fn finished(walk: ProverWalk, answers: prover_passes::ProverAnswers) -> Proved {
         entries: answers.entries,
         reaches: walk.reaches,
         published: answers.published,
+        std_claims: walk
+            .std_claims
+            .into_iter()
+            .map(|((at, node), written)| ((at as usize, node as usize), written))
+            .collect(),
     }
 }
 

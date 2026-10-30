@@ -449,6 +449,20 @@ fn walked<'a>(
         checker.s.facts.entries = proved.entries;
         checker.s.facts.reaches = proved.reaches;
         checker.s.facts.published = proved.published;
+        // **A `std` precondition at a call is a claim of the program**
+        // (#1003): held, refused (`NK1300`) and listed as an `assert` is.
+        for ((at, node), written) in proved.std_claims {
+            checker.s.facts.claims.insert(
+                (at as i64, node as i64),
+                Claim {
+                    held: None,
+                    written,
+                    left: None,
+                    right: None,
+                    assumed: false,
+                },
+            );
+        }
         for (key, held) in proved.held {
             if let Some(claim) = checker
                 .s

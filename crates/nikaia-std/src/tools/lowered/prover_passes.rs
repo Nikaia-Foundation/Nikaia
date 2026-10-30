@@ -28,6 +28,7 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
     let mut settled = false;
     while !settled {
         walk.held = collections::BTreeMap::new();
+        walk.std_claims = collections::BTreeMap::new();
         walk.reaches = collections::BTreeMap::new();
         walk.findings = vec![];
         walk.state.broken = collections::BTreeSet::new();

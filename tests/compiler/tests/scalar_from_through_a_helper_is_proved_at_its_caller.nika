@@ -1,0 +1,21 @@
+// A call of `scalar::from(n)` at the top of a function the program wrote
+// makes its precondition that function's (ADR-269 D15, #1003): `letter`'s
+// callers prove it - a literal, and a value an `if` has tested - so no call
+// is refused and none is checked at run time. `nikaia check --asserts` lists
+// it as `letter`'s precondition, proved at every call.
+
+fn letter(n: i64) -> scalar {
+    return scalar::from(n)
+}
+
+fn main() {
+    let mut out = String()
+    out.push(letter(0x4E))
+    for k in 0..<3 {
+        let n = 0x69 + k
+        if n >= 0 && n <= 0x10FFFF && (n < 0xD800 || n > 0xDFFF) {
+            out.push(letter(n))
+        }
+    }
+    println(out)
+}

@@ -255,6 +255,7 @@ impl EmitState {
 
 impl EmitState {
     pub fn path(&self, world: &EmitWorld<'_, '_, '_, '_>, trusting: bool, unpinned: bool, segments: &[String]) -> String {
+        if segments.len() == 2 && *nikaia_std::index::get(&segments, 0) == "scalar" && *nikaia_std::index::get(&segments, 1) == "from" { return String::from("nikaia_std::num::scalar_from"); }
         if segments.len() == 2 && *nikaia_std::index::get(&segments, 1) == "new" {
             if unpinned && (*nikaia_std::index::get(&segments, 0) == "HashMap" || *nikaia_std::index::get(&segments, 0) == "HashSet") { return format!("{}::default", *nikaia_std::index::get(&segments, 0)); }
             let chosen = self.map_name(trusting, nikaia_std::index::get(&segments, 0));

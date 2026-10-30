@@ -278,7 +278,13 @@ Nikaia provides basic types to represent simple values.
       the escapes a string uses: `'a'`, `'ä'`, `'\n'` (2.6). Walking a text's
       scalars yields it (`for c in name.scalars`), and a `match` over one
       compares against it (3.4). There is no `char`: what one character is
-      depends on the unit, and 2.6 names the three.
+      depends on the unit, and 2.6 names the three. An integer becomes one
+      by name, `scalar::from(n)`: `n` is an `i64` (a narrower integer widens
+      into it), and the call's precondition is that `n` is a scalar value -
+      not negative, not a surrogate (`0xD800` to `0xDFFF`), not above
+      `0x10FFFF`. It is held as every precondition is (Part III 14.2): shown
+      by the caller's facts, a literal, an `if` or an `assert`, or refused
+      (`NK1300`).
 * **A run of elements:**
     * `ref Array[T]`: a **view** of a run of `T`, with the promise
       `ref String` carries — *this points at elements somebody else keeps, no
