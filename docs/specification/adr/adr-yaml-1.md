@@ -1,7 +1,7 @@
 # ADR-yaml-1: `yaml` Is an Official Package in `packages/yaml/`: a Grammar Over `Bytes` Builds a Zero-Copy Tree With Spans, YAML 1.2 Core Schema, Limits On by Default; the serde_yaml Facade and `stream` Come Later
 
 **Status:** Accepted
-**Date:** October 30, 2026 (#928; the owner's decisions of 2026-10-28 and 2026-10-29 recorded there)
+**Date:** October 30, 2026 (#928; the owner's decisions of 2026-10-28 and 2026-10-29 recorded there; D5's conversion of numbers and D11 are the owner's of 2026-10-30)
 **Answers:** where the official package `yaml` lives, what its native API is,
 what it is tested against, and in which order its later layers come (#928)
 **Supersedes / Related:**
@@ -92,9 +92,11 @@ pub struct Scalar { pub raw: String, pub style: Style }   // Plain, Single, Doub
 Names may change in the build; the rules may not:
 
 * Every `String` in the tree is a view of the input; nothing is copied while
-  parsing. A scalar keeps its `raw` text as written; its value (escapes,
-  folding, a block scalar's indentation) is computed on request and is a copy
-  only then.
+  parsing. A scalar keeps its `raw` text as written. A double-quoted scalar
+  with an escape or a line break carries its value as text of its own,
+  decoded by the grammar (D11); every other scalar's value is a view of the
+  input, and folding or a block scalar's indentation is computed on request,
+  a copy only then (ADR-282 D12-D14).
 * A key is a node, not a string: YAML allows any node as a key.
 * A mapping keeps its entries in the text's order. A document is a `Node`; a
   stream is a list of them.
@@ -110,6 +112,16 @@ in their three spellings, are floats; everything else is a string. `yes`,
 `no`, `on`, `off` are strings. The core tags (`!!null`, `!!bool`, `!!int`,
 `!!float`, `!!str`, `!!seq`, `!!map`) fix a node's kind; any other tag is kept
 on the node.
+
+**A number of a known shape is converted for that shape, and its shape is
+checked once** (owner, 2026-10-30). The core-schema resolution in the grammar's
+action has already checked an `Int`'s or a `Float`'s shape, so `as_i64` and
+`as_f64` check nothing per digit, as `benches/brc/fast.nika` reads its
+temperature: a hexadecimal digit's value is `(c & 15) + 9 * (c >> 6)`, branch
+free over a digit already checked; whether `0x…` or `0o…` fits an `i64` is
+decided by the count of its significant digits (and, at the limit, the first
+one), not by checked arithmetic; a decimal integer stays `text::parse_i64`. No
+generic radix parse enters `std` for this (left open for later, not refused).
 
 ### D6 — The parsed tree is the text as written; `load` resolves it.
 
@@ -173,6 +185,20 @@ the commit file changed to name it.
 | format-preserving editing (comments, order, indentation kept) | the tree carrying comments and every token's span; an ADR of its own for the edit model |
 | writer matching serde_yaml 0.9's output | the facade's tests |
 | typed `yaml::read[T]` on the Nikaia side | #859, as `json::read[T]` |
+
+### D11 — An escape is checked and decoded once, by the grammar, where the knowledge is.
+
+(Owner, 2026-10-30.) An invalid escape is a syntax error in YAML 1.2.2, so the
+grammar checks it and the error carries line and column: the digits of `\x`,
+`\u` and `\U` by a guard per digit (`x:any if(is_hex(x))`, two, four or eight
+of them; not waiting for `hex_digit`, #1002), and the range by a guard on the
+value: no surrogate after `\u`, nothing above `0x10FFFF` after `\U`; `\x` is
+in range by its two digits. The grammar's action decodes the escapes into the
+scalar's value, so the guard's fact reaches `scalar::from(n)`, whose
+precondition (`n` a Unicode scalar value, #1003) is then proved, not checked
+again. A second check of the same digits in `text()` or a helper is what this
+decision excludes; where the prover does not carry a guard's fact into the
+action, that is a compiler defect, fixed before the decoding is built.
 
 ## 5. Consequences
 

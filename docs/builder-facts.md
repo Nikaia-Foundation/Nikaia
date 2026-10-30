@@ -50,6 +50,8 @@ the same dirty lock file). Read once; the brief adds only what is specific.
 * **`.map(fn(x) { x.clone() })` in `tools/*.nika` lowers as written and trips `clippy::map_clone`**: the tools module in `crates/nikaia-std/src/lib.rs` allows it since P5d (0f9a525); another lowered lint goes into the same allow list, never into the lowered file.
 * **A converter draft of `impl` methods, when the brief wants free functions**: keep the bodies, redo the signatures at once (`self.x` -> a parameter); do not edit method by method (P5a kept 6 of 104 lines, 2026-10-28).
 
+* **Open grammar lowering defects** (y1-tree-core, 2026-10-30; each a `ready` issue, a brief names the one it meets and never writes around it): #1001 a group whose branches yield different types reaches rustc; #1002 `hex_digit` is an undefined rule (check a digit with a guard instead, `x:any if(...)`); #1003 an integer `as scalar` (decided: `scalar::from`); #1004 a temporary `Bytes(..)` as an entry argument (bind it with `let`). In a grammar: an option after `;` needs a default; a helper called from an action is `sync`; `--bless` writes nothing for a test with no `.stdout` yet (create it empty). Remove a line when its issue closes.
+
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
 
 Rules from the sessions that moved the most; they save tokens, not just time.

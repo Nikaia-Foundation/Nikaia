@@ -1,0 +1,51 @@
+---
+agent: builder
+model: opus
+max_turns: 110
+budget_usd: 28
+---
+# Brief: #928, `yaml`: escapes checked and decoded once in the grammar; `0x`/`0o` converted for their shape (owner's decisions 2026-10-30)
+
+**Read first: `docs/specification/adr/adr-yaml-1.md`, D4 (amended), D5's last paragraph and D11** (the owner's decisions of 2026-10-30, the reason this brief exists), then `packages/yaml/src/main.nika` and its tests as `y1-tree-core.md` left them (its report and debrief beside it). This brief needs `scalar::from` (`y4-1003-scalar-from.md`, the brief before it): check `grep -rn "scalar::from" crates/nikaia-std` first; absent, stop with `Result: blocked`, `Needs: y4`.
+
+## The decisions, short (owner, 2026-10-30; decided, so none of this is a way around a gap)
+
+* No generic radix parse in `std`. A number whose shape the grammar's core-schema resolution has already checked is converted for that shape, checking nothing per digit, as `benches/brc/fast.nika` reads its temperature: a hex digit's value `(c & 15) + 9 * (c >> 6)`; `0x`/`0o` overflow decided by the count of significant digits (leading zeros do not count; `0x`: up to 15 always fits, 16 fit when the first is at most `7`; 17 or more never; `0o`: up to 21 always fit (63 bits), 22 or more never; `i64::MAX` is `0x7FFFFFFFFFFFFFFF` and `0o777777777777777777777`), never checked arithmetic; decimal stays `text::parse_i64`.
+* An escape is checked once, by the grammar, where the knowledge is: the digits by a guard per digit (e.g. `(x:any if(is_hex(x))){4}`; `hex_digit` is #1002, do not wait for it), the range by a guard (`\u`: no surrogate; `\U`: not above `0x10FFFF`; `\x`: in range by its two digits), so an invalid escape is a parse error with line and column (a syntax error in YAML 1.2.2). The action decodes, so the guard's fact reaches `scalar::from`, whose precondition is then proved. No second check in `text()` or a helper.
+* Only a double-quoted scalar with an escape or a line break gets text of its own; every other scalar's value is a view of the input (ADR-282 D12-D14, the *either* tier). Plain and single-quoted folding stays computed on request in `text()`.
+
+## Facts the last builder paid for (y1 debrief)
+
+* An option after `;` in a rule needs a default. Helpers called from actions are `sync`, or a test recursing through them fails with "async recursion". `nikaia fmt` reflows and uses tabs.
+* `--bless` writes nothing for a test that has no `.stdout` yet: create an empty one first. One program alone: a scratch project with `yaml = { path = "/home/user/Nikaia/packages/yaml" }`.
+* `ParseError`'s rendered message holds raw newlines inside its expected-token list; `error_of` reads line and column from it: keep the escape errors' positions tested.
+* Open compiler defects, do not route around them: #1001 (a group whose branches yield different types reaches rustc), #1004 (a temporary `Bytes(..)` as an entry argument: bind it with `let` first, as y1 did, which is the ordinary form, not a workaround).
+
+## To build (each step a commit)
+
+1. **Probe: does the prover carry a grammar guard's fact into the action?** A program of a few lines in a scratch project: a rule reading four hex digits into `v`, a guard `if(v < 0xD800 || v > 0xDFFF)` (and whatever else the precondition needs, stated in the guard, not after it), an action calling `scalar::from(v)`, built at the default `unproved-claims = "error"`, with `--asserts`. Proved: go on. Refused (`NK1300`) or checked at run time: that is a compiler defect. Fix it in `crates/` as its own commit with a test in `tests/compiler/tests/` (the gate of `.claude/agents/builder.md` then applies; `Changelog:` one sentence) if it is within this run; otherwise stop: `Result: blocked`, `Found:` the probe, nothing written around it. Prefer the form whose fact is plain to the prover (e.g. `\x`'s two digits as a `u8`, then `b as scalar`, which always fits) and name the forms you tried in `Body:`.
+2. **Escapes in the grammar.** `DoubleChar`/`Double` check the digits and range of `\x`, `\u`, `\U` by guards and decode every escape (and the escaped line break and line folding of 7.3) in the action into the scalar's value; `Scalar` carries that value (a field, e.g. `value: String`, owned for a double-quoted scalar with an escape or a line break, a view otherwise); `text()` returns it for `Double` and keeps folding `Plain`/`Single` on request; `escaped()` and the lazy decoding go. Tests: `tests/quoted_scalars.nika` gains `"\x41"`, `"é"`, `" "`, `"\U0001F600"`; `tests/errors_carry_line_and_column.nika` gains `"\uD800"`, `"\U00110000"`, `"\x4G"`, `"\u12"` with their line and column (YAML 1.2.2 5.7; name the yaml-test-suite case where one exists).
+3. **`0x` and `0o` in `as_i64`/`as_f64`** by decision 1: `0x1F` 31, `0o17` 15, `0x7FFFFFFFFFFFFFFF` and `0o777777777777777777777` `i64::MAX`, `0x000000000000000001F` 31, `0x8000000000000000` and `0o1000000000000000000000` an error naming the text, `as_f64` of `0x1F` 31.0. Extend `tests/plain_scalars_resolve_by_the_core_schema.nika`. Check that `Value::Int` is only ever built by the classifier (so its shape is known); say so in the header comment of `as_i64`.
+
+## Done when
+
+`target/fast/nikaia test --project packages/yaml` passes; the package gate below is green (and the builder.md gate if step 1 changed `crates/`); each step committed and pushed; the last commit's message says `Part of #928`.
+
+## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
+* Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
+* `git add <files>` only; commit after each step; `git push origin develop` fast-forward, no rebase (rejected: report `Pushed: rejected`, go on committing).
+* Before pushing: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `scripts/pre-push-check.sh`, and the gate of `.claude/agents/builder.md` (#852).
+* No version lines, `CHANGELOG.md`, badges; no new NK code. New tests in Nikaia only; never the full suite. No foreground `sleep`, no polling; scripts in files.
+* A form Nikaia, `std` or the toolchain lacks stops the work: no code around it unless an ADR or Part I-III refuses it (name it). Else `Result: blocked`, `Found:` gap + probe, `Needs: owner decision` (CLAUDE.md, *A missing form stops the work*).
+* Disk: `NIKAIA_CACHE_LIMIT=2G`; at most two clones with `target/` in the machine; delete your own clone's `target/` and `target/release/nikaia-scratch` at the end; report GB freed.
+* Commit and push before you write the report; the report's `Pushed:` line names the pushed sha. A report without a `Pushed:` line, or with a placeholder left in (`TC`, `DISK`), is not done and cuts the batch (k3a1 2026-10-29: `Result: done`, nothing committed).
+* **Package gate** (this lane): `NIKAIA_CACHE_LIMIT=2G target/fast/nikaia test --project packages/yaml` green, and `cargo test --profile fast -p nikaia --test it -- fmt::every_nika_file` (it formats every `.nika` under `packages/`). For a change only under `packages/yaml/` this is the gate the line above asks for; a change under `crates/` runs the gate of `.claude/agents/builder.md` (#852) as well. `target/fast/nikaia` is built by the session hook; if it is missing, `cargo build --profile fast -p nikaia` once.
+* A package change raises no toolchain version (CLAUDE.md table; ADR-yaml-1 D1): `Changelog: none`, unless the brief changes `crates/`.
+* Files not to touch: anything outside `packages/yaml/` and the brief's own report, unless the brief names it; never `docs/briefs/batch.txt` or a brief of another lane.
+
+## Report (at most 15 lines, to exactly `/home/user/Nikaia/docs/briefs/yaml/y5-escapes-and-radix.md.report.md`)
+Fields of `docs/architect.md`, *Briefs and reports*: `Result: done|noop|partial|blocked` (the bare word alone on that line: `Result: done`, never a summary after it, which cuts the batch, b869a 2026-10-27; `Owner:` is a question for the owner or `none`, never a role), Files, Commit, Body (optional, one paragraph for the commit message), Fixes, Pushed, Tests, Gate (green|red), Deviation, Found, Needs, Changelog, Owner, Disk freed, and for a move `Rs2nika:` (the `kept N of M lines` of `rs2nika --score`, then the three costliest hand edits; `none` for a task that moves no Rust, `none (redesign)` for a brief with `Shape: redesign` and no `Convert:` line). `none` where nothing, and then the bare word: `Deviation: none (a note)` cuts the batch (batch.nika compares exactly); a note goes into the commit message. `Found:` is only for a defect outside your change (it cuts the batch); a process event such as another session resetting or rewriting your files is no `Found:`, it goes under `Needs:` (m3a 2026-10-28); a converter draft that came out wrong is no `Found:`, it is one of the costliest edits under `Rs2nika:`, which the converter lane reads (e12-4b 2026-10-27); how you solved your own step goes into the commit message. `Deviation:` is only a step of the brief built otherwise than written or not built (a choice the brief left to you, such as *keep what X needs and say so*, is no deviation: it goes into the commit message; nor is building two steps in one commit when every step is built, e12-3a 2026-10-27, nor a step another commit on develop already built, shown by your test failing with that commit's change reverted, b889 2026-10-27: name the commit in `Body:`, nor a test's expected `.stdout`/`.stderr` taken from what the program really prints where the brief's sketch of it was short or wrong, b934 2026-10-29: say so in `Body:`, nor a lowering that follows the ADR governing it where the brief's expected lowering contradicts that ADR, b933 2026-10-29: name the ADR in `Body:`, nor re-keying an allow-list entry (`KNOWN`) whose hash changed for the same program and the same reason, b-fixforward-sweep2 2026-10-28: say so in `Body:`); how you verified (e.g. a test not run against the unfixed compiler) goes under `Tests:`. A `noop` says why under `Tests:` (what was probed), not under `Deviation:`. Final answer, one line: `done <sha>, report <path>` (or `BLOCKED: ...` / `PUSH REJECTED ...`).
+
+Attribution:
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01UVxJDveRM5qKZKyCqq6Y24
