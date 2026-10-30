@@ -3,3 +3,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y4b-1003-scalar-from-continue.md 16189495 137
 /home/user/Nikaia/docs/briefs/yaml/y5-escapes-and-radix.md 1457364 9
 /home/user/Nikaia/docs/briefs/yaml/y6-1013-text-bindings.md 583717 5
+/home/user/Nikaia/docs/briefs/yaml/y5b-escapes.md 1669722 34
