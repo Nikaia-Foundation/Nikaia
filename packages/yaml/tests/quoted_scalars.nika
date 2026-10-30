@@ -1,5 +1,6 @@
-// Single- and double-quoted scalars (YAML 1.2.2 7.3): `''`, the escapes,
-// an escaped line break, line folding. A quoted scalar is a string.
+// Single- and double-quoted scalars (YAML 1.2.2 7.3): `''`, the escapes
+// (`\\x`, `\\u`, `\\U` decoded by the grammar, ADR-yaml-1 D11), an escaped
+// line break, line folding. A quoted scalar is a string.
 use yaml
 
 fn show(n: ref yaml::Node) -> String {
@@ -37,7 +38,14 @@ fn main() {
 	line("'it''s'")
 	line("['', \"\"]")
 	line("\"a\\tb\\\\c\\\"d\\/e\\nf\"")
-	line("\"\\x41\\u00e9\" # the digits are kept as written for now")
+	line("\"\\x41\\u00e9\" # decoded by the grammar")
+	line("\"\\x41\"")
+	line("\"é\"")
+	line("\"\\u00e9\"")
+	line("\"\\u0020\"")
+	line("\"\\U0001F600\"")
+	// spaces before an escaped line break are kept, empty lines after it are breaks
+	line("\"a \\\n\n  b\"")
 	// spaces kept at both ends of a single line
 	line("\"  lead and trail  \"")
 	line("'# no comment' # a comment")

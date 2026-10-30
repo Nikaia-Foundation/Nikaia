@@ -20,6 +20,12 @@ fn main() {
 	// an entry indented one space less than its siblings (suite 9KBC)
 	fails("a:\n  b: 1\n c: 2\n")
 	fails("k:\n  - x\n - y\n")
+	// an invalid escape is a syntax error (YAML 1.2.2 5.7, ADR-yaml-1 D11): a
+	// surrogate, a code point above 0x10FFFF, a digit that is not one, too few
+	fails("a: 1\nk: \"\\uD800\"\n")
+	fails("k: \"\\U00110000\"")
+	fails("k: \"x \\x4G\"")
+	fails("k: \"\\u12\"")
 	// a byte that is not UTF-8
 	let mut bad: Vec[u8] = []
 	for b in "k: é".bytes() {
