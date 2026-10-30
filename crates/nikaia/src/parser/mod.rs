@@ -3857,6 +3857,7 @@ grammar! {
         // A digit and an underscore continue a word too (`as2`, `as_of`), and the
         // backend's `ident` accepts both, so they are covered by the same line.
         rule KW_AS = "as" not(ident)
+        rule KW_ASYNC = "async" not(ident)
         rule KW_BOUNDARY = "boundary" not(ident)
         rule KW_ENTRY = "entry" not(ident)
         rule KW_BREAK = "break" not(ident)
@@ -4050,6 +4051,11 @@ grammar! {
           // Measured when the record was written: no name in the tree's
           // `.nika` files is `test`.
           | KW_TEST -> { 0 }
+          // **`async`, the prefix that starts a task**
+          // ([ADR-async-4](../../../../docs/specification/adr/adr-async-4.md)):
+          // Part I's list has it since 0.0.1305. No `.nika` in the tree writes
+          // it as a name; it appears only inside strings the lowering emits.
+          | KW_ASYNC -> { 0 }
 
 
         // The compiler's identifier.

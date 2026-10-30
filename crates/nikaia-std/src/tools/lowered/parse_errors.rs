@@ -21,7 +21,7 @@ pub struct ParseReading {
     pub help: Option<String>,
 }
 
-pub const RESERVED_WORDS: [&str; 38] = ["as", "break", "catch", "comptime", "continue", "dsl", "else", "enum", "extern", "false", "fn", "for", "grammar", "if", "impl", "in", "let", "match", "mut", "null", "overlap", "pub", "ref", "return", "select", "self", "spawn", "struct", "sync", "test", "throw", "throws", "trait", "true", "unsafe", "use", "while", "with"];
+pub const RESERVED_WORDS: [&str; 38] = ["as", "async", "break", "catch", "comptime", "continue", "dsl", "else", "enum", "extern", "false", "fn", "for", "grammar", "if", "impl", "in", "let", "match", "mut", "null", "pub", "ref", "return", "select", "self", "spawn", "struct", "sync", "test", "throw", "throws", "trait", "true", "unsafe", "use", "while", "with"];
 
 pub(crate) fn missing_value_message(prev: &str) -> String {
     if prev == "=" { return String::from("`=` has nothing after it."); }

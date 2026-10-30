@@ -39,7 +39,7 @@ pub struct ParseReading {
 /// error gets when it tripped over one, and the checker, which refuses `self`
 /// as a declared name, read this list; `rule`, `boundary`, `fold`, `par_fold`
 /// and `unchecked` are the grammar sublanguage's vocabulary and not here.
-pub comptime RESERVED_WORDS: Array[ref String, 38] = ["as", "break", "catch", "comptime", "continue", "dsl", "else", "enum", "extern", "false", "fn", "for", "grammar", "if", "impl", "in", "let", "match", "mut", "null", "overlap", "pub", "ref", "return", "select", "self", "spawn", "struct", "sync", "test", "throw", "throws", "trait", "true", "unsafe", "use", "while", "with"]
+pub comptime RESERVED_WORDS: Array[ref String, 38] = ["as", "async", "break", "catch", "comptime", "continue", "dsl", "else", "enum", "extern", "false", "fn", "for", "grammar", "if", "impl", "in", "let", "match", "mut", "null", "pub", "ref", "return", "select", "self", "spawn", "struct", "sync", "test", "throw", "throws", "trait", "true", "unsafe", "use", "while", "with"]
 
 // What a missing value is said as after this token, or nothing where the token
 // is none an operand follows.
