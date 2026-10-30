@@ -1416,6 +1416,13 @@ sequence of owned elements, and keeps them; `s.extend(xs.clone())` copies the
 elements, never a list in between. Only what depends on order (`first`,
 `last`) is the ordered kind's alone.
 
+**A set is walked as a list is** ([ADR-collections-2](adr/adr-collections-2.md)
+D3): `s.iter()` lends the elements one at a time, the sequence `Vec::iter()` is,
+so `any`, `all`, `filter`, `map`, `count` and `collect` follow. A `BTreeSet`
+hands them back smallest first and from either end (`rev`); a `HashSet` in no
+order, as `HashMap::keys` does, so a program that prints them says which order
+it means.
+
 Every input carries a **provenance**, because the compiler knows where a buffer came from (Part I 6.6):
 
 * **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, and every file read while the program runs.
