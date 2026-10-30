@@ -207,7 +207,7 @@ fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throw
     }
     let name = drive_stem(brief)
     let msg = f"briefs: {name} report"
-    let trailer = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq"
+    let trailer = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01UVxJDveRM5qKZKyCqq6Y24"
     drive_say(dry, "git add " + paths.join(" "))
     drive_say(dry, f"git commit -m '{msg}' -m <Attribution> -- " + paths.join(" "))
     if dry {
