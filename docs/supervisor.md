@@ -83,6 +83,13 @@ What the owner expects from such a round:
   missing and prepare a decision basis first: the problem, today's state,
   how other languages and tools do it, options with their consequences, the
   measurements still owed, and a recommendation.
+* **No decision without a decision paper, however small** (owner,
+  2026-10-30, on `BTreeSet::iter()` asked bare in chat): every question put
+  to the owner comes with a written paper, as a `decision` issue, before it
+  is asked. The paper says where the question comes from, the alternatives
+  (doing nothing included), the advantages and disadvantages of each, how
+  other languages do it, and a recommendation. A bare yes/no question in
+  chat, even with a recommendation, is not a decision basis.
 * **Do not ask which issue to take next**: the order is arbitrary, pick one.
 * **What the language offers is decided from what it is for**, the coherence of
   its types and what other languages count as basic - never from what this
