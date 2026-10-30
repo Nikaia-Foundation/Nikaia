@@ -149,8 +149,16 @@ MIT `License` and a file naming the source commit; a test program reads the
 cases and compares, and the cases it passes are listed in a pass list outside
 the vendored directory, which only grows. The `data` branch carries no licence
 file of its own (it is generated from `main` at tag `v2022-01-17`, whose
-`License` is the MIT text); it enters once the owner confirms that `main`'s
-licence covers it (#928, licences decided 2026-10-28).
+`License` is the MIT text); the owner confirmed that `main`'s licence covers
+it, with that `License` beside it (2026-10-30, #928).
+
+**The vendored suite is never changed** (owner, 2026-10-30): it is copied byte
+for byte and stays so. No case is edited, reformatted, renamed, re-encoded,
+trimmed or deleted, not even one the parser fails or one that looks wrong; no
+`cargo fmt`, `nikaia fmt`, line-ending or whitespace fix touches the directory.
+What the package does not pass goes into the pass list beside it, never into the
+suite. An update is a fresh byte-for-byte copy of a newer upstream commit, with
+the commit file changed to name it.
 
 ### D10 — The serde_yaml facade, `stream` and editing are later stages, each waiting on a named step.
 
