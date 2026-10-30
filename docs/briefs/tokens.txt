@@ -148,3 +148,4 @@
 /home/user/Nikaia/docs/briefs/k3a1-commit.md 190572 9
 /home/user/Nikaia/docs/briefs/b995-coalesce-map-get.md 1983443 43
 /home/user/Nikaia/docs/briefs/architect-task.md 985155 20
+/home/user/Nikaia/docs/briefs/b997-let-lambda-string-param.md 690886 6
