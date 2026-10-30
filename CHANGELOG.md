@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1311] — 2026-10-30
+
+**sets are walked by `iter()`; a kept function value is handed on more than once (#1006, #1008)**
+- `std` gains `iter()` on `collections::BTreeSet` (smallest first) and `collections::HashSet` (no order), lending the elements one at a time (ADR-collections-2 D3, #1006).
+- A function value handed more than once to code that keeps it (twice, in a loop, recursively) now compiles (#1008).
+
 ## [0.0.1310] — 2026-10-30
 
 **text tiers: `.to_string()` of an owned or number local stays owned (#1005)**
