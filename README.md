@@ -41,13 +41,7 @@ itself: which data needs protecting, where a function waits, when memory can be 
 how to spread work over several cores. You write what should happen, and the compiler picks
 how.
 
-* **An `assert` is checked by the compiler**, as a contract every caller must meet.
-* **Unchecked missing values and unhandled errors are refused** at compile time.
-* **No garbage collector and no `free`.** Memory is released at a point you can see.
-* **One core or many is one line** in `nikaia.toml`; the code stays the same.
-* **Formats are part of the language**: a log or a protocol is described as a grammar.
-
-Tasks that run at the same time are checked as well. Two tasks that would change the same
+Much of that is about safety, and for tasks safety means more than memory. Two tasks that would change the same
 value at once, or both write to standard output, are refused when the program is built, and
 the message names what they share; where the compiler cannot tell what a call touches, as in
 a Rust crate or a C library, it does not refuse. A task's error is thrown where the program
@@ -56,6 +50,13 @@ fail. A task handle that is never joined, cancelled or detached is refused. Each
 get a memory budget of its own, so that a task that uses it up ends alone while the rest runs
 on; that is specified, not built yet, and memory a Rust crate or a C library allocates for
 itself is not counted.
+
+The compiler also treats an `assert` as a contract that every caller must meet, and refuses a
+missing value that is used unchecked or an error that is neither handled nor declared with
+`throws`. Memory is released at a point you can see, without a garbage collector and without
+`free`. Whether a program runs on one core or on many is one line in `nikaia.toml`, and the
+code stays the same. Formats are part of the language: a log or a protocol is described as a
+grammar.
 
 You do not need to mark the functions that wait, because the compiler finds where a function
 pauses: a call that waits is written like any other, and a function that starts to wait leaves
