@@ -1,0 +1,15 @@
+Result: blocked
+Files: see commits 65271eb1 (step 1) and 50198a76 (step 3)
+Commit: 65271eb1 prover: a grammar action's claims are proved, with its guards as facts; 50198a76 yaml: 0x and 0o integers converted for their shape
+Body: Step 1: the prover never walked grammar actions (a claim there was left to run time even at unproved-claims = "error"); fixed in crates/, the guards at the top of an alternative are facts and the bound whole numbers are variables. Step 3 built as the brief says. Step 2 not on develop: its draft (DoublePart decodes \x \u \U under guards, all three scalar::from proved by --asserts) is on wip/y5-escapes-in-the-grammar (72df62ae).
+Fixes: none
+Pushed: rejected (65271eb1, 50198a76 local on develop; origin moved, supervisor rebases)
+Tests: tests/compiler --both-settings 362/363, the one failure my new .stderr's column (tabs after fmt), rewritten from the real output; the refusal test's program compiled and stopped at run time on the unfixed compiler (probe, same form); it range_spelling shipped_ledger contracts::every_std_module dependency_ledger fmt::every_nika_file unproved_claims prove grammar green; packages/yaml 9/9, packages/json 7/7; clippy and pre-push-check clean
+Gate: green
+Deviation: step 2 not built on develop (blocked, below)
+Found: (1) winnow-grammar refuses `s:peek(text(p))` ("Peek cannot be bound", winnow-grammar-model/src/parser.rs:1689) though Part II 10's table says peek(p) yields as p; step 2 needs it to keep `raw` a view while the parts decode; probe: `rule top -> S = s:peek(text(any*)) parts:Part* eof -> {..}`. (2) ADR-282 D22 forbids a pub field of a pub struct holding both kinds, so ADR-yaml-1 D4's `Scalar.value` (owned with an escape, a view otherwise) is refused NK1106; probe: pub struct S { pub raw: String, pub value: String } fed `s` in one arm, an owned `v` in another. (3) A binding inside `text(..)` (`s:text(parts:Part*)`) reaches rustc (no check), and a struct named `S` collides with the grammar's type parameter `S` in rustc. (4) The lowering cache's interface key leaves out an inferred `sync`: a body change that made prover_bodies async left prover_passes.rs stale (fixed in my code with ordinary `sync` declarations). (5) `nikaia fmt` turns a long rule line holding `if(cond, "label")` into text that does not parse
+Needs: owner decision: (a) peek binding: fix in winnow-grammar (and bump its rev) or lower `x:peek(p)` in the emitter; (b) D22 vs D4: make `Scalar.value` a non-pub field read through `text()`, or amend one ADR; then rebase wip/y5-escapes-in-the-grammar
+Changelog: A claim in a grammar rule's action is proved like any other, with the guards before it as facts, and refused (`NK1300`) where they do not show it, instead of being left to run time.
+Owner: may `Scalar.value` be a private field (ADR-282 D22), and should peek binding be fixed in winnow-grammar or in the emitter?
+Rs2nika: none
+Disk freed: 0.03 GB (scratch binary); target/nikaia-project-tests 5.8G, / 9.5G free; new cache entry over 100 MB: run-bundle/b2db8b4e959f1cfc 340 MB
