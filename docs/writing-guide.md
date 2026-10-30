@@ -29,8 +29,8 @@ Absolute statements invite critics, who need only one counterexample to take
 them apart. Words like "never", "impossible", "no failure is lost" or "always
 safe" do not appear. Instead the text says what the compiler checks, and in the
 same paragraph where that check ends. For example, the compiler refuses two
-tasks that would write the same file at once, and it does not refuse where it
-cannot tell what a call touches. Every task has a memory budget, and memory that
+tasks that would both write to standard output at once, and it does not refuse
+where it cannot tell what a call touches. Every task has a memory budget, and memory that
 a Rust crate or a C library allocates for itself is not counted in it.
 
 Phrasing is positive. Rather than "there is no `await`", the text says that a
