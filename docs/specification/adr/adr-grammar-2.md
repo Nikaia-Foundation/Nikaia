@@ -259,6 +259,7 @@ there is no text to parse while running.
 ## 6. What this does not decide
 
 * **How a grammar meets a type with a text form of its own** (D12): an arm
-  naming an exact type, or one guarded by a bound. A decision round of its own.
+  naming an exact type, or one guarded by a bound. A decision round of its own
+  ([#1020](https://github.com/Nikaia-Foundation/Nikaia/issues/1020)).
 * **The JSON form of a variant that carries a payload** (D13).
 * **A reader input** (a pipe, a socket) for an entry (D7).
