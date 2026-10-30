@@ -294,6 +294,7 @@ supervisor's commit.
 | 2026-10-30 | 25d67a | plan | 140 | 10.9 | 0 | - | |
 | 2026-10-30 | dc24f5 | plan | 68 | 3.5 | 0 | - | |
 | 2026-10-30 | 81e938 | plan | 147 | 13.6 | 0 | - | |
+| 2026-10-30 | 2daa0b | plan | 169 | 12.5 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)
