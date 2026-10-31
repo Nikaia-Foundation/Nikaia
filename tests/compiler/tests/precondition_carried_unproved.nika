@@ -1,0 +1,19 @@
+// A precondition carried back to a caller's entry is proved only where the
+// caller's calls prove it: `hb(u)` does not, so `h`'s claim is refused
+// (ADR-269 D15, D20, ADR-380 D1, #1090).
+
+fn h(b: ref Vec[u8]) -> i64 sync {
+	assert(b.len() >= 4)
+	return b[3] as i64
+}
+
+fn hb(x: ref Vec[u8]) -> i64 sync {
+	return h(x)
+}
+
+fn main() {
+	let xs = [1, 2, 3]
+	let mut u: Vec[u8] = []
+	u.resize(xs[2], 0)
+	print(f"{hb(u)}")
+}

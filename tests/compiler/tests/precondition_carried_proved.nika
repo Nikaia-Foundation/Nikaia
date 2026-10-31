@@ -1,0 +1,20 @@
+// A precondition carried back through one call and through two is proved
+// where the outermost calls prove it (ADR-269 D15, #1090).
+
+fn h(b: ref Vec[u8]) -> i64 sync {
+	assert(b.len() >= 4)
+	return b[3] as i64
+}
+
+fn hb(x: ref Vec[u8]) -> i64 sync {
+	return h(x)
+}
+
+fn hc(x: ref Vec[u8]) -> i64 sync {
+	return hb(x)
+}
+
+fn main() {
+	let z = [0 as u8; 8]
+	println(f"{hb([1, 2, 3, 4])} {hc(z)}")
+}

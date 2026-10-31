@@ -135,15 +135,49 @@ pub(crate) fn count_checked_calls(walk: &mut ProverWalk) {
             checked.insert(callee.to_string(), so_far + 1);
         }
     }
+    let carried = carried_to(&walk.state);
     let mut counted: collections::BTreeMap<(i64, i64), ClaimHeld> = collections::BTreeMap::new();
     for (key, held) in walk.held.iter() {
         let now = match held {
-            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(function.to_string(), nikaia_std::index::or(*nikaia_std::index::get(&checked, function), || 0)),
+            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(function.to_string(), checked_through(&checked, &carried, &walk.findings, function)),
             _ => held.clone(),
         };
         counted.insert(key.clone(), now);
     }
     walk.held = counted;
+}
+
+pub(crate) fn carried_to(state: &ProverState) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+    let mut out: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    for (owner, pre) in state.preconditions.iter() {
+        for claim in pre.claims.iter() {
+            let site = match claim.site.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut callers = nikaia_std::index::or(out.remove(&site.callee), || collections::BTreeSet::new().into());
+            callers.insert(owner.to_string());
+            out.insert(site.callee.to_string(), callers);
+        }
+    }
+    out
+}
+
+pub(crate) fn checked_through(checked: &collections::BTreeMap<String, i64>, carried: &collections::BTreeMap<String, collections::BTreeSet<String>>, findings: &[Finding], function: &str) -> i64 {
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut todo: Vec<String> = vec![function.to_string()];
+    let mut total: i64 = 0;
+    while !todo.is_empty() {
+        let next = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        if seen.contains(&next) { continue; }
+        let mut calls = nikaia_std::index::or(*nikaia_std::index::get(&checked, &next), || 0);
+        if next != function { for found in findings.iter() { if found.code == "NK1207" && found.message.contains(&format!("`{}`'s precondition", next)) { calls -= 1; } } }
+        if calls > 0 { total += calls; }
+        let callers = match *nikaia_std::index::get(&carried, &next) { Some(__nikaia_value) => __nikaia_value, None => {
+            seen.insert(next);
+            continue;
+        } };
+        for caller in callers.iter() { todo.push(caller.to_string()); }
+        seen.insert(next);
+    }
+    total
 }
 
 pub(crate) fn hold_unreached(walk: &mut ProverWalk, program: &Program) {

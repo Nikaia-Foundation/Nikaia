@@ -181,7 +181,9 @@ fn ledger_term_text(arena: ref TermArena, id: i64) -> String {
 /// held as preconditions. A call that reaches the checked entry
 /// (`CallReach::Through`: an argument the prover doesn't read) proves
 /// nothing either; it checks when it runs, as a `Checked` call does
-/// (ADR-269 D20, ADR-380 D1, #1076).
+/// (ADR-269 D20, ADR-380 D1, #1076). A call carried back to its caller's
+/// entry (D15) proves nothing by itself: the precondition is then the
+/// caller's, and its callers' calls count too, transitively (#1090).
 fn count_checked_calls(mut walk: ProverWalk) {
     let mut checked: collections::BTreeMap[String, i64] = collections::BTreeMap()
     for (key, reach) in walk.reaches {
@@ -196,15 +198,70 @@ fn count_checked_calls(mut walk: ProverWalk) {
             checked.insert(callee.clone(), so_far + 1)
         }
     }
+    let carried = carried_to(walk.state)
     let mut counted: collections::BTreeMap[(i64, i64), ClaimHeld] = collections::BTreeMap()
     for (key, held) in walk.held {
         let now = match held {
-            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(function.clone(), checked[function] ?? 0),
+            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(function.clone(), checked_through(checked, carried, walk.findings, function)),
             else => held.clone(),
         }
         counted.insert(key.clone(), now)
     }
     walk.held = counted
+}
+
+/// **The functions each function's preconditions were carried to**: the
+/// callers whose entries hold a claim carried back from a call to it
+/// (ADR-269 D15).
+fn carried_to(state: ref ProverState) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let mut out: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for (owner, pre) in state.preconditions {
+        for claim in pre.claims {
+            let site = claim.site ?? continue
+            let mut callers = out.remove(site.callee) ?? collections::BTreeSet()
+            callers.insert(owner.clone())
+            out.insert(site.callee.clone(), callers)
+        }
+    }
+    return out
+}
+
+/// The unproved calls of `function` and of every function its
+/// preconditions were carried to, transitively; each function once, so the
+/// carrying stops at a cycle (#1090). A call to a function it was carried
+/// to that `NK1207` told breaks it is told already, and not counted again;
+/// `function`'s own are left out where its claims are asked
+/// (`check_claims_unproved`).
+fn checked_through(checked: ref collections::BTreeMap[String, i64], carried: ref collections::BTreeMap[String, collections::BTreeSet[String]], findings: ref Vec[Finding], function: ref String) -> i64 {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut todo: Vec[String] = [function.clone()]
+    let mut total = 0
+    while !todo.is_empty() {
+        let next = todo.pop() ?? break
+        if seen.contains(next) {
+            continue
+        }
+        let mut calls = checked[next] ?? 0
+        if next != function {
+            for found in findings {
+                if found.code == "NK1207" && found.message.contains(f"`{next}`'s precondition") {
+                    calls -= 1
+                }
+            }
+        }
+        if calls > 0 {
+            total += calls
+        }
+        let callers = carried[next] ?? {
+            seen.insert(next)
+            continue
+        }
+        for caller in callers {
+            todo.push(caller.clone())
+        }
+        seen.insert(next)
+    }
+    return total
 }
 
 /// **An `assert` this walk did not reach is checked where it stands** - in
