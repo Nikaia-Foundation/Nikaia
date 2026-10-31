@@ -33,8 +33,9 @@ impl EmitState {
         match &pattern.node {
             Pattern::Seq(parts) => { self.emit_patterns(world, walk, out, host, parts, String::from(" "))?; },
             Pattern::Choice(parts) => { self.emit_patterns(world, walk, out, host, parts, String::from(" | "))?; },
-            Pattern::Bind { name, pat } => {
-                let pat = nikaia_std::boxed::open(pat); let name = *name;
+            Pattern::Bind { name, pat: grouped } => {
+                let grouped = nikaia_std::boxed::open(grouped); let name = *name;
+                let pat = emit_ungrouped(grouped);
                 if emit_is_a_span(world, &walk, &pat.node) {
                     match &pat.node {
                         Pattern::Ref { args, .. } => {
@@ -75,9 +76,11 @@ impl EmitState {
             },
             Pattern::Group(inner) => {
                 let inner = nikaia_std::boxed::open(inner);
-                out.push("(");
-                self.emit_pattern(world, walk, out, host, inner)?;
-                out.push(")");
+                if emit_groups_parts(&inner.node) {
+                    out.push("(");
+                    self.emit_pattern(world, walk, out, host, inner)?;
+                    out.push(")");
+                } else { self.emit_pattern(world, walk, out, host, inner)?; }
             },
             Pattern::Cut => { out.push("=>"); },
             Pattern::Fold(spec) => { self.emit_fold(world, walk, out, host, spec)?; },
@@ -274,6 +277,15 @@ pub(crate) fn emit_is_a_span(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk,
     }
 }
 
+pub(crate) fn emit_groups_parts(pattern: &Pattern) -> bool { matches!(pattern, Pattern::Seq(_) | Pattern::Choice(_)) }
+
+pub(crate) fn emit_ungrouped(pattern: &Spanned<Pattern>) -> &Spanned<Pattern> {
+    match &pattern.node {
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); if emit_groups_parts(&inner.node) { pattern } else { emit_ungrouped(inner) } },
+        _ => pattern,
+    }
+}
+
 pub(crate) fn emit_is_a_binding_text(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
     match pattern {
         Pattern::Ref { name, generics, args } => { let name = *name; emit_text(world, name) == "text" && generics.is_empty() && !args.is_empty() && !walk.grammar_nested && !walk.grammar_rules.contains("text") && args.iter().any(|arg| { emit_binds_a_name(&arg.node) }) },
@@ -296,7 +308,7 @@ pub(crate) fn emit_binds_a_name(pattern: &Pattern) -> bool {
 
 pub(crate) fn emit_text_nested(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
     match pattern {
-        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_is_a_binding_text(world, walk, &pat.node) },
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_is_a_binding_text(world, walk, &emit_ungrouped(pat).node) },
         _ => false,
     }
 }
@@ -314,8 +326,9 @@ pub(crate) fn emit_text_edge(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk,
 pub(crate) fn emit_text_edge_of(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, parts: &[Spanned<Pattern>], at: &str) -> String {
     let k = if at == "from" { 0 } else { parts.len() as i64 - 1 };
     match &nikaia_std::index::get(&parts, nikaia_std::index::at(k)).node {
-        Pattern::Bind { name: inner, pat } => {
-            let pat = nikaia_std::boxed::open(pat); let inner = *inner;
+        Pattern::Bind { name: inner, pat: grouped } => {
+            let grouped = nikaia_std::boxed::open(grouped); let inner = *inner;
+            let pat = emit_ungrouped(grouped);
             if emit_is_a_binding_text(world, walk, &pat.node) {
                 match &pat.node {
                     Pattern::Ref { args: within, .. } => { return emit_text_edge(world, walk, &emit_text(world, inner), within, at); },

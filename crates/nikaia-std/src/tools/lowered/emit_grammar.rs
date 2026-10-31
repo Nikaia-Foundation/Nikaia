@@ -41,8 +41,9 @@ pub(crate) fn emit_writes_a_built_in(world: &EmitWorld<'_, '_, '_, '_>, walk: &E
 
 pub(crate) fn emit_span_bindings(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, found: &mut Vec<String>) {
     match pattern {
-        Pattern::Bind { name, pat } => {
-            let pat = nikaia_std::boxed::open(pat); let name = *name;
+        Pattern::Bind { name, pat: grouped } => {
+            let grouped = nikaia_std::boxed::open(grouped); let name = *name;
+            let pat = emit_ungrouped(grouped);
             if emit_is_a_span(world, walk, &pat.node) { found.push(emit_text(world, name)); }
             emit_span_bindings(world, walk, &pat.node, found);
         },
@@ -57,8 +58,9 @@ pub(crate) fn emit_span_bindings(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitW
 
 pub(crate) fn emit_text_bindings(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, found: &mut Vec<String>, ranges: &mut Vec<String>) {
     match pattern {
-        Pattern::Bind { name, pat } => {
-            let pat = nikaia_std::boxed::open(pat); let name = *name;
+        Pattern::Bind { name, pat: grouped } => {
+            let grouped = nikaia_std::boxed::open(grouped); let name = *name;
+            let pat = emit_ungrouped(grouped);
             match &pat.node {
                 Pattern::Ref { args, .. } => {
                     if emit_is_a_binding_text(world, walk, &pat.node) {

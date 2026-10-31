@@ -36,7 +36,8 @@ impl EmitState {
         match pattern.node {
             Pattern::Seq(parts) => self.emit_patterns(world, walk, out, host, parts, " "),
             Pattern::Choice(parts) => self.emit_patterns(world, walk, out, host, parts, " | "),
-            Pattern::Bind { name, pat } => {
+            Pattern::Bind { name, pat: grouped } => {
+                let pat = emit_ungrouped(grouped)
                 // **`s:span(p)` is `p` with the range it covered** (ADR-339
                 // D1, #557): the backend's `(p) @ s`, which keeps a name `p`
                 // binds, and is read as a `text::Span` before the action.
@@ -101,10 +102,18 @@ impl EmitState {
                 }
                 out.push(repeat_suffix(rep))
             },
+            // A group around one element is that element (Part II 10.8,
+            // `( p )` yields as `p`): the backend reads `n:(P)` as a scope
+            // of its own, so only a sequence or a choice keeps its
+            // parentheses (#1027).
             Pattern::Group(inner) => {
-                out.push("(")
-                self.emit_pattern(world, walk, out, host, inner)
-                out.push(")")
+                if emit_groups_parts(inner.node) {
+                    out.push("(")
+                    self.emit_pattern(world, walk, out, host, inner)
+                    out.push(")")
+                } else {
+                    self.emit_pattern(world, walk, out, host, inner)
+                }
             },
             Pattern::Cut => out.push("=>"),
             Pattern::Fold(spec) => self.emit_fold(world, walk, out, host, spec),
@@ -337,6 +346,25 @@ fn emit_is_a_span(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern
     }
 }
 
+/// Whether a group around this pattern keeps its parentheses: it holds a
+/// sequence or a choice (#1027).
+fn emit_groups_parts(pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Seq(_) => true,
+        Pattern::Choice(_) => true,
+        else => false,
+    }
+}
+
+/// **A pattern through every group around one element** (#1027): what a
+/// label on it binds, as Part II 10.8 reads `( p )`.
+fn emit_ungrouped(pattern: ref Spanned[Pattern]) -> ref Spanned[Pattern] {
+    return match pattern.node {
+        Pattern::Group(inner) => if emit_groups_parts(inner.node) { pattern } else { emit_ungrouped(inner) },
+        else => pattern,
+    }
+}
+
 /// Whether a pattern is the built-in `text(p)` and `p` binds a name
 /// (#1013): the grammar declares no rule of that name.
 fn emit_is_a_binding_text(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
@@ -364,7 +392,7 @@ fn emit_binds_a_name(pattern: ref Pattern) -> bool {
 /// whose pattern binds names: it writes its own ranges.
 fn emit_text_nested(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
     return match pattern {
-        Pattern::Bind { pat, .. } => emit_is_a_binding_text(world, walk, pat.node),
+        Pattern::Bind { pat, .. } => emit_is_a_binding_text(world, walk, emit_ungrouped(pat).node),
         else => false,
     }
 }
@@ -385,7 +413,8 @@ fn emit_text_edge(world: ref EmitWorld, walk: ref EmitWalk, name: String, args: 
 fn emit_text_edge_of(world: ref EmitWorld, walk: ref EmitWalk, name: String, parts: ref Vec[Spanned[Pattern]], at: String) -> String {
     let k = if at == "from" { 0 } else { parts.len() - 1 }
     match parts[k].node {
-        Pattern::Bind { name: inner, pat } => {
+        Pattern::Bind { name: inner, pat: grouped } => {
+            let pat = emit_ungrouped(grouped)
             if emit_is_a_binding_text(world, walk, pat.node) {
                 match pat.node {
                     Pattern::Ref { args: within, .. } => return emit_text_edge(world, walk, emit_text(world, inner), within, at),

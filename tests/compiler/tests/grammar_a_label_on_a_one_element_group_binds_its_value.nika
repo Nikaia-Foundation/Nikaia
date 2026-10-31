@@ -1,0 +1,19 @@
+// #1027: a label on a group around one element binds what the element
+// yields (Part II 10.8, `( p )` yields as `p`), nested groups included.
+struct N { v: i64 }
+grammar G {
+	rule WS = "" -> { }
+	entry rule top -> i64 = n:(P) eof -> { n.v } | "?" m:(P)? eof -> { (m ?? N { v: 9 }).v } | "(" k:((P)) eof -> { k.v } | "t" s:(text(digit+)) eof -> {
+		s.len() as i64
+	}
+	rule P -> N = "&" -> { N { v: 1 } }
+}
+fn main() {
+	for t in ["&", "?", "?&", "(&", "t123", "x"] {
+		let r = G::top(Bytes(t.bytes().collect())) catch {
+			println("error")
+			continue
+		}
+		println(r)
+	}
+}

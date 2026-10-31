@@ -69,7 +69,8 @@ fn emit_writes_a_built_in(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref
 /// back as a range, which the action reads as a `text::Span` (#557).
 fn emit_span_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, mut found: Vec[String]) {
     match pattern {
-        Pattern::Bind { name, pat } => {
+        Pattern::Bind { name, pat: grouped } => {
+            let pat = emit_ungrouped(grouped)
             if emit_is_a_span(world, walk, pat.node) {
                 found.push(emit_text(world, name))
             }
@@ -101,7 +102,8 @@ fn emit_span_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pat
 /// the text between them.
 fn emit_text_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, mut found: Vec[String], mut ranges: Vec[String]) {
     match pattern {
-        Pattern::Bind { name, pat } => {
+        Pattern::Bind { name, pat: grouped } => {
+            let pat = emit_ungrouped(grouped)
             match pat.node {
                 Pattern::Ref { args, .. } => {
                     if emit_is_a_binding_text(world, walk, pat.node) {
