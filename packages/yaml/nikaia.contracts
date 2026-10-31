@@ -176,11 +176,6 @@ sync = true
 touches = []
 signature = "(x: scalar) -> bool"
 
-[fn."is_hex"]
-sync = true
-touches = []
-signature = "(x: scalar) -> bool"
-
 [fn."is_indicator"]
 sync = true
 touches = []

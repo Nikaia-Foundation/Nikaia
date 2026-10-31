@@ -233,10 +233,6 @@ fn breaks(n: i64) -> String sync {
 	return out
 }
 
-fn is_hex(x: scalar) -> bool sync {
-	return (x >= '0' && x <= '9') || (x >= 'a' && x <= 'f') || (x >= 'A' && x <= 'F')
-}
-
 // `c-indicator`: no plain scalar starts with one (`-`, `?`, `:` may, when a
 // safe character follows: `-1`, `:x`).
 fn is_indicator(x: scalar) -> bool sync {
@@ -512,8 +508,8 @@ grammar Yaml {
 		| "!" TagChar+ -> { }
 		| "!" -> { }
 	rule WordChar = x:any if(is_word(x)) -> { }
-	rule UriChar = "%" Hex Hex -> { } | x:any if(is_uri(x)) -> { }
-	rule TagChar = "%" Hex Hex -> { } | x:any if(is_uri(x) && x != '!' && !is_flow_indicator(x)) -> { }
+	rule UriChar = "%" hex_digit hex_digit -> { } | x:any if(is_uri(x)) -> { }
+	rule TagChar = "%" hex_digit hex_digit -> { } | x:any if(is_uri(x) && x != '!' && !is_flow_indicator(x)) -> { }
 
 	// What follows `-` or `key:` at indentation `m`: a node on this line, on
 	// the lines below, or none (`Null`, where the indicator ends). After `-`
@@ -739,7 +735,7 @@ grammar Yaml {
 		}
 		| "\\" x:any if(is_escape(x), "an escape") -> { escaped(x) }
 	rule DoubleWord = x:any if(x != '"' && x != '\\' && x != '\n' && x != ' ' && x != '\t') -> { }
-	rule Hex -> i64 = x:any if(is_hex(x)) -> { hex_value(x) }
+	rule Hex -> i64 = h:hex_digit -> { hex_value(h) }
 	rule Hex2 -> i64 = a:Hex b:Hex -> { a * 16 + b }
 	rule Hex4 -> i64 = a:Hex2 b:Hex2 -> { a * 256 + b }
 	rule Hex8 -> i64 = a:Hex4 b:Hex4 -> { a * 65536 + b }
