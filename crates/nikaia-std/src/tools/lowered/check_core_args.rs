@@ -103,7 +103,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                         for one in returned.iter() { for value in one.value.iter() { state.text_literal(world, &written, value, true); } }
                     }
                     let mut out: Option<Ty> = None;
-                    if !written.is_unknown() { out = Some(written); } else if !came_to.is_unknown() { out = Some(came_to); }
+                    if !written.is_unknown() && !check_core_args_open_option(&written) { out = Some(written); } else if !came_to.is_unknown() { out = Some(came_to); } else if !written.is_unknown() { out = Some(written); }
                     return Ty::Fn { params: given.to_owned(), result: Box::new(out), is_sync: !pauses, can_throw: fails };
                 },
                 _ => { },
@@ -112,6 +112,13 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
         _ => { },
     }
     Ty::Unknown
+}
+
+pub(crate) fn check_core_args_open_option(ty: &Ty) -> bool {
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.is_unknown() },
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

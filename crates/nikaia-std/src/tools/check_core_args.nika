@@ -138,11 +138,16 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                             }
                         }
                     }
+                    // A written `U?` the receiver left unbound (`??`) is
+                    // what the body comes to, so `filter_map` binds `U`
+                    // (#1078).
                     let mut out: Ty? = null
-                    if !written.is_unknown() {
+                    if !written.is_unknown() && !check_core_args_open_option(written) {
                         out = written
                     } else if !came_to.is_unknown() {
                         out = came_to
+                    } else if !written.is_unknown() {
+                        out = written
                     }
                     return Ty::Fn { params: given.clone(), result: out, is_sync: !pauses, can_throw: fails }
                 }
@@ -152,6 +157,14 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
         else => {}
     }
     return Ty::Unknown
+}
+
+/// Whether a type is `??`: an option of nothing the signature bound.
+fn check_core_args_open_option(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(inner) => inner.is_unknown(),
+        else => false,
+    }
 }
 
 /// **Any other argument**: walked, and recorded where a declared function or a

@@ -3465,7 +3465,7 @@ pub(crate) fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &T
             _ => { },
         }
     }
-    if method == "map" && args.len() == 1 {
+    if (method == "map" || method == "filter_map") && args.len() == 1 {
         match nikaia_std::index::get(&args, 0) {
             Expr::Closure { params, body, .. } => { return mapped(params, body, &received, ask, walk); },
             _ => { },

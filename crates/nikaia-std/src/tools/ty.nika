@@ -307,7 +307,14 @@ pub fn parse(written: ref String) -> Ty {
         return Ty::Nullable(parse(cut(trimmed, 0, 1)))
     }
     if trimmed.starts_with("(") && trimmed.ends_with(")") {
-        return Ty::Tuple(each(split_args(cut(trimmed, 1, 1))))
+        // **One part without a comma is a group**, not a tuple: `fn(T) ->
+        // (U?)` hands back a `U?` (#1078).
+        let inner = cut(trimmed, 1, 1)
+        let parts = split_args(inner)
+        if parts.len() == 1 && !inner.trim().ends_with(",") {
+            return parse(parts[0])
+        }
+        return Ty::Tuple(each(parts))
     }
     // `fn(Stats) -> R sync throws`: read before a view, because a
     // function type is never one.
@@ -1789,6 +1796,14 @@ pub fn bind(pattern: ref Ty, actual: ref Ty, mut out: collections::BTreeMap[Stri
         }
         Ty::Fn { params, result, .. } => {
             bind_code(params, result, actual, out)
+        }
+        // **`U?` binds `U` to what the option holds** (#1078): a lambda
+        // handing back `X?` where `fn(T) -> (U?)` is wanted binds `U` to `X`.
+        Ty::Nullable(inner) => {
+            match actual {
+                Ty::Nullable(held) => bind(inner, held, out),
+                else => {}
+            }
         }
         else => {}
     }

@@ -4790,8 +4790,9 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
         }
     }
     // **What `map` makes is what its lambda hands back**, with the lambda's
-    // parameter bound to what came in (ADR-293 D26).
-    if method == "map" && args.len() == 1 {
+    // parameter bound to what came in (ADR-293 D26). `filter_map` keeps
+    // what its lambda hands back inside the option, so its kinds too (#1078).
+    if (method == "map" || method == "filter_map") && args.len() == 1 {
         match args[0] {
             Expr::Closure { params, body, .. } => return mapped(params, body, received, ask, walk),
             else => {}

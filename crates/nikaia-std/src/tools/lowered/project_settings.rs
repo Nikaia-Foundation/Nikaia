@@ -64,9 +64,9 @@ pub fn optimizations(words: &str) -> Result<(BoundsChecks, OverflowChecks), nika
     Ok((bounds, overflow))
 }
 
-pub fn prove_through_loops(words: &str) -> bool { nikaia_std::index::or(words.split(',').map(|w| { w.trim() }).filter_map(|w| { w.strip_prefix("prove-through-loops:") }).last().map(|__nikaia_found| __nikaia_found.to_string()), || "".into()) == "on" }
+pub fn prove_through_loops(words: &str) -> bool { nikaia_std::index::or(words.split(',').map(|w| { w.trim() }).filter_map(|w| { w.strip_prefix("prove-through-loops:") }).last(), || "") == "on" }
 
-pub fn skip_free_at_exit(words: &str) -> bool { nikaia_std::index::or(words.split(',').map(|w| { w.trim() }).filter_map(|w| { w.strip_prefix("skip-free-at-exit:") }).last().map(|__nikaia_found| __nikaia_found.to_string()), || "".into()) == "on" }
+pub fn skip_free_at_exit(words: &str) -> bool { nikaia_std::index::or(words.split(',').map(|w| { w.trim() }).filter_map(|w| { w.strip_prefix("skip-free-at-exit:") }).last(), || "") == "on" }
 
 pub(crate) fn project_settings_renamed(level: &str) -> &'static str {
     match level {

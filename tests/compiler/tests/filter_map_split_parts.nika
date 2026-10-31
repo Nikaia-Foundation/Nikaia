@@ -1,0 +1,28 @@
+// #1078: `filter_map` over `split_once` hands on the parts' text kinds and
+// their type: row a binds the tuple in the next lambda's parameters, row b
+// reads the pair by position.
+
+fn tag(text: String) -> String {
+	f"<{text}>"
+}
+
+fn pairs(lines: Vec[String]) -> Vec[(String, String)] {
+	lines.iter().skip(1).filter_map(fn(line) { line.split_once("=") }).map(fn((name, rlib)) {
+		(name.clone(), tag(rlib))
+	}).collect()
+}
+
+fn by_position(lines: Vec[String]) -> Vec[(String, String)] {
+	lines.iter().skip(1).filter_map(fn(line) { line.split_once("=") }).map(fn(pair) {
+		(pair.0.clone(), tag(pair.1))
+	}).collect()
+}
+
+fn main() {
+	for (n, p) in pairs(["head", "a=x.rlib", "b=y.rlib"]) {
+		println(f"{n} {p}")
+	}
+	for (n, p) in by_position(["head", "c=z.rlib", "nothing", "d=w.rlib"]) {
+		println(f"{n} {p}")
+	}
+}

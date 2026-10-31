@@ -141,7 +141,12 @@ pub fn parse(written: &str) -> Ty {
         if pointer.is_some() { return nikaia_std::index::or(pointer, || Ty::Unknown); }
     }
     if trimmed.ends_with('?') { return Ty::Nullable(Box::new(parse(&cut(trimmed, 0, 1)))); }
-    if trimmed.starts_with('(') && trimmed.ends_with(')') { return Ty::Tuple(each(&split_args(&cut(trimmed, 1, 1)))); }
+    if trimmed.starts_with('(') && trimmed.ends_with(')') {
+        let inner = cut(trimmed, 1, 1);
+        let parts = split_args(&inner);
+        if parts.len() == 1 && !inner.trim().ends_with(',') { return parse(nikaia_std::index::get(&parts, 0)); }
+        return Ty::Tuple(each(&parts));
+    }
     if trimmed.starts_with("fn(") {
         let code = a_function(trimmed);
         if code.is_some() { return nikaia_std::index::or(code, || Ty::Unknown); }
@@ -1026,6 +1031,13 @@ pub fn bind(pattern: &Ty, actual: &Ty, out: &mut collections::BTreeMap<String, T
         Ty::Fn { params, result, .. } => {
             let result = nikaia_std::boxed::open(result);
             bind_code(params, (result).as_ref(), actual, out);
+        },
+        Ty::Nullable(inner) => {
+            let inner = nikaia_std::boxed::open(inner);
+            match actual {
+                Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); bind(inner, held, out); },
+                _ => { },
+            }
         },
         _ => { },
     }
