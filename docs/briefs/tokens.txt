@@ -193,3 +193,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 2423145 56
 /home/user/Nikaia/docs/briefs/bred2-kept-lambda-test.md 162061 7
 /home/user/Nikaia/docs/briefs/b1034a-kept-lambda-captured-fn.md 293929 7
+/home/user/Nikaia/docs/briefs/b1035-fn-field-from-loan.md 418024 9
