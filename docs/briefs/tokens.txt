@@ -196,3 +196,4 @@
 /home/user/Nikaia/docs/briefs/b1035-fn-field-from-loan.md 418024 9
 /home/user/Nikaia/docs/briefs/architect-task.md 2043385 44
 /home/user/Nikaia/docs/briefs/b938b-nested-number-lists.md 662443 8
+/home/user/Nikaia/docs/briefs/b1034b-returned-lambda-keeps-param.md 400377 7
