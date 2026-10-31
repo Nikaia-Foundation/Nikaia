@@ -55,3 +55,4 @@
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 484598 15
 /home/user/Nikaia/docs/briefs/qa-task.md 435807 16
 /home/user/Nikaia/docs/briefs/yaml/y21-events.md 648831 19
+/home/user/Nikaia/docs/briefs/yaml/architect-task.md 2188592 48
