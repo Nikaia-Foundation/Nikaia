@@ -1,13 +1,12 @@
-1. **What cost the most:** tracing why p8 turned four `it` tests red took about 12 of my roughly 30 turns: reading both test sources, then six small probes to find which shapes lose a length. One probe was my own mistake. I swapped the `push` loop for a single `push`, which gives a length of 1, and read the failure as a gap. Chasing a wrong lead about calls inside f-strings then cost about 3 more turns.
-
-2. **What the brief could have handed me:**
-   - p8's report named the four tests but not their files or line numbers, and not the one-line cause (`Bytes(v)` loses `v`'s length). I found those with `grep`.
-   - That GitHub's search endpoint is blocked by the proxy, and that `--paginate` fails. Only the plain `repos/.../issues` list works.
-   - What `<full brief path>` in `common.part` looks like.
-   - That `common.part`'s `Attribution:` block is hard-coded to another session's ID, so every brief must replace it. I only noticed after writing p10.
-
-3. **Checks:**
-   - Useful: the shape probes on today's binary (repeat, literal argument, `Bytes`, `resize`), the file-clash check against the other lanes' `batch.txt`, the `where.nika` lookups, and reading the p7 and p8 reports.
-   - Wasted: searching the specification for a `Vec.filled` constructor, the f-string detour, the blocked search call, and re-reading the whole p9 brief when only its opening check needed fixing.
-
-4. **The one change that would save the most:** in `.claude/agents/builder.md`, require that a report with `Needs: architect decision` on newly refused tests gives each test's file and line plus a probe of a few lines that shows the cause. Every architect run after a `partial` starts by redoing that trace. I should also have made `common.part`'s `Attribution:` block a placeholder that `agent.nika` fills in, at the source. That fix is still open.
+1. **Most turns and time:** two things. Finding the D15 carrying path in the prover took about four reads of `prover_state.nika` and `prover_passes.nika` before the cause was clear. Writing p9's staging rule for `sysroot.rs` took two rewrites, because I first missed that `scripts/commit.nika` adds whole files.
+2. **What I had to look up that the brief could have handed me:**
+   - That p7 and p8 were already pushed (the old `state.md` said they were unpushed).
+   - That the driver had cut the batch on p10's `Found:`, so p9 never ran (I had to read `drive.nika` to see what `CUT` means).
+   - That `RED`'s timestamp was new while its contents were old.
+   - That bug-lane b17 also edits `sysroot.rs`.
+   - Where `count_checked_calls` and `PreClaim` live (`scripts/where.nika` would have given them).
+   - That `var` does not parse; it is `let mut`.
+3. **Checks run:**
+   - Useful: the defect reproduction (check and run), the twin with a proved literal and two-step chain, the overlap check against the other lanes' batches, and the figure at both settings (about 90 s).
+   - Wasted: my first reproduction failed on `var`, and a probe that removed `mut` only confirmed a misleading warning.
+4. **One change to save the most:** the driver should write a short "since the last architect run" header into `architect-input.txt`. It would list the pushed/unpushed state of each lane commit, which briefs ran and which were cut, and the files the other lanes' current briefs touch. That would have replaced about eight of my lookups.
