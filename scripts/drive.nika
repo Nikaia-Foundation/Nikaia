@@ -1,6 +1,6 @@
 // One driver for a whole batch: builders and the architect, until an escalation.
 //
-//     nikaia run scripts/drive.nika -- DIR [--max N] [--dry-run] [--lines FILE]
+//     nikaia run scripts/drive.nika -- DIR [--max N] [--no-bump] [--dry-run] [--lines FILE]
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time:
 //
@@ -17,6 +17,9 @@
 // `Result:` is not `done`, the same stop line after an architect run, a RED sha
 // seen before with no builder to run, `--max` agent runs (default 8), a push
 // rejected after one rebase.
+// `--no-bump` leaves the version raise to another driver: a second lane in the
+// same session (`docs/briefs/bugs`) runs with it, so only the main lane's
+// driver raises the version and two raises never meet in `CHANGELOG.md`.
 // `--dry-run` runs one step of the loop and prints the commands it would run
 // and the final line `DRY-RUN <action>`; `--lines FILE` takes the cycle's
 // output from FILE instead of running `cycle.nika` (for tests).
@@ -284,6 +287,7 @@ fn main() throws {
     let mut dir: String = ""
     let mut max: i64 = 8
     let mut dry = false
+    let mut no_bump = false
     let mut lines_file: String = ""
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
@@ -291,6 +295,8 @@ fn main() throws {
     while i < args.len() {
         if args[i] == "--dry-run" {
             dry = true
+        } else if args[i] == "--no-bump" {
+            no_bump = true
         } else if args[i] == "--max" && i + 1 < args.len() {
             max = text::parse_i64(args[i + 1].clone()) ?? 8
             i += 1
@@ -304,7 +310,7 @@ fn main() throws {
         i += 1
     }
     if dir == "" {
-        println("usage: nikaia run scripts/drive.nika -- DIR [--max N] [--dry-run] [--lines FILE]")
+        println("usage: nikaia run scripts/drive.nika -- DIR [--max N] [--no-bump] [--dry-run] [--lines FILE]")
         process::exit(2)
     }
     if args.len() == 4 && args[1] == "--rewrite" {
@@ -343,7 +349,7 @@ fn main() throws {
         let cyc = drive_cycle(exe.clone(), dir.clone(), lines_file.clone())
         let mut lines: Vec[String] = []
         for l in cyc.trim().split("\n") {
-            if l.trim() != "" { lines.push(l.trim().clone()) }
+            if l.trim() != "" && !(no_bump && l.trim().starts_with("BUMP")) { lines.push(l.trim().clone()) }
         }
         if lines.len() == 0 { drive_escalate("cycle.nika printed nothing") }
         let action = drive_action(lines.clone(), red_seen.clone(), last_stop.clone())
