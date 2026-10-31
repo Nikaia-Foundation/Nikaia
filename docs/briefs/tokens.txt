@@ -229,3 +229,4 @@
 /home/user/Nikaia/docs/briefs/gr2-grammar-run-reland.md 936788 25
 /home/user/Nikaia/docs/briefs/s1082-or-default-cloned.md 421565 4
 /home/user/Nikaia/docs/briefs/architect-task.md 2194593 45
+/home/user/Nikaia/docs/briefs/c1a-ledger-items.md 3421994 56
