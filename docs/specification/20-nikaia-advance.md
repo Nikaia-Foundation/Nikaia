@@ -255,6 +255,18 @@ whether the value is that variant; what a variant carries is read with a
 `Struct` bound, or `T::variants` without an `Enum` bound, is refused with
 `NK1171`.
 
+**A reflected field is a `meta::Field`, and a function may take one**
+([ADR-grammar-2](adr/adr-grammar-2.md) D4). `fn wire_name(f: meta::Field) ->
+String?` is a build-time function over a field: its parameter is `comptime` by
+its type (writing the word changes nothing), so each call is made with the
+field of an unrolled turn and calls the copy made for that field
+([ADR-specialization-1](adr/adr-specialization-1.md) D1), in which `f.name`,
+`f.ty`, `f.attribute(X)` and the other members are what they are in the loop's
+body. A field is handed over, never moved: the turn's `f` stays readable after
+the call. `meta::Field` stands only as a parameter's type; as the type of a
+`let`, a field, a result or an element it is `NK1320`, since a reflected field
+exists only while the program is built.
+
 **A loop over a build-time value is unrolled where `@unroll` says so** ([ADR-specialization-1](adr/adr-specialization-1.md)).
 `@unroll` before a `for` makes the loop variable a build-time value in every
 turn: the body is emitted once per element with the element bound, a branch on
@@ -667,7 +679,8 @@ separated by `sep`, in any order, and yields an `S`. `value` is a rule with
 `_` for its type, applied with each field's type. `name:` is a build-time
 function over a reflected field giving its name in the input, or `null` for a
 field the input never names; the format reads its own attributes there
-(`f.attribute(Name)`). How a key is matched to its field is the compiler's
+(`f.attribute(Name)`). Left out, `name:` is the field's own name, `null:`
+matches nothing and `unknown:` skips nothing. How a key is matched to its field is the compiler's
 (Part II 10.2), and `unknown:`'s rule builds nothing. A text with no escape is
 a view of the input. **The mapping rule**, one for every format and for SQL's
 `-> T` (10.5):

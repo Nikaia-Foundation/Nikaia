@@ -145,13 +145,20 @@ language, and `field.set` stays `NK1180`.
 ### D4 — A format's attributes are read in its `name:` function, a build-time function over the reflected field.
 
 ```nika
-fn wire_name(f) -> String? {
+fn wire_name(f: meta::Field) -> String? {
     if f.attribute(Skip) != null { return null }
     return f.attribute(Name)?.value ?? f.name
 }
 ```
 
 The package writes it once; its grammar and its `write` use it (ADR-331 D6).
+
+*Amended by the architect on 2026-10-31 (`docs/architect.md`, Language
+decisions: obvious): the parameter's type, left out above until then, is
+`meta::Field`, the reflected field's type, which ADR-329 already names. A
+parameter of that type is `comptime` by its type, copied per field as
+ADR-specialization-1 D1 copies; `meta::Field` elsewhere is `NK1320`
+(Part II 10.3).*
 Each format reads its own attributes (`@json::Name`, `@yaml::Name`).
 
 ### D5 — Values follow the input, and the key dispatch is the compiler's.
