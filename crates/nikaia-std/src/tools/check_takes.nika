@@ -371,8 +371,14 @@ impl CheckState {
         let mut again: String = "a lambda may run more than once, and the second run would find it gone"
         if what == "loop" {
             again = "the next time round the loop it would be handed over again, but it's already gone"
+        } else if what == "guard" || what == "bound" {
+            again = f"a {what} only reads the labels of its alternative: they stay the alternative's, for its action"
         }
-        self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"Hand over a copy each time: `{path}.clone()`."))
+        let mut copy = f"{path}.clone()"
+        if ty.text().ends_with("?") {
+            copy = f"{path}?.clone()"
+        }
+        self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"Hand over a copy each time: `{copy}`."))
     }
 
     // The part `path` taken out of `root` by the hand-over `handed`: missing

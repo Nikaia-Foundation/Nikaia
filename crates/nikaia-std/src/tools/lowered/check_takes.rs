@@ -220,9 +220,11 @@ impl CheckState {
         let around = self.around_a_repeat(bound, &root);
         if around < 0 { return; }
         let what = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(around)).what.to_string();
-        let mut again: &'static str = "a lambda may run more than once, and the second run would find it gone";
-        if what == "loop" { again = "the next time round the loop it would be handed over again, but it's already gone"; }
-        self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.text(), again), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("Hand over a copy each time: `{}.clone()`.", path))));
+        let mut again: String = String::from("a lambda may run more than once, and the second run would find it gone");
+        if what == "loop" { again = String::from("the next time round the loop it would be handed over again, but it's already gone"); } else if what == "guard" || what == "bound" { again = format!("a {} only reads the labels of its alternative: they stay the alternative's, for its action", what); }
+        let mut copy = format!("{}.clone()", path);
+        if ty.text().ends_with('?') { copy = format!("{}?.clone()", path); }
+        self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.text(), again), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("Hand over a copy each time: `{}`.", copy))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -1,0 +1,38 @@
+// A guard reads the labels of its alternative, it does not take them (#1050):
+// `t` handed to a parameter that keeps it (`fits` binds it in a `match` arm)
+// is refused, as inside a lambda. It used to pass the checker and reach rustc
+// ("closure only implements `FnOnce`"). Lent (`ref Node?`), or not kept by
+// the callee, it runs.
+
+struct Node {
+	start: i64,
+	name: String,
+}
+
+grammar G {
+	rule WS = "" -> { }
+	rule Item -> Node = a:here s:until(";" | eof) -> { Node { start: a, name: s } }
+	rule Tail -> Node = ";" n:Item -> { n }
+	entry rule doc -> String = k:Item t:Tail? if(fits(k, t), "fits") eof -> {
+		match t {
+			null => k.name.clone()
+			v => f"{k.name}+{v.name}"
+		}
+	}
+}
+
+fn fits(k: ref Node, t: Node?) -> bool sync {
+	return match t {
+		null => true
+		v => k.start < 10
+	}
+}
+
+fn main() {
+	let input = Bytes("a;b".bytes().collect())
+	let r = G::doc(input) catch {
+		println("error")
+		return
+	}
+	println(r)
+}

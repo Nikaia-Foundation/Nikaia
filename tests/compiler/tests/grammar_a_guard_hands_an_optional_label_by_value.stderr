@@ -1,0 +1,10 @@
+error[NK2105]: `t` is passed to `fits`, which keeps it inside a guard, but it was declared outside it.
+   --> tests/grammar_a_guard_hands_an_optional_label_by_value.nika:16:44
+    |
+ 16 | 	entry rule doc -> String = k:Item t:Tail? if(fits(k, t), "fits") eof -> {
+    |                                            ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `t` is a `Node?`, so it's handed over itself, not a copy - a guard only reads the labels of its alternative: they stay the alternative's, for its action.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: Hand over a copy each time: `t?.clone()`.
+
