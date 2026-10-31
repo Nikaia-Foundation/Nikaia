@@ -1,1 +1,2 @@
 /home/user/Nikaia/docs/briefs/prover/architect-task.md 4234712 66
+/home/user/Nikaia/docs/briefs/prover/p1-1053-measure.md 660779 8
