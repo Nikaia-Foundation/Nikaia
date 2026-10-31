@@ -10,3 +10,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b6-1010-let-mut-literal-owned-field.md 173701 3
 /home/user/Nikaia/docs/briefs/bugs/b7-1016-named-lifetime-and-typed-let-slice.md 493913 9
 /home/user/Nikaia/docs/briefs/bugs/b8-1044-last-view-handed-back.md 612615 13
+/home/user/Nikaia/docs/briefs/bugs/architect-task.md 1262133 27

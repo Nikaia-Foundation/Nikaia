@@ -1,21 +1,14 @@
-1. **What cost the most.** Probing #1016's leftovers took about 10 of my roughly 30 calls. I sorted b4's deviation (nullable) and its Found (typed `let`, function type) into four separate causes, one probe at a time. On top of that, `architect.md` came to about 38k tokens, so it was read in pages. I also read two files' output as one stream at first, and briefly took a stray line for a `RED`.
+1. **What cost the most.** Tracing #1048 took about six turns. The issue said `AsyncFn`, but only by running a `sync` variant did I see that the `code.is_sync` guard was the cause. Filing #1057 cost one extra turn: I built the JSON in a double-quoted `python3 -c`, so the shell ate the backticks in the title and I had to PATCH it afterwards. The push was rejected, and that only cost time.
 
 2. **What the brief could have handed me.**
-   - That b4's commit was already pushed (6832794b). Its report said `Pushed: rejected`, so I checked origin myself.
-   - That b5 and b6 were already written and queued but never run.
-   - How to see the lowered Rust (`nikaia lower F.nika` writes `F.rs`). I grepped `builder-facts.md` for it.
-   - The emit locations for named lifetimes and the nullable `.as_ref()`. These came from greps, since `where.nika` only finds definitions by name.
+   - Whether the CUT commit (b8, 920d8608) was already on `origin/develop`. I had to check `git log` myself.
+   - That `common.part` was out of date with `builder.md`'s commit-locally rule. I found it by chance while copying the rules block.
+   - That #1056 belongs to the yaml lane. It has no `wip` label; only its body says so.
+   - How the architect itself should push in a checkout full of other agents' unstaged files. Rebase, or leave it to the driver?
 
 3. **Checks.**
-   - Useful: n1–n9 and t7 (each separated one cause), the b5 and b6 probes re-run, and the lowered signatures.
-   - Wasted:
-     - Compiling the hand-edited `.rs` with plain `rustc`. It cannot link `nikaia_std`, and `builder-facts.md` says so.
-     - The first version of n1 (`pick(ref xs)` hit NK1137, a probe-writing mistake).
-     - n7b (the `String` form ran into the separate NK1261 / `ref String` matter).
-     - The issue-list dump, of which I used only the `ready` rows.
+   - Useful: the reports of b6-b8; the issue list; the probes (b8's Found rows a-e plus the map form, #1048 text, list and `sync` forms); reading `check_core_leaves.nika` and `emit_core_types.nika`; diffing `common.part` against b9's rules block.
+   - Wasted: the `nikaia --help` grep looking for a lowering command (I never used it), and grepping for the git history of the `'call` comment.
+   - Not run: row d of #1048 (a function kept in a struct field). The brief tells the builder to probe it first.
 
-4. **The change that would save the most.** The driver could put two things into `architect-input.txt` on a `CUT`:
-   - whether the cut brief's commit is on `origin/develop`;
-   - which briefs in `batch.txt` have not run yet.
-
-   `architect.md` could also add a line under *Briefs and reports*: "re-probe a partial report's Deviation before planning its step, since a later commit may already cover it". That would have caught at once that the nullable case mostly runs today.
+4. **One change.** In `architect-task.md`, say that the architect commits locally and the driver pushes, as builders do. Also add a small `scripts/issue.nika -- TITLE_FILE BODY_FILE LABELS` that files an issue from files, so nothing passes through shell quoting. Together these would have saved the rejected push, the PATCH and the doubt about rebasing.
