@@ -1,10 +1,13 @@
-1. **What cost the most:** deciding #1044's rule. To settle "clone or refuse?" I probed a map, a `ref` field, `Vec[String]` and an owned local, and grepped Part I and Part III for the copy rule and `NK1131`. That was about 15 of roughly 35 turns. Wrong probe syntax cost three more: `var`, `HashMap` without its module, `HashMap::new`, and `.to_string()` on a literal.
-2. **What the brief could have handed me:**
-   - That `docs/briefs/b859c-type-argument.md` belongs to another session. It sits in my folder untagged; I learned whose it was from `git log`.
-   - That #1047 already has its options written out. My first *State* line said it had none, which took a second commit to fix.
-   - That `architect.md` is over the read cap, so *State* has to be read by line offset.
-   - Probe syntax: map construction and `use std::collections`. This belongs in builder-facts as a ready-to-paste block of correct forms.
+1. **Most turns and time:** trying to reproduce b1046's `Found:` myself. I started with a copied probe package (`target/arch-probe`), which `nikaia test` and `check` didn't support the way I needed. Then I ran the whole `tests/compiler` package at both settings in the background. It was still far from done when I killed it, and it settled only one of the three tests. Second came the #922 research: whether `sha2` is a dependency of `std` (it isn't), and what a missing `touches` line means in Part III.
+2. **Lookups the brief could have handed me:**
+   - The plan rows' blocker status: which rows wait on #920 or #922, and that BT waits on nothing.
+   - That `nikaia-std` has no `sha2` (its `Cargo.toml` :116, ADR-002 D4).
+   - The `touches` rule (Part III :332).
+   - The `process::run` signature, and that no tools file calls it yet.
+   - The four stand-in `sha256_hex` methods in the tools files.
+   - `docs/briefs/s3-fs-canonical.md` as the model for a `std`-entry brief.
+   - The bug lane's naming scheme (`b<N>-<issue>`) and its next free number.
 3. **Checks:**
-   - Useful: the `nikaia run` probes of rows a–g, `nikaia lower` to see the lowered `&[Sym]`, the grep for `view_of` assignments, and the `ref Box2` probe, which turned up the `NK1131` model.
-   - Partly wasted: the full open `ready` issue list (long output, I used three entries), the `where.nika NK1104` call, and the oversized `NK1131` spec grep that spilled to a file.
-4. **The one change:** have `drive.nika` write a "lane owner" line for every brief in `docs/briefs/` that is not in my `batch.txt` (or a `owner:` key in brief frontmatter). Also have the task include the issues filed since the last architect run, with label and whether a decision paper exists. That would have saved the b859c digging and the #1047 correction. Second choice: a builder-facts block of correct probe snippets (map, set, owned list, `?.clone()`).
+   - Useful: `where.nika` and outline reads, the converter draft for BT and GR, the `std.contracts` greps, `gh api` on the issue labels, `git diff --cached --stat` before the commit.
+   - Wasted: the `arch-probe` copy; the background both-settings run, which mostly ran unrelated tests and never reached two of the three; one failed `git add` on a path `git mv` had already staged.
+4. **The change that would save the most:** a rule in the architect task that the architect does not reproduce a builder's `Found:` itself. It files the `Found:` as it stands, in brief form for the bug lane, and reproducing it becomes that brief's first step. The builder's report should also give the binary's sha and the exact command it ran. That alone would have saved a third of my turns.

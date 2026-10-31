@@ -204,3 +204,4 @@
 /home/user/Nikaia/docs/briefs/b1045-let-lambda-fn-field.md 291147 7
 /home/user/Nikaia/docs/briefs/architect-task.md 2469800 49
 /home/user/Nikaia/docs/briefs/b1046-let-lambda-pausing-param.md 659596 11
+/home/user/Nikaia/docs/briefs/architect-task.md 5181536 85
