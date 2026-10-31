@@ -128,7 +128,7 @@ the background in a cloud session.
 
 * **The main session** (supervisor: starts agents, talks to the owner, raises
   versions, watches CI, runs decision rounds): `docs/supervisor.md`, and
-  `docs/architect.md` for the architect and the hand-over.
+  `docs/architect.md` for the architect and the lanes.
 * **Builders**: `.claude/agents/builder.md` (the cycle and the gate) and
   `docs/builder-facts.md` (where things live, traps, and the self-hosting
   rules: slices, syntax gaps of `tools/*.nika`, lowering).
@@ -190,7 +190,8 @@ the background in a cloud session.
   (owner's direction: no technical debt). A defect that cannot be fixed in
   this round is filed as a GitHub issue with a probe and a *To build* list
   (status label `ready`), never in a file in the repository, and the work that
-  needs it waits for the fix.
+  needs it waits for the fix. A defect a move finds is fixed by the bug lane,
+  not the move lane; the move waits (`docs/architect.md`, *Lanes*).
 * **The disk is shared and small.** Delete `target/` of a worktree you no
   longer use; keep `target/nikaia-project-tests` (the tests' cache, pruned by
   the compiler to `NIKAIA_CACHE_LIMIT`). Never run the full suite locally

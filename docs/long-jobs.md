@@ -53,7 +53,7 @@ it is slow by construction.
    reads it. After each builder's push it runs
    `gh run watch <id> --exit-status` with `run_in_background` (one call, it
    wakes on the end; no polling) while the next builder starts; a red run
-   makes the repair the next order (`architect.md`, *The loop*).
+   makes the repair the next order (`architect.md`, *Roles*).
 2. **Builders never run the full suite**, only the touched tests; CI runs the
    rest. Already the rule; now also in the work order's *Done when*.
 3. **Measuring only in a task whose point is a number**, named in the work

@@ -50,6 +50,11 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **At about 120 turns, or when your context passes about 200k tokens**,
   stop starting new work: commit and push what is verified, and report what
   is left, so a fresh agent can take it from the repository.
+* **Time box on a search** (owner, 2026-10-31). No cause found after about
+  40 turns, or going in circles (the same probe, file or hypothesis again):
+  stop. Commit nothing half-made, report `Result: partial` with what you
+  ruled out, the smallest probe, and where you suspect the fault (file and
+  function), so the architect can narrow it.
 * **Wait in one call.** Run a build or a test in the foreground with a long
   timeout, or with `run_in_background` and let its end wake you. Never poll
   with repeated `tail`, `ps` or `sleep` calls.

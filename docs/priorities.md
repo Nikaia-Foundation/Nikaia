@@ -9,11 +9,14 @@ counts, never seconds.
 
 **Owner's direction (2026-10-27): finish self-hosting.** Until
 `crates/nikaia/src` holds no compiler logic in Rust, self-hosting goes first:
-every batch carries at least two moves, the largest Rust files first
-(`project.rs`, `parser/mod.rs`, `comptime_run.rs`, `sysroot.rs`,
-`emit/mod.rs`, `modules.rs`, `contracts/mod.rs`, `check/mod.rs`). A compiler
-bug goes into a batch only when it blocks a move or turns `develop` red. The
-pause rule (more bugs found than fixed) still stops the self-hosting lane.
+the main lane (`docs/briefs/`) holds moves only, at least two a batch, the
+largest Rust files first (`project.rs`, `parser/mod.rs`, `comptime_run.rs`,
+`sysroot.rs`, `emit/mod.rs`, `modules.rs`, `contracts/mod.rs`,
+`check/mod.rs`); its one exception is a fix-forward for a red `develop`. A
+compiler bug a move finds goes as a brief into the bug lane
+(`docs/briefs/bugs/batch.txt`, with a `Blocks:` line) and the move waits for
+its fix there (owner, 2026-10-31; `docs/architect.md`, *Lanes*). The bug lane
+orders the other defects by the score below. The pause rule (more bugs found than fixed) still stops the self-hosting lane.
 Each move starts from an `rs2nika` draft; a converter defect met on the way
 is fixed in the converter (the 60 % rule in `scripts/drive.nika`). A move
 is faithful by default; a schematic reshape is taught to the converter first,
@@ -34,7 +37,7 @@ only the order matters, not the number.
 
 ## Order
 
-The score decides, across areas. The default prior is the adviser's order:
+The score decides within each lane (the lanes are set above). The default prior is the adviser's order:
 compiler bugs, self-hosting, CI speed, `rs2nika` (the converter only when it
 measurably speeds a planned move, not for completeness). A bug a builder is
 blocked on comes first. Any other departure from bugs-first is allowed when
@@ -54,27 +57,6 @@ Such an issue is closed by hand with the commit named, not briefed.
 Two or three lines: `S=<grade> (why), O=<M tokens> (why), C=<M tokens> (from
 which past run), area`; on a departure from bugs-first, the figures.
 
-## Current score (2026-10-25, after a2f40f98)
+## Current figures
 
-Figures that decide: the last four `check` moves cost 8.3-14.9 k tokens per
-moved Rust line (`docs/tokenspeed.md`, target 50 k), so a slice of 1000 lines
-costs about 10-15 M; E11-4a moved 1212 lines in one run. Rust left in
-`crates/nikaia/src`: 25 555 lines (75.9 % of the toolchain is Nikaia);
-`emit/mod.rs` 4605, `check/mod.rs` 1309. Per ticket a compiler bug still
-scores higher (S 3 at C 3 M against S 2 at C 15 M), so self-hosting does **not**
-go before bugs; it runs in its own lane beside the bug lane and never waits
-(CLAUDE.md default: one bug builder, one self-hosting builder). The pause rule
-does not fire: the last slices found one defect each and fixed it in the run.
-
-Re-scored 2026-10-26 (c6a6bdd3): #853 #856 #857 #855 done; #851 is `decision`.
-
-| Ticket | S | O (M) | C (M) | Score | Lane, order |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| #861 docs-only push promotes an untested base (main on red code twice) | 3 | 2 | 2 | 16 | CI 1 |
-| #848 `m.get(k) ?? (tuple)` with text | 3 | 0.3 | 5 | 6.1 | bugs 1 |
-| #862 batch/status/cycle lines (main-session restarts) | 1 | 1 | 2 | 5.5 | process 1 |
-| #863 `process::exit(2)` in a `throws` helper exits 1 (reduce first) | 3 | 0.2 | 4 | 7.6 | bugs 2 (after #862: unreduced) |
-| C-7 rest, `check/mod.rs` (#584): research brief first | 2 | 1 | 15 | 1.4 | self-hosting 1 |
-| `emit/seeds.rs` (951) | 2 | 0.5 | 10 | 2.1 | self-hosting 2 |
-
-Re-scored 2026-10-26 (f691147): #861 #848 #862 #863-#866 #706 done or closed. Bugs 1: #665 (S 3, C 5, 6.0); self-hosting 1: #867 `emit/seeds.rs` (S 2, C 10, 2.1); then C-7 rest (1.4).
+In `docs/architect.md`, *State*. Past scores are in git (`git log -p docs/priorities.md`).
