@@ -152,7 +152,9 @@ shows. Everything else waits for the owner's answer.
 The counting tool exists for `--bounds` (#1053): `nikaia lower-std --bounds
 [--optimization NAME:LEVEL]... > REPORT`, then `nikaia run scripts/proved.nika
 -- REPORT` prints the totals, the unproved sites by reason and the 15 files
-with the most of them; `--asserts` is not summed yet.
+with the most of them; with `lower-std --bounds --asserts` it also sums the
+claims and the `panic` calls into `left at run time`, the lane's target 0
+(#1053).
 
 ## 6. Owner's decisions (2026-10-24, #796)
 

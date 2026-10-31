@@ -2,59 +2,63 @@
 
 *Current state only, rewritten by the lane's architect each run. What happened is in `git log` and the issues.*
 
-**Goal (owner, 2026-10-31):** 100 % of the indexes and arithmetic steps in `crates/nikaia-std/src/tools/*.nika` proved: claim (b) of `docs/formal-verification.md`. Epic: #1053 (`wip`). Then the gaps outsiders name (lengths, sorted lists, facts about data, postconditions, lemmas). Then, by the score: the prover as a product, interfaces for outside proposers (ADR-361 D6, `nikaia prove --propose`), current research.
+**Goal (owner, 2026-10-31):** 100 % of the indexes and arithmetic steps in `crates/nikaia-std/src/tools/*.nika` proved, and `left at run time` 0: claim (b) of `docs/formal-verification.md`. Epic: #1053 (`wip`). Then the gaps outsiders name (lengths, sorted lists, facts about data, postconditions, lemmas). Then, by the score: the prover as a product, interfaces for outside proposers (ADR-361 D6, `nikaia prove --propose`), current research.
 
-**The headline counts at `prove-through-loops:on`** (architect, 2026-10-31): claim (b) is about what is proved, the strongest setting the toolchain offers; which proved checks a build drops is a separate setting (ADR-361 D11: `std` and the tools are lowered with it `off`). Both figures are recorded. **The figure must also count claims** before `assert`s go into the tools: a precondition (ADR-269 D5) moves a check to its callers, and an unproved one there is still a run-time check.
+**The headline counts at `prove-through-loops:on`**: claim (b) is about what is proved; which proved checks a build drops is a separate setting (ADR-361 D11: `std` and the tools are lowered with it `off`). Both figures are recorded.
 
-## Figure (2026-10-31, 76c216e binary: `lower-std --bounds` + `scripts/proved.nika`)
+## Figure (2026-10-31, 21:11 binary at 9e657f7: `lower-std --bounds --asserts` + `scripts/proved.nika`)
 
-| Setting | Indexes | Operations |
-| :--- | :--- | :--- |
-| `off` | 1,536 / 2,659 (57.8 %) | 838 / 1,625 (51.6 %) |
-| `prove-through-loops:on` | 1,568 / 2,659 (59.0 %) | 844 / 1,625 (51.9 %) |
+| Setting | Indexes | Operations | Left at run time |
+| :--- | :--- | :--- | :--- |
+| `off` (p9, a784e6d) | 1,543 / 2,676 (57.7 %) | 840 / 1,633 (51.4 %) | 1,929 |
+| `prove-through-loops:on` | 1,576 / 2,677 (58.9 %) | 846 / 1,633 (51.8 %) | 1,891 |
 
-Unproved by reason (on): 702 catch-all, 433 counter, 382 parameter, 127 list element, 110 another list's length, 61 call result, 37 list of lists, 7 `if`/`match` value, 6 product, 4 lower bound, 3 field. Top files: `fmt.nika` 135, `text_tiers.nika` 87, `bounds_walk.nika` 65, `logic_lia.nika` 54. `tools/*.nika` holds no `assert` and 13 `panic(` in 9 files: p9 puts both into the figure (`left at run time`, the lane's target: 0).
+Claims: 0 asserts in the tools. Panics: the figure says 3, really 2 (`modules.nika` :496 is a `panic(` in generated text; p13 step 5 fixes the count). Unproved by reason (on): 708 catch-all, 439 counter, 383 parameter, 128 list element, 112 another list's length, 61 call result, 37 list of lists, 7 `if`/`match` value, 6 product, 4 lower bound, 3 field.
+
+What the architect's sample (2026-10-31) found in the big buckets:
+
+* **Counters (439)**: 82 `x += 1` in a `for` over a collection, 52 in a `while`; the same shapes prove in a one-file program. Two causes probed: an unsized length has no upper bound (ADR-385 D1, p12), and a list of a struct declared in another tools file is taken as unsized (suspected `takes_space` not seeing it, p12 step 2).
+* **Catch-all (708)**: by shape 267 `xs[i]`, 160 `xs[K]`, 91 `n + K`. Of the indexed lists, about 27 come from `split(..).collect()`, 26 from `chars().collect()` (ADR-385 D2, p13), 5 from `splitn`; `found`-style indexes set inside a guarded loop (`found = index` under `index < len`, then `if found >= 0 { xs[found] }`) and call results returning an index or -1 (`the_boundary`) need an invariant / postcondition.
+* **Another list's length (112)**: lists filled pairwise (`for _ in handles { held.push(false) }`, then `held[index]` under `index < handles.len()`): #388's fill case. Its parameter case already works: `assert(a.len() == b.len())` at the top is a precondition the walk uses (probed).
 
 ## Lane facts (for the architect and briefs)
 
-* Count: `target/fast/nikaia lower-std --bounds [--optimization prove-through-loops:on] > R` (about 45 s), then `target/fast/nikaia run scripts/proved.nika -- R`. Never per-file `check --bounds` on tools files: alone they are refused. The report's file header lines start in column 0; `awk '/^[^ ]/{f=$0} /REASON/{print f": "$1}' R` maps sites to files.
-* A program test carries `NAME.bounds` / `NAME.loops.bounds` (p5, #1069); every prover brief guards its gain with one. `--asserts` has no such guard: a claim test uses `.stderr` (NK1300/NK1207).
-* The bounds walk (`bounds_walk.nika`) is separate from the prover walk (`prover_walk.nika`, `prover_state.nika`, `prover_loops.nika`). p4 gave the walk the portfolio for `while` only; p6 gave it D13 (`bounding_turn_steps`, `bounding_turn_bounds`), reading a collection's length from the checker's `std_lengths`/`sized_lengths` by `node_key`. The prover walk (`prover_for`, `prover_walk.nika` :1068) builds a record only for a `for` over a range.
-* Certificate checker: `logic_search.nika` `lg_verify` and its callees, `logic_lia.nika`.
+* Count: `target/fast/nikaia lower-std --bounds --asserts [--optimization prove-through-loops:on] > R` (about 45 s), then `target/fast/nikaia run scripts/proved.nika -- R`. Never per-file `check --bounds` on tools files. In `R` a file's header is `bounds in <path>: ...` in column 0; a site line is `   LINE  EXPR   proved|checked: REASON`.
+* A program test carries `NAME.bounds` / `NAME.loops.bounds` (p5, #1069); every prover brief guards its gain with one. A claim test uses `.stderr` (NK1300/NK1207).
+* Bounds walk: `bounds_walk.nika` (`bounding_length_named` :1728 the length axioms, `bounding_built` :3589 a `let`'s length, `bounding_each` :1639 the ledger's per-item facts), `bounds_matched.nika` `bm_each`. Prover walk (claims): `prover_walk.nika`, `prover_state.nika` (`length_given` :968), `prover_loops.nika`. Checker facts: `check_facts.nika`, `std_lengths`/`sized_lengths` set in `check_core_method.nika` :917 and `check_core_stmt_for`, `takes_space` in `check_decls.nika`.
+* Certificate checker: `logic_search.nika` `lg_verify` and callees, `logic_lia.nika` (54 unproved), `logic_search.nika` (18), `logic_alethe.nika` (21). Its sites are mostly list elements used as indexes (`held[place]`, `needed[from]`: certificate data, so a guard that rejects a malformed certificate is right there), #388 pairs, parameters.
 * Valid `Facts:` headings: `Where things live`, `Traps already met`, `Commands`, `Moving Rust into Nikaia`.
-* `nikaia.toml` has no optimization key: a setting is chosen on the command line only.
 
 ## Order of work (score = (S x 10 M + O) / C)
 
 | # | Work | Issue | S | O | C | Score |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1-9 | Count, in-loop asserts, reasons, D10 portfolio, `.bounds` tests, D13 in the bounds walk, a `for`'s collection length, `Through` calls not proving (p8), argument lengths (p10) | #1053.1-4, #1054, #1069, #1076, #1084 | | | | done (p10 local, unpushed) |
-| 10 | p11: a precondition carried back (D15) counts the unproved calls of every function it was carried to | #1090 | 3 | 3 | 3 | 11, batch, first |
-| 11 | p9: `lower-std --asserts`, `proved.nika` counts claims and `panic`s, `left at run time`; `formal-verification.md` §2/§4 | #1053.9 | 3 | 1 | 4 | 7.8, batch, after p11 |
-| 12 | The prover walk's `for`: a turn count (D13) as `loop_record_range` over `0..len`, so claims after/inside a `for` read its counters, and a `push` once a turn in a `for` over `0..<n` gives the length `old + n` (probed: `for j in 0..<4 { u.push(j) }` then `g(u)` with `u.len() >= 4` refused at both settings) | #1053.4 | 3 | 3 | 8 | 4.1, next run |
-| 13 | Certificate checker at zero: preconditions as `assert`s, guards for malformed certificates (`logic_lia.nika` 54 unproved) | #1053.5 | 3 | 1 | 6 | 5.2, after 11-12 |
-| 14 | The catch-all's 702 re-split | #1053.3 | 2 | 2 | 4 | 5.5, with p9's run |
-| 15 | `assert`s at the 382 parameter sites, file by file, files clear of the main lane | #1053.8 | 3 | 1 | 10 | 3.1, after 11-12 |
-| 16 | The 13 `panic`s: each a proved-unreachable claim or a `throw` | #1053 | 2 | 1 | 4 | 5.3, after 11 |
-| 17 | By the table: list elements #797, other list's length #388 (decision), call results (postconditions: decision paper due), #384, #385, #386 | | | | | by the table |
+| 1-11 | Count, in-loop asserts, reasons, D10, `.bounds` tests, D13, `for` length, p8, p10, p11 (carried preconditions), p9 (claims and panics in the figure) | #1053.1-4/9, #1054, #1069, #1076, #1084, #1090 | | | | done, pushed |
+| 12 | p12: ADR-385 D1 (every length <= 2^63 - 1), the tools' cross-file structs taking space | #1053 | 3 | 3 | 3 | 11, batch, first |
+| 13 | p13: ADR-385 D2 (`ensures_count`: split, chars, bytes), the panic count | #1053 | 3 | 3 | 4 | 8.3, batch, second |
+| 14 | #388 fill case: two lists pushed once each per turn (or built from one another's length) are as long as each other; decide (obvious: no syntax, every user gains; the parameter case is an `assert`), ADR, brief | #388 | 3 | 3 | 5 | 6.6, next run |
+| 15 | The catch-all re-split in `bounds_reasons.nika`: the reason names the form (`found`-style index, call result, list from a `std` sequence without an entry) | #1053.3 | 2 | 2 | 4 | 5.5, next run |
+| 16 | Certificate checker at zero: guards rejecting malformed certificates, `assert` preconditions its callers prove, after 12-14 | #1053.5 | 3 | 1 | 6 | 5.2 |
+| 17 | The 2 `panic`s: each a proved-unreachable claim or a `throw` (`check_walked.nika` :121, `emit_grammar.nika` :225) | #1053 | 2 | 1 | 3 | 7, with 16 |
+| 18 | `assert`s at the 383 parameter sites, file by file, clear of the other lanes | #1053.8 | 3 | 1 | 10 | 3.1 |
+| 19 | Postconditions (`ensures` on a program's own function, ADR-269 D17 has methods): call results returning an index or -1 (61 sites); decision paper if a syntax is needed | #382 (closed), new | | | | by the table |
+| 20 | By the table: list elements #797, #798 (decision), #384, #385, #386 | | | | | by the table |
 
 ## Decisions in force
 
-* ADR-306 D12: a length is below 2^60, so `xs.len() + 1` is proved.
-* ADR-361 D2, D3, D10: claims and checks are asked through loops (p2, p4). D13 (architect, 2026-10-31): a `for` counts its turns; a counter is bounded by `k` times them, at both settings; built in the bounds walk (p6), the collection length via the checker (p7), the prover walk next (item 10).
-* p7 (architect, 2026-10-31): `check_core_stmt_for` records the iterable in `std_lengths` (and `sized_lengths` where elements take space), as `.len()` does. `for c in text` over a `String` passes check and fails in rustc: #1075 (bug lane).
-* #1076 (architect, 2026-10-31): a call that reaches the checked entry (`CallReach::Through`, ADR-269 D20) checks the precondition when it runs; it counts as not proving it.
-* #1084 (architect, 2026-10-31, obvious): `Bytes(x)` has `x`'s length (like `find_all`, ADR-375 D5); `[v; n]` has length `n` bound by `let` or passed; a literal argument has its count. Tests p8 turned red are rebuilt so the prover reads the length, never lowered with `unproved-claims = "warn"` to pass.
-* #1090 (architect, 2026-10-31, defect): a claim held as a precondition is proved only if no call proves it short anywhere along its carrying chain (D15): its unproved calls are its own function's plus those of every function its precondition was carried to.
-* #1069 (architect, 2026-10-31): `NAME.bounds` (off) and `NAME.loops.bounds` (on) beside a program test, path relative, the build-dependent tail cut.
-* p4: `bounding_fits` may state a one-way goal as `t <= y` for a name `y` whose type lies inside the operation's, at most 8 per goal.
-* Open decisions this lane may need: #388 (equal lengths), #385 (lists of lists, `decision`), #386 (products), #798 (element rules), postconditions (`ensures`, no issue yet: write the decision paper when item 12 reaches call results).
-* NK codes: `NK1320`-`NK1329`, `NK2720`-`NK2729`.
+* ADR-306 D12: a length is below 2^60 where elements take space. ADR-385 (architect, 2026-10-31, obvious): D1 every length <= 2^63 - 1; D2 `ensures_count` on a `std` sequence (p12, p13 build it; Part III text with each build).
+* ADR-361 D2, D3, D10, D13 (a `for` counts its turns; in the bounds walk p6, the collection length via the checker p7; the prover walk's `for` builds a record only over a range).
+* #1076: a call through `CallReach::Through` counts as not proving a precondition. #1090 (D15): a carried precondition is proved only if no call along its carrying chain leaves it open.
+* #1084: `Bytes(x)` has `x`'s length; `[v; n]` has `n`; a literal argument its count. Tests are rebuilt so the prover reads the length, never `unproved-claims = "warn"`.
+* #1069: `NAME.bounds` (off) and `NAME.loops.bounds` (on) beside a program test.
+* p4: `bounding_fits` may state a one-way goal as `t <= y`, at most 8 per goal.
+* Open decisions this lane may need: #388 (to decide next run, see item 14), #385, #386, #798; postconditions on functions (paper when item 19 comes).
+* NK codes: `NK1320`-`NK1329`, `NK2720`-`NK2729` (none used yet).
 
-## CI and the tree (2026-10-31, after 28ffe0b)
+## CI and the tree (2026-10-31, after 1612975)
 
-p7 and p8 are pushed. Local `develop` holds p10 (76c216e) unpushed; the driver cut the batch on p10's `Found:` (#1090, filed and briefed as p11), so p9 did not run; the batch's suite was starting on 76c216e at 20:34. `RED`/`qa-input.txt` in this directory are an older QA round's, not this lane's. `lowered/project_members.rs` is residue (#1060); briefs say never to stage it. `sysroot.rs` is shared with the bug lane's b17 (#1077): p9 stages its own hunks only. Owed to the supervisor (version heading): p5's-p8's and p10's `Changelog:` lines.
+The suite on 9e657f7 was green; p11 (3ebe381) and p9 (9e657f7) are pushed. CI runs for 1612975 in progress, the runs before green. `RED` (empty) and `qa-input.txt` in this directory are an older round's, not this lane's. p9's `Found:` (a view of a temporary's field in a `let`, rustc "temporary value dropped while borrowed") is #1081's second shape: commented there, bug lane. `lowered/project_members.rs` is residue (#1060): briefs say never to stage it. `sysroot.rs` is shared with the main lane's gr2. Owed to the supervisor (version heading): p5's-p11's and p9's `Changelog:` lines; ADR-385 lands with p12/p13's Part III text.
 
 ## Batch
 
-`batch.txt`: p11 (`prover_passes.nika`, maybe `prover_claims.nika`, two new `tests/compiler` tests), then p9 (`main.rs`, `sysroot.rs`, `scripts/proved.nika`, `formal-verification.md`). Next run: item 12 (the prover walk's `for`, push lengths), then 13 or 15 by p9's figure.
+`batch.txt`: p12 (`bounds_walk.nika`, maybe `check_decls.nika`/`sysroot.rs`, `30-nikaia-tooling.md`, `formal-verification.md`, one test), then p13 (`ty.nika`, `ledger.nika`, `ledger_text.nika`, `bounds_matched.nika`, `bounds_walk.nika`, `std.contracts`, `scripts/proved.nika`, `30-nikaia-tooling.md`, `formal-verification.md`, one test). Next run: #388's decision and brief (item 14), the catch-all re-split (15), then the certificate checker.
