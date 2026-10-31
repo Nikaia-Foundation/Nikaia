@@ -1,8 +1,9 @@
 Result: done
-Batch: y29-1089-match-on-a-get-bound-local.md y27-load.md
+Batch: y27-load.md y31-merge.md y30-1092-match-moves-owned-field.md
 Owner: none
-Found: #1089 filed (ready, wip; yaml lane): a local bound by `m.get(k) ?? <jump>` or `match m.get(k) { null => <jump>  x => x }` is not lent, so a match or `??` on its non-copy optional field lowers without `&` (rustc E0507); rows a-h probed on target/fast/nikaia at 6eab43c4; kin to #1057 (b13, a refusal), not the same fix.
-Decided: nothing new for the language; y28 (91b72357, Fixes #1085) changed `crates/`, Changelog line in its report for the supervisor.
-Process: builder-facts *Traps already met* (package commit): no `--bless` before `nikaia check` is clean; NK1127 on a default means rustc refused the lowered file (y27's debrief).
-Next after this batch: merge on request (D6, serde_yaml 0.9 `apply_merge`), then tag resolution for events.
-Pushed: rejected (local develop holds the batch's unpushed commits; the driver rebases and pushes)
+Input: CUT on y29's Found (not a red CI; the suite of y29 445f6064 still running). y29 done, #1089 fixed.
+Filed: #1092 (bug, ready): a by-value parameter whose field a `match` moves out is inferred lent, lowered `&A`, rustc E0507; probe checked by the architect on target/fast/nikaia (the `??` spelling runs). Fix brief y30, last in the batch (nothing in yaml needs it).
+Decided: ADR-yaml-1 D6, paragraph of 2026-10-31: `merge(node: Node, input: ref Bytes) -> Node sync throws` as serde_yaml 0.9's apply_merge (own keys win, then the first merged mapping; a non-mapping `<<` value an Error; quoted "<<" ordinary). Package ADR, no toolchain version.
+y27-load.md unchanged (run 2 paragraph already there, unrun).
+#928 To build updated (y29 struck, #1092, eleventh batch); labels ready+wip kept.
+Pushed: rejected (local commit "briefs(yaml): y31 merge ..." on top of the unpushed y29 commits; the driver rebases)

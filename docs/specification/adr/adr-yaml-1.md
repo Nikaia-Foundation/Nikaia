@@ -139,6 +139,18 @@ still views), a key given twice in one mapping an error naming both positions
 (keys compared by kind and value), and `<<` an ordinary key: a merge happens
 only on request, by a separate function, as in serde_yaml 0.9.
 
+That function (architect, 2026-10-31, as serde_yaml 0.9's `apply_merge` and
+the YAML 1.1 merge key): `merge(node: Node, input: ref Bytes) -> Node sync
+throws` over a tree from `load`, every mapping at every depth. A mapping's `<<`
+entry is taken out; its value is a mapping, or a sequence of mappings, whose
+entries are added after the mapping's own, in order, each only when its key
+(compared as `load` compares keys) is not there yet: the mapping's own keys
+win, then the first merged mapping over a later one. Merged nodes are merged
+themselves first. Any other value of `<<` (a scalar, null, a sequence holding a
+non-mapping, an alias left unresolved) is an `Error` at that value's position,
+`input` giving its line and column, as for every error of the package. A `<<`
+that is a quoted scalar (`"<<"`) is an ordinary key, as in serde_yaml.
+
 ### D7 — Events are a walk of the parsed tree, in the yaml-test-suite's vocabulary, each with its span.
 
 `events` turns the parsed tree into a list: stream, document (explicit or not),
