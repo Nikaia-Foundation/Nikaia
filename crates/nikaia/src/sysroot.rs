@@ -454,19 +454,13 @@ fn without_bodies(source: &str, parsed: &crate::parser::Parsed) -> String {
         .collect()
 }
 
-/// The same with the per-file cache of [`LoweredBefore`]: `reused` counts the
-/// files taken from it. A file's key is its own text and the package's
-/// interface - the others' signatures, the ledger and the trust it is checked
-/// against - and not the others' bodies, so a body change lowers one file and
-/// a signature change (or a change the ledger shows) lowers all.
-fn lower_tools_files_cached(
+/// **The package's files read and parsed**: each file's size and text, and
+/// its parse with the package's text tiers refined over all of them; refused
+/// where a name is declared twice (ADR-286 D1).
+#[allow(clippy::type_complexity)]
+fn read_tools_package(
     paths: &[PathBuf],
-    build: crate::emit::Build,
-    threads: Option<usize>,
-    cache: &LoweredBefore,
-    reused: &mut usize,
-) -> Result<Package> {
-    let mut timer = Phases::from_env();
+) -> Result<(Vec<usize>, Vec<String>, Vec<crate::parser::Parsed>)> {
     let mut parsed: Vec<crate::parser::Parsed> = Vec::new();
     let mut sizes: Vec<usize> = Vec::new();
     let mut texts: Vec<String> = Vec::new();
@@ -485,7 +479,6 @@ fn lower_tools_files_cached(
         let mut files: Vec<&mut crate::parser::Parsed> = parsed.iter_mut().collect();
         crate::text_tiers::refine_package(&mut files);
     }
-    timer.lap("parse");
     // **One package, one namespace** (ADR-286 D1), as a project's files are.
     let files: Vec<(&Path, &crate::parser::Parsed)> = paths
         .iter()
@@ -493,6 +486,13 @@ fn lower_tools_files_cached(
         .zip(parsed.iter())
         .collect();
     crate::modules::declared_once(&files)?;
+    Ok((sizes, texts, parsed))
+}
+
+/// **The ledger the tools package is checked against**: the described one,
+/// `std` with the described entries over it, and whether the file check's
+/// facts may serve the emitter.
+fn tools_library() -> Result<(crate::contracts::Ledger, crate::contracts::Ledger, bool)> {
     let described =
         crate::contracts::Ledger::parse(TOOLS_DESCRIBED).context("the tools' described ledger")?;
     let mut library = crate::contracts::std_library();
@@ -508,6 +508,98 @@ fn lower_tools_files_cached(
         .keys()
         .any(|k| std.functions.contains_key(k))
         && !described.types.keys().any(|k| std.types.contains_key(k));
+    Ok((described, library, facts_reusable))
+}
+
+/// **A tools file checked as `lower-std` checks it** (Part III C.1): with the
+/// package beside it, and `assume` refused in the toolchain.
+fn check_tools_file(
+    unit: &crate::parser::Parsed,
+    beside: &[&crate::parser::Parsed],
+    own: &crate::contracts::Ledger,
+    library: &crate::contracts::Ledger,
+) -> crate::check::Checked {
+    let mut checked = crate::check::check_against(
+        unit,
+        beside,
+        own,
+        library,
+        &std::collections::BTreeSet::new(),
+        &crate::check::Newly::default(),
+        &crate::assets::Reads::none(),
+    );
+    crate::check::refuse_assumes_in_std(&mut checked);
+    checked
+}
+
+/// **`nikaia lower-std --bounds`** (#1053): the `--bounds` report of each file
+/// of the tools package, each checked with the package beside it and against
+/// the package's ledger, as `lower-std` checks it. A file the check refuses is
+/// one line, `refused: <path>`. Nothing is written and no cache is read: the
+/// report needs the walk. The `runtime` package and the `std` modules are
+/// left out.
+pub fn bounds_tools(
+    sysroot: &Sysroot,
+    bounds: crate::bounds::BoundsChecks,
+    overflow: crate::bounds::OverflowChecks,
+    through_loops: bool,
+) -> Result<String> {
+    let paths = tools_sources(&sysroot.tools_dir())?;
+    let (sizes, texts, parsed) = read_tools_package(&paths)?;
+    let (_, library, _) = tools_library()?;
+    let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
+    let (own, _) = crate::contracts::Ledger::infer_package_checked(&units, &library);
+    let report_one = |at: usize| -> String {
+        let beside: Vec<&crate::parser::Parsed> = parsed
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != at)
+            .map(|(_, other)| other)
+            .collect();
+        let checked = check_tools_file(&parsed[at], &beside, &own, &library);
+        let path = paths[at].display().to_string();
+        let refused = checked
+            .findings
+            .iter()
+            .any(|finding| matches!(finding.severity, crate::check::Severity::Error));
+        match refused {
+            true => format!("refused: {path}\n"),
+            false => crate::bounds_report::report_checked(
+                &parsed[at],
+                &texts[at],
+                &path,
+                &checked,
+                &own,
+                &library,
+                bounds,
+                overflow,
+                through_loops,
+            ),
+        }
+    };
+    // The largest first, as `lower-std` does; `in_parallel` answers in file
+    // order whatever the order of the work.
+    let mut order: Vec<usize> = (0..paths.len()).collect();
+    order.sort_by_key(|at| std::cmp::Reverse(sizes[*at]));
+    Ok(in_parallel(&order, None, report_one).concat())
+}
+
+/// The same with the per-file cache of [`LoweredBefore`]: `reused` counts the
+/// files taken from it. A file's key is its own text and the package's
+/// interface - the others' signatures, the ledger and the trust it is checked
+/// against - and not the others' bodies, so a body change lowers one file and
+/// a signature change (or a change the ledger shows) lowers all.
+fn lower_tools_files_cached(
+    paths: &[PathBuf],
+    build: crate::emit::Build,
+    threads: Option<usize>,
+    cache: &LoweredBefore,
+    reused: &mut usize,
+) -> Result<Package> {
+    let mut timer = Phases::from_env();
+    let (sizes, texts, parsed) = read_tools_package(paths)?;
+    timer.lap("parse");
+    let (described, library, facts_reusable) = tools_library()?;
     let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
     let (own, checked) = crate::contracts::Ledger::infer_package_checked(&units, &library);
     timer.lap("ledger");
@@ -579,16 +671,7 @@ fn lower_tools_files_cached(
             .collect();
         // **Checked before it is lowered** (Part III C.1), with the package
         // beside it.
-        let mut checked = crate::check::check_against(
-            unit,
-            &beside,
-            &own,
-            &library,
-            &std::collections::BTreeSet::new(),
-            &crate::check::Newly::default(),
-            &crate::assets::Reads::none(),
-        );
-        crate::check::refuse_assumes_in_std(&mut checked);
+        let checked = check_tools_file(unit, &beside, &own, &library);
         let refusals: Vec<&crate::check::Finding> = checked
             .findings
             .iter()

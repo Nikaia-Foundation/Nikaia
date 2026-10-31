@@ -55,6 +55,34 @@ pub fn report(
     through_loops: bool,
 ) -> String {
     let checked = crate::check::check(parsed, own, library);
+    report_checked(
+        parsed,
+        source,
+        path,
+        &checked,
+        own,
+        library,
+        bounds,
+        overflow,
+        through_loops,
+    )
+}
+
+/// The same over a check the caller ran: `lower-std --bounds` checks each file
+/// of the tools package with the others beside it (#1053), as `lower-std`
+/// does, where [`report`] checks the file alone.
+#[allow(clippy::too_many_arguments)]
+pub fn report_checked(
+    parsed: &Parsed,
+    source: &str,
+    path: &str,
+    checked: &crate::check::Checked,
+    own: &Ledger,
+    library: &Ledger,
+    bounds: BoundsChecks,
+    overflow: OverflowChecks,
+    through_loops: bool,
+) -> String {
     let published = crate::prove::with_published(own, &checked.facts.published);
     let proven = crate::bounds::proven(
         parsed,

@@ -353,6 +353,14 @@ pub enum Command {
     ///
     /// A binary install never needs to run it - the `.rs` ships beside the
     /// `.nika`. A from-source install may.
+    ///
+    /// With `--bounds`, a development aid (#1053): it writes nothing and reads
+    /// no cache, and prints `check --bounds`'s report for each file of the
+    /// toolchain's package (`tools/`), each checked with the package beside
+    /// it as `lower-std` checks it, at the `--optimization` levels given. A
+    /// file that check refuses is the line `refused: <path>`. The `runtime`
+    /// package and the `std` modules are left out.
+    /// `nikaia run scripts/proved.nika -- REPORT` sums a saved report.
     LowerStd {
         /// The sysroot. Defaults to `NIKAIA_SYSROOT`, or the checkout this
         /// compiler was built from.
@@ -555,6 +563,24 @@ fn lower_std(sysroot: Option<PathBuf>) -> Result<i32> {
     Ok(0)
 }
 
+/// `nikaia lower-std --bounds` (#1053): the tools package's `--bounds`
+/// report, each file seeing the package, at the `--optimization` levels
+/// given (each `off` where none is).
+fn lower_std_bounds(sysroot: Option<PathBuf>, optimization: &[String]) -> Result<i32> {
+    let sysroot = match sysroot {
+        Some(root) => Sysroot::new(root),
+        None => Sysroot::resolve(),
+    };
+    let words = optimization.join(",");
+    let (bounds, overflow) = project::optimizations(&words)?;
+    let through_loops = project::prove_through_loops(&words);
+    print!(
+        "{}",
+        sysroot::bounds_tools(&sysroot, bounds, overflow, through_loops)?
+    );
+    Ok(0)
+}
+
 /// `nikaia describe <crate>` ([ADR-290](../../../docs/specification/adr/adr-290.md) D2).
 ///
 /// **What it prints is what a reviewer does next**, which is the whole reason
@@ -727,6 +753,9 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             both_settings,
             bless,
         } => return test_command(args, project.clone(), *both_settings, *bless),
+        Command::LowerStd { sysroot } if args.bounds => {
+            return lower_std_bounds(sysroot.clone(), &args.optimization);
+        }
         Command::LowerStd { sysroot } => return lower_std(sysroot.clone()),
         Command::Describe {
             crate_name,

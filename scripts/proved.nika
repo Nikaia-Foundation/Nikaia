@@ -1,0 +1,102 @@
+// How much of the tools package the prover proves (#1053): sums a saved
+// `nikaia lower-std --bounds` report, where each file of the package was
+// checked with the others beside it, as `lower-std` checks it.
+//
+//     nikaia lower-std --bounds [--optimization NAME:LEVEL]... > REPORT
+//     nikaia run scripts/proved.nika -- REPORT
+//
+// It prints one line of totals, then the unproved sites by reason (count,
+// reason, most first), then the 15 files with the most unproved sites.
+// A site the walk has no reason for is counted under `(no reason)`.
+
+use std::cli
+use std::collections
+use std::fs
+use std::text
+
+// `n` of `total` in percent, one decimal, without a float: `54.3`.
+fn percent(n: i64, total: i64) -> String {
+    if total == 0 { return "-" }
+    let tenths = (n * 1000 + total / 2) / total
+    return f"{tenths / 10}.{tenths % 10}"
+}
+
+// `text` right-aligned in `width` columns.
+fn right(text: String, width: i64) -> String {
+    if text.len() >= width { return text }
+    return f"{" ".repeat(width - text.len())}{text}"
+}
+
+// The number before `word` in `text`: `1821` for `1821 indexes,` and `indexes,`.
+fn number_before(text: String, word: String) -> i64 {
+    let mut previous = ""
+    for each in text.split(" ") {
+        if each == word { return text::parse_i64(previous) ?? 0 }
+        previous = each
+    }
+    return 0
+}
+
+fn main() throws {
+    let mut args: Vec[String] = Vec()
+    for a in cli::args() { args.push(a) }
+    if args.len() != 2 {
+        eprintln("usage: nikaia run scripts/proved.nika -- REPORT (the output of `nikaia lower-std --bounds`)")
+        return
+    }
+    let report = fs::read_to_string(args[1], fs::Root::Anywhere)
+    let mut indexes = 0
+    let mut indexes_proved = 0
+    let mut operations = 0
+    let mut operations_proved = 0
+    let mut files = 0
+    let mut refused = 0
+    let mut reasons: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut unproved: Vec[(i64, String)] = Vec()
+    for line in report.lines() {
+        if line.starts_with("refused: ") {
+            files += 1
+            refused += 1
+            continue
+        }
+        if line.starts_with("bounds in ") {
+            files += 1
+            let (head, counts) = line.split_once(": ") ?? continue
+            let path = head["bounds in ".len()..].to_string()
+            let (index_part, operation_part) = counts.split_once("; ") ?? continue
+            let i = number_before(index_part, "indexes,")
+            let ip = number_before(index_part, "proved")
+            let o = number_before(operation_part, "operations,")
+            let op = number_before(operation_part, "proved")
+            indexes += i
+            indexes_proved += ip
+            operations += o
+            operations_proved += op
+            unproved.push((i - ip + o - op, path))
+            continue
+        }
+        let (_, how) = line.split_once("  checked") ?? continue
+        let reason = match how.strip_prefix(": ") {
+            null => "(no reason)",
+            why => why.trim(),
+        }
+        reasons.insert(reason, (reasons[reason] ?? 0) + 1)
+    }
+    println(f"proved: {indexes_proved}/{indexes} indexes ({percent(indexes_proved, indexes)} %), {operations_proved}/{operations} operations ({percent(operations_proved, operations)} %), {files} files, {refused} refused")
+    println("")
+    println("unproved sites by reason:")
+    let mut by_reason: Vec[(i64, String)] = Vec()
+    for (reason, count) in reasons { by_reason.push((count, reason)) }
+    by_reason.sort()
+    by_reason.reverse()
+    for (count, reason) in by_reason {
+        println(f"{right(f"{count}", 6)}  {reason}")
+    }
+    println("")
+    println("files with the most unproved sites:")
+    unproved.sort()
+    unproved.reverse()
+    for (count, path) in unproved.iter().take(15) {
+        println(f"{right(f"{count}", 6)}  {path}")
+    }
+}
