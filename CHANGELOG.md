@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1321] — 2026-10-31
+
+**check, emit: type arguments at a call reached by a path (ADR-grammar-2 D11)**
+- `path::f[T](…)` fills a function of another package or `std` the same way `f[T](…)` does, `warning[NK1233]` only where a value argument already says the type (ADR-330 D9, ADR-grammar-2 D11). A path callee with more than one type parameter is still read as an index: a read ledger signature keeps no unbounded type parameter.
+
 ## [0.0.1320] — 2026-10-31
 
 **spec: NK1233's example is one a value already says (ADR-grammar-2 D11, ADR-330 D9)**
