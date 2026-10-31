@@ -1,0 +1,106 @@
+// #1053 step 4 (ADR-361 D13): a `for` counts its turns, and a counter is
+// bounded by them. `ranged`'s `k += 1` is proved at both settings (`k == t`,
+// `t < n`); `every`, `some` and `same` need the length of the collection
+// walked, which the checker does not yet hand the walk, and stay checked
+// here. The soundness rows stay checked: a start the walk does not bound,
+// a `u8` that 2 a turn takes past 255, a reset, a counter grown in an inner
+// loop, a doubling, and a `u8` counted over a range of unknown length.
+fn every(xs: ref Vec[i64]) -> i64 sync {
+	let mut at = 0
+	for _x in xs {
+		at += 1
+	}
+	return at
+}
+
+fn some(xs: ref Vec[i64]) -> i64 sync {
+	let mut n = 0
+	for x in xs {
+		if x > 2 {
+			n += 1
+		}
+	}
+	return n
+}
+
+fn same(xs: ref Vec[i64]) -> i64 sync {
+	let mut at = 0
+	let mut s = 0
+	for _x in xs {
+		if xs[at] > 0 {
+			s = 1
+		}
+		at += 1
+	}
+	return s
+}
+
+fn ranged(n: i64) -> i64 sync {
+	let mut k = 0
+	for i in 0..<n {
+		if i > 2 {
+			continue
+		}
+		k += 1
+	}
+	return k
+}
+
+fn unbounded_start(xs: ref Vec[i64], start: i64) -> i64 sync {
+	let mut at = start
+	for _x in xs {
+		at += 1
+	}
+	return at
+}
+
+fn small(xs: ref Vec[i64]) -> u8 sync {
+	let mut n: u8 = 0
+	for _x in xs {
+		n += 2
+	}
+	return n
+}
+
+fn reset(xs: ref Vec[i64]) -> i64 sync {
+	let mut n = 0
+	for x in xs {
+		if x > 0 {
+			n = 0
+		}
+		n += 1
+	}
+	return n
+}
+
+fn inner(xs: ref Vec[i64]) -> i64 sync {
+	let mut n = 0
+	for _x in xs {
+		for _y in xs {
+			n += 1
+		}
+	}
+	return n
+}
+
+fn doubled(xs: ref Vec[i64]) -> i64 sync {
+	let mut n = 1
+	for _x in xs {
+		n = n * 2
+	}
+	return n
+}
+
+fn small_ranged(n: i64) -> u8 sync {
+	let mut s: u8 = 0
+	for _i in 0..<n {
+		s += 1
+	}
+	return s
+}
+
+fn main() {
+	let xs = [1, 5, -2]
+	println(f"{every(xs)} {some(xs)} {same(xs)} {ranged(5)}")
+	println(f"{unbounded_start(xs, 1)} {small(xs)} {reset(xs)} {inner(xs)} {doubled(xs)} {small_ranged(3)}")
+}

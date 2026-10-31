@@ -33,7 +33,7 @@ fn main() throws {
 		"fn k() -> i64 sync {\n\tlet mut i = 0\n\tlet mut s = 0\n\twhile i < 10 {\n\t\ts += 1\n\t\ti += 1\n\t}\n\treturn s\n}\n\nfn main() {\n\tprintln(f\"{k()}\")\n}\n",
 	)
 	fs::write(f"{tmp}/tests/counter.stdout", fs::Root::Anywhere, "10\n")
-	let off = "bounds in tests/counter.nika: 0 indexes, 0 proved; 1 operations, 0 proved\n     5  s += 1  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)\n"
+	let off = "bounds in tests/counter.nika: 0 indexes, 0 proved; 1 operations, 1 proved\n     5  s += 1  proved\n"
 	let on = "bounds in tests/counter.nika: 0 indexes, 0 proved; 1 operations, 1 proved\n     5  s += 1  proved\n"
 	fs::write(f"{tmp}/tests/counter.bounds", fs::Root::Anywhere, off)
 	fs::write(f"{tmp}/tests/counter.loops.bounds", fs::Root::Anywhere, on)

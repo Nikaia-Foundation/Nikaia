@@ -1,0 +1,10 @@
+bounds in tests/prove_while_counter_relative.nika: 1 indexes, 1 proved; 8 operations, 6 proved
+    11  xs[i]   proved
+    12  n += 1  proved
+    14  i += 1  proved
+    23  s += 2  proved
+    24  i += 1  proved
+    33  s += 2  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    34  i += 1  proved
+    43  n += 1  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    45  i += 1  proved
