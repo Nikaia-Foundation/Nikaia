@@ -104,6 +104,31 @@ enum Ctx {
 	BlockOut,
 }
 
+// What a node's tag says of its kind (D5): none, the non-specific `!`, a
+// core tag that fixes the kind (`!!str` or `!<tag:yaml.org,2002:str>`), or
+// any other, kept on the node and resolved as if it were not there.
+enum TagKind {
+	Untagged,
+	NonSpecific,
+	Null,
+	Bool,
+	Int,
+	Float,
+	Str,
+	Seq,
+	Map,
+	Other,
+}
+
+// A node's properties (YAML 1.2.2 6.9): the anchor's name and the tag as
+// written, and where they stand.
+struct Props {
+	start: u32,
+	end: u32,
+	anchor: String?,
+	tag: String?,
+}
+
 // What a plain scalar's text resolves to by the core schema (D5).
 enum Kind {
 	Null,
@@ -247,7 +272,8 @@ grammar Yaml {
 
 	// What follows `---`: a node on that line, on the lines below, or none.
 	rule DocAfter -> Node =
-		s:count(" " | "\t") if(s > 0) v:BlockScalar(-1) Blanks -> { v }
+		s:count(" " | "\t") if(s > 0) v:Propped(-1) -> { v }
+		| s:count(" " | "\t") if(s > 0) v:BlockScalar(-1) Blanks -> { v }
 		| s:count(" " | "\t") if(s > 0) v:Inline(-1) Eol Blanks -> { v }
 		| Eol Blanks v:Block(-1) -> { v }
 		| a:here Eol Blanks -> {
@@ -271,17 +297,19 @@ grammar Yaml {
 	// indentation of its first line, which exceeds `n` (`s-l+block-node`). A
 	// sequence that is a mapping's value may sit at the mapping's own
 	// indentation (`seq-spaces(n, block-out)`).
-	rule Block(n: i64; c: Ctx = Ctx::BlockIn) -> Node =
-		not(Marker) m:count(" ") if(m > n) v:Content(m, n) -> { v }
+	// `k` is the tag a property line above gave it.
+	rule Block(n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
+		not(Marker) m:count(" ") if(m > n) v:Content(m, n; k: k) -> { v }
 		| not(Marker) m:count(" ") if(c == Ctx::BlockOut && m == n) v:Seq(m) -> { v }
 
 	// A node whose first character is at column `m`, under a parent at `n`;
 	// it ends after its last line's break and the blank lines behind it.
-	rule Content(m: i64, n: i64) -> Node =
+	rule Content(m: i64, n: i64; k: TagKind = TagKind::Untagged) -> Node =
 		v:Seq(m) -> { v }
 		| v:Map(m) -> { v }
-		| v:BlockScalar(n) Blanks -> { v }
-		| v:Inline(n) Eol Blanks -> { v }
+		| v:Propped(n) -> { v }
+		| v:BlockScalar(n; k: k) Blanks -> { v }
+		| v:Inline(n; k: k) Eol Blanks -> { v }
 
 	rule Seq(m: i64) -> Node =
 		a:here first:SeqEntry(m) rest:SeqMore(m)* -> {
@@ -314,11 +342,82 @@ grammar Yaml {
 
 	// An implicit key: one line, a flow collection, a quoted or a plain scalar.
 	rule Key -> Node =
+		p:Props Sep1 v:KeyNode(tag_kind(p.tag)) if(fits_node(tag_kind(p.tag), v), "a node its tag fits") -> {
+			Node { start: p.start, end: v.end, anchor: p.anchor, tag: p.tag, value: v.value }
+		}
+		| v:KeyNode(TagKind::Untagged) -> { v }
+	rule KeyNode(k: TagKind) -> Node =
 		v:FlowSeq -> { v }
 		| v:FlowMap -> { v }
-		| v:Double -> { v }
-		| v:Single -> { v }
-		| v:Plain(-1, false, false) -> { v }
+		| v:Double(k) -> { v }
+		| v:Single(k) -> { v }
+		| v:Alias -> { v }
+		| v:Plain(-1, false, false; k: k) -> { v }
+
+	// A block node that begins with properties (YAML 1.2.2 6.9, 8.2.3): its
+	// content on the same line, a block scalar, a node on the lines below (a
+	// block collection, as a rule), or none, an empty node. A core tag that
+	// fixes a kind is checked here, against a collection, and where a scalar
+	// is read, against its text; an alias takes no properties.
+	rule Propped(n: i64; c: Ctx = Ctx::BlockIn) -> Node =
+		p:Props s:count(" " | "\t") if(s > 0) v:BlockScalar(n; k: tag_kind(p.tag)) Blanks -> {
+			Node { start: p.start, end: v.end, anchor: p.anchor, tag: p.tag, value: v.value }
+		}
+		| p:Props s:count(" " | "\t") if(s > 0) v:Inline(n; k: tag_kind(p.tag)) if(fits_node(tag_kind(p.tag), v), "a node its tag fits") Eol Blanks -> {
+			Node { start: p.start, end: v.end, anchor: p.anchor, tag: p.tag, value: v.value }
+		}
+		| p:Props Eol Blanks v:Block(n; c: c, k: tag_kind(p.tag)) if(fits_node(tag_kind(p.tag), v), "a node its tag fits") -> {
+			Node { start: p.start, end: v.end, anchor: p.anchor, tag: p.tag, value: v.value }
+		}
+		| p:Props if(empty_fits(tag_kind(p.tag)), "a node its tag fits") e:text(Nothing) Eol Blanks -> {
+			let v = match tag_kind(p.tag) {
+				TagKind::Str => Value::Str(Scalar {
+						raw: e,
+						value: e,
+						style: Style::Plain,
+						indent: 0,
+						chomp: Chomp::Clip,
+					})
+				TagKind::NonSpecific => Value::Str(Scalar {
+						raw: e,
+						value: e,
+						style: Style::Plain,
+						indent: 0,
+						chomp: Chomp::Clip,
+					})
+				else => Value::Null
+			}
+			Node { start: p.start, end: p.end, anchor: p.anchor, tag: p.tag, value: v }
+		}
+	rule Nothing = "" -> { }
+
+	// `c-ns-properties`: a tag and an anchor, in either order, or one alone.
+	rule Props -> Props =
+		a:here t:Tag Sep1 n:Anchor b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
+		| a:here n:Anchor Sep1 t:Tag b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
+		| a:here t:Tag b:here -> { Props { start: a, end: b, anchor: null, tag: t } }
+		| a:here n:Anchor b:here -> { Props { start: a, end: b, anchor: n, tag: null } }
+	rule Sep1 = (" " | "\t")+ -> { }
+	// `c-ns-anchor-property`: the name, after `&`.
+	rule Anchor -> String = "&" s:text(AnchorChar+) -> { s }
+	rule AnchorChar = x:any if(!is_space(x) && !is_flow_indicator(x)) -> { }
+	// `c-ns-alias-node`: `*` and an anchor's name, not resolved (D6).
+	rule Alias -> Node = a:here "*" s:text(AnchorChar+) b:here -> {
+		Node { start: a, end: b, anchor: null, tag: null, value: Value::Alias(s) }
+	}
+	// `c-ns-tag-property`, as written: verbatim `!<uri>`, a shorthand with a
+	// named or the secondary handle (`!e!x`, `!!str`), with the primary one
+	// (`!local`), or the non-specific `!`. Its shape is checked here, by the
+	// characters a URI may hold (`ns-uri-char`, `ns-tag-char`).
+	rule Tag -> String = s:text(TagForm) -> { s }
+	rule TagForm =
+		"!<" UriChar+ ">" -> { }
+		| "!" WordChar* "!" TagChar+ -> { }
+		| "!" TagChar+ -> { }
+		| "!" -> { }
+	rule WordChar = x:any if(is_word(x)) -> { }
+	rule UriChar = "%" Hex Hex -> { } | x:any if(is_uri(x)) -> { }
+	rule TagChar = "%" Hex Hex -> { } | x:any if(is_uri(x) && x != '!' && !is_flow_indicator(x)) -> { }
 
 	// What follows `-` or `key:` at indentation `m`: a node on this line, on
 	// the lines below, or none (`Null`, where the indicator ends). After `-`
@@ -326,6 +425,7 @@ grammar Yaml {
 	// column it began in.
 	rule After(m: i64; c: Ctx = Ctx::BlockIn) -> Node =
 		s:count(" ") if(s > 0 && c == Ctx::BlockIn) v:Compact(m + 1 + s) -> { v }
+		| s:count(" " | "\t") if(s > 0) v:Propped(m; c: c) -> { v }
 		| s:count(" " | "\t") if(s > 0) v:BlockScalar(m) Blanks -> { v }
 		| s:count(" " | "\t") if(s > 0) v:Inline(m) Eol Blanks -> { v }
 		| Eol Blanks v:Block(m; c: c) -> { v }
@@ -338,12 +438,13 @@ grammar Yaml {
 		| v:Map(m) -> { v }
 
 	// A node in flow style inside a block, under a parent at `n`.
-	rule Inline(n: i64) -> Node =
+	rule Inline(n: i64; k: TagKind = TagKind::Untagged) -> Node =
 		v:FlowSeq -> { v }
 		| v:FlowMap -> { v }
-		| v:Double -> { v }
-		| v:Single -> { v }
-		| v:Plain(n, false, true) -> { v }
+		| v:Double(k) -> { v }
+		| v:Single(k) -> { v }
+		| v:Alias -> { v }
+		| v:Plain(n, false, true; k: k) -> { v }
 
 	// Flow collections: spaces, comments and line breaks between their parts
 	// (`s-separate-lines`); a trailing comma.
@@ -366,8 +467,8 @@ grammar Yaml {
 			let b = p.value.end
 			Node { start: a, end: b, anchor: null, tag: null, value: Value::Map([p]) }
 		}
-		| v:FlowNode -> { v }
-	rule FlowPair -> Entry = k:FlowNode Fs ":" Fs v:FlowNode -> { Entry { key: k, value: v } }
+		| v:FlowAny -> { v }
+	rule FlowPair -> Entry = k:FlowAny Fs ":" Fs v:FlowAny -> { Entry { key: k, value: v } }
 
 	rule FlowMap -> Node =
 		a:here "{" Fs first:FlowEntry Fs rest:FlowEntryNext* ("," Fs)? "}" b:here -> {
@@ -382,13 +483,13 @@ grammar Yaml {
 	// `{a: b}`, `{a: }` and `{a}`: a missing value is `Null`.
 	rule FlowEntry -> Entry =
 		e:FlowPair -> { e }
-		| k:FlowNode Fs ":" b:here -> {
+		| k:FlowAny Fs ":" b:here -> {
 			Entry {
 				key: k,
 				value: Node { start: b, end: b, anchor: null, tag: null, value: Value::Null },
 			}
 		}
-		| k:FlowNode -> {
+		| k:FlowAny -> {
 			let b = k.end
 			Entry {
 				key: k,
@@ -396,12 +497,40 @@ grammar Yaml {
 			}
 		}
 
-	rule FlowNode -> Node =
+	// A flow node, with properties or without; properties alone are an empty
+	// node.
+	rule FlowAny -> Node =
+		p:Props Fs v:FlowNode(tag_kind(p.tag)) if(fits_node(tag_kind(p.tag), v), "a node its tag fits") -> {
+			Node { start: p.start, end: v.end, anchor: p.anchor, tag: p.tag, value: v.value }
+		}
+		| p:Props if(empty_fits(tag_kind(p.tag)), "a node its tag fits") e:text(Nothing) -> {
+			let v = match tag_kind(p.tag) {
+				TagKind::Str => Value::Str(Scalar {
+						raw: e,
+						value: e,
+						style: Style::Plain,
+						indent: 0,
+						chomp: Chomp::Clip,
+					})
+				TagKind::NonSpecific => Value::Str(Scalar {
+						raw: e,
+						value: e,
+						style: Style::Plain,
+						indent: 0,
+						chomp: Chomp::Clip,
+					})
+				else => Value::Null
+			}
+			Node { start: p.start, end: p.end, anchor: p.anchor, tag: p.tag, value: v }
+		}
+		| v:FlowNode(TagKind::Untagged) -> { v }
+	rule FlowNode(k: TagKind) -> Node =
 		v:FlowSeq -> { v }
 		| v:FlowMap -> { v }
-		| v:Double -> { v }
-		| v:Single -> { v }
-		| v:Plain(-1, true, true) -> { v }
+		| v:Double(k) -> { v }
+		| v:Single(k) -> { v }
+		| v:Alias -> { v }
+		| v:Plain(-1, true, true; k: k) -> { v }
 
 	// `c-double-quoted`: `raw` is the text between the quotes, as written. A
 	// scalar with neither an escape nor a line break is its own value, a view;
@@ -410,40 +539,46 @@ grammar Yaml {
 	// a guard per digit, its range by a guard on its value, so that an invalid
 	// escape is a parse error with its line and column, and `scalar::from` is
 	// proved by the guard before it.
-	rule Double -> Node =
-		a:here "\"" s:text(DoublePlain*) "\"" b:here -> {
-			Node {
-				start: a,
-				end: b,
-				anchor: null,
-				tag: null,
-				value: Value::Str(Scalar {
+	// `k` is the node's tag: a core tag that fixes a kind other than a string
+	// reads the text between the quotes as that kind, its shape checked here.
+	rule Double(k: TagKind) -> Node =
+		a:here "\"" s:text(DoublePlain*) "\"" b:here if(fits(k, s), "a scalar its tag fits") -> {
+			let v = match resolve(k, s, false) {
+				Kind::Null => Value::Null
+				Kind::True => Value::Bool(true)
+				Kind::False => Value::Bool(false)
+				Kind::Int => Value::Int(s)
+				Kind::Float => Value::Float(s)
+				Kind::Str => Value::Str(Scalar {
 					raw: s,
 					value: s,
 					style: Style::Double,
 					indent: 0,
 					chomp: Chomp::Clip,
-				}),
+				})
 			}
+			Node { start: a, end: b, anchor: null, tag: null, value: v }
 		}
-		| a:here "\"" s:text(parts:DoublePart*) "\"" b:here -> {
-			let mut v = String()
+		| a:here "\"" s:text(parts:DoublePart*) "\"" b:here if(fits(k, s), "a scalar its tag fits") -> {
+			let mut d = String()
 			for p in parts {
-				v.push_str(p)
+				d.push_str(p)
 			}
-			Node {
-				start: a,
-				end: b,
-				anchor: null,
-				tag: null,
-				value: Value::Str(Scalar {
+			let v = match resolve(k, s, false) {
+				Kind::Null => Value::Null
+				Kind::True => Value::Bool(true)
+				Kind::False => Value::Bool(false)
+				Kind::Int => Value::Int(s)
+				Kind::Float => Value::Float(s)
+				Kind::Str => Value::Str(Scalar {
 					raw: s,
-					value: v,
+					value: d,
 					style: Style::Double,
 					indent: 0,
 					chomp: Chomp::Clip,
-				}),
+				})
 			}
+			Node { start: a, end: b, anchor: null, tag: null, value: v }
 		}
 	rule DoublePlain = x:any if(x != '"' && x != '\\' && x != '\n') -> { }
 	// One part of a double-quoted scalar's value (YAML 1.2.2 7.3.1): a run of
@@ -480,8 +615,10 @@ grammar Yaml {
 	// content lines as written, the empty lines behind them included; `text()`
 	// takes off the indentation, folds and chomps (no escapes, nothing to check
 	// twice). The header is checked here: a wrong indicator is a parse error.
-	rule BlockScalar(n: i64) -> Node =
-		a:here st:BlockStyle h:Head e:here HeadEnd r:here s:text(k:BlockBody(n, h.indent)) -> {
+	// A core tag other than `!!str` does not fit one: its value is a copy, and
+	// an `Int` or a `Float` keeps a view.
+	rule BlockScalar(n: i64; k: TagKind = TagKind::Untagged) -> Node =
+		a:here st:BlockStyle if(block_fits(k), "a scalar its tag fits") h:Head e:here HeadEnd r:here s:text(i:BlockBody(n, h.indent)) -> {
 			Node {
 				start: a,
 				end: block_end(e, r, s),
@@ -491,7 +628,7 @@ grammar Yaml {
 					raw: s,
 					value: s,
 					style: st,
-					indent: k,
+					indent: i,
 					chomp: h.chomp,
 				}),
 			}
@@ -524,28 +661,33 @@ grammar Yaml {
 		| " "* "\n" -> { }
 
 	// `c-single-quoted`: `''` is a quote.
-	rule Single -> Node = a:here "'" s:text(SingleChar*) "'" b:here -> {
-		Node {
-			start: a,
-			end: b,
-			anchor: null,
-			tag: null,
-			value: Value::Str(Scalar {
-				raw: s,
-				value: s,
-				style: Style::Single,
-				indent: 0,
-				chomp: Chomp::Clip,
-			}),
+	rule Single(k: TagKind) -> Node =
+		a:here "'" s:text(SingleChar*) "'" b:here if(fits(k, s), "a scalar its tag fits") -> {
+			let v = match resolve(k, s, false) {
+				Kind::Null => Value::Null
+				Kind::True => Value::Bool(true)
+				Kind::False => Value::Bool(false)
+				Kind::Int => Value::Int(s)
+				Kind::Float => Value::Float(s)
+				Kind::Str => Value::Str(Scalar {
+					raw: s,
+					value: s,
+					style: Style::Single,
+					indent: 0,
+					chomp: Chomp::Clip,
+				})
+			}
+			Node { start: a, end: b, anchor: null, tag: null, value: v }
 		}
-	}
 	rule SingleChar = "''" -> { } | x:any if(x != '\'') -> { }
 
 	// A plain scalar, resolved by the core schema. In flow the flow
 	// indicators end it; `multi` lets it go on over lines indented past `n`.
-	rule Plain(n: i64, flow: bool, multi: bool) -> Node =
-		a:here s:text(PlainFirst(flow) PlainMore(n, flow, multi)*) b:here -> {
-			let v = match plain_kind(s) {
+	// `k` is the node's tag: a core tag fixes the kind, its shape checked
+	// here; no tag, or another, resolves by the core schema.
+	rule Plain(n: i64, flow: bool, multi: bool; k: TagKind = TagKind::Untagged) -> Node =
+		a:here s:text(PlainFirst(flow) PlainMore(n, flow, multi)*) b:here if(fits(k, s), "a scalar its tag fits") -> {
+			let v = match resolve(k, s, true) {
 				Kind::Null => Value::Null
 				Kind::True => Value::Bool(true)
 				Kind::False => Value::Bool(false)
@@ -577,15 +719,138 @@ grammar Yaml {
 	rule Empty = (" " | "\t")* "\n" -> { }
 }
 
+fn is_word(x: scalar) -> bool sync {
+	return (x >= '0' && x <= '9') || (x >= 'a' && x <= 'z') || (x >= 'A' && x <= 'Z') || x == '-'
+}
+
+// `ns-uri-char` other than `%`, which comes with two hexadecimal digits.
+fn is_uri(x: scalar) -> bool sync {
+	return is_word(x) || "#;/?:@&=+$,_.!~*'()[]".contains(x)
+}
+
+// What a tag, as written, says of a node's kind (D5).
+fn tag_kind(t: String?) -> TagKind sync {
+	let s = match t {
+		null => return TagKind::Untagged
+		x => x
+	}
+	if s == "!" {
+		return TagKind::NonSpecific
+	}
+	if is_core(s, "null") {
+		return TagKind::Null
+	}
+	if is_core(s, "bool") {
+		return TagKind::Bool
+	}
+	if is_core(s, "int") {
+		return TagKind::Int
+	}
+	if is_core(s, "float") {
+		return TagKind::Float
+	}
+	if is_core(s, "str") {
+		return TagKind::Str
+	}
+	if is_core(s, "seq") {
+		return TagKind::Seq
+	}
+	if is_core(s, "map") {
+		return TagKind::Map
+	}
+	return TagKind::Other
+}
+
+// `!!name` or `!<tag:yaml.org,2002:name>`.
+fn is_core(s: String, name: String) -> bool sync {
+	return s == f"!!{name}" || s == f"!<tag:yaml.org,2002:{name}>"
+}
+
+// Whether a scalar's text has the shape its tag's kind needs (D5): checked
+// once, here, so that `as_i64` checks no digit again.
+fn fits(k: TagKind, s: String) -> bool sync {
+	return match k {
+		TagKind::Null => s == "" || is_null(s)
+		TagKind::Bool => is_true(s) || is_false(s)
+		TagKind::Int => is_int(s)
+		TagKind::Float => is_float(s)
+		TagKind::Seq => false
+		TagKind::Map => false
+		else => true
+	}
+}
+
+fn block_fits(k: TagKind) -> bool sync {
+	return match k {
+		TagKind::Null => false
+		TagKind::Bool => false
+		TagKind::Int => false
+		TagKind::Float => false
+		TagKind::Seq => false
+		TagKind::Map => false
+		else => true
+	}
+}
+
+// An empty node is null, or with `!!str` or `!` an empty string.
+fn empty_fits(k: TagKind) -> bool sync {
+	return match k {
+		TagKind::Bool => false
+		TagKind::Int => false
+		TagKind::Float => false
+		TagKind::Seq => false
+		TagKind::Map => false
+		else => true
+	}
+}
+
+// Whether a node fits its tag where the scalars' texts are checked already:
+// a collection against `!!seq` and `!!map`; an alias takes no properties.
+fn fits_node(k: TagKind, v: ref Node) -> bool sync {
+	return match v.value {
+		Value::Seq(items) => k == TagKind::Untagged || k == TagKind::Other || k == TagKind::NonSpecific || k == TagKind::Seq
+		Value::Map(entries) => k == TagKind::Untagged || k == TagKind::Other || k == TagKind::NonSpecific || k == TagKind::Map
+		Value::Alias(name) => false
+		else => true
+	}
+}
+
+// What a scalar's text is, by its tag `k` (D5): a core tag fixes the kind;
+// with none, or another, a plain scalar resolves by the core schema and a
+// quoted one is a string.
+fn resolve(k: TagKind, s: String, plain: bool) -> Kind sync {
+	return match k {
+		TagKind::Null => Kind::Null
+		TagKind::Bool => if is_true(s) { Kind::True } else { Kind::False }
+		TagKind::Int => Kind::Int
+		TagKind::Float => Kind::Float
+		TagKind::Untagged => if plain { plain_kind(s) } else { Kind::Str }
+		TagKind::Other => if plain { plain_kind(s) } else { Kind::Str }
+		else => Kind::Str
+	}
+}
+
+fn is_null(s: String) -> bool sync {
+	return s == "~" || s == "null" || s == "Null" || s == "NULL"
+}
+
+fn is_true(s: String) -> bool sync {
+	return s == "true" || s == "True" || s == "TRUE"
+}
+
+fn is_false(s: String) -> bool sync {
+	return s == "false" || s == "False" || s == "FALSE"
+}
+
 // The core schema's resolution of a plain scalar's text (D5).
 fn plain_kind(s: String) -> Kind sync {
-	if s == "~" || s == "null" || s == "Null" || s == "NULL" {
+	if is_null(s) {
 		return Kind::Null
 	}
-	if s == "true" || s == "True" || s == "TRUE" {
+	if is_true(s) {
 		return Kind::True
 	}
-	if s == "false" || s == "False" || s == "FALSE" {
+	if is_false(s) {
 		return Kind::False
 	}
 	if is_int(s) {
