@@ -1,0 +1,6 @@
+inherited out
+ok=true stdout=[]
+stdout=kept stderr=[]
+echoed=fed in
+early ok=true
+stdout=out stderr=err

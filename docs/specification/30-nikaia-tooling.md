@@ -1548,6 +1548,17 @@ Some modules are available, or behave restrictively, depending on the target and
   group of its own, which `SIGKILL` ends as a whole; a program that leaves the
   group is not reached, and a terminal's interrupt does not reach the group.
   On Windows the program itself is killed.
+  **Its streams** (ADR-243 D10): three options after `within`, in this
+  order. `stdin: process::Input = process::Input::Closed` is what the program
+  reads: `Closed`, an input at its end at once; `Inherited`, the caller's own
+  standard input; or `Text(s)`, which `run` writes while it reads the output,
+  so a program that writes before it reads does not block, and then closes; a
+  program that ends before it has read all of `s` is no failure.
+  `stdout: process::Stream = process::Stream::Captured` and `stderr:
+  process::Stream = process::Stream::Captured` each say where that stream
+  goes: `Captured` into `Output` as text, or `Inherited`, the caller's own
+  stream, which the program writes as it runs; an inherited stream is `""` in
+  `Output`. `within` bounds a run with inherited streams too.
   `process::exit(code)` throws `process::Exit(code)`, a fatal error
   (Part I 7.1), with `code` an `i64` from `0` to `255`; it never returns a
   value, and a function that calls it says `throws`

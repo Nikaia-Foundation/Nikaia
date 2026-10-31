@@ -1,0 +1,16 @@
+// #920, ADR-243 D10: `process::run(...; stdin:, stdout:, stderr:)` inherits a
+// stream or feeds a text to the child's standard input; the defaults are unchanged.
+use std::process
+
+fn main() throws {
+	let shown = process::run("sh", ["-c", "echo inherited out"]; stdout: process::Stream::Inherited)
+	println(f"ok={shown.ok} stdout=[{shown.stdout}]")
+	let split = process::run("sh", ["-c", "echo kept; echo shown >&2"]; stderr: process::Stream::Inherited)
+	println(f"stdout={split.stdout.trim()} stderr=[{split.stderr}]")
+	let fed = process::run("sh", ["-c", "cat"]; stdin: process::Input::Text("fed in\n"))
+	println(f"echoed={fed.stdout.trim()}")
+	let early = process::run("sh", ["-c", "exit 0"]; stdin: process::Input::Text("ignored\n"))
+	println(f"early ok={early.ok}")
+	let plain = process::run("sh", ["-c", "echo out; echo err >&2; cat"])
+	println(f"stdout={plain.stdout.trim()} stderr={plain.stderr.trim()}")
+}

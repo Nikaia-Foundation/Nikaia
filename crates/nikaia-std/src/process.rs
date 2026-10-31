@@ -27,7 +27,7 @@
 // that fills a pipe blocked for ever.
 
 use std::ffi::{OsStr, OsString};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -63,6 +63,41 @@ pub struct Output {
     pub timed_out: bool,
 }
 
+/// **Where one of the child's output streams goes** (ADR-243 D10): into
+/// `Output` as text, or to the caller's own stream as the child writes it,
+/// in which case `Output` holds `""` for it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum Stream {
+    /// Read through a pipe to its end and handed back in `Output`.
+    #[default]
+    Captured,
+    /// The caller's own stream, shared with the child.
+    Inherited,
+}
+
+/// **What the child reads on its standard input** (ADR-243 D10): nothing, the
+/// caller's own standard input, or the given text, written while the output
+/// is read and then closed.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+pub enum Input {
+    /// An input that is at its end at once.
+    #[default]
+    Closed,
+    /// The caller's own standard input, shared with the child.
+    Inherited,
+    /// This text, written on a thread of its own, then closed.
+    Text(String),
+}
+
+impl Stream {
+    fn stdio(self) -> Stdio {
+        match self {
+            Stream::Captured => Stdio::piped(),
+            Stream::Inherited => Stdio::inherit(),
+        }
+    }
+}
+
 /// What the thread beside the task hands back: the two streams' bytes, and
 /// how the program ended with what it used.
 struct Ran {
@@ -73,15 +108,25 @@ struct Ran {
     timed_out: bool,
 }
 
+/// The streams a run was asked for (ADR-243 D10).
+struct Streams {
+    stdin: Input,
+    stdout: Stream,
+    stderr: Stream,
+}
+
 /// Start the program, read both pipes to their end - standard error on a
 /// thread of its own, so that neither pipe fills while the other is read -
-/// and only then wait for it.
+/// and only then wait for it. An input text is written on a third thread, so
+/// a child that writes before it reads does not block on a full pipe; a child
+/// that ends before it has read it all is no failure.
 fn started(
     program: &Path,
     args: &[String],
     dir: &str,
     environment: Option<Vec<(OsString, OsString)>>,
     within: Option<Duration>,
+    streams: Streams,
 ) -> std::io::Result<Ran> {
     let started = Instant::now();
     let mut command = Command::new(program);
@@ -96,10 +141,25 @@ fn started(
     let mut child = command
         .args(args)
         .current_dir(dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdin(match &streams.stdin {
+            Input::Closed => Stdio::null(),
+            Input::Inherited => Stdio::inherit(),
+            Input::Text(_) => Stdio::piped(),
+        })
+        .stdout(streams.stdout.stdio())
+        .stderr(streams.stderr.stdio())
         .spawn()?;
+    let writer = match (streams.stdin, child.stdin.take()) {
+        (Input::Text(text), Some(mut pipe)) => {
+            Some(std::thread::spawn(move || -> std::io::Result<()> {
+                match pipe.write_all(text.as_bytes()) {
+                    Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+                    written => written,
+                }
+            }))
+        }
+        _ => None,
+    };
     let expired = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let watchdog = within.map(|limit| {
         let (done, wake) = std::sync::mpsc::channel::<()>();
@@ -129,6 +189,11 @@ fn started(
     let stderr = beside
         .join()
         .unwrap_or_else(|_| Err(std::io::Error::other("reading standard error panicked")));
+    let written = writer.map_or(Ok(()), |thread| {
+        thread
+            .join()
+            .unwrap_or_else(|_| Err(std::io::Error::other("writing standard input panicked")))
+    });
     let waited = child_usage::wait(child)?;
     let elapsed = started.elapsed();
     if let Some((done, thread)) = watchdog {
@@ -136,6 +201,7 @@ fn started(
         let _ = thread.join();
     }
     read?;
+    written?;
     Ok(Ran {
         stdout,
         stderr: stderr?,
@@ -156,6 +222,10 @@ fn started(
 /// `IoError::NotFound(program)` where nothing is there,
 /// `IoError::PermissionDenied(program)` where it may not be run, and
 /// `IoError::NotText` where either stream is not UTF-8.
+///
+/// `stdin` is what the child reads, `stdout` and `stderr` where its output
+/// goes (D10); the defaults close its input and capture both streams.
+#[allow(clippy::too_many_arguments)]
 pub async fn run(
     program: &str,
     args: Vec<String>,
@@ -164,6 +234,9 @@ pub async fn run(
     env_remove: Vec<String>,
     env_clear: bool,
     within: Option<Duration>,
+    stdin: Input,
+    stdout: Stream,
+    stderr: Stream,
 ) -> Result<Output, IoError> {
     let invalid = invalid_entries(&env, &env_remove);
     if !invalid.is_empty() {
@@ -191,9 +264,15 @@ pub async fn run(
         )
     });
     let dir = dir.to_string();
-    let finished = crate::rt::io::beside(move || started(&found, &args, &dir, environment, within))
-        .await
-        .map_err(|e| IoError::of(e, &named))?;
+    let streams = Streams {
+        stdin,
+        stdout,
+        stderr,
+    };
+    let finished =
+        crate::rt::io::beside(move || started(&found, &args, &dir, environment, within, streams))
+            .await
+            .map_err(|e| IoError::of(e, &named))?;
     let stdout = String::from_utf8(finished.stdout)
         .map_err(|_| IoError::NotText(format!("{named}'s standard output")))?;
     let stderr = String::from_utf8(finished.stderr)

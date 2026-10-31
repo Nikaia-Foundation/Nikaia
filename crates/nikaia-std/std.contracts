@@ -5123,6 +5123,23 @@ pub = true
 # what somebody else sent it, and a map keyed on its output is hashed with the
 # keyed function (ADR-010 D2).
 
+# Where one of a program's output streams goes (ADR-243 D10): into `Output`
+# as text, or to the caller's own stream as it is written.
+[type."process::Stream"]
+pub = true
+crosses = true
+compares = true
+copies = true
+variants = ["Captured", "Inherited"]
+
+# What a program reads on its standard input (ADR-243 D10): nothing, the
+# caller's own standard input, or this text, then the end.
+[type."process::Input"]
+pub = true
+crosses = true
+compares = true
+variants = ["Closed", "Inherited", "Text(String)"]
+
 # What a program that ran to its end left behind.
 #
 # `code` is its exit code, or `-1` where it was ended by a signal and has none;
@@ -5164,13 +5181,20 @@ fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: St
 # first, and the call throws `io::IoError::Other` naming each invalid one
 # (D7). One written as a literal is refused while building (`NK1286`).
 #
+# **Its streams** (ADR-243 D10, #920): `stdin` is what it reads - nothing
+# (`Closed`), the caller's own standard input (`Inherited`), or a `Text`,
+# written while its output is read and then closed; a program that ends before
+# reading all of it is no failure. `stdout` and `stderr` are each `Captured`
+# into `Output`, or `Inherited`: the caller's own stream, written as the
+# program writes, and `""` in `Output`.
+#
 # The wait gives the thread up, so other tasks run while the program does.
 [fn."process::run"]
 pub = true
 throws = ["io::IoError"]
 provenance = "untrusted"
 keeps = ["args"]
-signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null) -> process::Output"
+signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured) -> process::Output"
 
 # Throw `process::Exit::Code(code)`, with `code` from 0 to 255: a fatal error
 # (ADR-345), which a `catch` takes only in an arm naming it. At the end of
