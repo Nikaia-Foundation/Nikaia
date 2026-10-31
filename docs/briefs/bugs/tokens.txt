@@ -12,3 +12,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b8-1044-last-view-handed-back.md 612615 13
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 1262133 27
 /home/user/Nikaia/docs/briefs/qa-task.md 366704 19
+/home/user/Nikaia/docs/briefs/bugs/b9-1055-field-of-a-coalesce.md 129642 3
