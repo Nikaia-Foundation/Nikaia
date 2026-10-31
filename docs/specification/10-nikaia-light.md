@@ -2798,6 +2798,14 @@ fn pick(given: ref Vec[Expr], tail: ref Expr, c: bool) -> i64 {
 }
 ```
 
+**`ref` stands in front of a tuple as in front of a name**: `ref (String,
+Entry, i64)` is a view of the whole tuple, `ref (String, Entry)?` a view that
+may be missing, in every place a `ref T` stands (a parameter, a `let`, a field,
+a result, a type argument), and its parts are read through the view as a
+field is (`t.0`). A tuple whose parts all copy is copied as a whole, so `ref`
+on it is refused as on a number, below. This is not `(ref String, Entry)`,
+which is a tuple holding one view.
+
 A value that is a word by its kind - a number, a `bool`, a `scalar`, an enum
 whose variants hold nothing - is copied at a read, so there is no view of it to
 declare: `ref` on such a type is refused with `NK1257` on a `let`, a parameter,

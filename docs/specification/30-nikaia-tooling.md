@@ -1297,7 +1297,10 @@ stands wherever a `Path` is asked, as a view without a copy, so a literal or a `
 A `Path` is made from text, by the operating system (`walk`, `read_dir`, a program's arguments,
 the environment) or by the operations on one: `==` against a path or text, `starts_with`,
 `ends_with`, `file_name`, `extension`, `with_extension`, `parent`, `join` and `strip_prefix`,
-each handing back a `Path`. `p.strip_prefix(base)` is the rest of `p` after the whole parts of
+each handing back a `Path`. Paths have an order, so a `Path` is a key of an ordered map or set
+(`BTreeSet[fs::Path]`, `BTreeMap[(fs::Path?, i64), T]`) and of a hash map: whole parts are
+compared one after the other, each by its bytes, which is the order `==` agrees with
+([ADR-319](adr/adr-319.md) D9). `p.strip_prefix(base)` is the rest of `p` after the whole parts of
 `base`, or `null` where they do not lead it; it reads no file system. `fs::canonical(path, root)`
 is the absolute name with every link, `.` and `..` resolved; it throws `NotFound` for a name that
 does not exist and, under `Dir(store)`, `Outside` where the resolved name leaves the store. There is no constructor from arbitrary bytes, so no call fails for a name's encoding. An
