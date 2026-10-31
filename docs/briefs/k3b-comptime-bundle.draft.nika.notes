@@ -1,0 +1,2 @@
+// rs2nika: `run` may be in Nikaia already: tools/interpreter.nika `fn run` (the same name)
+// rs2nika: called but not in Nikaia yet (move them first, or name the equivalent in rs2nika.names): did_not, digest, pub, runtime_dependencies_for, target_libdir, toolchain, unique_beside
