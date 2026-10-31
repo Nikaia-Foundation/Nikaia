@@ -508,6 +508,10 @@ pub struct CheckWorld {
     /// The parameters each callee keeps now and did not, or keeps no longer
     /// (ADR-297 D12): the parameter, whether it keeps it now, its type.
     pub newly_keeps: collections::BTreeMap[String, Vec[(String, bool, String)]],
+    /// **The impls that keep each parameter of a trait method of this
+    /// package** (ADR-277 D17), by the trait method, then the parameter: what
+    /// a lending caller's `NK2101` names.
+    pub keepers: collections::BTreeMap[String, collections::BTreeMap[String, Vec[String]]],
 }
 
 /// **What the checker keeps while it walks a program**: the findings, the
@@ -806,6 +810,10 @@ pub struct CheckState {
     /// took it in words. The statement's end and not its start, because the
     /// reads inside the body are the move itself.
     pub moved_into_a_task: Vec[(String, Ty, i64, String)],
+    /// **The impls keeping each parameter of the trait method being called**
+    /// (ADR-277 D17), from `CheckWorld.keepers`, set for the arguments of one
+    /// call and empty otherwise.
+    pub call_keepers: collections::BTreeMap[String, Vec[String]],
     /// **A name whose sequence was walked** (`NK2702`, ADR-105 D2), the shape of
     /// `handed` and for its reason.
     pub walked: Vec[CheckTaken],

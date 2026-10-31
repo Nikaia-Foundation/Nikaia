@@ -23,6 +23,27 @@ pub fn check_core_args_runs(callee: ref FnContract?, at: i64) -> bool {
     return true
 }
 
+/// **Who keeps the argument at `at`** in words, for `NK2101`: the impls of
+/// the trait method being called that keep its parameter (ADR-277 D17), or a
+/// function kept for later where none is known.
+fn check_core_args_keepers(state: ref CheckState, callee: ref FnContract?, at: i64) -> String {
+    let general = "a function kept for later"
+    let contract = callee ?? return general
+    let signature = contract.signature ?? return general
+    let mut i = 0
+    for (name, _) in call_arguments(signature) {
+        if i == at {
+            let impls = state.call_keepers.get(name) ?? return general
+            if impls.len() == 0 {
+                return general
+            }
+            return f"{impls.join(", ")}, which keeps `{name}` for the trait method's column (ADR-277 D17),"
+        }
+        i += 1
+    }
+    return general
+}
+
 /// Whether the callee is known and keeps nothing of the argument at `at`
 /// (ADR-094 D2): it only reads it.
 fn check_core_args_reads(callee: ref FnContract?, at: i64) -> bool {
@@ -95,7 +116,8 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                     if !runs {
                         state.facts.kept_lambdas.insert(id, (pauses, fails))
                         state.a_kept_lambdas_hulls(world, arg)
-                        state.a_kept_lambda_takes_these(world, arg, pauses, span)
+                        let who = check_core_args_keepers(state, callee, at)
+                        state.a_kept_lambda_takes_these(world, arg, pauses, who, span)
                     }
                     state.a_lambdas_text_is_its_own(world, want, arg)
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, CheckPromises { may_pause: pauses, may_fail: fails }, span)

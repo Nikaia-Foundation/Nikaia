@@ -1,0 +1,30 @@
+// #1012, ADR-277 D17: an impl of another package's trait may keep at most the
+// trait method's column. `traitlib::H::ask` has no keeping impl in its own
+// package, so it runs `known`; an impl under the package's `tests/` (a client)
+// that stores the callback is refused with NK1264, on the statement that
+// keeps it.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"traitlib\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "pub trait H {\n    fn ask(ref mut self, known: fn(i64) -> i64 sync) -> i64 sync\n}\n")
+    fs::write(f"{tmp}/tests/keeps.nika", fs::Root::Anywhere, "use traitlib\nstruct Keep { held: Vec[fn(i64) -> i64 sync] }\nimpl traitlib::H for Keep {\n    fn ask(ref mut self, known: fn(i64) -> i64 sync) -> i64 sync {\n        let n = self.held.len()\n        self.held.push(known)\n        return n\n    }\n}\nfn main() {\n    let mut k = Keep { held: [] }\n    println(k.ask(fn(x) { x + 1 }))\n}\n")
+    fs::write(f"{tmp}/tests/keeps.stdout", fs::Root::Anywhere, "0\n")
+    let out = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone())
+    for line in f"{out.stdout}\n{out.stderr}".lines() {
+        if line.contains("NK1264") || line.contains("-->") || line.contains("push(known)") || line.contains("= note") || line.contains("= help") {
+            println(line.replace(tmp, "TMP"))
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

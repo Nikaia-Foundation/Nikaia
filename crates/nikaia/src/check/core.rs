@@ -102,6 +102,7 @@ pub(super) fn hollow() -> Box<CheckState> {
         inside_an_action: None,
         inside_a_sync_function: None,
         moved_into_a_task: Vec::new(),
+        call_keepers: BTreeMap::new(),
         walked: Vec::new(),
         branch: Vec::new(),
         reads_on_paths: Vec::new(),

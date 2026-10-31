@@ -132,6 +132,9 @@ pub struct Newly {
     pub throws: BTreeMap<String, Vec<String>>,
     /// The parameters each callee keeps now and did not, or keeps no longer.
     pub keeps: BTreeMap<String, Vec<Kept>>,
+    /// The impls that keep each parameter of a trait method of the package
+    /// (ADR-277 D17): what a lending caller's refusal names.
+    pub keepers: BTreeMap<String, BTreeMap<String, Vec<String>>>,
 }
 
 /// **A parameter whose `keeps` moved** (ADR-297 D12).
@@ -159,6 +162,7 @@ impl FromIterator<(String, Vec<String>)> for Newly {
         Newly {
             throws: items.into_iter().collect(),
             keeps: BTreeMap::new(),
+            keepers: Default::default(),
         }
     }
 }
@@ -362,6 +366,7 @@ fn walked<'a>(
         here_at,
         fields_by_base: check_items::fields_by_base(own, library),
         newly_throws: newly.throws.clone(),
+        keepers: newly.keepers.clone(),
         newly_keeps: newly
             .keeps
             .iter()

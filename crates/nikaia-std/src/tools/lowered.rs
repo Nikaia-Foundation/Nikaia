@@ -2611,7 +2611,7 @@ pub mod ledger_text {
 }
 pub mod lends {
     #[allow(unused_imports)]
-    pub use super::{lends_in, lends_in_own, a_ledger_copies, moves, Passed, Uses, kept_by, option_at, lends_option, lowered_options};
+    pub use super::{lends_in, lends_in_own, a_ledger_copies, moves, Passed, Uses, kept_by, keeps_its, option_at, lends_option, lowered_options};
 }
 pub mod libraries {
     #[allow(unused_imports)]

@@ -113,7 +113,7 @@ pub(crate) fn add_kept(kept: &mut collections::BTreeMap<String, collections::BTr
     kept.insert(name.to_string(), parameters);
 }
 
-pub(crate) fn keeps_its(callee: &str, at: i64, settling: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, library: &Ledger) -> bool {
+pub fn keeps_its(callee: &str, at: i64, settling: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, library: &Ledger) -> bool {
     if settling.contains_key(callee) {
         let contract = match *nikaia_std::index::get(&own.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return true };
         let parameter = match parameter_at(contract, at) { Some(__nikaia_value) => __nikaia_value, None => return true };

@@ -80,15 +80,16 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_kept_lambda_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, pauses: bool, span: &Span) {
+    pub fn a_kept_lambda_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, pauses: bool, who: &str, span: &Span) {
         match value {
-            Expr::Closure { params, body, .. } => { self.takes_of_a_lambda(world, value, params, body, pauses, span); },
+            Expr::Closure { params, body, .. } => { self.takes_of_a_lambda(world, value, params, body, pauses, who, span); },
             _ => { },
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn takes_of_a_lambda(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, params: &[winnow_grammar::Symbol], body: &Block, pauses: bool, span: &Span) {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn takes_of_a_lambda(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, params: &[winnow_grammar::Symbol], body: &Block, pauses: bool, who: &str, span: &Span) {
         let named = lambda_names(world, body);
         let own = lambda_own(world, params);
         let mut owned: Vec<String> = vec![];
@@ -100,7 +101,7 @@ impl CheckState {
                 let ty = if a_lent_parameter(&local) { local.ty.owned() } else { local.ty.clone() };
                 if is_a_handle(&ty) || !self.takes_away(world, &ty) { continue; }
                 owned.push(name.to_string());
-                self.moved_into_a_task.push((name.to_string(), ty, span.end as i64, String::from("a function kept for later")));
+                self.moved_into_a_task.push((name.to_string(), ty, span.end as i64, who.to_string()));
             }
         }
         if pauses && !owned.is_empty() { self.facts.kept_owned.insert(id_of(value) as i64, owned); }

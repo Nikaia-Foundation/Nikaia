@@ -176,7 +176,11 @@ pub fn infer(
             );
         }
     }
-    Noted { by_code, why }
+    Noted {
+        by_code,
+        why,
+        column: Default::default(),
+    }
 }
 
 /// What [`infer`] learns besides the ledger's own column, for the build to say
@@ -188,6 +192,10 @@ pub struct Noted {
     pub by_code: BTreeMap<String, Vec<String>>,
     /// Why each function that can pause does (D5).
     pub why: BTreeMap<String, Pause>,
+    /// **What the impls of trait methods keep on their own evidence**
+    /// ([ADR-277](../../../docs/specification/adr/adr-277.md) D17): `NK1264`
+    /// and the keepers `NK1265` names.
+    pub column: super::keeps::Column,
 }
 
 /// **The way from a function to the statement that makes it pause**, in

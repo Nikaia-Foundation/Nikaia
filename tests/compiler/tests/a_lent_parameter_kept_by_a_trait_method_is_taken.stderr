@@ -1,4 +1,4 @@
-error[NK2101]: You're using `s` after a function kept for later took it.
+error[NK2101]: You're using `s` after `Keep::take` (tests/a_lent_parameter_kept_by_a_trait_method_is_taken.nika:9: `fn take(ref mut self, f: fn(i64) -> i64) { self.held.push(f) }`), which keeps `f` for the trait method's column (ADR-277 D17), took it.
    --> tests/a_lent_parameter_kept_by_a_trait_method_is_taken.nika:13:5
     |
  13 |     println(s)

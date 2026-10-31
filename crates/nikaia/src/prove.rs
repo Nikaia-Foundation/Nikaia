@@ -412,10 +412,16 @@ use nikaia_std::tools::prove_terms;
 /// proof that leaned on it may no longer hold. The solver decides each
 /// direction; where it cannot show the implication, the change is said.
 /// `mine` says which entries are this package's own.
-pub fn changed_contracts(now: &Ledger, committed: &Ledger, mine: impl Fn(&str) -> bool) -> String {
+pub fn changed_contracts(
+    now: &Ledger,
+    committed: &Ledger,
+    keepers: &BTreeMap<String, BTreeMap<String, Vec<String>>>,
+    mine: impl Fn(&str) -> bool,
+) -> String {
     nikaia_std::tools::contract_changes::changed_contracts(
         now,
         committed,
+        keepers,
         &|key| mine(key),
         &|from, to, names| implies(from, to, names),
     )

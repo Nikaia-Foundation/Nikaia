@@ -837,7 +837,12 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         }
     }
     let callee: Option<FnContract> = Some(contract.clone());
+    state.call_keepers = nikaia_std::index::or(match world.keepers.get(key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeMap::new().into());
     let found = check_core_arguments_bound(state, world, host, args, &patterns, &mut bound, &mut expected, world.own.functions.contains_key(key), (callee).as_ref(), span);
+    state.call_keepers = collections::BTreeMap::new();
     if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {
         let acc: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&bound, "A") {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),

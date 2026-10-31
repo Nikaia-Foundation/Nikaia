@@ -12,6 +12,22 @@ pub fn check_core_args_runs(callee: Option<&FnContract>, at: i64) -> bool {
     true
 }
 
+pub(crate) fn check_core_args_keepers(state: &CheckState, callee: Option<&FnContract>, at: i64) -> String {
+    let general: String = String::from("a function kept for later");
+    let contract = match callee { Some(__nikaia_value) => __nikaia_value, None => return general };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return general };
+    let mut i: i64 = 0;
+    for (name, _) in call_arguments(signature) {
+        if i == at {
+            let impls = match state.call_keepers.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return general };
+            if impls.is_empty() { return general; }
+            return format!("{}, which keeps `{}` for the trait method's column (ADR-277 D17),", impls.join(", "), name);
+        }
+        i += 1;
+    }
+    general
+}
+
 pub(crate) fn check_core_args_reads(callee: Option<&FnContract>, at: i64) -> bool {
     let contract = match callee { Some(__nikaia_value) => __nikaia_value, None => return false };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -69,7 +85,8 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     if !runs {
                         state.facts.kept_lambdas.insert(id, (pauses, fails));
                         state.a_kept_lambdas_hulls(world, arg);
-                        state.a_kept_lambda_takes_these(world, arg, pauses, span);
+                        let who = check_core_args_keepers(&state, callee, at);
+                        state.a_kept_lambda_takes_these(world, arg, pauses, &who, span);
                     }
                     state.a_lambdas_text_is_its_own(world, want, arg);
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, &CheckPromises { may_pause: pauses, may_fail: fails }, span);

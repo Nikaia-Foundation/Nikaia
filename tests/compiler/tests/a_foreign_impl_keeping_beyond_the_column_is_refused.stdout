@@ -1,0 +1,6 @@
+error[NK1264]: `Keep::ask` keeps `known`, which the trait method `traitlib::H::ask` runs.
+  --> tests/keeps.nika:6:9
+ 6 |         self.held.push(known)
+   = note: Callers through `traitlib::H::ask` were written against its `keeps` column, which keeps nothing at `known` (ADR-277 D17).
+   = note: Only the package that declares `traitlib::H` widens the column.
+   = help: Run `known` here rather than keep it, or keep it in a type of your own that does not implement `traitlib::H`.

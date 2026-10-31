@@ -1,0 +1,56 @@
+// #1012, ADR-277 D17: a `pub` trait method's `keeps` column moves with the
+// impls of its own package, and `NK1265` says so in either direction until
+// the ledger is committed. A caller that lends into the widened position is
+// refused naming the impl that keeps it.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn build(nikaia: String, tmp: String, label: String) throws {
+    let out = process::run(nikaia, ["build"]; dir: tmp.clone())
+    println(f"-- {label}")
+    let mut inside = false
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.starts_with("warning[") || line.starts_with("error[") {
+            inside = line.contains("NK1265") || line.contains("NK2101")
+        } else if !line.starts_with(" ") {
+            inside = false
+        }
+        if inside && !line.trim().starts_with("|") && !line.trim().starts_with("^") && !line.contains("Compiling") && !line.contains("Finished") {
+            println(line.replace(tmp, "TMP"))
+        }
+    }
+    let ledger = fs::read_to_string(f"{tmp}/nikaia.contracts", fs::Root::Anywhere)
+    let parts: Vec[String] = ledger.split("[fn.\"H::ask\"]").collect()
+    if parts.len() < 2 {
+        println("no entry for H::ask")
+    } else {
+        let own: Vec[String] = parts[1].split("\n\n").collect()
+        println(f"H::ask keeps in the ledger: {own[0].contains("keeps")}")
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"traitcol\"\nversion = \"0.1.0\"\n")
+    let base = "pub trait H {\n    fn ask(ref mut self, known: fn(i64) -> i64 sync) -> i64 sync\n}\nstruct Run { base: i64 }\nimpl H for Run {\n    fn ask(ref mut self, known: fn(i64) -> i64 sync) -> i64 sync { return known(self.base) }\n}\n"
+    let keeper = "struct Keep { held: Vec[fn(i64) -> i64 sync] }\nimpl H for Keep {\n    fn ask(ref mut self, known: fn(i64) -> i64 sync) -> i64 sync {\n        let n = self.held.len()\n        self.held.push(known)\n        return n\n    }\n}\n"
+    let lender = "fn lend[T: H](mut t: T) -> i64 {\n    let word = f\"h{t.ask(fn(x) { x })}\"\n    let n = t.ask(fn(x) { x + word.len() })\n    println(word)\n    return n\n}\n"
+    let main = "fn main() {\n    let mut r = Run { base: 1 }\n    println(r.ask(fn(n) { n + 1 }))\n}\n"
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, f"{base}{main}")
+    build(nikaia, tmp, "first build, the ledger written")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, f"{base}{keeper}{main}")
+    build(nikaia, tmp, "a keeping impl added")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, f"{base}{keeper}{lender}{main}")
+    build(nikaia, tmp, "a caller lends into the kept position")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, f"{base}{main}")
+    build(nikaia, tmp, "the keeping impl removed")
+    process::run("rm", ["-rf", tmp])
+}

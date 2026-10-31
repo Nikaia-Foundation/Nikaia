@@ -1101,7 +1101,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         }
     }
     let callee: FnContract? = contract.clone()
+    state.call_keepers = world.keepers.get(key)?.clone() ?? collections::BTreeMap()
     let found = check_core_arguments_bound(state, world, host, args, patterns, bound, expected, world.own.functions.contains_key(key), callee, span)
+    state.call_keepers = collections::BTreeMap()
     // **A fold's step and merge return the accumulator or change it in
     // place** (ADR-372 D9): the result type says which.
     if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {

@@ -14,8 +14,21 @@ use std::collections
 
 /// The warnings, one per contract that moved the wrong way, for every `pub`
 /// function `mine` says is this package's and the committed ledger has.
-pub fn changed_contracts(now: ref Ledger, committed: ref Ledger, mine: fn(ref String) -> bool sync, implies: fn(ref Vec[String], ref Vec[String], ref collections::BTreeSet[String]) -> bool sync) -> String {
+///
+/// **And `NK1265`** (ADR-277 D17): a `pub` trait method of this package whose
+/// `keeps` column moved, in either direction. `keepers` holds every trait
+/// method of the package, with the impls that keep each parameter now, as a
+/// message names them.
+pub fn changed_contracts(now: ref Ledger, committed: ref Ledger, keepers: ref collections::BTreeMap[String, collections::BTreeMap[String, Vec[String]]], mine: fn(ref String) -> bool sync, implies: fn(ref Vec[String], ref Vec[String], ref collections::BTreeSet[String]) -> bool sync) -> String {
     let mut out: String = ""
+    for (key, by_parameter) in keepers {
+        let new = now.functions.get(key) ?? continue
+        let old = committed.functions.get(key) ?? continue
+        if !new.public || !mine(key) {
+            continue
+        }
+        out.push_str(column_moved(key, old, new, by_parameter))
+    }
     for (key, new) in now.functions {
         let old = committed.functions.get(key) ?? continue
         if !new.public || !mine(key) {
@@ -28,6 +41,30 @@ pub fn changed_contracts(now: ref Ledger, committed: ref Ledger, mine: fn(ref St
         if !implies(new.ensures, old.ensures, names) {
             out.push_str(f"warning[NK1208]: `{key}` promises less than the committed ledger says.\n   = note: it ensured {conditions_said(old.ensures)}, and now ensures {conditions_said(new.ensures)}.\n   = note: a caller's proof that relied on what it ensured may no longer hold.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n")
         }
+    }
+    return out
+}
+
+/// `NK1265` for each parameter of the trait method `key` whose `keeps` moved
+/// between the committed entry `old` and `new`.
+fn column_moved(key: ref String, old: ref FnContract, new: ref FnContract, by_parameter: ref collections::BTreeMap[String, Vec[String]]) -> String {
+    let mut out: String = ""
+    for parameter in new.keeps {
+        if old.keeps.contains(parameter) {
+            continue
+        }
+        let impls: Vec[String] = by_parameter.get(parameter)?.clone() ?? []
+        let mut who = "an impl in this package keeps it"
+        if impls.len() > 0 {
+            who = f"{impls.join(", ")} keeps it"
+        }
+        out.push_str(f"warning[NK1265]: the trait method `{key}` keeps `{parameter}` now, and the committed ledger says it runs it.\n   = note: {who}.\n   = note: a caller that lends into `{parameter}` through the trait is refused now.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n")
+    }
+    for parameter in old.keeps {
+        if new.keeps.contains(parameter) {
+            continue
+        }
+        out.push_str(f"warning[NK1265]: the trait method `{key}` runs `{parameter}` now, and the committed ledger says it keeps it.\n   = note: no impl in this package keeps it any longer.\n   = note: an impl in another package that keeps it is refused now (NK1264).\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n")
     }
     return out
 }

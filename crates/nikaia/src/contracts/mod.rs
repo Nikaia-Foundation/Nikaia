@@ -666,7 +666,7 @@ impl LedgerOps for Ledger {
             .flat_map(|c| c.methods.iter().map(|(k, v)| (k.clone(), v.clone())))
             .collect();
 
-        let noted = sync::infer(&mut ledger, units, library, &resolved);
+        let mut noted = sync::infer(&mut ledger, units, library, &resolved);
         // **An expression function's `ensures`** (ADR-314 D3): after `sync`,
         // which it is only given for.
         expression_ensures(&mut ledger, units);
@@ -702,7 +702,7 @@ impl LedgerOps for Ledger {
         // (#697): a call whose result points into an argument keeps it only
         // where the result leaves, and the walk asks the callee's `ref(..)`.
         write_result_sources(&mut ledger, units, library);
-        keeps::infer(&mut ledger, units, library, &resolved);
+        let mut column = keeps::infer(&mut ledger, units, library, &resolved);
         // **And again, until `keeps` settles** (#720): a parameter `keeps`
         // says is kept is moved in, not viewed, so the result no longer points
         // into it, and a caller that hands its own parameter there keeps that
@@ -713,7 +713,7 @@ impl LedgerOps for Ledger {
             let before: Vec<Vec<String>> =
                 ledger.functions.values().map(|c| c.keeps.clone()).collect();
             write_result_sources(&mut ledger, units, library);
-            keeps::infer(&mut ledger, units, library, &resolved);
+            column = keeps::infer(&mut ledger, units, library, &resolved);
             if ledger
                 .functions
                 .values()
@@ -758,6 +758,7 @@ impl LedgerOps for Ledger {
         write_result_sources(&mut ledger, units, library);
         evaluate_defaults(&mut ledger, units, &defaults, library);
         attribute_values(&mut ledger, units, library);
+        noted.column = column;
         (ledger, checked, noted)
     }
 

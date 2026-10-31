@@ -195,7 +195,7 @@ fn add_kept(mut kept: collections::BTreeMap[String, collections::BTreeSet[String
 // nothing**. An entry that is absent is unknown, and unknown keeps - as does a
 // position the signature does not have, which is a call read wrongly, and
 // reading it wrongly is not a licence to assume.
-fn keeps_its(callee: ref String, at: i64, settling: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, library: ref Ledger) -> bool {
+pub fn keeps_its(callee: ref String, at: i64, settling: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, library: ref Ledger) -> bool {
     if settling.contains_key(callee) {
         let contract = own.functions[callee] ?? return true
         let parameter = parameter_at(contract, at) ?? return true

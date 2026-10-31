@@ -262,6 +262,7 @@ pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {
     pub parts_beside: collections::BTreeMap<String, Vec<Ty>>,
     pub newly_throws: collections::BTreeMap<String, Vec<String>>,
     pub newly_keeps: collections::BTreeMap<String, Vec<(String, bool, String)>>,
+    pub keepers: collections::BTreeMap<String, collections::BTreeMap<String, Vec<String>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -336,6 +337,7 @@ pub struct CheckState {
     pub inside_an_action: Option<String>,
     pub inside_a_sync_function: Option<String>,
     pub moved_into_a_task: Vec<(String, Ty, i64, String)>,
+    pub call_keepers: collections::BTreeMap<String, Vec<String>>,
     pub walked: Vec<CheckTaken>,
     pub branch: Vec<(i64, i64)>,
     pub reads_on_paths: Vec<CheckRead>,

@@ -1,0 +1,22 @@
+-- first build, the ledger written
+H::ask keeps in the ledger: false
+-- a keeping impl added
+warning[NK1265]: the trait method `H::ask` keeps `known` now, and the committed ledger says it runs it.
+   = note: `Keep::ask` (TMP/src/main.nika:12: `self.held.push(known)`) keeps it.
+   = note: a caller that lends into `known` through the trait is refused now.
+   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.
+H::ask keeps in the ledger: true
+-- a caller lends into the kept position
+error[NK2101]: You're using `word` after `Keep::ask` (TMP/src/main.nika:12: `self.held.push(known)`), which keeps `known` for the trait method's column (ADR-277 D17), took it.
+   --> TMP/src/main.nika:19:5
+ 19 |     println(word)
+    = note: A function kept to be called later - a supervisor's child, a handler - is called after this function has moved on, so it takes the variables it uses with it. `word` is a `String`, so it went to the function.
+    = note: Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.
+    = help: Make a copy before and hand over the copy: `let copy = word.clone()`, then use `copy` inside.
+H::ask keeps in the ledger: true
+-- the keeping impl removed
+warning[NK1265]: the trait method `H::ask` runs `known` now, and the committed ledger says it keeps it.
+   = note: no impl in this package keeps it any longer.
+   = note: an impl in another package that keeps it is refused now (NK1264).
+   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.
+H::ask keeps in the ledger: false

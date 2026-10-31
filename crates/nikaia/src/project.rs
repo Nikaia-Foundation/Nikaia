@@ -1079,7 +1079,8 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // once for the package rather than once per unit: the question is
         // whether a *contract* moved, and a contract belongs to the
         // package.
-        let newly = newly(&layout.root, &program.contracts);
+        let mut newly = newly(&layout.root, &program.contracts);
+        newly.keepers = program.keepers.clone();
         // Collected once for the whole package, because every unit is
         // checked against the same program (`ADR-286`) and a `comptime` in
         // any of them may call into any other.
@@ -1218,7 +1219,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // The packages this program depends on: their entries in the ledger are
         // theirs, and a contract they changed is said in their own build.
         let program = self.program();
-        crate::prove::changed_contracts(now, committed, |key| {
+        crate::prove::changed_contracts(now, committed, &program.keepers, |key| {
             !key.split_once("::")
                 .is_some_and(|(package, _)| program.as_its_own.contains_key(package))
         })
@@ -1501,6 +1502,7 @@ fn newly(root: &Path, inferred: &Ledger) -> check::Newly {
     check::Newly {
         throws: project_check::project_check_gained(&committed, inferred),
         keeps: keeps_that_moved(&committed, inferred),
+        keepers: Default::default(),
     }
 }
 

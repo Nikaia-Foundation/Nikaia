@@ -396,6 +396,25 @@ pub struct Program {
     /// (`check::propagation_against`), so the emitter reads it rather than
     /// walking the unit again (#727).
     pub checked_facts: BTreeMap<usize, crate::check::CheckFacts>,
+    /// **The impls that keep each parameter of the program's own trait
+    /// methods** ([ADR-277](../../../docs/specification/adr/adr-277.md) D17),
+    /// each said with the statement that keeps it: what `NK1265` and a
+    /// refused lending caller name. Every own trait method is a key.
+    pub keepers: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+}
+
+/// An impl that keeps a trait method's parameter, as a message names it:
+/// `` `Keep::take` (src/main.nika:9: `self.held.push(f)`) ``.
+fn keeper_said(units: &[Unit], keeper: &crate::contracts::keeps::Keeper) -> String {
+    let unit = &units[keeper.unit];
+    let at = (keeper.span.start as usize).min(unit.source.len());
+    let line = unit.source[..at].matches('\n').count() + 1;
+    let text = unit.source.lines().nth(line - 1).unwrap_or("").trim();
+    format!(
+        "`{}` ({}:{line}: `{text}`)",
+        keeper.name,
+        unit.path.display()
+    )
 }
 
 /// One `test "…" { … }` of the program, as `nikaia test` names it.
@@ -500,6 +519,8 @@ impl Program {
             checked: RefCell::new(None),
             paused_by_code: RefCell::new(BTreeMap::new()),
             pauses: RefCell::new(BTreeMap::new()),
+            beyond_the_column: RefCell::new(Vec::new()),
+            keepers: RefCell::new(BTreeMap::new()),
         };
         let parts = collecting::modules_program_of(
             &host,
@@ -515,6 +536,41 @@ impl Program {
         };
         let paused_by_code = host.paused_by_code.into_inner();
         let pauses = host.pauses.into_inner();
+        // **An impl that keeps more than another package's trait column is
+        // refused** (ADR-277 D17, `NK1264`), on the statement that keeps it.
+        let beyond = host.beyond_the_column.into_inner();
+        if !beyond.is_empty() {
+            let said: Vec<String> = beyond
+                .iter()
+                .map(|(at, finding)| {
+                    let unit = &units[*at];
+                    crate::diagnostics::render_finding(
+                        finding,
+                        &unit.path.display().to_string(),
+                        &unit.source,
+                    )
+                })
+                .collect();
+            return Err(crate::diagnostics::refuse(said.join("\n")));
+        }
+        let keepers = host
+            .keepers
+            .into_inner()
+            .into_iter()
+            .map(|(method, by_parameter)| {
+                let said = by_parameter
+                    .into_iter()
+                    .map(|(parameter, impls)| {
+                        let impls = impls
+                            .iter()
+                            .map(|keeper| keeper_said(&units, keeper))
+                            .collect();
+                        (parameter, impls)
+                    })
+                    .collect();
+                (method, said)
+            })
+            .collect();
         Ok(Program {
             units,
             entry_shown_as: None,
@@ -526,6 +582,7 @@ impl Program {
             pauses,
             own_checked,
             checked_facts: BTreeMap::new(),
+            keepers,
         })
     }
 
@@ -679,6 +736,8 @@ struct ProgramHost<'a> {
     checked: RefCell<Option<(i64, Vec<crate::check::Checked>)>>,
     paused_by_code: RefCell<BTreeMap<String, Vec<String>>>,
     pauses: RefCell<BTreeMap<String, collecting::ModulesPause>>,
+    beyond_the_column: RefCell<Vec<(usize, crate::check::Finding)>>,
+    keepers: RefCell<BTreeMap<String, BTreeMap<String, Vec<crate::contracts::keeps::Keeper>>>>,
 }
 
 impl collecting::ModulesProgramHost for ProgramHost<'_> {
@@ -711,6 +770,31 @@ impl collecting::ModulesProgramHost for ProgramHost<'_> {
             package_ledger_checked(&self.units[from as usize..to as usize], None, library);
         *self.checked.borrow_mut() = checked.map(|checked| (from, checked));
         self.paused_by_code.borrow_mut().extend(noted.by_code);
+        self.beyond_the_column.borrow_mut().extend(
+            noted
+                .column
+                .beyond
+                .into_iter()
+                .map(|(at, finding)| (at + from as usize, finding)),
+        );
+        self.keepers
+            .borrow_mut()
+            .extend(noted.column.keepers.into_iter().map(|(method, all)| {
+                let all = all
+                    .into_iter()
+                    .map(|(parameter, impls)| {
+                        let impls = impls
+                            .into_iter()
+                            .map(|keeper| crate::contracts::keeps::Keeper {
+                                unit: keeper.unit + from as usize,
+                                ..keeper
+                            })
+                            .collect();
+                        (parameter, impls)
+                    })
+                    .collect();
+                (method, all)
+            }));
         self.pauses
             .borrow_mut()
             .extend(noted.why.into_iter().map(|(name, mut pause)| {
