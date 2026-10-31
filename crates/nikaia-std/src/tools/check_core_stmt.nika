@@ -74,6 +74,48 @@ fn check_core_stmt_got(state: ref CheckState, world: ref CheckWorld, value: ref 
     }
 }
 
+/// **And the same read spelled as a `match`** (#1089): `match m.get(k) {
+/// null => throw ..  x => x }` binds what `m.get(k) ?? throw ..` does.
+fn check_core_stmt_got_by_a_match(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    let (read, arms) = match value {
+        Expr::Match { value: read, arms, .. } => (read, arms),
+        else => return false,
+    }
+    if !check_core_stmt_a_get(world, read) || arms.len() != 2 {
+        return false
+    }
+    let mut jumps = false
+    let mut hands_back = false
+    for arm in arms {
+        if arm.guard != null {
+            return false
+        }
+        if shapes_is_null(arm.pattern) {
+            jumps = state.jumps(world, arm.body)
+        } else {
+            hands_back = check_core_stmt_binds_and_hands_back(world, arm.pattern, arm.body)
+        }
+    }
+    return jumps && hands_back
+}
+
+/// An arm `x => x`: the value bound, handed back as it is.
+fn check_core_stmt_binds_and_hands_back(world: ref CheckWorld, pattern: ref MatchPattern, body: ref Expr) -> bool sync {
+    let bound = match pattern {
+        MatchPattern::Path(path) => {
+            if path.len() != 1 {
+                return false
+            }
+            world.words.resolve(path[0]).clone()
+        },
+        else => return false,
+    }
+    return match body {
+        Expr::Variable(name, _) => world.words.resolve(name) == bound,
+        else => false,
+    }
+}
+
 /// A read through the brackets whose fallback jumps.
 // A chain `a[k] ?? b[k] ?? return` is one too (#735).
 fn check_core_stmt_read_through_a_jump(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
@@ -672,9 +714,10 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     let element_read = check_core_stmt_element_read(state, world, value)
     // **A value `get` hands back past a jump is a reference** (D30).
     let got = check_core_stmt_got(state, world, value)
+    let got_by_a_match = !got && check_core_stmt_got_by_a_match(state, world, value)
     for n in names {
         let name: String = f"{world.words.resolve(n)}"
-        if got {
+        if got || got_by_a_match {
             state.got_past_a_jump.insert(name)
         } else {
             state.got_past_a_jump.remove(name)

@@ -494,7 +494,8 @@ fn check_core_flow_through_a_view(state: ref CheckState, world: ref CheckWorld, 
         return false
     }
     let local: CheckLocal = state.binding(name) ?? return false
-    return local.lent || local.ty.is_a_view() || state.a_lent_let(world, root)
+    // A name a `get` handed back past a jump is a view of the element (#1089).
+    return local.lent || local.ty.is_a_view() || state.a_lent_let(world, root) || state.got_past_a_jump.contains(name)
 }
 
 /// **A name lent to this function's walk** (`Local::lent`).

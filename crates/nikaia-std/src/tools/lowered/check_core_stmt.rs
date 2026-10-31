@@ -45,6 +45,39 @@ pub(crate) fn check_core_stmt_got(state: &CheckState, world: &CheckWorld<'_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_got_by_a_match(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    let (read, arms) = match value {
+        Expr::Match { value: read, arms, .. } => { let read = nikaia_std::boxed::open(read); (read, arms) },
+        _ => return false,
+    };
+    if !check_core_stmt_a_get(world, read) || arms.len() != 2 { return false; }
+    let mut jumps = false;
+    let mut hands_back = false;
+    for arm in arms.iter() {
+        if arm.guard.is_some() { return false; }
+        if shapes_is_null(&arm.pattern) { jumps = state.jumps(world, &arm.body); } else { hands_back = check_core_stmt_binds_and_hands_back(world, &arm.pattern, &arm.body); }
+    }
+    jumps && hands_back
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_binds_and_hands_back(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, body: &Expr) -> bool {
+    let bound = match pattern {
+        MatchPattern::Path(path) => {
+            if path.len() != 1 { return false; }
+            world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string()
+        },
+        _ => return false,
+    };
+    match body {
+        Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == bound },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_read_through_a_jump(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_an_index(read) && (state.jumps(world, fallback) || check_core_stmt_read_through_a_jump(state, world, fallback)) },
@@ -522,10 +555,11 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let of_a_map = was_read && check_core_stmt_a_map_read(value);
     let element_read = check_core_stmt_element_read(&state, world, value);
     let got = check_core_stmt_got(&state, world, value);
+    let got_by_a_match = !got && check_core_stmt_got_by_a_match(&state, world, value);
     for n in names.iter() {
         let n = *n;
         let name: String = format!("{}", world.words.resolve(n));
-        if got { state.got_past_a_jump.insert(name); } else { state.got_past_a_jump.remove(&name); }
+        if got || got_by_a_match { state.got_past_a_jump.insert(name); } else { state.got_past_a_jump.remove(&name); }
     }
     if names.len() == 1 {
         let single: String = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));

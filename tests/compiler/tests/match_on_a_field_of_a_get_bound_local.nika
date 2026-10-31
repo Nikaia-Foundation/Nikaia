@@ -1,0 +1,90 @@
+// A local bound by a `get` whose miss jumps is a view of the element: a
+// `match` or a `??` on one of its fields borrows it (#1089).
+use std::collections
+
+struct E { msg: String }
+impl Error for E { fn message(ref self) -> String { return self.msg.clone() } }
+struct N { v: Vec[i64] }
+struct A { node: N? }
+
+fn by_a_match(m: ref collections::HashMap[String, A], k: String) -> N sync throws {
+    let a = match m.get(k) { null => throw E { msg: "no key" }  x => x }
+    let node = match a.node { null => throw E { msg: "no node" }  x => x }
+    return node.clone()
+}
+
+fn by_a_throw(m: ref collections::HashMap[String, A], k: String) -> N sync throws {
+    let a = m.get(k) ?? throw E { msg: "no key" }
+    let node = match a.node { null => throw E { msg: "no node" }  x => x }
+    return node.clone()
+}
+
+fn by_a_return(m: ref collections::HashMap[String, A], k: String) -> N sync {
+    let a = m.get(k) ?? return N { v: [] }
+    let node = match a.node { null => return N { v: [] }  x => x }
+    return node.clone()
+}
+
+fn of_a_list(m: ref Vec[A], k: i64) -> N sync throws {
+    let a = m.get(k) ?? throw E { msg: "no element" }
+    let node = match a.node { null => throw E { msg: "no node" }  x => x }
+    return node.clone()
+}
+
+fn of_a_list_by_a_match(m: ref Vec[A], k: i64) -> N sync throws {
+    let a = match m.get(k) { null => throw E { msg: "no element" }  x => x }
+    let node = match a.node { null => throw E { msg: "no node" }  x => x }
+    return node.clone()
+}
+
+fn field_by_coalesce(m: ref collections::HashMap[String, A], k: String) -> N sync throws {
+    let a = m.get(k) ?? throw E { msg: "no key" }
+    let node = a.node ?? throw E { msg: "no node" }
+    return node.clone()
+}
+
+fn by_brackets(m: ref Vec[A], k: i64) -> N sync throws {
+    let a = m[k]
+    let node = match a.node { null => throw E { msg: "no node" }  x => x }
+    return node.clone()
+}
+
+fn of_a_parameter(a: ref A) -> N sync throws {
+    let node = match a.node { null => throw E { msg: "no node" }  x => x }
+    return node.clone()
+}
+
+fn by_a_match_cloned(m: ref collections::HashMap[String, A], k: String) -> N sync throws {
+    let a = match m.get(k) { null => throw E { msg: "no key" }  x => x.clone() }
+    let node = match a.node { null => throw E { msg: "no node" }  x => x }
+    return node.clone()
+}
+
+// An owned local of the same name as a `get`-bound local elsewhere is still
+// matched as the value it is, its field moved out.
+fn owned() -> N sync throws {
+    let a = A { node: N { v: [1, 2, 3] } }
+    let node = match a.node { null => throw E { msg: "no node" }  x => x }
+    return node
+}
+
+fn main() throws {
+    let mut m: collections::HashMap[String, A] = collections::HashMap()
+    m.insert("a", A { node: N { v: [1, 2] } })
+    m.insert("b", A { node: null })
+    let list: Vec[A] = [A { node: N { v: [1, 2] } }]
+    println(f"a {by_a_match(m, "a").v.len()}")
+    println(f"b {by_a_throw(m, "a").v.len()}")
+    println(f"c {by_a_return(m, "a").v.len()} {by_a_return(m, "b").v.len()} {by_a_return(m, "z").v.len()}")
+    println(f"d {of_a_list(list, 0).v.len()} {of_a_list_by_a_match(list, 0).v.len()}")
+    println(f"e {field_by_coalesce(m, "a").v.len()}")
+    println(f"f {by_brackets(list, 0).v.len()}")
+    println(f"g {of_a_parameter(list[0]).v.len()}")
+    println(f"h {by_a_match_cloned(m, "a").v.len()}")
+    println(f"owned {owned().v.len()}")
+    let missing = by_a_match(m, "z") catch {
+        println(f"miss {error.message()}")
+        return
+    }
+    println(f"{missing.v.len()}")
+}

@@ -858,6 +858,7 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     state.reads_on_paths.clear()
     state.flow.read_index = collections::BTreeMap()
     state.lent_lets = collections::BTreeSet()
+    state.got_past_a_jump = collections::BTreeSet()
     state.a_task_took_what_is_used_again()
 
     state.expected = outer

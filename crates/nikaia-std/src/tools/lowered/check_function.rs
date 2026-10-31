@@ -689,6 +689,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.reads_on_paths.clear();
     state.flow.read_index = collections::BTreeMap::new();
     state.lent_lets = collections::BTreeSet::new();
+    state.got_past_a_jump = collections::BTreeSet::new();
     state.a_task_took_what_is_used_again();
     state.expected = outer;
     state.flow.expected_either = outer_either;
