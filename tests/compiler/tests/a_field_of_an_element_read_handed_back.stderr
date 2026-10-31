@@ -1,0 +1,17 @@
+error[NK1131]: You can't give away `s.inner` here: it is part of an element of `path`, which keeps it.
+   --> tests/a_field_of_an_element_read_handed_back.nika:12:2
+    |
+ 12 | 	return s.inner
+    |  ^^^^^^^^^^^^^^
+    |
+    = note: `path.last()` reads an element `path` keeps, and what `path` keeps is lent, whether `path` is owned here or borrowed. Giving it away by value would take it out of `path`, and Nikaia never copies behind your back.
+    = help: Write `s.inner.clone()` for a copy.
+error[NK1131]: You can't give away `s.inner` here: it is part of an element of `m`, which keeps it.
+   --> tests/a_field_of_an_element_read_handed_back.nika:17:2
+    |
+ 17 | 	return s.inner
+    |  ^^^^^^^^^^^^^^
+    |
+    = note: `m.get(k)` reads an element `m` keeps, and what `m` keeps is lent, whether `m` is owned here or borrowed. Giving it away by value would take it out of `m`, and Nikaia never copies behind your back.
+    = help: Write `s.inner.clone()` for a copy.
+2 type errors

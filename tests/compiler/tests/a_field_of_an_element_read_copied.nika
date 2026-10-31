@@ -1,0 +1,16 @@
+// #1057: a field of an element read, copied with `clone()`, is handed back
+// by value; the element stays in the list.
+struct Inner { name: String }
+
+struct Item { inner: Inner }
+
+fn last_inner(path: Vec[Item]) -> Inner? {
+	let s = path.last() ?? return null
+	return s.inner.clone()
+}
+
+fn main() {
+	let xs = [Item { inner: Inner { name: "a" } }, Item { inner: Inner { name: "b" } }]
+	let r = last_inner(xs) ?? return
+	println(r.name)
+}

@@ -1,0 +1,22 @@
+// #1057: a field that does not copy, read off a local bound to an element
+// read and handed back by value, is part of what the list or map keeps:
+// `NK1131`, like the whole element (#1044, Part III).
+use std::collections
+
+struct Inner { name: String }
+
+struct Item { inner: Inner }
+
+fn last_inner(path: Vec[Item]) -> Inner? {
+	let s = path.last() ?? return null
+	return s.inner
+}
+
+fn inner_of(m: collections::BTreeMap[String, Item], k: String) -> Inner? {
+	let s = m.get(k) ?? return null
+	return s.inner
+}
+
+fn main() {
+	println("unreached")
+}

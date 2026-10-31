@@ -77,10 +77,11 @@ pub(crate) fn check_core_leaves_list_of_a_read(read: &str) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_leaves_an_element_read_given_away(state: &mut CheckState, what: &str, list: &str, read: &str, span: &Span) {
+pub(crate) fn check_core_leaves_an_element_read_given_away(state: &mut CheckState, what: &str, list: &str, read: &str, copy: &str, part: bool, span: &Span) {
     let notes: Vec<String> = vec![format!("`{}` reads an element `{}` keeps, and what `{}` keeps is lent, whether `{}` is owned here or borrowed. Giving it away by value would take it out of `{}`, and Nikaia never copies behind your back.", read, list, list, list, list)];
-    let help: String = format!("Write `{}?.clone()` for a copy.", read);
-    state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is an element of `{}`, which keeps it.", what, list), notes, Some(help)));
+    let help: String = format!("Write `{}.clone()` for a copy.", copy);
+    let whose: String = if part { format!("part of an element of `{}`", list) } else { format!("an element of `{}`", list) };
+    state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is {}, which keeps it.", what, whose), notes, Some(help)));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -108,7 +109,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
             let list = local.view_of.to_string();
             let of = check_core_leaves_list_of_a_read(&list);
             if of.is_some() {
-                check_core_leaves_an_element_read_given_away(state, &written, nikaia_std::index::or(of.as_deref(), || ""), &list, span);
+                check_core_leaves_an_element_read_given_away(state, &written, nikaia_std::index::or(of.as_deref(), || ""), &list, &format!("{}?", list), false, span);
                 return;
             }
             let notes: Vec<String> = vec![format!("`{}` is the element of `{}` itself, and `{}` belongs to whoever lent it. Giving the element away would take a piece out of something this function doesn't own.", written, list, list)];
@@ -123,6 +124,18 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
                 path = match whole { Some(__nikaia_value) => __nikaia_value, None => return }.to_string();
                 let at = match nikaia_std::search::find(&path, &".", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
                 root = nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_string();
+                if keeps {
+                    let local = state.binding(&root);
+                    if local.is_some() {
+                        let read = match local { Some(__nikaia_value) => __nikaia_value, None => return }.view_of.to_string();
+                        let of = check_core_leaves_list_of_a_read(&read);
+                        if of.is_some() {
+                            let ty = check_core_expr(state, world, host, value, span);
+                            if state.does_not_copy(world, &ty) { check_core_leaves_an_element_read_given_away(state, &path, nikaia_std::index::or(of.as_deref(), || ""), &read, &path, true, span); }
+                            return;
+                        }
+                    }
+                }
             } else {
                 if handed_back { return; }
                 match base {
@@ -161,7 +174,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
             };
             if !state.does_not_copy(world, &held_ty) { return; }
             let read = format!("{}.{}({})", held, name, shown);
-            check_core_leaves_an_element_read_given_away(state, &read, &held, &read, span);
+            check_core_leaves_an_element_read_given_away(state, &read, &held, &read, &format!("{}?", read), false, span);
             return;
         },
         Expr::Index { base, .. } => {
