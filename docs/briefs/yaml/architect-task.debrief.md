@@ -1,16 +1,14 @@
-1. **What cost the most:** finding where the fault probably sits for #1089, about 8 turns. A broad grep for `match &` hit 48 files and told me nothing. After that I followed `lent_scrutinees` to `check_core_flow_through_a_view`, then `a_lent_let`, then the callers of `check_core_stmt_lent_let`. The report's probe also cost a run: it lacked `impl Error for E` and used `HashMap::new()`, so its first run stopped on NK1161 and NK1149.
+1. **What cost the most.** Getting the rules block and the context took the most: I read y27-load.md and y29 in full, two long briefs whose Rules and Report sections are identical. Closing out cost the next most. The push was rejected, and then I amended my commit twice to fit a `Pushed:` line into the report. That was three commits for one line, and the sha in the first try went stale as soon as I amended.
 
-2. **What I looked up that the brief could have given:**
-   - #928's current *To build* text. I fetched it whole just to edit one sentence of step 4.
-   - Which brief to copy the rules block from (y28, the newest one with an `Attribution:` block).
-   - That y27's work sat on local branch `wip/y27-load` (eef3a2e7). The report said so, but I checked the branch to be sure.
-   - Whether #1057 (b13) already covered this defect. I read that issue and the b13 brief to find out.
+2. **What the brief could have handed me.**
+   - The *To build* text of #928 (I fetched it with `gh` and pulled out the section).
+   - D6 of ADR-yaml-1.
+   - The name of `load`'s key-comparison helper (`key_of` in eef3a2e7).
+   - Above all, where the lent-parameter inference of ADR-277 D17 lives. I never found it, so the y30 brief only gives a low-confidence `rg` hint. One line in builder-facts would have done it, something like "lent-parameter inference: file:function".
 
-3. **Checks:**
-   - Useful: the probe plus seven variants (map and list, `??` and `match`, index, `ref` parameter, clone in the arm). They gave #1089 its rows a–h and bounded the defect. Reading the lowered Rust of three variants side by side showed the missing `&` straight away.
-   - Wasted: the broad grep, and the first probe run.
-   - The push: I tried it, and it was rejected. I could have seen beforehand that local `develop` was ahead of `origin/develop` with the batch's unpushed commits.
+3. **Checks.**
+   - Useful: running the #1092 probe on `target/fast/nikaia`, both the `match` form (E0507) and the `??` form (prints 3). That confirmed the defect and gave a row that must keep working.
+   - Wasted: grepping builder-facts for "lent" (nothing relevant), and the broad grep across tools that listed nine files without narrowing anything.
+   - Not run: rows d and e of #1092. I left them to the builder to probe.
 
-4. **One change that would have saved the most:** two lines in the architect task.
-   - Say that local `develop` holds the batch's unpushed commits, so the architect commits and writes `Pushed: rejected` without trying to push.
-   - Say that a report's `Found:` probe must be a complete program that runs as pasted (error `impl`, constructors written out). The same rule belongs in builder.md, so the next architect can re-run a probe without fixing it first.
+4. **One change that would save the most.** Have the driver write two things into `architect-input.txt`: whether `unpushed.txt` is non-empty, which means a push will be rejected, and the path of the current rules block as a file (`docs/briefs/yaml/rules.part`). The architect could then write `Pushed: rejected (unpushed batch)` before the one commit and paste the rules with a `sed`. That saves reading whole briefs and amending.
