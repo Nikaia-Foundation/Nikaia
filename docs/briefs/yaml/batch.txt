@@ -1,2 +1,3 @@
+y11-1032-guard-call-tiers.md
+y12-1033-guard-text-label.md
 y2c-properties.md
-y2b-keys-directives-limits.md
