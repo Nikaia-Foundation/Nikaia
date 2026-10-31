@@ -1,16 +1,16 @@
-1. **Most turns:** writing the `load` probe in a scratch copy of the package. I lost about five runs to syntax trial and error: `mut` goes before the parameter name, not on the type; the map type is `collections::BTreeMap`, not `std::collections::HashMap`; a named argument comes after `;`. I also put `.clone()` on `n.anchor`, which caused an NK1106 cascade I first took for the defect. Each package test run takes minutes.
-2. **What I had to look up:**
-   - Probe syntax: `mut` parameters, collection types and constructors, named arguments, legal text cuts (NK1214 refused `input[0..3]`).
-   - Where NK2106 is raised: `check_takes.nika` and `check_values.nika`.
-   - That `scripts/where.nika` runs as `target/fast/nikaia run`, since there is no `nikaia` on PATH.
-   - That y21, the newest brief, had a cut-short rules block, so it was the wrong place to copy one from.
-3. **Checks:**
-   - Useful: reading the reports, input and suite log; the two-file minimal probes (A, B), which pinned the defect in seconds; cutting the package probe down to a copy without the map; checking the y19 rules block.
-   - Wasted: the first three package runs, which stopped on my own syntax errors; `nikaia check src/main.nika` on a package file, the wrong mode, which gave misleading errors; the `gh` issue search for NK2106, which found nothing relevant.
-   - Not done: a re-check of the NK2302 neighbour (`words_of`). I left it out rather than file a guess.
-4. **One change:** add a "probe kit" to the lane facts in `architect-task.md`. It should hold:
-   - a 10-line syntax crib (`mut x: T` parameters, `collections::BTreeMap[K, V]()`, `f(a; name: v)`, `x?.m()`);
-   - the rule "probe the smallest standalone `.nika` first, a package copy only to confirm; `nikaia test --project`, never `check` on a package file";
-   - `target/fast/nikaia run scripts/where.nika -- NKxxxx` to find where a code is raised.
+1. **Most time:** the two probe runs in a scratch copy of the package, a few minutes each. The first run was wasted by my own mistake: I assumed `yaml::parse` returns one `Node`, but it returns `Vec[Node]`.
+2. **What I looked up:**
+   - The `pub fn` signatures and tree types at the top of `packages/yaml/src/main.nika`.
+   - How each grammar rule fills `Scalar.raw`.
+   - #928's body, fetched through `gh`.
+   - The rules block, copied out of y21.
 
-   That would have saved roughly 8–10 turns.
+   A list of the package's public signatures in the task brief would have saved the first lookup and the wasted run.
+3. **Checks:**
+   - The y21 probe: needed, because it confirmed the gap and the tag-start span (28) before I wrote the decision.
+   - `pre-push-check.sh`: cheap and fine.
+   - `git ls-files` before `git mv`: needed.
+   - Wasted: the first probe run.
+
+   On the way I noticed that a field read on a `Vec`, `n.value`, gets a misleading NK1245 ("can't tell what type"). I did not file it. It probably deserves an issue: the message should say that `Vec` has no field `value`.
+4. **The change that would save the most:** a script, e.g. `scripts/yaml-probe.nika -- <file.nika>`, that copies the package to the scratchpad, drops the test in and runs `nikaia test --project`. The architect's probing before each brief, and the builders' gap probes, would then each take one call instead of hand-written shell. Next to it, the task brief's *Lane facts* should list the public API: `documents`/`parse -> Vec[Node]`, `text`, `as_i64`, `as_f64`.

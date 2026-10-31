@@ -45,3 +45,4 @@
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 2205049 41
 /home/user/Nikaia/docs/briefs/yaml/y22-1063-view-field-copy.md 708224 7
 /home/user/Nikaia/docs/briefs/yaml/y21-events.md 2064370 37
+/home/user/Nikaia/docs/briefs/yaml/architect-task.md 1152969 28

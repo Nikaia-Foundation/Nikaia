@@ -1,8 +1,8 @@
 Result: done
-Batch: y22-1063-view-field-copy.md y21-events.md
+Batch: y23-scalar-written.md y21-events.md
 Owner: none
-Decided: y19's Deviation (two error offsets of a bad `\x`/`\u` escape now point at the offending character) accepted: it is "where reading stopped" (the package's own error rule); recorded on #928.
-Found: #1063 (filed, `ready` + `wip`), by the architect probing step 4: a view field of a lent struct (`w.text` of a `ref Word`, a `for` element) stored in a new struct is refused NK2106; in `yaml` it cascades into NK1106 across the grammar and NK1127 on `parse`'s default. Both `events` (anchor/tag per event) and `load` (D6: strings still views) need it, so y22 fixes it first and y21 gets a pre-flight probe.
-Process: y21's rules block had no report form or `Attribution:`; refilled from y19, and the lane fact in architect-task.md now says to copy from the newest brief that ends in `Attribution:`.
-Next after this batch: `load` (aliases within the alias limit, duplicate keys, `<<` ordinary, merge on request), probed on the fixed binary (scratch probe of copy_node with an anchors map also hit NK2305 on `anchors` returned through `target.clone()`: recheck after #1063).
-Pushed: see commit
+Decided: ADR-yaml-1 D7 last paragraph: Node gets `pub raw: String` and `pub style: Style` for every scalar node (y21's Found; probe confirmed on 2a303980). Not payloads on Value::Null/Bool. Architect's decision, package-only, no version raise.
+Changed: y23 written; y21 re-queued (run 1 report -> y21-events.md.run1.report.md, run 2 paragraph); #928 step 4 updated (ready + wip); builder-facts: package commit files, `for x in v.drain()`.
+Found: none filed (y21's gap is a package design choice, decided in the ADR, not a compiler gap).
+Changelog: none (y22's line is in its report, for the supervisor)
+Pushed: rejected
