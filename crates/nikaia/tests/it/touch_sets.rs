@@ -391,9 +391,9 @@ fn the_two_console_handles_keep_their_order() {
         reason.contains("which might be the same place") && reason.contains("stderr"),
         "{reason}"
     );
-    // … and the way out is named, because a refusal a reader can act on is
-    // worth several they cannot (D9).
-    assert!(reason.contains("`seq`"), "{reason}");
+    // … and the note no longer sends the reader to the removed `seq`; the
+    // help names the way out (#994).
+    assert!(!reason.contains("`seq`"), "{reason}");
 }
 
 /// A resource named in a word this compiler does not know reaches everything.
