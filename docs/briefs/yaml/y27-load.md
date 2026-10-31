@@ -1,8 +1,8 @@
 ---
 agent: builder
 model: opus
-max_turns: 100
-budget_usd: 20
+max_turns: 60
+budget_usd: 12
 ---
 # Brief: `yaml` `load`, the tree a program reads: aliases expanded within the limit, a duplicate key an error (#928 step 4, second half)
 
@@ -26,6 +26,12 @@ Read `docs/builder-facts.md`, ADR-yaml-1 **D4, D6, D8** (`docs/specification/adr
 2. **Tests**: `packages/yaml/tests/load.nika` + `.stdout`: an anchor used twice (both copies printed); an alias inside a nested collection; anchors are per document (two documents, the second's `*a` unknown); unknown anchor; recursive alias; a billion laughs of 9 levels with 9 aliases each stops with the limit error, and the same with a raised `Limits { alias_nodes: .. }` small enough to build passes; a `Limits` lowered so an ordinary anchor fails; duplicate keys: `a`/`"a"`, `16`/`0x10`, `[1, 2]` as a key twice, and `1`/`"1"` accepted; `<<: *base` kept as a key `<<` with the copied mapping as its value. Write the test before the first package run and fill `.stdout` with `--bless` in that run (one run is 3-4 minutes); check every line by hand.
 
 If a form the package needs is missing or refused in the compiler, the lowering or `std` (no ADR refusing it), stop: `Result: blocked`, `Found:` the gap with a probe of a few lines, `Needs: architect decision`. Do not write around it (a hand-written deep copy instead of `.clone()`, a map from anchor to index because a `Map[String, Node]` of views is refused, are both ways around: report them).
+
+## Run 2 (architect, 2026-10-31): take the draft, after y29
+
+Run 1 built both steps on local branch `wip/y27-load` (eef3a2e7: `main.nika` `load` and helpers, `tests/load.nika`, `tests/load.stdout` blessed and checked line by line in a scratch copy) and stopped on #1089: `let a = match m.get(k) { null => throw ..  x => x }` then `match a.node { .. }` in `Loader::expansion` lowers without `&` (rustc E0507, shown as NK1127 on every `limits = default_limits()`). `y29-1089-match-on-a-get-bound-local.md` runs just before this brief and fixes it.
+
+Pre-flight instead of the one above: `git log --oneline -5` shows y29's commit (`Fixes #1089`); rebuild `target/fast/nikaia`. Then `git checkout eef3a2e7 -- packages/yaml/src/main.nika packages/yaml/tests/load.nika packages/yaml/tests/load.stdout` (only these three; `main.nika` of eef3a2e7 is y21's file plus `load`, check with `git diff HEAD -- packages/yaml/src/main.nika` that nothing else differs), `target/fast/nikaia check packages/yaml/src/main.nika` clean, then the package gate once without `--bless`: `load` must pass with the blessed `.stdout` as it is. Do not rewrite `expansion`'s `match a.node` (run 1's scratch spelling `a.node?.clone()` is the way around #1089). If the build still fails there, `Result: blocked` with rustc's error. Commit the three files (and `nikaia.contracts`/`nikaia.derived` if they changed), `Part: #928`. No `--bless` unless check is clean (`docs/builder-facts.md`, *Traps already met*).
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.

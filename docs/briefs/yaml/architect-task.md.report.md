@@ -1,9 +1,8 @@
 Result: done
-Batch: y28-1085-views-back-through-if-match.md, y21-events.md, y27-load.md
+Batch: y29-1089-match-on-a-get-bound-local.md y27-load.md
 Owner: none
-Found: y21 run 3's NK2302 filed as #1085 (`ready`): a list or struct of views handed back through an `if`/`match` (or a block tail) is refused; handed back directly it passes. The builder's probe passed on today's binary because its struct was built from a literal in `main` (field owned); reproduced with `N` built from a `trim()` inside a function. Cause: `views.nika` `handed_back` follows only `StructLit`/`ListLit`, not `If`/`Match`/`Block` tails.
-Checked: with `walk` rewritten in scratch to push into a local, the draft 1c1199d6 checks, builds, and `tests/events.nika` blesses to the suite's form; so #1085 is the only defect left before y21.
-Briefs: y28 new (fix, `crates/`, version raise for the supervisor); y21 re-queued (run-3 report and debrief renamed `.run3.`, a *Run 4* paragraph with an inline pre-flight); y27's pre-flight names y21 run 4 and #1085.
-Process: `docs/architect.md` (a view-checker probe must make the field really a view; check the whole draft before re-queueing), `docs/builder-facts.md` (narrow a view refusal with `return x` / `let r = x; return r`).
-Issues: #1085 filed (`ready`); #928 *To build* step 4 updated (keeps `ready`, `wip`).
-Pushed: 0888d170, 182703b2 (develop, fast-forward)
+Found: #1089 filed (ready, wip; yaml lane): a local bound by `m.get(k) ?? <jump>` or `match m.get(k) { null => <jump>  x => x }` is not lent, so a match or `??` on its non-copy optional field lowers without `&` (rustc E0507); rows a-h probed on target/fast/nikaia at 6eab43c4; kin to #1057 (b13, a refusal), not the same fix.
+Decided: nothing new for the language; y28 (91b72357, Fixes #1085) changed `crates/`, Changelog line in its report for the supervisor.
+Process: builder-facts *Traps already met* (package commit): no `--bless` before `nikaia check` is clean; NK1127 on a default means rustc refused the lowered file (y27's debrief).
+Next after this batch: merge on request (D6, serde_yaml 0.9 `apply_merge`), then tag resolution for events.
+Pushed: rejected (local develop holds the batch's unpushed commits; the driver rebases and pushes)
