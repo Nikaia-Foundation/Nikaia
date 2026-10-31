@@ -1,4 +1,5 @@
 use std::text
+use std::collections
 
 // The official `yaml` package (ADR-yaml-1): YAML text, as `Bytes`, into a tree
 // of `Node`s that points into the input.
@@ -1565,6 +1566,225 @@ pub fn parse(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Node] s
 		roots.push(d.root)
 	}
 	return roots
+}
+
+// An anchor's resolved node while `load` resolves a document, with its node
+// count, its own expansions included; `node` is null while the anchored node
+// is still being resolved, so an alias inside it is told from one after it.
+struct Anchored {
+	node: Node?,
+	nodes: i64,
+}
+
+// What `load` keeps while it resolves one document (anchors do not cross
+// documents): the most recent anchor of each name, the nodes made so far, the
+// nodes the aliases produced, and the most they may produce (D8).
+struct Loader {
+	anchors: collections::HashMap[ref String, Anchored],
+	made: i64,
+	expanded: i64,
+	limit: i64,
+	alias_nodes: i64,
+}
+
+// The stream's documents as a program reads them (D6): one root `Node` each,
+// every alias replaced by a copy of the resolved node of the most recent
+// anchor of its name before it in the same document (the structure copied,
+// the strings still views of the input), a key given twice in one mapping an
+// error, and `<<` an ordinary key. Anchors and tags stay on the nodes. The
+// nodes the aliases produce in a document may not exceed ten times its own
+// nodes plus `limits.alias_nodes`, checked before each copy (D8).
+pub fn load(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Node] sync throws {
+	let alias_nodes = limits.alias_nodes
+	let mut docs = documents(input; limits: limits)
+	let mut out: Vec[Node] = []
+	for d in docs.drain() {
+		let mut ld = Loader {
+			anchors: collections::HashMap(),
+			made: 0,
+			expanded: 0,
+			limit: 10 * nodes_in(d.root) + alias_nodes,
+			alias_nodes: alias_nodes,
+		}
+		out.push(ld.resolved(d.root, input))
+	}
+	return out
+}
+
+// The nodes of a parsed tree, an alias one node.
+fn nodes_in(n: ref Node) -> i64 sync {
+	return match n.value {
+		Value::Seq(items) => 1 + items.iter().map(fn(x) { nodes_in(x) }).sum()
+		Value::Map(entries) => 1
+			+ entries.iter().map(fn(e) { nodes_in(e.key) + nodes_in(e.value) }).sum()
+		else => 1
+	}
+}
+
+fn load_error(input: ref Bytes, start: u32, message: String) -> Error sync {
+	let (line, column) = place_of(input, start as i64)
+	return Error { message: message, line: line, column: column, offset: start as i64 }
+}
+
+impl Loader {
+	// A node with its aliases replaced, its anchor recorded for the aliases
+	// after it.
+	fn resolved(ref mut self, n: Node, input: ref Bytes) -> Node sync throws {
+		let name = match n.value {
+			Value::Alias(a) => a
+			else => ""
+		}
+		if name != "" {
+			return self.expansion(name, n.start, input)
+		}
+		let before = self.made
+		let anchor = n.anchor
+		if anchor != null {
+			self.anchors.insert(anchor ?? "", Anchored { node: null, nodes: 0 })
+		}
+		let value = match n.value {
+			Value::Seq(items) => {
+				let mut out: Vec[Node] = []
+				for x in items.drain() {
+					out.push(self.resolved(x, input))
+				}
+				Value::Seq(out)
+			}
+			Value::Map(entries) => Value::Map(self.resolved_entries(entries, input))
+			else => n.value
+		}
+		self.made += 1
+		let out = Node {
+			start: n.start,
+			end: n.end,
+			anchor: n.anchor,
+			tag: n.tag,
+			flow: n.flow,
+			raw: n.raw,
+			style: n.style,
+			value: value,
+		}
+		if anchor != null {
+			self.anchors.insert(
+				anchor ?? "",
+				Anchored { node: out.clone(), nodes: self.made - before },
+			)
+		}
+		return out
+	}
+
+	// The copy an alias at `start` stands for, within the alias limit, checked
+	// before the copy is made.
+	fn expansion(ref mut self, name: String, start: u32, input: ref Bytes) -> Node sync throws {
+		let a = match self.anchors.get(name) {
+			null => throw load_error(input, start, f"unknown anchor *{name}")
+			x => x
+		}
+		let nodes = a.nodes
+		let node = match a.node {
+			null => throw load_error(input, start, f"alias *{name} inside its own anchor")
+			x => x
+		}
+		if self.expanded + nodes > self.limit {
+			throw load_error(
+				input,
+				start,
+				f"alias expansion exceeds {self.limit} nodes (alias_nodes limit {self.alias_nodes})",
+			)
+		}
+		let copy = node.clone()
+		self.expanded += nodes
+		self.made += nodes
+		return copy
+	}
+
+	// A mapping's entries resolved; a key equal to an earlier one (`key_of`)
+	// is an error at its position naming the first's.
+	fn resolved_entries(
+		ref mut self,
+		entries: Vec[Entry],
+		input: ref Bytes,
+	) -> Vec[Entry] sync throws {
+		let mut out: Vec[Entry] = []
+		let mut seen: collections::HashMap[String, u32] = collections::HashMap()
+		for e in entries.drain() {
+			let at = e.key.start
+			let key = self.resolved(e.key, input)
+			let k = key_of(key)
+			if k != null {
+				let s = k ?? ""
+				let first = seen.get(s)
+				if first != null {
+					let (line, column) = place_of(input, (first ?? 0) as i64)
+					let here = load_error(input, at, "")
+					throw Error {
+						message: f"duplicate key at {here.line}:{here.column}, first at {line}:{column}",
+						line: here.line,
+						column: here.column,
+						offset: here.offset,
+					}
+				}
+				seen.insert(s, at)
+			}
+			out.push(Entry { key: key, value: self.resolved(e.value, input) })
+		}
+		return out
+	}
+}
+
+// A key by its kind and value, as text two keys share exactly when they are
+// equal (D6): `a` and `"a"` one key (`text()`), `16` and `0x10` one key
+// (`as_i64`, the text where it does not fit), `1.0` and `1.00` one key
+// (`as_f64`), collections element by element and entry by entry; null for a
+// key equal to no key (a NaN, or a collection holding one).
+fn key_of(n: ref Node) -> String? sync {
+	return match n.value {
+		Value::Null => "n"
+		Value::Bool(b) => f"b{b}"
+		Value::Str(s) => {
+			let t = text(s)
+			f"s{t.len()}:{t}"
+		}
+		Value::Int(t) => {
+			let i = as_i64(n.value) catch {
+				return f"I{t.len()}:{t}"
+			}
+			f"i{i}"
+		}
+		Value::Float(t) => {
+			let f = as_f64(n.value) catch {
+				return f"F{t.len()}:{t}"
+			}
+			if f.is_nan() {
+				return null
+			}
+			if f == 0.0 { "f0" } else { f"f{f}" }
+		}
+		Value::Seq(items) => {
+			let mut out = f"q{items.len()}"
+			for x in items {
+				let k = key_of(x)
+				if k == null {
+					return null
+				}
+				out = f"{out}[{k ?? ""}]"
+			}
+			out
+		}
+		Value::Map(entries) => {
+			let mut out = f"m{entries.len()}"
+			for e in entries {
+				let k = key_of(e.key)
+				let v = key_of(e.value)
+				if k == null || v == null {
+					return null
+				}
+				out = f"{out}[{k ?? ""}={v ?? ""}]"
+			}
+			out
+		}
+		Value::Alias(a) => f"a{a}"
+	}
 }
 
 // A scalar's value: for a double-quoted one what the grammar decoded (D11);
