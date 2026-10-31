@@ -1,15 +1,12 @@
-1. **Most cost:** finding out that the figure couldn't be trusted. Running `check --bounds` per file was quick, but it took several more steps to see that 227 of the 246 files are refused when checked alone, and to trace how `lower-std` checks the package (`sysroot.rs`). Tracing the loop defect also took several probes (inside the loop, after it, with and without `prove-through-loops`) before I reached `prover_state.nika`'s `through_loops`. That probing was worth it.
-2. **What the brief could have handed me:**
-   - Where the `tools` files are. `tools/*.nika` matched nothing; they are in `crates/nikaia-std/src/tools/`.
-   - Where the certificate checker is: `lg_verify` and its callees in `logic_search.nika`.
-   - That `tests/compiler` is a single project, so no test can set its own `--optimization`.
-   - The exact headings of `builder-facts.md`. I first wrote an invalid `Facts:` line into the issues and had to fix them.
-   - Which issues are already closed (#382, #383), and ADR-306 D12 (lengths below 2^60).
+1. **Most cost:** working out p2's open question. I read `bounding_fits`, `solvable()`, `bounding_loop_stmt` and `bounding_loop_guesses` in `bounds_walk.nika`, and ADR-361 D2, D3 and D10, to learn how the check walk guesses loop invariants and why it caps sums at 2^62. The two `lower-std --bounds` counts took about a minute each, which was cheap.
+2. **Looked up, could have been handed over:**
+   - That `docs/briefs/prover/RED` is the driver's marker, where empty means green. I deleted it as clutter and restored it empty. That was a mistake, though nothing broke.
+   - That p3's rules block was older than the current `docs/briefs/common.part`.
+   - Whether the tools package is built with `prove-through-loops` on or off.
+   - Why 4 files were refused: the `fast` binary predated the latest commits.
+   - The valid `Facts:` headings in `builder-facts.md`.
 3. **Checks:**
-   - Useful: the per-file count and its error codes; the shape probes (counter, `if` value, field, parameter, element); the loop-assert probes; running p3's probe exactly as written in the brief.
-   - Wasted:
-     - an over-broad `grep` whose output matched every path and had to be saved to a file;
-     - `check` on a directory, which only says *Is a directory*;
-     - the first probe, which failed on a syntax slip (`s: mut S`);
-     - searching `tests/` for `prove-through-loops`, which found nothing.
-4. **The change that would save the most:** a short *Lane facts* block in the architect task, or `state.md` once it exists. It would list the tools directory, the counting command and why counting each file alone undercounts, where the certificate checker is, the test-project limit, and the valid `Facts:` headings. With that, about 15 of my roughly 45 turns would not have been needed.
+   - Useful: the two package counts (`off` and `on`); the 5-function probe under `--bounds` at `on`, which confirmed every claim in p4; the check that no p3/p4 file is in the main or bug batch; looking up the issues' state and labels.
+   - Wasted: the search for `prove-through-loops` in `sysroot.rs` and the package's `nikaia.toml`, which settled nothing; reading `adr-361`'s heading list before the sections I needed.
+   - Not run: a fresh `cargo build`, so the figure carries 4 refused files.
+4. **One change:** the architect task should say which files in `DIR` belong to the driver (`RED`, `*.run.json`, `*.session`, `cost.txt`, `tokens.txt`) and must never be touched. It should also say: "rebuild `target/fast/nikaia` before counting if `crates/` changed since the binary". Both are now partly in `state.md`'s *Lane facts*, but belong in the task template.
