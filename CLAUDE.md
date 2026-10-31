@@ -124,6 +124,17 @@ the background in a cloud session.
   reported to the supervisor (the session that started the agents), not
   fixed. The supervisor resolves it if the agent that caused it does not
   notice and repair it itself.
+* **New features are written in Nikaia only; no new Rust** (owner,
+  2026-10-31). A new feature of the compiler, `std` or the tools is written
+  as `.nika` (`crates/nikaia-std/src/tools/*.nika`, a package, a `tools/*.nika`);
+  nobody writes new Rust by hand from now on. The `.rs` files the lowering
+  writes from a `.nika` (`crates/nikaia-std/src/tools/lowered/`) are output,
+  not Rust written by hand. A step that cannot be done without writing Rust
+  stops before the first line: the report says `Result: blocked`,
+  `Found:` what is missing in Nikaia (the gap that makes Rust necessary), and
+  `Needs: architect decision`; the architect makes closing that gap the
+  next brief, never a brief that writes the Rust. Briefs and agent files
+  that still order Rust are read with this rule over them.
 * **Helper tools are written in Nikaia, not in Python or shell.** A new tool
   (a migration aid, a checker, a generator) is a `tools/*.nika` behind a
   `nikaia` subcommand or a program run with `nikaia run`; the existing Python

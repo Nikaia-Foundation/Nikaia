@@ -19,6 +19,7 @@ Read `docs/architect.md` lines 1-260 (roles, briefs, batches; its *State* sectio
 
 ## Lane facts
 
+* **No new Rust** (owner, 2026-10-31, CLAUDE.md): every brief builds in Nikaia (`.nika`); a step that needs hand-written Rust is not briefed: file the Nikaia gap that forces it and brief that gap first.
 * `NK` codes: this lane uses those ADR-grammar-2 names (`NK1250`, `NK1310`, `NK1311`, `NK1312`, already in Part II/III). Any new code: `NK1320`-`NK1329` only.
 * An empty `RED` file in this directory is not a red CI: `architect-input.txt` decides.
 * Re-queue a blocked brief: rename its report to `<brief>.runN.report.md` (`git mv` when tracked), and add a paragraph to the brief on what changed between the runs.
