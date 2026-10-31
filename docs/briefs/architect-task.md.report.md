@@ -1,7 +1,4 @@
 Result: done
-Batch: b1012c-trait-column-data.md, b1017-lambda-optional-tail.md, b1018-kept-fn-index-read.md
+Batch: b1018-kept-fn-index-read.md, b1029-kept-lambda-int-result.md
 Owner: none
-
-Decision: b1012b (51b0838a, #1012 step 2) is done; its Changelog line is in its report and the version raise is still owed. Its Found is not a defect: `nikaia fmt` puts tabs into a tools file because Part III says it must. The rule now sits in builder-facts as "never fmt tools files". Its Deviation, an existing test's stderr updated because the change rightly altered the message, no longer counts as a deviation (common.part). CI is green up to df143a1b.
-b1012c now writes `Fixes #1012`: step 4 (k3a2, 829ce635) is on develop. #1017 and #1018 were probed at ed30efd5 and still fail. #1017 traces to `check_core_lambda_leave`. #1018 drops the issue's `fs[0](2)` row because it does not parse. I commented on both issues and committed in 8de92b2c.
-Needs from the main session: nothing.
+Notes: cut at b1017 on Found; #1017 done (ee9aa6a6, version raise owed). Found filed `ready` as #1029 (pausing kept lambda typed `-> i64` hands back i32 literals; cast `BoxedIn<'_, _>` in emit_flow_kept), probed six rows. CI red since 555fe6e9 was the json example's ledger, fixed forward by 71aa29ae (all examples pass `test --locked` locally; run in progress). Pushed 0db664aa.
