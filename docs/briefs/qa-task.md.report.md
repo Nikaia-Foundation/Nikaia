@@ -1,9 +1,7 @@
 Result: done
-Cause: 91d5eb6b (already pushed-range brief commit) added docs/specification/adr/adr-384.md without its index row; pre-push step (check-adr-refs.py) red
-Fixed: added the ADR-384 row to docs/specification/adr/README.md
-Tests: scripts/pre-push-check.sh green (fmt, ADR refs, badges, bump)
-Found: none (the "Unused import ProbePlain" warning in the suite log is a lint note in scripts/gate.nika, not a failure)
-Files: docs/specification/adr/README.md
-Commit: ADR index: add the row for ADR-384 (Entry::or_default, Seq::cloned)
-Changelog: none
-Pushed: local eadeb8f8b1342d97ed78392bf27a6de6382e30bf
+Cause: 316e0721 (tiers; the lowering now writes TrustedMap/TrustedSet) left lowered/project_members.rs stale with HashMap: step lower-std "lowered drift"
+Fixed: committed the file as `nikaia lower-std` writes it (7 lines, HashMap/HashSet to TrustedMap/TrustedSet)
+Tests: nikaia lower-std rerun: second run changes nothing (fixpoint); cargo build --profile fast -p nikaia ok with the file; pre-push-check ok
+Found: none
+Files: crates/nikaia-std/src/tools/lowered/project_members.rs docs/briefs/qa-task.md.report.md
+Commit: lowered: project_members.rs as lower-std writes it (TrustedMap, TrustedSet)
