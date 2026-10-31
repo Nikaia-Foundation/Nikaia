@@ -1,6 +1,7 @@
 Result: done
-Batch: j6-1019-error-path.md, j7-1095-sync-bracket-call.md, j5-1019-comptime-field.md (run 2)
+Batch: j7-1095-sync-bracket-call.md, j5-1019-comptime-field.md, j8-1019-cut-item-frame.md
 Owner: none
-Decided: j5's Needs: step 2 goes through a generic value function in the build-time sub-program calling j3's field copy (no second rewriter); step 3 may edit grammar_decode.nika. j5's Found (1) filed #1095 (ready, wip: tools lane, brief j7); Found (3) filed #1096 (ready, bug lane). #1019 and #1087 updated.
-Changelog: j5 run 1 (417abcf): A `comptime` in an unrolled turn over `T::fields` can read the turn's field name, `f.name`, directly or through a function (#1087).
-Pushed: rejected (local is behind origin/develop and holds the untested 417abcf; the driver rebases and pushes)
+Decided: j6's Needs (obvious, no language change): winnow-grammar numbers a Cut error in a repetition with `item k` as it does a Backtrack one; the list index is read by Nikaia's emitter through marker rules (j6 run 2). Rejected: a run-time `frame(expr, p)` pattern.
+Needs from main session: after j8, push its winnow-grammar commit (local clone /home/user/winnow-grammar, patch in docs/briefs/tools/) to keywan-ghadami/winnow-grammar main (needs add_repo push access); then the next architect run queues j6 run 2 (pin move + path).
+Changed: j6 report -> run1, j6 Run 2 paragraph; #1019 3d updated (ready+wip); docs/architect.md check: probe a route a brief calls possible.
+Changelog: none

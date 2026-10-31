@@ -64,6 +64,14 @@ The new tests pass through `nikaia test` (one program alone: `docs/builder-facts
 ## Stop and report if
 the path cannot be carried without a change to `winnow-grammar` (say which function and what it must carry, `Needs: architect decision`); an edit outside Locations and the new tests; an error in another agent's file. Stop about 15 turns before `max_turns`, commit what is finished and report `partial`.
 
+## Run 2 (architect, 2026-10-31; queued only after j8's winnow-grammar commit is pushed upstream)
+Run 1 (`j6-1019-error-path.md.run1.report.md`) stopped rightly: the "no backend change" route of *Locations* is wrong, a Cut error lost its `item N` frame. Decided (obvious): j8 makes winnow-grammar number a Cut error in a repetition as it numbers a Backtrack one; nothing else changes in the backend. What changed for you:
+* Pre-flight: `git ls-remote https://github.com/keywan-ghadami/winnow-grammar main` shows j8's sha (in `j8-1019-cut-item-frame.md.report.md`); if not, `Result: blocked`, nothing built. Move the pin in `Cargo.toml` to it (`Cargo.lock` follows), `touch crates/nikaia/build.rs`, rebuild, and run the probe of `docs/builder-facts.md`, *Traps already met* (the rev baked in). `Cargo.toml`, `Cargo.lock` join your Locations.
+* Fields: one marker rule per field, as run 1 proposed (`__nikaia_members_N_field_NAME` around `_value`'s alternative i, static names); `nikaia_std::grammar` reads and drops them before `render`.
+* List index: the emitter wraps the list's elements in two marker rules of its own (non-template, so each gets a frame): `__nikaia_list_first` around the first element (index 0) and `__nikaia_list_elem` around the repeated one; the index of a `__nikaia_list_elem` frame is the `item k` frame directly outside it (`k` counted from 1 in `(sep item)*`, so index `k`). Confirm the count on the generated Rust (`nikaia lower FILE`) before relying on it. An `item k` frame read as an index is dropped with its marker; every other `item N` frame (`digit+` inside an element) stays as today.
+* The new `item N` lines on Cut errors may change the expected output of existing grammar tests (also the yaml lane's `tests/compiler/tests/*yaml*` and `packages/yaml/`): run every `*grammar*` and `*yaml*` test; a test that rightly gains an `in item N` line is updated and named in `Body:`.
+* Allowed beyond *Locations*: `Cargo.toml`, `Cargo.lock`.
+
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
 * `git add <files>` only (`scripts/commit.nika -- REPORT` does it); commit locally after each step and **never push**: the driver runs the complete suite and pushes (`.claude/agents/builder.md`, *Cheap checks only*; owner, 2026-10-31).

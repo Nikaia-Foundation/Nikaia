@@ -173,6 +173,10 @@ paid for the rule):
   answered with that issue (p3a; `CLAUDE.md`);
 * a move that reshapes a struct names every file that reads its fields, with a
   count, the new shape, and any Nikaia twin that exists (p1);
+* a route a brief calls possible ("one way needs no backend change") is
+  probed by the architect in the failing case it must carry (a Cut, a
+  template rule the macro inlines), the generated Rust read, before the brief
+  offers it (j6 run 1: the backend's `item N` frame vanished on a Cut);
 * a fix-forward lists every commit of the first red run's push
   (`git log <last green>..<first red>`), cheap suspects first
   (b-fixforward-sweep).
