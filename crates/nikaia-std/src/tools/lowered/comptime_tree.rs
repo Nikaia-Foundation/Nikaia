@@ -217,14 +217,14 @@ pub(crate) fn comptime_method_key(words: &winnow_grammar::InternerContext, metho
 
 pub(crate) fn comptime_a_function(name: Option<winnow_grammar::Symbol>, ret_type: Option<Type>, stmts: Vec<Spanned<Stmt>>) -> Item { Item::Fn { name, generics: vec![], receiver: None, args: vec![], config: vec![], spread: None, ret_type, body: Block { stmts }, is_sync: false, sync_by: vec![], is_public: false, can_throw: false, is_extern: false } }
 
-pub(crate) fn comptime_literal_of(value: &BuildValue, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<Expr> {
+pub(crate) fn comptime_literal_of(value: &BuildValue, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Expr> {
     match value {
         BuildValue::Int(n) => Some(Expr::LitInt { value: n.magnitude, negative: n.negative, id: fresh_id() }),
         BuildValue::Bool(b) => { let b = *b; Some(Expr::LitBool(b, fresh_id())) },
         BuildValue::Float(f) => { let f = *f; Some(Expr::LitFloat(format!("{:?}", f), fresh_id())) },
         BuildValue::Text(text) => Some(Expr::LitStr { text: as_a_literal(text), id: fresh_id() }),
-        BuildValue::List(items) => Some(Expr::ListLit { items: match comptime_literals_of(items, intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, id: fresh_id() }),
-        BuildValue::Tuple(parts) => Some(Expr::Tuple(match comptime_literals_of(parts, intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, fresh_id())),
+        BuildValue::List(items) => Some(Expr::ListLit { items: match comptime_literals_of(items, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, id: fresh_id() }),
+        BuildValue::Tuple(parts) => Some(Expr::Tuple(match comptime_literals_of(parts, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, fresh_id())),
         BuildValue::Constant { .. } => None,
         BuildValue::Struct { name: ty, fields } => {
             let named = intern(ty);
@@ -240,15 +240,15 @@ pub(crate) fn comptime_literal_of(value: &BuildValue, intern: &impl Fn(&str) -> 
             let path = Expr::Path(segments, fresh_id());
             match payload.is_empty() {
                 true => Some(path),
-                false => Some(Expr::Call { func: Box::new(path), args: match comptime_literals_of(payload, intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, config: vec![], id: fresh_id() }),
+                false => Some(Expr::Call { func: Box::new(path), args: match comptime_literals_of(payload, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None }, config: vec![], id: fresh_id() }),
             }
         },
     }
 }
 
-pub(crate) fn comptime_literals_of(values: &[BuildValue], intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<Vec<Expr>> {
+pub(crate) fn comptime_literals_of(values: &[BuildValue], intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Vec<Expr>> {
     let mut out: Vec<Expr> = vec![];
-    for value in values.iter() { out.push(match comptime_literal_of(value, intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+    for value in values.iter() { out.push(match comptime_literal_of(value, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     Some(out)
 }
 
@@ -287,25 +287,25 @@ pub(crate) fn comptime_held_wide(n: &Integer) -> Option<Ty> {
     None
 }
 
-pub(crate) fn comptime_written_type(ty: &Ty, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<Type> {
+pub(crate) fn comptime_written_type(ty: &Ty, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Type> {
     match ty {
         Ty::Named { name, args, view } => {
             let view = *view;
-            let mut out = comptime_plain(name.to_string(), intern);
+            let mut out = comptime_plain(name.to_string(), &intern);
             out.is_view = view;
-            out.generics = match comptime_written_types(args, intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            out.generics = match comptime_written_types(args, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(out)
         },
         Ty::Count(n) => {
             let n = *n;
-            let mut out = comptime_plain(format!("{}", n), intern);
+            let mut out = comptime_plain(format!("{}", n), &intern);
             out.count = Some(n);
             Some(out)
         },
         Ty::Tuple(parts) => {
-            let mut out = comptime_plain(String::from(""), intern);
+            let mut out = comptime_plain(String::from(""), &intern);
             out.is_tuple = true;
-            out.generics = match comptime_written_types(parts, intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            out.generics = match comptime_written_types(parts, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(out)
         },
         Ty::Nullable(inner) => {
@@ -318,9 +318,9 @@ pub(crate) fn comptime_written_type(ty: &Ty, intern: &impl Fn(&str) -> winnow_gr
     }
 }
 
-pub(crate) fn comptime_written_types(tys: &[Ty], intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<Vec<Type>> {
+pub(crate) fn comptime_written_types(tys: &[Ty], intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Vec<Type>> {
     let mut out: Vec<Type> = vec![];
-    for ty in tys.iter() { out.push(match comptime_written_type(ty, intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+    for ty in tys.iter() { out.push(match comptime_written_type(ty, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     Some(out)
 }
 

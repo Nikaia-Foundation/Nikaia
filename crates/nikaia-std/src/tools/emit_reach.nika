@@ -148,3 +148,93 @@ fn reach_set_for(reaches: ref collections::BTreeMap[String, collections::BTreeSe
     let found = reaches.get(key) ?? return collections::BTreeSet()
     return found.clone()
 }
+
+/// **Whether a function that runs a `sync` code parameter lies on a cycle of
+/// such functions** (ADR-277 D11, #1023): each new lambda handed round the
+/// cycle is a new type, so `impl Fn` would instantiate the function without
+/// end, and the parameter is written `&dyn Fn` there. Only a function generic
+/// over its lambda carries the lambda's type on, so the graph holds those
+/// alone; a method of a trait's `impl` keeps the trait's shape and is left out.
+pub fn code_on_a_cycle(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], contracts: ref Ledger, key: ref String) -> bool {
+    let own = contracts.functions.get(key) ?? return false
+    if !reach_runs_code(own) {
+        return false
+    }
+    let mut running: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in contracts.functions.keys() {
+        let contract = contracts.functions.get(name) ?? continue
+        if reach_runs_code(contract) {
+            running.insert(name.clone())
+        }
+    }
+    let mut by_last: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for name in running {
+        let last = reach_last_segment(name)
+        let mut keys = reach_keys_for(by_last, last)
+        keys.push(name.clone())
+        by_last.insert(last, keys)
+    }
+    let mut graph: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Fn { name, body, .. } => {
+                let held = name ?? continue
+                let fn_name = words.resolve(held).clone()
+                if running.contains(fn_name) {
+                    graph.insert(fn_name, reach_edges_of(words, aliases, running, by_last, body))
+                }
+            },
+            Item::Impl { trait_name, target, methods } => {
+                if trait_name != null {
+                    continue
+                }
+                let owner = words.resolve(target.name).clone()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, body, .. } => {
+                            let method_key = f"{owner}::{reach_method_name(words, name)}"
+                            if running.contains(method_key) {
+                                graph.insert(method_key, reach_edges_of(words, aliases, running, by_last, body))
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    if !graph.contains_key(key) {
+        return false
+    }
+    let mut pending: Vec[String] = []
+    for first in reach_set_for(graph, key) {
+        pending.push(first)
+    }
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut at = 0
+    while at < pending.len() {
+        let next = pending[at].clone()
+        at += 1
+        if next == key {
+            return true
+        }
+        if seen.insert(next.clone()) {
+            for then in reach_set_for(graph, next) {
+                pending.push(then)
+            }
+        }
+    }
+    return false
+}
+
+/// Whether a contract takes a `sync` code parameter it only runs.
+fn reach_runs_code(contract: ref FnContract) -> bool {
+    let signature = contract.signature ?? return false
+    return signature.params.iter().any(fn(param) {
+        match param.1 {
+            Ty::Fn { is_sync, .. } => is_sync && !contract.keeps.contains(param.0),
+            else => false,
+        }
+    })
+}

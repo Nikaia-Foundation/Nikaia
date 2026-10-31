@@ -123,3 +123,69 @@ pub(crate) fn reach_set_for(reaches: &collections::BTreeMap<String, collections:
     found.to_owned()
 }
 
+pub fn code_on_a_cycle(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], contracts: &Ledger, key: &str) -> bool {
+    let own = match contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if !reach_runs_code(&own) { return false; }
+    let mut running: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in contracts.functions.keys() {
+        let contract = match contracts.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if reach_runs_code(&contract) { running.insert(name.to_string()); }
+    }
+    let mut by_last: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    for name in running.iter() {
+        let last = reach_last_segment(name);
+        let mut keys = reach_keys_for(&by_last, &last);
+        keys.push(name.to_string());
+        by_last.insert(last, keys);
+    }
+    let mut graph: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { name, body, .. } => {
+                let name = *name;
+                let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let fn_name = words.resolve(held).to_string();
+                if running.contains(&fn_name) { graph.insert(fn_name, reach_edges_of(words, aliases, &running, &by_last, body)); }
+            },
+            Item::Impl { trait_name, target, methods } => {
+                let trait_name = *trait_name;
+                if trait_name.is_some() { continue; }
+                let owner = words.resolve(target.name).to_string();
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, body, .. } => {
+                            let name = *name;
+                            let method_key = format!("{}::{}", owner, reach_method_name(words, name));
+                            if running.contains(&method_key) { graph.insert(method_key, reach_edges_of(words, aliases, &running, &by_last, body)); }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    if !graph.contains_key(key) { return false; }
+    let mut pending: Vec<String> = vec![];
+    for first in reach_set_for(&graph, key) { pending.push(first); }
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut at: i64 = 0;
+    while ((at) as usize) < pending.len() {
+        let next = (*nikaia_std::index::get(&pending, (at) as usize)).to_string();
+        at += 1;
+        if next == key { return true; }
+        if seen.insert(next.to_string()) { for then in reach_set_for(&graph, &next) { pending.push(then); } }
+    }
+    false
+}
+
+pub(crate) fn reach_runs_code(contract: &FnContract) -> bool {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    signature.params.iter().any(|param| {
+        match &param.1 {
+            Ty::Fn { is_sync, .. } => { let is_sync = *is_sync; is_sync && !contract.keeps.contains(&param.0) },
+            _ => false,
+        }
+    })
+}
+

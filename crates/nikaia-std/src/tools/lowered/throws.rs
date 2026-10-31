@@ -304,39 +304,39 @@ pub fn thrown_by(body: &Block, names: &winnow_grammar::InternerContext, holes_of
     out
 }
 
-pub(crate) fn thrown_in_block(block: &Block, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution, in_a_handler: bool, out: &mut Thrown) {
+pub(crate) fn thrown_in_block(block: &Block, names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, contribution_of: &dyn Fn(&Expr) -> Contribution, in_a_handler: bool, out: &mut Thrown) {
     for stmt in block.stmts.iter() {
         match &stmt.node {
-            Stmt::Let { value, .. } => { thrown_in(value, names, holes_of, contribution_of, in_a_handler, false, out); },
-            Stmt::Comptime { value, .. } => { thrown_in(value, names, holes_of, contribution_of, in_a_handler, false, out); },
-            Stmt::Expr(value) => { thrown_in(value, names, holes_of, contribution_of, in_a_handler, false, out); },
-            Stmt::Return(value) => { thrown_in(match value { Some(__nikaia_value) => __nikaia_value, None => continue }, names, holes_of, contribution_of, in_a_handler, false, out); },
+            Stmt::Let { value, .. } => { thrown_in(value, names, &holes_of, &contribution_of, in_a_handler, false, out); },
+            Stmt::Comptime { value, .. } => { thrown_in(value, names, &holes_of, &contribution_of, in_a_handler, false, out); },
+            Stmt::Expr(value) => { thrown_in(value, names, &holes_of, &contribution_of, in_a_handler, false, out); },
+            Stmt::Return(value) => { thrown_in(match value { Some(__nikaia_value) => __nikaia_value, None => continue }, names, &holes_of, &contribution_of, in_a_handler, false, out); },
             Stmt::Assign { target, value, .. } => {
-                thrown_in(target, names, holes_of, contribution_of, in_a_handler, false, out);
-                thrown_in(value, names, holes_of, contribution_of, in_a_handler, false, out);
+                thrown_in(target, names, &holes_of, &contribution_of, in_a_handler, false, out);
+                thrown_in(value, names, &holes_of, &contribution_of, in_a_handler, false, out);
             },
-            Stmt::For { iter, .. } => { thrown_in(iter, names, holes_of, contribution_of, in_a_handler, false, out); },
-            Stmt::While { cond, .. } => { thrown_in(cond, names, holes_of, contribution_of, in_a_handler, false, out); },
+            Stmt::For { iter, .. } => { thrown_in(iter, names, &holes_of, &contribution_of, in_a_handler, false, out); },
+            Stmt::While { cond, .. } => { thrown_in(cond, names, &holes_of, &contribution_of, in_a_handler, false, out); },
             _ => { },
         }
         match &stmt.node {
             Stmt::For { body, .. } => { thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out); },
             Stmt::While { body, .. } => { thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out); },
-            Stmt::Let { value, .. } => { thrown_in_blocks(value, names, holes_of, contribution_of, in_a_handler, out); },
-            Stmt::Comptime { value, .. } => { thrown_in_blocks(value, names, holes_of, contribution_of, in_a_handler, out); },
-            Stmt::Expr(value) => { thrown_in_blocks(value, names, holes_of, contribution_of, in_a_handler, out); },
-            Stmt::Return(value) => { thrown_in_blocks(match value { Some(__nikaia_value) => __nikaia_value, None => continue }, names, holes_of, contribution_of, in_a_handler, out); },
+            Stmt::Let { value, .. } => { thrown_in_blocks(value, names, &holes_of, &contribution_of, in_a_handler, out); },
+            Stmt::Comptime { value, .. } => { thrown_in_blocks(value, names, &holes_of, &contribution_of, in_a_handler, out); },
+            Stmt::Expr(value) => { thrown_in_blocks(value, names, &holes_of, &contribution_of, in_a_handler, out); },
+            Stmt::Return(value) => { thrown_in_blocks(match value { Some(__nikaia_value) => __nikaia_value, None => continue }, names, &holes_of, &contribution_of, in_a_handler, out); },
             Stmt::Assign { target, value, .. } => {
-                thrown_in_blocks(target, names, holes_of, contribution_of, in_a_handler, out);
-                thrown_in_blocks(value, names, holes_of, contribution_of, in_a_handler, out);
+                thrown_in_blocks(target, names, &holes_of, &contribution_of, in_a_handler, out);
+                thrown_in_blocks(value, names, &holes_of, &contribution_of, in_a_handler, out);
             },
             _ => { },
         }
     }
 }
 
-pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution, in_a_handler: bool, caught: bool, out: &mut Thrown) {
-    a_contribution(expr, names, contribution_of, in_a_handler, caught, out);
+pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, contribution_of: &dyn Fn(&Expr) -> Contribution, in_a_handler: bool, caught: bool, out: &mut Thrown) {
+    a_contribution(expr, names, &contribution_of, in_a_handler, caught, out);
     for hole in holes_of(expr) { thrown_in(&hole, names, holes_of, contribution_of, in_a_handler, caught, out); }
     match expr {
         Expr::Call { func, args, config, .. } => {
@@ -386,7 +386,7 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
         },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
-            let into_the_handler = caught || !passes_on(handler, names, holes_of, contribution_of);
+            let into_the_handler = caught || !passes_on(handler, names, &holes_of, &contribution_of);
             let outer = out.named.to_owned();
             if !caught { out.named = fatal_named(handler, names); }
             thrown_in(expr, names, holes_of, contribution_of, in_a_handler, into_the_handler, out);
@@ -397,11 +397,11 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
             let value = nikaia_std::boxed::open(value);
             thrown_in(value, names, holes_of, contribution_of, in_a_handler, caught, out);
             for arm in arms.iter() {
-                maybe_thrown_in((arm.guard).as_ref(), names, holes_of, contribution_of, in_a_handler, caught, out);
+                maybe_thrown_in((arm.guard).as_ref(), names, &holes_of, &contribution_of, in_a_handler, caught, out);
                 thrown_in(&arm.body, names, holes_of, contribution_of, in_a_handler, caught, out);
             }
         },
-        Expr::StructLit { fields, .. } => { for field in fields.iter() { maybe_thrown_in((field.value).as_ref(), names, holes_of, contribution_of, in_a_handler, caught, out); } },
+        Expr::StructLit { fields, .. } => { for field in fields.iter() { maybe_thrown_in((field.value).as_ref(), names, &holes_of, &contribution_of, in_a_handler, caught, out); } },
         Expr::ListRepeat { value, count, .. } => {
             let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
             thrown_in(value, names, holes_of, contribution_of, in_a_handler, caught, out);
@@ -411,7 +411,7 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
             thrown_in(base, names, holes_of, contribution_of, in_a_handler, caught, out);
-            for field in fields.iter() { maybe_thrown_in((field.value).as_ref(), names, holes_of, contribution_of, in_a_handler, caught, out); }
+            for field in fields.iter() { maybe_thrown_in((field.value).as_ref(), names, &holes_of, &contribution_of, in_a_handler, caught, out); }
         },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); thrown_in(match value { Some(__nikaia_value) => __nikaia_value, None => return }, names, holes_of, contribution_of, in_a_handler, caught, out); },
         Expr::Select(arms, _) => { for arm in arms.iter() { thrown_in(&arm.value, names, holes_of, contribution_of, in_a_handler, caught, out); } },
@@ -419,14 +419,14 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
     }
 }
 
-pub(crate) fn maybe_thrown_in(expr: Option<&Expr>, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution, in_a_handler: bool, caught: bool, out: &mut Thrown) { thrown_in(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, names, holes_of, contribution_of, in_a_handler, caught, out); }
+pub(crate) fn maybe_thrown_in(expr: Option<&Expr>, names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, contribution_of: &dyn Fn(&Expr) -> Contribution, in_a_handler: bool, caught: bool, out: &mut Thrown) { thrown_in(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, names, &holes_of, &contribution_of, in_a_handler, caught, out); }
 
-pub(crate) fn thrown_in_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution, in_a_handler: bool, out: &mut Thrown) {
+pub(crate) fn thrown_in_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, contribution_of: &dyn Fn(&Expr) -> Contribution, in_a_handler: bool, out: &mut Thrown) {
     match expr {
-        Expr::Block(block, _) => { thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out); },
-        Expr::Unsafe(block, _) => { thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out); },
-        Expr::Overlap(block, _) => { thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out); },
-        Expr::Closure { body, .. } => { thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out); },
+        Expr::Block(block, _) => { thrown_in_block(block, names, &holes_of, &contribution_of, in_a_handler, out); },
+        Expr::Unsafe(block, _) => { thrown_in_block(block, names, &holes_of, &contribution_of, in_a_handler, out); },
+        Expr::Overlap(block, _) => { thrown_in_block(block, names, &holes_of, &contribution_of, in_a_handler, out); },
+        Expr::Closure { body, .. } => { thrown_in_block(body, names, &holes_of, &contribution_of, in_a_handler, out); },
         Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); thrown_in_blocks(body, names, holes_of, contribution_of, in_a_handler, out); },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -447,16 +447,16 @@ pub(crate) fn thrown_in_blocks(expr: &Expr, names: &winnow_grammar::InternerCont
             for setting in config.iter() { thrown_in_blocks(&setting.value, names, holes_of, contribution_of, in_a_handler, out); }
         },
         Expr::If { then_branch, else_branch, .. } => {
-            thrown_in_block(then_branch, names, holes_of, contribution_of, in_a_handler, out);
-            thrown_in_block(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, names, holes_of, contribution_of, in_a_handler, out);
+            thrown_in_block(then_branch, names, &holes_of, &contribution_of, in_a_handler, out);
+            thrown_in_block(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, names, &holes_of, &contribution_of, in_a_handler, out);
         },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             thrown_in_blocks(expr, names, holes_of, contribution_of, in_a_handler, out);
-            thrown_in_block(handler, names, holes_of, contribution_of, true, out);
+            thrown_in_block(handler, names, &holes_of, &contribution_of, true, out);
         },
         Expr::Match { arms, .. } => { for arm in arms.iter() { thrown_in_blocks(&arm.body, names, holes_of, contribution_of, in_a_handler, out); } },
-        Expr::Select(arms, _) => { for arm in arms.iter() { thrown_in_block(&arm.body, names, holes_of, contribution_of, in_a_handler, out); } },
+        Expr::Select(arms, _) => { for arm in arms.iter() { thrown_in_block(&arm.body, names, &holes_of, &contribution_of, in_a_handler, out); } },
         _ => { },
     }
 }
@@ -506,9 +506,9 @@ pub(crate) fn the_caught_error(expr: &Expr, names: &winnow_grammar::InternerCont
     }
 }
 
-pub(crate) fn passes_on(handler: &Block, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution) -> bool {
+pub(crate) fn passes_on(handler: &Block, names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, contribution_of: &dyn Fn(&Expr) -> Contribution) -> bool {
     let mut seen = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
-    thrown_in_block(handler, names, holes_of, contribution_of, false, &mut seen);
+    thrown_in_block(handler, names, &holes_of, &contribution_of, false, &mut seen);
     seen.passes_on
 }
 

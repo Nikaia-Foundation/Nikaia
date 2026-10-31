@@ -1,0 +1,14 @@
+// #1023: a function on a call cycle that hands a new lambda to its own `fn`
+// parameter takes the parameter as `&dyn Fn` (ADR-277 D11): `impl Fn` would
+// instantiate `ping` anew for each lambda, without end.
+fn alt(name: String) -> i64? sync { return name.len() }
+
+fn ping(n: i64, known: fn(ref String) -> i64? sync) -> i64 sync {
+    if n == 0 { return known("a") ?? 0 }
+    let more = fn(name) { known(name) ?? alt(name) }
+    return pong(n - 1, more)
+}
+
+fn pong(n: i64, known: fn(ref String) -> i64? sync) -> i64 sync { return ping(n, known) }
+
+fn main() { println(f"{ping(2, fn(_name) { null })}") }

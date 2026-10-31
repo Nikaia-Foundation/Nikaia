@@ -218,7 +218,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
+pub(crate) fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
     let mut untracked: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut pinned: collections::BTreeSet<String> = collections::BTreeSet::new();
     if prover_binds_mutable(block) {
@@ -233,26 +233,26 @@ pub(crate) fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut Pro
             let returned = prover_returned_name(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(next)).node, words);
             if returned.is_some() { walk.state.before_return.insert(stmt.span.start as i64, nikaia_std::index::or(returned, || "".into())); }
         }
-        if prover_stmt(walk, &stmt, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition) { return true; }
+        if prover_stmt(walk, &stmt, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition) { return true; }
         prover_follow_mutables(walk, &stmt.node, &stmt.span, scope, &untracked, &pinned, words);
-        if !prover_a_branch(&stmt.node) && leaves_stmt(&stmt.node, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true) { scope.exact = false; }
+        if !prover_a_branch(&stmt.node) && leaves_stmt(&stmt.node, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true) { scope.exact = false; }
     }
     false
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
+pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
     let span = stmt.span;
     let nested = at.inside(false);
     match &stmt.node {
         Stmt::Let { names, mutable, ty, value, .. } => {
             let mutable = *mutable;
-            prover_let(walk, names, mutable, (ty).as_ref(), value, span, scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_let(walk, names, mutable, (ty).as_ref(), value, span, scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             false
         },
         Stmt::Comptime { name, value, .. } => {
             let name = *name;
-            prover_expr(walk, value, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_expr(walk, value, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             let bound = words.resolve(name).to_string();
             scope.rebind(&walk.arena, &bound);
             let computed = *nikaia_std::index::get(&walk.state.comptime_at, &(span.start as i64));
@@ -267,13 +267,13 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
             false
         },
         Stmt::Assign { target, op, value } => {
-            prover_expr(walk, target, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-            prover_expr(walk, value, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_expr(walk, target, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+            prover_expr(walk, value, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             match target {
                 Expr::Variable(name, _) => {
                     let name = *name;
                     let n = words.resolve(name).to_string();
-                    let tainted = from_outside(value, &scope.tainted, words, library, holes_of) || op.is_some() && scope.tainted.contains(&n);
+                    let tainted = from_outside(value, &scope.tainted, words, library, &holes_of) || op.is_some() && scope.tainted.contains(&n);
                     if !prover_assigned(walk, &n, (op).as_ref(), value, &span, scope, words) {
                         scope.rebind(&walk.arena, &n);
                         if op.is_none() && !tainted {
@@ -288,11 +288,11 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
             false
         },
         Stmt::For { bindings, iter, body, .. } => {
-            prover_for(walk, bindings, iter, body, span, scope, at, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_for(walk, bindings, iter, body, span, scope, at, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             false
         },
         Stmt::While { cond, body } => {
-            prover_expr(walk, cond, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_expr(walk, cond, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             let mut changed = assigned_in(body, words);
             prover_lengths_changed(&mut changed, body, &scope, &walk.state.readers, words);
             let mut state: Vec<String> = vec![];
@@ -300,7 +300,7 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
             let mut records: Vec<LoopRecord> = vec![];
             if !state.is_empty() {
                 let at_loop = scope.with_history();
-                let record = loop_record(&mut walk.arena, span.start as i64, &state, &at_loop, &scope.ints, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, cond, body, words, &walk.claims, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of);
+                let record = loop_record(&mut walk.arena, span.start as i64, &state, &at_loop, &scope.ints, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, cond, body, words, &walk.claims, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of);
                 if record.is_some() { records.push(match record { Some(__nikaia_value) => __nikaia_value, None => return false }); }
             }
             let kept_bits = prover_loop_bits(walk, &scope, &changed, body, words);
@@ -330,17 +330,17 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
             scope.path = None;
             let holds = claim_term(cond, words, &|name| { inner.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &inner, name) }, &mut walk.arena.nodes);
             if holds.is_some() { inner.facts.push(nikaia_std::index::or(holds, || 0)); }
-            prover_block(walk, body, &mut inner, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-            if leaves_block(body, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, false) { scope.exact = false; }
+            prover_block(walk, body, &mut inner, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+            if leaves_block(body, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, false) { scope.exact = false; }
             false
         },
         Stmt::Return(value) => {
-            prover_return(walk, (value).as_ref(), span, &scope, at, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_return(walk, (value).as_ref(), span, &scope, at, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             true
         },
         Stmt::Break => true,
         Stmt::Continue => true,
-        Stmt::Expr(expr) => prover_expr_stmt(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
+        Stmt::Expr(expr) => prover_expr_stmt(walk, expr, span, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition),
     }
 }
 
@@ -422,13 +422,13 @@ pub(crate) fn prover_field_list(value: Option<&Expr>, field_name: &str, words: &
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol], mutable: bool, ty: Option<&Type>, value: &Expr, span: Span, scope: &mut ProverScope, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
-    prover_expr(walk, value, span, &scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-    let tainted = from_outside(value, &scope.tainted, words, library, holes_of);
+pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol], mutable: bool, ty: Option<&Type>, value: &Expr, span: Span, scope: &mut ProverScope, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+    prover_expr(walk, value, span, &scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+    let tainted = from_outside(value, &scope.tainted, words, library, &holes_of);
     let mut known_calls: collections::BTreeSet<String> = collections::BTreeSet::new();
-    if names.len() == 1 && !mutable { known_calls = prover_known_calls(walk, value, &scope, program, words, own, holes_of, unaliased, condition); }
-    if names.len() == 1 && !mutable { prover_call_results(walk, value, true, scope, program, words, own, unaliased, condition, written_of); }
-    let leaned = prover_pin_divisors(walk, value, &scope, words, ask, model);
+    if names.len() == 1 && !mutable { known_calls = prover_known_calls(walk, value, &scope, program, words, own, &holes_of, &unaliased, &condition); }
+    if names.len() == 1 && !mutable { prover_call_results(walk, value, true, scope, program, words, own, &unaliased, &condition, &written_of); }
+    let leaned = prover_pin_divisors(walk, value, &scope, words, &ask, &model);
     let value_lin = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
     let mut value_at_entry: Option<i64> = None;
     if value_lin.is_some() { value_at_entry = scope.at_entry(&mut walk.arena, nikaia_std::index::or(value_lin, || 0)); }
@@ -440,12 +440,12 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
         match value {
             Expr::Call { func, args, config, .. } => {
                 let func = nikaia_std::boxed::open(func);
-                let callee = prover_bound_callee(func, &scope, words, unaliased);
+                let callee = prover_bound_callee(func, &scope, words, &unaliased);
                 if callee.is_some() {
                     let c = nikaia_std::index::or(callee, || "".into());
                     let bound = words.resolve(*nikaia_std::index::get(&names, 0)).to_string();
-                    called_facts = prover_postconditions_of(walk, &c, args, config, &bound, &scope, program, words, own, condition);
-                    called_whole = prover_returns_whole(walk, &c, program, words, own, condition);
+                    called_facts = prover_postconditions_of(walk, &c, args, config, &bound, &scope, program, words, own, &condition);
+                    called_whole = prover_returns_whole(walk, &c, program, words, own, &condition);
                     called_summed = prover_summed(walk, &c, args, config, &bound, &scope, program, words, &written_of(value));
                     called = true;
                 }
@@ -520,7 +520,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_call_results(walk: &mut ProverWalk, expr: &Expr, top: bool, scope: &mut ProverScope, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, unaliased: &impl Fn(&str) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>, written_of: &impl Fn(&Expr) -> String) {
+pub(crate) fn prover_call_results(walk: &mut ProverWalk, expr: &Expr, top: bool, scope: &mut ProverScope, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, unaliased: &dyn Fn(&str) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>, written_of: &dyn Fn(&Expr) -> String) {
     match expr {
         Expr::Binary { lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
@@ -533,11 +533,11 @@ pub(crate) fn prover_call_results(walk: &mut ProverWalk, expr: &Expr, top: bool,
             let func = nikaia_std::boxed::open(func);
             for arg in args.iter() { prover_call_results(walk, arg, false, scope, program, words, own, unaliased, condition, written_of); }
             if top { return; }
-            let callee = match prover_bound_callee(func, &scope, words, unaliased) { Some(__nikaia_value) => __nikaia_value, None => return };
-            if !prover_returns_whole(walk, &callee, program, words, own, condition) { return; }
+            let callee = match prover_bound_callee(func, &scope, words, &unaliased) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if !prover_returns_whole(walk, &callee, program, words, own, &condition) { return; }
             let name = call_result_name(expr);
             scope.rebind(&walk.arena, &name);
-            let facts = prover_postconditions_of(walk, &callee, args, config, &name, &scope, program, words, own, condition);
+            let facts = prover_postconditions_of(walk, &callee, args, config, &name, &scope, program, words, own, &condition);
             scope.ints.insert(name.to_string());
             scope.loose.insert(name.to_string());
             for fact in facts.iter() {
@@ -551,7 +551,7 @@ pub(crate) fn prover_call_results(walk: &mut ProverWalk, expr: &Expr, top: bool,
     }
 }
 
-pub(crate) fn prover_pin_divisors(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Vec<String> {
+pub(crate) fn prover_pin_divisors(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Vec<String> {
     let mut notes: Vec<String> = vec![];
     match expr {
         Expr::Binary { op, lhs, rhs, .. } => {
@@ -572,14 +572,14 @@ pub(crate) fn prover_pin_divisors(walk: &mut ProverWalk, expr: &Expr, scope: &Pr
             if walk.arena.constant(d).is_some() { return notes; }
             walk.state.divisor_queries += 1;
             let mut facts = scope.facts.to_owned();
-            let mut pinned = prover_pinned_value(&mut walk.arena, &facts, d, ask, model);
+            let mut pinned = prover_pinned_value(&mut walk.arena, &facts, d, &ask, &model);
             if pinned.is_none() && !scope.summed.is_empty() {
                 let here = walk.arena.equal(d, d);
                 let read = summed_read(&walk.arena, scope, here);
                 if !read.is_empty() {
                     facts = summed_facts(&mut walk.arena, scope, &read);
                     walk.state.second_queries += 1;
-                    pinned = prover_pinned_value(&mut walk.arena, &facts, d, ask, model);
+                    pinned = prover_pinned_value(&mut walk.arena, &facts, d, &ask, &model);
                     if pinned.is_some() {
                         let mut said: Vec<String> = vec![];
                         for bound in read.iter() {
@@ -780,9 +780,9 @@ pub(crate) fn prover_all_plain(exprs: &[Expr]) -> bool {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: &Expr, body: &Block, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
-    prover_expr(walk, iter, span, &scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-    let tainted = from_outside(iter, &scope.tainted, words, library, holes_of);
+pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: &Expr, body: &Block, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+    prover_expr(walk, iter, span, &scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+    let tainted = from_outside(iter, &scope.tainted, words, library, &holes_of);
     let mut changed = assigned_in(body, words);
     prover_lengths_changed(&mut changed, body, &scope, &walk.state.readers, words);
     let mut state: Vec<String> = vec![];
@@ -800,7 +800,7 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
                 if fits {
                     let mut ints = scope.ints.to_owned();
                     ints.insert(counter.to_string());
-                    let record = loop_record_range(&mut walk.arena, span.start as i64, &state, &scope.facts, &ints, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &counter, nikaia_std::index::or(low, || 0), nikaia_std::index::or(high, || 0), inclusive, body, words, &walk.claims, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of);
+                    let record = loop_record_range(&mut walk.arena, span.start as i64, &state, &scope.facts, &ints, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &counter, nikaia_std::index::or(low, || 0), nikaia_std::index::or(high, || 0), inclusive, body, words, &walk.claims, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of);
                     if record.is_some() { records.push(match record { Some(__nikaia_value) => __nikaia_value, None => return }); }
                 }
             },
@@ -860,7 +860,7 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
                             inner.facts.push(below);
                         }
                     } else { inner.loose.insert(name.to_string()); }
-                    if leaves_block(body, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, false) { inner.loose.insert(name); }
+                    if leaves_block(body, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, false) { inner.loose.insert(name); }
                 }
             },
             _ => { },
@@ -873,21 +873,21 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
         }
     }
     inner.path = None;
-    prover_block(walk, body, &mut inner, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+    prover_block(walk, body, &mut inner, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     scope.path = None;
-    if leaves_block(body, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, false) { scope.exact = false; }
+    if leaves_block(body, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, false) { scope.exact = false; }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_return(walk: &mut ProverWalk, value: Option<&Expr>, span: Span, scope: &ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_return(walk: &mut ProverWalk, value: Option<&Expr>, span: Span, scope: &ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-    prover_expr(walk, returned, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-    walk.state.exit(&mut walk.arena, returned, words, scope, (at.function).as_deref(), !at.lambda && at.posts, &at.params, ask);
-    if !at.lambda && at.free { prover_sum_exit(walk, returned, scope, at, program, words, own, unaliased, condition, written_of); }
+    prover_expr(walk, returned, span, scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+    walk.state.exit(&mut walk.arena, returned, words, scope, (at.function).as_deref(), !at.lambda && at.posts, &at.params, &ask);
+    if !at.lambda && at.free { prover_sum_exit(walk, returned, scope, at, program, words, own, &unaliased, &condition, &written_of); }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &mut ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
+pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &mut ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
     let nested = at.inside(false);
     match expr {
         Expr::Call { func, args, config, .. } => {
@@ -901,22 +901,22 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
                     return false;
                 }
                 if prover_an_assume(func, words) {
-                    prover_expr(walk, &cond, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+                    prover_expr(walk, &cond, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
                     let vouched = claim_term(&cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
                     if vouched.is_some() { scope.facts.push(nikaia_std::index::or(vouched, || 0)); }
                     walk.held.insert((span.start as i64, node_key(&cond)), ClaimHeld::Proved);
                     return false;
                 }
-                prover_expr(walk, &cond, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+                prover_expr(walk, &cond, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
                 let message = prover_message(config, words);
-                let names = claim_names_in(&cond, words, holes_of);
+                let names = claim_names_in(&cond, words, &holes_of);
                 let mut leaned: Vec<String> = vec![];
                 if !walk.state.in_test {
-                    prover_call_results(walk, &cond, false, scope, program, words, own, unaliased, condition, written_of);
-                    leaned = prover_pin_divisors(walk, &cond, &scope, words, ask, model);
+                    prover_call_results(walk, &cond, false, scope, program, words, own, &unaliased, &condition, &written_of);
+                    leaned = prover_pin_divisors(walk, &cond, &scope, words, &ask, &model);
                     leaned.extend(leaned_notes(&walk.arena, &scope, &names));
                 }
-                let outcome = walk.state.an_assert(&mut walk.arena, words, &cond, written_of(&cond), &names, message, span, scope, at, ask, model);
+                let outcome = walk.state.an_assert(&mut walk.arena, words, &cond, written_of(&cond), &names, message, span, scope, at, &ask, &model);
                 let mut held = outcome.held.clone();
                 let mut findings: Vec<Finding> = vec![];
                 for found in outcome.findings.iter() {
@@ -925,9 +925,9 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
                     findings.push(one);
                 }
                 if !walk.state.in_test {
-                    let read = prover_known_calls(walk, &cond, &scope, program, words, own, holes_of, unaliased, condition);
+                    let read = prover_known_calls(walk, &cond, &scope, program, words, own, &holes_of, &unaliased, &condition);
                     if !read.is_empty() {
-                        let ran = prover_claim_ran(walk, &read, &held, &findings, &written_of(&cond), span, written_of);
+                        let ran = prover_claim_ran(walk, &read, &held, &findings, &written_of(&cond), span, &written_of);
                         held = ran.held;
                         findings = ran.findings;
                     }
@@ -941,32 +941,32 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
                 _ => false,
             };
             if panics {
-                prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+                prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
                 return true;
             }
         },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
-            return prover_if(walk, cond, then_branch, (else_branch).as_ref(), span, scope, at, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            return prover_if(walk, cond, then_branch, (else_branch).as_ref(), span, scope, at, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
         },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
-            return prover_match(walk, value, arms, span, scope, at, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            return prover_match(walk, value, arms, span, scope, at, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
         },
         Expr::Throw(value, _) => {
             let value = nikaia_std::boxed::open(value);
-            prover_expr(walk, value, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_expr(walk, value, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             return true;
         },
         Expr::Return(value, _) => {
             let value = nikaia_std::boxed::open(value);
-            prover_return(walk, (value).as_ref(), span, &scope, at, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_return(walk, (value).as_ref(), span, &scope, at, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             return true;
         },
         Expr::Break(_) => { return true; },
         Expr::Continue(_) => { return true; },
         Expr::Unsafe(block, _) => {
-            prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             for cond in prover_assumed_in_unsafe(block, words) {
                 let vouched = claim_term(&cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
                 if vouched.is_some() { scope.facts.push(nikaia_std::index::or(vouched, || 0)); }
@@ -975,46 +975,46 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
         },
         _ => { },
     }
-    prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+    prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     false
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_if(walk: &mut ProverWalk, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
-    prover_expr(walk, cond, span, &scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+pub(crate) fn prover_if(walk: &mut ProverWalk, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
+    prover_expr(walk, cond, span, &scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     let holds = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
     let mut fails: Option<i64> = None;
     if holds.is_some() { fails = Some(walk.arena.not(nikaia_std::index::or(holds, || 0))); }
     let mut then_scope = scope.clone();
     if holds.is_some() { then_scope.facts.push(nikaia_std::index::or(holds, || 0)); }
     then_scope.exact = then_scope.exact && holds.is_some();
-    let cond_leaves = leaves_expr(cond, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true);
+    let cond_leaves = leaves_expr(cond, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true);
     then_scope.on_the_path(&mut walk.arena, holds);
-    let then_leaves = prover_block(walk, then_branch, &mut then_scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+    let then_leaves = prover_block(walk, then_branch, &mut then_scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     let mut else_scope = scope.clone();
-    let else_leaves = prover_else(walk, else_branch, &mut else_scope, fails, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+    let else_leaves = prover_else(walk, else_branch, &mut else_scope, fails, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     if !(then_leaves && else_leaves) { prover_join(walk, scope, &then_scope, then_leaves, then_branch, &else_scope, else_leaves, else_branch, &span, words); }
     if then_leaves && else_leaves { return true; }
     if then_leaves {
         if fails.is_some() { scope.facts.push(nikaia_std::index::or(fails, || 0)); }
         scope.on_the_path(&mut walk.arena, fails);
-        scope.exact = scope.exact && fails.is_some() && !prover_else_leaves(else_branch, at, program, words, own, library, holes_of, unaliased);
+        scope.exact = scope.exact && fails.is_some() && !prover_else_leaves(else_branch, at, program, words, own, library, &holes_of, &unaliased);
     } else if else_leaves {
         if holds.is_some() { scope.facts.push(nikaia_std::index::or(holds, || 0)); }
         scope.on_the_path(&mut walk.arena, holds);
-        scope.exact = scope.exact && holds.is_some() && !leaves_block(then_branch, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true);
-    } else if leaves_block(then_branch, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true) || prover_else_leaves(else_branch, at, program, words, own, library, holes_of, unaliased) { scope.exact = false; }
+        scope.exact = scope.exact && holds.is_some() && !leaves_block(then_branch, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true);
+    } else if leaves_block(then_branch, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true) || prover_else_leaves(else_branch, at, program, words, own, library, &holes_of, &unaliased) { scope.exact = false; }
     if cond_leaves { scope.exact = false; }
     false
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_else(walk: &mut ProverWalk, else_branch: Option<&Block>, else_scope: &mut ProverScope, fails: Option<i64>, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
+pub(crate) fn prover_else(walk: &mut ProverWalk, else_branch: Option<&Block>, else_scope: &mut ProverScope, fails: Option<i64>, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
     if fails.is_some() { else_scope.facts.push(nikaia_std::index::or(fails, || 0)); }
     let block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
     else_scope.exact = else_scope.exact && fails.is_some();
     else_scope.on_the_path(&mut walk.arena, fails);
-    prover_block(walk, block, else_scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+    prover_block(walk, block, else_scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1087,9 +1087,9 @@ pub(crate) fn prover_join_arms(walk: &mut ProverWalk, scope: &mut ProverScope, s
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_match(walk: &mut ProverWalk, value: &Expr, arms: &[MatchArm], span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
-    prover_expr(walk, value, span, &scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-    let cond_leaves = leaves_expr(value, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true);
+pub(crate) fn prover_match(walk: &mut ProverWalk, value: &Expr, arms: &[MatchArm], span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
+    prover_expr(walk, value, span, &scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+    let cond_leaves = leaves_expr(value, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true);
     let truth = claim_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
     let number = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
     let mut sides: Vec<ProverArm> = vec![];
@@ -1111,9 +1111,9 @@ pub(crate) fn prover_match(walk: &mut ProverWalk, value: &Expr, arms: &[MatchArm
         if fact.is_some() { arm_scope.facts.push(nikaia_std::index::or(fact, || 0)); }
         arm_scope.exact = arm_scope.exact && fact.is_some() && arm.guard.is_none();
         if arm.guard.is_none() { arm_scope.on_the_path(&mut walk.arena, fact); } else { arm_scope.on_the_path(&mut walk.arena, None); }
-        prover_arm_guard(walk, (arm.guard).as_ref(), span, &arm_scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-        let leaves = prover_arm_body(walk, &arm.body, span, &mut arm_scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-        let may_leave = leaves_expr(&arm.body, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true);
+        prover_arm_guard(walk, (arm.guard).as_ref(), span, &arm_scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+        let leaves = prover_arm_body(walk, &arm.body, span, &mut arm_scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+        let may_leave = leaves_expr(&arm.body, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true);
         if !leaves {
             going += 1;
             lone = fact;
@@ -1140,18 +1140,18 @@ pub(crate) fn prover_match(walk: &mut ProverWalk, value: &Expr, arms: &[MatchArm
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_arm_guard(walk: &mut ProverWalk, guard: Option<&Expr>, span: Span, scope: &ProverScope, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_arm_guard(walk: &mut ProverWalk, guard: Option<&Expr>, span: Span, scope: &ProverScope, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     let present = match guard { Some(__nikaia_value) => __nikaia_value, None => return };
-    prover_expr(walk, present, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+    prover_expr(walk, present, span, scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_arm_body(walk: &mut ProverWalk, body: &Expr, span: Span, scope: &mut ProverScope, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
+pub(crate) fn prover_arm_body(walk: &mut ProverWalk, body: &Expr, span: Span, scope: &mut ProverScope, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
     match body {
-        Expr::Block(block, _) => prover_block(walk, block, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
-        _ => prover_expr_stmt(walk, body, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
+        Expr::Block(block, _) => prover_block(walk, block, scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition),
+        _ => prover_expr_stmt(walk, body, span, scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition),
     }
 }
 
@@ -1318,18 +1318,18 @@ pub(crate) fn prover_else_leaves(else_branch: Option<&Block>, at: &ProverWhere, 
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_expr(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
-    prover_calls_in(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-    prover_blocks_in(walk, expr, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+pub(crate) fn prover_expr(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+    prover_calls_in(walk, expr, span, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+    prover_blocks_in(walk, expr, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     match expr {
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
-            let callee = prover_called(func, words, unaliased);
-            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), node_key(expr), args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition); }
+            let callee = prover_called(func, words, &unaliased);
+            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), node_key(expr), args, config, span, scope, at, program, words, own, library, &ask, &model, &escape, &written_of, &condition); }
         },
         _ => { },
     }
@@ -1343,7 +1343,7 @@ pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, sc
         },
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-            prover_a_method_call(walk, receiver, method, args, config, span, scope, at, program, words, ask, model, escape, written_of);
+            prover_a_method_call(walk, receiver, method, args, config, span, scope, at, program, words, &ask, &model, &escape, &written_of);
             prover_calls_in(walk, receiver, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
             for arg in args.iter() { prover_calls_in(walk, arg, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); }
             for c in config.iter() { prover_calls_in(walk, &c.value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); }
@@ -1387,11 +1387,11 @@ pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, sc
             let value = nikaia_std::boxed::open(value);
             prover_calls_in(walk, value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
             for arm in arms.iter() {
-                prover_calls_in_maybe(walk, (arm.guard).as_ref(), span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+                prover_calls_in_maybe(walk, (arm.guard).as_ref(), span, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
                 prover_calls_in(walk, &arm.body, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
             }
         },
-        Expr::StructLit { fields, .. } => { for field in fields.iter() { prover_calls_in_maybe(walk, (field.value).as_ref(), span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); } },
+        Expr::StructLit { fields, .. } => { for field in fields.iter() { prover_calls_in_maybe(walk, (field.value).as_ref(), span, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); } },
         Expr::ListRepeat { value, count, .. } => {
             let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
             prover_calls_in(walk, value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
@@ -1401,26 +1401,26 @@ pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, sc
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
             prover_calls_in(walk, base, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-            for field in fields.iter() { prover_calls_in_maybe(walk, (field.value).as_ref(), span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); }
+            for field in fields.iter() { prover_calls_in_maybe(walk, (field.value).as_ref(), span, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); }
         },
-        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); prover_calls_in_maybe(walk, (value).as_ref(), span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); prover_calls_in_maybe(walk, (value).as_ref(), span, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); },
         Expr::Select(arms, _) => { for arm in arms.iter() { prover_calls_in(walk, &arm.value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); } },
         _ => { },
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_calls_in_maybe(walk: &mut ProverWalk, expr: Option<&Expr>, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_calls_in_maybe(walk: &mut ProverWalk, expr: Option<&Expr>, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     let present = match expr { Some(__nikaia_value) => __nikaia_value, None => return };
-    prover_calls_in(walk, present, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+    prover_calls_in(walk, present, span, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_blocks_in(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_blocks_in(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     match expr {
-        Expr::Block(block, _) => { if prover_claims_then_value(block, words) { prover_block(walk, block, &mut scope.clone(), &at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); } else { prover_nested(walk, block, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); } },
-        Expr::Unsafe(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
-        Expr::Overlap(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
+        Expr::Block(block, _) => { if prover_claims_then_value(block, words) { prover_block(walk, block, &mut scope.clone(), &at.inside(false), program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); } else { prover_nested(walk, block, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); } },
+        Expr::Unsafe(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); },
+        Expr::Overlap(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); },
         Expr::Closure { params, mutable, body, .. } => {
             let mut names: Vec<String> = vec![];
             for p in params.iter() {
@@ -1431,7 +1431,7 @@ pub(crate) fn prover_blocks_in(walk: &mut ProverWalk, expr: &Expr, scope: &Prove
                 let p = *p;
                 names.push(words.resolve(p).to_string());
             }
-            prover_nested(walk, body, Some(names), scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_nested(walk, body, Some(names), scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
         },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -1452,28 +1452,28 @@ pub(crate) fn prover_blocks_in(walk: &mut ProverWalk, expr: &Expr, scope: &Prove
             for c in config.iter() { prover_blocks_in(walk, &c.value, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); }
         },
         Expr::If { then_branch, else_branch, .. } => {
-            prover_nested(walk, then_branch, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-            prover_nested_maybe(walk, (else_branch).as_ref(), scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_nested(walk, then_branch, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+            prover_nested_maybe(walk, (else_branch).as_ref(), scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
         },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             prover_blocks_in(walk, expr, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-            prover_nested(walk, handler, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_nested(walk, handler, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
         },
         Expr::Match { arms, .. } => { for arm in arms.iter() { prover_blocks_in(walk, &arm.body, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); } },
-        Expr::Select(arms, _) => { for arm in arms.iter() { prover_nested(walk, &arm.body, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); } },
+        Expr::Select(arms, _) => { for arm in arms.iter() { prover_nested(walk, &arm.body, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); } },
         _ => { },
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_nested_maybe(walk: &mut ProverWalk, block: Option<&Block>, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_nested_maybe(walk: &mut ProverWalk, block: Option<&Block>, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     let present = match block { Some(__nikaia_value) => __nikaia_value, None => return };
-    prover_nested(walk, present, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+    prover_nested(walk, present, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_nested(walk: &mut ProverWalk, block: &Block, lambda: Option<Vec<String>>, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_nested(walk: &mut ProverWalk, block: &Block, lambda: Option<Vec<String>>, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     let is_lambda = lambda.is_some();
     if is_lambda {
         let mut inner = scope.clone();
@@ -1483,10 +1483,10 @@ pub(crate) fn prover_nested(walk: &mut ProverWalk, block: &Block, lambda: Option
         }
         inner.path = None;
         inner.exact = false;
-        prover_block(walk, block, &mut inner, &at.inside(true), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+        prover_block(walk, block, &mut inner, &at.inside(true), program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     } else {
         let mut inner = scope.blind();
-        prover_block(walk, block, &mut inner, &at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+        prover_block(walk, block, &mut inner, &at.inside(false), program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     }
 }
 

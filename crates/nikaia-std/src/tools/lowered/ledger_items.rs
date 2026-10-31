@@ -102,7 +102,7 @@ pub(crate) fn folds_in_parallel(pattern: &Pattern) -> bool {
     }
 }
 
-pub fn literal_of(value: &BuildValue, float_text: &impl Fn(f64) -> String) -> Option<String> {
+pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Option<String> {
     match value {
         BuildValue::Int(n) => return Some(integer_text(n)),
         BuildValue::Float(f) => {

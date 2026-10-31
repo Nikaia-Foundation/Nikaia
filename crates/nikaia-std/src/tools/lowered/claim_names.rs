@@ -16,7 +16,7 @@ pub fn is_a_parameter(name: &str, params: &collections::BTreeSet<String>) -> boo
     params.contains(&base)
 }
 
-pub(crate) fn collect_names(expr: &Expr, words: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, names: &mut collections::BTreeSet<String>) {
+pub(crate) fn collect_names(expr: &Expr, words: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, names: &mut collections::BTreeSet<String>) {
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -29,19 +29,19 @@ pub(crate) fn collect_names(expr: &Expr, words: &winnow_grammar::InternerContext
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             collect_names(func, words, holes_of, names);
-            each_name(args, words, holes_of, names);
+            each_name(args, words, &holes_of, names);
             for c in config.iter() { collect_names(&c.value, words, holes_of, names); }
         },
         Expr::MethodCall { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
             collect_names(receiver, words, holes_of, names);
-            each_name(args, words, holes_of, names);
+            each_name(args, words, &holes_of, names);
             for c in config.iter() { collect_names(&c.value, words, holes_of, names); }
         },
         Expr::SafeMethod { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
             collect_names(receiver, words, holes_of, names);
-            each_name(args, words, holes_of, names);
+            each_name(args, words, &holes_of, names);
             for c in config.iter() { collect_names(&c.value, words, holes_of, names); }
         },
         Expr::Binary { lhs, rhs, .. } => {
@@ -65,7 +65,7 @@ pub(crate) fn collect_names(expr: &Expr, words: &winnow_grammar::InternerContext
             collect_names(start, words, holes_of, names);
             collect_names(end, words, holes_of, names);
         },
-        Expr::Tuple(parts, _) => { each_name(parts, words, holes_of, names); },
+        Expr::Tuple(parts, _) => { each_name(parts, words, &holes_of, names); },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
             collect_names(value, words, holes_of, names);
@@ -77,32 +77,32 @@ pub(crate) fn collect_names(expr: &Expr, words: &winnow_grammar::InternerContext
             let value = nikaia_std::boxed::open(value);
             collect_names(value, words, holes_of, names);
             for arm in arms.iter() {
-                collect_maybe((arm.guard).as_ref(), words, holes_of, names);
+                collect_maybe((arm.guard).as_ref(), words, &holes_of, names);
                 collect_names(&arm.body, words, holes_of, names);
             }
         },
-        Expr::StructLit { fields, .. } => { for field in fields.iter() { collect_maybe((field.value).as_ref(), words, holes_of, names); } },
+        Expr::StructLit { fields, .. } => { for field in fields.iter() { collect_maybe((field.value).as_ref(), words, &holes_of, names); } },
         Expr::ListRepeat { value, count, .. } => {
             let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
             collect_names(value, words, holes_of, names);
             collect_names(count, words, holes_of, names);
         },
-        Expr::ListLit { items, .. } => { each_name(items, words, holes_of, names); },
+        Expr::ListLit { items, .. } => { each_name(items, words, &holes_of, names); },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
             collect_names(base, words, holes_of, names);
-            for field in fields.iter() { collect_maybe((field.value).as_ref(), words, holes_of, names); }
+            for field in fields.iter() { collect_maybe((field.value).as_ref(), words, &holes_of, names); }
         },
-        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); collect_maybe((value).as_ref(), words, holes_of, names); },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); collect_maybe((value).as_ref(), words, &holes_of, names); },
         Expr::Select(arms, _) => { for arm in arms.iter() { collect_names(&arm.value, words, holes_of, names); } },
         _ => { },
     }
 }
 
-pub(crate) fn collect_maybe(expr: Option<&Expr>, words: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, names: &mut collections::BTreeSet<String>) {
+pub(crate) fn collect_maybe(expr: Option<&Expr>, words: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, names: &mut collections::BTreeSet<String>) {
     let present = match expr { Some(__nikaia_value) => __nikaia_value, None => return };
-    collect_names(present, words, holes_of, names);
+    collect_names(present, words, &holes_of, names);
 }
 
-pub(crate) fn each_name(exprs: &[Expr], words: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, names: &mut collections::BTreeSet<String>) { for e in exprs.iter() { collect_names(e, words, holes_of, names); } }
+pub(crate) fn each_name(exprs: &[Expr], words: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, names: &mut collections::BTreeSet<String>) { for e in exprs.iter() { collect_names(e, words, &holes_of, names); } }
 

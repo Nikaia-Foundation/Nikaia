@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn rust_value(value: &BuildValue, float_text: &impl Fn(f64) -> String) -> Option<String> {
+pub fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Option<String> {
     match value {
         BuildValue::Int(n) => return Some(integer_text(n)),
         BuildValue::Float(n) => {
@@ -261,7 +261,7 @@ pub(crate) fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
+pub fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, payloads: &dyn Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
     match value {
         BuildValue::Struct { name, fields } => {
             let own = state.unwritable_field(world, &Ty::Named { name: name.to_string(), args: vec![], view: false });
@@ -273,7 +273,7 @@ pub fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
             return vec![];
         },
         BuildValue::Variant { ty, variant, payload } => {
-            let own = unwritable_payload(state, world, ty, variant, payloads);
+            let own = unwritable_payload(state, world, ty, variant, &payloads);
             if !own.is_empty() { return own; }
             for held in payload.iter() {
                 let inner = unwritable_in(state, world, held, payloads);
@@ -308,8 +308,8 @@ pub fn tuple_spelled(parts: &[String]) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, want: Option<&Ty>, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &impl Fn(f64) -> String) -> Option<String> {
-    if want.is_none() { return rust_value(value, float_text); }
+pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, want: Option<&Ty>, payloads: &dyn Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &dyn Fn(f64) -> String) -> Option<String> {
+    if want.is_none() { return rust_value(value, &float_text); }
     let wanted: Ty = nikaia_std::index::or(want.as_ref(), || &Ty::Unknown).clone();
     match value {
         BuildValue::List(items) => {
@@ -366,7 +366,7 @@ pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
             }
             return Some(tuple_spelled(&written));
         },
-        _ => return rust_value(value, float_text),
+        _ => return rust_value(value, &float_text),
     }
 }
 

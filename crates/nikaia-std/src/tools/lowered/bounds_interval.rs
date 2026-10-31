@@ -90,7 +90,7 @@ pub fn candidate(term: i64, facts: &[i64], term_of: &impl Fn(i64) -> SolverTerm)
     evaluate(&form, &known)
 }
 
-pub(crate) fn linear_form(term: i64, term_of: &impl Fn(i64) -> SolverTerm) -> Option<Form> {
+pub(crate) fn linear_form(term: i64, term_of: &dyn Fn(i64) -> SolverTerm) -> Option<Form> {
     match term_of(term) {
         SolverTerm::Int(n) => Some(Form { vars: collections::BTreeMap::new(), k: n }),
         SolverTerm::Var(ref name) => {
@@ -153,7 +153,7 @@ pub(crate) fn shifted(form: &Form, n: i64) -> Option<Form> {
     Some(Form { vars: form.vars.to_owned(), k })
 }
 
-pub(crate) fn atoms(fact: i64, term_of: &impl Fn(i64) -> SolverTerm, out: &mut Vec<Form>) {
+pub(crate) fn atoms(fact: i64, term_of: &dyn Fn(i64) -> SolverTerm, out: &mut Vec<Form>) {
     match term_of(fact) {
         SolverTerm::And(ref parts) => {
             for part in parts.iter() {
@@ -162,27 +162,27 @@ pub(crate) fn atoms(fact: i64, term_of: &impl Fn(i64) -> SolverTerm, out: &mut V
             }
         },
         SolverTerm::Le(a, b) => {
-            let d = match difference(a, b, term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let d = match difference(a, b, &term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(d);
         },
         SolverTerm::Lt(a, b) => {
-            let d = match difference(a, b, term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let d = match difference(a, b, &term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let strict = match shifted(&d, 1) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(strict);
         },
         SolverTerm::Ge(a, b) => {
-            let d = match difference(a, b, term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let d = match difference(a, b, &term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let turned = match scaled(&d, -1) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(turned);
         },
         SolverTerm::Gt(a, b) => {
-            let d = match difference(a, b, term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let d = match difference(a, b, &term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let turned = match scaled(&d, -1) { Some(__nikaia_value) => __nikaia_value, None => return };
             let strict = match shifted(&turned, 1) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(strict);
         },
         SolverTerm::Eq(a, b) => {
-            let d = match difference(a, b, term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let d = match difference(a, b, &term_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let turned = match scaled(&d, -1) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(turned);
             out.push(d);

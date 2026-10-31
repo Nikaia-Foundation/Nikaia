@@ -164,6 +164,25 @@ impl EmitState {
         }
     }
 
+    /// A run `sync` code parameter of a function on a cycle, a `&dyn Fn`,
+    /// handed on (#1023), also from a lambda inside it: `function` is the
+    /// function being written, not the lambda's scope.
+    fn emit_arg_dyn_code_handed_on(ref self, world: ref EmitWorld, function: ref String, arg: ref Expr) -> bool {
+        let name = match arg {
+            Expr::Variable(name, _) => emit_text(world, name),
+            else => return false,
+        }
+        let contract = self.own_contracts.functions.get(function) ?? return false
+        let signature = contract.signature ?? return false
+        let is_code = signature.params.iter().any(fn(param) {
+            param.0 == name && match param.1 {
+                Ty::Fn { is_sync, .. } => is_sync,
+                else => false,
+            }
+        })
+        return is_code && !contract.keeps.contains(name)
+    }
+
     /// Whether this unit's function `callee` only reads its parameter `i`,
     /// which is then lowered a `&str` (`Option<&str>`) below whatever text
     /// flows in (ADR-282 D5, D11): a view is lent as it is, not wrapped (#598).
@@ -417,6 +436,12 @@ impl EmitState {
         // **A function value a method took whole is lent on to code that only
         // runs it** (#463), not to a call of the function it stands in (#464).
         if !lend && !change && !self.emit_arg_calls_itself(scope.function, callee) && self.emit_arg_code_handed_on(world, scope.function, callee, i, arg) {
+            lend = true
+        }
+        // **A `&dyn Fn` handed on is lent once more** (ADR-277 D11, #1023):
+        // `&impl Fn` takes a sized lambda, which a `&dyn Fn` is and a `dyn Fn`
+        // is not; a `&dyn Fn` taker coerces the `&&dyn Fn`.
+        if !lend && !change && walk.dyn_code && !self.emit_arg_calls_itself(walk.keep_function, callee) && self.emit_arg_dyn_code_handed_on(world, walk.keep_function, arg) {
             lend = true
         }
         if emit_arg_is_null(arg) && has_how {

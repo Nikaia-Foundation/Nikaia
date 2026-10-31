@@ -86,7 +86,7 @@ pub(crate) fn mp_ordinal(g: &mut MpGather, at: &MpAt) -> Option<i64> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn mp_of(g: &mut MpGather, held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<String, MpStruct>, key: &impl Fn(i64, &Type) -> String, arity: &impl Fn(&str) -> i64, unit: i64, ty: &Type, at: &MpAt, out: &mut Vec<MpPosition>, depth: i64) {
+pub(crate) fn mp_of(g: &mut MpGather, held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<String, MpStruct>, key: &dyn Fn(i64, &Type) -> String, arity: &dyn Fn(&str) -> i64, unit: i64, ty: &Type, at: &MpAt, out: &mut Vec<MpPosition>, depth: i64) {
     if (*ty.code).is_some() || depth > 6 { return; }
     let name = (*nikaia_std::index::get(&held.words, nikaia_std::index::at(unit))).resolve(ty.name).to_string();
     if !ty.is_tuple && mp_is_map(&name) {

@@ -81,7 +81,7 @@ pub fn tr_a_rule(words: &winnow_grammar::InternerContext, rule: &Expr, span: Spa
     }
 }
 
-pub fn tr_renumbered(base: &Expr, renew: &impl Fn(&Expr) -> Expr) -> Expr {
+pub fn tr_renumbered(base: &Expr, renew: &dyn Fn(&Expr) -> Expr) -> Expr {
     match base {
         Expr::Variable(name, _) => { let name = *name; Expr::Variable(name, node_id::NodeId::fresh()) },
         Expr::Field { base: inner, name, .. } => { let inner = nikaia_std::boxed::open(inner); let name = *name; Expr::Field { base: Box::new(tr_renumbered(inner, renew)), name, id: node_id::NodeId::fresh() } },
@@ -89,20 +89,20 @@ pub fn tr_renumbered(base: &Expr, renew: &impl Fn(&Expr) -> Expr) -> Expr {
     }
 }
 
-pub(crate) fn tr_all_on(claims: &[Expr], words: &winnow_grammar::InternerContext, base: &Expr, fields: &collections::BTreeSet<String>, renew: &impl Fn(&Expr) -> Expr) -> Option<Vec<Expr>> {
+pub(crate) fn tr_all_on(claims: &[Expr], words: &winnow_grammar::InternerContext, base: &Expr, fields: &collections::BTreeSet<String>, renew: &dyn Fn(&Expr) -> Expr) -> Option<Vec<Expr>> {
     let mut out: Vec<Expr> = vec![];
     for claim in claims.iter() {
-        let one = match tr_on(words, claim, base, fields, renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let one = match tr_on(words, claim, base, fields, &renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
         out.push(one);
     }
     Some(out)
 }
 
-pub fn tr_on(words: &winnow_grammar::InternerContext, claim: &Expr, base: &Expr, fields: &collections::BTreeSet<String>, renew: &impl Fn(&Expr) -> Expr) -> Option<Expr> {
+pub fn tr_on(words: &winnow_grammar::InternerContext, claim: &Expr, base: &Expr, fields: &collections::BTreeSet<String>, renew: &dyn Fn(&Expr) -> Expr) -> Option<Expr> {
     match claim {
         Expr::Variable(name, _) => {
             let name = *name;
-            if fields.contains(words.resolve(name)) { return Some(Expr::Field { base: Box::new(tr_renumbered(base, renew)), name, id: node_id::NodeId::fresh() }); }
+            if fields.contains(words.resolve(name)) { return Some(Expr::Field { base: Box::new(tr_renumbered(base, &renew)), name, id: node_id::NodeId::fresh() }); }
             return Some(Expr::Variable(name, node_id::NodeId::fresh()));
         },
         Expr::Path(segments, _) => Some(Expr::Path(segments.to_owned(), node_id::NodeId::fresh())),
@@ -131,7 +131,7 @@ pub fn tr_on(words: &winnow_grammar::InternerContext, claim: &Expr, base: &Expr,
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if !config.is_empty() { return None; }
             let over = match tr_on(words, receiver, base, fields, renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let all = match tr_all_on(args, words, base, fields, renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let all = match tr_all_on(args, words, base, fields, &renew) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return Some(Expr::MethodCall { receiver: Box::new(over), method, args: all, config: vec![], id: node_id::NodeId::fresh() });
         },
         Expr::Cast { expr, ty, .. } => {

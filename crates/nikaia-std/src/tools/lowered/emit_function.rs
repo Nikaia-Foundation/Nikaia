@@ -331,6 +331,8 @@ impl EmitState {
                     } else { lengths.push(String::from("")); }
                     at += 1;
                 }
+                let on_a_cycle = code_on_a_cycle(world.words, world.aliases, world.items, &self.own_contracts, &key);
+                walk.dyn_code = on_a_cycle;
                 let mut either_first: Vec<String> = vec![];
                 let mut k: i64 = 0;
                 for each in args.iter() {
@@ -362,6 +364,10 @@ impl EmitState {
                         walk.trusting = fast;
                         spelled = self.emit_fn_ty(world, walk, host, &each.ty, position, &key, &pname);
                         walk.trusting = outer;
+                        if on_a_cycle && runs && reference.starts_with('&') && !reference.starts_with("&mut") && (spelled.starts_with("impl Fn(") || spelled.starts_with("impl for<")) {
+                            let bound = nikaia_std::index::or(spelled.strip_prefix("impl "), || "").to_string();
+                            spelled = format!("dyn {}", bound);
+                        }
                         walk.in_parameter = inside;
                         walk.code_parameter_runs = held;
                     }

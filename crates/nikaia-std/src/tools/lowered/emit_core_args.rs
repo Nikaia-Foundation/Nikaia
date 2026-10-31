@@ -97,6 +97,21 @@ impl EmitState {
             _ => false,
         }
     }
+    pub(crate) fn emit_arg_dyn_code_handed_on(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, arg: &Expr) -> bool {
+        let name = match arg {
+            Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
+            _ => return false,
+        };
+        let contract = match self.own_contracts.functions.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let is_code = signature.params.iter().any(|param| {
+            param.0 == name && match &param.1 {
+                Ty::Fn { is_sync, .. } => { let is_sync = *is_sync; is_sync },
+                _ => false,
+            }
+        });
+        is_code && !nikaia_std::list::contains(&contract.keeps, &name)
+    }
     pub(crate) fn emit_arg_only_read(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, i: i64) -> bool {
         let contract = match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match match contract.signature.as_ref() {
@@ -267,6 +282,7 @@ impl EmitState {
         }
         if has_how { lend = false; }
         if !lend && !change && !self.emit_arg_calls_itself(&scope.function, callee) && self.emit_arg_code_handed_on(world, &scope.function, callee, i, arg) { lend = true; }
+        if !lend && !change && walk.dyn_code && !self.emit_arg_calls_itself(&walk.keep_function, callee) && self.emit_arg_dyn_code_handed_on(world, &walk.keep_function, arg) { lend = true; }
         if emit_arg_is_null(arg) && has_how {
             out.push("None");
             out.push(&after);

@@ -520,6 +520,10 @@ impl EmitState {
                     at += 1
                 }
 
+                // **A run `sync` parameter on a cycle of the call graph is a
+                // `&dyn Fn`** (ADR-277 D11, #1023).
+                let on_a_cycle = code_on_a_cycle(world.words, world.aliases, world.items, self.own_contracts, key)
+                walk.dyn_code = on_a_cycle
                 let mut either_first: Vec[String] = []
                 let mut k = 0
                 for each in args {
@@ -580,6 +584,10 @@ impl EmitState {
                         walk.trusting = fast
                         spelled = self.emit_fn_ty(world, walk, host, each.ty, position, key, pname)
                         walk.trusting = outer
+                        if on_a_cycle && runs && reference.starts_with("&") && !reference.starts_with("&mut") && (spelled.starts_with("impl Fn(") || spelled.starts_with("impl for<")) {
+                            let bound = (spelled.strip_prefix("impl ") ?? "").clone()
+                            spelled = f"dyn {bound}"
+                        }
                         walk.in_parameter = inside
                         walk.code_parameter_runs = held
                     }

@@ -1,0 +1,24 @@
+// #1023: a recursive function that hands a new lambda to itself takes its
+// `fn` parameter as `&dyn Fn` (ADR-277 D11); handing the same parameter on,
+// also from a lambda inside it, keeps working.
+fn alt(name: String) -> i64? sync { return name.len() }
+
+fn deep(n: i64, known: fn(ref String) -> i64? sync) -> i64 sync {
+    if n == 0 { return known("a") ?? 0 }
+    let more = fn(name) { known(name) ?? alt(name) }
+    return deep(n - 1, more)
+}
+
+fn twice(x: i64, f: fn(i64) -> i64 sync) -> i64 sync { return f(f(x)) }
+
+fn leaf(n: i64, known: fn(ref String) -> i64? sync) -> i64 sync { return n + (known("abc") ?? 0) }
+
+fn same(n: i64, known: fn(ref String) -> i64? sync) -> i64 sync {
+    if n == 0 { return twice(1, fn(x) { leaf(x, known) }) }
+    return same(n - 1, known) + leaf(n, known)
+}
+
+fn main() {
+    println(f"{deep(2, fn(_name) { null })}")
+    println(f"{same(2, fn(name) { alt(name) })}")
+}

@@ -182,7 +182,7 @@ pub(crate) fn loop_forget(arena: &mut TermArena, path: &mut LoopPath, name: &str
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath], ends: &mut Vec<LoopEnd>, state: &[String], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Vec<LoopPath>> {
+pub(crate) fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath], ends: &mut Vec<LoopEnd>, state: &[String], ints: &collections::BTreeSet<String>, pinned: &dyn Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &dyn Fn(&Expr) -> bool, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<Vec<LoopPath>> {
     let mut live = first.to_owned();
     for stmt in block.stmts.iter() {
         let mut next: Vec<LoopPath> = vec![];
@@ -195,10 +195,10 @@ pub(crate) fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath
                 Stmt::Continue => { ended = String::from("turn"); },
                 Stmt::Return(_) => { ended = String::from("return"); },
                 Stmt::Let { names, ty, value, .. } => {
-                    if leaves_stmt(&stmt.node, throwing, holes_of, true) { return None; }
+                    if leaves_stmt(&stmt.node, &throwing, &holes_of, true) { return None; }
                     for n in assigned_in_statement(&stmt.node, words) { if p.values.contains_key(&n) { loop_forget(arena, &mut p, &n); } }
                     let mut term: Option<i64> = None;
-                    if names.len() == 1 { term = loop_read(arena, value, &p, ints, pinned, words, false); }
+                    if names.len() == 1 { term = loop_read(arena, value, &p, ints, &pinned, words, false); }
                     for name in names.iter() {
                         let name = *name;
                         let n = words.resolve(name).to_string();
@@ -217,13 +217,13 @@ pub(crate) fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath
                     }
                 },
                 Stmt::Assign { target, op, value } => {
-                    if leaves_stmt(&stmt.node, throwing, holes_of, true) { return None; }
+                    if leaves_stmt(&stmt.node, &throwing, &holes_of, true) { return None; }
                     let name = match target {
                         Expr::Variable(s, _) => { let s = *s; words.resolve(s).to_string() },
                         _ => String::from(""),
                     };
                     if name != "" && p.values.contains_key(&name) {
-                        let read = loop_read(arena, value, &p, ints, pinned, words, false);
+                        let read = loop_read(arena, value, &p, ints, &pinned, words, false);
                         let old = nikaia_std::index::or(*nikaia_std::index::get(&p.values, &name), || arena.var(&name).into());
                         let mut updated: Option<i64> = None;
                         if read.is_some() {
@@ -240,14 +240,14 @@ pub(crate) fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath
                     }
                 },
                 Stmt::Expr(expr) => {
-                    let handled = match loop_expr_stmt(arena, expr, &stmt.span, &p, &mut next, ends, state, ints, pinned, words, claims, throwing, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let handled = match loop_expr_stmt(arena, expr, &stmt.span, &p, &mut next, ends, state, ints, &pinned, words, claims, &throwing, &holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
                     if handled { keep = false; } else {
-                        if leaves_stmt(&stmt.node, throwing, holes_of, true) { return None; }
+                        if leaves_stmt(&stmt.node, &throwing, &holes_of, true) { return None; }
                         for n in assigned_in_statement(&stmt.node, words) { if p.values.contains_key(&n) { loop_forget(arena, &mut p, &n); } }
                     }
                 },
                 _ => {
-                    if leaves_stmt(&stmt.node, throwing, holes_of, true) { return None; }
+                    if leaves_stmt(&stmt.node, &throwing, &holes_of, true) { return None; }
                     for n in assigned_in_statement(&stmt.node, words) { if p.values.contains_key(&n) { loop_forget(arena, &mut p, &n); } }
                 },
             }
@@ -260,24 +260,24 @@ pub(crate) fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn loop_expr_stmt(arena: &mut TermArena, expr: &Expr, span: &Span, path: &LoopPath, next: &mut Vec<LoopPath>, ends: &mut Vec<LoopEnd>, state: &[String], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<bool> {
+pub(crate) fn loop_expr_stmt(arena: &mut TermArena, expr: &Expr, span: &Span, path: &LoopPath, next: &mut Vec<LoopPath>, ends: &mut Vec<LoopEnd>, state: &[String], ints: &collections::BTreeSet<String>, pinned: &dyn Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &dyn Fn(&Expr) -> bool, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<bool> {
     match expr {
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
-            let c = loop_read(arena, cond, path, ints, pinned, words, true);
+            let c = loop_read(arena, cond, path, ints, &pinned, words, true);
             let mut yes = path.clone();
             let mut no = path.clone();
             if c.is_some() {
                 yes.constraints.push(nikaia_std::index::or(c, || 0));
                 no.constraints.push(arena.not(nikaia_std::index::or(c, || 0)));
             }
-            let after_yes = match loop_block(arena, then_branch, &vec![yes], ends, state, ints, pinned, words, claims, throwing, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let after_yes = match loop_block(arena, then_branch, &vec![yes], ends, state, ints, &pinned, words, claims, &throwing, &holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
             next.extend(after_yes);
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => {
                 next.push(no);
                 return Some(true);
             } };
-            let after_no = match loop_block(arena, otherwise, &vec![no], ends, state, ints, pinned, words, claims, throwing, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let after_no = match loop_block(arena, otherwise, &vec![no], ends, state, ints, &pinned, words, claims, &throwing, &holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
             next.extend(after_no);
             return Some(true);
         },
@@ -289,7 +289,7 @@ pub(crate) fn loop_expr_stmt(arena: &mut TermArena, expr: &Expr, span: &Span, pa
             let func = nikaia_std::boxed::open(func);
             if prover_an_assert_call(func, args, &span, claims) {
                 let mut p = path.clone();
-                let c = loop_read(arena, nikaia_std::index::get(&args, 0), &p, ints, pinned, words, true);
+                let c = loop_read(arena, nikaia_std::index::get(&args, 0), &p, ints, &pinned, words, true);
                 if c.is_some() { p.constraints.push(nikaia_std::index::or(c, || 0)); }
                 next.push(p);
                 return Some(true);

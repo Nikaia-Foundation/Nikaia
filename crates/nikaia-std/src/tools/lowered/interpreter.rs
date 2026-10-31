@@ -22,9 +22,9 @@ pub fn run(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext, deb
     out
 }
 
-pub(crate) fn block(b: &Block, words: &winnow_grammar::InternerContext, debug: &impl Fn(&Expr) -> String, format_of: &impl Fn(&[FPart]) -> String, out: &mut Vec<String>) { for stmt in b.stmts.iter() { statement(&stmt.node, words, debug, format_of, out); } }
+pub(crate) fn block(b: &Block, words: &winnow_grammar::InternerContext, debug: &dyn Fn(&Expr) -> String, format_of: &dyn Fn(&[FPart]) -> String, out: &mut Vec<String>) { for stmt in b.stmts.iter() { statement(&stmt.node, words, &debug, &format_of, out); } }
 
-pub(crate) fn statement(stmt: &Stmt, words: &winnow_grammar::InternerContext, debug: &impl Fn(&Expr) -> String, format_of: &impl Fn(&[FPart]) -> String, out: &mut Vec<String>) {
+pub(crate) fn statement(stmt: &Stmt, words: &winnow_grammar::InternerContext, debug: &dyn Fn(&Expr) -> String, format_of: &dyn Fn(&[FPart]) -> String, out: &mut Vec<String>) {
     match stmt {
         Stmt::Let { names, value, .. } => {
             let mut bound: Vec<String> = vec![];
@@ -33,30 +33,30 @@ pub(crate) fn statement(stmt: &Stmt, words: &winnow_grammar::InternerContext, de
                 bound.push(words.resolve(n).to_string());
             }
             out.push(format!("[Nikaia Runtime] Bind: {} = <evaluated>", bound.join(", ")));
-            expression(value, words, debug, format_of, out);
+            expression(value, words, &debug, &format_of, out);
         },
         Stmt::Comptime { name, value, .. } => {
             let name = *name;
             out.push(format!("[Nikaia Runtime] Bind: {} = <evaluated>", words.resolve(name)));
-            expression(value, words, debug, format_of, out);
+            expression(value, words, &debug, &format_of, out);
         },
-        Stmt::Expr(e) => { expression(e, words, debug, format_of, out); },
+        Stmt::Expr(e) => { expression(e, words, &debug, &format_of, out); },
         Stmt::Assign { .. } => { out.push(String::from("[Nikaia Runtime] Assignment (Skipped)")); },
         Stmt::Return(_) => { out.push(String::from("[Nikaia Runtime] Return (Skipped)")); },
         Stmt::Break => { out.push(String::from("[Nikaia Runtime] Break (Skipped)")); },
         Stmt::Continue => { out.push(String::from("[Nikaia Runtime] Continue (Skipped)")); },
         Stmt::For { body, .. } => {
             out.push(String::from("[Nikaia Runtime] For loop (single pass)"));
-            block(body, words, debug, format_of, out);
+            block(body, words, &debug, &format_of, out);
         },
         Stmt::While { body, .. } => {
             out.push(String::from("[Nikaia Runtime] While loop (single pass)"));
-            block(body, words, debug, format_of, out);
+            block(body, words, &debug, &format_of, out);
         },
     }
 }
 
-pub(crate) fn expression(e: &Expr, words: &winnow_grammar::InternerContext, debug: &impl Fn(&Expr) -> String, format_of: &impl Fn(&[FPart]) -> String, out: &mut Vec<String>) {
+pub(crate) fn expression(e: &Expr, words: &winnow_grammar::InternerContext, debug: &dyn Fn(&Expr) -> String, format_of: &dyn Fn(&[FPart]) -> String, out: &mut Vec<String>) {
     match e {
         Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -64,11 +64,11 @@ pub(crate) fn expression(e: &Expr, words: &winnow_grammar::InternerContext, debu
                 Expr::Variable(name, _) => {
                     let name = *name;
                     if words.resolve(name) == "println" {
-                        printed(args, "", format_of, out);
+                        printed(args, "", &format_of, out);
                         return;
                     }
                     if words.resolve(name) == "log" {
-                        printed(args, "[LOG] ", format_of, out);
+                        printed(args, "[LOG] ", &format_of, out);
                         return;
                     }
                 },
@@ -80,13 +80,13 @@ pub(crate) fn expression(e: &Expr, words: &winnow_grammar::InternerContext, debu
             let body = nikaia_std::boxed::open(body);
             out.push(String::from("[Nikaia Runtime] Spawning Task (Async -> Sync Simulation)..."));
             match body {
-                Expr::Block(b, _) => { block(b, words, debug, format_of, out); },
+                Expr::Block(b, _) => { block(b, words, &debug, &format_of, out); },
                 _ => { expression(body, words, debug, format_of, out); },
             }
         },
         Expr::LitStr { .. } => { },
         Expr::LitInterpolated { .. } => { },
-        Expr::Block(b, _) => { block(b, words, debug, format_of, out); },
+        Expr::Block(b, _) => { block(b, words, &debug, &format_of, out); },
         Expr::Dsl { target, .. } => { let target = *target; out.push(format!("[Nikaia Runtime] DSL Block '{}' (Skipped)", words.resolve(target))); },
         _ => { out.push(format!("[Nikaia Runtime] Eval: {}", debug(e))); },
     }

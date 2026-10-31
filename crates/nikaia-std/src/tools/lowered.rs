@@ -2509,7 +2509,7 @@ pub mod emit_pattern {}
 pub mod emit_program {}
 pub mod emit_reach {
     #[allow(unused_imports)]
-    pub use super::{pausing_reach};
+    pub use super::{pausing_reach, code_on_a_cycle};
 }
 pub mod emit_seeds {
     #[allow(unused_imports)]

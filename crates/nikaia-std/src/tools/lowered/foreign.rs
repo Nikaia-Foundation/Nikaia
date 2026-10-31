@@ -37,36 +37,36 @@ pub fn seen_in_expression(expr: &Expr, names: &winnow_grammar::InternerContext, 
     found.seen
 }
 
-pub(crate) fn item_names(item: &Item, span: &Span, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, found: &mut Walked) {
+pub(crate) fn item_names(item: &Item, span: &Span, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) {
     match item {
         Item::Fn { args, ret_type, body, .. } => {
-            for arg in args.iter() { type_names(&arg.ty, span, names, unaliased, found); }
-            maybe_type_names((ret_type).as_ref(), span, names, unaliased, found);
-            block_names(body, names, unaliased, holes_of, root_at, found);
+            for arg in args.iter() { type_names(&arg.ty, span, names, &unaliased, found); }
+            maybe_type_names((ret_type).as_ref(), span, names, &unaliased, found);
+            block_names(body, names, &unaliased, &holes_of, &root_at, found);
         },
-        Item::Struct { fields, .. } => { for field in fields.iter() { type_names(&field.ty, span, names, unaliased, found); } },
+        Item::Struct { fields, .. } => { for field in fields.iter() { type_names(&field.ty, span, names, &unaliased, found); } },
         Item::Impl { methods, .. } => { for method in methods.iter() { item_names(&method.node, &method.span, names, unaliased, holes_of, root_at, found); } },
         _ => { },
     }
 }
 
-pub(crate) fn type_names(ty: &Type, span: &Span, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, found: &mut Walked) {
+pub(crate) fn type_names(ty: &Type, span: &Span, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, found: &mut Walked) {
     let name = unaliased(names.resolve(ty.name));
     if name.contains("::") { found.seen.push(named_at(name, span)); }
     for argument in ty.generics.iter() { type_names(argument, span, names, unaliased, found); }
-    maybe_type_names((*ty.code).as_ref().and_then(|__nikaia_it| (*__nikaia_it.result).as_ref()), span, names, unaliased, found);
+    maybe_type_names((*ty.code).as_ref().and_then(|__nikaia_it| (*__nikaia_it.result).as_ref()), span, names, &unaliased, found);
 }
 
-pub(crate) fn maybe_type_names(ty: Option<&Type>, span: &Span, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, found: &mut Walked) { type_names(match ty { Some(__nikaia_value) => __nikaia_value, None => return }, span, names, unaliased, found); }
+pub(crate) fn maybe_type_names(ty: Option<&Type>, span: &Span, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, found: &mut Walked) { type_names(match ty { Some(__nikaia_value) => __nikaia_value, None => return }, span, names, &unaliased, found); }
 
-pub(crate) fn block_names(block: &Block, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, found: &mut Walked) {
+pub(crate) fn block_names(block: &Block, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) {
     for stmt in block.stmts.iter() {
         match &stmt.node {
-            Stmt::Let { ty, .. } => { maybe_type_names((ty).as_ref(), &stmt.span, names, unaliased, found); },
+            Stmt::Let { ty, .. } => { maybe_type_names((ty).as_ref(), &stmt.span, names, &unaliased, found); },
             _ => { },
         }
-        statement_paths(&stmt.node, &stmt.span, names, unaliased, holes_of, root_at, found);
-        statement_blocks(&stmt.node, names, unaliased, holes_of, root_at, found);
+        statement_paths(&stmt.node, &stmt.span, names, &unaliased, &holes_of, &root_at, found);
+        statement_blocks(&stmt.node, names, &unaliased, &holes_of, &root_at, found);
     }
 }
 
@@ -86,20 +86,20 @@ pub(crate) fn statement_paths(stmt: &Stmt, span: &Span, names: &winnow_grammar::
     }
 }
 
-pub(crate) fn maybe_expression_paths(expr: Option<&Expr>, span: &Span, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, found: &mut Walked) { expression_paths(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, span, names, unaliased, holes_of, root_at, found); }
+pub(crate) fn maybe_expression_paths(expr: Option<&Expr>, span: &Span, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) { expression_paths(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, span, names, &unaliased, &holes_of, &root_at, found); }
 
-pub(crate) fn expression_paths(expr: &Expr, span: &Span, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, found: &mut Walked) {
+pub(crate) fn expression_paths(expr: &Expr, span: &Span, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) {
     match expr {
         Expr::Spawn { .. } => { found.seen.push(Seen::Spawn { span: span.clone() }); },
         Expr::Dsl { .. } => { found.seen.push(Seen::Opaque { span: span.clone() }); },
         Expr::Overlap(_, _) => { found.seen.push(Seen::Joins { construct: String::from("overlap"), span: span.clone() }); },
         Expr::Select(_, _) => { found.seen.push(Seen::Joins { construct: String::from("select"), span: span.clone() }); },
-        Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); a_named_call(func, args, span, names, root_at, found); },
+        Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); a_named_call(func, args, span, names, &root_at, found); },
         _ => { },
     }
     for hole in holes_of(expr) { expression_paths(&hole, span, names, unaliased, holes_of, root_at, found); }
     match expr {
-        Expr::Path(segments, _) => { if !segments.is_empty() { found.seen.push(named_at(path_name(segments, names, unaliased), span)); } },
+        Expr::Path(segments, _) => { if !segments.is_empty() { found.seen.push(named_at(path_name(segments, names, &unaliased), span)); } },
         Expr::Variable(name, _) => {
             let name = *name;
             if found.with_names { found.seen.push(Seen::Name(names.resolve(name).to_string())); }
@@ -155,11 +155,11 @@ pub(crate) fn expression_paths(expr: &Expr, span: &Span, names: &winnow_grammar:
             let value = nikaia_std::boxed::open(value);
             expression_paths(value, span, names, unaliased, holes_of, root_at, found);
             for arm in arms.iter() {
-                maybe_expression_paths((arm.guard).as_ref(), span, names, unaliased, holes_of, root_at, found);
+                maybe_expression_paths((arm.guard).as_ref(), span, names, &unaliased, &holes_of, &root_at, found);
                 expression_paths(&arm.body, span, names, unaliased, holes_of, root_at, found);
             }
         },
-        Expr::StructLit { fields, .. } => { for field in fields.iter() { maybe_expression_paths((field.value).as_ref(), span, names, unaliased, holes_of, root_at, found); } },
+        Expr::StructLit { fields, .. } => { for field in fields.iter() { maybe_expression_paths((field.value).as_ref(), span, names, &unaliased, &holes_of, &root_at, found); } },
         Expr::ListRepeat { value, count, .. } => {
             let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
             expression_paths(value, span, names, unaliased, holes_of, root_at, found);
@@ -169,36 +169,36 @@ pub(crate) fn expression_paths(expr: &Expr, span: &Span, names: &winnow_grammar:
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
             expression_paths(base, span, names, unaliased, holes_of, root_at, found);
-            for field in fields.iter() { maybe_expression_paths((field.value).as_ref(), span, names, unaliased, holes_of, root_at, found); }
+            for field in fields.iter() { maybe_expression_paths((field.value).as_ref(), span, names, &unaliased, &holes_of, &root_at, found); }
         },
-        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); maybe_expression_paths((value).as_ref(), span, names, unaliased, holes_of, root_at, found); },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); maybe_expression_paths((value).as_ref(), span, names, &unaliased, &holes_of, &root_at, found); },
         Expr::Select(arms, _) => { for arm in arms.iter() { expression_paths(&arm.value, span, names, unaliased, holes_of, root_at, found); } },
         _ => { },
     }
 }
 
-pub(crate) fn statement_blocks(stmt: &Stmt, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, found: &mut Walked) {
+pub(crate) fn statement_blocks(stmt: &Stmt, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) {
     match stmt {
-        Stmt::For { body, .. } => { block_names(body, names, unaliased, holes_of, root_at, found); },
-        Stmt::While { body, .. } => { block_names(body, names, unaliased, holes_of, root_at, found); },
-        Stmt::Let { value, .. } => { expression_blocks(value, names, unaliased, holes_of, root_at, found); },
-        Stmt::Comptime { value, .. } => { expression_blocks(value, names, unaliased, holes_of, root_at, found); },
-        Stmt::Expr(value) => { expression_blocks(value, names, unaliased, holes_of, root_at, found); },
+        Stmt::For { body, .. } => { block_names(body, names, &unaliased, &holes_of, &root_at, found); },
+        Stmt::While { body, .. } => { block_names(body, names, &unaliased, &holes_of, &root_at, found); },
+        Stmt::Let { value, .. } => { expression_blocks(value, names, &unaliased, &holes_of, &root_at, found); },
+        Stmt::Comptime { value, .. } => { expression_blocks(value, names, &unaliased, &holes_of, &root_at, found); },
+        Stmt::Expr(value) => { expression_blocks(value, names, &unaliased, &holes_of, &root_at, found); },
         Stmt::Assign { target, value, .. } => {
-            expression_blocks(target, names, unaliased, holes_of, root_at, found);
-            expression_blocks(value, names, unaliased, holes_of, root_at, found);
+            expression_blocks(target, names, &unaliased, &holes_of, &root_at, found);
+            expression_blocks(value, names, &unaliased, &holes_of, &root_at, found);
         },
-        Stmt::Return(value) => { expression_blocks(match value { Some(__nikaia_value) => __nikaia_value, None => return }, names, unaliased, holes_of, root_at, found); },
+        Stmt::Return(value) => { expression_blocks(match value { Some(__nikaia_value) => __nikaia_value, None => return }, names, &unaliased, &holes_of, &root_at, found); },
         _ => { },
     }
 }
 
-pub(crate) fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, found: &mut Walked) {
+pub(crate) fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) {
     match expr {
-        Expr::Block(block, _) => { block_names(block, names, unaliased, holes_of, root_at, found); },
-        Expr::Unsafe(block, _) => { block_names(block, names, unaliased, holes_of, root_at, found); },
-        Expr::Overlap(block, _) => { block_names(block, names, unaliased, holes_of, root_at, found); },
-        Expr::Closure { body, .. } => { block_names(body, names, unaliased, holes_of, root_at, found); },
+        Expr::Block(block, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
+        Expr::Unsafe(block, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
+        Expr::Overlap(block, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
+        Expr::Closure { body, .. } => { block_names(body, names, &unaliased, &holes_of, &root_at, found); },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             expression_blocks(func, names, unaliased, holes_of, root_at, found);
@@ -220,26 +220,26 @@ pub(crate) fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerCon
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
             expression_blocks(cond, names, unaliased, holes_of, root_at, found);
-            block_names(then_branch, names, unaliased, holes_of, root_at, found);
-            block_names(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, names, unaliased, holes_of, root_at, found);
+            block_names(then_branch, names, &unaliased, &holes_of, &root_at, found);
+            block_names(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, names, &unaliased, &holes_of, &root_at, found);
         },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             expression_blocks(expr, names, unaliased, holes_of, root_at, found);
-            block_names(handler, names, unaliased, holes_of, root_at, found);
+            block_names(handler, names, &unaliased, &holes_of, &root_at, found);
         },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
             expression_blocks(value, names, unaliased, holes_of, root_at, found);
             for arm in arms.iter() {
-                maybe_expression_blocks((arm.guard).as_ref(), names, unaliased, holes_of, root_at, found);
+                maybe_expression_blocks((arm.guard).as_ref(), names, &unaliased, &holes_of, &root_at, found);
                 expression_blocks(&arm.body, names, unaliased, holes_of, root_at, found);
             }
         },
         Expr::Select(arms, _) => {
             for arm in arms.iter() {
                 expression_blocks(&arm.value, names, unaliased, holes_of, root_at, found);
-                block_names(&arm.body, names, unaliased, holes_of, root_at, found);
+                block_names(&arm.body, names, &unaliased, &holes_of, &root_at, found);
             }
         },
         Expr::Binary { lhs, rhs, .. } => {
@@ -275,18 +275,18 @@ pub(crate) fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerCon
             expression_blocks(count, names, unaliased, holes_of, root_at, found);
         },
         Expr::ListLit { items, .. } => { for item in items.iter() { expression_blocks(item, names, unaliased, holes_of, root_at, found); } },
-        Expr::StructLit { fields, .. } => { for field in fields.iter() { maybe_expression_blocks((field.value).as_ref(), names, unaliased, holes_of, root_at, found); } },
+        Expr::StructLit { fields, .. } => { for field in fields.iter() { maybe_expression_blocks((field.value).as_ref(), names, &unaliased, &holes_of, &root_at, found); } },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
             expression_blocks(base, names, unaliased, holes_of, root_at, found);
-            for field in fields.iter() { maybe_expression_blocks((field.value).as_ref(), names, unaliased, holes_of, root_at, found); }
+            for field in fields.iter() { maybe_expression_blocks((field.value).as_ref(), names, &unaliased, &holes_of, &root_at, found); }
         },
-        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); maybe_expression_blocks((value).as_ref(), names, unaliased, holes_of, root_at, found); },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); maybe_expression_blocks((value).as_ref(), names, &unaliased, &holes_of, &root_at, found); },
         _ => { },
     }
 }
 
-pub(crate) fn maybe_expression_blocks(expr: Option<&Expr>, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, found: &mut Walked) { expression_blocks(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, names, unaliased, holes_of, root_at, found); }
+pub(crate) fn maybe_expression_blocks(expr: Option<&Expr>, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) { expression_blocks(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, names, &unaliased, &holes_of, &root_at, found); }
 
 pub(crate) fn path_name(segments: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String) -> String {
     let mut name = unaliased(names.resolve(*nikaia_std::index::get(&segments, 0)));

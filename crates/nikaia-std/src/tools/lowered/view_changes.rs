@@ -216,7 +216,7 @@ pub(crate) fn vc_calls(stmt: &Stmt, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, 
     out
 }
 
-pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, out: &mut Vec<VcCall>) {
+pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, out: &mut Vec<VcCall>) {
     match expr {
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -267,7 +267,7 @@ pub(crate) fn vc_names_in_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, 
     }
 }
 
-pub(crate) fn vc_names_in(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_names_in(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
     match expr {
         Expr::Variable(n, _) => {
             let n = *n;
@@ -280,14 +280,14 @@ pub(crate) fn vc_names_in(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '
     false
 }
 
-pub(crate) fn vc_mentions_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
-    if vc_names_in_stmt(stmt, name, ask, holes_of) { return true; }
+pub(crate) fn vc_mentions_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
+    if vc_names_in_stmt(stmt, name, ask, &holes_of) { return true; }
     for inner in check_visit_stmt_blocks(stmt) { for each in inner.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, holes_of) { return true; } } }
     false
 }
 
-pub(crate) fn vc_first_use(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
-    for block in check_visit_stmt_blocks(stmt) { for each in block.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, holes_of) { return Some(nikaia_std::index::or(vc_first_use(&each.node, name, ask, holes_of), || each.span.clone().into())); } } }
+pub(crate) fn vc_first_use(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
+    for block in check_visit_stmt_blocks(stmt) { for each in block.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, &holes_of) { return Some(nikaia_std::index::or(vc_first_use(&each.node, name, ask, holes_of), || each.span.clone().into())); } } }
     None
 }
 
@@ -324,12 +324,12 @@ pub(crate) fn vc_subject_first(contract: &FnContract) -> bool {
     !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self"
 }
 
-pub(crate) fn vc_changes(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &VcWalk) -> bool {
+pub(crate) fn vc_changes(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, walk: &VcWalk) -> bool {
     match stmt {
         Stmt::Assign { target, .. } => { if vc_rooted(target, name, ask) { return true; } },
         _ => { },
     }
-    for call in vc_calls(stmt, ask, holes_of) {
+    for call in vc_calls(stmt, ask, &holes_of) {
         if call.method {
             let root = match call.root { Some(__nikaia_value) => __nikaia_value, None => continue };
             let method = match call.callee { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -468,7 +468,7 @@ pub(crate) fn vc_mut_view(at: &Span, name: &str, place: &Expr, outer: &[VcView],
     Some(view)
 }
 
-pub(crate) fn vc_reads_expr(expr: &Expr, view: &VcView, root: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn vc_reads_expr(expr: &Expr, view: &VcView, root: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
     match expr {
         Expr::Variable(_, _) => { if vc_rooted(expr, root, ask) { return vc_watches(view, root, &vc_path_of(expr, ask)); } },
         Expr::Field { .. } => { if vc_rooted(expr, root, ask) { return vc_watches(view, root, &vc_path_of(expr, ask)); } },
@@ -574,7 +574,7 @@ pub(crate) fn vc_used_after(block: &Block, from: i64, name: &str, ask: &VcAsk<'_
     None
 }
 
-pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
+pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
     let mut views: Vec<VcView> = outer.to_owned();
     let own_from = views.len() as i64;
     let mut declared: collections::BTreeMap<String, (i64, bool)> = collections::BTreeMap::new();
@@ -582,17 +582,17 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
         let stmt = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j));
         for v in own_from..views.len() as i64 {
             let name = nikaia_std::index::get(&views, nikaia_std::index::at(v)).name.to_string();
-            views[nikaia_std::index::at(v)].used = vc_used_after(block, j + 1, &name, ask, holes_of);
+            views[nikaia_std::index::at(v)].used = vc_used_after(block, j + 1, &name, ask, &holes_of);
         }
         let looping = matches!(stmt.node, Stmt::For { .. } | Stmt::While { .. });
         let at = stmt.span.clone();
         let refused_before = walk.findings.len() as i64;
-        vc_changes_in(&stmt.node, &at, &views, ask, holes_of, walk);
-        if (walk.findings.len() as i64) == refused_before { vc_reads_in(&stmt.node, &at, &views, ask, holes_of, walk); }
+        vc_changes_in(&stmt.node, &at, &views, ask, &holes_of, walk);
+        if (walk.findings.len() as i64) == refused_before { vc_reads_in(&stmt.node, &at, &views, ask, &holes_of, walk); }
         match &stmt.node {
             Stmt::Assign { target, op, .. } => {
                 let whole = op.is_none() && matches!(target, Expr::Variable(_, _));
-                vc_assign(block, j, target, whole, &at, &mut views, &declared, ask, holes_of, walk);
+                vc_assign(block, j, target, whole, &at, &mut views, &declared, ask, &holes_of, walk);
             },
             Stmt::Expr(expr) => {
                 match expr {
@@ -618,7 +618,7 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
         if looping {
             for view in inner_views.iter_mut() {
                 let name = (*view).name.to_string();
-                if (*view).used.is_none() && vc_mentions_stmt(&stmt.node, &name, ask, holes_of) { (*view).used = Some(nikaia_std::index::or(vc_first_use(&stmt.node, &name, ask, holes_of), || at.clone().into())); }
+                if (*view).used.is_none() && vc_mentions_stmt(&stmt.node, &name, ask, &holes_of) { (*view).used = Some(nikaia_std::index::or(vc_first_use(&stmt.node, &name, ask, &holes_of), || at.clone().into())); }
             }
         }
         match &stmt.node {
@@ -639,7 +639,7 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
         for stmt in block.stmts.iter() {
             let start = stmt.span.start as i64;
             if start == entry.0 { continue; }
-            if walk.give_ups.rebound.contains_key(&start) && vc_assigns_to(&stmt.node, name, ask) { rebound = true; } else if vc_changes(&stmt.node, name, ask, holes_of, &walk) { other = true; }
+            if walk.give_ups.rebound.contains_key(&start) && vc_assigns_to(&stmt.node, name, ask) { rebound = true; } else if vc_changes(&stmt.node, name, ask, &holes_of, &walk) { other = true; }
         }
         if rebound && !other { walk.give_ups.unmuted.insert(entry.0); }
     }
