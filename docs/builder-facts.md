@@ -32,6 +32,7 @@ not make your gate red: report `Gate: green` and the figure under `Tests:`.
 
 ## Traps already met
 
+* **A build that shows none of your edits may have run while another lane's `drive.nika` rebased the shared checkout** (`git pull --rebase --autostash` after a rejected push, `scripts/drive.nika` `drive_push`; b1043, 2026-10-31: one probe round lost, `UU` files left). When a probe behaves as if your change were not there, first check `git status` and that your edit is in the file, then rebuild; never resolve or stage the `UU` files of others, report them under `Needs:`.
 * **A grammar probe fails in rustc with "multiple different versions of crate `winnow_grammar`" or "Cannot find type `E`"**: `target/fast/nikaia` has an old winnow-grammar rev baked in by `crates/nikaia/build.rs`, never your change (y12, 8 turns lost). Before the first grammar probe: `grep -c "$(grep -o 'rev = "[0-9a-f]*"' Cargo.toml | grep -o '[0-9a-f]\{7,\}' | head -1)" target/fast/nikaia` must print 1 or more; if 0, `touch crates/nikaia/build.rs` and `cargo build --profile fast -p nikaia`.
 * **A test that reads a type of another package** (`use yaml` in `packages/yaml/tests`): the compiler's own test project is a package too (`tests/compiler`, name `compiler_tests`), so its `pub` items in `tests/compiler/src/main.nika` are reached from a test with `use compiler_tests`; that is how a cross-package case gets a test CI runs (#1037).
 
