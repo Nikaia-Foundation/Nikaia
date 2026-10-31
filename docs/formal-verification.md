@@ -74,11 +74,19 @@ the proofs.
   *`r` is not a whole number the prover reads*), quantifiers over lists,
   recursive definitions and induction, strings, heap shapes, termination,
   postconditions (`ensures`), lemmas.
-* On the compiler's own code (`nikaia check --bounds`, each of the 214
-  `tools/*.nika` files on its own): **1,473 indexes, 802 proved (54 %);
-  1,101 arithmetic steps, 491 proved (45 %)**; 26 `assert`, 11 `panic` in
-  about 104 k lines. The rest keep their checks: a defect there stops the
-  compiler, it does not miscompile silently. The `unsafe` in `tools/` is
+* On the compiler's own code, measured on de2af5b2 with
+  `nikaia lower-std --bounds`, which checks each of the 246 `tools/*.nika`
+  files with the rest of the package beside it, as `lower-std` does (#1053),
+  summed by `scripts/proved.nika`: **2,608 indexes, 1,503 proved (57.6 %);
+  1,601 arithmetic steps, 719 proved (44.9 %)**, no file refused. With
+  `--optimization prove-through-loops:on`: 1,535 indexes proved (58.9 %),
+  726 steps (45.3 %). Most of what stays checked, 1,877 of 1,987 sites, is a
+  value no fact bounds: a counter, a loop, a length (#432, #383, #388).
+  An earlier count with `nikaia check --bounds` on each file alone listed
+  fewer sites, because `check` refuses a file that names another file's types
+  and the code it cannot type drops out; that count also found 26 `assert`
+  and 11 `panic` in about 104 k lines. The rest keep their checks: a defect
+  there stops the compiler, it does not miscompile silently. The `unsafe` in `tools/` is
   text the lowering writes, not code the tools run.
 
 ## 3. Requirements and their category
@@ -109,8 +117,8 @@ solvers) or major rework; E probably never.
 
 ## 4. Honest claims short of (a)
 
-* **Now (A):** "the compiler's Nikaia code proves 54 % of its indexes and 45 %
-  of its arithmetic and checks the rest; no unproved `assert` builds; every
+* **Now (A):** "the compiler's Nikaia code proves 58 % of its indexes and 45 %
+  of its arithmetic (on de2af5b2, `nikaia lower-std --bounds`, §2) and checks the rest; no unproved `assert` builds; every
   dropped check rests on a checked certificate"; "Stage 1 and the Rust stage
   agree on the whole suite".
 * **With extensions (B):** "the proof kernel is free of run-time errors"
@@ -134,6 +142,11 @@ that sums the `--bounds` and `--asserts` counts over `tools/*.nika` and
 prints one line, recorded with each self-hosting snapshot, so the share of
 proved checks is visible beside the share of moved lines and a regression
 shows. Everything else waits for the owner's answer.
+
+The counting tool exists for `--bounds` (#1053): `nikaia lower-std --bounds
+[--optimization NAME:LEVEL]... > REPORT`, then `nikaia run scripts/proved.nika
+-- REPORT` prints the totals, the unproved sites by reason and the 15 files
+with the most of them; `--asserts` is not summed yet.
 
 ## 6. Owner's decisions (2026-10-24, #796)
 
