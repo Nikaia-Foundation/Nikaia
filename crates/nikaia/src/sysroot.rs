@@ -538,11 +538,21 @@ fn check_tools_file(
 /// one line, `refused: <path>`. Nothing is written and no cache is read: the
 /// report needs the walk. The `runtime` package and the `std` modules are
 /// left out.
+///
+/// **`--asserts` beside it** (#1053 step 9): `bounds_report` and
+/// `asserts_report` say which blocks each file prints, the `--bounds` one
+/// first, then the `check --asserts` one (`check_claims_report`), so that
+/// `scripts/proved.nika` can count the claims left at run time too. The
+/// claims are read as the tools build reads them: an unproved one is
+/// refused (`check_against` refuses it, ADR-380 D1).
+#[allow(clippy::too_many_arguments)]
 pub fn bounds_tools(
     sysroot: &Sysroot,
     bounds: crate::bounds::BoundsChecks,
     overflow: crate::bounds::OverflowChecks,
     through_loops: bool,
+    bounds_report: bool,
+    asserts_report: bool,
 ) -> Result<String> {
     let paths = tools_sources(&sysroot.tools_dir())?;
     let (sizes, texts, parsed) = read_tools_package(&paths)?;
@@ -562,9 +572,12 @@ pub fn bounds_tools(
             .findings
             .iter()
             .any(|finding| matches!(finding.severity, crate::check::Severity::Error));
-        match refused {
-            true => format!("refused: {path}\n"),
-            false => crate::bounds_report::report_checked(
+        if refused {
+            return format!("refused: {path}\n");
+        }
+        let mut out = String::new();
+        if bounds_report {
+            out.push_str(&crate::bounds_report::report_checked(
                 &parsed[at],
                 &texts[at],
                 &path,
@@ -574,8 +587,19 @@ pub fn bounds_tools(
                 bounds,
                 overflow,
                 through_loops,
-            ),
+            ));
         }
+        if asserts_report {
+            out.push_str(&nikaia_std::tools::check_facts::check_claims_report(
+                &checked.facts.claims,
+                &texts[at],
+                &path,
+                &checked.facts.published,
+                false,
+                true,
+            ));
+        }
+        out
     };
     // The largest first, as `lower-std` does; `in_parallel` answers in file
     // order whatever the order of the work.

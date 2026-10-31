@@ -1,13 +1,18 @@
 // How much of the tools package the prover proves (#1053): sums a saved
-// `nikaia lower-std --bounds` report, where each file of the package was
-// checked with the others beside it, as `lower-std` checks it.
+// `nikaia lower-std --bounds --asserts` report, where each file of the
+// package was checked with the others beside it, as `lower-std` checks it.
 //
-//     nikaia lower-std --bounds [--optimization NAME:LEVEL]... > REPORT
+//     nikaia lower-std --bounds --asserts [--optimization NAME:LEVEL]... > REPORT
 //     nikaia run scripts/proved.nika -- REPORT
 //
-// It prints one line of totals, then the unproved sites by reason (count,
-// reason, most first), then the 15 files with the most unproved sites.
-// A site the walk has no reason for is counted under `(no reason)`.
+// It prints the line of indexes and operations proved, the line of claims
+// (the `asserts in` headers summed), the `panic(` calls in the tools sources
+// (`crates/nikaia-std/src/tools`, read from the checkout's root), and `left at run time`: every check still made when
+// the program runs, the lane's target figure (0 is claim (b)). Then the
+// unproved sites by reason (count, reason, most first), then the 15 files
+// with the most unproved sites. A site the walk has no reason for is counted
+// under `(no reason)`. A report without `--asserts` counts no claims, and
+// says so.
 
 use std::cli
 use std::collections
@@ -37,6 +42,33 @@ fn number_before(text: String, word: String) -> i64 {
     return 0
 }
 
+// The number after `phrase` in `text`: `3` for `not proved 3 (refused` and
+// `not proved `; 0 where `phrase` is not there.
+fn number_after(text: String, phrase: String) -> i64 {
+    let (_, rest) = text.split_once(phrase) ?? return 0
+    let (number, _) = rest.split_once(" ") ?? (rest, "")
+    return text::parse_i64(number.trim_end_matches(",").trim_end_matches(";").trim_end_matches(")")) ?? 0
+}
+
+// The `panic(` calls in `text` outside `//` comments (a name ending in
+// `panic`, `a_panic(`, is not one): `(calls, 1)` where
+// there is one, `(0, 0)` where none.
+fn panics_in(text: String) -> (i64, i64) {
+    let mut calls = 0
+    for line in text.lines() {
+        let (code, _) = line.split_once("//") ?? (line, "")
+        let parts: Vec[String] = code.split("panic(").map(fn(p) { p.to_string() }).collect()
+        for k in 0..<parts.len() - 1 {
+            // `a_panic(` is another function's name, not the call.
+            let before = parts[k].chars().last() ?? ' '
+            if before.is_alphanumeric() || before == '_' { continue }
+            calls += 1
+        }
+    }
+    if calls > 0 { return (calls, 1) }
+    return (0, 0)
+}
+
 fn main() throws {
     let mut args: Vec[String] = Vec()
     for a in cli::args() { args.push(a) }
@@ -53,7 +85,25 @@ fn main() throws {
     let mut refused = 0
     let mut reasons: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut unproved: Vec[(i64, String)] = Vec()
+    let mut counted = false
+    let mut asserts = 0
+    let mut asserts_proved = 0
+    let mut looped = 0
+    let mut preconditions = 0
+    let mut asserts_unproved = 0
     for line in report.lines() {
+        // `asserts in P: N - not proved U (...); ...; proved D (proved P,
+        // through a loop L, preconditions proved at every call C)`.
+        if line.starts_with("asserts in ") {
+            counted = true
+            let (_, counts) = line.split_once(": ") ?? continue
+            asserts += text::parse_i64(counts.split(" ").next() ?? "") ?? 0
+            asserts_unproved += number_after(counts, "not proved ")
+            asserts_proved += number_after(counts, "(proved ")
+            looped += number_after(counts, "through a loop ")
+            preconditions += number_after(counts, "proved at every call ")
+            continue
+        }
         if line.starts_with("refused: ") {
             files += 1
             refused += 1
@@ -83,6 +133,29 @@ fn main() throws {
         reasons.insert(reason, (reasons[reason] ?? 0) + 1)
     }
     println(f"proved: {indexes_proved}/{indexes} indexes ({percent(indexes_proved, indexes)} %), {operations_proved}/{operations} operations ({percent(operations_proved, operations)} %), {files} files, {refused} refused")
+    let unproved_sites = indexes - indexes_proved + operations - operations_proved
+    if counted {
+        println(f"claims: {asserts} asserts, {asserts_proved} proved ({looped} through a loop), {preconditions} preconditions proved at every call, {asserts_unproved} not proved")
+    } else {
+        println("claims: not counted (run lower-std with --asserts)")
+    }
+    // Run from the checkout's root, as the report's paths are.
+    let tools = "crates/nikaia-std/src/tools"
+    let mut panics = 0
+    let mut panic_files = 0
+    for entry in fs::read_dir(tools, fs::Root::Anywhere) {
+        let name = entry.to_text()
+        if !name.ends_with(".nika") { continue }
+        let (calls, file) = panics_in(fs::read_to_string(f"{tools}/{name}", fs::Root::Anywhere))
+        panics += calls
+        panic_files += file
+    }
+    println(f"panics: {panics} in {panic_files} files")
+    if counted {
+        println(f"left at run time: {unproved_sites + asserts_unproved + panics}")
+    } else {
+        println(f"left at run time: {unproved_sites + panics} (indexes, operations and panics; the unproved claims are not counted)")
+    }
     println("")
     println("unproved sites by reason:")
     let mut by_reason: Vec[(i64, String)] = Vec()

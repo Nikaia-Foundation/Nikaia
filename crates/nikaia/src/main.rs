@@ -359,7 +359,9 @@ pub enum Command {
     /// toolchain's package (`tools/`), each checked with the package beside
     /// it as `lower-std` checks it, at the `--optimization` levels given. A
     /// file that check refuses is the line `refused: <path>`. The `runtime`
-    /// package and the `std` modules are left out.
+    /// package and the `std` modules are left out. With `--asserts` too, each
+    /// file's `check --asserts` block follows its `--bounds` one (`--asserts`
+    /// alone prints only those blocks), so the claims are counted as well.
     /// `nikaia run scripts/proved.nika -- REPORT` sums a saved report.
     LowerStd {
         /// The sysroot. Defaults to `NIKAIA_SYSROOT`, or the checkout this
@@ -565,8 +567,15 @@ fn lower_std(sysroot: Option<PathBuf>) -> Result<i32> {
 
 /// `nikaia lower-std --bounds` (#1053): the tools package's `--bounds`
 /// report, each file seeing the package, at the `--optimization` levels
-/// given (each `off` where none is).
-fn lower_std_bounds(sysroot: Option<PathBuf>, optimization: &[String]) -> Result<i32> {
+/// given (each `off` where none is). With `--asserts`, each file's
+/// `check --asserts` block too, after its `--bounds` one; `--asserts` alone
+/// prints those blocks alone.
+fn lower_std_bounds(
+    sysroot: Option<PathBuf>,
+    optimization: &[String],
+    bounds_report: bool,
+    asserts_report: bool,
+) -> Result<i32> {
     let sysroot = match sysroot {
         Some(root) => Sysroot::new(root),
         None => Sysroot::resolve(),
@@ -576,7 +585,14 @@ fn lower_std_bounds(sysroot: Option<PathBuf>, optimization: &[String]) -> Result
     let through_loops = project::prove_through_loops(&words);
     print!(
         "{}",
-        sysroot::bounds_tools(&sysroot, bounds, overflow, through_loops)?
+        sysroot::bounds_tools(
+            &sysroot,
+            bounds,
+            overflow,
+            through_loops,
+            bounds_report,
+            asserts_report
+        )?
     );
     Ok(0)
 }
@@ -753,8 +769,13 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             both_settings,
             bless,
         } => return test_command(args, project.clone(), *both_settings, *bless),
-        Command::LowerStd { sysroot } if args.bounds => {
-            return lower_std_bounds(sysroot.clone(), &args.optimization);
+        Command::LowerStd { sysroot } if args.bounds || args.asserts => {
+            return lower_std_bounds(
+                sysroot.clone(),
+                &args.optimization,
+                args.bounds,
+                args.asserts,
+            );
         }
         Command::LowerStd { sysroot } => return lower_std(sysroot.clone()),
         Command::Describe {

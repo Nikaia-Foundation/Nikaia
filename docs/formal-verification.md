@@ -74,18 +74,23 @@ the proofs.
   *`r` is not a whole number the prover reads*), quantifiers over lists,
   recursive definitions and induction, strings, heap shapes, termination,
   postconditions (`ensures`), lemmas.
-* On the compiler's own code, measured on de2af5b2 with
-  `nikaia lower-std --bounds`, which checks each of the 246 `tools/*.nika`
-  files with the rest of the package beside it, as `lower-std` does (#1053),
-  summed by `scripts/proved.nika`: **2,608 indexes, 1,503 proved (57.6 %);
-  1,601 arithmetic steps, 719 proved (44.9 %)**, no file refused. With
-  `--optimization prove-through-loops:on`: 1,535 indexes proved (58.9 %),
-  726 steps (45.3 %). Most of what stays checked, 1,877 of 1,987 sites, is a
-  value no fact bounds: a counter, a loop, a length (#432, #383, #388).
+* On the compiler's own code, measured on a784e6d with
+  `nikaia lower-std --bounds --asserts`, which checks each of the 247
+  `tools/*.nika` files with the rest of the package beside it, as
+  `lower-std` does (#1053), summed by `scripts/proved.nika`: **2,676
+  indexes, 1,543 proved (57.7 %); 1,633 arithmetic steps, 840 proved
+  (51.4 %)**, no file refused. With `--optimization prove-through-loops:on`:
+  1,575 indexes proved (58.9 %), 846 steps (51.8 %). The tools hold no
+  `assert` yet (`claims: 0 asserts`) and 3 `panic(` calls in 3 files, one
+  of them in text the lowering writes for a test build. So the checks left
+  at run time number 1,929, and 1,891 with loops proved through: that
+  figure is the lane's target, and 0 would be claim (b). Most of what stays
+  checked is a value no fact bounds: of the 1,926 unproved sites, 709 read
+  a counter, a loop or a length without a fact, 476 are a counter a loop
+  changes, and 383 a parameter no precondition bounds (#432, #383, #388).
   An earlier count with `nikaia check --bounds` on each file alone listed
   fewer sites, because `check` refuses a file that names another file's types
-  and the code it cannot type drops out; that count also found 26 `assert`
-  and 11 `panic` in about 104 k lines. The rest keep their checks: a defect
+  and the code it cannot type drops out. The rest keep their checks: a defect
   there stops the compiler, it does not miscompile silently. The `unsafe` in `tools/` is
   text the lowering writes, not code the tools run.
 
@@ -117,8 +122,9 @@ solvers) or major rework; E probably never.
 
 ## 4. Honest claims short of (a)
 
-* **Now (A):** "the compiler's Nikaia code proves 58 % of its indexes and 45 %
-  of its arithmetic (on de2af5b2, `nikaia lower-std --bounds`, §2) and checks the rest; no unproved `assert` builds; every
+* **Now (A):** "the compiler's Nikaia code proves 58 % of its indexes and 51 %
+  of its arithmetic (on a784e6d, `nikaia lower-std --bounds --asserts`, §2) and
+  checks the rest, 1,929 checks at run time; no unproved `assert` builds; every
   dropped check rests on a checked certificate"; "Stage 1 and the Rust stage
   agree on the whole suite".
 * **With extensions (B):** "the proof kernel is free of run-time errors"
