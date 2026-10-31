@@ -24,3 +24,4 @@
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 349340 13
 /home/user/Nikaia/docs/briefs/bugs/b19-1080-lent-option-bare-arg.md 285482 5
 /home/user/Nikaia/docs/briefs/bugs/b17-1077-tools-preamble-traits.md 577390 17
+/home/user/Nikaia/docs/briefs/bugs/architect-task.md 528500 17
