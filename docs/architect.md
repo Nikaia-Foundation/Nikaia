@@ -293,32 +293,32 @@ tokens and turns per finished step, steps per day; counted, not timed.
 *Current state only, rewritten (not appended) by the architect when it ends:
 open lanes, what blocks what, figures, decisions in force that no ADR or issue
 holds. What happened is in `git log` and the issues.*
-**2026-10-31 (after d264161b).** Self-hosting: about 82 % of the toolchain
+**2026-10-31 (after 8153b8c0).** Self-hosting: about 82 % of the toolchain
 (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
 2026-11-04), rows and `Cut:` lines in `docs/selfhosting-plan.md`.
 
 * **CI**: last known red (clippy 1.99) fixed forward by 91510ca0. Main
   session: `rustup update stable` at a quiet moment (this machine's `stable`
   is 1.97; 1.99.1 is installed beside it).
-* **Main lane** (`docs/briefs/batch.txt`): P5c (`p5c-project-drive.md`, its
-  #1060 guard now: build from HEAD first), GR re-land
-  (`gr2-grammar-run-reland.md`, revert of 0fbe3d6b; b15 showed the drift was a
-  stale binary), s1082 (`s1082-or-default-cloned.md`, ADR-384: `Entry::or_default`,
-  `Seq::cloned`, decided by the architect). **C1a blocked** on #1080 (bug lane
-  b19) and #1082 (s1082); its verified step 1 is
-  `docs/briefs/c1a-ledger-items.wip.patch`, the brief's *Re-run* section says
-  how. **K3b blocked** on #1077 (b17) and #1078 (b18); draft on local branch
-  `wip/k3b-comptime-bundle` 9a1678a8 (`runtime_dependencies` returns
-  `Vec[(String, String)]`), then P5c's `write_if_changed` forward becomes the
-  Nikaia call. **S1** waits on b17 (same `sysroot.rs`); `String.get(range)` is
-  refused by design (NK1214). P5e waits on the O rows (#923).
-* **Next main batch**: C1a re-run (after b19 and s1082), C1b (`lookup`,
-  `candidates`, the `stored` fold), K3b re-run, S1, as blockers clear. Owed,
-  each its own brief: R0 (#921), `scripts/plan_rows.nika`, the driver writing
-  the failing job's clippy output into `architect-input.txt`, fold
-  `ComptimeRan` into `CheckWall`.
+* **Main lane** (`docs/briefs/batch.txt`): GR re-land
+  (`gr2-grammar-run-reland.md`), s1082 (`s1082-or-default-cloned.md`,
+  ADR-384, decided by the architect). **P5c blocked** on #1088 (bug lane b20,
+  a tuple's `T?` part at a `match`/`if` end gets no `Some`). Its move is done
+  on branch `wip/p5c-project-drive` cc40334f, and the brief's *Re-run* section
+  says how to land it. **C1a blocked** on #1080 (b19) and #1082 (s1082); its
+  verified step 1 is `docs/briefs/c1a-ledger-items.wip.patch`, see the
+  brief's *Re-run*. **K3b blocked** on #1077 (b17) and #1078 (b18); draft on
+  local branch `wip/k3b-comptime-bundle` 9a1678a8. **S1** waits on b17 (same
+  `sysroot.rs`); `String.get(range)` is refused by design (NK1214). P5e waits
+  on the O rows (#923).
+* **Next main batch**: P5c re-run (after b20), C1a re-run (after b19 and
+  s1082), C1b (`lookup`, `candidates`, the `stored` fold), K3b re-run, S1, as
+  blockers clear. No move is free without a blocker today: when the bug lane
+  is slow, write C1b. Owed, each its own brief: R0 (#921),
+  `scripts/plan_rows.nika`, the driver writing the failing job's clippy
+  output into `architect-input.txt`, fold `ComptimeRan` into `CheckWall`.
 * **Bug lane** (`docs/briefs/bugs/batch.txt`): b19 #1080, b17 #1077, b18
-  #1078 (the `Blocks:` briefs, for C1a and K3b). Queued after them, briefs
+  #1078, b20 #1088 (the `Blocks:` briefs, for C1a, K3b, P5c). Queued after them, briefs
   written and issues `wip`: b13 #1057, b14 #947, b16 #1065. b15 done
   (1d88667d, Part #1060: the gate catches lowered drift; step 2 not
   reproduced, #1060 stays open for it). `ready` defects no lane holds, next:

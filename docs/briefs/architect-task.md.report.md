@@ -1,6 +1,5 @@
 Result: done
-Batch: p5c-project-drive.md gr2-grammar-run-reland.md s1082-or-default-cloned.md
+Batch: gr2-grammar-run-reland.md, s1082-or-default-cloned.md
 Owner: none
-Filed: #1080 (C1a's Found, bug lane b19, `wip`, Blocks c1a), #1081 (b15's Found, `ready`, no lane), #1082 (std `Entry::or_default`, `Seq::cloned`; ADR-384 decided by the architect, C1a had written around both).
-C1a waits on b19 and s1082; its verified step 1 kept as docs/briefs/c1a-ledger-items.wip.patch, re-run section in its brief.
-Changelog (supervisor, with s1082): ADR-384, `Entry::or_default` and `Seq::cloned` in std.
+Found: P5c's Found filed as #1088 (ready, wip): a tuple's `T?` part at a match/if end gets no `Some`. Probed rows a-e; suspected location `check_overflow.nika` `check_overflow_list_into_nullables`. Bug brief b20 appended to `docs/briefs/bugs/batch.txt`, `Blocks: p5c-project-drive.md`. P5c's brief has a *Re-run* section for landing branch `wip/p5c-project-drive` cc40334f.
+Needs: none. Batch is two briefs: every other move waits on a bug-lane fix (P5c b20, C1a b19+s1082, K3b b17/b18, S1 b17).
