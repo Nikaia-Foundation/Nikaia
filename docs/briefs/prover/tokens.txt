@@ -17,3 +17,4 @@
 /home/user/Nikaia/docs/briefs/qa-task.md 560612 20
 /home/user/Nikaia/docs/briefs/prover/p10-1084-argument-lengths.md 264089 3
 /home/user/Nikaia/docs/briefs/prover/architect-task.md 1163125 28
+/home/user/Nikaia/docs/briefs/prover/p11-1090-carried-precondition-count.md 1775382 40
