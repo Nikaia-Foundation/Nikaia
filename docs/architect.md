@@ -132,6 +132,9 @@ paid for the rule):
 * a step resting on another brief's fix opens with a pre-flight probe of it;
   a draft (`wip/` branch, patch) is applied and run through `nikaia check` and
   one test first (y2c);
+* a fix that widens a rule names every function that repeats that rule
+  (the same condition tested elsewhere, e.g. `views_the_call_s` beside the
+  emitter's #703 branch) and allows its file, or drops the row (b11);
 * the expected lowering agrees with the ADR that governs it, or the brief says
   *any lowering rustc accepts* (b933);
 * an emitter fix that needs what the checker knows names the fact that carries
@@ -292,14 +295,17 @@ holds. What happened is in `git log` and the issues.*
   the driver writing the failing job's clippy output into
   `architect-input.txt` (job logs cannot be fetched here: the proxy refuses
   them).
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b9 #1055 and b10 #1057 step 1
-  done; b11 #1048 `wip`. `ready` defects no lane holds: #1038, #958, #1014,
-  #947, #927; #1057 step 2. qa-task's note (dev-profile `cargo test -p
-  nikaia` hits the recursion limit in winnow-grammar `rt.rs:902`, fast
-  profile builds) is unfiled: file it if a dev-profile build is needed.
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): b9-b11 done (#1055, #1057
+  step 1, #1048 rows a-c, `Fixes #1048` closes on promote). Batch now: b12
+  #1061 (#1048 row d, `views.nika`), b13 #1057 step 2, b14 #947; all `wip`.
+  `ready` defects no lane holds, next: #1038, #958, #1014, #927, #1056,
+  #1058. Unfiled: qa-task's note (dev-profile `cargo test -p nikaia` hits the
+  recursion limit in winnow-grammar `rt.rs:902`); a two-view `fn` field
+  written with `String` instead of `ref String` is NK1106 (b12's probe note):
+  file both when met again.
 * **yaml lane**: #928, #929, #604 (`wip`).
 * **Owed to the supervisor**: version raise / Changelog lines for s922, b9,
-  b10, b6-b8, b1046 (their reports). **Waiting on the owner**: #1047, #1042.
+  b10, b11, b6-b8, b1046 (their reports). **Waiting on the owner**: #1047, #1042.
 * **In force, in no other file**: `drive.nika`'s `drive_push` runs `git pull
   --rebase --autostash` in the shared checkout. Branch
   `wip/bounding-candidates-2026-10-19` is parked.
