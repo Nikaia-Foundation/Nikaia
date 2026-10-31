@@ -8,7 +8,7 @@ budget_usd: 20
 
 Score: self-hosting lane, row GR of `docs/selfhosting-plan.md`. It needs `hash::sha256_hex` and `env::var` (#922 steps 1-2, brief `s922-sha256-env.md`, the batch's step before this one) and BT's `Wall` = `CheckWall` (brief `bt-build-time.md`, the first step of the batch).
 
-Facts: Moving Rust into Nikaia, Where things live, Traps already met, Commands, exactly
+Facts: Moving Rust into Nikaia, Where things live, Traps already met, Commands
 
 Cut: crates/nikaia/src/grammar_run.rs:185-262
 Convert: --profile check-free --prefix grammar_run_

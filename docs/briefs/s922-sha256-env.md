@@ -8,7 +8,7 @@ budget_usd: 20
 
 Score: self-hosting lane. #922 steps 1-2 block GR (`grammar_run.rs`: `crate::assets::digest`, `std::env::var("CARGO")`), K3b and O1 (`docs/selfhosting-plan.md`), and four tools files carry a host `sha256_hex` method only because `std` has none. The signatures are decided in #922 (owner, 2026-10-28); what this brief adds is decided by the architect, no owner question.
 
-Facts: Where things live, Traps already met, Commands, exactly
+Facts: Where things live, Traps already met, Commands
 
 ## Decided (architect, 2026-10-31)
 * **SHA-256 is written out in `crates/nikaia-std/src/hash.rs`: no `sha2` dependency.** #922's table says "`sha2` (already a dependency of the toolchain)": it is a dependency of `nikaia` and `orchestrator`, not of `nikaia-std`, and `std` is built into every user program (`crates/nikaia-std/Cargo.toml` :116, ADR-002 D4 keeps that graph small). `hash.rs` already copies rustc-hash's byte hash for the same reason. That is FIPS 180-4's compression function: about 80 lines, no `unsafe`, no table but the 64 round constants. The NIST test vectors are the oracle, in a Nikaia test.

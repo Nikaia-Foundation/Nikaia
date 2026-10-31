@@ -225,7 +225,7 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   lowering defects are GitHub issues, the language options against the usual
   hurdles in `docs/history/mitigation-hurdles.md`.
 
-## Commands, exactly
+## Commands
 
 The cycle, clippy beside the tests, the report and `commit.nika`:
 `.claude/agents/builder.md`. Disk at the end: the same file, last step.

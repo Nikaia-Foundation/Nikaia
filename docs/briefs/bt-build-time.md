@@ -8,7 +8,7 @@ budget_usd: 20
 
 Score: self-hosting lane, bootstrap week lane 1, row BT of `docs/selfhosting-plan.md` (next in the plan's order after K3a, which is built). No `#922`/`#920` entry needed.
 
-Facts: Moving Rust into Nikaia, Where things live, Traps already met, Commands, exactly
+Facts: Moving Rust into Nikaia, Where things live, Traps already met, Commands
 
 Cut: crates/nikaia/src/build_time.rs:1-387
 Cut: crates/nikaia/src/comptime_run.rs:602-722

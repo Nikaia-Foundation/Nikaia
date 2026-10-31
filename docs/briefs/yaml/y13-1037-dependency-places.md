@@ -62,7 +62,7 @@ The architect ran it (scratch package, `nikaia test --project .`, today's develo
 * `crates/nikaia-std/src/tools/emit_tables.nika:299` `emit_tables_read_view_slots(ledger)`: another package's places, keyed by the ledger's bare type name (`Node`); `crates/nikaia/src/emit/mod.rs:857-864` chains it into `EmitState.view_slots` from `described`.
 * `emit_function.nika:823` and `:1062` (`emit_split_lifetimes`) read `view_slots` by `emit_text(world, t.name)` too; `emit_item.nika:121` `emit_item_slots`.
 * Suspects, unverified: the key (the written `two::Node` against `Node` in the map), or the dependency's ledger not reaching `described` on this path. Look first (`docs/builder-facts.md`, *A wrong lowering: look before you read code*): lower the probe test and read the `fn show` line and the `Node` struct.
-* Each `.nika` under `crates/nikaia-std/src/tools/` has its lowered twin in `tools/lowered/`: `nikaia lower-std` (see `docs/builder-facts.md`, *Commands, exactly*), and commit both.
+* Each `.nika` under `crates/nikaia-std/src/tools/` has its lowered twin in `tools/lowered/`: `nikaia lower-std` (see `docs/builder-facts.md`, *Commands*), and commit both.
 
 Read `docs/builder-facts.md` (its first trap: check the winnow-grammar rev of `target/fast/nikaia` before a probe).
 
