@@ -32,6 +32,7 @@ grammar Lit {
 * Lowered files and `lower-std` fixpoint.
 
 ## To build
+0. What j1 (06e4e63) left open, needed here: substitute a rule's type parameters inside its actions, guards and the `match` scrutinee of each copy (`grammar_types.nika`), and check a bound (`[S: Struct]`) at the call. Test `grammar_a_type_parameter_in_an_action.nika` + `.stdout`, and the bound refused in `grammar_a_rule_bound_is_checked.nika` + `.stderr` (the code a generic function's unmet bound gives today).
 1. `match T::kind` in a rule body with per-arm patterns, only the taken arm emitted per copy, `refuse("…")`, `NK1250` (rule and, through nested `Value[A]`, the path of type arguments that led there), `NK1310`. Tests in `tests/compiler/tests/`: `grammar_a_match_on_a_kind_chooses_the_pattern.nika` + `.stdout`, `grammar_a_type_no_arm_takes_is_refused.nika` + `.stderr` (`NK1250`), `grammar_refuse_in_an_arm_says_why.nika` + `.stderr`, `grammar_a_match_on_a_runtime_value_is_refused.nika` + `.stderr` (`NK1310`). Commit `grammar: a match on a kind chooses a rule's pattern, refuse (ADR-grammar-2 D2, D6)`, `Part of #1019`.
 
 ## Done when

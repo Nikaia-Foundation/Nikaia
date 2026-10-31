@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1323] — 2026-10-31
+
+**Grammar rules take type parameters**
+- Grammars: a rule and an entry take type parameters, `rule Value[T] -> T`, called `G::read[i64](input)` and `Value[T]` in a pattern; one copy per list of types, a value in the brackets is NK1230 (ADR-grammar-2 D1, #1019).
+
 ## [0.0.1322] — 2026-10-31
 
 **nikaia test on parallel workers; loop checks through the prover's candidates; --bounds names its reasons (#1053, #1054)**
