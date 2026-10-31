@@ -369,3 +369,118 @@ pub(crate) fn check_reflect_record(state: &mut CheckState, world: &CheckWorld<'_
     for part in parts.iter() { check_reflect_record(state, world, part); }
 }
 
+pub(crate) fn check_reflect_case_parts(case: &str) -> i64 {
+    if check_reflect_bare_kind(case) { return 0; }
+    match case {
+        "Maybe" => 1,
+        "List" => 1,
+        "Struct" => 1,
+        "Enum" => 1,
+        "Fn" => 1,
+        "Opaque" => 1,
+        "Tuple" => 1,
+        "Map" => 2,
+        "Array" => 2,
+        _ => -1,
+    }
+}
+
+pub fn check_reflect_arm(words: &winnow_grammar::InternerContext, pattern: &MatchPattern) -> Option<(String, Vec<String>)> {
+    match pattern {
+        MatchPattern::Otherwise => {
+            let case: String = String::from("");
+            let names: Vec<String> = vec![];
+            Some((case, names))
+        },
+        MatchPattern::Path(path) => {
+            if path.is_empty() { return None; }
+            let case = words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string();
+            let names: Vec<String> = vec![];
+            Some((case, names))
+        },
+        MatchPattern::Tuple { path, parts } => {
+            if path.is_empty() { return None; }
+            let case = words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string();
+            let mut names: Vec<String> = vec![];
+            for part in parts.iter() {
+                match part {
+                    MatchPattern::Path(written) => {
+                        if written.len() != 1 { return None; }
+                        names.push(words.resolve(*nikaia_std::index::get(&written, 0)).to_string());
+                    },
+                    _ => { return None; },
+                }
+            }
+            Some((case, names))
+        },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_reflect_kind_subject(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    if check_reflect_field_kind(&state, world, value) { return true; }
+    let segments = match value {
+        Expr::Path(segments, _) => segments,
+        _ => return false,
+    };
+    if segments.len() != 2 || world.words.resolve(*nikaia_std::index::get(&segments, 1)) != "kind" { return false; }
+    let ty = world.words.resolve(*nikaia_std::index::get(&segments, 0)).to_string();
+    if state.is_variant(&ty, "kind") || !check_reflect_a_type(&state, &ty) { return false; }
+    if !state.type_parameters.contains_key(&ty) {
+        let kind = check_reflect_named_kind(&state, &ty, &vec![]);
+        state.facts.type_kinds.insert(ty.to_string(), kind);
+    }
+    true
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, arms: &[MatchArm], span: &Span) -> Option<Ty> {
+    if !check_reflect_kind_subject(state, world, value) { return None; }
+    state.facts.kind_matches.insert(id_of(value) as i64);
+    let mut answered: Vec<CheckArm<'_>> = vec![];
+    let mut seen: Ty = Ty::Unknown;
+    let mut any = false;
+    let mut agree = true;
+    for arm in arms.iter() {
+        let read: Option<(String, Vec<String>)> = check_reflect_arm(world.words, &arm.pattern);
+        let (case, names) = nikaia_std::index::or(read, || ("?".into(), vec![].into()));
+        if case != "" && check_reflect_case_parts(&case) != names.len() as i64 {
+            let mut written: String = case.to_string();
+            if !names.is_empty() { written = format!("{}({})", case, names.join(", ")); }
+            state.a_kind_arm_names_no_case(&written, span);
+            continue;
+        }
+        let mut bounds: Vec<String> = vec![];
+        if case == "Struct" || case == "Enum" { bounds.push(case.to_string()); }
+        let mut held: Vec<(String, Option<Vec<String>>)> = vec![];
+        for name in names.iter() {
+            held.push((name.to_string(), match state.type_parameters.get(name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }));
+            state.type_parameters.insert(name.to_string(), bounds.to_owned());
+            state.walks_fields.insert(format!("$kind {}", name), name.to_string());
+        }
+        let got = check_core_expr(state, world, host, &arm.body, span);
+        for one in held.iter() {
+            state.walks_fields.remove(&format!("$kind {}", one.0));
+            match &one.1 {
+                None => { state.type_parameters.remove(&one.0); },
+                Some(before) => { state.type_parameters.insert(one.0.to_string(), before.to_owned()); },
+            }
+        }
+        answered.push(CheckArm { tail: Some(&arm.body), ty: got.clone() });
+        state.arm_types.insert(id_of(check_peeled(&arm.body)) as i64, got.clone());
+        if !any {
+            seen = got;
+            any = true;
+        } else if seen != got { agree = false; }
+    }
+    if !any { return Some(Ty::Unknown); }
+    if agree { return Some(seen); }
+    Some(check_core_flow_meet(state, world, expr, &answered, span))
+}
+

@@ -198,7 +198,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::Overlap(block, _) => check_core_flow_overlap(state, world, host, block, span),
         Expr::Select(arms, _) => check_core_flow_select(state, world, host, arms, span),
         Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); check_core_flow_if(state, world, host, expr, cond, then_branch, (else_branch).as_ref(), span) },
-        Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); check_core_flow_match(state, world, host, expr, value, arms, span) },
+        Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); nikaia_std::index::or(check_reflect_match(state, world, host, expr, value, arms, span), || check_core_flow_match(state, world, host, expr, value, arms, span).into()) },
         Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); check_core_call(state, world, host, func, args, config, span) },
         Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; check_core_method(state, world, host, expr, false, receiver, method, args, config, span) },
         Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; check_core_method(state, world, host, expr, true, receiver, method, args, config, span) },

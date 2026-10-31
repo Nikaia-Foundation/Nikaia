@@ -91,6 +91,9 @@ pub struct CheckFacts {
     /// The fields of each struct among them, for `field.ty::fields` and
     /// `s::fields` in a `Struct(s)` arm (ADR-330 D4, D5).
     pub type_fields: collections::BTreeMap[String, Vec[FieldContract]],
+    /// **The subjects of a `match` on a kind** (ADR-330 D4): each copy
+    /// emits the one arm its type takes.
+    pub kind_matches: collections::BTreeSet[i64],
     /// The comparisons of two kinds, decided per copy (ADR-330 D6).
     pub kind_compares: collections::BTreeSet[i64],
     /// The paths that are `T::name` (ADR-330 D2).
@@ -470,6 +473,7 @@ impl CheckFacts {
             type_kinds: collections::BTreeMap(),
             type_parts: collections::BTreeMap(),
             type_fields: collections::BTreeMap(),
+            kind_matches: collections::BTreeSet(),
             kind_compares: collections::BTreeSet(),
             reflected_names: collections::BTreeSet(),
             fallible_loops: collections::BTreeSet(),

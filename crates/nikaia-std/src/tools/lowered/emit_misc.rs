@@ -92,6 +92,13 @@ impl EmitState {
         if pair.first == head { return pair.second.to_string(); }
         head.to_string()
     }
+    pub fn kind_subject(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, side: &Expr) -> String {
+        match side {
+            Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; nikaia_std::index::or(self.reflected_field_type(world, walk, base, name, "ty::kind"), || "".into()) },
+            Expr::Path(segments, _) => self.type_named(world, walk, &emit_text(world, *nikaia_std::index::get(&segments, 0))),
+            _ => String::from(""),
+        }
+    }
     pub fn kind_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, side: &Expr) -> String {
         match side {
             Expr::Field { base, name, .. } => {

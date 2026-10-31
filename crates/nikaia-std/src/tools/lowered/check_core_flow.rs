@@ -193,7 +193,7 @@ pub(crate) fn check_core_flow_disagree(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_flow_meet(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, arms: &[CheckArm<'_>], span: &Span) -> Ty {
+pub fn check_core_flow_meet(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, arms: &[CheckArm<'_>], span: &Span) -> Ty {
     let text = check_core_flow_meet_at_text(state, world, arms, span);
     if text.is_some() { return nikaia_std::index::or(text, || Ty::Unknown); }
     let at_null = state.arms_meet_at_null(world, arms);

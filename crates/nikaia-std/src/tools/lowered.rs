@@ -2148,7 +2148,7 @@ pub mod check_core_expr {
 }
 pub mod check_core_flow {
     #[allow(unused_imports)]
-    pub use super::{check_core_flow_unsafe, check_core_flow_overlap, check_core_flow_select, check_core_flow_if, check_core_flow_match, check_core_flow_try_catch};
+    pub use super::{check_core_flow_meet, check_core_flow_unsafe, check_core_flow_overlap, check_core_flow_select, check_core_flow_if, check_core_flow_match, check_core_flow_try_catch};
 }
 pub mod check_core_leaves {
     #[allow(unused_imports)]
@@ -2164,7 +2164,7 @@ pub mod check_core_ops {
 }
 pub mod check_core_pilot {
     #[allow(unused_imports)]
-    pub use super::{check_specialised, check_core_grammar_call, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_a_mut_parameter_given_away, check_reflect_kind, check_reflect_written, check_reflect_compared, check_reflect_path, check_reflect_field_type};
+    pub use super::{check_specialised, check_core_grammar_call, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_a_mut_parameter_given_away, check_reflect_kind, check_reflect_written, check_reflect_compared, check_reflect_path, check_reflect_field_type, check_reflect_arm, check_reflect_match};
 }
 pub mod check_core_places {
     #[allow(unused_imports)]

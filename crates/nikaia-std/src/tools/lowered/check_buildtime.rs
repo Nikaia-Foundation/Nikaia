@@ -89,6 +89,9 @@ impl CheckState {
     pub fn a_kind_kept_at_run_time(&mut self, written: &str, span: &Span) { self.findings.push(check_refusal("NK1231", span, format!("`{}` is a `meta::Type`, which exists only while the program is built.", written), vec![String::from("A `meta::Type` carries types, and the running program holds no types: it cannot be kept in a value or handed to code that runs then.")], Some(String::from("Decide it while building: compare it, `T::kind == meta::Type::I64`, or print `T::name`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_kind_arm_names_no_case(&mut self, written: &str, span: &Span) { self.findings.push(check_refusal("NK1171", span, format!("`meta::Type` has no variant called `{}`.", written), vec![String::from("`meta::Type` is `I64`, `I32`, `U8`, `U64`, `U32`, `F64`, `Bool`, `Text`, `Bytes`, `Scalar`, `Maybe(A)`, `List(A)`, `Map(K, V)`, `Array(A, N)`, `Tuple(parts)`, `Struct(T)`, `Enum(T)`, `Fn(F)` or `Opaque(T)`.")], Some(String::from("Name one of its cases, or `else`.")))); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_reflected_field_has_two_members(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A field from `T::fields` has no `{}`.", member), vec![String::from("A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, `.ty`, its type, and `.attribute(X)` and `.attributes(X)`, what its attributes say.")], Some(String::from("Use `.name`, `.of(value)`, `.default`, `.ty::kind`, `.ty::name`, `.attribute(X)` or `.attributes(X)`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

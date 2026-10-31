@@ -1,0 +1,39 @@
+// A `match` on a kind (ADR-330 D4, #859 step 4): every arm is checked under
+// the kind it names, a name an arm binds stands for a type, and each copy of
+// the function is written with the one arm its type takes.
+
+struct Bag {
+	label: String,
+	items: Vec[i64],
+}
+
+fn describe[T](_value: T) -> String {
+	return match T::kind {
+		Text => "text",
+		I64 => "a number",
+		List(it) => f"a list of {it::name}",
+		Maybe(a) => f"maybe {a::name}",
+		Struct(s) => {
+			let mut out = f"{s::name} with"
+			for field in s::fields {
+				let extra = match field.ty::kind {
+					List(it) => f", a list of {it::name}",
+					else => "",
+				}
+				out = f"{out} {field.name}: {field.ty::name}{extra}"
+			}
+			out
+		},
+		else => "something else",
+	}
+}
+
+fn main() {
+	println(describe("a"))
+	println(describe(1))
+	println(describe([1, 2]))
+	let maybe: i64? = 3
+	println(describe(maybe))
+	println(describe(Bag { label: "b", items: [1] }))
+	println(describe(true))
+}

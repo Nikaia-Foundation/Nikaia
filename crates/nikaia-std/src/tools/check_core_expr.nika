@@ -249,7 +249,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::Overlap(block, _) => check_core_flow_overlap(state, world, host, block, span),
         Expr::Select(arms, _) => check_core_flow_select(state, world, host, arms, span),
         Expr::If { cond, then_branch, else_branch, .. } => check_core_flow_if(state, world, host, expr, cond, then_branch, else_branch, span),
-        Expr::Match { value, arms, .. } => check_core_flow_match(state, world, host, expr, value, arms, span),
+        Expr::Match { value, arms, .. } => check_reflect_match(state, world, host, expr, value, arms, span) ?? check_core_flow_match(state, world, host, expr, value, arms, span),
         Expr::Call { func, args, config, .. } => check_core_call(state, world, host, func, args, config, span),
         Expr::MethodCall { receiver, method, args, config, .. } => check_core_method(state, world, host, expr, false, receiver, method, args, config, span),
         Expr::SafeMethod { receiver, method, args, config, .. } => check_core_method(state, world, host, expr, true, receiver, method, args, config, span),

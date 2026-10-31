@@ -208,6 +208,16 @@ impl EmitState {
         return head.clone()
     }
 
+    /// **The type a kind is asked of, as written**: `T::kind`'s `T` in this
+    /// copy, `field.ty::kind`'s field type at this turn (ADR-330 D4, D5).
+    pub fn kind_subject(ref self, world: ref EmitWorld, walk: ref EmitWalk, side: ref Expr) -> String {
+        return match side {
+            Expr::Field { base, name, .. } => self.reflected_field_type(world, walk, base, name, "ty::kind") ?? "",
+            Expr::Path(segments, _) => self.type_named(world, walk, emit_text(world, segments[0])),
+            else => "",
+        }
+    }
+
     /// **The case of `meta::Type` a side of a kind comparison names**
     /// (ADR-330 D3): `meta::Type::X` names `X`, `T::kind` the kind of the
     /// type `T` stands for in this copy.

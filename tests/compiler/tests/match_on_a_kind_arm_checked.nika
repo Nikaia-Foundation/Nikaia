@@ -1,0 +1,13 @@
+// Every arm of a `match` on a kind is checked (ADR-330 D4, #859 step 4), the
+// ones no call takes too: `Text` binds no type, so `it` names nothing.
+
+fn describe[T](_value: T) -> String {
+	return match T::kind {
+		Text => it::name,
+		else => "other",
+	}
+}
+
+fn main() {
+	println(describe(1))
+}

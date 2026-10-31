@@ -1,0 +1,6 @@
+text
+a number
+a list of i64
+maybe i64
+Bag with label: String items: Vec[i64], a list of i64
+something else

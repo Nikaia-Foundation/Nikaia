@@ -396,6 +396,55 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_kind_match<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let kind = self.kind_named(world, &walk, value);
+        let ty: String = self.kind_subject(world, &walk, value);
+        for arm in arms.iter() {
+            let read: Option<(String, Vec<String>)> = check_reflect_arm(world.words, &arm.pattern);
+            let (case, names) = match read { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if case != "" && case != kind { continue; }
+            let parts: Vec<String> = nikaia_std::index::or(match self.facts.type_parts.get(&ty) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into());
+            let mut held: Vec<(String, Option<String>)> = vec![];
+            for at in 0..names.len() as i64 {
+                let name = (*nikaia_std::index::get(&names, nikaia_std::index::at(at))).to_string();
+                held.push((name.to_string(), match walk.type_names.get(&name) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }));
+                let part: String = nikaia_std::index::or(match parts.get(nikaia_std::count::of(at)) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || ty.to_string().into());
+                walk.type_names.insert(name, part);
+            }
+            let body_flow = EmitFlow { arms_are_statements: false, ..flow };
+            if flow.arms_are_statements {
+                out.push("{ ");
+                self.emit_expr(world, walk, out, host, &arm.body, depth, body_flow, scope)?;
+                out.push("; }");
+            } else {
+                let bare = matches!(arm.body, Expr::LitStr { .. } | Expr::LitInterpolated { .. } | Expr::LitInt { .. } | Expr::LitChar(_, _) | Expr::LitBool(_, _) | Expr::Variable(_, _) | Expr::Block(_, _) | Expr::Tuple(_, _) | Expr::ListLit { .. });
+                if !bare { out.push("("); }
+                self.emit_expr(world, walk, out, host, &arm.body, depth, body_flow, scope)?;
+                if !bare { out.push(")"); }
+            }
+            for one in held.iter() {
+                match &one.1 {
+                    None => { walk.type_names.remove(&one.0); },
+                    Some(before) => { walk.type_names.insert(one.0.to_string(), before.to_string()); },
+                }
+            }
+            return Ok(());
+        }
+        out.push("unreachable!(\"no arm takes this kind\")");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
     pub fn emit_core_arm_body_led<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, nest_count: i64, body: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, lead: &str) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mut taken_apart = lead.to_string();
         for at in 0..nest_count {
@@ -631,6 +680,10 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_match<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        if self.facts.kind_matches.contains(&node_key(value)) {
+            self.emit_kind_match(world, walk, out, host, value, arms, depth, flow, scope)?;
+            return Ok(());
+        }
         if scope.caught_sum.is_some() && emit_match_is_caught(world, value) {
             let sum = match match scope.caught_sum.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),

@@ -1,0 +1,9 @@
+error[NK1181]: `it::name` is written under `it`, but `it` isn't declared anywhere.
+  --> tests/match_on_a_kind_arm_checked.nika:5:2
+   |
+ 5 | 	return match T::kind {
+   |  ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A name in front of `::` has to be a type, a package `use` brings in, a package in `nikaia.toml`, a described Rust crate or a `std` module, and `it` is none of them.
+   = help: Did you mean `io`? Write `use std::io` at the top of the file.
+1 type error

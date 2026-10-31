@@ -236,7 +236,7 @@ fn check_core_flow_disagree(mut state: CheckState, world: ref CheckWorld, expr: 
 
 /// **What arms that disagree come to**: text, `null` beside a value, or
 /// nothing known, said.
-fn check_core_flow_meet(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, arms: ref Vec[CheckArm], span: ref Span) -> Ty sync {
+pub fn check_core_flow_meet(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, arms: ref Vec[CheckArm], span: ref Span) -> Ty sync {
     let text = check_core_flow_meet_at_text(state, world, arms, span)
     if text != null {
         return text ?? Ty::Unknown

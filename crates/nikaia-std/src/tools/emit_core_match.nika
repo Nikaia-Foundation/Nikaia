@@ -601,6 +601,68 @@ impl EmitState {
         return n
     }
 
+    /// **The arm of a `match` on a kind that this copy's type takes** (ADR-330
+    /// D4), with the names it binds standing for the types its kind carries.
+    fn emit_kind_match[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let kind = self.kind_named(world, walk, value)
+        let ty: String = self.kind_subject(world, walk, value)
+        for arm in arms {
+            let read: (String, Vec[String])? = check_reflect_arm(world.words, arm.pattern)
+            let (case, names) = read ?? continue
+            if case != "" && case != kind {
+                continue
+            }
+            let parts: Vec[String] = self.facts.type_parts.get(ty)?.clone() ?? []
+            let mut held: Vec[(String, String?)] = []
+            for at in 0..<names.len() {
+                let name = names[at].clone()
+                held.push((name.clone(), walk.type_names.get(name)?.clone()))
+                let part: String = parts.get(at)?.clone() ?? ty.clone()
+                walk.type_names.insert(name, part)
+            }
+            let body_flow = flow with { arms_are_statements: false }
+            if flow.arms_are_statements {
+                out.push("{ ")
+                self.emit_expr(world, walk, out, host, arm.body, depth, body_flow, scope)
+                out.push("; }")
+            } else {
+                // A value that is one piece is written bare: rustc warns of
+                // parentheses around it at `return` and `let`.
+                let bare = match arm.body {
+                    Expr::LitStr { .. } => true,
+                    Expr::LitInterpolated { .. } => true,
+                    Expr::LitInt { .. } => true,
+                    Expr::LitChar(_, _) => true,
+                    Expr::LitBool(_, _) => true,
+                    Expr::Variable(_, _) => true,
+                    Expr::Block(_, _) => true,
+                    Expr::Tuple(_, _) => true,
+                    Expr::ListLit { .. } => true,
+                    else => false,
+                }
+                if !bare {
+                    out.push("(")
+                }
+                self.emit_expr(world, walk, out, host, arm.body, depth, body_flow, scope)
+                if !bare {
+                    out.push(")")
+                }
+            }
+            for one in held {
+                match one.1 {
+                    null => {
+                        walk.type_names.remove(one.0)
+                    },
+                    before => {
+                        walk.type_names.insert(one.0.clone(), before.clone())
+                    },
+                }
+            }
+            return
+        }
+        out.push("unreachable!(\"no arm takes this kind\")")
+    }
+
     /// **An arm, with each name bound out of a box taken out of it first**
     /// (ADR-246 D2): `boxed::open` makes a `T` of a `Box<T>` and a `&T` of a
     /// `&Box<T>`, so the arm reads the name as the pattern's type says. First
@@ -971,6 +1033,12 @@ impl EmitState {
     /// `matches!` (0.0.249); one over the error a `catch` binds, where that
     /// travels in a sum, taken apart by member (ADR-280 D17).
     pub fn emit_core_match[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **A `match` on a kind is the one arm this copy's type takes**
+        // (ADR-330 D4).
+        if self.facts.kind_matches.contains(node_key(value)) {
+            self.emit_kind_match(world, walk, out, host, value, arms, depth, flow, scope)
+            return
+        }
         // **A `match error` over a sum is taken apart by member** (ADR-280 D17).
         // The patterns the source writes name variants of the **members** -
         // `ConfigError::Empty(p)` and `io::IoError::NotFound(p)` in one block -

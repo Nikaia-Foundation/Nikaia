@@ -498,3 +498,153 @@ fn check_reflect_record(mut state: CheckState, world: ref CheckWorld, ty: ref Ty
         check_reflect_record(state, world, part)
     }
 }
+
+/// **The cases of `meta::Type`, and how many types each carries** (ADR-330
+/// D3, ADR-332 D1); `-1` where it is no case.
+fn check_reflect_case_parts(case: ref String) -> i64 {
+    if check_reflect_bare_kind(case) {
+        return 0
+    }
+    return match case {
+        "Maybe" => 1,
+        "List" => 1,
+        "Struct" => 1,
+        "Enum" => 1,
+        "Fn" => 1,
+        "Opaque" => 1,
+        "Tuple" => 1,
+        "Map" => 2,
+        "Array" => 2,
+        else => -1,
+    }
+}
+
+/// **The case an arm of a `match` on a kind names, and the names it binds**
+/// (ADR-330 D4): `Text`, `meta::Type::Text`, `List(it)`; `""` for `else`.
+/// `null` for a pattern of another shape.
+pub fn check_reflect_arm(words: ref winnow_grammar::InternerContext, pattern: ref MatchPattern) -> (String, Vec[String])? {
+    return match pattern {
+        MatchPattern::Otherwise => {
+            let case: String = ""
+            let names: Vec[String] = []
+            (case, names)
+        },
+        MatchPattern::Path(path) => {
+            if path.len() == 0 {
+                return null
+            }
+            let case = words.resolve(path[path.len() - 1]).clone()
+            let names: Vec[String] = []
+            (case, names)
+        },
+        MatchPattern::Tuple { path, parts } => {
+            if path.len() == 0 {
+                return null
+            }
+            let case = words.resolve(path[path.len() - 1]).clone()
+            let mut names: Vec[String] = []
+            for part in parts {
+                match part {
+                    MatchPattern::Path(written) => {
+                        if written.len() != 1 {
+                            return null
+                        }
+                        names.push(words.resolve(written[0]).clone())
+                    },
+                    else => return null,
+                }
+            }
+            (case, names)
+        },
+        else => null,
+    }
+}
+
+/// Whether a `match` subject is a kind known while building: `P::kind` of a
+/// type, or `field.ty::kind` of a reflected field.
+fn check_reflect_kind_subject(mut state: CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    if check_reflect_field_kind(state, world, value) {
+        return true
+    }
+    let segments = match value {
+        Expr::Path(segments, _) => segments,
+        else => return false,
+    }
+    if segments.len() != 2 || world.words.resolve(segments[1]) != "kind" {
+        return false
+    }
+    let ty = world.words.resolve(segments[0]).clone()
+    if state.is_variant(ty, "kind") || !check_reflect_a_type(state, ty) {
+        return false
+    }
+    if !state.type_parameters.contains_key(ty) {
+        let kind = check_reflect_named_kind(state, ty, [])
+        state.facts.type_kinds.insert(ty.clone(), kind)
+    }
+    return true
+}
+
+/// **A `match` on a kind** (ADR-330 D4): every arm is checked, under the
+/// kind it names, with the names it binds standing for types (`s::fields`
+/// reachable in `Struct(s)`, `it::kind` in `List(it)`); the emitter writes
+/// the one arm each copy's type takes. `null` where the subject is no kind.
+pub fn check_reflect_match[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> Ty? sync {
+    if !check_reflect_kind_subject(state, world, value) {
+        return null
+    }
+    state.facts.kind_matches.insert(id_of(value) as i64)
+    let mut answered: Vec[CheckArm] = []
+    let mut seen: Ty = Ty::Unknown
+    let mut any = false
+    let mut agree = true
+    for arm in arms {
+        let read: (String, Vec[String])? = check_reflect_arm(world.words, arm.pattern)
+        let (case, names) = read ?? ("?", [])
+        if case != "" && check_reflect_case_parts(case) != names.len() as i64 {
+            let mut written: String = case.clone()
+            if names.len() > 0 {
+                written = f"{case}({names.join(", ")})"
+            }
+            state.a_kind_arm_names_no_case(written, span)
+            continue
+        }
+        // The names stand for types in this arm, and a struct's is walked.
+        let mut bounds: Vec[String] = []
+        if case == "Struct" || case == "Enum" {
+            bounds.push(case.clone())
+        }
+        let mut held: Vec[(String, Vec[String]?)] = []
+        for name in names {
+            held.push((name.clone(), state.type_parameters.get(name)?.clone()))
+            state.type_parameters.insert(name.clone(), bounds.clone())
+            state.walks_fields.insert(f"$kind {name}", name.clone())
+        }
+        let got = check_core_expr(state, world, host, arm.body, span)
+        for one in held {
+            state.walks_fields.remove(f"$kind {one.0}")
+            match one.1 {
+                null => {
+                    state.type_parameters.remove(one.0)
+                },
+                before => {
+                    state.type_parameters.insert(one.0.clone(), before.clone())
+                },
+            }
+        }
+        answered.push(CheckArm { tail: arm.body, ty: got.clone() })
+        state.arm_types.insert(id_of(check_peeled(arm.body)) as i64, got.clone())
+        if !any {
+            seen = got
+            any = true
+        } else if seen != got {
+            agree = false
+        }
+    }
+    if !any {
+        return Ty::Unknown
+    }
+    if agree {
+        return seen
+    }
+    return check_core_flow_meet(state, world, expr, answered, span)
+}
