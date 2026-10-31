@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1317] — 2026-10-31
+
+**check, emit: type kinds, a reflected field's .ty, match on a kind (ADR-330 D2-D6, #859 steps 3, 1, 4)**
+- `T::kind` and `T::name` exist: a generic function that asks them is written once per type, `T::kind == meta::Type::I64` is decided while building, and a `meta::Type` that would reach the running program is NK1231.
+- Reflected field types: in a walk over `T::fields`, `field.ty::name`, `field.ty::kind` and `field.ty::fields` name the field's type, and `expr.name::member` parses (ADR-330 D5).
+- A match on a kind: `match T::kind { Text => ..., List(it) => ..., Struct(s) => ... }` checks every arm under its kind and builds the arm each type takes (ADR-330 D4).
+
 ## [0.0.1316] — 2026-10-31
 
 **Kept callbacks: a fn parameter lent to a kept position is refused with NK2101 (#1024), a parameter a kept lambda names is kept (#1025), NK1264/NK1265 (#1012); grammar labels on literals and one-element groups bind (#1027); a call in a guard is a call site (#1032)**
