@@ -1,4 +1,3 @@
-Result: done
-Batch: b12-1061-pausing-two-view-field.md, b13-1057-field-of-a-coalesce-and-let.md, b14-947-get-or-return-compared.md
+Result: blocked
+Batch: unchanged (red not from bugs: gate-error, `scripts/gate.nika` refused to compile with `Cannot find Stream in process` at its `process::run` calls; on 46e6179f the same binary (`cmp` identical to target/fast/nikaia) checks and runs `gate.nika` cleanly in /home/user/nikaia-suite, so no commit of this lane, nor any commit, shows the fault: re-run the suite). b12 is done (e95ba850, Fixes #1061). Ready to append after b15 once green: b16-1065-field-call-lends.md (b12's Found, filed #1065, traced to check_core_a_called_field / emit_core_a_field_call, `wip`).
 Owner: none
-Pushed: rejected (develop moved; the tree holds other agents unstaged files, so no rebase here: local 8eecacbc, the driver pushes it)
