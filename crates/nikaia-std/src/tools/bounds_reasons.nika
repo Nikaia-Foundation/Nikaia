@@ -5,24 +5,291 @@
 // field, a list of lists, a product of two unknowns, a call's result, or none
 // of those. Each names the issue that would supply the fact; it says where the
 // next fact pays off, not that it would be enough.
+//
+// **Where the syntax names nothing, the binding does** (#1053 step 3): the
+// first name the site reads is looked up in the enclosing function - a counter
+// a loop changes, an `if` or `match` value, a parameter, a value read out of a
+// list, or an index of one list in a loop bounded by another's length.
 
 /// The shape that kept an index's check, read off the site.
-pub fn blocked_index(base: ref Expr, index: ref Expr) -> String {
-    return match base {
+pub fn blocked_index(base: ref Expr, index: ref Expr, args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext) -> String {
+    let shape = match base {
         Expr::Index { .. } => list_of_lists(),
         else => site_shape(base, index),
     }
+    if shape != unbounded() {
+        return shape
+    }
+    match index {
+        Expr::Variable(name, _) => {
+            if within_other_length(body, id_of(base), words.resolve(name), written_expression(words, base), words) {
+                return "the length of another list, which bounds the loop and not this index (#388)"
+            }
+        },
+        else => {},
+    }
+    return from_binding(names_read(index, words), args, body, words)
 }
 
 /// **The shape that kept an operation's check**, read off the site. A side
 /// the walk has no fact for at all - a field, a list of lists, a call - is
 /// named before the product: it would block the sum of the two as well.
-pub fn blocked_operation(op: BinaryOp, lhs: ref Expr, rhs: ref Expr) -> String {
+pub fn blocked_operation(op: BinaryOp, lhs: ref Expr, rhs: ref Expr, args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext) -> String {
     let shape = site_shape(lhs, rhs)
-    if shape == unbounded() && op == BinaryOp::Mul && !is_int_literal(lhs) && !is_int_literal(rhs) {
+    if shape != unbounded() {
+        return shape
+    }
+    if op == BinaryOp::Mul && !is_int_literal(lhs) && !is_int_literal(rhs) {
         return "a product of two unknowns (#386)"
     }
-    return shape
+    let mut names = names_read(lhs, words)
+    for name in names_read(rhs, words) {
+        if !names.contains(name) {
+            names.push(name)
+        }
+    }
+    return from_binding(names, args, body, words)
+}
+
+/// The names an expression reads, each once, in the order written.
+fn names_read(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> Vec[String] {
+    let mut names: Vec[String] = []
+    for e in check_visit_preorder(expr) {
+        match e {
+            Expr::Variable(name, _) => {
+                let text = words.resolve(name)
+                if !names.contains(text) {
+                    names.push(text.clone())
+                }
+            },
+            else => {},
+        }
+    }
+    return names
+}
+
+/// **The reason from how a name was bound**: the first of `names` whose
+/// binding in the function names one, else the old catch-all.
+fn from_binding(names: ref Vec[String], args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext) -> String {
+    for name in names {
+        let found = binding_reason(body, name, false, words)
+        if found != "" {
+            return found
+        }
+        if !bound_in(body, name, words) {
+            for arg in args {
+                if words.resolve(arg.name) == name {
+                    return "a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)"
+                }
+            }
+        }
+    }
+    return unbounded()
+}
+
+/// What the binding of `name` in `block`, or a change to it, says; empty
+/// where none does.
+fn binding_reason(block: ref Block, name: ref String, in_loop: bool, words: ref winnow_grammar::InternerContext) -> String {
+    for stmt in block.stmts {
+        let here = statement_reason(stmt.node, name, in_loop, words)
+        if here != "" {
+            return here
+        }
+        let looped = match stmt.node {
+            Stmt::For { .. } => true,
+            Stmt::While { .. } => true,
+            else => in_loop,
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            let found = binding_reason(inner, name, looped, words)
+            if found != "" {
+                return found
+            }
+        }
+    }
+    return ""
+}
+
+fn statement_reason(stmt: ref Stmt, name: ref String, in_loop: bool, words: ref winnow_grammar::InternerContext) -> String {
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            if names.len() == 1 && words.resolve(names[0]) == name {
+                if is_choice(value) {
+                    return choice()
+                }
+                if is_element(value, words) {
+                    return element()
+                }
+            }
+        },
+        Stmt::For { bindings, iter, .. } => {
+            if any_named(bindings, name, words) && !is_range(iter) {
+                return element()
+            }
+        },
+        Stmt::Assign { target, op, value } => {
+            if in_loop && is_name(target, name, words) && steps(op, value, name, words) {
+                return "a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)"
+            }
+        },
+        else => {},
+    }
+    return ""
+}
+
+/// `+= k`, `-= k`, or `= name + k` / `= name - k`.
+fn steps(op: ref BinaryOp?, value: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    if op != null {
+        let o = op ?? return false
+        return o == BinaryOp::Add || o == BinaryOp::Sub
+    }
+    return match value {
+        Expr::Binary { op, lhs, .. } => (op == BinaryOp::Add || op == BinaryOp::Sub) && is_name(lhs, name, words),
+        else => false,
+    }
+}
+
+fn is_choice(value: ref Expr) -> bool {
+    return match value {
+        Expr::If { .. } => true,
+        Expr::Match { .. } => true,
+        else => false,
+    }
+}
+
+/// An element of a list or a map: `xs[k]`, `m.get(k)`, `xs.first()`, ...,
+/// with or without a `??` after it.
+fn is_element(value: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    return match value {
+        Expr::Index { .. } => true,
+        Expr::Coalesce { value, .. } => is_element(value, words),
+        Expr::MethodCall { method, .. } => element_method(words.resolve(method)),
+        Expr::SafeMethod { method, .. } => element_method(words.resolve(method)),
+        else => false,
+    }
+}
+
+fn element_method(method: ref String) -> bool {
+    return method == "get" || method == "first" || method == "last" || method == "pop"
+}
+
+fn is_range(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Range { .. } => true,
+        else => false,
+    }
+}
+
+fn is_name(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return match expr {
+        Expr::Variable(bound, _) => words.resolve(bound) == name,
+        else => false,
+    }
+}
+
+fn any_named(symbols: ref Vec[winnow_grammar::Symbol], name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    for s in symbols {
+        if words.resolve(s) == name {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether a `let` or a `for` in `block` binds `name`: then it is not the
+/// parameter of that name.
+fn bound_in(block: ref Block, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    for stmt in block.stmts {
+        let here = match stmt.node {
+            Stmt::Let { names, .. } => any_named(names, name, words),
+            Stmt::For { bindings, .. } => any_named(bindings, name, words),
+            else => false,
+        }
+        if here {
+            return true
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            if bound_in(inner, name, words) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+/// **An index of one list in a loop bounded by another's length**: a loop
+/// around the site whose condition (or range) holds `index < other.len()`,
+/// `other` not the list the site reads.
+fn within_other_length(block: ref Block, site: u32, index: ref String, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    for stmt in block.stmts {
+        let bounds = match stmt.node {
+            Stmt::While { cond, body } => holds_site(body, site) && bounded_by_other(cond, index, list, words),
+            Stmt::For { bindings, iter, body, .. } => holds_site(body, site) && any_named(bindings, index, words) && range_by_other(iter, list, words),
+            else => false,
+        }
+        if bounds {
+            return true
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            if within_other_length(inner, site, index, list, words) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+fn bounded_by_other(cond: ref Expr, index: ref String, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    for e in check_visit_preorder(cond) {
+        let found = match e {
+            Expr::Binary { op, lhs, rhs, .. } => (op == BinaryOp::Lt || op == BinaryOp::Le) && is_name(lhs, index, words) && length_of_other(rhs, list, words),
+            else => false,
+        }
+        if found {
+            return true
+        }
+    }
+    return false
+}
+
+fn range_by_other(iter: ref Expr, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return match iter {
+        Expr::Range { end, .. } => length_of_other(end, list, words),
+        else => false,
+    }
+}
+
+/// `other.len()`, `other` written otherwise than `list`.
+fn length_of_other(expr: ref Expr, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return match expr {
+        Expr::MethodCall { receiver, method, args, .. } => args.is_empty() && words.resolve(method) == "len" && written_expression(words, receiver) != list,
+        else => false,
+    }
+}
+
+/// Whether the expression with node id `site` stands in `block`.
+fn holds_site(block: ref Block, site: u32) -> bool {
+    for stmt in block.stmts {
+        for e in check_visit_stmt(stmt.node) {
+            if id_of(e) == site {
+                return true
+            }
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            if holds_site(inner, site) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+fn choice() -> String {
+    return "an `if` or `match` value, which the walk does not read (#1053)"
+}
+
+fn element() -> String {
+    return "a value read out of a list, of which the walk knows no fact (#797, #798)"
 }
 
 /// What the expressions of the site read.

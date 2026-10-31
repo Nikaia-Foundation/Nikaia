@@ -21,7 +21,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use crate::ast::{BinaryOp, Block, Expr, Item, Span, Stmt};
+use crate::ast::{BinaryOp, Block, Expr, FnArg, Item, Span, Stmt};
 use crate::bounds::{BoundsChecks, OverflowChecks};
 use crate::check::value_node;
 use crate::contracts::Ledger;
@@ -100,14 +100,16 @@ pub fn report_checked(
         proven: &proven,
         seen: HashSet::new(),
         sites: Vec::new(),
+        args: NO_ARGS,
+        body: None,
     };
     for item in &parsed.program.items {
         match &item.node {
-            Item::Fn { body, .. } => walk.block(body),
+            Item::Fn { args, body, .. } => walk.function(args, body),
             Item::Impl { methods, .. } => {
                 for method in methods {
-                    if let Item::Fn { body, .. } = &method.node {
-                        walk.block(body);
+                    if let Item::Fn { args, body, .. } = &method.node {
+                        walk.function(args, body);
                     }
                 }
             }
@@ -116,7 +118,7 @@ pub fn report_checked(
                 for rule in &grammar.rules {
                     for alt in &rule.alts {
                         if let Some(action) = &alt.action {
-                            walk.block(action);
+                            walk.function(NO_ARGS, action);
                         }
                         // And a fold's lambdas (ADR-367 D3).
                         let mut specs = Vec::new();
@@ -127,7 +129,7 @@ pub fn report_checked(
                                 .flatten()
                             {
                                 if let crate::ast::Expr::Closure { body, .. } = lambda {
-                                    walk.block(body);
+                                    walk.function(NO_ARGS, body);
                                 }
                             }
                         }
@@ -189,9 +191,22 @@ struct Walk<'a> {
     /// Index nodes already listed: an index read in a statement is listed once.
     seen: HashSet<usize>,
     sites: Vec<Site>,
+    /// The function the walk is in: where a reason looks up how a name was
+    /// bound (#1053 step 3).
+    args: &'a Vec<FnArg>,
+    body: Option<&'a Block>,
 }
 
-impl Walk<'_> {
+/// A grammar action's or a fold lambda's parameters, as the reasons see them.
+const NO_ARGS: &Vec<FnArg> = &Vec::new();
+
+impl<'a> Walk<'a> {
+    fn function(&mut self, args: &'a Vec<FnArg>, body: &'a Block) {
+        self.args = args;
+        self.body = Some(body);
+        self.block(body);
+    }
+
     fn line(&self, at: usize) -> usize {
         self.source[..at.min(self.source.len())]
             .matches('\n')
@@ -208,6 +223,11 @@ impl Walk<'_> {
 
     fn stmt(&mut self, stmt: &Stmt, span: &Span) {
         let line = self.line(span.at());
+        let within = Within {
+            args: self.args,
+            body: self.body.expect("a statement stands in a body"),
+            words: &self.parsed.interner,
+        };
         // **A compound assignment is its operation** (ADR-306 D5a): keyed by
         // the statement's first byte, where no operator of an expression stands.
         if let Stmt::Assign {
@@ -229,7 +249,7 @@ impl Walk<'_> {
                 text,
                 index: false,
                 proved,
-                blocked: (!proved).then(|| blocked_operation(*op, target, value)),
+                blocked: (!proved).then(|| within.blocked_operation(*op, target, value)),
             });
         }
         let mut found: Vec<Site> = Vec::new();
@@ -244,7 +264,7 @@ impl Walk<'_> {
                     text: crate::check::written(self.parsed, expr),
                     index: true,
                     proved,
-                    blocked: (!proved).then(|| blocked_index(base, index)),
+                    blocked: (!proved).then(|| within.blocked_index(base, index)),
                 });
             }
             // **A word read of a `Bytes`** (ADR-320 D12), a candidate as the
@@ -261,7 +281,7 @@ impl Walk<'_> {
                     text: crate::check::written(self.parsed, expr),
                     index: true,
                     proved,
-                    blocked: (!proved).then(|| blocked_index(receiver, &args[0])),
+                    blocked: (!proved).then(|| within.blocked_index(receiver, &args[0])),
                 });
             }
             Expr::Binary {
@@ -277,7 +297,7 @@ impl Walk<'_> {
                     text: crate::check::written(self.parsed, expr),
                     index: false,
                     proved,
-                    blocked: (!proved).then(|| blocked_operation(*op, lhs, rhs)),
+                    blocked: (!proved).then(|| within.blocked_operation(*op, lhs, rhs)),
                 });
             }
             // **A negation** (ADR-314 D5): it leaves its type only from the
@@ -310,11 +330,25 @@ fn symbol(op: BinaryOp) -> &'static str {
     }
 }
 
-/// **Why a check stayed** is `tools/bounds_reasons.nika` (ADR-294, #435).
-fn blocked_index(base: &Expr, index: &Expr) -> String {
-    nikaia_std::tools::bounds_reasons::blocked_index(base, index)
+/// **Why a check stayed** is `tools/bounds_reasons.nika` (ADR-294, #435),
+/// given the function the site stands in (#1053 step 3).
+#[derive(Clone, Copy)]
+struct Within<'a> {
+    args: &'a Vec<FnArg>,
+    body: &'a Block,
+    words: &'a winnow_grammar::InternerContext,
 }
 
-fn blocked_operation(op: BinaryOp, lhs: &Expr, rhs: &Expr) -> String {
-    nikaia_std::tools::bounds_reasons::blocked_operation(&op, lhs, rhs)
+impl Within<'_> {
+    fn blocked_index(self, base: &Expr, index: &Expr) -> String {
+        nikaia_std::tools::bounds_reasons::blocked_index(
+            base, index, self.args, self.body, self.words,
+        )
+    }
+
+    fn blocked_operation(self, op: BinaryOp, lhs: &Expr, rhs: &Expr) -> String {
+        nikaia_std::tools::bounds_reasons::blocked_operation(
+            &op, lhs, rhs, self.args, self.body, self.words,
+        )
+    }
 }
