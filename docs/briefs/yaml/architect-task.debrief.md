@@ -1,13 +1,10 @@
-1. **Biggest cost:** my first commit. I chained `git add ... && git status; git commit` with a pathspec for a file that no longer existed after my `git mv`. The add failed, but the `;` let the commit run anyway, so db275fc8 holds only the renames and a second commit (f5a6fd29) was needed. Next was working out where fmt lives: I looked in `tools/`, then `crates/nikaia/src/fmt.rs`, before finding `crates/nikaia-std/src/tools/fmt.nika`.
+1. **Biggest cost:** the y2b probes, because I wrote the scratch programs from memory. Three runs failed on my own mistakes before any of them tested what I wanted: I used `match` on an entry's result (it needs `catch`), wrote `Bytes("...")` (it needs `.bytes().collect()`), and threw a `String` (a throw needs a type with `impl Error`). Next came finding where #1041 lives. Four grep rounds for how parameters get marked owned or lent mostly found nothing, until `where.nika` on `grammar_entry` led me to `check_core_grammar_call`.
 2. **What I looked up that the brief could have handed me:**
-   - Where fmt lives and its main functions (`reshape`, `fmt_broken`, `fmt_sealed`).
-   - That `fmt::every_nika_file` scans `tests/` as well as `packages/`.
-   - That an existing `tests/compiler` fmt test is the model for a new one.
-   - That the debrief files are tracked, so renaming them for a re-run needs `git mv`.
-   - That the main checkout held run 2's leftover `nikaia.derived` and `nikaia.lock`.
-   
-   `architect-input.txt` could also name the branch the blocked run left behind (`wip/y2c-properties`).
+   - The small Nikaia patterns a probe needs: `catch` on an entry call, building `Bytes` from text, an error type to throw. One working probe in the yaml directory to copy would have done.
+   - That `gh api search/issues` is blocked, so duplicates can't be searched this way. Only repository-scoped endpoints work.
+   - Whether `return` in a grammar action is specified. It isn't, and grepping Part II proved that only by finding nothing.
+   - Where the checker decides lent versus owned for a call's argument. I never found one function for it.
 3. **Checks:**
-   - Useful: the two fmt probes with the existing binary, which confirmed both defects and gave the brief exact symptoms. Also `git ls-remote` for the wip branches, the diff stat of the branch against develop, and a grep for the `fmt::every_nika_file` directories.
-   - Wasted: the greps for fmt under the wrong paths, and the `git status` before commit that never ran.
-4. **The one change:** a line in the architect task's *Lane facts* (and in `docs/architect.md`): "commit with separate calls, `git add <files>` then `git commit` only if the add succeeded; never `;` between them, and check `git show --stat HEAD` before pushing."
+   - Useful: probes a–e for y14's Found, which separated the unbound, nested, guard and repeat cases. The `Vec[Dir]`/`Limits` probe (h). Reading the generated Rust (i), which showed the `&Limits`. The `j`/`k`/`l` trio (parameter, local, ordinary call), which narrowed #1041 to one cause.
+   - Wasted: the search API call, the `match` probe, the `Bytes`/throw retries, and the greps for `consum`/`ParamMode`/`entry`.
+4. **The one change:** add to `docs/builder-facts.md`, pointed to from the architect's lane facts, a ten-line probe skeleton for a grammar over `ref Bytes`. It would have an entry with values after the input, `catch`, `Bytes(text.bytes().collect())`, a throwable error struct, and the place under `~/.cache/nikaia/run/<name>-*/target/nikaia/gen/` to read the generated Rust. It would have saved about five probe runs, and it serves builders as much as the architect.

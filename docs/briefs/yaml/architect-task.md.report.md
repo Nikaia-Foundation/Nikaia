@@ -1,8 +1,7 @@
 Result: done
-Batch: y15-1015-fmt-guard-label.md y2c-properties.md y14-1013-guard-inner-label.md
-Owner: none
-Input: CUT y2c-properties.md blocked. The RED line is y2c's own package gate (fmt::every_nika_file), not CI. Run 2 built the step (11/11 package tests, wip/y2c-properties b223f972); only fmt was red, on #1015.
-Decided: fix #1015 first (y15: a guard's `if(..)` on a rule line is never broken, and a rule's continuation line goes one level deeper; test tests/compiler/tests/fmt_keeps_a_grammar_guard_whole.nika). Then y2c run 3 applies run 2's branch, formats, runs the gate and commits. y14 stays third. The architect reproduced both fmt defects on develop.
-Changed: y2c run 2's report and debrief renamed to *.run2.*; y2c brief: run 3 steps, 60 turns, newest rules block; y14 now names the order; batch.txt; builder.md: a run that starts from a draft or wip branch runs fmt, check and the tests on it before writing anything (y2c debrief). #928 To build updated (ready+wip); #1015 comment (stays ready).
-Note: the main checkout holds run 2's uncommitted packages/yaml/nikaia.derived and nikaia.lock. y2c run 3 restores them by name (step 2).
-Pushed: f5a6fd29 (db275fc8 before it holds only the renames)
+Batch: y17-1041-entry-takes-a-parameter.md, y2b-keys-directives-limits.md, y16-1039-unbound-text-names.md
+Owner: #1040 (a `return` inside a grammar action reaches rustc): A, it gives the action's value as in a function body (recommended), or B, it is refused? Nothing in yaml needs it.
+Pushed: 477879ca
+Found: y14's Found filed as #1039 (ready; an unbound text(d:P+) and a name below a repeat read by an action reach rustc). Probing y2b turned up #1041 (ready; a function parameter handed to an entry rule's value parameter stays lent, rustc), which blocks y2b step 2, so y17 runs first, and #1040 (decision).
+Changed: #928 To build updated (y2c, y14, y15 done; new order); 95a690fe linked to #928 by a comment; .claude/agents/builder.md: never `Fixes: none` in a report (commit.nika writes it into the message).
+Needs: scripts/commit.nika should skip `Fixes: none` as it skips `Body: none` (a script change, for a builder of the main lane).
