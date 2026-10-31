@@ -1,18 +1,17 @@
-1. **What cost the most:** reading `docs/architect.md`. It is too big to read in one go: the second half was refused, so I had to find the *State* section with grep. Most of that section is the main lane's history, which this lane doesn't need. Writing the two briefs with a Python templating script also took a few turns.
+1. **Most cost:** narrowing the y2c failure down to #1037. My scratch probe went through five rounds before it showed the real defect. I wrote `Some`/`None` for a `T?`; a `pub fn make(x, y)` was refused with NK1102; a field set twice was refused with NK2105; then NK1104 turned up, which became #1038. On top of that, three rounds went to finding how the CLI behaves.
 
-2. **What I looked up that the brief could have handed me:**
-   - That the `RED` file in `docs/briefs/yaml/` was empty, so the input really was just the y2c cut, not a red CI.
-   - Where the defects live: `bind_grammar_pattern` in `text_tiers.nika`, the action prelude in `emit_grammar.nika`, and the guard arm in `emit_pattern.nika`.
-   - That y2c's report had to be renamed `.run1.report.md` so the driver re-runs it. That rule sits in architect.md's main-session cycle, not in this brief.
+2. **Looked up, could have been handed:**
+   - How the CLI behaves: `nikaia check` needs a FILE; `nikaia lower` writes a file (`-o`), not stdout; a package's test file can't be lowered on its own.
+   - How a test can read a type from another package (the `compiler_tests` package plus `use compiler_tests`).
+   - That CI runs no `packages/*/tests`.
+   - Where an emitter looks up another package's lifetimes (`view_slots`, `emit_tables_read_view_slots`) and ADR-353 D7.
+   - #1013's state: its label was a stale `blocked`, and its point 2 was already built by s1013.
 
 3. **Checks:**
-   - Useful: the two defect probes plus two controls, one `nikaia lower` that showed exactly where `s` goes missing, and the check of #928's labels after the edit.
-   - Wasted: a `git add` that failed on the old report path. The rename had already been staged, which `git status` would have shown me first.
-   - My mistake: I ran `git pull --rebase --autostash` in the shared checkout. That is effectively a `git stash`, which CLAUDE.md forbids there. The stash went back cleanly this time, but I should have committed and pushed fast-forward only.
+   - Useful: the binary's winnow-grammar version; applying the draft plus `check` and the package tests (this found #1037); the cross-package probe with and without the type named, and with a `main` present; the single-file control; re-running y12's NK1117 probe.
+   - Wasted: `check` without a file, `lower` to stdout, lowering a test on its own, the early probe rounds (wrong `T?` syntax, then the NK1102 and NK2105 refusals).
+   - Unverified: whether rustc's `bool` and `str` errors follow from #1037. The y13 brief says so.
 
-4. **One change:** put a lane section at the top of `architect-task.md` with three things:
-   - the re-queue rule (rename the blocked brief's report to `.run1.report.md`);
-   - the push rule: no `--autostash` or stash; if the push is rejected, report it;
-   - "do not read architect.md's *State* section, it belongs to the main lane", plus the rules block's file and line range to copy.
+4. **One change:** the driver should do the pre-flight of a re-queued draft before starting the architect: apply the `wip/` draft, run `check` and `nikaia test --project packages/yaml`, and put the first error of each kind into `architect-input.txt`. Second: the lane facts I added should also hold a ready two-file package skeleton with the exact commands.
 
-   I would also split architect.md, so that *State* becomes its own file.
+   Also, I rewrote the task's push rule myself, from `pull --rebase` to fast-forward with a report. As a result this run's push sits rejected and waits for the driver. The owner or main session should confirm that rule.
