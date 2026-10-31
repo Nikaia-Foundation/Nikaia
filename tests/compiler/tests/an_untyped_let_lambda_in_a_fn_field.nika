@@ -1,0 +1,19 @@
+// #1045: an untyped lambda bound by `let` and put into a function field:
+// what its body calls is what a call through the field reaches, so a body
+// that cannot fail leaves the call infallible (no NK2605).
+struct H {
+    f: fn(i64) -> i64,
+}
+
+fn twice(n: i64) -> i64 {
+    return n * 2
+}
+
+fn main() {
+    let g = fn(x) { x + 1 }
+    let h = H { f: g }
+    println(f"{h.f(1)}")
+    let t = fn(x) { twice(x) }
+    let k = H { f: t }
+    println(f"{k.f(4)}")
+}

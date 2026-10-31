@@ -470,7 +470,8 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let declared = written_ty(world.words, world.here.aliases, t);
         state.a_map_read_assigned(world, &declared, value, span);
     }
-    if code_place && !check_core_stmt_holds_code(&found) { state.stored_frames.pop(); } else if code_place {
+    let a_lambda = matches!(value, Expr::Closure { .. });
+    if code_place && !a_lambda && !check_core_stmt_holds_code(&found) { state.stored_frames.pop(); } else if code_place {
         let current: String = nikaia_std::index::or(match state.current.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,

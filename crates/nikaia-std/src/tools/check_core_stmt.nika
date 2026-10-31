@@ -603,7 +603,14 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         let declared = written_ty(world.words, world.here.aliases, t)
         state.a_map_read_assigned(world, declared, value, span)
     }
-    if code_place && !check_core_stmt_holds_code(found) {
+    // A lambda is code whatever type it was given here: one bound without
+    // a type that no call hands on is not `Ty::Fn` yet, and what its body
+    // calls is still what a field it is put into reaches (#1045).
+    let a_lambda = match value {
+        Expr::Closure { .. } => true,
+        else => false,
+    }
+    if code_place && !a_lambda && !check_core_stmt_holds_code(found) {
         state.stored_frames.pop()
     } else if code_place {
         let current: String = state.current?.clone() ?? ""
