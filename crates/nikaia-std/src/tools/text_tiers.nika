@@ -337,6 +337,9 @@ struct TextDeclared {
     fields: collections::BTreeMap[(String, String), FieldDecl],
     /// What every positional variant of every enum carries, by `E::V`.
     variants: collections::BTreeMap[String, Vec[Type]],
+    /// The type of each field of every named variant, by (`E::V`, field):
+    /// not a position, only what a pattern binds out of it (#1072).
+    variant_fields: collections::BTreeMap[(String, String), Type],
     /// The enums that are published.
     public_enums: collections::BTreeSet[String],
     /// Every function and method, by key.
@@ -350,7 +353,7 @@ struct TextDeclared {
 }
 
 fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), types: collections::BTreeSet(), methods: collections::BTreeMap(), rules: collections::BTreeSet() }
+    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), variant_fields: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), types: collections::BTreeSet(), methods: collections::BTreeMap(), rules: collections::BTreeSet() }
     for item in program.items {
         match item.node {
             Item::Struct { name, fields, is_public, .. } => {
@@ -375,6 +378,12 @@ fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext)
                         match variant.fields {
                             VariantFields::Tuple(parts) => {
                                 declared.variants.insert(f"{owner}::{names.resolve(variant.name)}", parts.clone())
+                            }
+                            VariantFields::Named(named) => {
+                                for field in named {
+                                    let key = (f"{owner}::{names.resolve(variant.name)}", names.resolve(field.name).clone())
+                                    declared.variant_fields.insert(key, field.ty.clone())
+                                }
                             }
                             else => {}
                         }
@@ -1471,7 +1480,15 @@ fn bind_static_payloads(pattern: ref MatchPattern, ask: ref TierAsk, mut walk: T
             for field in fields {
                 let name = ask.names.resolve(field.name).clone()
                 let key = (owner.clone(), name.clone())
-                let found: FieldDecl = walk.declared.fields[key]?.clone() ?? continue
+                let found: FieldDecl = walk.declared.fields[key]?.clone() ?? {
+                    // A named variant's field that holds no text itself, a
+                    // struct or a list of one, is bound as a struct's (#1072).
+                    let ty = walk.declared.variant_fields[key]?.clone() ?? continue
+                    if !holds_text(ask.names, ty) {
+                        bind_a_payload(field.pat, TextOwner::Field(owner.clone(), name), ty, ask, walk)
+                    }
+                    continue
+                }
                 if bind_a_payload(field.pat, TextOwner::Field(owner.clone(), name), found.ty, ask, walk) {
                     bound = true
                 }
@@ -1523,6 +1540,23 @@ fn bind_a_payload(part: ref MatchPattern, owner: TextOwner, ty: ref Type, ask: r
         let mut local = plain_local(owned_kinds())
         local.declared = Declaring { owner: owner, ty: ty.clone() }
         local.made = true
+        bind_tier_local(name, local, walk)
+        return false
+    }
+    // **A struct a pattern binds is a value of that struct** (#1072), as a
+    // loop's element of a list of it is (#967): a field read off it is that
+    // field's position. **A list a pattern binds is that part's list**, so a
+    // loop over it binds the elements' struct.
+    let bare = !ty.is_nullable && !ty.is_tuple && !ty.is_slice && ty.code == null
+    if bare && ty.generics.len() == 0 && walk.declared.types.contains(ask.names.resolve(ty.name)) {
+        let mut local = plain_local(no_kinds())
+        local.of = ask.names.resolve(ty.name).clone()
+        bind_tier_local(name, local, walk)
+        return false
+    }
+    if bare && a_container(ask.names, through_ref(ty)) {
+        let mut local = plain_local(no_kinds())
+        local.declared = Declaring { owner: owner, ty: ty.clone() }
         bind_tier_local(name, local, walk)
     }
     return false

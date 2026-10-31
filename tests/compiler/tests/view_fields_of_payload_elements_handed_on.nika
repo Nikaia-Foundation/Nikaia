@@ -1,0 +1,39 @@
+enum V {
+	Seq(Vec[M]),
+	Other,
+}
+
+struct M {
+	name: String,
+}
+
+struct N {
+	value: V,
+}
+
+struct E {
+	name: String,
+}
+
+fn walk(n: ref N) -> Vec[E] sync {
+	let mut out: Vec[E] = []
+	match n.value {
+		V::Seq(items) => {
+			for x in items {
+				out.push(E { name: x.name })
+			}
+		}
+		else => {}
+	}
+	return out
+}
+
+fn word_of(input: String) -> N {
+	return N { value: V::Seq([M { name: input.trim() }]) }
+}
+
+fn main() {
+	let n = word_of(" hello ")
+	let es = walk(n)
+	println(f"{es.len()} {es[0].name}")
+}

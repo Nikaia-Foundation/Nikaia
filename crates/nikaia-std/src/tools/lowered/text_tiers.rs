@@ -210,6 +210,7 @@ pub(crate) struct FnDecl {
 pub(crate) struct TextDeclared {
     pub(crate) fields: collections::BTreeMap<(String, String), FieldDecl>,
     pub(crate) variants: collections::BTreeMap<String, Vec<Type>>,
+    pub(crate) variant_fields: collections::BTreeMap<(String, String), Type>,
     public_enums: collections::BTreeSet<String>,
     pub(crate) fns: collections::BTreeMap<String, FnDecl>,
     pub(crate) types: collections::BTreeSet<String>,
@@ -218,7 +219,7 @@ pub(crate) struct TextDeclared {
 }
 
 pub(crate) fn declared_of(program: &Program, names: &winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), types: collections::BTreeSet::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new() };
+    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), variant_fields: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), types: collections::BTreeSet::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Struct { name, fields, is_public, .. } => {
@@ -239,6 +240,12 @@ pub(crate) fn declared_of(program: &Program, names: &winnow_grammar::InternerCon
                     for variant in variants.iter() {
                         match &variant.fields {
                             VariantFields::Tuple(parts) => { declared.variants.insert(format!("{}::{}", owner, names.resolve(variant.name)), parts.to_owned()); },
+                            VariantFields::Named(named) => {
+                                for field in named.iter() {
+                                    let key = (format!("{}::{}", owner, names.resolve(variant.name)), names.resolve(field.name).to_string());
+                                    declared.variant_fields.insert(key, field.ty.clone());
+                                }
+                            },
                             _ => { },
                         }
                     }
@@ -980,7 +987,14 @@ pub(crate) fn bind_static_payloads(pattern: &MatchPattern, ask: &TierAsk<'_, '_,
                 let found: FieldDecl = match match *nikaia_std::index::get(&walk.declared.fields, &key) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
-                } { Some(__nikaia_value) => __nikaia_value, None => continue };
+                } { Some(__nikaia_value) => __nikaia_value, None => {
+                    let ty = match match *nikaia_std::index::get(&walk.declared.variant_fields, &key) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    } { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if !holds_text(ask.names, &ty) { bind_a_payload(&field.pat, TextOwner::Field(owner.to_string(), name), &ty, ask, walk); }
+                    continue;
+                } };
                 if bind_a_payload(&field.pat, TextOwner::Field(owner.to_string(), name), &found.ty, ask, walk) { bound = true; }
             }
         },
@@ -1020,6 +1034,19 @@ pub(crate) fn bind_a_payload(part: &MatchPattern, owner: TextOwner, ty: &Type, a
         let mut local = plain_local(owned_kinds());
         local.declared = Some(Declaring { owner, ty: ty.clone() });
         local.made = true;
+        bind_tier_local(name, local, walk);
+        return false;
+    }
+    let bare = !ty.is_nullable && !ty.is_tuple && !ty.is_slice && (*ty.code).is_none();
+    if bare && ty.generics.is_empty() && walk.declared.types.contains(ask.names.resolve(ty.name)) {
+        let mut local = plain_local(no_kinds());
+        local.of = Some(ask.names.resolve(ty.name).to_string());
+        bind_tier_local(name, local, walk);
+        return false;
+    }
+    if bare && a_container(ask.names, &through_ref(ty)) {
+        let mut local = plain_local(no_kinds());
+        local.declared = Some(Declaring { owner, ty: ty.clone() });
         bind_tier_local(name, local, walk);
     }
     false
