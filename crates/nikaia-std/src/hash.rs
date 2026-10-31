@@ -313,20 +313,19 @@ fn crc32c_by_table(crc: u32, word: u64) -> u32 {
 /// stays small (ADR-002 D4).
 pub fn sha256_hex(data: &[u8]) -> String {
     let mut state = SHA256_START;
-    let mut blocks = data.chunks_exact(64);
-    for block in &mut blocks {
+    let (blocks, rest) = data.as_chunks::<64>();
+    for block in blocks {
         sha256_block(&mut state, block);
     }
     // The padding: one 1 bit, zeros, then the message's length in bits as a
     // big-endian `u64`, so that the last block (or two) ends on 64 bytes.
-    let rest = blocks.remainder();
     let mut tail = [0u8; 128];
     tail[..rest.len()].copy_from_slice(rest);
     tail[rest.len()] = 0x80;
     let end = if rest.len() < 56 { 64 } else { 128 };
     let bits = (data.len() as u64).wrapping_mul(8);
     tail[end - 8..end].copy_from_slice(&bits.to_be_bytes());
-    for block in tail[..end].chunks_exact(64) {
+    for block in tail[..end].as_chunks::<64>().0 {
         sha256_block(&mut state, block);
     }
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
@@ -365,10 +364,10 @@ const SHA256_ROUNDS: [u32; 64] = [
 ];
 
 /// SHA-256's compression function over one 64-byte block (FIPS 180-4 6.2.2).
-fn sha256_block(state: &mut [u32; 8], block: &[u8]) {
+fn sha256_block(state: &mut [u32; 8], block: &[u8; 64]) {
     let mut w = [0u32; 64];
-    for (t, word) in block.chunks_exact(4).enumerate() {
-        w[t] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
+    for (t, word) in block.as_chunks::<4>().0.iter().enumerate() {
+        w[t] = u32::from_be_bytes(*word);
     }
     for t in 16..64 {
         let s0 = w[t - 15].rotate_right(7) ^ w[t - 15].rotate_right(18) ^ (w[t - 15] >> 3);
