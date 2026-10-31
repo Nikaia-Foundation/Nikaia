@@ -8,7 +8,9 @@ publish = false
 
 [dependencies]
 # `Vec<T, A>` on stable Rust, with an allocator that may refuse.
-allocator-api2 = "0.2"
+# Only `alloc`, the feature hashbrown asks for: `std` here would build a second
+# `nikaia-std` under `cargo test --workspace` (see its hashbrown line).
+allocator-api2 = { version = "0.2", default-features = false, features = ["alloc"] }
 # The table `std`'s `HashMap` is, taking the same allocator.
 hashbrown = { version = "0.17", default-features = false, features = ["allocator-api2", "inline-more"] }
 # The hash a Nikaia program's map gets for keys the operator chose, on both

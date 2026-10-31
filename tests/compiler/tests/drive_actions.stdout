@@ -13,7 +13,7 @@ would run: mkdir target/suite.lock (wait while its owner's pid lives)
 would run: df -Pk /home/user/nikaia-suite (or its parent): under 8 GB free, rm -rf /home/user/nikaia-suite/target/fast/incremental /home/user/nikaia-suite/target/debug; still under, ESCALATE drive: disk
 would run: not yet a worktree: git worktree add --detach /home/user/nikaia-suite <sha>; else git -C /home/user/nikaia-suite checkout --detach --force <sha>; git -C /home/user/nikaia-suite clean -fdx -e target
 would run: cp target/fast/nikaia /home/user/nikaia-suite/target/suite-nikaia
-would run: in the background, in /home/user/nikaia-suite, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: /home/user/nikaia-suite/target/suite-nikaia run scripts/gate.nika -- --all > T/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once
+would run: in the background, in /home/user/nikaia-suite, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=4G: /home/user/nikaia-suite/target/suite-nikaia run scripts/gate.nika -- --all > T/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once
 would run: before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
 would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again and waited for (at most 2 QA rounds)
 would run: write T/architect-input.txt: BATCH DONE
@@ -31,7 +31,7 @@ would run: mkdir target/suite.lock (wait while its owner's pid lives)
 would run: df -Pk /home/user/nikaia-suite (or its parent): under 8 GB free, rm -rf /home/user/nikaia-suite/target/fast/incremental /home/user/nikaia-suite/target/debug; still under, ESCALATE drive: disk
 would run: not yet a worktree: git worktree add --detach /home/user/nikaia-suite <sha>; else git -C /home/user/nikaia-suite checkout --detach --force <sha>; git -C /home/user/nikaia-suite clean -fdx -e target
 would run: cp target/fast/nikaia /home/user/nikaia-suite/target/suite-nikaia
-would run: in the background, in /home/user/nikaia-suite, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: /home/user/nikaia-suite/target/suite-nikaia run scripts/gate.nika -- --all > T/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once
+would run: in the background, in /home/user/nikaia-suite, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=4G: /home/user/nikaia-suite/target/suite-nikaia run scripts/gate.nika -- --all > T/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once
 would run: before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
 would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again and waited for (at most 2 QA rounds)
 would run: write T/architect-input.txt: CUT b1: too big -> ARCHITECT
@@ -49,7 +49,7 @@ would run: mkdir target/suite.lock (wait while its owner's pid lives)
 would run: df -Pk /home/user/nikaia-suite (or its parent): under 8 GB free, rm -rf /home/user/nikaia-suite/target/fast/incremental /home/user/nikaia-suite/target/debug; still under, ESCALATE drive: disk
 would run: not yet a worktree: git worktree add --detach /home/user/nikaia-suite <sha>; else git -C /home/user/nikaia-suite checkout --detach --force <sha>; git -C /home/user/nikaia-suite clean -fdx -e target
 would run: cp target/fast/nikaia /home/user/nikaia-suite/target/suite-nikaia
-would run: in the background, in /home/user/nikaia-suite, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: /home/user/nikaia-suite/target/suite-nikaia run scripts/gate.nika -- --all > T/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once
+would run: in the background, in /home/user/nikaia-suite, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=4G: /home/user/nikaia-suite/target/suite-nikaia run scripts/gate.nika -- --all > T/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once
 would run: before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
 would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again and waited for (at most 2 QA rounds)
 would run: write T/architect-input.txt: RED aaaa1111 test -> ARCHITECT

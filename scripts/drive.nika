@@ -63,7 +63,7 @@
 // directory, so its `target/fast/nikaia`, crates/ and tests/ are the
 // worktree's (its `build` step builds that binary first), with
 // CARGO_INCREMENTAL=0 (incremental data costs about 10 GB a tree and a suite
-// build gains nothing from it) and NIKAIA_CACHE_LIMIT=2G. Its output goes to
+// build gains nothing from it) and NIKAIA_CACHE_LIMIT=4G. Its output goes to
 // DIR/suite.log of the shared checkout (overwritten), its exit status to
 // target/suite.lock/exit-<sha>, and target/suite.lock/testing notes `<sha> <N>`,
 // N the lines of unpushed.txt the tested sha covers; the driver prints
@@ -493,7 +493,7 @@ fn drive_launch(exe: String, dir: String, wt: String) throws {
     for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
         if l.trim() != "" { covered += 1 }
     }
-    let gate = f"cd '{wt}' && CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G '{copy}' run scripts/gate.nika -- --all > '{log}' 2>&1; echo $? > '{exit}.tmp'; mv '{exit}.tmp' '{exit}'"
+    let gate = f"cd '{wt}' && CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=4G '{copy}' run scripts/gate.nika -- --all > '{log}' 2>&1; echo $? > '{exit}.tmp'; mv '{exit}.tmp' '{exit}'"
     let started = process::run("sh", ["-c", f"( {gate} ) < /dev/null > /dev/null 2>&1 &"])
     if !started.ok { drive_escalate(f"the suite did not start in {wt}: {started.stderr.trim()}") }
     fs::write(drive_lock_dir() + "/testing", fs::Root::Anywhere, f"{sha} {covered}\n")
@@ -581,7 +581,7 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
     drive_say(dry, f"df -Pk {wt} (or its parent): under 8 GB free, rm -rf {wt}/target/fast/incremental {wt}/target/debug; still under, ESCALATE drive: disk")
     drive_say(dry, f"not yet a worktree: git worktree add --detach {wt} <sha>; else git -C {wt} checkout --detach --force <sha>; git -C {wt} clean -fdx -e target")
     drive_say(dry, f"cp {exe} {wt}/target/suite-nikaia")
-    drive_say(dry, f"in the background, in {wt}, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: {wt}/target/suite-nikaia run scripts/gate.nika -- --all > {dir}/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once")
+    drive_say(dry, f"in the background, in {wt}, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=4G: {wt}/target/suite-nikaia run scripts/gate.nika -- --all > {dir}/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once")
     drive_say(dry, f"before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock")
     drive_say(dry, f"red: write {dir}/qa-input.txt, rm -f {qa}.report.md, {exe} run scripts/agent.nika -- {qa} --dir {dir}, commit its report, the suite again and waited for (at most 2 QA rounds)")
     if dry { return }

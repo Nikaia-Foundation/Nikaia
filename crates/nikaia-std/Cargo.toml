@@ -32,8 +32,12 @@ compiler = []
 # reserves one slot on every call, which cost 1BRC 27 of its 300 instructions
 # a row, and `hashbrown`'s map compares a text key with `memcmp`. Both kinds
 # of map, keyed and trusted, are this one type with their hasher (`hash.rs`);
-# no default hasher, because the compiler always names one.
-hashbrown = { version = "0.17", default-features = false }
+# no default hasher, because the compiler always names one. `allocator-api2`
+# and `inline-more` are the features `benches/fallible` turns on: with the same
+# set, `cargo build -p nikaia` and `cargo test --workspace` build one
+# `nikaia-std`, not two (feature unification; `inline-more` is also hashbrown's
+# default).
+hashbrown = { version = "0.17", default-features = false, features = ["allocator-api2", "inline-more"] }
 # **`Bytes::find` is `memchr`** (ADR-320 D6, #701): a word-wide search for one
 # byte, never a loop over them. Already in every build through `winnow`.
 memchr = "2"

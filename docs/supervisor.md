@@ -164,7 +164,10 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   take turns), prints `SUITE <sha8> green|red <steps>`, pushes the tested
   commit on green (`PUSHED <sha8>`), and on red starts QA
   (`docs/briefs/qa-task.md`, input `DIR/qa-input.txt`, log `DIR/suite.log`),
-  at most two rounds, then `ESCALATE`. An escalated red leaves the commits
+  at most two rounds, then `ESCALATE`. The suite stops at the first red cheap
+  step (build, lower-std, fmt, clippy, pre-push) without running the tests,
+  and runs tests/compiler beside `cargo test --workspace` with a 4G package
+  cache. An escalated red leaves the commits
   local: read `DIR/suite.log` and the QA report, and fix forward or hand it to
   a fresh QA run before restarting the driver. The suite runs in its own
   detached worktree at the tested sha (`/home/user/nikaia-suite`, or
