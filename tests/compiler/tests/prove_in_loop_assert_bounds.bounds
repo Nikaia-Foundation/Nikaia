@@ -1,0 +1,4 @@
+bounds in tests/prove_in_loop_assert_bounds.nika: 1 indexes, 1 proved; 2 operations, 1 proved
+     8  s += xs[i]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+     8  xs[i]       proved
+     9  i += 1      proved

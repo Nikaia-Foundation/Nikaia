@@ -8,6 +8,7 @@ pub struct ProjectTestsOutcome {
     pub stdout: Bytes,
     pub stderr: String,
     pub files: Vec<(String, Option<Bytes>)>,
+    pub bounds: Vec<(String, Bytes, Bytes)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +29,8 @@ pub struct ProgramTest {
     pub dir: fs::Path,
     pub stdout: Option<Bytes>,
     pub stderr: Option<Bytes>,
+    pub bounds: Option<Bytes>,
+    pub loops_bounds: Option<Bytes>,
 }
 
 pub fn shown_path(path: &std::path::Path, root: &std::path::Path) -> String {
@@ -136,9 +139,70 @@ pub async fn program_tests(root: &std::path::Path) -> Result<Vec<ProgramTest>, n
     for name in project_tests_stems(&dir, ".nika", false) {
         let stdout = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdout", name))))).await?;
         let stderr = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stderr", name))))).await?;
-        tests.push(ProgramTest { name: name.to_string(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr });
+        let bounds = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.bounds", name))))).await?;
+        let loops_bounds = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.loops.bounds", name))))).await?;
+        tests.push(ProgramTest { name: name.to_string(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, bounds, loops_bounds });
     }
     Ok(tests)
+}
+
+pub fn project_tests_stray_bounds(root: &std::path::Path) -> Vec<String> {
+    let dir = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests")));
+    let mut stray: Vec<String> = vec![];
+    for stem in project_tests_stems(&dir, ".bounds", false) {
+        let short: String = nikaia_std::index::or(stem.strip_suffix(".loops"), || "").to_string();
+        let beside = project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", stem))))) || !short.is_empty() && project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", short)))));
+        if !beside { stray.push(format!("{}.bounds", stem)); }
+    }
+    stray
+}
+
+pub fn project_tests_bounds_report(printed: &str, written: &str) -> Bytes {
+    let head = format!("bounds in {}: ", written);
+    let mut report: String = String::from("");
+    let mut inside = false;
+    for line in printed.lines() {
+        if inside {
+            if !line.starts_with(' ') { break; }
+            report.push_str(line);
+            report.push_str("\n");
+            continue;
+        }
+        if line.starts_with(&head) {
+            inside = true;
+            let cut = nikaia_std::search::find(&line, &" - written without their check: ", 0);
+            if cut.is_some() {
+                let at = nikaia_std::index::or(cut, || 0);
+                report.push_str(nikaia_std::index::get(&line, nikaia_std::index::at(0..at)));
+            } else { report.push_str(line); }
+            report.push_str("\n");
+        }
+    }
+    report.as_bytes().copy_of()
+}
+
+pub fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTestsOutcome, off: &str, on: &str) -> ProjectTestsOutcome {
+    let written = format!("tests/{}.nika", program.name);
+    let mut bounds: Vec<(String, Bytes, Bytes)> = vec![];
+    match &program.bounds {
+        None => { },
+        Some(want) => { bounds.push((format!("{}.bounds", program.name), want.copy_of(), project_tests_bounds_report(off, &written))); },
+    }
+    match &program.loops_bounds {
+        None => { },
+        Some(want) => { bounds.push((format!("{}.loops.bounds", program.name), want.copy_of(), project_tests_bounds_report(on, &written))); },
+    }
+    let right = bounds.iter().all(|entry| { entry.1 == entry.2 });
+    ProjectTestsOutcome { ended_well: outcome.ended_well, passed: outcome.passed && right, stdout: outcome.stdout.copy_of(), stderr: outcome.stderr.to_string(), files: outcome.files.to_owned(), bounds }
+}
+
+pub fn project_tests_explain_bounds(outcome: &ProjectTestsOutcome) {
+    for (name, want, got) in outcome.bounds.iter() {
+        if want != got {
+            println!("tests/{} (- expected, + reported):", name);
+            print!("{}", project_tests_difference(want, got));
+        }
+    }
 }
 
 pub fn is_refusal(text: &str) -> bool { (text.starts_with("error") || text.contains("\nerror")) && !does_not_compile(text) }
@@ -228,7 +292,7 @@ pub async fn project_tests_output_outcome(output: &OutputTest, own: &std::path::
         Some(want) => *want == stderr.as_bytes(),
     };
     let wrote_right = (nikaia_std::range::span(0, output.files.len() as i64)).all(|at| { project_tests_wrote(&files, &output.files, at) });
-    ProjectTestsOutcome { ended_well, passed: ended_well && printed_right && said_right && wrote_right, stdout, stderr, files }
+    ProjectTestsOutcome { ended_well, passed: ended_well && printed_right && said_right && wrote_right, stdout, stderr, files, bounds: vec![] }
 }
 
 pub fn project_tests_refused_outcome(program: &ProgramTest, stderr: &str) -> ProjectTestsOutcome {
@@ -241,7 +305,7 @@ pub fn project_tests_refused_outcome(program: &ProgramTest, stderr: &str) -> Pro
         None => false,
         Some(want) => *want == shown.as_bytes(),
     };
-    ProjectTestsOutcome { ended_well: false, passed, stdout: Bytes(vec![]), stderr: shown, files: vec![] }
+    ProjectTestsOutcome { ended_well: false, passed, stdout: Bytes(vec![]), stderr: shown, files: vec![], bounds: vec![] }
 }
 
 pub fn project_tests_ran_outcome(program: &ProgramTest, ended_well: bool, stdout: Bytes, said: String) -> ProjectTestsOutcome {
@@ -256,7 +320,7 @@ pub fn project_tests_ran_outcome(program: &ProgramTest, ended_well: bool, stdout
             Err(_error) => { "" },
         }) && *want == said.as_bytes(),
     };
-    ProjectTestsOutcome { ended_well, passed: ended_well && printed_right && said_right, stdout, stderr: said, files: vec![] }
+    ProjectTestsOutcome { ended_well, passed: ended_well && printed_right && said_right, stdout, stderr: said, files: vec![], bounds: vec![] }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -288,6 +352,7 @@ pub async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(Str
     if first.passed { return Ok(ProjectTestsBlessed::Unchanged); }
     if !refused && (program.stdout.is_some() || !first.stdout.is_empty()) { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stdout", program.name)))), &fs::Root::Anywhere, first.stdout.copy_of(), false, true).await?; }
     if refused || program.stderr.is_some() { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stderr", program.name)))), &fs::Root::Anywhere, nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; }
+    for (name, _, got) in first.bounds.iter() { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(name))), &fs::Root::Anywhere, got.copy_of(), false, true).await?; }
     Ok(ProjectTestsBlessed::Written)
 }
 

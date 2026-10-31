@@ -1,0 +1,16 @@
+// #1069, guarding p2 (an `assert` inside a loop): the index `xs[i]` under the
+// in-loop `assert(i >= 0)` and the loop's `i < xs.len()`.
+fn sum(xs: ref Vec[i64]) -> i64 sync {
+	let mut i = 0
+	let mut s = 0
+	while i < xs.len() {
+		assert(i >= 0)
+		s += xs[i]
+		i += 1
+	}
+	return s
+}
+
+fn main() {
+	println(sum([1, 2, 3]))
+}

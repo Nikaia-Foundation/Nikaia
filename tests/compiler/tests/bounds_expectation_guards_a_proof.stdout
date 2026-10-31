@@ -1,0 +1,3 @@
+agreeing files: passes
+a changed line: fails true, names it true
+a stray file: refused true
