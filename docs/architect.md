@@ -297,34 +297,38 @@ tokens and turns per finished step, steps per day; counted, not timed.
 *Current state only, rewritten (not appended) by the architect when it ends:
 open lanes, what blocks what, figures, decisions in force that no ADR or issue
 holds. What happened is in `git log` and the issues.*
-**2026-10-31 (after 0d8deb1f).** Self-hosting: about 82 % of the toolchain
+**2026-10-31 (after 7ad2ea08).** Self-hosting: about 82.6 % of the toolchain
 (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
 2026-11-04), rows and `Cut:` lines in `docs/selfhosting-plan.md`.
 
 * **CI**: last known red (clippy 1.99) fixed forward by 91510ca0. Main
   session: `rustup update stable` at a quiet moment (this machine's `stable`
   is 1.97; 1.99.1 is installed beside it).
-* **Main lane** (`docs/briefs/batch.txt`): C1a re-run (`c1a-ledger-items.md`,
-  #1080 and #1082 built; old report `.run1.report.md`), K3b re-run
-  (`k3b-comptime-bundle.md`, #1077 and #1078 built; cherry-pick 9a1678a8,
-  never merge the wip branch: it sits on pre-rebase commits). GR and s1082
-  done (ADR-384 landed). To check when next near `trust.rs`: `join` makes a
-  package that reads no untrusted source all-fast even where keys come through
-  a trait barrier (ADR-010 D9 point 5); file it if a probe shows a keyed
-  position written fast. **P5c blocked** on #1088 (bug lane b20); move on
-  branch `wip/p5c-project-drive` cc40334f, the brief's *Re-run* says how to
-  land it (check it cherry-picks, as K3b's did not merge). **S1** is free
-  (b17 built; an uncommitted `sysroot.rs` of another agent may still sit in
-  the main checkout); `String.get(range)` is refused by design (NK1214).
-  P5e waits on the O rows (#923).
-* **Next main batch**: P5c re-run (after b20), C1b (`lookup`, `candidates`,
-  the `stored` fold), S1. Owed, each its own brief: R0 (#921),
+* **Main lane** (`docs/briefs/batch.txt`): P5c re-run (`p5c-project-drive.md`,
+  #1088 built f4f138bc, its branch `wip/p5c-project-drive` cc40334f touches
+  no file develop changed since but `lowered.rs`; old report `.run1`), C1b
+  (`c1b-ledger-stored.md`: the `stored` fold, dead `LedgerOps::candidates`
+  deleted). C1a done (5bd603f3). **K3b blocked** on #1106 (bug lane b25,
+  `EitherText` into `fs::Path`); its run 2 is on `wip/k3b-comptime-bundle-run2`
+  707d5e53: cherry-pick `--no-commit`, `git restore --staged`, re-lower; on
+  re-queue rename its report `.run2.report.md`. **C1c** (`lookup` to
+  `(String, ref FnContract)?`) waits on #1107 (b26); brief not written yet.
+  **S1** needs converter commits first (plan row: `.get(range)` on a `String`
+  is NK1214 by design, ADR-374 positions/`forward`; `else if let`; #886's
+  or-pattern): write a converter brief before the move. P5e waits on the O
+  rows (#923). To check when next near `trust.rs`: `join` makes a package that
+  reads no untrusted source all-fast even where keys come through a trait
+  barrier (ADR-010 D9 point 5); file it if a probe shows a keyed position
+  written fast.
+* **Next main batch**: K3b run 3 (after b25), C1c (after b26), S1 once its
+  converter brief is built. Owed, each its own brief: R0 (#921),
   `scripts/plan_rows.nika`, the driver writing the failing job's clippy output
-  into `architect-input.txt`, fold `ComptimeRan` into `CheckWall`. The
-  driver's `drive_push` rebase stopped once on a conflict in a lowered file
-  (`lowered/check_facts.rs`, 2026-10-31 21:30) and was resolved by hand: if it
-  recurs, the driver should re-lower on conflict in `lowered/*.rs`.
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b17 #1077, b19 #1080 done;
+  into `architect-input.txt`, fold `ComptimeRan` into `CheckWall`, #1102
+  (driver re-lowers on a rebase conflict in `lowered/*.rs`).
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): appended b25 #1106 (blocks
+  K3b) and b26 #1107 (blocks C1c), both `ready,wip`. b22 #1099 stopped
+  `partial` on K3b's untracked files (since restored); its edit sits
+  uncommitted in `emit_core_leaves.nika`. b17 #1077, b19 #1080 done;
   b18 #1078, b20 #1088 done (906a5be7; `wip` stays until promote closes
   them); b20's Found filed as #1101 (tuple `null` end + text-literal end,
   NK1104 when the parameter also takes owned text; brief b24, `ready,wip`).

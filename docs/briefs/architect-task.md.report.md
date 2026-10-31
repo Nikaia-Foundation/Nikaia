@@ -1,4 +1,7 @@
 Result: done
-Batch: c1a-ledger-items.md, k3b-comptime-bundle.md
+Batch: p5c-project-drive.md, c1b-ledger-stored.md
 Owner: none
-Notes: s1082 done (ADR-384, Fixes #1082); its two Founds filed: #1099 (a hole-less f-string used as a receiver keeps `{{`, emit_core_leaves.nika, cause sure) and #1100 (`[1, 2, 3].iter().filter(..)` over a list literal of open numbers: no copied walk, check_core_method.nika, cause suspected). Both are `ready,wip`, with bug briefs b22 and b23 appended to docs/briefs/bugs/batch.txt. C1a and K3b are re-queued now that #1077, #1078, #1080 and #1082 are built; their old reports are renamed to .run1.report.md, and K3b got a *Re-run* section (cherry-pick 9a1678a8, which applies clean; a merge conflicts). Committed locally, not pushed: develop is 10 ahead of origin with builder commits under the suite, so the driver pushes after green. The driver's rebase in drive_push stopped once on a conflict in lowered/check_facts.rs and was resolved by hand; noted in the State section.
+Filed: #1106 (EitherText into fs::Path, blocks K3b; bug brief b25) and #1107 (a `ref T?` map view unwrapped by `??`/`match` loses `ref`, blocks C1c `lookup`; bug brief b26), both `ready,wip`, appended to docs/briefs/bugs/batch.txt.
+Main: C1a done. K3b waits on b25 (run 2 on wip/k3b-comptime-bundle-run2 707d5e53). P5c re-runs (#1088 built, probe passes; old report run1). C1b is the stored fold and the deletion of the dead LedgerOps::candidates; lookup split off as C1c behind #1107.
+Next: K3b run 3, C1c, and a converter brief for S1 (`.get(range)` by design NK1214, `else if let`, #886).
+Process: b22 stopped on K3b's untracked tools file in the shared tree; K3b run 2 then worked on a branch, which is the pattern to keep.
