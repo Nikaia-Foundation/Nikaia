@@ -1,0 +1,15 @@
+// #1054, ADR-361 D2, D4: a claim inside a loop body that is false at some
+// turn is not proved through the loop: `i < 3` fails at the fourth turn of
+// `h(5)`, so it stays refused.
+fn h(n: i64) -> i64 sync {
+	let mut i = 0
+	while i < n {
+		assert(i < 3)
+		i += 1
+	}
+	return i
+}
+
+fn main() {
+	println(f"{h(5)}")
+}

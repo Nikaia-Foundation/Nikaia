@@ -349,6 +349,23 @@ fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, 
     return false
 }
 
+/// **The head of a turn of each loop in `records`** (ADR-361 D2, D3): each
+/// state name is its value there, `loop_turn_name`, so a claim in the body
+/// can be asked with the invariant at that head (`ProverState::through_loops`).
+/// An assignment since moves the tie among the earlier values (D9); a name
+/// bound again drops it.
+fn prover_turn_ties(mut walk: ProverWalk, mut inner: ProverScope, records: ref Vec[LoopRecord]) {
+    for record in records {
+        for name in record.problem.state {
+            let here = walk.arena.var(name)
+            let head = walk.arena.var(loop_turn_name(name, record.start))
+            let tie = walk.arena.equal(here, head)
+            inner.facts.push(tie)
+        }
+        inner.around.push(record.clone())
+    }
+}
+
 /// One statement; whether control never goes past it.
 fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool {
     let span = stmt.span
@@ -450,6 +467,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             if !changed.is_empty() {
                 scope.exact = false
             }
+            prover_turn_ties(walk, inner, records)
             scope.loops.extend(records)
             inner.path = null
             // Which turns there are depends on what the loop changes.
@@ -1110,7 +1128,7 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
         inner.bounded_bits(walk.arena, n, bits)
         scope.bounded_bits(walk.arena, n, bits)
     }
-    scope.loops.extend(records)
+    scope.loops.extend(records.clone())
     if !changed.is_empty() {
         scope.exact = false
     }
@@ -1165,6 +1183,7 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
             inner.loose.insert(words.resolve(binding).clone())
         }
     }
+    prover_turn_ties(walk, inner, records)
     // A claim in a loop, or after one, is not carried back to the entry
     // (D16): that needs an invariant.
     inner.path = null

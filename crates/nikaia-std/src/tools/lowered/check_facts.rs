@@ -309,7 +309,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
             false => check_claim_held((claim.held).as_ref()),
         };
         let row = format!("  {}:{}  {}  {}", path, line, claim.written, how);
-        if how == "proved" { proved.push(row); } else if how.starts_with("proved through") {
+        if how == "proved" { proved.push(row); } else if how.starts_with("proved through") || how.starts_with("proved inside") {
             through_loops += 1;
             proved.push(row);
         } else if how.starts_with("precondition of `main`") {

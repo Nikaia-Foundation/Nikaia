@@ -58,6 +58,11 @@ pub struct ProverScope {
     /// **The loops passed whose names are not bound again since** (ADR-361
     /// D2): a claim what is known leaves open is asked through them.
     pub loops: Vec[LoopRecord],
+    /// **The loops whose body this point stands in** (ADR-361 D2, D3),
+    /// outermost first: each state name `i` was `i^S` at the head of the
+    /// turn (`loop_turn_name`), a tie the facts hold from there. A claim what
+    /// is known leaves open is asked with each one's invariant at that head.
+    pub around: Vec[LoopRecord],
     /// **What the earlier values of the followed mutable whole numbers make
     /// known** (ADR-361 D9): the facts that read a value an assignment left
     /// behind (`x#12`, `x` before the statement at byte 12), and what a branch
@@ -93,6 +98,7 @@ impl ProverScope {
             leaned: collections::BTreeMap(),
             mutables: collections::BTreeSet(),
             loops: [],
+            around: [],
             history: [],
             bits: collections::BTreeMap(),
         }

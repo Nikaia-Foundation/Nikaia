@@ -756,7 +756,7 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
         let row = f"  {path}:{line}  {claim.written}  {how}"
         if how == "proved" {
             proved.push(row)
-        } else if how.starts_with("proved through") {
+        } else if how.starts_with("proved through") || how.starts_with("proved inside") {
             through_loops += 1
             proved.push(row)
         } else if how.starts_with("precondition of `main`") {

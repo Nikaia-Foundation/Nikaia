@@ -240,6 +240,18 @@ pub(crate) fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut Pro
     false
 }
 
+pub(crate) fn prover_turn_ties(walk: &mut ProverWalk, inner: &mut ProverScope, records: &[LoopRecord]) {
+    for record in records.iter() {
+        for name in record.problem.state.iter() {
+            let here = walk.arena.var(name);
+            let head = walk.arena.var(&loop_turn_name(name, record.start));
+            let tie = walk.arena.equal(here, head);
+            inner.facts.push(tie);
+        }
+        inner.around.push(record.clone());
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
     let span = stmt.span;
@@ -324,6 +336,7 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
                 scope.bounded_bits(&mut walk.arena, n, &bits);
             }
             if !changed.is_empty() { scope.exact = false; }
+            prover_turn_ties(walk, &mut inner, &records);
             scope.loops.extend(records);
             inner.path = None;
             inner.exact = false;
@@ -827,7 +840,7 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
         inner.bounded_bits(&mut walk.arena, n, &bits);
         scope.bounded_bits(&mut walk.arena, n, &bits);
     }
-    scope.loops.extend(records);
+    scope.loops.extend(records.iter().cloned());
     if !changed.is_empty() { scope.exact = false; }
     for binding in bindings.iter() {
         let binding = *binding;
@@ -872,6 +885,7 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
             inner.loose.insert(words.resolve(binding).to_string());
         }
     }
+    prover_turn_ties(walk, &mut inner, &records);
     inner.path = None;
     prover_block(walk, body, &mut inner, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     scope.path = None;
