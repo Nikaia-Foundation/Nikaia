@@ -113,6 +113,14 @@ pub struct CheckFacts {
     /// the bases of the reads whose element is a `fn`, so the lowering clones
     /// the `Kept` handle the list holds instead of moving it out.
     pub kept_fn_reads: collections::BTreeSet[i64],
+    /// **A function value copied from a place is a copy too** (Part I, #1031):
+    /// a name or a field read whose type is a `fn` that holds a `Kept` (not
+    /// a parameter that only runs it, not a named function), keyed by the
+    /// read; where it stands as a value the lowering clones the handle.
+    /// A callee and an assignment target are taken out again.
+    pub kept_fn_copies: collections::BTreeSet[i64],
+    /// `P { f }` over such a name, by the struct literal and the field.
+    pub kept_fn_fields: collections::BTreeSet[(i64, String)],
     pub copied_tuple_parts: collections::BTreeSet[(i64, String)],
     pub std_lengths: collections::BTreeSet[i64],
     pub sized_lengths: collections::BTreeSet[i64],
@@ -464,6 +472,8 @@ impl CheckFacts {
             slice_indices: collections::BTreeSet(),
             list_indices: collections::BTreeSet(),
             kept_fn_reads: collections::BTreeSet(),
+            kept_fn_copies: collections::BTreeSet(),
+            kept_fn_fields: collections::BTreeSet(),
             copied_tuple_parts: collections::BTreeSet(),
             std_lengths: collections::BTreeSet(),
             sized_lengths: collections::BTreeSet(),

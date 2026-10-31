@@ -634,6 +634,7 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
         Expr::Path(segments, _) => { name = world.here.unaliased(&check_core_call_joined(world, segments)); },
         _ => {
             check_core_expr(state, world, host, func, span);
+            state.facts.kept_fn_copies.remove(&(id_of(func) as i64));
             return Ty::Unknown;
         },
     }

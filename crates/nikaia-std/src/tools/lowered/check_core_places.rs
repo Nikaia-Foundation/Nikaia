@@ -407,7 +407,7 @@ pub(crate) fn check_core_places_a_declared_field<H: CheckHost>(state: &mut Check
     bind(&want, &given, bound);
     if !want.is_a_view() {
         let to = format!("stored in `{}.{}`", name, field);
-        if value.is_none() && state.a_text_bytes_name(field) { state.facts.kept_byte_fields.insert((id_of(expr) as i64, field.to_string())); } else if value.is_none() { state.hands_over_name(world, field, &to, span); } else {
+        if value.is_none() && state.a_text_bytes_name(field) { state.facts.kept_byte_fields.insert((id_of(expr) as i64, field.to_string())); } else if value.is_none() && check_core_places_a_kept_fn(&state, field, &given) { state.facts.kept_fn_fields.insert((id_of(expr) as i64, field.to_string())); } else if value.is_none() { state.hands_over_name(world, field, &to, span); } else {
             let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
             state.hands_over(world, v, &given, &to, span);
         }
@@ -493,6 +493,15 @@ pub(crate) fn check_core_places_a_literal_field<H: CheckHost>(state: &mut CheckS
     if declared.is_none() { return true; }
     let d: &Vec<FieldContract> = match declared { Some(__nikaia_value) => __nikaia_value, None => return true };
     check_core_places_a_declared_field(state, world, host, expr, name, d, (init.value).as_ref(), &field, &given, bound, span)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_places_a_kept_fn(state: &CheckState, name: &str, given: &Ty) -> bool {
+    match given {
+        Ty::Fn { .. } => state.lookup(name).is_some() && !state.run_code.contains(name),
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

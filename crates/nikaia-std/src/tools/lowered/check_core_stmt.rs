@@ -814,6 +814,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     let saved_target = state.narrowing.target;
     if op.is_none() { state.narrowing.target = id_of(target) as i64; }
     let mut into = check_core_expr(state, world, host, target, span);
+    state.facts.kept_fn_copies.remove(&(id_of(target) as i64));
     state.narrowing.target = saved_target;
     if state.a_mut_view_name(world, target) {
         state.facts.view_derefs.insert(node_key(target));

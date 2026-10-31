@@ -322,6 +322,12 @@ impl EmitState {
         } else {
             walk.hull_count = null
         }
+        // **A kept function value is copied by the argument, not by its read**
+        // (#1031): only where it is handed over by value.
+        let copies = self.facts.kept_fn_copies.contains(node_key(arg)) && !self.facts.kept_functions.contains_key(node_key(arg))
+        if copies {
+            walk.uncopied = node_key(arg)
+        }
         // **A text pattern of one scalar is that character** (#617).
         let scalar = self.facts.char_patterns.get(node_key(arg)) ?? ""
         if scalar != "" {
@@ -367,7 +373,6 @@ impl EmitState {
         // (#1008): a `Kept` is an `Arc`, and the name may be read again
         // (a second call, a loop, a recursive call).
         let hands_on_kept = emit_arg_is_variable(arg) && !self.facts.named_fn_values.contains_key(node) && self.keeps_code_at(method_callee?.clone() ?? callee.clone(), i)
-        let duplicate = shares_a_handle || hands_on_kept
         // Part I 2.3: a plain value in a parameter the callee declares nullable.
         let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node, arg)
         // **A count the language below wants in `usize`** (ADR-285 D15), not
@@ -381,6 +386,7 @@ impl EmitState {
         let mut lend = self.facts.lent_args.contains(node) && !(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node))
         // **And `&mut` for a parameter the callee declared `mut`** (D3).
         let change = self.facts.mut_args.contains(node)
+        let duplicate = shares_a_handle || hands_on_kept
         // **A lambda handed to a parameter whose type may pause** (ADR-277 D11).
         let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(node) && !self.facts.kept_lambdas.contains_key(node)
         // **The pointer a C declaration takes** (ADR-302 D5).
@@ -553,7 +559,10 @@ impl EmitState {
             out.push(")")
         }
         out.push(after)
-        if duplicate {
+        // A kept function value copied from a place (#1031), where the
+        // argument hands it over: not lent, not lent as its closure.
+        let copied = copies && !lend && !change && !self.facts.kept_args.contains(node)
+        if duplicate || copied {
             // `.clone()` and not `Rc::clone(&x)`: it is right under either count,
             // so it cannot disagree with the type the position was lowered to.
             out.push(".clone()")

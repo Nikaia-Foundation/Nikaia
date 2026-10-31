@@ -411,9 +411,10 @@ impl EmitState {
                 if self.facts.lent_fields.contains(&node_key(value)) { out.push("&"); }
                 self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
                 out.push(&after);
-            } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_string())) {
+            } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_string())) || self.facts.kept_fn_fields.contains(&(node_key(node), plain.to_string())) {
                 let mut put = written.to_string();
                 if self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_string())) { put = format!("nikaia_std::bytes::Bytes::from({})", written); }
+                if self.facts.kept_fn_fields.contains(&(node_key(node), plain.to_string())) { put = format!("{}.clone()", written); }
                 if wrapped { put = format!("Some({})", put); }
                 if boxed { out.push(&format!(": Box::new({})", put)); } else { out.push(&format!(": {}", put)); }
             }

@@ -238,7 +238,11 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::LitBool(_, _) => check_core_expr_named("bool"),
         // **A nullable of it-does-not-say** (Part III, C.4).
         Expr::LitNull(_) => Ty::Nullable(Ty::Unknown),
-        Expr::Variable(name, _) => check_core_expr_variable(state, world, host, expr, name, span),
+        Expr::Variable(name, _) => {
+            let read = check_core_expr_variable(state, world, host, expr, name, span)
+            check_core_expr_kept_copy(state, world, expr, read)
+            read
+        },
         Expr::Path(segments, _) => check_core_expr_path(state, world, segments, span),
         Expr::Block(block, _) => check_core_block(state, world, host, block),
         Expr::Unsafe(block, _) => check_core_flow_unsafe(state, world, host, block),
@@ -249,7 +253,11 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::Call { func, args, config, .. } => check_core_call(state, world, host, func, args, config, span),
         Expr::MethodCall { receiver, method, args, config, .. } => check_core_method(state, world, host, expr, false, receiver, method, args, config, span),
         Expr::SafeMethod { receiver, method, args, config, .. } => check_core_method(state, world, host, expr, true, receiver, method, args, config, span),
-        Expr::Field { base, name, .. } => check_core_field(state, world, host, expr, false, base, name, span),
+        Expr::Field { base, name, .. } => {
+            let read = check_core_field(state, world, host, expr, false, base, name, span)
+            check_core_expr_kept_copy(state, world, expr, read)
+            read
+        },
         Expr::SafeField { base, name, .. } => check_core_field(state, world, host, expr, true, base, name, span),
         Expr::StructLit { name, fields, .. } => check_core_struct_literal(state, world, host, expr, name, fields, span),
         Expr::With { base, fields, .. } => check_core_with(state, world, host, expr, base, fields, span),
@@ -300,6 +308,30 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
 }
 
 /// `"…"`: its escapes, and a hole written the old way (ADR-309 D15).
+/// **A function value copied from a place shares its closure** (Part I, *A
+/// function type stands wherever a type does*, #1031): a local or a field of
+/// `fn` type holds a `Kept`, so a read that is a value clones the handle. A
+/// parameter that only runs its function is a reference (`run_code`), and a
+/// named function is no place.
+fn check_core_expr_kept_copy(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, read: ref Ty) sync {
+    let place = match expr {
+        Expr::Variable(name, _) => {
+            let written = world.words.resolve(name).clone()
+            state.lookup(written) != null && !state.run_code.contains(written)
+        },
+        Expr::Field { .. } => true,
+        else => false,
+    }
+    match read {
+        Ty::Fn { .. } => {
+            if place {
+                state.facts.kept_fn_copies.insert(id_of(expr) as i64)
+            }
+        },
+        else => {}
+    }
+}
+
 fn check_core_expr_text[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, text: ref String, span: ref Span) -> Ty sync {
     check_core_expr_escapes(state, host, text, span)
     state.unmarked_hole(world, host, text, span)

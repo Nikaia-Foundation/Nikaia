@@ -186,7 +186,12 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         },
         Expr::LitBool(_, _) => check_core_expr_named("bool"),
         Expr::LitNull(_) => Ty::Nullable(Box::new(Ty::Unknown)),
-        Expr::Variable(name, _) => { let name = *name; check_core_expr_variable(state, world, host, expr, name, span) },
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let read = check_core_expr_variable(state, world, host, expr, name, span);
+            check_core_expr_kept_copy(state, world, expr, &read);
+            read
+        },
         Expr::Path(segments, _) => check_core_expr_path(state, world, segments, span),
         Expr::Block(block, _) => check_core_block(state, world, host, block),
         Expr::Unsafe(block, _) => check_core_flow_unsafe(state, world, host, block),
@@ -197,7 +202,12 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); check_core_call(state, world, host, func, args, config, span) },
         Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; check_core_method(state, world, host, expr, false, receiver, method, args, config, span) },
         Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; check_core_method(state, world, host, expr, true, receiver, method, args, config, span) },
-        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; check_core_field(state, world, host, expr, false, base, name, span) },
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let read = check_core_field(state, world, host, expr, false, base, name, span);
+            check_core_expr_kept_copy(state, world, expr, &read);
+            read
+        },
         Expr::SafeField { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; check_core_field(state, world, host, expr, true, base, name, span) },
         Expr::StructLit { name, fields, .. } => { let name = *name; check_core_struct_literal(state, world, host, expr, name, fields, span) },
         Expr::With { base, fields, .. } => { let base = nikaia_std::boxed::open(base); check_core_with(state, world, host, expr, base, fields, span) },
@@ -240,6 +250,24 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             check_core_expr_unanswered(state);
             Ty::Unknown
         },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_expr_kept_copy(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, read: &Ty) {
+    let place = match expr {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let written = world.words.resolve(name).to_string();
+            state.lookup(&written).is_some() && !state.run_code.contains(&written)
+        },
+        Expr::Field { .. } => true,
+        _ => false,
+    };
+    match read {
+        Ty::Fn { .. } => { if place { state.facts.kept_fn_copies.insert(id_of(expr) as i64); } },
+        _ => { },
     }
 }
 

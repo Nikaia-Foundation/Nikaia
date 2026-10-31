@@ -213,6 +213,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_argument<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, method_callee: Option<&str>, arg: &Expr, i: i64, boxed_mask: &[bool], part_counts: &[Count], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if i < part_counts.len() as i64 { walk.hull_count = Some(*nikaia_std::index::get(&part_counts, nikaia_std::index::at(i))); } else { walk.hull_count = None; }
+        let copies = self.facts.kept_fn_copies.contains(&node_key(arg)) && !self.facts.kept_functions.contains_key(&node_key(arg));
+        if copies { walk.uncopied = node_key(arg); }
         let scalar = nikaia_std::index::or(self.facts.char_patterns.get(&node_key(arg)), || "");
         if scalar != "" {
             out.push(&scalar.to_string());
@@ -246,12 +248,12 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,
         }, || callee.to_string().into()), i);
-        let duplicate = shares_a_handle || hands_on_kept;
         let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node, arg);
         let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
         let count = wants_a_size && !only_literals(arg);
         let mut lend = self.facts.lent_args.contains(&node) && !(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node));
         let change = self.facts.mut_args.contains(&node);
+        let duplicate = shares_a_handle || hands_on_kept;
         let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(&node) && !self.facts.kept_lambdas.contains_key(&node);
         let mut pointer: i64 = 0;
         if self.foreign_params.contains_key(callee) {
@@ -323,7 +325,8 @@ impl EmitState {
         if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
         out.push(&after);
-        if duplicate { out.push(".clone()"); }
+        let copied = copies && !lend && !change && !self.facts.kept_args.contains(&node);
+        if duplicate || copied { out.push(".clone()"); }
         if boxed_here { out.push(")"); }
         Ok(())
     }

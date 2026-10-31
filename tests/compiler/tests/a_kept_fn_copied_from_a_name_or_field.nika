@@ -1,0 +1,26 @@
+// A function value copied from a name, a field or a tuple part is a copy:
+// it shares the one closure, and the place keeps its own (Part I, #1031).
+struct H { f: fn(i64) -> i64 }
+
+fn main() {
+	let f: fn(i64) -> i64 = fn(x) { x + 5 }
+	let g = f
+	println(f(1))
+	println(g(2))
+	let h = H { f: f }
+	let k = H { f: h.f }
+	let a = h.f
+	let b = h.f
+	let c = k.f
+	println(a(1) + b(2) + c(3))
+	let mut fs: Vec[fn(i64) -> i64] = []
+	fs.push(f)
+	fs.push(f)
+	let d = fs[1]
+	println(d(1) + f(2))
+	let t = (f, 1)
+	let u = (f, 2)
+	let (p, _) = t
+	let (q, _) = u
+	println(f(1) + p(2) + q(3))
+}

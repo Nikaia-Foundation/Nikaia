@@ -112,6 +112,12 @@ impl EmitState {
             return
         }
         self.emit_expr_unmixed(world, walk, out, host, node, depth, flow, scope)
+        // **A function value copied from a place shares its closure** (Part
+        // I, #1031): the `Kept` stays where it is, and the value is a clone of
+        // the handle.
+        if at != walk.uncopied && self.facts.kept_fn_copies.contains(at) && !self.facts.kept_functions.contains_key(at) {
+            out.push(".clone()")
+        }
     }
 
     /// A narrowed read of `name`, by the checker's flags in `how`: 1 copied,

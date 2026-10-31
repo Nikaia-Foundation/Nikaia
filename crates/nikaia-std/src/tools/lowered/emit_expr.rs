@@ -72,6 +72,7 @@ impl EmitState {
             return Ok(());
         }
         self.emit_expr_unmixed(world, walk, out, host, node, depth, flow, scope)?;
+        if at != walk.uncopied && self.facts.kept_fn_copies.contains(&at) && !self.facts.kept_functions.contains_key(&at) { out.push(".clone()"); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

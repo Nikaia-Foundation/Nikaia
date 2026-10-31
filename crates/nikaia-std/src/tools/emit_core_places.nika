@@ -628,7 +628,7 @@ impl EmitState {
                 }
                 self.emit_expr(world, walk, out, host, value, depth, flow, scope)
                 out.push(after)
-            } else if wrapped || boxed || self.facts.kept_byte_fields.contains((node_key(node), plain.clone())) {
+            } else if wrapped || boxed || self.facts.kept_byte_fields.contains((node_key(node), plain.clone())) || self.facts.kept_fn_fields.contains((node_key(node), plain.clone())) {
                 // `Counter { db }` is the shorthand for `db: db` (Part I 4.1),
                 // and a wrapper has to be written around the name - which means
                 // writing the pair out. A name bound to `s.bytes` is copied into
@@ -636,6 +636,10 @@ impl EmitState {
                 let mut put = written.clone()
                 if self.facts.kept_byte_fields.contains((node_key(node), plain.clone())) {
                     put = f"nikaia_std::bytes::Bytes::from({written})"
+                }
+                // **`P { f }` over a kept function value copies it** (#1031).
+                if self.facts.kept_fn_fields.contains((node_key(node), plain.clone())) {
+                    put = f"{written}.clone()"
                 }
                 if wrapped {
                     put = f"Some({put})"

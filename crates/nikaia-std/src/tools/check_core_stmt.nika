@@ -1110,6 +1110,8 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         state.narrowing.target = id_of(target) as i64
     }
     let mut into = check_core_expr(state, world, host, target, span)
+    // A place written to is not a copy of it (#1031).
+    state.facts.kept_fn_copies.remove(id_of(target) as i64)
     state.narrowing.target = saved_target
     // **A `let mut` view is written through** (#976): `*c = v`, `*c += 1`,
     // and what it is assigned is the value it views. A view of text stays

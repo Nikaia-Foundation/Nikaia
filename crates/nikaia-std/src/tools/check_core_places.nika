@@ -533,6 +533,9 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
             // **`P { b }` over a name bound to `s.bytes` keeps it**, copied
             // (ADR-320 D11).
             state.facts.kept_byte_fields.insert((id_of(expr) as i64, field.clone()))
+        } else if value == null && check_core_places_a_kept_fn(state, field, given) {
+            // **`P { f }` over a kept function value copies it** (#1031).
+            state.facts.kept_fn_fields.insert((id_of(expr) as i64, field.clone()))
         } else if value == null {
             state.hands_over_name(world, field, to, span)
         } else {
@@ -653,6 +656,14 @@ fn check_core_places_a_literal_field[H: CheckHost](mut state: CheckState, world:
 
 /// **A struct literal**, `Point { x: 1, y: 2 }` (ADR-096, ADR-295 D2,
 /// ADR-331 D5).
+/// A name of a local that holds a `Kept` function value (#1031).
+fn check_core_places_a_kept_fn(state: ref CheckState, name: ref String, given: ref Ty) -> bool sync {
+    return match given {
+        Ty::Fn { .. } => state.lookup(name) != null && !state.run_code.contains(name),
+        else => false,
+    }
+}
+
 pub fn check_core_struct_literal[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, written: winnow_grammar::Symbol, fields: ref Vec[FieldInit], span: ref Span) -> Ty sync {
     // `unaliased`, the same as a type (ADR-286 D12).
     let name: String = world.here.unaliased(f"{world.words.resolve(written)}")
