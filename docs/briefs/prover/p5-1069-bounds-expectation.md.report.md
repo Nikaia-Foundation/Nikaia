@@ -1,0 +1,15 @@
+Result: done
+Files: crates/nikaia-std/src/tools/project_tests.nika crates/nikaia-std/src/tools/lowered/project_tests.rs crates/nikaia-std/src/tools/lowered.rs crates/nikaia/src/project.rs docs/specification/30-nikaia-tooling.md tests/compiler/tests/bounds_expectation_guards_a_proof.nika tests/compiler/tests/bounds_expectation_guards_a_proof.stdout tests/compiler/tests/prove_loop_counter_bounds.nika tests/compiler/tests/prove_loop_counter_bounds.stdout tests/compiler/tests/prove_loop_counter_bounds.bounds tests/compiler/tests/prove_loop_counter_bounds.loops.bounds tests/compiler/tests/prove_in_loop_assert_bounds.nika tests/compiler/tests/prove_in_loop_assert_bounds.stdout tests/compiler/tests/prove_in_loop_assert_bounds.bounds tests/compiler/tests/prove_in_loop_assert_bounds.loops.bounds
+Commit: nikaia test: a test program's .bounds and .loops.bounds guard its --bounds report (#1069)
+Body: `ProgramTest` reads `NAME.bounds` / `NAME.loops.bounds`; for a program that has one, `run_program_test` runs `nikaia check --bounds --optimization prove-through-loops:off|on` on the temp project's entry (as check computes it, independent of the build's remove-* levels, ADR-306 D14), and `project_tests_bounds_outcome` keeps the entry's report (the `bounds in tests/NAME.nika:` block, path relocated, the ` - written without their check: ...` tail cut) and compares it byte for byte; the outcome carries `bounds: Vec[(file, expected, reported)]`, a failure prints `tests/NAME.loops.bounds (- expected, + reported):` and the difference, `--bless` writes the files that exist. A `.bounds` with no `NAME.nika` beside it makes `nikaia test` stop with an error (`project_tests_stray_bounds`, checked in `project::program_tests`). Part III gets one paragraph after the test-program paragraph. The three steps are in one commit. The guards' `.bounds` were written with `--bless` and read through: under `on` k's `s += 1`, g's `i += 1`, f's `j += 1` and `i += 1` are proved, c's `n += 1` checked (p4's claims); under `off` only the two `i += 1` of g and f; in prove_in_loop_assert_bounds `xs[i]` and `i += 1` are proved at both levels, `s += xs[i]` checked.
+Fixes: #1069
+Tests: the 3 new tests + every tests/compiler program named prove_* or containing bless/stderr (24) pass with `nikaia test --both-settings` in a scratch project holding copies (no name filter); with the unfixed binary (nikaia-suite) bounds_expectation_guards_a_proof fails (changed line not caught, stray not refused) and a corrupted .loops.bounds passes unnoticed; `cargo test -p nikaia --lib project::` green; lower-std fixpoint clean; clippy 1.97 and 1.99.1 clean; pre-push-check clean
+Gate: green
+Deviation: none
+Found: none
+Needs: none
+Changelog: `nikaia test` compares a test program's `--bounds` report with `tests/NAME.bounds` (at `prove-through-loops:off`) and `tests/NAME.loops.bounds` (at `:on`) where they exist, and `--bless` writes them, so a proof is guarded by a test.
+Owner: none
+Disk freed: 0.65 GB (the 1.99.1 clippy target dir); target/nikaia-project-tests 4.2G, disk 6.1G free, no new cache entry over 100 MB
+Rs2nika: none
+Pushed: local 6f95aa59f2467bec2b9428e831ccbfa7c3ca7144

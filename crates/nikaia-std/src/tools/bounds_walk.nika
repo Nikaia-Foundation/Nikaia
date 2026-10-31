@@ -2702,6 +2702,33 @@ fn bounding_proven_count(proven: ref BoundsProven) -> i64 {
 
 /// `while cond { body }`, with the counters `cands` taken to only grow.
 fn bounding_while(mut walk: BoundsWalk, cond: ref Expr, body: ref Block, changed: ref BoundsChanged, cands: ref Vec[String], mut facts: BoundsFacts, invariant: ref Vec[i64], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    // **A `while` counts its turns by a name each grows by exactly one**
+    // (ADR-361 D13): `t` is `i - i@`, and its other counters lie within
+    // their steps times `t`, at the head of each turn (not past a `break`).
+    let outside = bounding_changed_in_expr(cond, context, words).values
+    let steps = bounding_turn_steps(walk, body, outside, changed, facts, context, words)
+    let mut turn_facts: Vec[i64] = []
+    let mut step: Vec[(String, i64, i64)] = []
+    let mut others: Vec[(String, i64, i64)] = []
+    for (name, low, high) in steps {
+        if step.is_empty() && low == 1 && high == 1 {
+            step.push((name.clone(), low, high))
+        } else {
+            others.push((name.clone(), low, high))
+        }
+    }
+    if !step.is_empty() && !others.is_empty() {
+        let t = walk.arena.var(f"#turn{walk.entries}")
+        walk.entries += 1
+        let zero = walk.arena.int(0)
+        turn_facts.push(walk.arena.ge(t, zero))
+        for fact in bounding_turn_bounds(walk, facts, step, t) {
+            turn_facts.push(fact)
+        }
+        for fact in bounding_turn_bounds(walk, facts, others, t) {
+            turn_facts.push(fact)
+        }
+    }
     bounding_loop_change(walk, facts, changed, cands)
     for fact in invariant {
         bounding_push(walk, facts, fact)
@@ -2709,6 +2736,9 @@ fn bounding_while(mut walk: BoundsWalk, cond: ref Expr, body: ref Block, changed
     bounding_expr(walk, cond, facts, context, program, words, ask)
     let mut inner = facts.clone()
     bounding_assume(walk, inner, cond, context, program, words)
+    for fact in turn_facts {
+        bounding_push(walk, inner, fact)
+    }
     if !bounding_block(walk, body, inner, context, program, words, ask) {
         bounding_turn_end(walk, inner, false, false, ask)
     }
@@ -2823,6 +2853,287 @@ fn bounding_steps_up(name: ref String, op: ref BinaryOp?, value: ref Expr, words
         Expr::Binary { op: added, lhs, rhs, .. } => added == BinaryOp::Add && ((path_of(lhs, words) ?? "") == name || (path_of(rhs, words) ?? "") == name),
         else => false,
     }
+}
+
+/// **What one turn adds to each name it changes only by constants**
+/// (ADR-361 D13): `names[k]` grows by at least `low[k]` and at most
+/// `high[k]` along every path from the head of a turn to its end; `live`
+/// where a path still runs.
+struct BoundsSteps {
+    names: Vec[String],
+    low: Vec[i64],
+    high: Vec[i64],
+    live: bool,
+}
+
+/// `a` and `b` joined: the paths of either.
+fn bounding_steps_join(mut a: BoundsSteps, b: ref BoundsSteps) {
+    if !b.live {
+        return
+    }
+    if !a.live {
+        a.low = b.low.clone()
+        a.high = b.high.clone()
+        a.live = true
+        return
+    }
+    for k in 0..<a.names.len() {
+        if b.low[k] < a.low[k] {
+            a.low[k] = b.low[k]
+        }
+        if b.high[k] > a.high[k] {
+            a.high[k] = b.high[k]
+        }
+    }
+}
+
+/// **The counters of a turn** (ADR-361 D13): each whole-number name of
+/// `changed` the body changes only by adding or taking constants - `n += 2`,
+/// `n = n - 1` - with `(name, low, high)`, the least and the most one turn
+/// adds along any path to a turn's end, its fall-through end or a
+/// `continue`; only those of one sign. A name changed any other way, in an
+/// inner loop, a lambda, by a call, bound again in the body, or one of
+/// `outside` (the loop's bindings, what a `while`'s condition changes) is
+/// none. With the head of a turn the base, these sums are the step of the
+/// induction: `low * t <= n - n@ <= high * t` holds at each head, `t` the
+/// turns ended before it.
+fn bounding_turn_steps(walk: ref BoundsWalk, body: ref Block, outside: ref collections::BTreeSet[String], changed: ref BoundsChanged, facts: ref BoundsFacts, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> Vec[(String, i64, i64)] {
+    let mut start = BoundsSteps { names: [], low: [], high: [], live: true }
+    for x in changed.values {
+        if walk.pinned.contains(path_root(x)) || outside.contains(x) || !facts.ints.contains(x) {
+            continue
+        }
+        let mut inside = false
+        for v in changed.values {
+            if v != x && path_within(x, v) {
+                inside = true
+            }
+        }
+        for v in changed.parts {
+            if path_within(x, v) {
+                inside = true
+            }
+        }
+        for place in changed.elements {
+            if bounding_element_hit(x, place, false) {
+                inside = true
+            }
+        }
+        if !inside {
+            start.names.push(x.clone())
+            start.low.push(0)
+            start.high.push(0)
+        }
+    }
+    if start.names.is_empty() {
+        return []
+    }
+    let mut ends = BoundsSteps { names: start.names.clone(), low: start.low.clone(), high: start.high.clone(), live: false }
+    let mut bad: collections::BTreeSet[String] = collections::BTreeSet()
+    bounding_steps_block(body, start, ends, bad, context, words)
+    bounding_steps_join(ends, start)
+    let mut out: Vec[(String, i64, i64)] = []
+    if !ends.live {
+        return out
+    }
+    for k in 0..<ends.names.len() {
+        let name = ends.names[k].clone()
+        if bad.contains(name) || (ends.low[k] < 0 && ends.high[k] > 0) || (ends.low[k] == 0 && ends.high[k] == 0) {
+            continue
+        }
+        out.push((name, ends.low[k], ends.high[k]))
+    }
+    return out
+}
+
+fn bounding_steps_block(block: ref Block, mut state: BoundsSteps, mut ends: BoundsSteps, mut bad: collections::BTreeSet[String], context: ref BoundsContext, words: ref winnow_grammar::InternerContext) {
+    for each in block.stmts {
+        if !state.live {
+            return
+        }
+        match each.node {
+            Stmt::Let { names, .. } => {
+                bounding_steps_other(each, state, ends, bad, context, words)
+                for name in names {
+                    bad.insert(words.resolve(name).clone())
+                }
+            },
+            Stmt::Comptime { name, .. } => {
+                bounding_steps_other(each, state, ends, bad, context, words)
+                bad.insert(words.resolve(name).clone())
+            },
+            Stmt::Assign { target, op, value } => {
+                let place = path_of(target, words) ?? ""
+                let by = bounding_step_by(place, op, value, words)
+                let mut k = 0
+                while k < state.names.len() && state.names[k] != place {
+                    k += 1
+                }
+                if by != null && k < state.names.len() {
+                    state.low[k] += by ?? 0
+                    state.high[k] += by ?? 0
+                } else {
+                    bounding_steps_other(each, state, ends, bad, context, words)
+                }
+            },
+            Stmt::Return(value) => {
+                bounding_steps_other(each, state, ends, bad, context, words)
+                state.live = false
+            },
+            Stmt::Break => {
+                state.live = false
+            },
+            Stmt::Continue => {
+                bounding_steps_join(ends, state)
+                state.live = false
+            },
+            Stmt::Expr(expr) => match expr {
+                Expr::If { cond, then_branch, else_branch, .. } => {
+                    bounding_steps_cond(each, cond, then_branch, else_branch, state, ends, bad, context, words)
+                    let mut other = BoundsSteps { names: state.names.clone(), low: state.low.clone(), high: state.high.clone(), live: state.live }
+                    bounding_steps_block(then_branch, state, ends, bad, context, words)
+                    bounding_steps_maybe(else_branch, other, ends, bad, context, words)
+                    bounding_steps_join(state, other)
+                },
+                else => bounding_steps_other(each, state, ends, bad, context, words),
+            },
+            else => bounding_steps_other(each, state, ends, bad, context, words),
+        }
+    }
+}
+
+fn bounding_steps_maybe(block: ref Block?, mut state: BoundsSteps, mut ends: BoundsSteps, mut bad: collections::BTreeSet[String], context: ref BoundsContext, words: ref winnow_grammar::InternerContext) {
+    let present = block ?? return
+    bounding_steps_block(present, state, ends, bad, context, words)
+}
+
+fn bounding_maybe_jumps(block: ref Block?, words: ref winnow_grammar::InternerContext) -> i64 {
+    let present = block ?? return 0
+    return turn_jumps(present, words)
+}
+
+/// An `if`'s condition: what it changes is no counter, and a `break` or
+/// `continue` in it - one the statement has beyond its branches' - may end
+/// the turn here.
+fn bounding_steps_cond(each: ref Spanned[Stmt], cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, mut state: BoundsSteps, mut ends: BoundsSteps, mut bad: collections::BTreeSet[String], context: ref BoundsContext, words: ref winnow_grammar::InternerContext) {
+    let changed = bounding_changed_in_expr(cond, context, words)
+    for name in state.names {
+        if bounding_changes_name(changed, name) {
+            bad.insert(name.clone())
+        }
+    }
+    for name in assigned_in_expr(cond, words) {
+        bad.insert(name.clone())
+    }
+    let one = Block { stmts: [each.clone()] }
+    if turn_jumps(one, words) > turn_jumps(then_branch, words) + bounding_maybe_jumps(else_branch, words) {
+        bounding_steps_join(ends, state)
+    }
+}
+
+/// **Any other statement of a turn**: a name it changes, at any depth, is no
+/// counter; a `break` or `continue` of this loop in it may end the turn
+/// with the sums of here (an inner loop's own are its own).
+fn bounding_steps_other(each: ref Spanned[Stmt], mut state: BoundsSteps, mut ends: BoundsSteps, mut bad: collections::BTreeSet[String], context: ref BoundsContext, words: ref winnow_grammar::InternerContext) {
+    let one = Block { stmts: [each.clone()] }
+    let changed = bounding_changed(one, context, words)
+    for name in state.names {
+        if bounding_changes_name(changed, name) {
+            bad.insert(name.clone())
+        }
+    }
+    for name in assigned_in_statement(each.node, words) {
+        bad.insert(name.clone())
+    }
+    if turn_jumps(one, words) > 0 {
+        bounding_steps_join(ends, state)
+    }
+}
+
+/// What `name op= value` or `name = value` adds to `name`, where that is a
+/// constant: `n += 2` is 2, `n = n - 1` is -1.
+fn bounding_step_by(name: ref String, op: ref BinaryOp?, value: ref Expr, words: ref winnow_grammar::InternerContext) -> i64? {
+    if name == "" {
+        return null
+    }
+    if op != null {
+        let by = bounding_step_literal(value) ?? return null
+        if bounding_is_op(op, BinaryOp::Add) {
+            return by
+        }
+        if bounding_is_op(op, BinaryOp::Sub) {
+            return 0 - by
+        }
+        return null
+    }
+    return match value {
+        Expr::Binary { op: added, lhs, rhs, .. } => {
+            let left = (path_of(lhs, words) ?? "") == name
+            let right = (path_of(rhs, words) ?? "") == name
+            if added == BinaryOp::Add && left {
+                return bounding_step_literal(rhs)
+            }
+            if added == BinaryOp::Add && right {
+                return bounding_step_literal(lhs)
+            }
+            if added == BinaryOp::Sub && left {
+                let by = bounding_step_literal(rhs) ?? return null
+                return 0 - by
+            }
+            null
+        },
+        else => null,
+    }
+}
+
+/// A whole-number literal small enough to be a turn's step.
+fn bounding_step_literal(expr: ref Expr) -> i64? {
+    return match expr {
+        Expr::LitInt { value, negative, .. } => {
+            if value > 1048576 {
+                return null
+            }
+            if negative {
+                return 0 - (value as i64)
+            }
+            value as i64
+        },
+        else => null,
+    }
+}
+
+/// **A loop's counters bounded by its turns** (ADR-361 D13): for each of
+/// `steps`, a name for the value it had where the loop was reached, what
+/// held of that value pushed onto `facts` (the facts the loop is reached
+/// with, before its changes are taken away), and the facts to assume at
+/// each head of a turn, `low * t <= n - n@ <= high * t`.
+fn bounding_turn_bounds(mut walk: BoundsWalk, mut facts: BoundsFacts, steps: ref Vec[(String, i64, i64)], turns: i64) -> Vec[i64] {
+    let mut out: Vec[i64] = []
+    for (name, low, high) in steps {
+        let entry = f"{name}#{walk.entries}"
+        walk.entries += 1
+        let e = walk.arena.var(entry)
+        let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        given.insert(name.clone(), e)
+        let mut copies: Vec[i64] = []
+        for fact in facts.facts {
+            if walk.arena.mentions(fact, name) {
+                copies.push(walk.arena.substitute(fact, given))
+            }
+        }
+        for copy in copies {
+            bounding_push(walk, facts, copy)
+        }
+        let now = walk.arena.var(name)
+        let moved = walk.arena.sub(now, e)
+        let least = walk.arena.int(low)
+        let most = walk.arena.int(high)
+        let floor = walk.arena.mul(least, turns)
+        let ceiling = walk.arena.mul(most, turns)
+        out.push(walk.arena.ge(moved, floor))
+        out.push(walk.arena.le(moved, ceiling))
+    }
+    return out
 }
 
 /// `let names: ty = value`.
@@ -2958,6 +3269,58 @@ fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol],
         }
     }
     let mut inner = facts.clone()
+    // **A `for` counts its turns** (ADR-361 D13): at the head of each, `t`
+    // turns have ended, `0 <= t` and `t` below the range's span or the
+    // length of the collection where the loop is reached (a `for` cannot
+    // change what it walks, NK2305); a counter lies within its steps times
+    // `t`, and a range's binding is its start plus `t`.
+    let mut outside: collections::BTreeSet[String] = collections::BTreeSet()
+    for binding in bindings {
+        outside.insert(words.resolve(binding).clone())
+    }
+    let steps = bounding_turn_steps(walk, body, outside, changed, facts, context, words)
+    let mut turn_facts: Vec[i64] = []
+    if !steps.is_empty() {
+        let t = walk.arena.var(f"#turn{walk.entries}")
+        walk.entries += 1
+        let mut limit: i64? = null
+        let mut binding_at: i64? = null
+        if counted && low != null && high != null {
+            let l = low ?? 0
+            let h = high ?? 0
+            if bounding_stable(walk, l, changed, name) && bounding_stable(walk, h, changed, name) {
+                let reached = walk.arena.add(l, t)
+                limit = bounding_below(walk, reached, h, closed)
+                let bound = walk.arena.var(name)
+                binding_at = walk.arena.equal(bound, reached)
+            }
+        } else if !counted {
+            let walked = path_of(iter, words) ?? ""
+            let mut stable = walked != "" && !changed.lengths.contains(walked)
+            for v in changed.values {
+                if path_within(walked, v) {
+                    stable = false
+                }
+            }
+            if stable {
+                let length = bounding_length(walk, iter, walked, context)
+                if length != null {
+                    limit = walk.arena.lt(t, length ?? 0)
+                }
+            }
+        }
+        if limit != null {
+            let zero = walk.arena.int(0)
+            turn_facts.push(walk.arena.ge(t, zero))
+            turn_facts.push(limit ?? 0)
+            if binding_at != null {
+                turn_facts.push(binding_at ?? 0)
+            }
+            for fact in bounding_turn_bounds(walk, inner, steps, t) {
+                turn_facts.push(fact)
+            }
+        }
+    }
     bounding_loop_change(walk, inner, changed, cands)
     for binding in bindings {
         let bound = words.resolve(binding)
@@ -2965,6 +3328,9 @@ fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol],
         inner.ints.remove(bound)
     }
     for fact in invariant {
+        bounding_push(walk, inner, fact)
+    }
+    for fact in turn_facts {
         bounding_push(walk, inner, fact)
     }
     // `for d in x.chars()` over a text binding: `d` is in its class

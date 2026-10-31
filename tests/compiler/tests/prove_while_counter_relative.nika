@@ -1,0 +1,54 @@
+// #1053 step 4 (ADR-361 D13): a `while` counts its turns by a name each
+// turn grows by exactly one, and its other counters are bounded relative to
+// it. `whiles`' `n += 1` (`n - n@ <= i - i@`, `i < xs.len()`) and `twice`'s
+// `s += 2` are proved at both settings; `small`'s `s += 2` into a `u8`, over
+// a limit the walk does not bound, stays checked, and so does `uneven`'s
+// `n += 1`, where a path of a turn does not grow `i`.
+fn whiles(xs: ref Vec[i64]) -> i64 sync {
+	let mut i = 0
+	let mut n = 0
+	while i < xs.len() {
+		if xs[i] > 0 {
+			n += 1
+		}
+		i += 1
+	}
+	return n
+}
+
+fn twice(xs: ref Vec[i64]) -> i64 sync {
+	let mut i = 0
+	let mut s = 0
+	while i < xs.len() {
+		s += 2
+		i += 1
+	}
+	return s
+}
+
+fn small(n: i64) -> u8 sync {
+	let mut i = 0
+	let mut s: u8 = 0
+	while i < n {
+		s += 2
+		i += 1
+	}
+	return s
+}
+
+fn uneven(m: i64) -> i64 sync {
+	let mut i = 0
+	let mut n = 0
+	while i < m {
+		n += 1
+		if n > 3 {
+			i += 1
+		}
+	}
+	return n
+}
+
+fn main() {
+	let xs = [1, -5, 2]
+	println(f"{whiles(xs)} {twice(xs)} {small(3)} {uneven(2)}")
+}

@@ -1,0 +1,45 @@
+// #1069, guarding #1054 (p4): the loop counters the prover proves through
+// the loop. `k`'s `s += 1`, `g`'s `i += 1` and `f`'s two steps are proved at
+// both settings (`s` and `j` by `i`'s turns, ADR-361 D13); `c`'s `n += 1`, a
+// counter bounded only by the turns of a `for`, stays checked here.
+fn k() -> i64 sync {
+	let mut i = 0
+	let mut s = 0
+	while i < 10 {
+		s += 1
+		i += 1
+	}
+	return s
+}
+
+fn g(n: i64) -> i64 sync {
+	let mut i = 0
+	while i < n {
+		i += 1
+	}
+	return i
+}
+
+fn f(n: i64) -> i64 sync {
+	let mut i = 0
+	let mut j = 0
+	while i < n {
+		j += 1
+		i += 1
+	}
+	return j
+}
+
+fn c(xs: ref Vec[i64]) -> i64 sync {
+	let mut n = 0
+	for x in xs {
+		if x > 0 {
+			n += 1
+		}
+	}
+	return n
+}
+
+fn main() {
+	println(k() + g(3) + f(3) + c([1, -1]))
+}

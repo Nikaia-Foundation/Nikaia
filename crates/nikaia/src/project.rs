@@ -2948,6 +2948,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                     stdout: out.stdout.into(),
                     stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
                     files: Vec::new(),
+                    bounds: Vec::new(),
                 },
             ));
         }
@@ -3025,7 +3026,10 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                 }
                 match output {
                     Some(output) => project_tests::project_tests_explain_output(output, outcome),
-                    None => print!("{}", String::from_utf8_lossy(&outcome.stdout)),
+                    None => {
+                        print!("{}", String::from_utf8_lossy(&outcome.stdout));
+                        project_tests::project_tests_explain_bounds(outcome);
+                    }
                 }
                 eprint!("{}", outcome.stderr);
             }
@@ -3107,7 +3111,14 @@ fn run_program_tests<'a>(
 }
 
 /// The package's test programs, by name (`tools/project_tests.nika`).
+/// A `.bounds` or `.loops.bounds` with no test program beside it is an error
+/// (#1069), as an expectation nothing would check.
 pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
+    if let Some(stray) = project_tests::project_tests_stray_bounds(root).first() {
+        return Err(anyhow!(
+            "tests/{stray}: there is no test program beside it to report the bounds of"
+        ));
+    }
     block_on(project_tests::program_tests(root)).map_err(|e| anyhow!("{e}"))
 }
 
@@ -3174,12 +3185,38 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str, own: &Path) 
             .replace(&entry.display().to_string(), &written)
             .replace(&canonical(&entry).display().to_string(), &written)
     };
+    // **The `--bounds` reports a `.bounds` or `.loops.bounds` expects**
+    // (#1069), as `check --bounds` computes them for the program; what is
+    // proved does not depend on the build's settings (ADR-306 D14).
+    let bounds = |through_loops: bool, wanted: bool| -> Result<String> {
+        if !wanted {
+            return Ok(String::new());
+        }
+        let level = match through_loops {
+            true => "prove-through-loops:on",
+            false => "prove-through-loops:off",
+        };
+        let out = std::process::Command::new(&exe)
+            .args(["check", "--bounds", "--optimization", level])
+            .arg(&entry)
+            .current_dir(own)
+            .env_remove("CARGO_TARGET_DIR")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .with_context(|| format!("running {}", exe.display()))?;
+        Ok(relocate(&out.stdout))
+    };
+    let off = bounds(false, test.bounds.is_some())?;
+    let on = bounds(true, test.loops_bounds.is_some())?;
+    let reported = |outcome: Outcome| -> Outcome {
+        project_tests::project_tests_bounds_outcome(test, &outcome, &off, &on)
+    };
     let built = run("build", own)?;
     if !built.status.success() {
-        return Ok(project_tests::project_tests_refused_outcome(
+        return Ok(reported(project_tests::project_tests_refused_outcome(
             test,
             &relocate(&built.stderr),
-        ));
+        )));
     }
     // `project_settings_own_copy`'s place for the program, with no variant.
     let binary = project
@@ -3207,12 +3244,12 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str, own: &Path) 
             (out, said)
         }
     };
-    Ok(project_tests::project_tests_ran_outcome(
+    Ok(reported(project_tests::project_tests_ran_outcome(
         test,
         out.status.success(),
         out.stdout.into(),
         relocate(&said),
-    ))
+    )))
 }
 
 /// Remove everything in `dir` but the entry named `keep`.

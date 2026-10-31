@@ -22,6 +22,13 @@ on: its report comes to the architect, whose next order is the repair (the
 compiler defect first, `CLAUDE.md`'s *Fix, do not work around*), then the
 blocked step.
 
+**Pushing from a checkout that is behind** (a dirty shared tree, so no
+rebase): push a merge, `T=$(git merge-tree --write-tree HEAD origin/develop)`,
+then `git commit-tree $T -p HEAD -p origin/develop` and push that sha. Never
+rebuild your files on `origin/develop`'s tree with a scratch index: a file
+another session changed there is overwritten (architect 2026-10-31: the y21
+probe rule, restored by f96bb09a). Chain such steps with `&&`, never `;`.
+
 ## Language decisions (owner, 2026-10-31)
 
 Language principles (owner, 2026-10-31), the measure for every language
@@ -49,7 +56,10 @@ probe is filed by the architect at its next run: a GitHub issue in brief form
 (`ready`, the probe, *To build*) and a bug brief
 `docs/briefs/bugs/b<N>-<issue>-<topic>.md` with a `Blocks:` line, appended to
 `docs/briefs/bugs/batch.txt`, issue labelled `wip`. An open issue that already
-holds the defect gets the new probe as a comment instead.
+holds the defect gets the new probe as a comment instead. A lane architect whose task
+forbids other lanes' briefs (`docs/briefs/prover/architect-task.md`) files
+the issue `ready` without `wip` and writes no bug brief: the bug lane's
+architect claims it (prover run after p6, 2026-10-31).
 
 ## Driver, suite and QA (owner, 2026-10-31)
 
@@ -132,6 +142,11 @@ paid for the rule):
 * a step resting on another brief's fix opens with a pre-flight probe of it;
   a draft (`wip/` branch, patch) is applied and run through `nikaia check` and
   one test first (y2c);
+* a step that builds new code over borrowed data is probed in its planned
+  shape, not only in the shape of the last fix: the walk's recursion, its
+  result type with view fields, the `match` payloads and `for` elements it
+  reads, the by-value arguments beside them (y21 run 2: three checker defects
+  a ten-line probe would have shown before the batch);
 * a fix that widens a rule names every function that repeats that rule
   (the same condition tested elsewhere, e.g. `views_the_call_s` beside the
   emitter's #703 branch) and allows its file, or drops the row (b11);

@@ -24,6 +24,10 @@ pub struct ProjectTestsOutcome {
     /// under that name - nothing where it wrote nothing
     /// ([ADR-247](../../../docs/specification/adr/adr-247.md) D2).
     pub files: Vec[(String, Bytes?)],
+    /// A test program's `--bounds` reports, each beside what it expects
+    /// (#1069): the file's name (`NAME.bounds`, `NAME.loops.bounds`), what
+    /// the file holds and what was reported - one entry per file there is.
+    pub bounds: Vec[(String, Bytes, Bytes)],
 }
 
 /// **An output test** ([ADR-269](../../../docs/specification/adr/adr-269.md) D13,
@@ -54,6 +58,11 @@ pub struct ProgramTest {
     /// What it writes to standard error, or, where it is refused, the
     /// compiler's whole message (it starts `error`).
     pub stderr: Bytes?,
+    /// `NAME.bounds`: its `--bounds` report at `prove-through-loops:off`
+    /// (#1069), where there is one.
+    pub bounds: Bytes?,
+    /// `NAME.loops.bounds`: the same at `prove-through-loops:on`.
+    pub loops_bounds: Bytes?,
 }
 
 /// Every file under `dir`, by its name relative to it with `/` between the
@@ -175,9 +184,91 @@ pub fn program_tests(root: ref fs::Path) -> Vec[ProgramTest] throws {
     for name in project_tests_stems(dir, ".nika", false) {
         let stdout = project_tests_optional(dir.join(f"{name}.stdout"))
         let stderr = project_tests_optional(dir.join(f"{name}.stderr"))
-        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr })
+        let bounds = project_tests_optional(dir.join(f"{name}.bounds"))
+        let loops_bounds = project_tests_optional(dir.join(f"{name}.loops.bounds"))
+        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, bounds: bounds, loops_bounds: loops_bounds })
     }
     return tests
+}
+
+/// The `.bounds` and `.loops.bounds` files in the package's `tests/` with no
+/// test program beside them (#1069), by file name: each is an error, not an
+/// expectation nothing checks.
+pub fn project_tests_stray_bounds(root: ref fs::Path) -> Vec[String] {
+    let dir = root.join("tests")
+    let mut stray: Vec[String] = []
+    for stem in project_tests_stems(dir, ".bounds", false) {
+        let short: String = (stem.strip_suffix(".loops") ?? "").clone()
+        let beside = project_tests_is_file(dir.join(f"{stem}.nika")) || (!short.is_empty() && project_tests_is_file(dir.join(f"{short}.nika")))
+        if !beside {
+            stray.push(f"{stem}.bounds")
+        }
+    }
+    return stray
+}
+
+/// **The part of `check --bounds`'s output about the test program**
+/// (#1069): the report whose first line names `written` (`tests/NAME.nika`,
+/// the path already rewritten so), and the lines under it. The first line's
+/// tail, what this build writes without its check, is cut: it depends on the
+/// build, what is proved does not (ADR-306 D14).
+pub fn project_tests_bounds_report(printed: String, written: String) -> Bytes {
+    let head = f"bounds in {written}: "
+    let mut report: String = ""
+    let mut inside = false
+    for line in printed.lines() {
+        if inside {
+            if !line.starts_with(" ") {
+                break
+            }
+            report.push_str(line)
+            report.push_str("\n")
+            continue
+        }
+        if line.starts_with(head) {
+            inside = true
+            let cut = line.find(" - written without their check: ")
+            if cut != null {
+                let at = cut ?? 0
+                report.push_str(line[0..<at])
+            } else {
+                report.push_str(line)
+            }
+            report.push_str("\n")
+        }
+    }
+    return report.bytes.clone()
+}
+
+/// **A test program's outcome with its `--bounds` reports compared**
+/// (#1069): `off` and `on` are what `check --bounds` printed for it at
+/// `prove-through-loops:off` and `:on`, its path written `tests/NAME.nika`.
+/// Each report its `.bounds` or `.loops.bounds` expects must be that file,
+/// byte for byte, or the test fails.
+pub fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref ProjectTestsOutcome, off: String, on: String) -> ProjectTestsOutcome {
+    let written = f"tests/{program.name}.nika"
+    let mut bounds: Vec[(String, Bytes, Bytes)] = []
+    match program.bounds {
+        null => {},
+        want => bounds.push((f"{program.name}.bounds", want.clone(), project_tests_bounds_report(off, written))),
+    }
+    match program.loops_bounds {
+        null => {},
+        want => bounds.push((f"{program.name}.loops.bounds", want.clone(), project_tests_bounds_report(on, written))),
+    }
+    let right = bounds.iter().all(fn(entry) { entry.1 == entry.2 })
+    return ProjectTestsOutcome { ended_well: outcome.ended_well, passed: outcome.passed && right, stdout: outcome.stdout.clone(), stderr: outcome.stderr.clone(), files: outcome.files.clone(), bounds: bounds }
+}
+
+/// What a test program's `--bounds` reports got wrong, as differences
+/// (#1069).
+pub fn project_tests_explain_bounds(outcome: ref ProjectTestsOutcome) {
+    for (name, want, got) in outcome.bounds {
+        if want != got {
+            println(f"tests/{name} (- expected, + reported):")
+            print(project_tests_difference(want, got))
+        }
+    }
 }
 
 /// Whether a stderr file holds a compiler's refusal, whatever stage produced
@@ -292,7 +383,7 @@ pub fn project_tests_output_outcome(output: ref OutputTest, own: ref fs::Path, e
         want => want == stderr.bytes,
     }
     let wrote_right = (0..<output.files.len()).all(fn(at) { project_tests_wrote(files, output.files, at) })
-    return ProjectTestsOutcome { ended_well: ended_well, passed: ended_well && printed_right && said_right && wrote_right, stdout: stdout, stderr: stderr, files: files }
+    return ProjectTestsOutcome { ended_well: ended_well, passed: ended_well && printed_right && said_right && wrote_right, stdout: stdout, stderr: stderr, files: files, bounds: [] }
 }
 
 /// **A test program the compiler did not build**: `stderr` is what it said,
@@ -309,7 +400,7 @@ pub fn project_tests_refused_outcome(program: ref ProgramTest, stderr: String) -
         null => false,
         want => want == shown.bytes,
     }
-    return ProjectTestsOutcome { ended_well: false, passed: passed, stdout: Bytes([]), stderr: shown, files: [] }
+    return ProjectTestsOutcome { ended_well: false, passed: passed, stdout: Bytes([]), stderr: shown, files: [], bounds: [] }
 }
 
 /// **A test program that built and ran**: it passed where it ended
@@ -324,7 +415,7 @@ pub fn project_tests_ran_outcome(program: ref ProgramTest, ended_well: bool, std
         null => true,
         want => !is_refusal(want.text() catch { "" }) && want == said.bytes,
     }
-    return ProjectTestsOutcome { ended_well: ended_well, passed: ended_well && printed_right && said_right, stdout: stdout, stderr: said, files: [] }
+    return ProjectTestsOutcome { ended_well: ended_well, passed: ended_well && printed_right && said_right, stdout: stdout, stderr: said, files: [], bounds: [] }
 }
 
 /// What `--bless` did with one test.
@@ -350,7 +441,8 @@ pub fn project_tests_blessed_line(label: String, blessed: ref ProjectTestsBlesse
 }
 
 /// `--bless` for a test program: `NAME.stdout` and `NAME.stderr` are written
-/// from what happened, a refusal into `NAME.stderr` only. A program that
+/// from what happened, a refusal into `NAME.stderr` only, and the `--bounds`
+/// reports into the `NAME.bounds` and `NAME.loops.bounds` there are (#1069). A program that
 /// built and ended unsuccessfully, or whose settings disagree, is not blessed.
 pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(String, ProjectTestsOutcome)]) -> ProjectTestsBlessed throws {
     if outcomes.is_empty() {
@@ -375,6 +467,9 @@ pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(
     }
     if refused || program.stderr != null {
         fs::write(program.dir.join(f"{program.name}.stderr"), fs::Root::Anywhere, first.stderr.bytes)
+    }
+    for (name, _, got) in first.bounds {
+        fs::write(program.dir.join(name), fs::Root::Anywhere, got.clone())
     }
     return ProjectTestsBlessed::Written
 }

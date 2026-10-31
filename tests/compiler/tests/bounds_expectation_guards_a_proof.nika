@@ -1,0 +1,59 @@
+// #1069: a test program's `.bounds` and `.loops.bounds` are its `--bounds`
+// reports at `prove-through-loops:off` and `:on`. Files that agree pass; a
+// changed line fails the test, naming the file; a `.bounds` with no program
+// beside it is an error.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
+	fs::write(
+		f"{tmp}/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]\nname = \"boundslib\"\nversion = \"0.1.0\"\n",
+	)
+	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "pub fn one() -> i64 {\n\treturn 1\n}\n")
+	fs::write(
+		f"{tmp}/tests/counter.nika",
+		fs::Root::Anywhere,
+		"fn k() -> i64 sync {\n\tlet mut i = 0\n\tlet mut s = 0\n\twhile i < 10 {\n\t\ts += 1\n\t\ti += 1\n\t}\n\treturn s\n}\n\nfn main() {\n\tprintln(f\"{k()}\")\n}\n",
+	)
+	fs::write(f"{tmp}/tests/counter.stdout", fs::Root::Anywhere, "10\n")
+	let off = "bounds in tests/counter.nika: 0 indexes, 0 proved; 1 operations, 1 proved\n     5  s += 1  proved\n"
+	let on = "bounds in tests/counter.nika: 0 indexes, 0 proved; 1 operations, 1 proved\n     5  s += 1  proved\n"
+	fs::write(f"{tmp}/tests/counter.bounds", fs::Root::Anywhere, off)
+	fs::write(f"{tmp}/tests/counter.loops.bounds", fs::Root::Anywhere, on)
+	let agree = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone())
+	if agree.stdout.contains("1 passed; 0 failed") {
+		println("agreeing files: passes")
+	} else {
+		println(agree.stdout)
+		println(agree.stderr)
+	}
+	fs::write(
+		f"{tmp}/tests/counter.loops.bounds",
+		fs::Root::Anywhere,
+		on.replace("  proved\n", "  checked\n"),
+	)
+	let changed = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone())
+	println(f"a changed line: fails {changed.stdout.contains("0 passed; 1 failed")}, names it {changed.stdout.contains("tests/counter.loops.bounds (- expected, + reported):")}")
+	fs::write(f"{tmp}/tests/counter.loops.bounds", fs::Root::Anywhere, on)
+	fs::write(f"{tmp}/tests/x.bounds", fs::Root::Anywhere, "")
+	let stray = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone())
+	println(f"a stray file: refused {stray.stderr.contains("tests/x.bounds: there is no test program beside it")}")
+	process::run("rm", ["-rf", tmp])
+}

@@ -1,7 +1,6 @@
 Result: done
-Batch: p5-1069-bounds-expectation.md, p6-1053-for-counters.md
-Figure: off 1518/2628 indexes (57.8 %), 729/1612 operations (45.2 %); prove-through-loops:on 1550/2628 (59.0 %), 736/1612 (45.7 %) (ecf435a, 246 files, 0 refused)
+Batch: p7-1053-for-collection-length.md, p8-1076-precondition-unread-argument.md, p9-1053-claims-in-the-figure.md
+Figure: 28acd94 (p6's run of lower-std --bounds + proved.nika): off 1,520/2,646 indexes (57.4 %), 733/1,620 operations (45.2 %); prove-through-loops:on 1,552/2,646 (58.7 %), 740/1,620 (45.7 %); no assert and 13 panic( in tools/*.nika, counted in the figure from p9 on
 Owner: none
-Decided: ADR-361 D13 (a `for` counts its turns; a counter is bounded by k times them), #1069 (`.bounds` / `.loops.bounds` beside a program test). Both under *Language decisions*; p5 and p6 write the Part III text and their Changelog lines.
-Filed: #1066, #1067, #1068 (bug lane, `ready`); #1069 (`ready`, `wip`). Comments on #1053 (figure, plan) and #432 (D13 covers its loop part).
-Supervisor: Part III `30-nikaia-tooling.md` :315 writes `time::Duration::new(30, 0)`, refused by NK1149; `async e` refused is #984, not a defect; the reassigned `split().collect()` probe did not reproduce.
+Decided: p6's Needs (obvious, no language change): check_core_stmt_for records a for's iterable length as .len() does (p7). Found while probing: #1076 the prover reports a precondition "proved at every call" where a call passes an argument it does not read (the call reaches the checked entry; the program builds and the assert fires at run time): p8, before any assert goes into tools. Filed for the bug lane (ready, no wip, no bug brief: this task forbids other lanes' briefs): #1074 (p6's Found, tools lowering of ref T? ?? ref T), #1075 (for c in text over a String passes check, fails in rustc). Next run: the prover walk's for turn count (claims cannot read n after for x in xs { n += 1 }, probed). Owed to the supervisor: p5's and p6's Changelog lines. architect.md: a lane architect files without a bug brief when its task forbids one.
+Pushed: rejected (local develop diverged from origin by 11 commits; the driver rebases)
