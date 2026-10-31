@@ -1,0 +1,43 @@
+// #1021: a `match` on a `bool` is walked as the `if` it is: each arm knows
+// its side of the condition, and what the arms assign is joined after it
+// (ADR-361 D9).
+fn bump(first: i64) -> i64 {
+	assert(first >= 0 && first <= 10)
+	let mut cp = first
+	match cp > 5 {
+		true => { cp = cp + 1 },
+		false => {},
+	}
+	assert(cp >= 0 && cp <= 11)
+	return cp
+}
+
+// The `false` arm first, and the condition's side known inside each arm.
+fn shrink(first: i64) -> i64 {
+	assert(first >= 0 && first <= 10)
+	let mut cp = first
+	match cp > 5 {
+		false => { cp = cp + 4 },
+		true => { cp = cp - 6 },
+	}
+	assert(cp >= 0 && cp <= 9)
+	return cp
+}
+
+// An `else` arm is the side the other arm left.
+fn cap(first: i64) -> i64 {
+	assert(first >= 0 && first <= 10)
+	let mut cp = first
+	match cp <= 3 {
+		true => { cp = cp + 7 },
+		else => { cp = cp - 4 },
+	}
+	assert(cp >= 0 && cp <= 10)
+	return cp
+}
+
+fn main() {
+	println(f"{bump(3)} {bump(7)}")
+	println(f"{shrink(3)} {shrink(7)}")
+	println(f"{cap(2)} {cap(9)}")
+}

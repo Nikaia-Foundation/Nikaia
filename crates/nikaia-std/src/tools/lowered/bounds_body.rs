@@ -51,6 +51,12 @@ pub fn assigned_in(body: &Block, words: &winnow_grammar::InternerContext) -> col
     found.names
 }
 
+pub fn assigned_in_expr(expr: &Expr, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+    let mut found = tally();
+    tally_expr(expr, &Ask::Assigned, false, words, &mut found);
+    found.names
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn untracked_in(body: &Block, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
@@ -431,6 +437,12 @@ pub(crate) fn tally_expr(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_
 pub fn changes_length_in_statement(stmt: &Stmt, list: &str, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
     let mut changes = tally();
     tally_statement(stmt, &Ask::Changes(list.to_string(), readers.to_owned()), false, words, &mut changes);
+    changes.count > 0
+}
+
+pub fn changes_length_in_expr(expr: &Expr, list: &str, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
+    let mut changes = tally();
+    tally_expr(expr, &Ask::Changes(list.to_string(), readers.to_owned()), false, words, &mut changes);
     changes.count > 0
 }
 

@@ -340,9 +340,9 @@ fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, 
         }
         prover_follow_mutables(walk, stmt.node, stmt.span, scope, untracked, pinned, words)
         // A statement that may leave for some states and not for others
-        // narrows what goes on past it, and only an `if` the prover reads says
-        // how (`prover_expr_stmt`).
-        if !prover_an_if(stmt.node) && leaves_stmt(stmt.node, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true) {
+        // narrows what goes on past it, and only an `if` or a `match` the
+        // prover reads says how (`prover_expr_stmt`).
+        if !prover_a_branch(stmt.node) && leaves_stmt(stmt.node, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true) {
             scope.exact = false
         }
     }
@@ -1271,6 +1271,9 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
         Expr::If { cond, then_branch, else_branch, .. } => {
             return prover_if(walk, cond, then_branch, else_branch, span, scope, at, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         },
+        Expr::Match { value, arms, .. } => {
+            return prover_match(walk, value, arms, span, scope, at, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+        },
         Expr::Throw(value, _) => {
             prover_expr(walk, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             return true
@@ -1369,7 +1372,7 @@ fn prover_else(mut walk: ProverWalk, else_branch: ref Block?, mut else_scope: Pr
 /// `if`'s byte), and each side that goes on past the `if` adds what it made
 /// known over the names that live past it. One the walk stops following on
 /// either side is bound again.
-fn prover_join(mut walk: ProverWalk, mut scope: ProverScope, then_scope: ref ProverScope, then_leaves: bool, then_branch: ref Block, else_scope: ref ProverScope, else_leaves: bool, else_branch: ref Block?, span: Span, words: ref winnow_grammar::InternerContext) {
+fn prover_join(mut walk: ProverWalk, mut scope: ProverScope, then_scope: ref ProverScope, then_leaves: bool, then_branch: ref Block, else_scope: ref ProverScope, else_leaves: bool, else_branch: ref Block?, span: Span, words: ref winnow_grammar::InternerContext) sync {
     if scope.mutables.is_empty() {
         return
     }
@@ -1377,15 +1380,47 @@ fn prover_join(mut walk: ProverWalk, mut scope: ProverScope, then_scope: ref Pro
     prover_lengths_changed(then_assigns, then_branch, scope, walk.state.readers, words)
     let mut else_assigns = prover_else_assigns(else_branch, words)
     prover_else_lengths_changed(else_assigns, else_branch, scope, walk.state.readers, words)
-    let mut changed: Vec[String] = []
-    for n in then_assigns {
+    if !prover_changes_followed(scope, then_assigns) && !prover_changes_followed(scope, else_assigns) {
+        return
+    }
+    let sides = [
+        ProverArm { scope: then_scope.clone(), leaves: then_leaves, assigns: then_assigns, own: prover_own_names(then_branch, words), tag: f"{span.start}t" },
+        ProverArm { scope: else_scope.clone(), leaves: else_leaves, assigns: else_assigns, own: prover_else_own_names(else_branch, words), tag: f"{span.start}e" },
+    ]
+    prover_join_arms(walk, scope, sides, span)
+}
+
+/// One side of a branch, as the join reads it: the scope it ends with,
+/// whether it always leaves, the names it assigns, the names its own block
+/// binds, and the tag its own names are renamed apart with.
+struct ProverArm {
+    scope: ProverScope,
+    leaves: bool,
+    assigns: collections::BTreeSet[String],
+    own: collections::BTreeSet[String],
+    tag: String,
+}
+
+/// Whether `assigns` holds a mutable whole number the walk follows.
+fn prover_changes_followed(scope: ref ProverScope, assigns: ref collections::BTreeSet[String]) -> bool sync {
+    for n in assigns {
         if scope.mutables.contains(n) {
-            changed.push(n.clone())
+            return true
         }
     }
-    for n in else_assigns {
-        if scope.mutables.contains(n) && !then_assigns.contains(n) {
-            changed.push(n.clone())
+    return false
+}
+
+/// **The mutable whole numbers after a branch of any number of sides** - an
+/// `if`'s two, a `match`'s arms (ADR-361 D9, #1021): each is one side's value
+/// or another's. A side that always leaves drops out.
+fn prover_join_arms(mut walk: ProverWalk, mut scope: ProverScope, sides: ref Vec[ProverArm], span: Span) sync {
+    let mut changed: Vec[String] = []
+    for side in sides {
+        for n in side.assigns {
+            if scope.mutables.contains(n) && !changed.contains(n) {
+                changed.push(n.clone())
+            }
         }
     }
     if changed.is_empty() {
@@ -1395,9 +1430,13 @@ fn prover_join(mut walk: ProverWalk, mut scope: ProverScope, then_scope: ref Pro
     let mut followed: Vec[String] = []
     let mut dropped: collections::BTreeSet[String] = collections::BTreeSet()
     for n in changed {
-        let on_then = then_leaves || then_scope.ints.contains(n)
-        let on_else = else_leaves || else_scope.ints.contains(n)
-        if on_then && on_else {
+        let mut on_all = true
+        for side in sides {
+            if !side.leaves && !side.scope.ints.contains(n) {
+                on_all = false
+            }
+        }
+        if on_all {
             followed.push(n.clone())
         } else {
             dropped.insert(n.clone())
@@ -1418,32 +1457,262 @@ fn prover_join(mut walk: ProverWalk, mut scope: ProverScope, then_scope: ref Pro
         scope.renamed(walk.arena, n, old)
         earlier.insert(n.clone(), old)
     }
-    let mut sides: Vec[i64] = []
-    if !then_leaves {
-        let own = prover_own_names(then_branch, words)
-        sides.push(prover_side(walk.arena, then_scope, own, before, outer, dropped, earlier, then_assigns, f"{span.start}t"))
+    let mut terms: Vec[i64] = []
+    for side in sides {
+        if !side.leaves {
+            terms.push(prover_side(walk.arena, side.scope, side.own, before, outer, dropped, earlier, side.assigns, side.tag))
+        }
     }
-    if !else_leaves {
-        let own = prover_else_own_names(else_branch, words)
-        sides.push(prover_side(walk.arena, else_scope, own, before, outer, dropped, earlier, else_assigns, f"{span.start}e"))
-    }
-    if !followed.is_empty() {
-        if sides.len() == 1 {
-            scope.history.push(sides[0])
+    if !followed.is_empty() && !terms.is_empty() {
+        if terms.len() == 1 {
+            scope.history.push(terms[0])
         } else {
-            scope.history.push(walk.arena.or(sides))
+            scope.history.push(walk.arena.or(terms))
         }
     }
     for n in followed {
         scope.ints.insert(n.clone())
-        if (!then_leaves && then_scope.loose.contains(n)) || (!else_leaves && else_scope.loose.contains(n)) {
-            scope.loose.insert(n.clone())
-        }
-        if (!then_leaves && then_scope.tainted.contains(n)) || (!else_leaves && else_scope.tainted.contains(n)) {
-            scope.tainted.insert(n.clone())
+        for side in sides {
+            if !side.leaves && side.scope.loose.contains(n) {
+                scope.loose.insert(n.clone())
+            }
+            if !side.leaves && side.scope.tainted.contains(n) {
+                scope.tainted.insert(n.clone())
+            }
         }
     }
     scope.exact = false
+}
+
+/// **A `match` as a statement** (ADR-361 D9, #1021), walked as an `if` of
+/// many sides: each arm knows what its pattern says of the matched value -
+/// `true` or `false` of a condition the prover reads, a whole-number literal
+/// or range of a whole number it reads, nothing else - and the arms that go
+/// on are joined. A guard is walked for its calls and gives no fact. Whether
+/// control never goes past it.
+fn prover_match(mut walk: ProverWalk, value: ref Expr, arms: ref Vec[MatchArm], span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool sync {
+    prover_expr(walk, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+    let cond_leaves = leaves_expr(value, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true)
+    let truth = claim_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+    let number = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+    let mut sides: Vec[ProverArm] = []
+    let mut going = 0
+    let mut lone: i64? = null
+    let mut lone_exact = false
+    let mut partly_leaves = false
+    let mut seen_true = false
+    let mut seen_false = false
+    for arm in arms {
+        let mut fact = prover_pattern_fact(walk.arena, arm.pattern, truth, number, words)
+        let literal = prover_bool_literal(arm.pattern)
+        // A catch-all arm of a `bool` match is the value the arms above it
+        // without a guard left.
+        if fact == null && truth != null && literal == null && prover_catch_all(arm.pattern) {
+            if seen_true && !seen_false {
+                fact = walk.arena.not(truth ?? 0)
+            } else if seen_false && !seen_true {
+                fact = truth
+            }
+        }
+        if arm.guard == null && literal != null {
+            if literal ?? false {
+                seen_true = true
+            } else {
+                seen_false = true
+            }
+        }
+        let mut arm_scope = scope.clone()
+        let mut bound: collections::BTreeSet[String] = collections::BTreeSet()
+        prover_pattern_names(arm.pattern, words, bound)
+        for name in bound {
+            arm_scope.rebind(walk.arena, name)
+        }
+        if fact != null {
+            arm_scope.facts.push(fact ?? 0)
+        }
+        arm_scope.exact = arm_scope.exact && fact != null && arm.guard == null
+        if arm.guard == null {
+            arm_scope.on_the_path(walk.arena, fact)
+        } else {
+            arm_scope.on_the_path(walk.arena, null)
+        }
+        prover_arm_guard(walk, arm.guard, span, arm_scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+        let leaves = prover_arm_body(walk, arm.body, span, arm_scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+        let may_leave = leaves_expr(arm.body, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true)
+        if !leaves {
+            going += 1
+            lone = fact
+            lone_exact = fact != null && arm.guard == null && !may_leave
+            if may_leave {
+                partly_leaves = true
+            }
+        }
+        let mut assigns = prover_arm_assigns(arm.body, words)
+        prover_arm_lengths_changed(assigns, arm.body, scope, walk.state.readers, words)
+        let mut own_names = prover_arm_own_names(arm.body, words)
+        own_names.extend(bound)
+        sides.push(ProverArm { scope: arm_scope, leaves: leaves, assigns: assigns, own: own_names, tag: f"{span.start}a{sides.len()}" })
+    }
+    if going == 0 && !arms.is_empty() {
+        return true
+    }
+    if !scope.mutables.is_empty() {
+        prover_join_arms(walk, scope, sides, span)
+    }
+    // **What the arms that always leave rule out** holds after the `match`,
+    // where one arm alone goes on: its pattern's fact.
+    if going == 1 && going < arms.len() {
+        if lone != null {
+            scope.facts.push(lone ?? 0)
+        }
+        scope.on_the_path(walk.arena, lone)
+        scope.exact = scope.exact && lone_exact
+    } else if going < arms.len() || partly_leaves {
+        scope.exact = false
+    }
+    if cond_leaves {
+        scope.exact = false
+    }
+    return false
+}
+
+/// A guard, if the arm has one, walked for what it calls.
+fn prover_arm_guard(mut walk: ProverWalk, guard: ref Expr?, span: Span, scope: ref ProverScope, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) sync {
+    let present = guard ?? return
+    prover_expr(walk, present, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+}
+
+/// An arm's body: a block walked as a branch is, any other expression as a
+/// statement; whether it always leaves.
+fn prover_arm_body(mut walk: ProverWalk, body: ref Expr, span: Span, mut scope: ProverScope, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool sync {
+    return match body {
+        Expr::Block(block, _) => prover_block(walk, block, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
+        else => prover_expr_stmt(walk, body, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
+    }
+}
+
+/// Every name an arm's body assigns.
+fn prover_arm_assigns(body: ref Expr, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] sync {
+    return match body {
+        Expr::Block(block, _) => assigned_in(block, words),
+        else => assigned_in_expr(body, words),
+    }
+}
+
+/// The followed list lengths an arm's body may change.
+fn prover_arm_lengths_changed(mut changed: collections::BTreeSet[String], body: ref Expr, scope: ref ProverScope, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) sync {
+    match body {
+        Expr::Block(block, _) => prover_lengths_changed(changed, block, scope, readers, words),
+        else => {
+            for m in scope.mutables {
+                if m.ends_with(".len()") && changes_length_in_expr(body, (m.strip_suffix(".len()") ?? "").clone(), readers, words) {
+                    changed.insert(m.clone())
+                }
+            }
+        },
+    }
+}
+
+/// The names an arm's block binds, if its body is one.
+fn prover_arm_own_names(body: ref Expr, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] sync {
+    return match body {
+        Expr::Block(block, _) => prover_own_names(block, words),
+        else => collections::BTreeSet(),
+    }
+}
+
+/// **What a pattern says of the matched value**: `true` or `false` of a
+/// condition the prover reads (`truth`), a whole-number literal or an
+/// inclusive range of a whole number it reads (`number`), an or-pattern of
+/// such; else nothing.
+fn prover_pattern_fact(mut arena: TermArena, pattern: ref MatchPattern, truth: i64?, number: i64?, words: ref winnow_grammar::InternerContext) -> i64? sync {
+    return match pattern {
+        MatchPattern::Literal(lit) => {
+            let literal = prover_bool_literal(pattern)
+            if literal != null {
+                let t = truth ?? return null
+                if literal ?? false {
+                    return t
+                }
+                return arena.not(t)
+            }
+            let v = number ?? return null
+            let l = lin_term(lit, words, fn(name) { false }, fn(name) { null }, arena.nodes) ?? return null
+            arena.equal(v, l)
+        },
+        MatchPattern::Range { start, end } => {
+            let v = number ?? return null
+            let low = lin_term(start, words, fn(name) { false }, fn(name) { null }, arena.nodes) ?? return null
+            let high = lin_term(end, words, fn(name) { false }, fn(name) { null }, arena.nodes) ?? return null
+            let above = arena.le(low, v)
+            let below = arena.le(v, high)
+            arena.and([above, below])
+        },
+        MatchPattern::Or(alternatives) => {
+            let mut parts: Vec[i64] = []
+            for alternative in alternatives {
+                parts.push(prover_pattern_fact(arena, alternative, truth, number, words) ?? return null)
+            }
+            arena.or(parts)
+        },
+        else => null,
+    }
+}
+
+/// The `true` or `false` a pattern is, if it is one.
+fn prover_bool_literal(pattern: ref MatchPattern) -> bool? sync {
+    return match pattern {
+        MatchPattern::Literal(lit) => match lit {
+            Expr::LitBool(value, _) => value,
+            else => null,
+        },
+        else => null,
+    }
+}
+
+/// Whether a pattern takes every value: `else`, or a bare name.
+fn prover_catch_all(pattern: ref MatchPattern) -> bool sync {
+    return match pattern {
+        MatchPattern::Otherwise => true,
+        MatchPattern::Path(segments) => segments.len() == 1,
+        else => false,
+    }
+}
+
+/// Every name a pattern may bind: a bare name counts, which binds again
+/// at worst a name the walk did not need.
+fn prover_pattern_names(pattern: ref MatchPattern, words: ref winnow_grammar::InternerContext, mut out: collections::BTreeSet[String]) sync {
+    match pattern {
+        MatchPattern::Path(segments) => {
+            if segments.len() == 1 {
+                out.insert(words.resolve(segments[0]).clone())
+            }
+        },
+        MatchPattern::RestNamed(name) => {
+            out.insert(words.resolve(name).clone())
+        },
+        MatchPattern::Tuple { parts, .. } => {
+            for p in parts {
+                prover_pattern_names(p, words, out)
+            }
+        },
+        MatchPattern::List(parts) => {
+            for p in parts {
+                prover_pattern_names(p, words, out)
+            }
+        },
+        MatchPattern::Named { fields, .. } => {
+            for field in fields {
+                prover_pattern_names(field.pat, words, out)
+            }
+        },
+        MatchPattern::Or(alternatives) => {
+            for p in alternatives {
+                prover_pattern_names(p, words, out)
+            }
+        },
+        else => {},
+    }
 }
 
 /// **What one side of an `if` adds**, as one term: the facts it made known,
@@ -2253,10 +2522,10 @@ fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut 
         },
         Stmt::While { .. } => {},
         Stmt::For { .. } => {},
-        // An assignment and an `if` see to their own (D9).
+        // An assignment, an `if` and a `match` see to their own (D9).
         Stmt::Assign { .. } => {},
         else => {
-            if !scope.mutables.is_empty() && !prover_an_if(stmt) {
+            if !scope.mutables.is_empty() && !prover_a_branch(stmt) {
                 for n in assigned_in_statement(stmt, words) {
                     if scope.mutables.contains(n) {
                         scope.rebind(walk.arena, n)
@@ -2308,7 +2577,7 @@ fn prover_follow_lengths(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut s
         Stmt::For { .. } => return,
         else => {},
     }
-    if prover_an_if(stmt) {
+    if prover_a_branch(stmt) {
         return
     }
     let mut lists: Vec[String] = []
@@ -2443,11 +2712,13 @@ fn prover_relength(mut walk: ProverWalk, n: ref String, mut scope: ProverScope) 
     }
 }
 
-/// Whether a statement is an `if` standing as one.
-fn prover_an_if(stmt: ref Stmt) -> bool {
+/// Whether a statement is an `if` or a `match` standing as one: its walk
+/// joins what its sides change (ADR-361 D9).
+fn prover_a_branch(stmt: ref Stmt) -> bool {
     return match stmt {
         Stmt::Expr(expr) => match expr {
             Expr::If { .. } => true,
+            Expr::Match { .. } => true,
             else => false,
         },
         else => false,

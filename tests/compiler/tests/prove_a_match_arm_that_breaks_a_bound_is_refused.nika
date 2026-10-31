@@ -1,0 +1,22 @@
+// #1021: the join after a `match` is one arm's value or another's, so an
+// arm that assigns past the bound the claim after it states is refused.
+enum Size {
+	Small,
+	Medium,
+	Large,
+}
+
+fn width(size: Size) -> i64 {
+	let mut w = 2
+	match size {
+		Size::Small => {},
+		Size::Medium => { w = 5 },
+		Size::Large => { w = 12 },
+	}
+	assert(w >= 2 && w <= 9)
+	return w
+}
+
+fn main() {
+	println(f"{width(Size::Small)}")
+}

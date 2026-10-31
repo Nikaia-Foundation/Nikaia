@@ -1,0 +1,38 @@
+// #1021: what each arm of a `match` assigns reaches the join after it, an
+// arm that leaves drops out, and a whole-number literal or range pattern is
+// a fact of its arm; an arm that assigns nothing keeps the old value
+// (ADR-361 D9).
+enum Size {
+	Small,
+	Medium,
+	Large,
+	Unknown,
+}
+
+fn width(size: Size) -> i64 {
+	let mut w = 2
+	match size {
+		Size::Small => {},
+		Size::Medium => { w = 5 },
+		Size::Large => { w = 9 },
+		Size::Unknown => return 1,
+	}
+	assert(w >= 2 && w <= 9)
+	return w
+}
+
+fn step(n: i64) -> i64 {
+	let mut w = 1
+	match n {
+		0 => {},
+		1..4 => { w = n + 2 },
+		else => { w = 7 },
+	}
+	assert(w >= 1 && w <= 7)
+	return w
+}
+
+fn main() {
+	println(f"{width(Size::Small)} {width(Size::Medium)} {width(Size::Large)} {width(Size::Unknown)}")
+	println(f"{step(0)} {step(3)} {step(9)}")
+}

@@ -2005,7 +2005,7 @@ pub mod bounds_basic {
 }
 pub mod bounds_body {
     #[allow(unused_imports)]
-    pub use super::{breaks, turn_jumps, pinned_in, assigned_in_statement, assigned_in, untracked_in, filled_once, changes_length_in_statement, changes_length_in};
+    pub use super::{breaks, turn_jumps, pinned_in, assigned_in_statement, assigned_in, assigned_in_expr, untracked_in, filled_once, changes_length_in_statement, changes_length_in_expr, changes_length_in};
 }
 pub mod bounds_interval {
     #[allow(unused_imports)]
