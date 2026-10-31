@@ -23,6 +23,35 @@ pub(crate) fn check_function_walks_the_fields_of(here: &ParsedView<'_, '_, '_, '
     false
 }
 
+pub(crate) fn check_function_reflects_on(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, parameter: &str) -> bool {
+    let mut called: collections::BTreeSet<u32> = collections::BTreeSet::new();
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
+                Expr::Path(_, at) => {
+                    let at = *at;
+                    called.insert(at.get());
+                },
+                _ => { },
+            }; },
+            _ => { },
+        }
+    }
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Path(segments, at) => {
+                let at = *at;
+                if segments.len() == 2 && !called.contains(&at.get()) {
+                    let member = here.text(*nikaia_std::index::get(&segments, 1));
+                    if here.text(*nikaia_std::index::get(&segments, 0)) == parameter && (member == "kind" || member == "name") { return true; }
+                }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+
 pub(crate) fn check_function_compared(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>) -> CompareDeclared {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     compare_declared(&asking, &world.here)
@@ -47,6 +76,7 @@ impl CheckState {
                             if check_function_walks_the_fields_of(file, body, &parameter, &member) { walked = Some(parameter.to_string()); }
                         }
                     }
+                    for g in generics.iter() { if walked.is_none() && check_function_reflects_on(file, body, &file.text(g.name)) { walked = Some(file.text(g.name).to_string()); } }
                     let parameter = match walked { Some(__nikaia_value) => __nikaia_value, None => continue };
                     self.walks_fields.insert(file.text(called), parameter);
                 },

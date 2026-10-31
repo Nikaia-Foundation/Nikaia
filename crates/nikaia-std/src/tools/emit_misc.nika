@@ -185,6 +185,42 @@ impl EmitState {
         return signature.params.len() == 1 && signature.params[0].0 == "input"
     }
 
+    /// **Whether a copy writes the type it is made for in place of its
+    /// parameter** (ADR-304 D6): a named type's copy does; one for a type with
+    /// parts, a number or text keeps the parameter, which the language below
+    /// fills from the argument (ADR-330 D2).
+    pub fn copy_substitutes(ref self, on: ref String) -> bool {
+        let kind = self.facts.type_kinds.get(on) ?? return true
+        return kind == "Struct" || kind == "Enum" || kind == "Opaque"
+    }
+
+    /// **The type a path's head stands for**: the copy's type where the head
+    /// is the parameter the copy is made on, else the head as written.
+    pub fn type_named(ref self, world: ref EmitWorld, walk: ref EmitWalk, head: ref String) -> String {
+        let pair = walk.specialising ?? return head.clone()
+        if pair.first == head {
+            return pair.second.clone()
+        }
+        return head.clone()
+    }
+
+    /// **The case of `meta::Type` a side of a kind comparison names**
+    /// (ADR-330 D3): `meta::Type::X` names `X`, `T::kind` the kind of the
+    /// type `T` stands for in this copy.
+    pub fn kind_named(ref self, world: ref EmitWorld, walk: ref EmitWalk, side: ref Expr) -> String {
+        match side {
+            Expr::Path(segments, _) => {
+                if segments.len() == 3 {
+                    return emit_text(world, segments[2])
+                }
+                let ty = self.type_named(world, walk, emit_text(world, segments[0]))
+                return (self.facts.type_kinds.get(ty)?.clone() ?? "Opaque").clone()
+            },
+            else => {},
+        }
+        return ""
+    }
+
     /// The function a shape walk is inside, found by the type it is made for.
     pub fn enclosing_shape_walk(ref self, on: ref String) -> String? {
         for key in self.facts.unrolled.keys() {

@@ -81,6 +81,29 @@ impl EmitState {
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
         signature.params.len() == 1 && nikaia_std::index::get(&signature.params, 0).0 == "input"
     }
+    pub fn copy_substitutes(&self, on: &str) -> bool {
+        let kind = match self.facts.type_kinds.get(on) { Some(__nikaia_value) => __nikaia_value, None => return true };
+        kind == "Struct" || kind == "Enum" || kind == "Opaque"
+    }
+    pub fn type_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, head: &str) -> String {
+        let pair = match walk.specialising.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return head.to_string() };
+        if pair.first == head { return pair.second.to_string(); }
+        head.to_string()
+    }
+    pub fn kind_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, side: &Expr) -> String {
+        match side {
+            Expr::Path(segments, _) => {
+                if segments.len() == 3 { return emit_text(world, *nikaia_std::index::get(&segments, 2)); }
+                let ty = self.type_named(world, walk, &emit_text(world, *nikaia_std::index::get(&segments, 0)));
+                return nikaia_std::index::or(match self.facts.type_kinds.get(&ty) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "Opaque".into()).to_string();
+            },
+            _ => { },
+        }
+        String::from("")
+    }
     pub fn enclosing_shape_walk(&self, on: &str) -> Option<String> {
         for key in self.facts.unrolled.keys() { if key.1 == on { return Some(key.0.to_string()); } }
         None

@@ -426,7 +426,7 @@ impl EmitState {
                 }
                 if has_kept { params.push(format!("__keep: {}nikaia_std::tether::Keep", kept_lt.reference())); }
                 let mut declared: Vec<String> = vec![];
-                if walk.specialising.is_some() {
+                if walk.specialising.is_some() && self.copy_substitutes(&nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string()) {
                     if has_dsl { declared.push(String::from("NikaiaDsl")); }
                     for each in open.iter() { declared.push(each.to_string()); }
                 } else {

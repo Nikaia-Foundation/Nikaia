@@ -1,0 +1,54 @@
+// `T::name` and `T::kind` are known while the program is built (ADR-330 D2,
+// D3, #859 step 3): a function that asks them is written once per type, and a
+// comparison of two kinds is decided in each copy.
+
+use std::collections
+
+struct User {
+	name: String,
+	age: i64,
+}
+
+enum Color {
+	Green,
+}
+
+fn double(x: i64) -> i64 {
+	return x * 2
+}
+
+fn describe[T](_value: T) {
+	let mut kind = "other"
+	if T::kind == meta::Type::I64 {
+		kind = "I64"
+	}
+	if T::kind == meta::Type::Text {
+		kind = "Text"
+	}
+	if T::kind != meta::Type::Bool && T::kind == meta::Type::F64 {
+		kind = "F64"
+	}
+	println(f"{T::name}: {kind}")
+}
+
+fn main() {
+	describe(User { name: "a", age: 1 })
+	describe(Color::Green)
+	describe(7)
+	describe("text")
+	describe(1.5)
+	describe([1, 2, 3])
+	let maybe: i64? = 3
+	describe(maybe)
+	let mut ages: collections::HashMap[String, i64] = collections::HashMap()
+	ages["a"] = 1
+	describe(ages)
+	describe((1, "a"))
+	describe(double)
+	println(User::name)
+	if User::kind == meta::Type::I64 {
+		println("User is a number")
+	} else {
+		println("User is not a number")
+	}
+}

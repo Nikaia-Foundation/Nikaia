@@ -274,6 +274,11 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_binary<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let site = at.start as i64;
+        if self.facts.kind_compares.contains(&node_key(node)) {
+            let same = self.kind_named(world, &walk, lhs) == self.kind_named(world, &walk, rhs);
+            out.push(if same == (op == BinaryOp::Eq) { "true" } else { "false" });
+            return Ok(());
+        }
         let mut wide = flow;
         if !flow.widen && !flow.inferred && host.wants_widening(node) { wide = flow.widened(); }
         if (op == BinaryOp::Eq || op == BinaryOp::Ne) && self.facts.path_comparisons.contains(&site) {

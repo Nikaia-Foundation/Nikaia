@@ -243,7 +243,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             check_core_expr_kept_copy(state, world, expr, read)
             read
         },
-        Expr::Path(segments, _) => check_core_expr_path(state, world, segments, span),
+        Expr::Path(segments, _) => check_reflect_path(state, world, expr, segments, span) ?? check_core_expr_path(state, world, segments, span),
         Expr::Block(block, _) => check_core_block(state, world, host, block),
         Expr::Unsafe(block, _) => check_core_flow_unsafe(state, world, host, block),
         Expr::Overlap(block, _) => check_core_flow_overlap(state, world, host, block, span),
@@ -263,7 +263,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::With { base, fields, .. } => check_core_with(state, world, host, expr, base, fields, span),
         Expr::Closure { params, mutable, body, .. } => check_core_ops_closure(state, world, host, params, mutable, body, span),
         Expr::Unary { op, expr: inner, .. } => check_core_expr_unary(state, world, host, expr, op, inner, span),
-        Expr::Binary { op, lhs, rhs, span: at, .. } => check_core_ops_binary(state, world, host, op, lhs, rhs, at, span),
+        Expr::Binary { op, lhs, rhs, span: at, .. } => check_reflect_compared(state, world, expr, op, lhs, rhs) ?? check_core_ops_binary(state, world, host, op, lhs, rhs, at, span),
         Expr::Cast { expr: inner, ty, .. } => check_core_cast(state, world, host, inner, ty, span),
         Expr::Tuple(parts, _) => check_core_tuple(state, world, host, parts, span),
         Expr::ListLit { items, .. } => check_core_list_literal(state, world, host, items, span),

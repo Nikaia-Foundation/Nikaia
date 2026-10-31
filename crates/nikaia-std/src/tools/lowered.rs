@@ -2164,7 +2164,7 @@ pub mod check_core_ops {
 }
 pub mod check_core_pilot {
     #[allow(unused_imports)]
-    pub use super::{check_specialised, check_core_grammar_call, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_a_mut_parameter_given_away};
+    pub use super::{check_specialised, check_core_grammar_call, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_a_mut_parameter_given_away, check_reflect_kind, check_reflect_compared, check_reflect_path};
 }
 pub mod check_core_places {
     #[allow(unused_imports)]

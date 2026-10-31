@@ -14,7 +14,10 @@ impl EmitState {
                 let mut copies: Vec<String> = vec![];
                 for ((written, on), _) in self.facts.unrolled.iter() { if *written == shape { copies.push(on.to_string()); } }
                 for on in copies.iter() {
-                    let walked = self.walked_parameter(world, &item.node).to_string();
+                    let walked = nikaia_std::index::or(match self.facts.walks_fields.get(&shape) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || self.walked_parameter(world, &item.node).to_string().into());
                     walk.specialising = Some(EmitPair { first: walked, second: on.to_string() });
                     let st = out.mark();
                     host.refuse_unwritten_item(item)?;

@@ -1,0 +1,9 @@
+error[NK1231]: `T::kind` is a `meta::Type`, which exists only while the program is built.
+  --> tests/type_kind_kept_at_run_time.nika:5:2
+   |
+ 5 | 	let kind = T::kind
+   |  ^^^^^^^^^^^^^^^^^^
+   |
+   = note: A `meta::Type` carries types, and the running program holds no types: it cannot be kept in a value or handed to code that runs then.
+   = help: Decide it while building: compare it, `T::kind == meta::Type::I64`, or print `T::name`.
+1 type error

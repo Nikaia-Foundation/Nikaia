@@ -81,6 +81,13 @@ pub struct CheckFacts {
     pub unrolled: collections::BTreeMap[(String, String), Vec[FieldContract]],
     pub walks_fields: collections::BTreeMap[String, String],
     pub unrolled_calls: collections::BTreeMap[i64, String],
+    /// **The kind of each type a copy is made for, or a path names**
+    /// (ADR-330 D3): `Vec[i64]` is `List`, keyed by the type as written.
+    pub type_kinds: collections::BTreeMap[String, String],
+    /// The comparisons of two kinds, decided per copy (ADR-330 D6).
+    pub kind_compares: collections::BTreeSet[i64],
+    /// The paths that are `T::name` (ADR-330 D2).
+    pub reflected_names: collections::BTreeSet[i64],
     pub fallible_loops: collections::BTreeSet[i64],
     pub pausing_walks: collections::BTreeSet[i64],
     pub pausing_loops: collections::BTreeSet[i64],
@@ -453,6 +460,9 @@ impl CheckFacts {
             unrolled: collections::BTreeMap(),
             walks_fields: collections::BTreeMap(),
             unrolled_calls: collections::BTreeMap(),
+            type_kinds: collections::BTreeMap(),
+            kind_compares: collections::BTreeSet(),
+            reflected_names: collections::BTreeSet(),
             fallible_loops: collections::BTreeSet(),
             pausing_walks: collections::BTreeSet(),
             pausing_loops: collections::BTreeSet(),

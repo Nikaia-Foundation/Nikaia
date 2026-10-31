@@ -86,6 +86,9 @@ impl CheckState {
     pub fn a_reflected_variant_has_two_members(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A variant from `T::variants` has no `{}`.", member), vec![String::from("A variant from `T::variants` has `.name`, its name as text, `.is(value)`, whether a value is that variant, and `.attribute(X)` and `.attributes(X)`, what its attributes say.")], Some(String::from("Use `.name`, `.is(value)`, `.attribute(X)` or `.attributes(X)`. To read what a variant carries, use a `match`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_kind_kept_at_run_time(&mut self, written: &str, span: &Span) { self.findings.push(check_refusal("NK1231", span, format!("`{}` is a `meta::Type`, which exists only while the program is built.", written), vec![String::from("A `meta::Type` carries types, and the running program holds no types: it cannot be kept in a value or handed to code that runs then.")], Some(String::from("Decide it while building: compare it, `T::kind == meta::Type::I64`, or print `T::name`.")))); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_reflected_field_has_two_members(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A field from `T::fields` has no `{}`.", member), vec![String::from("A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, and `.attribute(X)` and `.attributes(X)`, what its attributes say.")], Some(String::from("Use `.name`, `.of(value)`, `.default`, `.attribute(X)` or `.attributes(X)`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

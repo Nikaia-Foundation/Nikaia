@@ -34,7 +34,7 @@ impl EmitState {
                     }
                 }
                 for on in copies {
-                    let walked = self.walked_parameter(world, item.node).clone()
+                    let walked = self.facts.walks_fields.get(shape)?.clone() ?? self.walked_parameter(world, item.node).clone()
                     walk.specialising = EmitPair { first: walked, second: on.clone() }
                     let st = out.mark()
                     host.refuse_unwritten_item(item)

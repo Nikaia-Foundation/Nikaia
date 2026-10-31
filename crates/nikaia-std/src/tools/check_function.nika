@@ -40,6 +40,37 @@ fn check_function_walks_the_fields_of(here: ref ParsedView, body: ref Block, par
     return false
 }
 
+/// **Whether this body asks `P::kind` or `P::name`** (ADR-330 D2), other than
+/// as a function it calls.
+fn check_function_reflects_on(here: ref ParsedView, body: ref Block, parameter: ref String) -> bool {
+    let mut called: collections::BTreeSet[u32] = collections::BTreeSet()
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Call { func, .. } => match func {
+                Expr::Path(_, at) => {
+                    called.insert(at.get())
+                },
+                else => {},
+            },
+            else => {},
+        }
+    }
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Path(segments, at) => {
+                if segments.len() == 2 && !called.contains(at.get()) {
+                    let member = here.text(segments[1])
+                    if here.text(segments[0]) == parameter && (member == "kind" || member == "name") {
+                        return true
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
 /// The comparison asked over what the state has collected.
 fn check_function_compared(world: ref CheckWorld, beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]]) -> CompareDeclared {
     let asking = CheckComparable { beside: beside, structs: structs, enums: enums, payloads: payloads, parameters: parameters, own: world.own, library: world.library }
@@ -64,6 +95,13 @@ impl CheckState {
                             if check_function_walks_the_fields_of(file, body, parameter, member) {
                                 walked = parameter.clone()
                             }
+                        }
+                    }
+                    // **A function that asks a type its kind or name**
+                    // is a copy per type as well (ADR-330 D2).
+                    for g in generics {
+                        if walked == null && check_function_reflects_on(file, body, file.text(g.name)) {
+                            walked = file.text(g.name).clone()
                         }
                     }
                     let parameter = walked ?? continue

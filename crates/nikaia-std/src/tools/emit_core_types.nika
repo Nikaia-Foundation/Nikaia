@@ -119,7 +119,7 @@ impl EmitState {
         // The parameter stands for the type, while a copy is written
         // (ADR-304 D6). The walk's cell is let go before the recursion.
         let parameter = (walk.specialising?.first ?? "").clone()
-        if walk.specialising != null && ty.generics.len() == 0 && ty.code == null && name == parameter {
+        if walk.specialising != null && ty.generics.len() == 0 && ty.code == null && name == parameter && self.copy_substitutes((walk.specialising?.second ?? "").clone()) {
             let on = (walk.specialising?.second ?? "").clone()
             let held = walk.specialising?.clone()
             walk.specialising = null

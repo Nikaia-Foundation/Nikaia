@@ -677,7 +677,7 @@ impl EmitState {
                 // copy has no type parameter left (ADR-304 D6), and a length a
                 // parameter left open is a `const` parameter (ADR-184 D3).
                 let mut declared: Vec[String] = []
-                if walk.specialising != null {
+                if walk.specialising != null && self.copy_substitutes((walk.specialising?.second ?? "").clone()) {
                     if has_dsl {
                         declared.push("NikaiaDsl")
                     }

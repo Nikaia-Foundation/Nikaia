@@ -1,0 +1,11 @@
+// A `meta::Type` exists only while the program is built (ADR-330 D6): one
+// kept in a value of the running program is `NK1231`.
+
+fn describe[T](_value: T) {
+	let kind = T::kind
+	println(T::name)
+}
+
+fn main() {
+	describe(1)
+}

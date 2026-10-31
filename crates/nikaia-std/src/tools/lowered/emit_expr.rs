@@ -208,6 +208,10 @@ impl EmitState {
             Expr::LitNull(_) => { out.push("None"); },
             Expr::Variable(name, _) => { let name = *name; self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope)?; },
             Expr::Path(segments, _) => {
+                if self.facts.reflected_names.contains(&at) {
+                    out.push(&self.type_named(world, &walk, &emit_text(world, *nikaia_std::index::get(&segments, 0))).quoted());
+                    return Ok(());
+                }
                 if self.emit_expr_kept_function(world, walk, out, host, node, depth, flow, scope)? { return Ok(()); }
                 let mut path: Vec<String> = vec![];
                 for s in segments.iter() {

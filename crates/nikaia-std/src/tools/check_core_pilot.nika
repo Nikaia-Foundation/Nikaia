@@ -14,7 +14,12 @@ use std::collections
 /// The name of the copy of `function` that is specialised on the type `on`:
 /// the emitter writes the same name at the call and at the definition.
 pub fn check_specialised(function: ref String, on: ref String) -> String {
-    let tail: String = on.replace("::", "__")
+    // A type with parts is spelled into a name the language below accepts
+    // (ADR-330 D2): `Vec[i64]` is `Vec_i64_`, `i64?` is `i64_maybe`.
+    let mut tail: String = on.clone()
+    for (from, to) in [("::", "__"), (" -> ", "_to_"), (", ", "_"), ("[", "_"), ("]", "_"), ("(", "_of_"), (")", "_"), ("?", "_maybe"), (" ", "_")] {
+        tail = tail.replace(from, to)
+    }
     return f"{function}__{tail}"
 }
 
@@ -143,11 +148,41 @@ pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: r
     let before = state.findings.len()
     let given = check_core_expr(state, world, host, args[0], span)
     state.findings.truncate(before)
-    let on: String = match given {
+    // **A type of no shape is a copy too** (ADR-330 D2): a function that asks
+    // `T::kind` or `T::name` is written once per type, with no field to walk.
+    let named: String = match given {
         Ty::Named { name, .. } => name.clone(),
-        else => return,
+        else => "",
     }
-    let fields = state.shape_of(world.here, world, on) ?? return
+    let mut on: String = named.clone()
+    let mut fields: Vec[FieldContract] = []
+    let shape: Vec[FieldContract]? = state.shape_of(world.here, world, named)
+    let shaped = shape != null
+    if shaped {
+        fields = shape ?? []
+    } else {
+        // An unknown type is an integer literal's, else no copy is made.
+        let literal = match args[0] {
+            Expr::LitInt { .. } => true,
+            else => false,
+        }
+        let unknown = match given {
+            Ty::Unknown => true,
+            else => false,
+        }
+        if unknown && !literal {
+            return
+        }
+        on = check_reflect_written(given)
+        if on == "" {
+            return
+        }
+    }
+    let mut kind = check_reflect_kind(state, check_reflect_plain(given))
+    if shaped && kind == "Opaque" {
+        kind = "Struct"
+    }
+    state.facts.type_kinds.insert(on.clone(), kind)
     state.facts.unrolled_calls.insert(call, check_specialised(name, on))
     state.facts.unrolled.insert((name.clone(), on.clone()), fields)
 }
@@ -195,4 +230,171 @@ fn check_core_grammar_input_refused(key: ref String, given: ref Ty, span: ref Sp
     let notes: Vec[String] = ["A grammar reads text or bytes; the argument decides which."]
     let help: String = "Hand it the text or the bytes to parse."
     return check_refusal("NK1282", span, message, notes, help)
+}
+
+/// **The cases of `meta::Type` that carry no type** (ADR-330 D3): the ones a
+/// path can name before a type can be passed as an argument (#859 step 2).
+fn check_reflect_bare_kind(case: ref String) -> bool {
+    return ["I64", "I32", "U8", "U64", "U32", "F64", "Bool", "Text", "Bytes", "Scalar"].contains(case)
+}
+
+/// **What `T::kind` is for a type** (ADR-330 D3, ADR-332 D1): the case of
+/// `meta::Type` it takes. `ref A`, `Shared[A]` and `SharedMut[A]` have the kind
+/// of `A`; what the program cannot see inside is `Opaque`.
+pub fn check_reflect_kind(state: ref CheckState, ty: ref Ty) -> String {
+    return match ty {
+        Ty::Nullable(_) => "Maybe",
+        Ty::Tuple(_) => "Tuple",
+        Ty::Fn { .. } => "Fn",
+        Ty::Named { name, args, .. } => check_reflect_named_kind(state, name, args),
+        else => "Opaque",
+    }
+}
+
+fn check_reflect_named_kind(state: ref CheckState, name: ref String, args: ref Vec[Ty]) -> String {
+    if (name == "Shared" || name == "SharedMut") && args.len() == 1 {
+        return check_reflect_kind(state, args[0])
+    }
+    if state.structs.contains_key(name) {
+        return "Struct"
+    }
+    if state.enums.contains_key(name) {
+        return "Enum"
+    }
+    return match name {
+        "i64" => "I64",
+        "i32" => "I32",
+        "u8" => "U8",
+        "u64" => "U64",
+        "u32" => "U32",
+        "f64" => "F64",
+        "bool" => "Bool",
+        "String" => "Text",
+        "str" => "Text",
+        "Bytes" => "Bytes",
+        "scalar" => "Scalar",
+        "Vec" => "List",
+        "List" => "List",
+        "HashMap" => "Map",
+        "Array" => "Array",
+        else => "Opaque",
+    }
+}
+
+/// **The type a copy is made for, as the program writes it** (ADR-330 D2,
+/// `T::name`): each name as its declaration writes it, without the module in
+/// front; without the `ref` of a view, which is how it is reached and not what
+/// it is (D8); an integer nothing else types is an `i64` (Part I 2.4).
+fn check_reflect_plain(ty: ref Ty) -> Ty {
+    return match ty {
+        Ty::Named { name, args, .. } => {
+            let mut plain: String = name.split("::").last()?.clone() ?? name.clone()
+            if plain == "str" {
+                plain = "String"
+            }
+            Ty::Named { name: plain, args: args.iter().map(fn(a) { check_reflect_plain(a) }).collect(), view: false }
+        },
+        Ty::Nullable(inner) => Ty::Nullable(check_reflect_plain(inner)),
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(fn(a) { check_reflect_plain(a) }).collect()),
+        Ty::Unknown => Ty::Named { name: "i64", args: [], view: false },
+        else => ty.clone(),
+    }
+}
+
+/// The text of [`check_reflect_plain`], `""` where the type is not known.
+fn check_reflect_written(ty: ref Ty) -> String {
+    return match ty {
+        Ty::Var { .. } => "",
+        else => check_reflect_plain(ty).text(),
+    }
+}
+
+/// Whether `ty` names a type `::kind` and `::name` can be asked of: a type
+/// parameter, a type the program declares, or one of the language's own.
+fn check_reflect_a_type(state: ref CheckState, ty: ref String) -> bool {
+    if state.type_parameters.contains_key(ty) || state.structs.contains_key(ty) || state.enums.contains_key(ty) {
+        return true
+    }
+    return check_reflect_named_kind(state, ty, []) != "Opaque"
+}
+
+/// **The kind a side of a comparison names**, where it is one: the case of
+/// `meta::Type::X`, `?` for a type parameter's (decided per copy), the case
+/// of a named type's `X::kind` (kept for the emitter).
+fn check_reflect_kind_of(mut state: CheckState, world: ref CheckWorld, side: ref Expr) -> String? sync {
+    let segments = match side {
+        Expr::Path(segments, _) => segments,
+        else => return null,
+    }
+    if segments.len() == 3 {
+        let case = world.words.resolve(segments[2])
+        if world.words.resolve(segments[0]) == "meta" && world.words.resolve(segments[1]) == "Type" && check_reflect_bare_kind(case) {
+            return case.clone()
+        }
+        return null
+    }
+    if segments.len() != 2 || world.words.resolve(segments[1]) != "kind" {
+        return null
+    }
+    let ty = world.words.resolve(segments[0]).clone()
+    if state.is_variant(ty, "kind") || !check_reflect_a_type(state, ty) {
+        return null
+    }
+    if state.type_parameters.contains_key(ty) {
+        return "?"
+    }
+    let kind = check_reflect_named_kind(state, ty, [])
+    state.facts.type_kinds.insert(ty.clone(), kind.clone())
+    return kind
+}
+
+/// **`T::kind == meta::Type::X`, decided while the program is built**
+/// (ADR-330 D3, D6): both sides are kinds, and the comparison is a `bool` the
+/// emitter writes per copy. `null` where it is not such a comparison.
+pub fn check_reflect_compared(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr) -> Ty? sync {
+    let equality = match op {
+        BinaryOp::Eq | BinaryOp::Ne => true,
+        else => false,
+    }
+    if !equality {
+        return null
+    }
+    let left = check_reflect_kind_of(state, world, lhs) ?? return null
+    let right = check_reflect_kind_of(state, world, rhs) ?? return null
+    if left == "" || right == "" {
+        return null
+    }
+    state.facts.kind_compares.insert(id_of(expr) as i64)
+    return Ty::Named { name: "bool", args: [], view: false }
+}
+
+/// **`T::name` and `T::kind` as a value** (ADR-330 D2, D6): the name is text
+/// known while building; a kind anywhere but beside `==` would reach the
+/// running program, `NK1231`. `null` where the path is not one of them.
+pub fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, segments: ref Vec[winnow_grammar::Symbol], span: ref Span) -> Ty? sync {
+    let meta = Ty::Named { name: "meta::Type", args: [], view: false }
+    if segments.len() == 3 {
+        if world.words.resolve(segments[0]) == "meta" && world.words.resolve(segments[1]) == "Type" && check_reflect_bare_kind(world.words.resolve(segments[2])) {
+            state.a_kind_kept_at_run_time(f"meta::Type::{world.words.resolve(segments[2])}", span)
+            return meta
+        }
+        return null
+    }
+    if segments.len() != 2 {
+        return null
+    }
+    let ty = world.words.resolve(segments[0]).clone()
+    let member = world.words.resolve(segments[1]).clone()
+    if member != "kind" && member != "name" {
+        return null
+    }
+    if state.is_variant(ty, member) || resolve_call(world, f"{ty}::{member}") != null || !check_reflect_a_type(state, ty) {
+        return null
+    }
+    if member == "name" {
+        state.facts.reflected_names.insert(id_of(expr) as i64)
+        return Ty::Named { name: "str", args: [], view: true }
+    }
+    state.a_kind_kept_at_run_time(f"{ty}::kind", span)
+    return meta
 }

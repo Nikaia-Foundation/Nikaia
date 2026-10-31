@@ -317,6 +317,11 @@ impl EmitState {
             Expr::LitNull(_) => out.push("None"),
             Expr::Variable(name, _) => self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope),
             Expr::Path(segments, _) => {
+                // **`T::name` is text known while building** (ADR-330 D2).
+                if self.facts.reflected_names.contains(at) {
+                    out.push(self.type_named(world, walk, emit_text(world, segments[0])).quoted())
+                    return
+                }
                 if self.emit_expr_kept_function(world, walk, out, host, node, depth, flow, scope) {
                     return
                 }

@@ -424,6 +424,12 @@ impl EmitState {
     /// `a + b`, `a < b`, and the many shapes a comparison or a sum takes below.
     pub fn emit_core_binary[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let site = at.start as i64
+        // **Two kinds compared, decided while building** (ADR-330 D3, D6).
+        if self.facts.kind_compares.contains(node_key(node)) {
+            let same = self.kind_named(world, walk, lhs) == self.kind_named(world, walk, rhs)
+            out.push(if same == (op == BinaryOp::Eq) { "true" } else { "false" })
+            return
+        }
         // **A constant sum takes the first type that holds it**, the way a
         // constant does (ADR-285 D22). Asked only on the outermost expression that
         // folds - `widen` reaching inward is what makes the operands agree - and

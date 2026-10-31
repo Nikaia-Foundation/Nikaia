@@ -64,7 +64,7 @@ impl EmitState {
             return format!("({})", parts.join(", "));
         }
         let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string();
-        if walk.specialising.is_some() && ty.generics.is_empty() && (*ty.code).is_none() && name == parameter {
+        if walk.specialising.is_some() && ty.generics.is_empty() && (*ty.code).is_none() && name == parameter && self.copy_substitutes(&nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string()) {
             let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string();
             let held = match walk.specialising.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),

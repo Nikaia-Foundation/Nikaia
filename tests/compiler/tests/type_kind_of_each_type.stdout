@@ -1,0 +1,12 @@
+User: other
+Color: other
+i64: I64
+String: Text
+f64: F64
+Vec[i64]: other
+i64?: other
+HashMap[String, i64]: other
+(i64, String): other
+fn(i64) -> i64 sync: other
+User
+User is not a number
