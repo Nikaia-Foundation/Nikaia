@@ -28,11 +28,8 @@
 //! [ADR-310](../../../docs/specification/adr/adr-310.md) already bounds. What
 //! is new here is neither the permission nor the input.
 
-use std::cell::RefCell;
 use std::path::{Path, PathBuf};
-
-use nikaia_std::rt::exec::block_on;
-use nikaia_std::tools::grammar_run::{GrammarRunHost, grammar_run_compile_and_run};
+use std::process::Command;
 
 use crate::ast::Item;
 use crate::contracts::ty::Ty;
@@ -157,22 +154,90 @@ impl Workshop {
             }
             running.push(ask.grammar.to_string());
         }
-        let host = Host {
-            parsed,
-            ask,
-            refused: RefCell::new(None),
-        };
-        let outcome = block_on(grammar_run_compile_and_run(&host, at, ask.input));
+        let outcome = self.compile_and_run(at, parsed, ask);
         if let Ok(mut running) = self.running.lock() {
             running.pop();
         }
-        // **The driver's own refusal comes back as it was**: the lowered
-        // function sees only that the driver threw, and the host kept why.
-        match (host.refused.into_inner(), outcome) {
-            (Some(wall), _) => Err(wall),
-            (None, outcome) => outcome.map_err(|thrown| thrown.split().0),
+        outcome
+    }
+
+    fn compile_and_run(&self, at: &Path, parsed: &Parsed, ask: &Ask<'_>) -> Result<String, Wall> {
+        let program = driver(parsed, ask)?;
+        // **Keyed on what went into it** — the driver text carries the
+        // grammar's lowering, the types it uses and the dump, so a digest of it
+        // is a digest of everything this sub-project is.
+        let key = crate::assets::digest(program.as_bytes());
+        let dir = at.join(&key);
+        let source = dir.join("src").join("main.rs");
+        write_if_changed(&source, &program)?;
+        write_if_changed(&dir.join("Cargo.toml"), &manifest(&key, &program))?;
+
+        // **One target directory for every parser on the machine**: what a
+        // parser depends on - `std`, `winnow`, the grammar runtime - is the
+        // same for all of them, and under each project's workshop it was
+        // compiled again for every new project (half a minute before the
+        // first grammar could run). Each parser is a crate of its own name
+        // (`p<key>`), so they share the directory without meeting.
+        let target = shared_target();
+        let built = Command::new(cargo())
+            .current_dir(orchestrator::cache::Layout::where_tools_start())
+            .arg("build")
+            .arg("--quiet")
+            .arg("--manifest-path")
+            .arg(dir.join("Cargo.toml"))
+            .arg("--target-dir")
+            .arg(&target)
+            .output()
+            .map_err(|error| Wall::DidNotBuild {
+                detail: format!("running cargo: {error}"),
+            })?;
+        if !built.status.success() {
+            return Err(Wall::DidNotBuild {
+                detail: String::from_utf8_lossy(&built.stderr).to_string(),
+            });
+        }
+
+        // **The bytes go in a file**, because that is what a parser is pointed
+        // at and what the diagnostic's line and column are counted against.
+        let input = dir.join("input");
+        write_if_changed(&input, ask.input)?;
+
+        let binary = target.join("debug").join(format!("p{key}"));
+        let ran = Command::new(&binary)
+            .arg(&input)
+            .output()
+            .map_err(|error| Wall::DidNotBuild {
+                detail: format!("running {}: {error}", binary.display()),
+            })?;
+        match ran.status.success() {
+            true => Ok(String::from_utf8_lossy(&ran.stdout).trim().to_string()),
+            false => Err(Wall::Refused {
+                detail: String::from_utf8_lossy(&ran.stderr).to_string(),
+            }),
         }
     }
+}
+
+fn cargo() -> String {
+    std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string())
+}
+
+/// **Written only when it changed**, which is what keeps Cargo's own freshness
+/// working: a file rewritten with identical bytes is newer than the fingerprint
+/// and rebuilds for ever. The build cache learned this the same way
+/// ([ADR-021](../../../docs/specification/adr/adr-021.md)).
+fn write_if_changed(path: &Path, text: &str) -> Result<(), Wall> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| Wall::DidNotBuild {
+            detail: format!("creating {}: {error}", parent.display()),
+        })?;
+    }
+    if std::fs::read_to_string(path).is_ok_and(|held| held == text) {
+        return Ok(());
+    }
+    std::fs::write(path, text).map_err(|error| Wall::DidNotBuild {
+        detail: format!("writing {}: {error}", path.display()),
+    })
 }
 
 /// The sub-project's manifest.
@@ -201,37 +266,6 @@ fn shared_target() -> PathBuf {
         .join(&compiler[..16]);
     orchestrator::cache::use_entry(&entry);
     entry.join("target")
-}
-
-/// What the lowered build and run (`tools/grammar_run.nika`, GR) asks of the
-/// compiler: the driver, the manifest and the two directories.
-struct Host<'a> {
-    parsed: &'a Parsed,
-    ask: &'a Ask<'a>,
-    /// Why the driver refused, handed back after the run.
-    refused: RefCell<Option<Wall>>,
-}
-
-impl GrammarRunHost for Host<'_> {
-    fn driver(&self) -> Result<String, Box<dyn std::error::Error>> {
-        driver(self.parsed, self.ask).map_err(|wall| {
-            let message = wall.to_string();
-            *self.refused.borrow_mut() = Some(wall);
-            message.into()
-        })
-    }
-
-    fn manifest(&self, key: &str, program: &str) -> String {
-        manifest(key, program)
-    }
-
-    fn shared_target(&self) -> PathBuf {
-        shared_target()
-    }
-
-    fn where_tools_start(&self) -> PathBuf {
-        orchestrator::cache::Layout::where_tools_start()
-    }
 }
 
 fn manifest(key: &str, program: &str) -> String {
