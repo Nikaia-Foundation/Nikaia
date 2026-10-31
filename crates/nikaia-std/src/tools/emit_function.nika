@@ -607,9 +607,11 @@ impl EmitState {
                     } else if by_three && plain_list && spelled.starts_with("Vec<") {
                         let inner = (spelled.strip_prefix("Vec<") ?? "").strip_suffix(">") ?? ""
                         spelled = f"[{inner}]"
-                    } else if reference == "" && plain_list && spelled.starts_with("&Vec<") {
-                        let inner = (spelled.strip_prefix("&Vec<") ?? "").strip_suffix(">") ?? ""
-                        spelled = f"&[{inner}]"
+                    } else if reference == "" && plain_list && (spelled.starts_with("&Vec<") || spelled.starts_with("&'r Vec<")) {
+                        // `&Vec<T>`, or `&'r Vec<T>` where the result shares
+                        // a lifetime with it (#1016); a stored `&'a` and a
+                        // kept `&'k` stay as the field or keep spells them.
+                        spelled = a_list_read_as_a_slice(spelled)
                     }
                     // **A `ref Bytes` the body keeps takes the `Bytes` with its
                     // owner** (ADR-373 D1, D4).

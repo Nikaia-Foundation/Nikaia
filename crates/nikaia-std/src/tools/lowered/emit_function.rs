@@ -380,10 +380,7 @@ impl EmitState {
                     if by_four && plain_bytes { spelled = String::from("[u8]"); } else if by_four && plain_text { spelled = String::from("str"); } else if by_three && plain_list && spelled.starts_with("Vec<") {
                         let inner = nikaia_std::index::or(nikaia_std::index::or(spelled.strip_prefix("Vec<"), || "").strip_suffix('>'), || "");
                         spelled = format!("[{}]", inner);
-                    } else if reference == "" && plain_list && spelled.starts_with("&Vec<") {
-                        let inner = nikaia_std::index::or(nikaia_std::index::or(spelled.strip_prefix("&Vec<"), || "").strip_suffix('>'), || "");
-                        spelled = format!("&[{}]", inner);
-                    }
+                    } else if reference == "" && plain_list && (spelled.starts_with("&Vec<") || spelled.starts_with("&'r Vec<")) { spelled = a_list_read_as_a_slice(spelled); }
                     if plain_bytes && self.emit_fn_keeps_bytes(&key, at) {
                         let stripped = spelled.strip_suffix("[u8]");
                         match stripped {

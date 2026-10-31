@@ -154,10 +154,19 @@ pub fn is_length(method: &str, args: &[Expr]) -> bool { method == "len" && args.
 pub fn is_count(callee: &str, at: i64) -> bool { callee == "repeat" && at == 0 }
 
 pub fn a_list_read_as_a_slice(written: String) -> String {
-    if written.starts_with("&Vec<") && written.ends_with('>') {
-        let rest = nikaia_std::index::or(written.strip_prefix("&Vec<"), || "");
-        let element = nikaia_std::index::or(rest.strip_suffix('>'), || "");
-        return format!("&[{}]", element);
+    if !written.starts_with('&') || !written.ends_with('>') { return written; }
+    let after = nikaia_std::index::or(written.strip_prefix('&'), || "");
+    let mut lead: String = String::from("&");
+    let mut rest: String = after.to_string();
+    if after.starts_with('\'') {
+        let space = match nikaia_std::search::find(&after, &" ", 0) { Some(__nikaia_value) => __nikaia_value, None => return written };
+        lead = format!("&{} ", nikaia_std::index::get(&after, nikaia_std::index::at(0..space)));
+        rest = nikaia_std::index::get(&after, nikaia_std::index::at(space + 1..)).to_string();
+    }
+    if rest.starts_with("Vec<") {
+        let inner = nikaia_std::index::or(rest.strip_prefix("Vec<"), || "");
+        let element = nikaia_std::index::or(inner.strip_suffix('>'), || "");
+        return format!("{}[{}]", lead, element);
     }
     written
 }

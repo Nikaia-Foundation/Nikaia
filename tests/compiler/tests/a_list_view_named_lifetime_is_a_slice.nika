@@ -1,0 +1,19 @@
+fn longer(a: ref Vec[i64], b: ref Vec[i64]) -> ref Vec[i64] {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+fn twice(a: ref Vec[i64]) -> i64 {
+    return longer(a, a).len()
+}
+fn typed(a: ref Vec[i64]) -> i64 {
+    let w: ref Vec[i64] = a
+    return w.len()
+}
+fn main() {
+    let v = [1, 2]
+    println(f"{twice(v)}")
+    println(f"{typed([4, 5, 6])}")
+    println(f"{longer(v, [7]).len()}")
+}

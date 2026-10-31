@@ -483,7 +483,7 @@ pub(crate) fn check_core_places_a_literal_field<H: CheckHost>(state: &mut CheckS
     let mut code_field = false;
     let mut expected: Option<Ty> = None;
     if declared.is_some() {
-        let d: &Vec<FieldContract> = match declared { Some(__nikaia_value) => __nikaia_value, None => return true };
+        let d: &[FieldContract] = match declared { Some(__nikaia_value) => __nikaia_value, None => return true };
         for f in d.iter() { if f.name == field && check_core_stmt_holds_code(&f.ty) { code_field = true; } }
         for f in d.iter() {
             if f.name == field {
@@ -510,7 +510,7 @@ pub(crate) fn check_core_places_a_literal_field<H: CheckHost>(state: &mut CheckS
     }
     if code_field { check_core_places_stored(state, world, host, (init.value).as_ref(), &format!("{}.{}", name, field)); }
     if declared.is_none() { return true; }
-    let d: &Vec<FieldContract> = match declared { Some(__nikaia_value) => __nikaia_value, None => return true };
+    let d: &[FieldContract] = match declared { Some(__nikaia_value) => __nikaia_value, None => return true };
     check_core_places_a_declared_field(state, world, host, expr, name, d, (init.value).as_ref(), &field, &given, bound, span)
 }
 

@@ -209,12 +209,24 @@ pub fn is_count(callee: ref String, at: i64) -> bool {
 }
 
 /// A list a function value only reads is a slice (#458): `&Vec<T>` written
-/// as `&[T]`.
+/// as `&[T]`, and with a named lifetime `&'r Vec<T>` as `&'r [T]` (#1016);
+/// `&mut Vec<T>` stays.
 pub fn a_list_read_as_a_slice(written: String) -> String {
-    if written.starts_with("&Vec<") && written.ends_with(">") {
-        let rest = written.strip_prefix("&Vec<") ?? ""
-        let element = rest.strip_suffix(">") ?? ""
-        return f"&[{element}]"
+    if !written.starts_with("&") || !written.ends_with(">") {
+        return written
+    }
+    let after = written.strip_prefix("&") ?? ""
+    let mut lead: String = "&"
+    let mut rest: String = after.clone()
+    if after.starts_with("'") {
+        let space = after.find(" ") ?? return written
+        lead = f"&{after[0..<space]} "
+        rest = after[space + 1..<after.len()].clone()
+    }
+    if rest.starts_with("Vec<") {
+        let inner = rest.strip_prefix("Vec<") ?? ""
+        let element = inner.strip_suffix(">") ?? ""
+        return f"{lead}[{element}]"
     }
     return written
 }
