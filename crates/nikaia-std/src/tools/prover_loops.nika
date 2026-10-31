@@ -446,7 +446,7 @@ fn loop_expr_stmt(mut arena: TermArena, expr: ref Expr, span: Span, path: ref Lo
 /// - a name a turn changes by one constant on every path is its start plus
 /// that constant times the turns taken, and a counter stops at its bound -
 /// then intervals.
-fn loop_candidates(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> Vec[(i64, String)] sync {
+pub fn loop_candidates(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> Vec[(i64, String)] sync {
     let mut found: Vec[(i64, String)] = []
     let start = record.start
     // Closed forms: each name against its start, each pair against each other.

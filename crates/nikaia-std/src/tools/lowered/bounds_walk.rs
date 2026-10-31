@@ -550,7 +550,16 @@ pub(crate) fn bounding_fits(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr, rh
         let mut goal = walk.arena.and(vec![above, below]);
         if side > 0 { goal = below; } else if side < 0 { goal = above; }
         if bounding_proves(&walk, facts, goal, ask) { return true; }
-        if side != 0 && bounding_relative(walk, t, side, &bounds, facts, ask) { return true; }
+        let mut relatives: Vec<i64> = vec![];
+        if side != 0 { relatives = bounding_relatives(walk, t, side, &bounds, facts); }
+        for relative in relatives.iter() {
+            let relative = nikaia_std::num::value(relative);
+            if bounding_proves(&walk, facts, relative, ask) { return true; }
+        }
+        if !relatives.is_empty() {
+            relatives.insert(0, goal);
+            goal = walk.arena.or(relatives);
+        }
         bounding_missed(walk, facts, goal);
         return false;
     }
@@ -564,30 +573,32 @@ pub(crate) fn bounding_fits(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr, rh
 
 pub(crate) fn most_relatives() -> i64 { 8 }
 
-pub(crate) fn bounding_relative(walk: &mut BoundsWalk, t: i64, side: i64, bounds: &Range, facts: &BoundsFacts, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
-    if walk.typed.is_empty() { return false; }
+pub(crate) fn bounding_relatives(walk: &mut BoundsWalk, t: i64, side: i64, bounds: &Range, facts: &BoundsFacts) -> Vec<i64> {
+    let mut out: Vec<i64> = vec![];
+    if walk.typed.is_empty() { return out; }
     let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
     walk.arena.variables(t, &mut own);
     let mut tried: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut at = facts.facts.len() as i64;
-    while at > 0 && (tried.len() as i64) < most_relatives() {
-        at -= 1;
-        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
-        walk.arena.variables(*nikaia_std::index::get(&facts.facts, nikaia_std::index::at(at)), &mut read);
-        if !read.iter().any(|name| { own.contains(name) }) { continue; }
-        for y in read.iter() {
-            if own.contains(y) || tried.contains(y) || (tried.len() as i64) >= most_relatives() { continue; }
-            let ty = match walk.typed.get(y) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let held = match Range::held_by_type(&ty) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if !bounds.holds(&held) { continue; }
-            tried.insert(y.to_string());
-            let v = walk.arena.var(y);
-            let mut goal = walk.arena.le(t, v);
-            if side < 0 { goal = walk.arena.ge(t, v); }
-            if bounding_proves(&walk, facts, goal, ask) { return true; }
+    for near in [true, false] {
+        let mut at = facts.facts.len() as i64;
+        while at > 0 && (tried.len() as i64) < most_relatives() {
+            at -= 1;
+            let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+            walk.arena.variables(*nikaia_std::index::get(&facts.facts, nikaia_std::index::at(at)), &mut read);
+            let shares = read.iter().any(|name| { own.contains(name) });
+            if shares != near { continue; }
+            for y in read.iter() {
+                if own.contains(y) || tried.contains(y) || (tried.len() as i64) >= most_relatives() { continue; }
+                let ty = match walk.typed.get(y) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let held = match Range::held_by_type(&ty) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if !bounds.holds(&held) { continue; }
+                tried.insert(y.to_string());
+                let v = walk.arena.var(y);
+                if side < 0 { out.push(walk.arena.ge(t, v)); } else { out.push(walk.arena.le(t, v)); }
+            }
         }
     }
-    false
+    out
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1608,7 +1619,7 @@ pub(crate) fn bounding_loop_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut
         bounding_loop_framed(walk, stmt, facts, context, program, words, &ask);
         return;
     }
-    let entry = facts.clone();
+    let mut entry = facts.clone();
     let proven = walk.proven.clone();
     let written = walk.written.to_owned();
     let poisoned = walk.poisoned.to_owned();
@@ -1626,14 +1637,37 @@ pub(crate) fn bounding_loop_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut
         Stmt::While { body, .. } => turn_jumps(body, words),
         _ => return,
     };
+    let own_guesses = bounding_loop_guesses(walk, stmt, &entry, &changed, context, program, words);
+    let proposals = bounding_loop_proposals(walk, stmt, start, &entry, &changed, words, &ask);
+    let mut offered = proposals.candidates.to_owned();
+    for guess in own_guesses.iter() {
+        let guess = nikaia_std::num::value(guess);
+        offered.push((guess, String::from("guess and check")));
+    }
+    for ghost in proposals.ghosts.iter() {
+        let ghost = nikaia_std::num::value(ghost);
+        entry.facts.push(ghost);
+    }
+    let mut origins: collections::BTreeMap<i64, String> = collections::BTreeMap::new();
     let mut guesses: Vec<i64> = vec![];
-    for guess in bounding_loop_guesses(walk, stmt, &entry, &changed, context, program, words) {
+    for fixed in proposals.fixed.iter() {
+        let fixed = nikaia_std::num::value(fixed);
+        guesses.push(fixed);
+        origins.insert(fixed, String::from("closed forms"));
+    }
+    for (guess, origin) in offered.iter() {
+        let guess = nikaia_std::num::value(guess);
+        if origins.contains_key(&guess) { continue; }
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(guess, &mut read);
         let mut useful = false;
         for name in read.iter() { if wanted.contains(name) { useful = true; } }
-        if useful && bounding_proves(&walk, &entry, guess, &ask) { guesses.push(guess); }
+        if useful && bounding_proves(&walk, &entry, guess, &ask) {
+            guesses.push(guess);
+            origins.insert(guess, origin.to_string());
+        }
     }
+    if (guesses.len() as i64) == proposals.fixed.len() as i64 { return; }
     if guesses.is_empty() { return; }
     if !bounding_could_pay(walk, &guesses, open, &ask) { return; }
     let after = facts.clone();
@@ -1674,7 +1708,7 @@ pub(crate) fn bounding_loop_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut
             let mut parts: Vec<(i64, String)> = vec![];
             for guess in guesses.iter() {
                 let guess = nikaia_std::num::value(guess);
-                parts.push((guess, String::from("guess and check")));
+                parts.push((guess, nikaia_std::index::or(*nikaia_std::index::get(&origins, &guess), || "guess and check").to_string()));
             }
             walk.proven.loops.insert(start, loop_parts_text(&walk.arena, &LoopFound { parts }));
             facts.facts = here.facts.to_owned();
@@ -1778,6 +1812,60 @@ pub(crate) fn bounding_loop_guesses(walk: &mut BoundsWalk, stmt: &Stmt, entry: &
     }
     out
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BoundsProposals {
+    pub(crate) ghosts: Vec<i64>,
+    pub(crate) fixed: Vec<i64>,
+    pub(crate) candidates: Vec<(i64, String)>,
+}
+
+pub(crate) fn bounding_loop_proposals(walk: &mut BoundsWalk, stmt: &Stmt, start: i64, entry: &BoundsFacts, changed: &BoundsChanged, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> BoundsProposals {
+    match stmt {
+        Stmt::While { cond, body } => bounding_while_proposals(walk, start, cond, body, entry, changed, words, ask),
+        _ => BoundsProposals { ghosts: vec![], fixed: vec![], candidates: vec![] },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounding_while_proposals(walk: &mut BoundsWalk, start: i64, cond: &Expr, body: &Block, entry: &BoundsFacts, changed: &BoundsChanged, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> BoundsProposals {
+    let mut out = BoundsProposals { ghosts: vec![], fixed: vec![], candidates: vec![] };
+    let mut state: Vec<String> = vec![];
+    for name in changed.values.iter() { if entry.ints.contains(name) && !walk.pinned.contains(&path_root(name)) { state.push(name.to_string()); } }
+    if state.is_empty() { return out; }
+    let constants = walk.shape.constants.to_owned();
+    let claims: collections::BTreeSet<(i64, i64)> = collections::BTreeSet::new();
+    let record = match loop_record(&mut walk.arena, start, &state, &entry.facts, &entry.ints, &|name| { (*nikaia_std::index::get(&constants, name)).copied() }, cond, body, words, &claims, &|e| { bounding_no_throw(e) }, &|e| { bounding_no_holes(e) }) { Some(__nikaia_value) => __nikaia_value, None => return out };
+    for name in state.iter() {
+        let here = walk.arena.var(name);
+        let before = walk.arena.var(&loop_before_name(name, start));
+        out.ghosts.push(walk.arena.equal(here, before));
+    }
+    for k in 0..entry.facts.len() as i64 {
+        let mut moved = false;
+        for name in state.iter() { if walk.arena.mentions(*nikaia_std::index::get(&entry.facts, (k) as usize), name) { moved = true; } }
+        if moved && ((k) as usize) < record.problem.fixed.len() { out.fixed.push(*nikaia_std::index::get(&record.problem.fixed, (k) as usize)); }
+    }
+    let mut asked: Vec<i64> = vec![];
+    for (candidate, origin) in loop_candidates(&mut walk.arena, &record, ask, &mut asked) {
+        match walk.arena.at(candidate) {
+            SolverTerm::Eq(a, b) => {
+                out.candidates.push((walk.arena.le(a, b), origin.to_string()));
+                out.candidates.push((walk.arena.ge(a, b), origin.to_string()));
+            },
+            _ => { out.candidates.push((candidate, origin.to_string())); },
+        }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn bounding_no_throw(e: &Expr) -> bool { false }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn bounding_no_holes(e: &Expr) -> Vec<Expr> { vec![] }
 
 pub(crate) fn bounding_break_guard(stmt: &Stmt) -> Option<Expr> {
     match stmt {

@@ -302,7 +302,7 @@ pub(crate) fn loop_expr_stmt(arena: &mut TermArena, expr: &Expr, span: &Span, pa
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn loop_candidates(arena: &mut TermArena, record: &LoopRecord, proved: &impl Fn(&TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Vec<(i64, String)> {
+pub fn loop_candidates(arena: &mut TermArena, record: &LoopRecord, proved: &impl Fn(&TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Vec<(i64, String)> {
     let mut found: Vec<(i64, String)> = vec![];
     let start = record.start;
     let mut steady: Vec<(String, i64)> = vec![];

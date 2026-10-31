@@ -2745,7 +2745,7 @@ pub mod prover_claims {
 }
 pub mod prover_loops {
     #[allow(unused_imports)]
-    pub use super::{LoopRecord, LoopTurn, LoopFound, loop_before_name, loop_record, loop_record_range, loop_found, loop_facts, loop_turn_name, loop_turn_facts, loop_found_text, loop_said, loop_open_text, loop_reads, loop_key, loop_parts_text, loop_recorded};
+    pub use super::{LoopRecord, LoopTurn, LoopFound, loop_before_name, loop_record, loop_record_range, loop_candidates, loop_found, loop_facts, loop_turn_name, loop_turn_facts, loop_found_text, loop_said, loop_open_text, loop_reads, loop_key, loop_parts_text, loop_recorded};
 }
 pub mod prover_passes {
     #[allow(unused_imports)]

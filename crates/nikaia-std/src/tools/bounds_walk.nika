@@ -874,8 +874,19 @@ fn bounding_fits(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: ref
         if bounding_proves(walk, facts, goal, ask) {
             return true
         }
-        if side != 0 && bounding_relative(walk, t, side, bounds, facts, ask) {
-            return true
+        let mut relatives: Vec[i64] = []
+        if side != 0 {
+            relatives = bounding_relatives(walk, t, side, bounds, facts)
+        }
+        for relative in relatives {
+            if bounding_proves(walk, facts, relative, ask) {
+                return true
+            }
+        }
+        // Left open: a loop's invariant may prove either goal (ADR-361 D2).
+        if !relatives.is_empty() {
+            relatives.insert(0, goal)
+            goal = walk.arena.or(relatives)
         }
         bounding_missed(walk, facts, goal)
         return false
@@ -905,47 +916,50 @@ fn most_relatives() -> i64 {
     return 8
 }
 
-/// **A goal relative to a value of the type** (ADR-306, #1054): `t <= y`
+/// **Goals relative to a value of the type** (ADR-306, #1054): `t <= y`
 /// (`t >= y` where `side < 0`) for a name `y` whose type lies inside
-/// `bounds`, so `t` does too. Each `y` is one a fact bounds a name of `t` by,
-/// the newest facts first, at most `most_relatives()`: a goal with no
-/// constant past 2^62, so `i + 1` under `i < n`, `n: i64`, is proved.
-fn bounding_relative(mut walk: BoundsWalk, t: i64, side: i64, bounds: ref Range, facts: ref BoundsFacts, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+/// `bounds`, so that `t` does too. The names a fact of the point reads, the
+/// newest facts first and those that read a name of `t` before the others,
+/// at most `most_relatives()`: goals with no constant past 2^62, so `i + 1`
+/// under `i < n`, `n: i64`, is proved.
+fn bounding_relatives(mut walk: BoundsWalk, t: i64, side: i64, bounds: ref Range, facts: ref BoundsFacts) -> Vec[i64] {
+    let mut out: Vec[i64] = []
     if walk.typed.is_empty() {
-        return false
+        return out
     }
     let mut own: collections::BTreeSet[String] = collections::BTreeSet()
     walk.arena.variables(t, own)
     let mut tried: collections::BTreeSet[String] = collections::BTreeSet()
-    let mut at = facts.facts.len()
-    while at > 0 && tried.len() < most_relatives() {
-        at -= 1
-        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
-        walk.arena.variables(facts.facts[at], read)
-        if !read.iter().any(fn(name) { own.contains(name) }) {
-            continue
-        }
-        for y in read {
-            if own.contains(y) || tried.contains(y) || tried.len() >= most_relatives() {
+    for near in [true, false] {
+        let mut at = facts.facts.len()
+        while at > 0 && tried.len() < most_relatives() {
+            at -= 1
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            walk.arena.variables(facts.facts[at], read)
+            let shares = read.iter().any(fn(name) { own.contains(name) })
+            if shares != near {
                 continue
             }
-            let ty = walk.typed.get(y) ?? continue
-            let held = Range::held_by_type(ty) ?? continue
-            if !bounds.holds(held) {
-                continue
-            }
-            tried.insert(y.clone())
-            let v = walk.arena.var(y)
-            let mut goal = walk.arena.le(t, v)
-            if side < 0 {
-                goal = walk.arena.ge(t, v)
-            }
-            if bounding_proves(walk, facts, goal, ask) {
-                return true
+            for y in read {
+                if own.contains(y) || tried.contains(y) || tried.len() >= most_relatives() {
+                    continue
+                }
+                let ty = walk.typed.get(y) ?? continue
+                let held = Range::held_by_type(ty) ?? continue
+                if !bounds.holds(held) {
+                    continue
+                }
+                tried.insert(y.clone())
+                let v = walk.arena.var(y)
+                if side < 0 {
+                    out.push(walk.arena.ge(t, v))
+                } else {
+                    out.push(walk.arena.le(t, v))
+                }
             }
         }
     }
-    return false
+    return out
 }
 
 /// `linear + ranged` (or `linear - ranged` where `subtracts`) inside `lo..=hi`:
@@ -2259,7 +2273,7 @@ fn bounding_loop_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFac
         bounding_loop_framed(walk, stmt, facts, context, program, words, ask)
         return
     }
-    let entry = facts.clone()
+    let mut entry = facts.clone()
     let proven = walk.proven.clone()
     let written = walk.written.clone()
     let poisoned = walk.poisoned.clone()
@@ -2285,8 +2299,29 @@ fn bounding_loop_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFac
         Stmt::While { body, .. } => turn_jumps(body, words),
         else => return,
     }
+    // **The prover's candidates first, then the walk's own guesses**
+    // (D5, D10): one portfolio for an `assert` and a check.
+    let own_guesses = bounding_loop_guesses(walk, stmt, entry, changed, context, program, words)
+    let proposals = bounding_loop_proposals(walk, stmt, start, entry, changed, words, ask)
+    let mut offered = proposals.candidates.clone()
+    for guess in own_guesses {
+        offered.push((guess, "guess and check"))
+    }
+    for ghost in proposals.ghosts {
+        entry.facts.push(ghost)
+    }
+    let mut origins: collections::BTreeMap[i64, String] = collections::BTreeMap()
     let mut guesses: Vec[i64] = []
-    for guess in bounding_loop_guesses(walk, stmt, entry, changed, context, program, words) {
+    // What held before the loop, over the values it was reached with: true
+    // at every turn, since nothing changes those values.
+    for fixed in proposals.fixed {
+        guesses.push(fixed)
+        origins.insert(fixed, "closed forms")
+    }
+    for (guess, origin) in offered {
+        if origins.contains_key(guess) {
+            continue
+        }
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
         walk.arena.variables(guess, read)
         let mut useful = false
@@ -2298,7 +2333,11 @@ fn bounding_loop_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFac
         // D4's first query: it holds where the loop is reached.
         if useful && bounding_proves(walk, entry, guess, ask) {
             guesses.push(guess)
+            origins.insert(guess, origin.clone())
         }
+    }
+    if guesses.len() == proposals.fixed.len() {
+        return
     }
     if guesses.is_empty() {
         return
@@ -2359,7 +2398,7 @@ fn bounding_loop_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFac
         if frame.failed.is_empty() && frame.jumps.len() == ways && bounding_proven_count(walk.proven) > bounding_proven_count(after_proven) {
             let mut parts: Vec[(i64, String)] = []
             for guess in guesses {
-                parts.push((guess, "guess and check"))
+                parts.push((guess, (origins[guess] ?? "guess and check").clone()))
             }
             walk.proven.loops.insert(start, loop_parts_text(walk.arena, LoopFound { parts: parts }))
             facts.facts = here.facts.clone()
@@ -2489,6 +2528,82 @@ fn bounding_loop_guesses(mut walk: BoundsWalk, stmt: ref Stmt, entry: ref Bounds
         }
     }
     return out
+}
+
+/// **What the prover proposes for a loop** (ADR-361 D5, D10): its
+/// candidates over the values the loop was reached with (`x@S`), an
+/// equality as its two halves; `ghosts`, `x == x@S` for each name the loop
+/// changes, which hold where it is reached; `fixed`, the facts it is reached
+/// with restated over those values, which hold at every turn.
+struct BoundsProposals {
+    ghosts: Vec[i64],
+    fixed: Vec[i64],
+    candidates: Vec[(i64, String)],
+}
+
+fn bounding_loop_proposals(mut walk: BoundsWalk, stmt: ref Stmt, start: i64, entry: ref BoundsFacts, changed: ref BoundsChanged, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> BoundsProposals {
+    return match stmt {
+        Stmt::While { cond, body } => bounding_while_proposals(walk, start, cond, body, entry, changed, words, ask),
+        else => BoundsProposals { ghosts: [], fixed: [], candidates: [] },
+    }
+}
+
+/// [`bounding_loop_proposals`] of `while cond { body }`: the prover's loop
+/// problem stated over the walk's terms (`loop_record`), and its strategies'
+/// candidates (`loop_candidates`). Only proposals: the walk checks each where
+/// the loop is reached and for one turn before it uses it (D4), so a way out
+/// the problem does not see costs a candidate, never a wrong proof.
+fn bounding_while_proposals(mut walk: BoundsWalk, start: i64, cond: ref Expr, body: ref Block, entry: ref BoundsFacts, changed: ref BoundsChanged, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> BoundsProposals {
+    let mut out = BoundsProposals { ghosts: [], fixed: [], candidates: [] }
+    let mut state: Vec[String] = []
+    for name in changed.values {
+        if entry.ints.contains(name) && !walk.pinned.contains(path_root(name)) {
+            state.push(name.clone())
+        }
+    }
+    if state.is_empty() {
+        return out
+    }
+    let constants = walk.shape.constants.clone()
+    let claims: collections::BTreeSet[(i64, i64)] = collections::BTreeSet()
+    let record = loop_record(walk.arena, start, state, entry.facts, entry.ints, fn(name) { constants[name] }, cond, body, words, claims, fn(e) { bounding_no_throw(e) }, fn(e) { bounding_no_holes(e) }) ?? return out
+    for name in state {
+        let here = walk.arena.var(name)
+        let before = walk.arena.var(loop_before_name(name, start))
+        out.ghosts.push(walk.arena.equal(here, before))
+    }
+    for k in 0..<entry.facts.len() {
+        let mut moved = false
+        for name in state {
+            if walk.arena.mentions(entry.facts[k], name) {
+                moved = true
+            }
+        }
+        if moved && k < record.problem.fixed.len() {
+            out.fixed.push(record.problem.fixed[k])
+        }
+    }
+    let mut asked: Vec[i64] = []
+    for (candidate, origin) in loop_candidates(walk.arena, record, ask, asked) {
+        match walk.arena.at(candidate) {
+            SolverTerm::Eq(a, b) => {
+                out.candidates.push((walk.arena.le(a, b), origin.clone()))
+                out.candidates.push((walk.arena.ge(a, b), origin.clone()))
+            },
+            else => out.candidates.push((candidate, origin.clone())),
+        }
+    }
+    return out
+}
+
+/// The bounds walk asks no question of what a loop may throw: its
+/// candidates are checked before use.
+fn bounding_no_throw(e: ref Expr) -> bool sync {
+    return false
+}
+
+fn bounding_no_holes(e: ref Expr) -> Vec[Expr] sync {
+    return []
 }
 
 /// The condition `c` of a statement `if c { break }`.
