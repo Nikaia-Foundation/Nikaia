@@ -85,7 +85,8 @@ the background in a cloud session.
   builder or QA agent started by `scripts/drive.nika` commits locally after
   cheap checks (build, touched tests, fmt, clippy, `pre-push-check.sh`) and
   never pushes. After each commit the driver runs the complete suite
-  (`gate.nika --all`, one at a time per checkout); green, it pushes the tested
+  (`gate.nika --all`, one at a time per checkout, in its own detached worktree
+  at the tested commit, `/home/user/nikaia-suite`, with an 8 GB disk guard); green, it pushes the tested
   commit; red, a QA agent (`.claude/agents/qa.md`) gets the briefs and reports
   of the unpushed commits and fixes forward, at most two rounds, then the
   driver escalates. The bullets above about pushing at once hold for sessions

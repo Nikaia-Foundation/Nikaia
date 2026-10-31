@@ -162,7 +162,15 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   (`docs/briefs/qa-task.md`, input `DIR/qa-input.txt`, log `DIR/suite.log`),
   at most two rounds, then `ESCALATE`. An escalated red leaves the commits
   local: read `DIR/suite.log` and the QA report, and fix forward or hand it to
-  a fresh QA run before restarting the driver.
+  a fresh QA run before restarting the driver. The suite runs in its own
+  detached worktree at the tested sha (`/home/user/nikaia-suite`, or
+  `NIKAIA_SUITE_DIR`; its `target/` is kept, `CARGO_INCREMENTAL=0`), so the
+  other lane's unfinished files never enter it. It needs 8 GB free: each run
+  prints `SUITE disk <N> GB free`; below 8 it deletes the worktree's
+  incremental and debug data, still below it escalates
+  (`ESCALATE drive: disk: ...`). Then free space (old
+  `target/fast/incremental` entries of the shared checkout, `target/debug`)
+  and restart the driver.
 * **Gaps and defects from reports go to the architect** (owner, 2026-10-31):
   it files every `partial|blocked` report's defect (issue `ready` and bug
   brief) and decides obvious language gaps itself (`docs/architect.md`,
