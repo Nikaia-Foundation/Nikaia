@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1324] — 2026-10-31
+
+**views: a by-value parameter that holds no text is no view source (#1070); views: a list of views handed back may be a literal or grown with extend (#1071); tiers: a view field read off a match payload of a lent struct is a view (#1072)**
+- A by-value parameter whose type holds no text (a field-less enum, or a struct or enum of only such fields and scalars) is no longer taken as the source of a view handed back, so building a view-holding struct from it is no longer refused NK2302.
+- A list of views handed back may now be returned as a list literal, start from a non-empty literal, or grow with `extend`, as one built by `push` already could.
+- A `String` field that holds a view can be copied from a struct bound by a `match` pattern (a tuple or named variant payload, or an element of a payload list) of a borrowed value into a new struct.
+
 ## [0.0.1323] — 2026-10-31
 
 **Grammar rules take type parameters**
