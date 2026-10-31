@@ -1,0 +1,57 @@
+// scripts/gate.nika --full --dry-run: which steps run, from the files changed
+// against the base, the files named after --files and the tests after --tests.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn git(tmp: String, args: Vec[String]) throws {
+    let mut all: Vec[String] = ["-c", "user.name=t", "-c", "user.email=t@example.com"]
+    for a in args { all.push(a.clone()) }
+    process::run("git", all; dir: tmp)
+}
+
+fn case(nikaia: String, gate: String, tmp: String, name: String, extra: Vec[String]) throws {
+    let mut args: Vec[String] = ["run", gate, "--", "--full", "--dry-run", "--base", "base"]
+    for a in extra { args.push(a.clone()) }
+    let out = process::run(nikaia, args; dir: tmp)
+    println(f"== {name}")
+    println(out.stdout.trim())
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let gate = f"{repo}/scripts/gate.nika"
+    let nikaia = toolchain(repo)
+    git(tmp.clone(), ["init", "-q"])
+    fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "x\n")
+    git(tmp.clone(), ["add", "a.txt"])
+    git(tmp.clone(), ["commit", "-q", "-m", "base"])
+    git(tmp.clone(), ["branch", "base"])
+    case(nikaia.clone(), gate.clone(), tmp.clone(), "nothing changed", [])
+    process::run("mkdir", ["-p", f"{tmp}/tests/compiler/tests", f"{tmp}/crates/nikaia-std/src/tools"])
+    for f in ["tests/compiler/tests/foo.nika", "tests/compiler/tests/foo.stdout", "crates/nikaia-std/src/tools/x.nika"] {
+        fs::write(f"{tmp}/{f}", fs::Root::Anywhere, "x\n")
+        git(tmp.clone(), ["add", f])
+    }
+    git(tmp.clone(), ["commit", "-q", "-m", "change"])
+    for f in ["tests/compiler/tests/bar.nika", "tests/compiler/tests/bar.stderr", "tests/compiler/tests/baz.nika", "other.txt"] {
+        fs::write(f"{tmp}/{f}", fs::Root::Anywhere, "x\n")
+    }
+    case(nikaia.clone(), gate.clone(), tmp.clone(), "a tools file and tests", ["--files", "tests/compiler/tests/bar.stderr", "--tests", "baz", "qux"])
+    case(nikaia.clone(), gate.clone(), tmp.clone(), "the emitter", ["--files", "crates/nikaia/src/emit/mod.rs"])
+    process::run("rm", ["-rf", tmp])
+}

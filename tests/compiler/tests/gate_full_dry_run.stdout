@@ -1,0 +1,30 @@
+== nothing changed
+changed: none
+build would run: cargo build --profile fast -p nikaia
+lower-std green skipped: no crates/nikaia-std/src/tools/*.nika changed
+fmt would run: cargo fmt --all -- --check
+clippy would run: cargo clippy --all-targets -- -D warnings
+pre-push would run: scripts/pre-push-check.sh
+test green no touched tests
+guards would run: cargo test --profile fast -p nikaia --test it -- (the guard set)
+Gate: dry-run
+== a tools file and tests
+changed: crates/nikaia-std/src/tools/x.nika tests/compiler/tests/foo.nika tests/compiler/tests/foo.stdout tests/compiler/tests/bar.stderr
+build would run: cargo build --profile fast -p nikaia
+lower-std would run: target/fast/nikaia lower-std, and to the fixpoint
+fmt would run: cargo fmt --all -- --check
+clippy would run: cargo clippy --all-targets -- -D warnings
+pre-push would run: scripts/pre-push-check.sh
+test would run: target/fast/nikaia test --both-settings on foo bar baz
+guards would run: cargo test --profile fast -p nikaia --test it -- (the guard set)
+Gate: dry-run
+== the emitter
+changed: crates/nikaia-std/src/tools/x.nika tests/compiler/tests/foo.nika tests/compiler/tests/foo.stdout crates/nikaia/src/emit/mod.rs
+build would run: cargo build --profile fast -p nikaia
+lower-std would run: target/fast/nikaia lower-std, and to the fixpoint
+fmt would run: cargo fmt --all -- --check
+clippy would run: cargo clippy --all-targets -- -D warnings
+pre-push would run: scripts/pre-push-check.sh
+test would run: target/fast/nikaia test --both-settings --project tests/compiler (the checker or the emitter changed)
+guards would run: cargo test --profile fast -p nikaia --test it -- (the guard set)
+Gate: dry-run

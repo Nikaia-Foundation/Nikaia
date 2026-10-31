@@ -1,11 +1,35 @@
-// The gate before a commit (#852): the repository-wide guard tests, and with
-// `--shard K/N` one part (K of N, from 1) of the `it` tests.
+// The gate before a commit (#852).
 //
 //     nikaia run scripts/gate.nika [-- --shard K/N]
 //
-// Prints `Gate: green` or `Gate: red <tests>`; exit code 0 or 1.
+// The repository-wide guard tests, and with `--shard K/N` one part (K of N,
+// from 1) of the `it` tests. Prints `Gate: green` or `Gate: red <tests>`.
+//
+//     nikaia run scripts/gate.nika -- --full [--files F...] [--tests T...]
+//         [--keep-going] [--dry-run] [--base REF]
+//
+// A builder's whole gate in one call, in this order: `build` (cargo build
+// --profile fast -p nikaia), `lower-std` (only when a
+// `crates/nikaia-std/src/tools/*.nika` changed: lower-std, and when that
+// changes a lowered file, build and lower-std again, which must change nothing
+// more: the fixpoint), `fmt` (cargo fmt --check), `clippy` (--all-targets, -D
+// warnings), `pre-push` (scripts/pre-push-check.sh), `test` (`nikaia test
+// --both-settings` on the touched tests of tests/compiler, copied into a
+// project of their own under target/; the whole package when the checker or
+// the emitter changed) and `guards` (the repository-wide scans of `it`).
+// "Changed" is against the merge base with REF (default `origin/develop`),
+// plus the working-tree files named after `--files`: the shared tree holds
+// other agents' files. The touched tests are the changed files under
+// tests/compiler/tests plus the names (or paths) after `--tests`. Any of these
+// options implies `--full`.
+//
+// One line per step, `<step> green|red <first error line, 160 chars>`, then
+// `Gate: green` or `Gate: red <step>`; exit code 0 or 1. It stops at the first
+// red step unless `--keep-going`. `--dry-run` runs nothing but git and prints
+// what each step would run.
 
 use std::cli
+use std::fs
 use std::process
 use std::text
 
@@ -24,10 +48,242 @@ fn gate_cargo(extra: Vec[String]) -> String throws {
     return failed.join(" ")
 }
 
+fn gate_cap(line: String) -> String throws {
+    if line.len() <= 160 { return line }
+    return line.bytes[0..<157].text() + "..."
+}
+
+// The first line of a failed command's output that names the failure, else
+// its last non-empty line.
+fn gate_first_error(out: String) -> String throws {
+    let mut last: String = ""
+    for line in out.split("\n") {
+        let l = line.trim()
+        if l == "" { continue }
+        last = l.clone()
+        let low = l.to_lowercase()
+        if low.starts_with("error") || low.contains(": error") || low.contains("warning:") || low.starts_with("diff in") || low.contains("failed") || low.contains("out of date") || low.contains("-->") {
+            return gate_cap(l.clone())
+        }
+    }
+    if last == "" { return "failed without output" }
+    return gate_cap(last)
+}
+
+// `green` or `red <first error line>` for one command.
+fn gate_run(cmd: String, args: Vec[String]) -> String throws {
+    let out = process::run(cmd, args)
+    let all = out.stdout + "\n" + out.stderr
+    if out.code != 0 { return "red " + gate_first_error(all) }
+    return "green"
+}
+
+fn gate_build() -> String throws {
+    return gate_run("cargo", ["build", "--profile", "fast", "-p", "nikaia", "--message-format", "short"])
+}
+
+fn gate_lowered_hash() -> String throws {
+    return process::run("sh", ["-c", "cat crates/nikaia-std/src/tools/lowered/*.rs crates/nikaia-std/src/tools/lowered.rs | sha256sum"]).stdout.trim().clone()
+}
+
+// A lower-std run refused a file when it exits non-zero or prints an error.
+fn gate_lower_std() -> String throws {
+    let out = process::run("target/fast/nikaia", ["lower-std"])
+    let all = out.stdout + "\n" + out.stderr
+    let mut refused = out.code != 0
+    for line in all.split("\n") {
+        if line.starts_with("error") || line.starts_with("Error") { refused = true }
+    }
+    if refused { return "red " + gate_first_error(all) }
+    return "green"
+}
+
+fn gate_fixpoint() -> String throws {
+    let before = gate_lowered_hash()
+    let first = gate_lower_std()
+    if first != "green" { return first }
+    let after = gate_lowered_hash()
+    if after == before { return "green fixpoint" }
+    let built = gate_build()
+    if built != "green" { return built + " (rebuild after lower-std)" }
+    let second = gate_lower_std()
+    if second != "green" { return second }
+    if gate_lowered_hash() != after { return "red lowered files still change after a rebuild: no fixpoint" }
+    return "green fixpoint after one rebuild"
+}
+
+fn gate_is_tools_nika(path: String) -> bool {
+    let rest = path.strip_prefix("crates/nikaia-std/src/tools/") ?? return false
+    return rest.ends_with(".nika") && !rest.contains("/")
+}
+
+// The checker or the emitter: the whole of tests/compiler runs (builder.md).
+fn gate_needs_package(path: String) -> bool {
+    if path.starts_with("crates/nikaia/src/check/") || path.starts_with("crates/nikaia/src/emit/") { return true }
+    let rest = path.strip_prefix("crates/nikaia-std/src/tools/") ?? return false
+    return gate_is_tools_nika(path.clone()) && (rest.starts_with("check_") || rest.starts_with("emit_"))
+}
+
+// The test a path under tests/compiler/tests (or a bare name) stands for.
+fn gate_test_name(path: String) -> String throws {
+    let mut rest = path.clone()
+    if path.contains("/") {
+        rest = (path.strip_prefix("tests/compiler/tests/") ?? return "").clone()
+    }
+    let first = rest.split("/").collect()[0].clone()
+    for ext in [".nika", ".stdout", ".stderr", ".out"] {
+        if first.ends_with(ext) { return (first.strip_suffix(ext) ?? "").clone() }
+    }
+    if path.contains("/") { return "" }
+    return first
+}
+
+fn gate_push_new(mut list: Vec[String], item: String) {
+    if item != "" && !list.contains(item.clone()) { list.push(item) }
+}
+
+// `nikaia test --both-settings` on the named tests, in a copy of the
+// tests/compiler package that holds only them (`nikaia test` has no filter).
+// The copy sits two levels below the root, as tests/compiler does, so a test
+// that finds the repository from its directory finds it from there too.
+fn gate_test_some(names: Vec[String]) -> String throws {
+    process::run("mkdir", ["-p", "target"])
+    let dir = process::run("mktemp", ["-d", "target/gate-tests-XXXXXX"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{dir}/tests"])
+    process::run("cp", ["-r", "tests/compiler/src", "tests/compiler/nikaia.toml", dir.clone()])
+    for ledger in ["nikaia.contracts", "nikaia.derived", "nikaia.proofs"] {
+        if fs::exists(f"tests/compiler/{ledger}", fs::Root::Anywhere) { process::run("cp", [f"tests/compiler/{ledger}", dir.clone()]) }
+    }
+    for name in names {
+        for ext in [".nika", ".stdout", ".stderr", ".out"] {
+            let from = f"tests/compiler/tests/{name}{ext}"
+            if fs::exists(from.clone(), fs::Root::Anywhere) { process::run("cp", ["-r", from, f"{dir}/tests/"]) }
+        }
+    }
+    let result = gate_run("target/fast/nikaia", ["test", "--both-settings", "--project", dir.clone()])
+    process::run("rm", ["-rf", dir])
+    return result
+}
+
+fn gate_test(dry: bool, whole: bool, names: Vec[String]) -> String throws {
+    if whole {
+        if dry { return "would run: target/fast/nikaia test --both-settings --project tests/compiler (the checker or the emitter changed)" }
+        return gate_run("target/fast/nikaia", ["test", "--both-settings", "--project", "tests/compiler"])
+    }
+    if names.len() == 0 { return "green no touched tests" }
+    let listed = names.join(" ")
+    if dry { return f"would run: target/fast/nikaia test --both-settings on {listed}" }
+    let result = gate_test_some(names)
+    if result == "green" { return f"green {listed}" }
+    return result
+}
+
+fn gate_guards() -> String throws {
+    let red = gate_cargo(["range_spelling::", "shipped_ledger::", "contracts::every_std_module", "dependency_ledger::", "fmt::every_nika_file", "sequences::the_corpus_has_no_more_unanswered"])
+    if red == "" { return "green" }
+    return "red " + gate_cap(red)
+}
+
+// What one step printed: `green ...`, `red <line>`, or under `--dry-run` what it would run.
+fn gate_step(step: String, dry: bool, tools: bool, whole: bool, kept: Vec[String]) -> String throws {
+    if step == "build" {
+        if dry { return "would run: cargo build --profile fast -p nikaia" }
+        return gate_build()
+    }
+    if step == "lower-std" {
+        if !tools { return "green skipped: no crates/nikaia-std/src/tools/*.nika changed" }
+        if dry { return "would run: target/fast/nikaia lower-std, and to the fixpoint" }
+        return gate_fixpoint()
+    }
+    if step == "fmt" {
+        if dry { return "would run: cargo fmt --all -- --check" }
+        return gate_run("cargo", ["fmt", "--all", "--", "--check"])
+    }
+    if step == "clippy" {
+        if dry { return "would run: cargo clippy --all-targets -- -D warnings" }
+        return gate_run("cargo", ["clippy", "--all-targets", "--message-format", "short", "--", "-D", "warnings"])
+    }
+    if step == "pre-push" {
+        if dry { return "would run: scripts/pre-push-check.sh" }
+        return gate_run("scripts/pre-push-check.sh", [])
+    }
+    if step == "test" { return gate_test(dry, whole, kept) }
+    if dry { return "would run: cargo test --profile fast -p nikaia --test it -- (the guard set)" }
+    return gate_guards()
+}
+
+fn gate_full(args: Vec[String]) throws {
+    let mut dry = false
+    let mut keep = false
+    let mut base: String = "origin/develop"
+    let mut files: Vec[String] = []
+    let mut tests: Vec[String] = []
+    let mut into: String = ""
+    // args[0] is the program itself.
+    let mut i = 1
+    while i < args.len() {
+        let a = args[i].clone()
+        if a == "--dry-run" { dry = true; into = "" }
+        else if a == "--keep-going" { keep = true; into = "" }
+        else if a == "--full" { into = "" }
+        else if a == "--files" || a == "--tests" { into = a.clone() }
+        else if a == "--base" && i + 1 < args.len() { base = args[i + 1].clone(); i += 1; into = "" }
+        else if into == "--files" { gate_push_new(files, a.clone()) }
+        else if into == "--tests" { gate_push_new(tests, a.clone()) }
+        else {
+            println(f"gate: unknown argument {a}")
+            process::exit(2)
+        }
+        i += 1
+    }
+    let mut changed: Vec[String] = []
+    let diff = process::run("git", ["diff", "--name-only", f"{base}...HEAD"])
+    for line in diff.stdout.split("\n") { gate_push_new(changed, line.trim().clone()) }
+    for f in files { gate_push_new(changed, f.clone()) }
+    let mut tools = false
+    let mut whole = false
+    let mut names: Vec[String] = []
+    for path in changed.clone() {
+        if gate_is_tools_nika(path.clone()) { tools = true }
+        if gate_needs_package(path.clone()) { whole = true }
+        if path.starts_with("tests/compiler/tests/") { gate_push_new(names, gate_test_name(path.clone())) }
+    }
+    for t in tests { gate_push_new(names, gate_test_name(t.clone())) }
+    let mut kept: Vec[String] = []
+    for name in names {
+        if fs::exists(f"tests/compiler/tests/{name}.nika", fs::Root::Anywhere) { kept.push(name.clone()) }
+    }
+    if dry { println("changed: " + if changed.len() == 0 { "none" } else { changed.join(" ") }) }
+    let mut red: Vec[String] = []
+    for step in ["build", "lower-std", "fmt", "clippy", "pre-push", "test", "guards"] {
+        let result = gate_step(step.to_string(), dry, tools, whole, kept.clone())
+        println(f"{step} {result}")
+        if result.starts_with("red") {
+            red.push(step.to_string())
+            if !keep { break }
+        }
+    }
+    if dry {
+        println("Gate: dry-run")
+    } else if red.len() == 0 {
+        println("Gate: green")
+    } else {
+        let steps = red.join(" ")
+        println(f"Gate: red {steps}")
+        process::exit(1)
+    }
+}
+
 fn main() throws {
     let mut shard: String = ""
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
+    for a in args.clone() {
+        if a == "--full" || a == "--files" || a == "--tests" || a == "--dry-run" || a == "--keep-going" || a == "--base" {
+            gate_full(args)
+            return
+        }
+    }
     let mut i = 0
     while i < args.len() {
         if args[i] == "--shard" && i + 1 < args.len() { shard = args[i + 1].clone() }

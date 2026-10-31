@@ -64,17 +64,30 @@ You build one small slice of an issue in the Nikaia repository and end.
   `package` also matches `nikaia_test::the_compiler_test_package_passes_at_both_settings`,
   ten minutes that repeat `nikaia test --both-settings`: add `--skip
   nikaia_test::the_compiler_test_package` (P4a debrief, 2026-10-28). Before the run's last
-  commit, once, run the gate (#852): besides the touched tests, the guard set: `cargo test --profile fast -p nikaia --test it --
-  range_spelling:: shipped_ledger:: contracts::every_std_module
-  dependency_ledger:: fmt::every_nika_file sequences::the_corpus_has_no_more_unanswered` (repository-wide scans no NK code leads to: they kept
-  `develop` red for runs 1902-1915; the `fmt` scan formats every `.nika`, and
-  P5d's new `tools/project_check.nika` hit a formatter defect it found only
-  in CI, 0f9a525; the `sequences` scan counts unanswered method calls over every
-  tools file, and 43312d30's new prover code raised it past its ceiling, red
-  from 75e25ed8). A change to `check/`, `emit/`,
-  `tools/check_*.nika` or `tools/emit_*.nika` also runs `target/fast/nikaia test
-  --both-settings --project tests/compiler`. Report `Gate: green` or `Gate: red
-  <tests>`; on red do not commit, report `Needs: fix`. A guard listed in
+  commit, once, run the gate (#852) as one call, with `run_in_background`
+  and `timeout: 3600000` (its end wakes you; no polling):
+
+      target/fast/nikaia run scripts/gate.nika -- --full --files <your uncommitted files> [--tests NAME...]
+
+  It runs, stopping at the first red: `build` (`cargo build --profile fast
+  -p nikaia`), `lower-std` (when a `tools/*.nika` changed: `lower-std`, and
+  when that changes a lowered file a rebuild and a second `lower-std` that
+  must change nothing: the fixpoint), `fmt` (`cargo fmt --check`), `clippy`
+  (`--all-targets -D warnings`), `pre-push` (`scripts/pre-push-check.sh`),
+  `test` (`nikaia test --both-settings` on the touched tests of
+  `tests/compiler`: the changed ones and those after `--tests`; the whole
+  package when `check/`, `emit/`, `tools/check_*.nika` or `tools/emit_*.nika`
+  changed) and `guards` (`range_spelling:: shipped_ledger::
+  contracts::every_std_module dependency_ledger:: fmt::every_nika_file
+  sequences::the_corpus_has_no_more_unanswered`: repository-wide scans no NK
+  code leads to; they kept `develop` red for runs 1902-1915, the `fmt` scan
+  found P5d's formatter defect only in CI, 0f9a525, the `sequences` scan went
+  red from 75e25ed8). "Changed" is against `origin/develop` plus the files
+  after `--files` (never all of `git status`: the tree holds other agents'
+  files). It prints `<step> green|red <first error line>` and `Gate: green`
+  or `Gate: red <step>`; `--keep-going` runs every step, `--dry-run` shows
+  what would run. Report `Gate: green` or `Gate: red <step>`; on red do not
+  commit, report `Needs: fix`. A guard listed in
   `docs/builder-facts.md`, *Red on develop now*, whose figure your change does
   not worsen, does not make the gate red: say its figure under `Tests:`.
 * **Never run the full suite.** Only the tests your change touches; CI runs
@@ -127,13 +140,6 @@ You build one small slice of an issue in the Nikaia repository and end.
   | x86-64-v3 | 101,447,105 | 902,430 |
 
   So v3 saves 0.7 % of the instructions and does not pay for the compiler.
-* **Clippy beside the last test run, in one call.** Clippy builds in
-  `target/debug`, the tests in `target/fast` (no shared lock): when the edits
-  are final, run `(cargo clippy --all-targets -- -D warnings 2>&1 | grep -E
-  '^(error|warning)' | head > $S/clippy.txt) & cargo test --profile fast -p
-  nikaia --test it -- a:: b:: 2>&1 | grep -E 'FAILED|panicked|test result' | head
-  -40; wait; cat $S/clippy.txt` ($S your scratchpad directory), then
-  `scripts/pre-push-check.sh`.
 * **A new regression test is a test program** where it checks what a
   program prints or which NK code refuses it: `tests/compiler/tests/NAME.nika`
   with `NAME.stdout` (or `NAME.stderr`, the whole refusal), ADR-269 D22, #821.
