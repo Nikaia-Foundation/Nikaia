@@ -2783,7 +2783,7 @@ pub mod prover_solver {
 }
 pub mod prover_state {
     #[allow(unused_imports)]
-    pub use super::{ProverState, postconditions_for, summed_read, leaned_notes, summed_facts, prover_pinned, ProverWhere, CallOutcome, AssertOutcome};
+    pub use super::{ProverState, postconditions_for, summed_read, leaned_notes, summed_facts, length_given, prover_pinned, ProverWhere, CallOutcome, AssertOutcome};
 }
 pub mod prover_walk {
     #[allow(unused_imports)]

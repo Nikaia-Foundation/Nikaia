@@ -314,17 +314,8 @@ impl ProverState {
                 let param = nikaia_std::index::get(&params, (k) as usize);
                 let term = lin_term(arg, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&self.pinned, scope, name) }, &mut arena.nodes);
                 if term.is_some() { given_by.insert(param.to_string(), nikaia_std::index::or(term, || 0)); }
-                match arg {
-                    Expr::Variable(name, _) => {
-                        let name = *name;
-                        let length = length_of(words.resolve(name));
-                        if scope.ints.contains(&length) {
-                            let known = arena.var(&length);
-                            given_by.insert(length_of(param), known);
-                        }
-                    },
-                    _ => { },
-                }
+                let given_length = length_given(arena, words, arg, scope, &self.pinned);
+                if given_length.is_some() { given_by.insert(length_of(param), nikaia_std::index::or(given_length, || 0)); }
                 k += 1;
             }
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -552,6 +543,36 @@ pub(crate) fn summed_notes(arena: &mut TermArena, scope: &ProverScope, read: &[S
         notes.push(said);
     }
     notes
+}
+
+pub fn length_given(arena: &mut TermArena, words: &winnow_grammar::InternerContext, expr: &Expr, scope: &ProverScope, pinned: &collections::BTreeMap<String, i64>) -> Option<i64> {
+    match expr {
+        Expr::ListLit { items, .. } => {
+            let count: i64 = items.len() as i64;
+            return Some(arena.int(count));
+        },
+        Expr::ListRepeat { count, .. } => { let count = nikaia_std::boxed::open(count); return lin_term(count, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(pinned, scope, name) }, &mut arena.nodes) },
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let length = length_of(words.resolve(name));
+            if !scope.ints.contains(&length) { return None; }
+            return Some(arena.var(&length));
+        },
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            if args.len() != 1 { return None; }
+            match func {
+                Expr::Variable(callee, _) => {
+                    let callee = *callee;
+                    let named = words.resolve(callee);
+                    if named == "Bytes" && !scope.locals.contains(named) { return length_given(arena, words, nikaia_std::index::get(&args, 0), scope, pinned); }
+                },
+                _ => { },
+            }
+            return None;
+        },
+        _ => return None,
+    }
 }
 
 pub fn prover_pinned(pinned: &collections::BTreeMap<String, i64>, scope: &ProverScope, name: &str) -> Option<i64> {

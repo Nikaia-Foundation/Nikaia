@@ -1,0 +1,25 @@
+// What #1084 leaves unproved: `Bytes(x)` of a list whose length is not
+// known, a repeat whose count is not known, and a literal too short, which
+// breaks the precondition at the call (NK1207). The calls stand in `main`:
+// in a function of their own they would be carried back to its entry
+// (ADR-269 D20). Proved cases: `prove_argument_lengths`.
+
+fn g(xs: ref Vec[u8]) -> i64 {
+	assert(xs.len() >= 40)
+	return xs.len()
+}
+
+fn h(b: ref Bytes) -> i64 {
+	assert(b.len() >= 4)
+	return b.len()
+}
+
+fn main() {
+	let xs = [1, 2, 3]
+	let k = xs[2]
+	let mut u: Vec[u8] = []
+	u.resize(k, 0)
+	println(f"{h(Bytes(u))}")
+	println(f"{g([59; k])}")
+	println(f"{g([1, 2, 3])}")
+}

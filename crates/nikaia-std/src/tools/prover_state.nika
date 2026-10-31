@@ -617,15 +617,11 @@ impl ProverState {
                 if term != null {
                     given_by.insert(param.clone(), term ?? 0)
                 }
-                match arg {
-                    Expr::Variable(name, _) => {
-                        let length = length_of(words.resolve(name))
-                        if scope.ints.contains(length) {
-                            let known = arena.var(length)
-                            given_by.insert(length_of(param), known)
-                        }
-                    },
-                    else => {},
+                // A literal, a repeat or `Bytes(x)` gives its length as a
+                // bound one does (#1084).
+                let given_length = length_given(arena, words, arg, scope, self.pinned)
+                if given_length != null {
+                    given_by.insert(length_of(param), given_length ?? 0)
                 }
                 k += 1
             }
@@ -969,6 +965,44 @@ fn summed_notes(mut arena: TermArena, scope: ref ProverScope, read: ref Vec[Stri
 /// **The value the build knows for `name`** (ADR-359 D7, D11), where no
 /// local of this body hides it. A call's result has a name no local can
 /// spell, which the walk binds where it reads the call.
+/// **The length of the list or `Bytes` an expression gives** (#1084), as a
+/// term: a list literal's is its items', a repeated one's its count, a
+/// name's the one the scope follows, and `Bytes(x)`'s is `x`'s (as `find_all`
+/// keeps the length of what it searches, ADR-375 D5). Null where none is known.
+pub fn length_given(mut arena: TermArena, words: ref winnow_grammar::InternerContext, expr: ref Expr, scope: ref ProverScope, pinned: ref collections::BTreeMap[String, i64]) -> i64? {
+    match expr {
+        Expr::ListLit { items, .. } => {
+            let count: i64 = items.len()
+            return arena.int(count)
+        },
+        Expr::ListRepeat { count, .. } => return lin_term(count, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(pinned, scope, name) }, arena.nodes),
+        Expr::Variable(name, _) => {
+            let length = length_of(words.resolve(name))
+            if !scope.ints.contains(length) {
+                return null
+            }
+            return arena.var(length)
+        },
+        Expr::Call { func, args, .. } => {
+            if args.len() != 1 {
+                return null
+            }
+            match func {
+                Expr::Variable(callee, _) => {
+                    // `std`'s type, not a local that shadows it.
+                    let named = words.resolve(callee)
+                    if named == "Bytes" && !scope.locals.contains(named) {
+                        return length_given(arena, words, args[0], scope, pinned)
+                    }
+                },
+                else => {},
+            }
+            return null
+        },
+        else => return null,
+    }
+}
+
 pub fn prover_pinned(pinned: ref collections::BTreeMap[String, i64], scope: ref ProverScope, name: ref String) -> i64? {
     if !name.starts_with("result@") && !name.starts_with("divisor@") && scope.locals.contains(name) {
         return null

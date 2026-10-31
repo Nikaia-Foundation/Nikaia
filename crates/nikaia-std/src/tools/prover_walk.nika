@@ -717,6 +717,9 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         },
         Expr::LitStr { .. } => scope.has_length(walk.arena, name, null),
         else => {
+            if prover_list_length(walk, name, value, scope, words) {
+                return
+            }
             if prover_typed(ty, words, 2) {
                 scope.has_length(walk.arena, name, null)
             }
@@ -2565,24 +2568,46 @@ fn prover_mutable_list(mut walk: ProverWalk, n: ref String, ty: ref Type?, value
             let known: i64? = items.len()
             scope.has_length(walk.arena, n, known)
         },
-        Expr::ListRepeat { count, .. } => {
-            let term = lin_term(count, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
-            scope.has_length(walk.arena, n, null)
-            if term != null && !walk.arena.mentions(term ?? 0, n) && !walk.arena.mentions(term ?? 0, length) {
-                let named = walk.arena.var(length)
-                scope.facts.push(walk.arena.equal(named, term ?? 0))
-                scope.loose.remove(length)
-            }
-        },
         else => {
-            let t = ty ?? return
-            if words.resolve(t.name) != "Vec" {
-                return
+            if !prover_list_length(walk, n, value, scope, words) {
+                let t = ty ?? return
+                if words.resolve(t.name) != "Vec" {
+                    return
+                }
+                scope.has_length(walk.arena, n, null)
             }
-            scope.has_length(walk.arena, n, null)
         },
     }
     scope.mutables.insert(length)
+}
+
+/// **A repeated list's or `Bytes(x)`'s length, where it is bound** (#782,
+/// #1084): `length_given`'s term, unless it reads the name bound or its
+/// length, as `let v = Bytes(v)` does: that is about the old binding.
+/// False where the value gives no length (a name too: the caller's rule).
+fn prover_list_length(mut walk: ProverWalk, n: ref String, value: ref Expr, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) -> bool {
+    match value {
+        Expr::ListRepeat { .. } => {},
+        Expr::Call { .. } => {},
+        else => return false,
+    }
+    let term = length_given(walk.arena, words, value, scope, walk.state.pinned)
+    match value {
+        Expr::Call { .. } => {
+            if term == null {
+                return false
+            }
+        },
+        else => {},
+    }
+    let length = length_of(n)
+    scope.has_length(walk.arena, n, null)
+    if term != null && !walk.arena.mentions(term ?? 0, n) && !walk.arena.mentions(term ?? 0, length) {
+        let named = walk.arena.var(length)
+        scope.facts.push(walk.arena.equal(named, term ?? 0))
+        scope.loose.remove(length)
+    }
+    return true
 }
 
 /// **The lengths of the followed lists, after a statement** (#782): `push`,

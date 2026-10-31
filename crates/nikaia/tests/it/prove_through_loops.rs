@@ -224,23 +224,13 @@ fn prove_through_loops_is_on_or_off() {
     );
 }
 
-/// What `nikaia --bounds lower` reports of `source` with every optimization on,
-/// at `unproved-claims = "warn"`: `Bytes(v)` has no length the prover reads, so
-/// the call into `scan` is not proved, which these programs do not test.
+/// What `nikaia --bounds lower` reports of `source` with every optimization on.
 fn bounds_report(purpose: &str, source: &str) -> String {
     let dir = common::scratch_dir(purpose);
     std::fs::write(dir.join("main.nika"), source).expect("the source");
     let out = nikaia(
         &dir,
-        &[
-            "--bounds",
-            "--unproved-claims",
-            "warn",
-            "lower",
-            "main.nika",
-            "--optimization",
-            ALL_ON,
-        ],
+        &["--bounds", "lower", "main.nika", "--optimization", ALL_ON],
     );
     assert!(
         out.status.success(),
@@ -275,8 +265,7 @@ fn scan(buf: ref Bytes, stop: i64) -> u64 {
 }
 
 fn main() {
-    let mut v: Vec[u8] = []
-    for _ in 0..<40 { v.push(59) }
+    let v: Vec[u8] = [59; 40]
     println(f\"{scan(Bytes(v), 10)}\")
 }
 ";

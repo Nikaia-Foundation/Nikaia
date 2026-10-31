@@ -528,7 +528,10 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
             scope.has_length(&mut walk.arena, &name, known);
         },
         Expr::LitStr { .. } => { scope.has_length(&mut walk.arena, &name, None); },
-        _ => { if prover_typed(ty, words, 2) { scope.has_length(&mut walk.arena, &name, None); } },
+        _ => {
+            if prover_list_length(walk, &name, value, scope, words) { return; }
+            if prover_typed(ty, words, 2) { scope.has_length(&mut walk.arena, &name, None); }
+        },
     }
 }
 
@@ -1863,23 +1866,36 @@ pub(crate) fn prover_mutable_list(walk: &mut ProverWalk, n: &str, ty: Option<&Ty
             let known: Option<i64> = Some(items.len() as i64);
             scope.has_length(&mut walk.arena, n, known);
         },
-        Expr::ListRepeat { count, .. } => {
-            let count = nikaia_std::boxed::open(count);
-            let term = lin_term(count, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
-            scope.has_length(&mut walk.arena, n, None);
-            if term.is_some() && !walk.arena.mentions(nikaia_std::index::or(term, || 0), n) && !walk.arena.mentions(nikaia_std::index::or(term, || 0), &length) {
-                let named = walk.arena.var(&length);
-                scope.facts.push(walk.arena.equal(named, nikaia_std::index::or(term, || 0)));
-                scope.loose.remove(&length);
-            }
-        },
         _ => {
-            let t = match ty { Some(__nikaia_value) => __nikaia_value, None => return };
-            if words.resolve(t.name) != "Vec" { return; }
-            scope.has_length(&mut walk.arena, n, None);
+            if !prover_list_length(walk, n, value, scope, words) {
+                let t = match ty { Some(__nikaia_value) => __nikaia_value, None => return };
+                if words.resolve(t.name) != "Vec" { return; }
+                scope.has_length(&mut walk.arena, n, None);
+            }
         },
     }
     scope.mutables.insert(length);
+}
+
+pub(crate) fn prover_list_length(walk: &mut ProverWalk, n: &str, value: &Expr, scope: &mut ProverScope, words: &winnow_grammar::InternerContext) -> bool {
+    match value {
+        Expr::ListRepeat { .. } => { },
+        Expr::Call { .. } => { },
+        _ => { return false; },
+    }
+    let term = length_given(&mut walk.arena, words, value, &scope, &walk.state.pinned);
+    match value {
+        Expr::Call { .. } => { if term.is_none() { return false; } },
+        _ => { },
+    }
+    let length = length_of(n);
+    scope.has_length(&mut walk.arena, n, None);
+    if term.is_some() && !walk.arena.mentions(nikaia_std::index::or(term, || 0), n) && !walk.arena.mentions(nikaia_std::index::or(term, || 0), &length) {
+        let named = walk.arena.var(&length);
+        scope.facts.push(walk.arena.equal(named, nikaia_std::index::or(term, || 0)));
+        scope.loose.remove(&length);
+    }
+    true
 }
 
 pub(crate) fn prover_follow_lengths(walk: &mut ProverWalk, stmt: &Stmt, span: &Span, scope: &mut ProverScope, words: &winnow_grammar::InternerContext) {

@@ -24,7 +24,8 @@ fn f(b: ref Bytes, xs: ref Vec[i64], i: i64, k: i64, n: i32) -> i64 {
 
 fn main() {
     let mut v: Vec[u8] = []
-    for j in 0..<64 { v.push(j as u8) }
+    v.resize(64, 0)
+    for j in 0..<64 { v[j] = j as u8 }
     println(f"{f(Bytes(v), [1, 2, 3, 4, 5, 6, 7, 8], 3, 5, 2)}")
 }
 "#;
@@ -43,15 +44,11 @@ fn main() {
 
 const ON: &str = "remove-bounds-checks:on,remove-overflow-checks:on";
 
-/// Lowered at `unproved-claims = "warn"`: what is tested is the emitted
-/// `unsafe`, not whether the call into `f` is proved.
 fn lowered(name: &str, source: &str, optimization: Option<&str>) -> String {
     let dir = common::scratch_dir(name);
     std::fs::write(dir.join("main.nika"), source).expect("the source");
     let mut command = Command::new(env!("CARGO_BIN_EXE_nikaia"));
-    command
-        .current_dir(&dir)
-        .args(["--unproved-claims", "warn", "lower", "main.nika"]);
+    command.current_dir(&dir).args(["lower", "main.nika"]);
     if let Some(switches) = optimization {
         command.args(["--optimization", switches]);
     }
