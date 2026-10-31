@@ -1361,10 +1361,6 @@ impl LoweredBefore {
 struct Host;
 
 impl sysroot_cache::SysrootHost for Host {
-    fn sha256_hex(&self, read: &[u8]) -> String {
-        cache::sha256_hex(read)
-    }
-
     fn use_entry(&self, entry: &Path) {
         cache::use_entry(entry)
     }

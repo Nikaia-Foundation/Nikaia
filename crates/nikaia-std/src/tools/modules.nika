@@ -9,6 +9,7 @@
 
 use std::collections
 use std::fs
+use std::hash
 
 /// The names a file declares: what one package's namespace counts
 /// (ADR-286 D1). A method belongs to its type and a grammar's rule to its
@@ -896,11 +897,9 @@ fn modules_is_file(path: ref fs::Path) -> bool {
     return found.is_file()
 }
 
-/// What a package's ledger asks of the compiler (M3a): `std` has no SHA-256,
-/// and reading a ledger stays Rust (`LedgerOps`).
+/// What a package's ledger asks of the compiler (M3a): reading a ledger stays
+/// Rust (`LedgerOps`).
 pub trait ModulesLedgerHost {
-    /// The SHA-256 of `text`'s bytes, in lowercase hex.
-    fn sha256_hex(ref self, text: ref String) -> String sync
     /// The ledger at `path`, where it is there and parses (`Ledger::read_beside`).
     fn read_beside(ref self, path: ref fs::Path) -> Ledger? sync
 }
@@ -919,7 +918,8 @@ pub fn modules_sources_of[H: ModulesLedgerHost](paths: ref Vec[fs::Path], texts:
         // is not one this compiler read, and naming it by its whole
         // spelling is better than dropping it out of the table.
         let name = paths[at].file_name()?.text_of() ?? paths[at].text_of()
-        sources.insert(name, host.sha256_hex(texts[at]))
+        let bytes: Vec[u8] = texts[at].bytes().collect()
+        sources.insert(name, hash::sha256_hex(bytes))
     }
     return sources
 }

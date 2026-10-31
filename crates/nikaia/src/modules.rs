@@ -326,10 +326,6 @@ fn package_ledger_checked(
 struct LedgerHost;
 
 impl ModulesLedgerHost for LedgerHost {
-    fn sha256_hex(&self, text: &str) -> String {
-        orchestrator::cache::sha256_hex(text.as_bytes())
-    }
-
     fn read_beside(&self, path: &Path) -> Option<crate::contracts::Ledger> {
         crate::contracts::Ledger::read_beside(path)
     }

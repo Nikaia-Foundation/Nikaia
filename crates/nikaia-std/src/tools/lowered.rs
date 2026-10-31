@@ -15,6 +15,8 @@ use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::fs;
 #[allow(unused_imports)]
+use nikaia_std::hash;
+#[allow(unused_imports)]
 use nikaia_std::node_id;
 #[allow(unused_imports)]
 use nikaia_std::text;

@@ -564,7 +564,6 @@ pub(crate) fn modules_is_file(path: &std::path::Path) -> bool {
 }
 
 pub trait ModulesLedgerHost {
-    fn sha256_hex(&self, text: &str) -> String;
     fn read_beside(&self, path: &std::path::Path) -> Option<Ledger>;
 }
 
@@ -575,7 +574,8 @@ pub fn modules_sources_of<H: ModulesLedgerHost>(paths: &[fs::Path], texts: &[Str
             Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
             None => None,
         }, || nikaia_std::fs::path::text_of(&(*nikaia_std::index::get(&paths, (at) as usize))).into());
-        sources.insert(name, host.sha256_hex(nikaia_std::index::get(&texts, (at) as usize)));
+        let bytes: Vec<u8> = (*nikaia_std::index::get(&texts, (at) as usize)).bytes().collect::<Vec<_>>();
+        sources.insert(name, hash::sha256_hex(&bytes));
     }
     sources
 }

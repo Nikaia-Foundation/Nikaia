@@ -3,7 +3,7 @@
 // system and SHA-256, moved. `sysroot.rs` keeps the driver (`lower_std`, the
 // runs of `lower_tools*`, `in_parallel`, `Phases`), `Sysroot::resolve`, the
 // compiled `std`'s directory and the `ASKED` memo of `native_cpu`, and calls
-// these; what `std` cannot say yet (SHA-256, the user cache, a `rustc`
+// these; what `std` cannot say yet (the user cache, a `rustc`
 // process) it answers as the `SysrootHost`.
 //
 // **The keys are the bytes the Rust hashed, in the same order**: a part is its
@@ -12,6 +12,7 @@
 // passed in, so no key changed with the move.
 
 use std::fs
+use std::hash
 
 /// `std`'s directory inside a sysroot. The same name it has in the checkout, so
 /// that `crates/` *is* a sysroot and the in-tree flow needs no special case.
@@ -48,8 +49,6 @@ comptime SYSROOT_LOWERED: ref String = "lowered.rs"
 
 /// What the sysroot's cache asks of the compiler.
 pub trait SysrootHost {
-    /// The SHA-256 of `read`, in lowercase hex (`std` has no SHA-256).
-    fn sha256_hex(ref self, read: ref Vec[u8]) -> String sync
     /// Marks a cache entry as used now, so the user cache's pruning keeps it.
     fn use_entry(ref self, entry: ref fs::Path) sync
     /// A name beside `path` that no other writer takes, for a file that is
@@ -189,7 +188,7 @@ pub fn sysroot_interface[H: SysrootHost](compiler: ref String, salt: ref String,
         sysroot_part(read, names[at])
         sysroot_part(read, bodiless[at])
     }
-    return host.sha256_hex(read)
+    return hash::sha256_hex(read)
 }
 
 /// **A file's key**: the package's interface, the file's name and its own
@@ -203,7 +202,7 @@ pub fn sysroot_file_key[H: SysrootHost](interface: ref String, name: ref String,
     for b in text.bytes() {
         read.push(b)
     }
-    return host.sha256_hex(read)
+    return hash::sha256_hex(read)
 }
 
 /// What is committed in `dir`: the index and every file under `lowered/`,
@@ -320,7 +319,7 @@ pub fn sysroot_lowered_key[H: SysrootHost](compiler: String?, what: ref String, 
             read.push(b)
         }
     }
-    return host.sha256_hex(read)
+    return hash::sha256_hex(read)
 }
 
 /// What the cache under `root` holds for `key`, marked as used; none where

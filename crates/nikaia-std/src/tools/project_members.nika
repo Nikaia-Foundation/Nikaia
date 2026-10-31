@@ -10,6 +10,7 @@
 
 use std::collections
 use std::fs
+use std::hash
 
 /// What the walk reads of a package's `nikaia.toml`; the Rust `Manifest` hands
 /// it over.
@@ -344,11 +345,9 @@ fn project_members_crate_root_of(root: ref fs::Path) -> fs::Path throws {
     return beside.remove(0)
 }
 
-/// What a build's foreign boundary asks of the compiler (P4b): `std` has no
-/// SHA-256, and the ledger's reading and merging stay Rust (`LedgerOps`).
+/// What a build's foreign boundary asks of the compiler (P4b): the ledger's
+/// reading and merging stay Rust (`LedgerOps`).
 pub trait ProjectMembersForeignHost {
-    /// The SHA-256 of `read`, in lowercase hex.
-    fn sha256_hex(ref self, read: ref Vec[u8]) -> String sync
     /// The ledger at `path`, where it is there and parses (`Ledger::read_beside`).
     fn read_beside(ref self, path: ref fs::Path) -> Ledger? sync
     /// `into` with `other`'s entries added, under the names it gives them.
@@ -531,7 +530,7 @@ fn project_members_sources_that_moved[H: ProjectMembersForeignHost](root: ref fs
         for b in bytes.iter() {
             read.push(b)
         }
-        if host.sha256_hex(read) != recorded {
+        if hash::sha256_hex(read) != recorded {
             out.push(file.clone())
         }
     }
@@ -557,7 +556,7 @@ pub fn project_members_proofs_digest[H: ProjectMembersForeignHost](root: ref fs:
             all.push(b)
         }
     }
-    return host.sha256_hex(all)
+    return hash::sha256_hex(all)
 }
 
 /// `contracts/<crate>.contracts`, where it is there **and parses as a ledger**.

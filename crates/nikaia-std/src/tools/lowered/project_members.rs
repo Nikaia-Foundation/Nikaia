@@ -169,7 +169,6 @@ pub(crate) fn project_members_crate_root_of(root: &std::path::Path) -> Result<fs
 }
 
 pub trait ProjectMembersForeignHost {
-    fn sha256_hex(&self, read: &[u8]) -> String;
     fn read_beside(&self, path: &std::path::Path) -> Option<Ledger>;
     fn absorb(&self, into: Ledger, other: Ledger) -> Ledger;
     fn empty_ledger(&self) -> Ledger;
@@ -246,7 +245,7 @@ pub(crate) async fn project_members_sources_that_moved<H: ProjectMembersForeignH
         };
         let mut read: Vec<u8> = vec![];
         for b in bytes.iter().copied() { read.push(b); }
-        if host.sha256_hex(&read) != *recorded { out.push(file.to_string()); }
+        if hash::sha256_hex(&read) != *recorded { out.push(file.to_string()); }
     }
     out
 }
@@ -272,7 +271,7 @@ pub async fn project_members_proofs_digest<H: ProjectMembersForeignHost>(root: &
         });
         for b in file.iter().copied() { all.push(b); }
     }
-    host.sha256_hex(&all)
+    hash::sha256_hex(&all)
 }
 
 pub(crate) fn project_members_description_at<H: ProjectMembersForeignHost>(root: &std::path::Path, name: &str, host: &H) -> Option<Ledger> { host.read_beside(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("contracts")))), std::path::Path::new(&(format!("{}.contracts", name))))) }

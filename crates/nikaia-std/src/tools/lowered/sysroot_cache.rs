@@ -18,7 +18,6 @@ pub(crate) const SYSROOT_PACKED: &str = "//@@ file ";
 pub(crate) const SYSROOT_LOWERED: &str = "lowered.rs";
 
 pub trait SysrootHost {
-    fn sha256_hex(&self, read: &[u8]) -> String;
     fn use_entry(&self, entry: &std::path::Path);
     fn unique_beside(&self, path: &std::path::Path) -> fs::Path;
     fn rustc_cpus(&self, triple: &str, more: &[String]) -> Result<String, Box<dyn std::error::Error>>;
@@ -126,7 +125,7 @@ pub fn sysroot_interface<H: SysrootHost>(compiler: &str, salt: &str, setting: &s
         sysroot_part(&mut read, nikaia_std::index::get(&names, (at) as usize));
         sysroot_part(&mut read, nikaia_std::index::get(&bodiless, (at) as usize));
     }
-    host.sha256_hex(&read)
+    hash::sha256_hex(&read)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -136,7 +135,7 @@ pub fn sysroot_file_key<H: SysrootHost>(interface: &str, name: &str, text: &str,
     for b in interface.bytes() { read.push(b); }
     sysroot_part(&mut read, name);
     for b in text.bytes() { read.push(b); }
-    host.sha256_hex(&read)
+    hash::sha256_hex(&read)
 }
 
 pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
@@ -239,7 +238,7 @@ pub async fn sysroot_lowered_key<H: SysrootHost>(compiler: Option<String>, what:
         sysroot_length(&mut read, source.len() as i64);
         for b in source.iter().copied() { read.push(b); }
     }
-    Some(host.sha256_hex(&read))
+    Some(hash::sha256_hex(&read))
 }
 
 pub async fn sysroot_lowered_get<H: SysrootHost>(root: &std::path::Path, cached: bool, key: Option<String>, host: &H) -> Option<String> {

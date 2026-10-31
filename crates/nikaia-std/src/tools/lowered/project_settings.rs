@@ -161,7 +161,6 @@ pub(crate) const PROJECT_SETTINGS_CPU_VAR: &str = "NIKAIA_CPU";
 pub trait ProjectSettingsHost {
     fn env_var(&self, name: &str) -> Option<String>;
     fn native_cpu(&self, triple: &str) -> Result<String, Box<dyn std::error::Error>>;
-    fn sha256_hex(&self, text: &str) -> String;
     fn hard_link(&self, from: &std::path::Path, to: &std::path::Path) -> bool;
 }
 
@@ -314,7 +313,8 @@ pub fn project_settings_root_tag<H: ProjectSettingsHost>(root: &std::path::Path,
         Some(ref named) => format!("{}\x1f{}", nikaia_std::fs::path::display(&(root)), named),
         None => nikaia_std::fs::path::display(&(root)),
     };
-    let hex = host.sha256_hex(&named);
+    let bytes: Vec<u8> = named.bytes().collect::<Vec<_>>();
+    let hex = hash::sha256_hex(&bytes);
     hex.chars().take(16).collect()
 }
 

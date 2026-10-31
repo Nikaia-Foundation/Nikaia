@@ -141,10 +141,6 @@ impl project_settings::ProjectSettingsHost for SettingsHost {
         crate::sysroot::native_cpu(triple).map_err(|e| format!("{e:#}").into())
     }
 
-    fn sha256_hex(&self, text: &str) -> String {
-        orchestrator::cache::sha256_hex(text.as_bytes())
-    }
-
     fn hard_link(&self, from: &Path, to: &Path) -> bool {
         std::fs::hard_link(from, to).is_ok()
     }
@@ -1261,10 +1257,6 @@ pub fn foreign_of(root: &Path) -> Foreign {
 struct ForeignHost;
 
 impl ProjectMembersForeignHost for ForeignHost {
-    fn sha256_hex(&self, read: &[u8]) -> String {
-        orchestrator::cache::sha256_hex(read)
-    }
-
     fn read_beside(&self, path: &Path) -> Option<Ledger> {
         Ledger::read_beside(path)
     }

@@ -7,6 +7,7 @@
 // Rust, and these take and return words and paths.
 
 use std::fs
+use std::hash
 
 /// A word a build setting does not take, in the words the compiler reports.
 pub enum ProjectSettingsRefusal {
@@ -251,8 +252,6 @@ pub trait ProjectSettingsHost {
     fn env_var(ref self, name: ref String) -> String? sync
     /// The CPU `rustc` finds on this machine for `triple`.
     fn native_cpu(ref self, triple: ref String) -> String sync throws
-    /// The SHA-256 of `text`, as lowercase hex.
-    fn sha256_hex(ref self, text: ref String) -> String sync
     /// Whether `to` became a hard link to `from`.
     fn hard_link(ref self, from: ref fs::Path, to: ref fs::Path) -> bool sync
 }
@@ -462,7 +461,8 @@ pub fn project_settings_root_tag[H: ProjectSettingsHost](root: ref fs::Path, var
         named => f"{root.display()}\x1f{named}",
         null => root.display(),
     }
-    let hex = host.sha256_hex(named)
+    let bytes: Vec[u8] = named.bytes().collect()
+    let hex = hash::sha256_hex(bytes)
     return hex.scalars.take(16).collect()
 }
 
