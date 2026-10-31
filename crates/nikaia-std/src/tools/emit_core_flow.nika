@@ -248,7 +248,9 @@ impl EmitState {
         // **A lambda that pauses, where a `std` entry takes it** (ADR-233 D1):
         // the language below's own `async` closure. Its body is an ordinary body
         // that pauses.
-        let pauses = self.facts.pausing_lambdas.contains_key(node_key(node))
+        // **A lambda bound by `let` and run by a parameter that may pause**
+        // (#1046): the same `async` closure the lambda written into the call is.
+        let pauses = self.facts.pausing_lambdas.contains_key(node_key(node)) || self.facts.run_lambdas.contains(node_key(node))
         // **A task of `task::scope`** (ADR-346 D7) fails in the scope's channel,
         // or says that it hands back nothing.
         let a_task = scope.tasks_channel != "" && self.facts.scope_tasks.contains(node_key(node))

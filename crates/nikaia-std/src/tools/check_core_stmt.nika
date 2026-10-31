@@ -545,8 +545,14 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if typed_by_use {
         let want: Ty = by_use ?? Ty::Unknown
         match want {
-            Ty::Fn { params, .. } => {
+            Ty::Fn { params, is_sync, .. } => {
                 state.facts.lambda_params_by_use.insert(id_of(value) as i64, params.clone())
+                // A use that may pause runs it as the language below's
+                // `async` closure, as the same lambda written into the
+                // call is (#1046).
+                if !is_sync {
+                    state.facts.run_lambdas.insert(id_of(value) as i64)
+                }
             },
             else => {}
         }
@@ -1839,7 +1845,7 @@ pub fn check_core_stmt_body_discarded(mut state: CheckState, body: ref Block) sy
 /// D2): the `fn` type of the parameter of a function it is first handed to,
 /// in the rest of the block. Its body is then checked, and lowered, as the
 /// same lambda written into that call is.
-fn check_core_stmt_lambda_by_use(world: ref CheckWorld, stmt: ref Stmt, block: ref Block, at: i64) -> Ty? sync {
+fn check_core_stmt_lambda_by_use[H: CheckHost](world: ref CheckWorld, host: ref H, stmt: ref Stmt, block: ref Block, at: i64) -> Ty? sync {
     let name: String = match stmt {
         Stmt::Let { names, ty, value, .. } => {
             if ty != null || names.len() != 1 || !check_core_stmt_an_untyped_lambda(value) {
@@ -1851,7 +1857,7 @@ fn check_core_stmt_lambda_by_use(world: ref CheckWorld, stmt: ref Stmt, block: r
     }
     let mut i = at + 1
     while i < block.stmts.len() as i64 {
-        let found: Ty? = check_core_stmt_handed_to(world, name, block.stmts[i].node)
+        let found: Ty? = check_core_stmt_handed_to(world, host, name, block.stmts[i].node)
         if found != null {
             return found
         }
@@ -1870,35 +1876,55 @@ fn check_core_stmt_an_untyped_lambda(value: ref Expr) -> bool sync {
 
 /// The `fn` type a statement first hands `name` to as an argument, in it or
 /// in a block it holds.
-fn check_core_stmt_handed_to(world: ref CheckWorld, name: ref String, stmt: ref Stmt) -> Ty? sync {
+fn check_core_stmt_handed_to[H: CheckHost](world: ref CheckWorld, host: ref H, name: ref String, stmt: ref Stmt) -> Ty? sync {
     for expr in check_visit_stmt(stmt) {
-        match expr {
-            Expr::Call { func, args, .. } => {
-                let mut at = 0
-                for arg in args {
-                    let named = match arg {
-                        Expr::Variable(n, _) => world.words.resolve(n) == name,
-                        else => false,
-                    }
-                    if named {
-                        let want: Ty? = check_core_stmt_code_parameter(world, func, at)
-                        if want != null {
-                            return want
-                        }
-                    }
-                    at += 1
-                }
-            },
-            else => {},
+        let found: Ty? = check_core_stmt_handed_in(world, host, name, expr)
+        if found != null {
+            return found
         }
     }
     for inner in check_visit_stmt_blocks(stmt) {
         for each in inner.stmts {
-            let found: Ty? = check_core_stmt_handed_to(world, name, each.node)
+            let found: Ty? = check_core_stmt_handed_to(world, host, name, each.node)
             if found != null {
                 return found
             }
         }
+    }
+    return null
+}
+
+/// The `fn` type one expression hands `name` to as an argument, or a call in
+/// a hole of it does (#1046: `println(f"{apply(add)}")`).
+fn check_core_stmt_handed_in[H: CheckHost](world: ref CheckWorld, host: ref H, name: ref String, expr: ref Expr) -> Ty? sync {
+    if check_visit_has_holes(expr) {
+        for hole in host.literal_holes(expr) {
+            for inner in check_visit_preorder(hole) {
+                let found: Ty? = check_core_stmt_handed_in(world, host, name, inner)
+                if found != null {
+                    return found
+                }
+            }
+        }
+    }
+    match expr {
+        Expr::Call { func, args, .. } => {
+            let mut at = 0
+            for arg in args {
+                let named = match arg {
+                    Expr::Variable(n, _) => world.words.resolve(n) == name,
+                    else => false,
+                }
+                if named {
+                    let want: Ty? = check_core_stmt_code_parameter(world, func, at)
+                    if want != null {
+                        return want
+                    }
+                }
+                at += 1
+            }
+        },
+        else => {},
     }
     return null
 }
@@ -1941,7 +1967,7 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
                 else => {},
             }
         }
-        state.flow.let_lambda_use = check_core_stmt_lambda_by_use(world, stmt.node, block, at)
+        state.flow.let_lambda_use = check_core_stmt_lambda_by_use(world, host, stmt.node, block, at)
         let ty = check_core_stmt(state, world, host, stmt.node, stmt.span)
         state.coalesces_not_lent_are_taken(world)
         state.failing_cleanups_bound()

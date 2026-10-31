@@ -1,0 +1,20 @@
+// #1046: an untyped lambda bound by `let` and handed to a parameter whose
+// `fn` type may pause is the language below's `async` closure, as the same
+// lambda written into the call is; a `sync` parameter keeps it plain.
+fn apply(f: fn(i64) -> i64) -> i64 {
+	return f(1)
+}
+
+fn apply_sync(f: fn(i64) -> i64 sync) -> i64 {
+	return f(1)
+}
+
+fn main() {
+	let add = fn(x) { x + 3 }
+	println(f"{apply(add)}")
+	let more = fn(x) { x + 4 }
+	let r = apply(more)
+	println(f"{r}")
+	let plain = fn(x) { x + 5 }
+	println(f"{apply_sync(plain)}")
+}

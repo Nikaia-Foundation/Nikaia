@@ -437,7 +437,10 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if typed_by_use {
         let want: Ty = nikaia_std::index::or(by_use, || Ty::Unknown);
         match want {
-            Ty::Fn { ref params, .. } => { state.facts.lambda_params_by_use.insert(id_of(value) as i64, params.to_owned()); },
+            Ty::Fn { ref params, is_sync, .. } => {
+                state.facts.lambda_params_by_use.insert(id_of(value) as i64, params.to_owned());
+                if !is_sync { state.facts.run_lambdas.insert(id_of(value) as i64); }
+            },
             _ => { },
         }
         state.flow.lambda_expected = Some(want);
@@ -1320,7 +1323,7 @@ pub fn check_core_stmt_body_discarded(state: &mut CheckState, body: &Block) {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_stmt_lambda_by_use(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, stmt: &Stmt, block: &Block, at: i64) -> Option<Ty> {
+pub(crate) fn check_core_stmt_lambda_by_use<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, stmt: &Stmt, block: &Block, at: i64) -> Option<Ty> {
     let name: String = match stmt {
         Stmt::Let { names, ty, value, .. } => {
             if ty.is_some() || names.len() != 1 || !check_core_stmt_an_untyped_lambda(value) { return None; }
@@ -1330,7 +1333,7 @@ pub(crate) fn check_core_stmt_lambda_by_use(world: &CheckWorld<'_, '_, '_, '_, '
     };
     let mut i = at + 1;
     while i < block.stmts.len() as i64 {
-        let found: Option<Ty> = check_core_stmt_handed_to(world, &name, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node);
+        let found: Option<Ty> = check_core_stmt_handed_to(world, host, &name, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node);
         if found.is_some() { return std::convert::identity(found); }
         i += 1;
     }
@@ -1348,32 +1351,48 @@ pub(crate) fn check_core_stmt_an_untyped_lambda(value: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_stmt_handed_to(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmt: &Stmt) -> Option<Ty> {
+pub(crate) fn check_core_stmt_handed_to<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, stmt: &Stmt) -> Option<Ty> {
     for expr in check_visit_stmt(stmt) {
-        match expr {
-            Expr::Call { func, args, .. } => {
-                let func = nikaia_std::boxed::open(func);
-                let mut at: i64 = 0;
-                for arg in args.iter() {
-                    let named = match arg {
-                        Expr::Variable(n, _) => { let n = *n; world.words.resolve(n) == name },
-                        _ => false,
-                    };
-                    if named {
-                        let want: Option<Ty> = check_core_stmt_code_parameter(world, func, at);
-                        if want.is_some() { return std::convert::identity(want); }
-                    }
-                    at += 1;
-                }
-            },
-            _ => { },
-        }
+        let found: Option<Ty> = check_core_stmt_handed_in(world, host, name, expr);
+        if found.is_some() { return std::convert::identity(found); }
     }
     for inner in check_visit_stmt_blocks(stmt) {
         for each in inner.stmts.iter() {
-            let found: Option<Ty> = check_core_stmt_handed_to(world, name, &each.node);
+            let found: Option<Ty> = check_core_stmt_handed_to(world, host, name, &each.node);
             if found.is_some() { return std::convert::identity(found); }
         }
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_handed_in<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, expr: &Expr) -> Option<Ty> {
+    if check_visit_has_holes(expr) {
+        for hole in host.literal_holes(expr) {
+            for inner in check_visit_preorder(&hole) {
+                let found: Option<Ty> = check_core_stmt_handed_in(world, host, name, inner);
+                if found.is_some() { return std::convert::identity(found); }
+            }
+        }
+    }
+    match expr {
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let mut at: i64 = 0;
+            for arg in args.iter() {
+                let named = match arg {
+                    Expr::Variable(n, _) => { let n = *n; world.words.resolve(n) == name },
+                    _ => false,
+                };
+                if named {
+                    let want: Option<Ty> = check_core_stmt_code_parameter(world, func, at);
+                    if want.is_some() { return std::convert::identity(want); }
+                }
+                at += 1;
+            }
+        },
+        _ => { },
     }
     None
 }
@@ -1410,7 +1429,7 @@ pub fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
                 _ => { },
             }
         }
-        state.flow.let_lambda_use = check_core_stmt_lambda_by_use(world, &stmt.node, block, at);
+        state.flow.let_lambda_use = check_core_stmt_lambda_by_use(world, host, &stmt.node, block, at);
         let ty = check_core_stmt(state, world, host, &stmt.node, &stmt.span);
         state.coalesces_not_lent_are_taken(world);
         state.failing_cleanups_bound();

@@ -170,7 +170,7 @@ impl EmitState {
             self.emit_flow_kept(world, walk, out, host, node, params, mutable, &names, body, pauses, fails, depth, flow, scope)?;
             return Ok(());
         }
-        let pauses = self.facts.pausing_lambdas.contains_key(&node_key(node));
+        let pauses = self.facts.pausing_lambdas.contains_key(&node_key(node)) || self.facts.run_lambdas.contains(&node_key(node));
         let a_task = scope.tasks_channel != "" && self.facts.scope_tasks.contains(&node_key(node));
         let fails = a_task && scope.tasks_channel != "nikaia_std::task::Crashed";
         if a_task && !fails { if pauses { out.push("nikaia_std::task::plain_paused("); } else { out.push("nikaia_std::task::plain("); } }
