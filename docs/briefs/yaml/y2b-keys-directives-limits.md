@@ -54,3 +54,7 @@ Fields of `docs/architect.md`, *Briefs and reports*: `Result: done|noop|partial|
 Attribution:
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01UVxJDveRM5qKZKyCqq6Y24
+
+## Earlier attempt (supervisor, 2026-10-31)
+
+A first builder on this brief was stopped mid-work when its driver hit a time limit. Its unfinished work is saved outside the checkout: `/tmp/claude-0/-home-user-Nikaia/e431aae9-4983-5166-8583-f9b3eb3b6f61/scratchpad/y2b-partial/tracked.diff` (the changes to tracked files, including `packages/yaml/src/main.nika`) and `untracked.tar` in the same folder (new tests: `directives`, `explicit_keys`, `limits_depth_and_size`). Read it, take over what holds up, and check every piece of it against this brief. It has not passed any gate.
