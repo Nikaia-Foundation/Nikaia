@@ -43,6 +43,20 @@ touches = []
 views = ["v: borrowed"]
 signature = "(v: ref Value) -> i64"
 
+[fn."block"]
+sync = true
+keeps = ["chomp"]
+touches = []
+views = ["raw: borrowed"]
+signature = "(raw: ref String, indent: i64, chomp: Chomp, folded: bool) -> String"
+
+[fn."block_end"]
+sync = true
+keeps = ["header"]
+touches = []
+views = ["s: borrowed"]
+signature = "(header: u32, from: u32, s: ref String) -> u32"
+
 [fn."breaks"]
 sync = true
 touches = []
@@ -66,6 +80,13 @@ sync = true
 keeps = ["e"]
 touches = []
 signature = "(e: scalar) -> String"
+
+[fn."explicit_indent"]
+sync = true
+keeps = ["d"]
+touches = []
+inferred = ["!(n < 0) || result == d", "!!(n < 0) || result == n + d"]
+signature = "(n: i64, d: i64) -> i64"
 
 [fn."fold"]
 sync = true
@@ -120,6 +141,18 @@ sync = true
 touches = []
 views = ["t: borrowed"]
 signature = "(t: String) -> i64"
+
+[fn."more_indented"]
+sync = true
+touches = []
+views = ["line: borrowed"]
+signature = "(line: String) -> bool"
+
+[fn."most"]
+sync = true
+touches = []
+views = ["xs: borrowed"]
+signature = "(xs: ref Vec[i64]) -> i64"
 
 [fn."offset_of"]
 sync = true
@@ -180,6 +213,7 @@ signature = "(cs: ref Vec[scalar], from: i64) -> i64"
 [fn."text"]
 pub = true
 sync = true
+keeps = ["s"]
 touches = []
 views = ["s: borrowed"]
 signature = "(s: ref Scalar) -> String"
@@ -187,6 +221,9 @@ signature = "(s: ref Scalar) -> String"
 [impl."Error for ConvertError"]
 
 [impl."Error for Error"]
+
+[type."Chomp"]
+variants = ["Clip", "Strip", "Keep"]
 
 [type."ConvertError"]
 pub = true
@@ -204,6 +241,9 @@ tethered = ["key", "value"]
 pub = true
 fields = ["pub message: String", "pub line: i64", "pub column: i64", "pub offset: i64"]
 
+[type."Head"]
+fields = ["indent: i64", "chomp: Chomp"]
+
 [type."Kind"]
 variants = ["Null", "True", "False", "Int", "Float", "Str"]
 
@@ -214,7 +254,7 @@ tethered = ["value"]
 
 [type."Scalar"]
 pub = true
-fields = ["pub raw: ref String", "value: String", "pub style: Style"]
+fields = ["pub raw: ref String", "value: String", "pub style: Style", "indent: i64", "chomp: Chomp"]
 tethered = ["raw", "value"]
 
 [type."Style"]

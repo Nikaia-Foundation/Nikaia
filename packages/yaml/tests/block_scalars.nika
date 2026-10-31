@@ -1,0 +1,74 @@
+// Block scalars (YAML 1.2.2 8.1): literal `|` and folded `>`, chomping `-`,
+// `+` and clip, an indentation indicator, the indentation taken from the
+// first text line. The references are the specification's examples 8.1-8.10
+// (the yaml-test-suite's "Spec Example 8.x" cases).
+use yaml
+
+fn show(n: ref yaml::Node) -> String {
+	return match n.value {
+		yaml::Value::Null => "null"
+		yaml::Value::Bool(b) => f"bool({b})"
+		yaml::Value::Int(t) => f"int({t})"
+		yaml::Value::Float(t) => f"float({t})"
+		yaml::Value::Str(s) => f"str({yaml::text(s).replace("\n", "\\n").replace("\t", "\\t")})"
+		yaml::Value::Alias(a) => f"alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println(f"error {error.line}:{error.column}")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+
+fn main() {
+	// chomping without trailing empty lines (examples 8.4, 8.5)
+	line("a: |\n  x\n  y\nb: |-\n  x\n  y\nc: |+\n  x\n  y\n")
+	// and with them; a less indented comment ends the scalar
+	line("a: |\n  x\n\n\nb: |-\n  x\n\n\nc: |+\n  x\n\n\n# c\nd: e\n")
+	line("a: >\n  x\n  y\n\nb: >-\n  x\n  y\n\nc: >+\n  x\n  y\n\n")
+	// no text line (example 8.6)
+	line("a: >-\n\nb: >\n\nc: |+\n\nd: |\n")
+	// no final line break, at the end of the input
+	line("a: |\n  x")
+	line("a: |+\n  x")
+	// leading empty lines, a comment after the header
+	line("a: | # c\n\n  x\n")
+	// folding: a single break a space, an empty line a break, more indented
+	// lines and the breaks around them kept (examples 8.10-8.12)
+	line(">\n\n folded\n line\n\n next\n line\n   * bullet\n\n   * list\n   * lines\n\n last\n line\n\n# Comment\n")
+	line("a: >\n  x\n    y\n  z\n")
+	// literal: lines kept, spaces past the indentation kept (example 8.7, 8.8)
+	line("a: |\n  x\n   y\n\n  z\n")
+	// an indentation indicator (example 8.2): a leading line of spaces past
+	// it is text; either order with the chomping indicator
+	line("a: |2\n   \n  x\n")
+	line("a: |1\n  x\n")
+	line("a: |-2\n   x\nb: >2+\n   y\n\n")
+	// in a sequence, at the top of a document, after `---`
+	line("- |\n a\n- >-\n b\n c\n")
+	line("|\n x\n")
+	line("--- |\nfoo\n--- >\n bar\n")
+	// a tab in the text is kept
+	line("a: |\n  x\ty\n")
+	// a header that is not one is an error at its position
+	line("a: |0\n  x\n")
+	line("a: |x\n  x\n")
+	line("a: |#c\n  x\n")
+	// the leading empty lines indented past the first text line
+	line("a: |\n    \n  x\n")
+}
