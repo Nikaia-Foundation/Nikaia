@@ -1,8 +1,8 @@
 ---
 agent: builder
 model: opus
-max_turns: 100
-budget_usd: 20
+max_turns: 90
+budget_usd: 18
 ---
 # Brief: `yaml` events, a walk of the parsed tree in the yaml-test-suite's form (#928 step 4, first half)
 
@@ -16,11 +16,11 @@ The architect's probe of this step found #1063: a view field of a lent struct (`
 
 ## To build
 
-1. **The tree keeps what the walk needs** (D7, new paragraph). `Node` gets `pub flow: bool` (true for a flow sequence or mapping, false for everything else); every `Node { .. }` in the grammar sets it. A `pub struct Document { pub root: Node, pub start: bool, pub end: bool }` (`---` written, `...` written after it), and `pub fn documents(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Document] sync throws`, with the size and depth errors `parse` gives today. `parse` becomes `documents` with each root taken out (no second parse, no copy of a node). A `...` belongs to the document before it. The existing 14 package tests keep their output byte for byte. Commit.
+1. ~~**The tree keeps what the walk needs**~~ (built in run 1, 2a303980; keep it as it is) (D7, new paragraph). `Node` gets `pub flow: bool` (true for a flow sequence or mapping, false for everything else); every `Node { .. }` in the grammar sets it. A `pub struct Document { pub root: Node, pub start: bool, pub end: bool }` (`---` written, `...` written after it), and `pub fn documents(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Document] sync throws`, with the size and depth errors `parse` gives today. `parse` becomes `documents` with each root taken out (no second parse, no copy of a node). A `...` belongs to the document before it. The existing 14 package tests keep their output byte for byte. Commit.
 2. **Events** (D7). `pub enum` / `pub struct` for an event (names yours): stream start/end, document start/end (explicit or not), sequence and mapping start (block or flow) and end, scalar (style, its value through `text()`), alias; each with its anchor, tag and span (`start`, `end` byte offsets). `pub fn events(docs: ref Vec[Document]) -> Vec[Event]` (or the input as argument, if the views make that the plainer call), and `pub fn event_line(e: ref Event) -> String`, the suite's line form:
    * `+STR`, `-STR`; `+DOC` or `+DOC ---`; `-DOC` or `-DOC ...`;
    * `+SEQ`, `+SEQ []` (flow), `-SEQ`; `+MAP`, `+MAP {}` (flow), `-MAP`;
-   * `=VAL` followed by the style mark and the value: `:` plain, `'` single, `"` double, `|` literal, `>` folded; in the value `\` is `\\`, a line break `\n`, a tab `\t`, a backspace `\b`, a carriage return `\r`;
+   * `=VAL` followed by the style mark and the value (a `Value::Str` gives its `Scalar`'s style and `text()`; every other scalar node its `Node.raw` and `Node.style`, y23: `=VAL :~`, `=VAL :True`, `=VAL <tag:yaml.org,2002:int> "1`): `:` plain, `'` single, `"` double, `|` literal, `>` folded; in the value `\` is `\\`, a line break `\n`, a tab `\t`, a backspace `\b`, a carriage return `\r`;
    * `=ALI *name`; an anchor is written `&name` and a tag `<tag>` (the tag as the tree keeps it, between angle brackets) after the `+SEQ`/`+MAP`/`=VAL` word and before the value, e.g. `+MAP {} &a <tag:yaml.org,2002:map>`, `=VAL &x :1`. If the tree keeps a tag in its short form (`!!str`) rather than resolved (`tag:yaml.org,2002:str`), write what the tree has and say so in `Deviation:`; resolving it is not this brief.
    * An empty node (null with no text) is `=VAL :`.
 3. **Tests**: `packages/yaml/tests/events.nika` + `.stdout`: block and flow collections, every scalar style, a document with and without `---`/`...`, two documents, an anchor, an alias and a tag, nested collections; and one line per event printed with its span for one small input. Compare by hand with the suite's form above.
@@ -28,6 +28,10 @@ The architect's probe of this step found #1063: a view field of a lent struct (`
 `load` (aliases expanded, duplicate keys, the alias limit) is the next brief, not this one.
 
 If a form the package needs is missing or refused in the compiler, the lowering or `std` (no ADR refusing it), stop: `Result: blocked`, `Found:` the gap with a probe of a few lines, `Needs: architect decision`. Do not write around it.
+
+## Run 2 (2026-10-31): what changed
+
+Run 1 built step 1 (2a303980: `Node.flow`, `Document`, `documents`, test `document_markers`) and stopped before step 2: the tree dropped the text and style of a scalar that resolves to `Null`, `Bool`, `Int` or `Float` (`~` and `null` one node, `!!int "1"` without its quotes). The architect decided it (ADR-yaml-1 D7, last paragraph): `Node` has `pub raw: String` and `pub style: Style` for every scalar node, built by `y23-scalar-written.md` just before this run. Pre-flight for run 2, instead of y22's Probe A: `rg -n "pub raw: String|pub style: Style" packages/yaml/src/main.nika` shows both on `Node`, and `packages/yaml/tests/scalar_written.stdout` exists; if not, stop: `Result: blocked`, `Found: y23 not built`. Build steps 2 and 3 only. Write `tests/events.nika` before the first package run and fill its `.stdout` with `--bless` in that run (one run is 3-4 minutes).
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.

@@ -159,6 +159,20 @@ is `documents` with each root taken out, so it pays for nothing it does not
 read. `events` walks `documents`; an event's line form is the package's own
 function, not the caller's.
 
+A scalar keeps how it was written whatever it resolves to (architect,
+2026-10-31, y21's report; *Language decisions* of `docs/architect.md`: D6
+already says the tree is the text as written, and D7's `flow` set the form).
+`~`, `NULL` and `null` are one `Value::Null`, `True` and `true` one
+`Value::Bool(true)`, and `!!int "1"` an `Value::Int` with no quotes; the
+suite's `=VAL :~`, `=VAL :True`, `=VAL <tag:yaml.org,2002:int> "1` need the
+difference. So a `Node` has `pub raw: String`, the scalar's text as `Scalar`'s
+`raw` takes it (a view: between the quotes, after a block header), and
+`pub style: Style`, for every scalar node, whatever its `Value`; a collection,
+an alias and an empty node have `""` and `Style::Plain` (the suite writes an
+empty node `=VAL :`). Not payloads on `Value::Null` and `Value::Bool`: that
+changes every `match` on `Value` and still loses a tagged scalar's quotes. A
+`Value::Str`'s `Scalar` keeps its own `raw` and `style`, which `text()` reads.
+
 ### D8 — Limits are on by default, a value the caller may pass, and an exceeded limit is an error.
 
 `Limits` holds the nesting depth (default 128), the nodes an alias expansion
