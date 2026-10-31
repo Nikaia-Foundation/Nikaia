@@ -598,7 +598,10 @@ fn check_core_ops_lent_root(state: ref CheckState, world: ref CheckWorld, value:
 fn check_core_ops_behind_a_view(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
         Expr::Field { base, .. } => {
-            if state.a_lent_let(world, base) {
+            // **A field of a `get` handed back past a jump** (#1055):
+            // `(m.get(k) ?? return null).sig` reads the element, as
+            // `let c = m.get(k) ?? return null` then `c.sig` does.
+            if state.a_lent_let(world, base) || check_core_stmt_got(state, world, base) {
                 return true
             }
             let on = check_core_ops_place_type(state, world, base) ?? return false

@@ -394,7 +394,7 @@ pub(crate) fn check_core_ops_behind_a_view(state: &CheckState, world: &CheckWorl
     match value {
         Expr::Field { base, .. } => {
             let base = nikaia_std::boxed::open(base);
-            if state.a_lent_let(world, base) { return true; }
+            if state.a_lent_let(world, base) || check_core_stmt_got(state, world, base) { return true; }
             let on = match check_core_ops_place_type(state, world, base) { Some(__nikaia_value) => __nikaia_value, None => return false };
             on.is_a_view() || check_core_ops_behind_a_view(state, world, base)
         },

@@ -1,0 +1,47 @@
+// #1055: an optional field read off a `??` result (a list or map element
+// handed back past a jump) is a view of the element, not moved out of it.
+use std::collections
+struct Slot { default: String }
+struct Sig { name: String, config: Vec[Slot] }
+struct Con { signature: Sig?, label: String? }
+
+fn row_a(m: collections::BTreeMap[String, Con], key: String) -> String? {
+    let sig = (m.get(key) ?? return null).signature ?? return null
+    sig.name.clone()
+}
+
+fn row_b(xs: Vec[Con]) -> String? {
+    let sig = (xs.get(0) ?? return null).signature ?? return null
+    sig.name.clone()
+}
+
+fn row_c(m: collections::BTreeMap[String, Con], key: String, at: i64) -> String? {
+    let d = (((m.get(key) ?? return null).signature ?? return null).config.get(at) ?? return null).default
+    d.clone()
+}
+
+fn row_d(m: collections::BTreeMap[String, Con], key: String) -> String? {
+    let c = m.get(key) ?? return null
+    let sig = c.signature ?? return null
+    sig.name.clone()
+}
+
+fn row_e(m: collections::BTreeMap[String, Con], key: String) -> String? {
+    let label = (m.get(key) ?? return null).label ?? return null
+    label.clone()
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, Con] = collections::BTreeMap()
+    m.insert("k", Con { signature: Sig { name: "one", config: [Slot { default: "dflt" }] }, label: "lbl" })
+    println(row_a(m, "k") ?? "none")
+    println(row_a(m, "x") ?? "none")
+    let xs = [Con { signature: Sig { name: "one", config: [] }, label: null }]
+    println(row_b(xs) ?? "none")
+    let empty: Vec[Con] = []
+    println(row_b(empty) ?? "none")
+    println(row_c(m, "k", 0) ?? "none")
+    println(row_c(m, "x", 0) ?? "none")
+    println(row_d(m, "k") ?? "none")
+    println(row_e(m, "k") ?? "none")
+}
