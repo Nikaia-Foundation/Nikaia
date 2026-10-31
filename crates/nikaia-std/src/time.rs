@@ -26,6 +26,17 @@ pub fn now() -> Instant {
     Instant::now()
 }
 
+/// **`time::since_epoch()`** (#922, [ADR-368](../../../docs/specification/adr/adr-368.md)):
+/// the wall clock, read as the span since the Unix epoch, zero before it. It
+/// is what a file's time is stamped in, so only it compares with
+/// `fs::Metadata::modified`; it can go back, so a span within a run is
+/// measured with [`now`], never with it.
+pub fn since_epoch() -> Duration {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+}
+
 /// **`b.since(a)`** ([ADR-368](../../../docs/specification/adr/adr-368.md)
 /// D1): the span from `a` to `b`, **zero where `b` is earlier** - the language
 /// below's `saturating_duration_since`, under the name Part III gives it.

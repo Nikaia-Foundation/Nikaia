@@ -1,0 +1,21 @@
+// `fs::Metadata::modified`, `links` and `file_id`, and `time::since_epoch`
+// (#922 step 4): a file just written was modified after 2023 and not after
+// now, has one link, and keeps its device and inode across two readings.
+use std::fs
+use std::time
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::write("t.txt", root, "times")
+    let m = fs::metadata("t.txt", root)
+    let now = time::since_epoch()
+    let modified = m.modified()
+    println(f"{modified.in_nanos() > 0}")
+    println(f"{modified <= now + 1.seconds()}")
+    println(f"{now.in_nanos() > 1700000000000000000}")
+    println(f"{m.links() == 1}")
+    println(f"{m.file_id() != null}")
+    let again = fs::metadata("t.txt", root)
+    println(f"{again.file_id() == m.file_id()}")
+    fs::remove("t.txt", root)
+}

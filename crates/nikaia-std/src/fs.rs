@@ -421,6 +421,9 @@ pub struct Metadata {
     len: u64,
     is_dir: bool,
     is_file: bool,
+    modified: std::time::Duration,
+    links: u64,
+    file_id: Option<(u64, u64)>,
 }
 
 impl Metadata {
@@ -442,6 +445,38 @@ impl Metadata {
     pub fn is_file(&self) -> bool {
         self.is_file
     }
+
+    /// The last modification, as the span since the Unix epoch (#922): the
+    /// wall clock's reading, comparable with `time::since_epoch()`; zero where
+    /// the platform does not say or the time is before the epoch.
+    pub fn modified(&self) -> std::time::Duration {
+        self.modified
+    }
+
+    /// The number of hard links to it (#922); `1` off Unix.
+    pub fn links(&self) -> u64 {
+        self.links
+    }
+
+    /// Its device and inode (#922), which two names of one file share; null
+    /// off Unix.
+    pub fn file_id(&self) -> Option<(u64, u64)> {
+        self.file_id
+    }
+}
+
+/// The hard links and the device and inode of what `known` describes: the
+/// numbers Unix keeps (`MetadataExt`).
+#[cfg(unix)]
+fn links_and_id(known: &std::fs::Metadata) -> (u64, Option<(u64, u64)>) {
+    use std::os::unix::fs::MetadataExt;
+    (known.nlink(), Some((known.dev(), known.ino())))
+}
+
+/// Off Unix: one link and no identity, as `Metadata::links` and `file_id` say.
+#[cfg(not(unix))]
+fn links_and_id(_known: &std::fs::Metadata) -> (u64, Option<(u64, u64)>) {
+    (1, None)
 }
 
 /// What the system knows of the name, which [`Metadata`] holds.
@@ -449,10 +484,19 @@ pub fn metadata(path: impl AsRef<FilePath>, root: &Root) -> Result<Metadata, cra
     let asked = path.as_ref();
     let resolved = resolve(asked, root)?;
     let known = std::fs::metadata(&resolved).map_err(|e| crate::io::IoError::of(e, asked))?;
+    let modified = known
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .unwrap_or_default();
+    let (links, file_id) = links_and_id(&known);
     Ok(Metadata {
         len: known.len(),
         is_dir: known.is_dir(),
         is_file: known.is_file(),
+        modified,
+        links,
+        file_id,
     })
 }
 

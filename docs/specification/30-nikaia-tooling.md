@@ -1389,13 +1389,15 @@ pub fn map(path: Path, root: Root) -> Mapped throws     // read-only memory map
 
 ```nika
 pub fn exists(path: Path, root: Root) -> bool throws
-pub fn metadata(path: Path, root: Root) -> Metadata throws   // len, is_dir, is_file, modified
+pub fn metadata(path: Path, root: Root) -> Metadata throws   // len, is_dir, is_file, modified, links, file_id
 pub fn read_dir(path: Path, root: Root) -> DirEntries throws
 pub fn create_dir(path: Path, root: Root; recursive: bool = false) throws
 pub fn remove(path: Path, root: Root; recursive: bool = false) throws
 pub fn rename(from: Path, to: Path, root: Root) throws       // both names under one root
 pub fn copy(from: Path, to: Path, root: Root) -> u64 throws
 ```
+
+`m.modified()` is the last modification as a `time::Duration` since the Unix epoch, on the wall clock `time::since_epoch()` reads, and zero where the platform does not say; `m.links()` is the number of hard links, `1` off Unix; `m.file_id()` is the device and inode as `(u64, u64)?`, the same for two names of one file, and null off Unix ([ADR-319](adr/adr-319.md), #922).
 
 **Availability by target**
 
@@ -1575,6 +1577,9 @@ Some modules are available, or behave restrictively, depending on the target and
   says nothing about the calendar, and means something only within the run
   that read it. A `Duration` also reads as `d.in_nanos()`, an `i64` saturated
   at its largest value as the other `in_*` readers are ([ADR-368](adr/adr-368.md)).
+  `time::since_epoch()` reads the wall clock, the `Duration` since the Unix
+  epoch: it compares with `fs::Metadata::modified`, but it is not monotonic and
+  measures no span within a run ([ADR-368](adr/adr-368.md)).
 * **`std::thread` / `async(detached)`**:
     * **At `user_parallelism = yes`:** full concurrency. The primary mechanism is `async` (Part I 8.1.2).
         * **Strict implicit move:** ownership of the ordinary data used inside an `async(detached)` block is transferred to the new task. A handle on a shared value is the one exception and is duplicated instead, so the name outside keeps working (Part I 6.2).
