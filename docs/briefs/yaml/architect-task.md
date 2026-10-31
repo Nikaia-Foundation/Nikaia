@@ -22,7 +22,7 @@ Read `docs/architect.md`, `docs/briefs/yaml/architect-input.txt` (the stop line 
 * Read only `docs/architect.md` lines 1-260 (roles, briefs, batches); its *State* section is the main lane's.
 * An empty `RED` file in this directory is not a red CI: `architect-input.txt` decides (a `RED` line names jobs).
 * Re-queue a blocked brief: rename its report to `<brief>.runN.report.md` (`git mv` when tracked) so `batch.nika` sees it unrun, and add a paragraph to the brief on what changed between the runs.
-* The rules block of a brief: from `## Rules` to the end of the newest brief here, with `<full brief path>` (the report line) replaced.
+* The rules block of a brief: from `## Rules` to the end of the newest brief here that ends in an `Attribution:` block (y21 was written without one, 2026-10-31), with `<full brief path>` (the report line) replaced.
 * A case that reads a type of another package (`use yaml`): probe it as a two-file scratch package (`nikaia.toml`, `src/main.nika`, `tests/x.nika` + `.stdout`, `nikaia test --project .`); its test goes into `tests/compiler` (package `compiler_tests`, `use compiler_tests`), `docs/builder-facts.md`.
 * `packages/yaml/tests` are not run by CI (only `tests/compiler` and the rs2nika projects are): the package gate in each brief is what guards them.
 
