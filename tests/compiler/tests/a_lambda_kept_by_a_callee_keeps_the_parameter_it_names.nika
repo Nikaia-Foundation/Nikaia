@@ -1,0 +1,15 @@
+// #1025: a lambda handed to a position the callee keeps outlives the call, so
+// a lent `String` parameter it names is kept (owned), not left lent for rustc
+// to refuse.
+fn keep(f: fn(i64) -> i64) -> Vec[fn(i64) -> i64] {
+    let mut v: Vec[fn(i64) -> i64] = []
+    v.push(f)
+    v
+}
+fn hand(s: String) -> i64 {
+    let v = keep(fn(x) { x + s.len() })
+    v.len()
+}
+fn main() {
+    println(hand("abc"))
+}

@@ -1,0 +1,16 @@
+// #1025: a lambda handed to a kept trait-method position takes the lent
+// `String` parameter it names; with no use afterwards the program runs.
+trait H {
+    fn take(ref mut self, f: fn(i64) -> i64)
+}
+struct Keep { held: Vec[fn(i64) -> i64] }
+impl H for Keep {
+    fn take(ref mut self, f: fn(i64) -> i64) { self.held.push(f) }
+}
+fn hand[T: H](mut h: T, s: String) {
+    h.take(fn(x) { x + s.len() })
+}
+fn main() {
+    hand(Keep { held: [] }, "ab")
+    println("ok")
+}

@@ -391,19 +391,19 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = resolved_callee(func, interner, own, library);
-            for at in 0..args.len() as i64 { if !a_position_the_result_points_into((callee).as_deref(), at, own, library) { keep_argument(nikaia_std::index::get(&args, nikaia_std::index::at(at)), (callee).as_deref(), at, interner, context, own, library, walk); } }
+            for at in 0..args.len() as i64 { if !a_position_the_result_points_into((callee).as_deref(), at, own, library) { keep_argument(nikaia_std::index::get(&args, nikaia_std::index::at(at)), (callee).as_deref(), at, interner, holes_of, context, own, library, walk); } }
             for setting in config.iter() { keep_option(setting, (callee).as_deref(), interner, context, own, library, walk); }
         },
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, walk);
-            keep_method_arguments(receiver, args, interner.resolve(method), interner, context, own, library, walk);
+            keep_method_arguments(receiver, args, interner.resolve(method), interner, holes_of, context, own, library, walk);
             keep_method_options(config, interner, context, own, library, walk);
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, walk);
-            keep_method_arguments(receiver, args, interner.resolve(method), interner, context, own, library, walk);
+            keep_method_arguments(receiver, args, interner.resolve(method), interner, holes_of, context, own, library, walk);
             keep_method_options(config, interner, context, own, library, walk);
         },
         _ => { },
@@ -411,9 +411,11 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn keep_argument(arg: &Expr, callee: Option<&str>, at: i64, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
+pub(crate) fn keep_argument(arg: &Expr, callee: Option<&str>, at: i64, interner: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     let known = nikaia_std::index::or(callee, || "").to_string();
-    for parameter in keeps_handed(arg, interner, context, own, library, &walk) { if callee.is_none() { walk.uses.kept.insert(parameter); } else { walk.uses.passed.push(Passed { parameter, callee: known.to_string(), at }); } }
+    let mut handed = keeps_handed(arg, interner, context, own, library, &walk);
+    handed.extend(keeps_named_by_a_lambda(arg, interner, holes_of, context, &walk));
+    for parameter in handed.iter() { if callee.is_none() { walk.uses.kept.insert(parameter.to_string()); } else { walk.uses.passed.push(Passed { parameter: parameter.to_string(), callee: known.to_string(), at }); } }
 }
 
 pub(crate) fn keep_option(setting: &ConfigArg, callee: Option<&str>, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
@@ -477,14 +479,16 @@ pub(crate) fn takes_its_receiver(contract: &FnContract) -> bool {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn keep_method_arguments(receiver: &Expr, args: &[Expr], method: &str, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
+pub(crate) fn keep_method_arguments(receiver: &Expr, args: &[Expr], method: &str, interner: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     let owner = keeps_owner_of(receiver, method, interner, context, own, library);
     let ours = candidate_keys(own, context.own_methods, method, (owner).as_deref(), args.len() as i64);
     for k in 0..args.len() as i64 {
         let theirs = keeps_at_in(library, context.library_methods, method, k + 1, (owner).as_deref());
-        for name in keeps_handed(nikaia_std::index::get(&args, (k) as usize), interner, context, own, library, &walk) {
+        let mut handed = keeps_handed(nikaia_std::index::get(&args, (k) as usize), interner, context, own, library, &walk);
+        handed.extend(keeps_named_by_a_lambda(nikaia_std::index::get(&args, (k) as usize), interner, holes_of, context, &walk));
+        for name in handed.iter() {
             for key in ours.iter() { walk.uses.passed.push(Passed { parameter: name.to_string(), callee: key.to_string(), at: k + 1 }); }
-            if theirs.hit || ours.is_empty() && !theirs.any { walk.uses.kept.insert(name); }
+            if theirs.hit || ours.is_empty() && !theirs.any { walk.uses.kept.insert(name.to_string()); }
         }
     }
 }
@@ -593,6 +597,26 @@ pub(crate) fn keep_what_a_task_names(body: &Expr, interner: &winnow_grammar::Int
             _ => { },
         }
     }
+}
+
+pub(crate) fn keeps_named_by_a_lambda(arg: &Expr, interner: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, walk: &KeepsWalk) -> Vec<String> {
+    let seen = match arg {
+        Expr::Closure { body, .. } => seen_in(body, interner, &name_as_it_is, holes_of, &no_root, true),
+        _ => return vec![],
+    };
+    let mut names: Vec<String> = vec![];
+    for one in seen.iter() {
+        match one {
+            Seen::Spawn { .. } => { return context.parameters.iter().map(|p| { p.to_string() }).collect::<Vec<_>>(); },
+            Seen::Name(name) => {
+                if context.parameters.contains(name) { names.push(name.to_string()); }
+                let viewing = match *nikaia_std::index::get(&walk.views, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                for viewed in viewing.iter() { names.push(viewed.to_string()); }
+            },
+            _ => { },
+        }
+    }
+    names
 }
 
 pub(crate) fn keep_if_a_parameter(name: &str, context: &KeepsBody<'_, '_>, uses: &mut Uses) { if context.parameters.contains(name) { uses.kept.insert(name.to_string()); } }

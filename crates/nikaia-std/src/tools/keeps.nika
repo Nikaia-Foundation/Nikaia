@@ -600,7 +600,7 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
             // result** (#697): `reached_of` and `keeps_viewed_of` follow it there.
             for at in 0..<args.len() {
                 if !a_position_the_result_points_into(callee, at, own, library) {
-                    keep_argument(args[at], callee, at, interner, context, own, library, walk)
+                    keep_argument(args[at], callee, at, interner, holes_of, context, own, library, walk)
                 }
             }
             for setting in config {
@@ -609,12 +609,12 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         }
         Expr::MethodCall { receiver, method, args, config, .. } => {
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, walk)
-            keep_method_arguments(receiver, args, interner.resolve(method), interner, context, own, library, walk)
+            keep_method_arguments(receiver, args, interner.resolve(method), interner, holes_of, context, own, library, walk)
             keep_method_options(config, interner, context, own, library, walk)
         }
         Expr::SafeMethod { receiver, method, args, config, .. } => {
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, walk)
-            keep_method_arguments(receiver, args, interner.resolve(method), interner, context, own, library, walk)
+            keep_method_arguments(receiver, args, interner.resolve(method), interner, holes_of, context, own, library, walk)
             keep_method_options(config, interner, context, own, library, walk)
         }
         else => {}
@@ -624,13 +624,15 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
 // Recorded rather than decided where the callee is known: whether it keeps is
 // the callee's answer, which the fixpoint waits for. A callee no ledger
 // describes keeps (D2's fail-closed case).
-fn keep_argument(arg: ref Expr, callee: ref String?, at: i64, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
+fn keep_argument(arg: ref Expr, callee: ref String?, at: i64, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     let known = (callee ?? "").clone()
-    for parameter in keeps_handed(arg, interner, context, own, library, walk) {
+    let mut handed = keeps_handed(arg, interner, context, own, library, walk)
+    handed.extend(keeps_named_by_a_lambda(arg, interner, holes_of, context, walk))
+    for parameter in handed {
         if callee == null {
-            walk.uses.kept.insert(parameter)
+            walk.uses.kept.insert(parameter.clone())
         } else {
-            walk.uses.passed.push(Passed { parameter: parameter, callee: known.clone(), at: at })
+            walk.uses.passed.push(Passed { parameter: parameter.clone(), callee: known.clone(), at: at })
         }
     }
 }
@@ -762,17 +764,19 @@ fn takes_its_receiver(contract: ref FnContract) -> bool {
 // `Slots::force` stores (found moving `sharing`'s walk into Nikaia, #125).
 // A library's candidates answer from their ledger, and no candidate at all
 // keeps (D2).
-fn keep_method_arguments(receiver: ref Expr, args: ref Vec[Expr], method: ref String, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
+fn keep_method_arguments(receiver: ref Expr, args: ref Vec[Expr], method: ref String, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     let owner = keeps_owner_of(receiver, method, interner, context, own, library)
     let ours = candidate_keys(own, context.own_methods, method, owner, args.len())
     for k in 0..<args.len() {
         let theirs = keeps_at_in(library, context.library_methods, method, k + 1, owner)
-        for name in keeps_handed(args[k], interner, context, own, library, walk) {
+        let mut handed = keeps_handed(args[k], interner, context, own, library, walk)
+        handed.extend(keeps_named_by_a_lambda(args[k], interner, holes_of, context, walk))
+        for name in handed {
             for key in ours {
                 walk.uses.passed.push(Passed { parameter: name.clone(), callee: key.clone(), at: k + 1 })
             }
             if theirs.hit || (ours.len() == 0 && !theirs.any) {
-                walk.uses.kept.insert(name)
+                walk.uses.kept.insert(name.clone())
             }
         }
     }
@@ -914,6 +918,36 @@ fn keep_what_a_task_names(body: ref Expr, interner: ref winnow_grammar::Interner
             else => {}
         }
     }
+}
+
+// **A lambda handed to a call takes along every parameter it names** (#1025):
+// where the callee keeps that position the lambda outlives the call, as a
+// task does (ADR-312 D1), so its parameters are handed to the callee's
+// column like a bare argument; where the callee does not keep it, the body
+// runs during the call and the fixpoint leaves them lent. Not a lambda:
+// nothing. A body with a `spawn` inside names them all, as for a task.
+fn keeps_named_by_a_lambda(arg: ref Expr, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, walk: ref KeepsWalk) -> Vec[String] {
+    let seen = match arg {
+        Expr::Closure { body, .. } => seen_in(body, interner, name_as_it_is, holes_of, no_root, true),
+        else => return [],
+    }
+    let mut names: Vec[String] = []
+    for one in seen {
+        match one {
+            Seen::Spawn { .. } => return context.parameters.iter().map(fn(p) { p.clone() }).collect(),
+            Seen::Name(name) => {
+                if context.parameters.contains(name) {
+                    names.push(name.clone())
+                }
+                let viewing = walk.views[name] ?? continue
+                for viewed in viewing {
+                    names.push(viewed.clone())
+                }
+            }
+            else => {}
+        }
+    }
+    return names
 }
 
 fn keep_if_a_parameter(name: ref String, context: ref KeepsBody, mut uses: Uses) {
