@@ -1,0 +1,44 @@
+// A built-in that takes one pattern takes a sequence or a choice as well
+// (Part II 10, the element table; #1049): `peek`, `not` and `intern` passed
+// `nikaia check` and stopped at the run.
+
+grammar Peek {
+	entry rule doc -> String = peek("-" "a") s:until(";") ";" -> { s }
+}
+
+grammar Not {
+	entry rule doc -> String = not("+" "a") s:until(";") ";" -> { s }
+}
+
+grammar Either {
+	entry rule doc -> String = peek("-" "a" | "+" "b") s:until(";") ";" -> { s }
+}
+
+grammar Interned {
+	entry rule doc -> String = a:intern("-" "a") ";" b:intern("-" "a" | "+" "b") -> {
+		if a == b { "same" } else { "differ" }
+	}
+}
+
+fn main() {
+	let p = Peek::doc("-a;") catch {
+		println("peek: error")
+		return
+	}
+	println(p)
+	let n = Not::doc("-a;") catch {
+		println("not: error")
+		return
+	}
+	println(n)
+	let e = Either::doc("+b;") catch {
+		println("either: error")
+		return
+	}
+	println(e)
+	let i = Interned::doc("-a;-a") catch {
+		println("intern: error")
+		return
+	}
+	println(i)
+}

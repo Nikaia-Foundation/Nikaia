@@ -325,7 +325,7 @@ impl EmitState {
             let raw = walk.grammar_raw
             walk.grammar_bytes = false
             walk.grammar_raw = raw || bytes && written == "bytes"
-            self.emit_patterns(world, walk, out, host, args, ", ")
+            self.emit_built_in_args(world, walk, out, host, called, args)
             walk.grammar_raw = raw
             walk.grammar_bytes = bytes
             out.push(if wrap { "))" } else { ")" })
@@ -345,10 +345,31 @@ impl EmitState {
             }
             out.push(f"<{params.join(", ")}>")
         }
-        if args.len() > 0 {
+        // **A built-in's one pattern may be a sequence or a choice** (Part
+        // II 10, #1049): the backend reads one element as `peek(..)`'s,
+        // `not(..)`'s or `intern(..)`'s argument, so a sequence or a choice
+        // is written as the group it means.
+        if args.len() == 1 && called == "intern" && emit_groups_parts(args[0].node) {
+            // what `intern(p)` keeps is `p`'s text, and a group yields its parts
+            out.push("(text(")
+            self.emit_built_in_args(world, walk, out, host, called, args)
+            out.push("))")
+        } else if args.len() > 0 {
             out.push("(")
-            self.emit_patterns(world, walk, out, host, args, ", ")
+            self.emit_built_in_args(world, walk, out, host, called, args)
             out.push(")")
+        }
+    }
+
+    // `until(..)` reads a sequence or a choice of its own: its alternatives are
+    // the terminators the engine scans for, so they are written as they are.
+    fn emit_built_in_args[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, called: ref String, args: ref Vec[Spanned[Pattern]]) sync throws {
+        if args.len() == 1 && called != "until" && emit_groups_parts(args[0].node) {
+            out.push("(")
+            self.emit_pattern(world, walk, out, host, args[0])
+            out.push(")")
+        } else {
+            self.emit_patterns(world, walk, out, host, args, ", ")
         }
     }
 }

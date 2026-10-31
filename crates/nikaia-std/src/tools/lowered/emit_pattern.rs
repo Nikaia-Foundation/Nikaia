@@ -259,7 +259,7 @@ impl EmitState {
             let raw = walk.grammar_raw;
             walk.grammar_bytes = false;
             walk.grammar_raw = raw || bytes && written == "bytes";
-            self.emit_patterns(world, walk, out, host, args, String::from(", "))?;
+            self.emit_built_in_args(world, walk, out, host, &called, args)?;
             walk.grammar_raw = raw;
             walk.grammar_bytes = bytes;
             out.push(if wrap { "))" } else { ")" });
@@ -272,11 +272,25 @@ impl EmitState {
             for g in generics.iter() { params.push(host.ty_named(walk, g)?); }
             out.push(&format!("<{}>", params.join(", ")));
         }
-        if !args.is_empty() {
+        if args.len() == 1 && called == "intern" && emit_groups_parts(&nikaia_std::index::get(&args, 0).node) {
+            out.push("(text(");
+            self.emit_built_in_args(world, walk, out, host, &called, args)?;
+            out.push("))");
+        } else if !args.is_empty() {
             out.push("(");
-            self.emit_patterns(world, walk, out, host, args, String::from(", "))?;
+            self.emit_built_in_args(world, walk, out, host, &called, args)?;
             out.push(")");
         }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_built_in_args<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, called: &str, args: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
+        if args.len() == 1 && called != "until" && emit_groups_parts(&nikaia_std::index::get(&args, 0).node) {
+            out.push("(");
+            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;
+            out.push(")");
+        } else { self.emit_patterns(world, walk, out, host, args, String::from(", "))?; }
         Ok(())
     }
 }
