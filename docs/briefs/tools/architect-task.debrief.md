@@ -1,11 +1,11 @@
-1. **Most turns lost:** a stray `cat > $TMPDIR/c.md` with no input sat waiting on stdin and hung the `gh` call. It ran into the 120 s timeout and went to the background, and killing it and rewriting the scratch file cost about 5 turns. After that came the probe syntax: grammar lists (`**` versus `list(…)`) and the `std::collections` import took 4 failed probe runs.
-2. **What the brief could have handed me:**
-   - The grammar list form: `list(item, sep)`, Part II 10.8, line 667.
-   - The fact that a single-file probe needs `use std::collections`.
-   - The location of the `ParseError` rendering: it lives in the external `winnow-grammar` checkout, `error.rs` (`rule_stack`, `render`).
-   - That `Gate: none` cuts the batch, and how the driver's `CUT … Gate: none` line maps to "j4 is in fact done".
-   - Whether an open issue already held j4's Found. I searched and found #1073.
-3. **Checks I ran:**
-   - Useful: the j6 probes (nested members, `[1,2,x]`); the NK1111 probe; the duplicate search for issues; `grep` on `batch.nika` for the cut rule.
-   - Wasted: the user-program reproduction of j4's lowering defect, which didn't reproduce because the trigger is the Keep frame in `lower-std`; the first two `gh` search calls, which lacked `is:issue`; the `Map`/`use` probe attempts.
-4. **One change that would save the most:** in `architect-task.md`, add a *Probe kit* line: a grammar-probe template that runs (with `list(…)`, `members`, `use std::collections`), a reminder to run `gh` with `</dev/null` and search with `is:issue`, and where `ParseError` is rendered. That would have saved about 10 turns.
+1. **Most turns:** finding which AST variant `id[i64](3)` parses to, and which walk hands it to `sync.nika` as `Seen::Opaque`. The search went `where.nika` → `grep Opaque` in `sync.nika` → `enum Seen` → `foreign.nika` → counting `Expr::` variants → `check_core_call.nika`. That was about 6 turns of grepping for something one line in builder-facts could say. Rebuilding #1019's body through Python and `sed` to strip the footer also cost a turn or two.
+2. **Could have been handed to me:**
+   - That an explicit generic call is `Expr::Index { base, .. }`, resolved by `check_core_call_filled`.
+   - Where `enum Seen` and the effect walk live (`foreign.nika`).
+   - That `docs/briefs/tools/architect-input.txt` was the CUT line, while `qa-input.txt` and `unpushed.txt` were stale leftovers from an earlier round. I read them and briefly took them for the current state.
+   - That local was 8 commits behind, with an untested builder commit (417abcf) on top. That made the push rejection predictable.
+3. **Checks run:**
+   - Useful: three probes on today's binary. They confirmed #1095's minimal form, j7's second probe and #1096. The search for duplicate issues and the `where.nika` lookup also earned their place.
+   - Partly wasted: the first `turn[Contact]` probe also tripped NK1104 (it returned `f.name` without `.clone()`), so I re-ran it. The push attempt was predictable: 417abcf is unpushed and untested, so it could never go out from this checkout.
+   - Not run: I never checked which `std` call the checker counts as pausing for j7's second test, and left that to the builder.
+4. **One change:** have the driver write the git state (ahead/behind, unpushed shas) and which input files are fresh into `architect-input.txt`. Separately, give builder-facts a short entry on how each call form is represented as an `Expr`, and which walks name a callee (`a_named_call`, `check_core_call`). Five of my lookups would have gone, and so would the j5 builder's guess that a bracket call can't be resolved.

@@ -8,3 +8,4 @@
 /home/user/Nikaia/docs/briefs/tools/j4-1019-members.md 8858966 123
 /home/user/Nikaia/docs/briefs/tools/architect-task.md 3092259 52
 /home/user/Nikaia/docs/briefs/tools/j5-1019-comptime-field.md 6960467 108
+/home/user/Nikaia/docs/briefs/tools/architect-task.md 1207083 29
