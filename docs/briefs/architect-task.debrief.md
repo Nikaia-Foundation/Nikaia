@@ -1,20 +1,15 @@
-1. **Most cost: reading.** `docs/architect.md` is about 36k tokens, and its *State* section is a long diary of very long lines. I needed only the cut line, the last report and the next brief. After that, the probing took about 6 turns, and writing the issue took 2 rounds because I wrote expected outputs before running the combined program.
+1. **What cost the most.** Reading `docs/architect.md`. Its *State* section is about 59 KB of dated entries, and one `sed` printed so much that the output was saved to a file. Running my own probes also took several turns: four probe programs for #938, then the lowered Rust. I also lost a turn on an empty `docs/briefs/RED` file that I first took for the CI status.
 
-2. **What I looked up that the brief could have handed me:**
-   - The format of the input file: what a `CUT` line means and where the full report is.
-   - Whether `b1029` had already run. I had to infer it from the missing `.report.md`.
-   - Where #1018's fact and its emit site are. Reading the commit diff worked, but a pointer to "the cut brief's commit" would have done it in one step.
-   - How the argument path already clones a kept fn (`hands_on_kept`). I found it with a grep.
-   - How to see the generated Rust. `nikaia lower` wrote no `.rs` where I expected one.
+2. **What the brief could have handed me.**
+   - The CI state of `develop` (I fetched it with `gh api`).
+   - That b1029's push had already been rebased and landed.
+   - The list of open `ready` bugs, with the yaml lane's issues marked as not mine.
+   - Which files b1031 touches, so I could pick a second bug in other files.
+   - Where the `for` lowering and `copied_loop_bindings` live (`emit_stmt.nika:960-987`, `check_core_stmt.nika:1502`). I found them with grep instead of `where.nika`.
 
-3. **Checks:**
-   - Useful: the probes a, b, c, d, g and the combined `t.nika` (all fail in rustc today as expected, and `c` confirmed the working path), `fc.nika` (shows a field call alone runs), and the #1018 diff.
-   - Wasted:
-     - The first `d.nika`: `fs[0](1)` is not valid syntax.
-     - `e.nika` with field calls in one expression: it led to the NK2605 side issue, which I left unresolved.
-     - Two failed `nikaia lower` greps.
-     - Re-reading the brief's head and tail after generating it.
+3. **Checks.**
+   - Useful: the #938 probe matrix, including the typed `Vec[i64]` row that showed which forms the bug hits; the brief's full test program (three errors); the lowered Rust; reading `a_copy_by_value`.
+   - Wasted: running #1016's probe (I did not pick that bug); a grep for `Ty` variants and integer-literal names that found nothing; reading the `Ty` enum.
+   - Not done: I did not confirm the exact type an untyped `[1, 2]` element gets, so the brief marks the cause as unverified.
 
-4. **Most useful change:** split `docs/architect.md`. Move *State* into its own file that keeps only the last 3 entries, older ones archived. Have the architect task brief say which three files to read: the input line, the cut report, and the queued briefs. That alone would have saved about 30k tokens and several turns.
-
-   **Second change:** add a line to `docs/builder-facts.md` saying how to get the lowered `.rs` of a scratch file, so probes can be traced to a cause without guessing.
+4. **The change that would save most.** `drive.nika` should write a short status into `architect-input.txt`: the CI run states, whether the last brief's commits are on `origin/develop`, the `ready` issues per lane, and the files the unrun briefs touch. Separately, the dated history in *State* should move out of `architect.md` into `docs/architect-state.md`, keeping only the latest entry inline. Together these would have saved about 6 turns and most of the context I spent.
