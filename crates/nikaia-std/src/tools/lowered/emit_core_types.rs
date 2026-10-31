@@ -82,7 +82,7 @@ impl EmitState {
             let mut outcome: String = String::from("()");
             if (*code.result).is_some() {
                 let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-                let inner = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, lifetimes, count);
+                let inner = a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, result, lifetimes, count));
                 if code.can_throw { outcome = format!("Result<{}, Box<dyn std::error::Error>>", inner); } else { outcome = inner; }
             } else if code.can_throw { outcome = String::from("Result<(), Box<dyn std::error::Error>>"); }
             let runs = walk.in_parameter && walk.code_parameter_runs;

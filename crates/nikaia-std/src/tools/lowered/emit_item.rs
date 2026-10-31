@@ -103,7 +103,9 @@ impl EmitState {
         if foreign && emit_base(&emit_text(world, ty.name)) == "CStr" { return String::from("Option<nikaia_std::foreign::CText>"); }
         if foreign && self.handle_named(world, ty).is_some() { return format!("*mut {}", self.pointed_at(world, ty)); }
         if foreign { return self.emit_foreign_ty(world, walk, host, ty); }
-        self.emit_item_ty(world, walk, host, ty, EmitLifetimes::Elided)
+        let written = self.emit_item_ty(world, walk, host, ty, EmitLifetimes::Elided);
+        if emit_text(world, ty.name) == "Vec" && ty.generics.len() == 1 && !ty.is_nullable && !ty.is_slice { return a_list_read_as_a_slice(written); }
+        written
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

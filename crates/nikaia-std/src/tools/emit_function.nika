@@ -765,6 +765,13 @@ impl EmitState {
                             walk.trusting = fast
                             returned = self.emit_fn_ty(world, walk, host, ty, result, key, "<result>")
                             walk.trusting = outer
+                            // **A list handed back as a view is a slice**, as
+                            // the parameter it comes from is (#1016): `&Vec<T>`
+                            // written `&[T]`; a field's `&Vec<T>` coerces.
+                            let plain_list = emit_text(world, ty.name) == "Vec" && ty.generics.len() == 1 && !ty.is_nullable && !ty.is_slice
+                            if plain_list {
+                                returned = a_list_read_as_a_slice(returned)
+                            }
                         }
                     },
                     null => {

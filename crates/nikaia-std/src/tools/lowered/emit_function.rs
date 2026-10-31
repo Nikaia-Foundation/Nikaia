@@ -466,6 +466,8 @@ impl EmitState {
                             walk.trusting = fast;
                             returned = self.emit_fn_ty(world, walk, host, ty, result, &key, "<result>");
                             walk.trusting = outer;
+                            let plain_list = emit_text(world, ty.name) == "Vec" && ty.generics.len() == 1 && !ty.is_nullable && !ty.is_slice;
+                            if plain_list { returned = a_list_read_as_a_slice(returned); }
                         }
                     },
                     None => { returned = String::from("()"); },

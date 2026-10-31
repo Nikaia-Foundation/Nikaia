@@ -138,7 +138,9 @@ impl EmitState {
             let mut outcome: String = "()"
             if code.result != null {
                 let result = code.result ?? return ""
-                let inner = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, lifetimes, count)
+                // **A list handed back as a view is a slice**, as the
+                // function's own result is (#1016).
+                let inner = a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, result, lifetimes, count))
                 if code.can_throw {
                     outcome = f"Result<{inner}, Box<dyn std::error::Error>>"
                 } else {
