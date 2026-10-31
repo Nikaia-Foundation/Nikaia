@@ -1,0 +1,29 @@
+// A view pushed into a list that is not handed back, inside a branch whose
+// value is handed back, is still kept past the call (#1085).
+struct N {
+	name: String,
+}
+
+struct E {
+	name: String,
+}
+
+fn many(n: ref N, mut seen: Vec[E]) -> Vec[E] sync {
+	return if n.name.len() > 0 {
+		seen.push(E { name: n.name })
+		[E { name: n.name }]
+	} else {
+		[]
+	}
+}
+
+fn parse(input: String) -> Vec[N] {
+	return [N { name: input.trim() }]
+}
+
+fn main() {
+	let ns = parse(" hello ")
+	let mut seen: Vec[E] = []
+	let es = many(ns[0], seen)
+	println(f"{es.len()} {seen.len()}")
+}

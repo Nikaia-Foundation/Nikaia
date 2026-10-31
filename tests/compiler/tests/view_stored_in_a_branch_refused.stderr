@@ -1,0 +1,14 @@
+error[NK2302]: `many` keeps `n` after this call, but `n: ref N` doesn't say whose data it points into.
+   --> tests/view_stored_in_a_branch_refused.nika:13:3
+    |
+ 13 | 		seen.push(E { name: n.name })
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It's stored in `E.name`.
+    = note: `E.name` is a `ref String`, so it points into some data, but `n: ref N` doesn't say whose.
+    = help: Put the view in a struct and pass the struct, so its declaration says whose data it is (like `Reading` in `examples/1brc.nika`):
+           struct Held { n: ref N }
+           …
+           fn many(…, held: Held) { … held.n … }
+       Or keep a copy of the text with `.clone()`, which costs one allocation.
+1 view kept past the call that was given it

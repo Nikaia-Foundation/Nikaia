@@ -802,7 +802,7 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
                 // **A struct that never leaves keeps nothing past the call**
                 // (#585): its fields are no store where the name is read only
                 // through them; where those reads go is asked on their own.
-                let handed = local_vec_handed_back(asked, block, i, names, value)
+                let handed = local_vec_handed_back(asked, block, i, tail, names, value)
                 if handed == 0 {
                     let kept = asked.names.resolve(names[0]).clone()
                     here.locals.insert(kept.clone())
@@ -818,7 +818,7 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
                 if handed == 0 {
                     descend_items(unit, asked, value, span, own_buffer, here)
                 } else if handed > 0 && here.ours_listed != null {
-                    listed_back(unit, asked, value, span, own_buffer, here)
+                    handed_back(unit, asked, value, span, own_buffer, here)
                 } else if views_a_local_struct(unit, asked, block, i, names, value, here.ours) {
                     descend(unit, asked, value, span, own_buffer, here)
                 } else {
@@ -874,13 +874,13 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
 // Whether `let name = [..]` at statement `at` binds a `Vec` that the rest of
 // the block only pushes to, extends, measures, indexes or loops over (#655,
 // #1071), and how
-// often a `return name` of this block hands it back (#1000); -1 where the
+// often a `return name` of this block, or the name as its tail where the
+// block's value is the result (#1085), hands it back (#1000); -1 where the
 // name goes anywhere else. 0: it never leaves, so what is pushed into it is
 // no store past the call.
-fn local_vec_handed_back(asked: ref Asked, block: ref Block, at: i64, names: ref Vec[winnow_grammar::Symbol], value: ref Expr) -> i64 {
-    match value {
-        Expr::ListLit { .. } => {},
-        else => return -1,
+fn local_vec_handed_back(asked: ref Asked, block: ref Block, at: i64, tail: bool, names: ref Vec[winnow_grammar::Symbol], value: ref Expr) -> i64 {
+    if !list_shaped(value) {
+        return -1
     }
     if names.len() != 1 {
         return -1
@@ -890,7 +890,7 @@ fn local_vec_handed_back(asked: ref Asked, block: ref Block, at: i64, names: ref
     let mut allowed = 0
     let mut handed = 0
     for j in (at + 1)..<block.stmts.len() {
-        if returns_named(asked.names, block.stmts[j].node, name) {
+        if returns_named(asked.names, block.stmts[j].node, name) || (tail && j + 1 == block.stmts.len() && a_tail_named(asked.names, block.stmts[j].node, name)) {
             handed += 1
         }
         match block.stmts[j].node {
@@ -926,6 +926,46 @@ fn local_vec_handed_back(asked: ref Asked, block: ref Block, at: i64, names: ref
         return -1
     }
     return handed
+}
+
+// A list literal, or an `if` or `match` whose every branch ends in one
+// (#1085): what such a value holds is only what its literals list.
+fn list_shaped(value: ref Expr) -> bool {
+    return match value {
+        Expr::ListLit { .. } => true,
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = else_branch ?? return false
+            list_shaped_block(then_branch) && list_shaped_block(other)
+        }
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                if !list_shaped(arm.body) {
+                    return false
+                }
+            }
+            true
+        }
+        Expr::Block(block, _) => list_shaped_block(block),
+        else => false,
+    }
+}
+
+fn list_shaped_block(block: ref Block) -> bool {
+    let count = block.stmts.len()
+    if count != 1 {
+        return false
+    }
+    return match block.stmts[0].node {
+        Stmt::Expr(expr) => list_shaped(expr),
+        else => false,
+    }
+}
+
+fn a_tail_named(names: ref winnow_grammar::InternerContext, stmt: ref Stmt, name: ref String) -> bool {
+    return match stmt {
+        Stmt::Expr(expr) => a_variable_named(names, expr, name),
+        else => false,
+    }
 }
 
 fn a_reading_method(method: ref String) -> bool {
@@ -1091,6 +1131,22 @@ fn handed_back(unit: ref Unit, asked: ref Asked, value: ref Expr, span: ref Span
                 stores(unit, asked, value, span, own_buffer, here)
             }
         }
+        // **An `if`, a `match` or a block handed back** (#1085): the value
+        // each branch, arm or block ends in is handed back; the condition and
+        // the matched value are asked as anywhere else.
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            stores(unit, asked, cond, span, own_buffer, here)
+            walk_block(unit, asked, then_branch, true, own_buffer, here)
+            let other = else_branch ?? return
+            walk_block(unit, asked, other, true, own_buffer, here)
+        }
+        Expr::Match { value, arms, .. } => {
+            stores(unit, asked, value, span, own_buffer, here)
+            for arm in arms {
+                handed_back(unit, asked, arm.body, span, own_buffer, here)
+            }
+        }
+        Expr::Block(block, _) => walk_block(unit, asked, block, true, own_buffer, here),
         else => stores(unit, asked, value, span, own_buffer, here),
     }
 }

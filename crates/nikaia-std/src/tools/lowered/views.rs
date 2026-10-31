@@ -525,7 +525,7 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                         here.carriers.insert(asked.names.resolve(name).to_string());
                     }
                 }
-                let handed = local_vec_handed_back(asked, block, i, names, value);
+                let handed = local_vec_handed_back(asked, block, i, tail, names, value);
                 if handed == 0 {
                     let kept = asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_string();
                     here.locals.insert(kept.to_string());
@@ -535,7 +535,7 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                     here.backs.insert(back.to_string());
                     here.carriers.insert(back);
                 }
-                if handed == 0 { descend_items(unit, asked, value, &span, &own_buffer, here); } else if handed > 0 && here.ours_listed.is_some() { listed_back(unit, asked, value, &span, &own_buffer, here); } else if views_a_local_struct(unit, asked, block, i, names, value, (here.ours).as_deref()) { descend(unit, asked, value, &span, &own_buffer, here); } else { stores(unit, asked, value, &span, &own_buffer, here); }
+                if handed == 0 { descend_items(unit, asked, value, &span, &own_buffer, here); } else if handed > 0 && here.ours_listed.is_some() { handed_back(unit, asked, value, &span, &own_buffer, here); } else if views_a_local_struct(unit, asked, block, i, names, value, (here.ours).as_deref()) { descend(unit, asked, value, &span, &own_buffer, here); } else { stores(unit, asked, value, &span, &own_buffer, here); }
             },
             Stmt::Comptime { name, value, .. } => {
                 let name = *name;
@@ -577,18 +577,15 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
     }
 }
 
-pub(crate) fn local_vec_handed_back(asked: &Asked<'_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr) -> i64 {
-    match value {
-        Expr::ListLit { .. } => { },
-        _ => { return -1; },
-    }
+pub(crate) fn local_vec_handed_back(asked: &Asked<'_, '_, '_>, block: &Block, at: i64, tail: bool, names: &[winnow_grammar::Symbol], value: &Expr) -> i64 {
+    if !list_shaped(value) { return -1; }
     if names.len() != 1 { return -1; }
     let name = asked.names.resolve(*nikaia_std::index::get(&names, 0));
     let mut uses: i64 = 0;
     let mut allowed: i64 = 0;
     let mut handed: i64 = 0;
     for j in at + 1..block.stmts.len() as i64 {
-        if returns_named(asked.names, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node, name) { handed += 1; }
+        if returns_named(asked.names, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node, name) || tail && j + 1 == block.stmts.len() as i64 && a_tail_named(asked.names, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node, name) { handed += 1; }
         match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node {
             Stmt::For { iter, .. } => { if a_variable_named(asked.names, iter, name) { allowed += 1; } },
             _ => { },
@@ -613,6 +610,38 @@ pub(crate) fn local_vec_handed_back(asked: &Asked<'_, '_, '_>, block: &Block, at
     }
     if uses != allowed + handed { return -1; }
     handed
+}
+
+pub(crate) fn list_shaped(value: &Expr) -> bool {
+    match value {
+        Expr::ListLit { .. } => true,
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
+            list_shaped_block(then_branch) && list_shaped_block(other)
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() { if !list_shaped(&arm.body) { return false; } }
+            true
+        },
+        Expr::Block(block, _) => list_shaped_block(block),
+        _ => false,
+    }
+}
+
+pub(crate) fn list_shaped_block(block: &Block) -> bool {
+    let count = block.stmts.len() as i64;
+    if count != 1 { return false; }
+    match &nikaia_std::index::get(&block.stmts, 0).node {
+        Stmt::Expr(expr) => list_shaped(expr),
+        _ => false,
+    }
+}
+
+pub(crate) fn a_tail_named(names: &winnow_grammar::InternerContext, stmt: &Stmt, name: &str) -> bool {
+    match stmt {
+        Stmt::Expr(expr) => a_variable_named(names, expr, name),
+        _ => false,
+    }
 }
 
 pub(crate) fn a_reading_method(method: &str) -> bool { a_growing_method(method) || method == "len" || method == "is_empty" }
@@ -714,6 +743,19 @@ pub(crate) fn handed_back(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, 
             if ours_is(asked, (here.ours).as_deref(), name) { descend(unit, asked, value, span, &own_buffer, here); } else { stores(unit, asked, value, span, &own_buffer, here); }
         },
         Expr::ListLit { .. } => { if here.ours_listed.is_some() { listed_back(unit, asked, value, span, &own_buffer, here); } else { stores(unit, asked, value, span, &own_buffer, here); } },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            stores(unit, asked, cond, span, &own_buffer, here);
+            walk_block(unit, asked, then_branch, true, &own_buffer, here);
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
+            walk_block(unit, asked, other, true, &own_buffer, here);
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            stores(unit, asked, value, span, &own_buffer, here);
+            for arm in arms.iter() { handed_back(unit, asked, &arm.body, span, own_buffer, here); }
+        },
+        Expr::Block(block, _) => { walk_block(unit, asked, block, true, &own_buffer, here); },
         _ => { stores(unit, asked, value, span, &own_buffer, here); },
     }
 }

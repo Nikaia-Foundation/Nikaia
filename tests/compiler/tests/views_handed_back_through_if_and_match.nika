@@ -1,0 +1,64 @@
+// A list or a struct holding views of a `ref` parameter, handed back through
+// an `if`, a `match` or a block arm, is handed back, not kept (#1085).
+struct N {
+	name: String,
+}
+
+struct E {
+	name: String,
+}
+
+fn by_if(n: ref N) -> Vec[E] sync {
+	return if true { [E { name: n.name }] } else { [] }
+}
+
+fn by_match(n: ref N) -> Vec[E] sync {
+	return match 1 {
+		1 => [E { name: n.name }],
+		else => [],
+	}
+}
+
+fn by_let(n: ref N) -> Vec[E] sync {
+	let r: Vec[E] = if true { [E { name: n.name }] } else { [] }
+	return r
+}
+
+fn by_block_arm(n: ref N) -> Vec[E] sync {
+	return if true {
+		let mut out: Vec[E] = [E { name: n.name }]
+		out.push(E { name: n.name })
+		out
+	} else {
+		[]
+	}
+}
+
+fn one(n: ref N) -> E sync {
+	return if true { E { name: n.name } } else { E { name: n.name } }
+}
+
+fn all(ns: ref Vec[N]) -> Vec[E] sync {
+	let mut out: Vec[E] = []
+	for n in ns {
+		out.extend(by_if(n))
+		out.extend(by_match(n))
+		out.extend(by_let(n))
+		out.extend(by_block_arm(n))
+		out.push(one(n))
+	}
+	return out
+}
+
+fn parse(input: String) -> Vec[N] {
+	return [N { name: input.trim() }]
+}
+
+fn main() {
+	let ns = parse(" hello ")
+	let es = all(ns)
+	for e in es {
+		print(f"{e.name} ")
+	}
+	println(f"{es.len()}")
+}
