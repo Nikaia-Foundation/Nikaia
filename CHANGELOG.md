@@ -8,6 +8,17 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1315] — 2026-10-31
+
+**The prover follows short loops turn by turn and a match as an if (ADR-361 D9, D12; #639, #1009, #1021); NK1241 refuses a wide integer `as scalar` (#1003); a callback through a trait borrows (ADR-277 D17 step 1, #1012); the NK2104 note no longer names `seq` (#994)**
+- The prover follows a loop of a constant number of turns, at most 16, turn by turn: each whole-number name it changes gets one interval per turn, each checked as an invariant, so `n = n * 16 + d` over four turns proves `n <= 0xFFFF`; a `throw` in a loop body is a way out of the loop, and a whole-number `let` the prover does not read is a name of its own (ADR-361 D12, #639).
+- The prover reads a `let mut` bound to a call, a whole number handed to a function that does not change it, what a branch's own `let` of a call bounds past the `if`, and a call's precondition through the history of an `if`, so json's surrogate-pair decoding proves `scalar::from` (#1009).
+- The prover follows a `let mut` whole number through a `match` statement as through an `if`: each arm knows what its `bool`, literal or range pattern says of the matched value, and after the `match` the number is one arm's value or another's (ADR-361 D9, #1021).
+- An integer other than a `u8` cast `as scalar` is refused with `NK1241`, whose help names `scalar::from(n)`, instead of being checked at run time (#1003).
+- Arms that differ only where one is not yet known meet at the known type; a `match` over a tuple of views binds the parts inside each view by reference and copies numbers and bools out.
+- A callback handed through a trait method borrows its captures when no impl in the trait's package keeps it (ADR-277 D17, #1012 step 1; the ledger entry and NK1264/NK1265 follow).
+- The `NK2104` note for stdout against stderr no longer sends the reader to the removed `seq` (#994).
+
 ## [0.0.1314] — 2026-10-30
 
 **ADR-grammar-2 accepted: a grammar entry takes a type and is emitted per type; members[S] builds the struct; json::read forwards to the grammar (#604)**
