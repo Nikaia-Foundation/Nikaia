@@ -1,3 +1,2 @@
-gr2-grammar-run-reland.md
-s1082-or-default-cloned.md
 c1a-ledger-items.md
+k3b-comptime-bundle.md

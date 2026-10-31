@@ -297,40 +297,39 @@ tokens and turns per finished step, steps per day; counted, not timed.
 *Current state only, rewritten (not appended) by the architect when it ends:
 open lanes, what blocks what, figures, decisions in force that no ADR or issue
 holds. What happened is in `git log` and the issues.*
-**2026-10-31 (after 8eac868c).** Self-hosting: about 82 % of the toolchain
+**2026-10-31 (after 0d8deb1f).** Self-hosting: about 82 % of the toolchain
 (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
 2026-11-04), rows and `Cut:` lines in `docs/selfhosting-plan.md`.
 
 * **CI**: last known red (clippy 1.99) fixed forward by 91510ca0. Main
   session: `rustup update stable` at a quiet moment (this machine's `stable`
   is 1.97; 1.99.1 is installed beside it).
-* **Main lane** (`docs/briefs/batch.txt`): GR re-run (`gr2-grammar-run-reland.md`,
-  resolved revert in `gr2-grammar-run-reland.wip.patch`), s1082
-  (`s1082-or-default-cloned.md`, ADR-384), C1a re-run (`c1a-ledger-items.md`,
-  #1080 fixed by d436703a, #1082 by s1082 just before it). GR's
-  `project_members.rs` drift to keyed maps is ADR-010 D9 working
-  (`process::run` is the tools package's first untrusted source, the keys come
-  through a trait barrier): committed with the move, no new decision. To check
-  when next near `trust.rs`: `join` makes a package that reads no untrusted
-  source all-fast even where keys come through a trait barrier (D9 point 5);
-  file it if a probe shows a keyed position written fast. **P5c blocked** on
-  #1088 (bug lane b20); move done on branch `wip/p5c-project-drive` cc40334f,
-  the brief's *Re-run* says how to land it. **K3b blocked** on #1077 (b17) and
-  #1078 (b18); draft on local branch `wip/k3b-comptime-bundle` 9a1678a8.
-  **S1** waits on b17 (same `sysroot.rs`; an uncommitted `sysroot.rs` sits in
-  the main checkout, another agent's); `String.get(range)` is refused by design
-  (NK1214). P5e waits on the O rows (#923).
+* **Main lane** (`docs/briefs/batch.txt`): C1a re-run (`c1a-ledger-items.md`,
+  #1080 and #1082 built; old report `.run1.report.md`), K3b re-run
+  (`k3b-comptime-bundle.md`, #1077 and #1078 built; cherry-pick 9a1678a8,
+  never merge the wip branch: it sits on pre-rebase commits). GR and s1082
+  done (ADR-384 landed). To check when next near `trust.rs`: `join` makes a
+  package that reads no untrusted source all-fast even where keys come through
+  a trait barrier (ADR-010 D9 point 5); file it if a probe shows a keyed
+  position written fast. **P5c blocked** on #1088 (bug lane b20); move on
+  branch `wip/p5c-project-drive` cc40334f, the brief's *Re-run* says how to
+  land it (check it cherry-picks, as K3b's did not merge). **S1** is free
+  (b17 built; an uncommitted `sysroot.rs` of another agent may still sit in
+  the main checkout); `String.get(range)` is refused by design (NK1214).
+  P5e waits on the O rows (#923).
 * **Next main batch**: P5c re-run (after b20), C1b (`lookup`, `candidates`,
-  the `stored` fold), K3b re-run, S1, as blockers clear. Owed, each its own
-  brief: R0 (#921), `scripts/plan_rows.nika`, the driver writing the failing
-  job's clippy output into `architect-input.txt`, fold `ComptimeRan` into
-  `CheckWall`.
+  the `stored` fold), S1. Owed, each its own brief: R0 (#921),
+  `scripts/plan_rows.nika`, the driver writing the failing job's clippy output
+  into `architect-input.txt`, fold `ComptimeRan` into `CheckWall`. The
+  driver's `drive_push` rebase stopped once on a conflict in a lowered file
+  (`lowered/check_facts.rs`, 2026-10-31 21:30) and was resolved by hand: if it
+  recurs, the driver should re-lower on conflict in `lowered/*.rs`.
 * **Bug lane** (`docs/briefs/bugs/batch.txt`): b17 #1077, b19 #1080 done;
   b18 #1078 done (46824f2b, local, `wip` stays until promote closes it), its
   Founds filed as #1097 (flat_map over a `Seq` result, `ready,wip`, decided on
   the issue: a `Seq`/`Vec`/`Array` result binds `U`) and #1098 (named fn and
   `filter_map` `if`/`null` over `iter()` of copy elements, `ready`). Batch:
-  b20 #1088 (Blocks P5c), b21 #1097, b13 #1057. Queued after, briefs written
+  b20 #1088 (Blocks P5c), b21 #1097, b13 #1057, b22 #1099 (hole-less f-string receiver keeps `{{`), b23 #1100 (walk over a list literal of open numbers not copied); both s1082 Founds. Queued after, briefs written
   and `wip`: b14 #947, b16 #1065. #1060 stays open for step 2 (not
   reproduced). `ready` defects no lane holds, next: #1098, #1081 (`let a = call().field` borrows the temporary), #1075, #1074,
   #1083, #1086, #1066, #1038, #958, #1014, #927, #1056, #1058. Unfiled:
