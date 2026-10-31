@@ -222,8 +222,7 @@ impl CheckState {
         let what = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(around)).what.to_string();
         let mut again: String = String::from("a lambda may run more than once, and the second run would find it gone");
         if what == "loop" { again = String::from("the next time round the loop it would be handed over again, but it's already gone"); } else if what == "guard" || what == "bound" { again = format!("a {} only reads the labels of its alternative: they stay the alternative's, for its action", what); }
-        let mut copy = format!("{}.clone()", path);
-        if ty.text().ends_with('?') { copy = format!("{}?.clone()", path); }
+        let copy = a_copy_said(&path, ty);
         self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.text(), again), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("Hand over a copy each time: `{}`.", copy))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -250,7 +249,7 @@ impl CheckState {
             if used.path == name { message = format!("You're using `{}` again, but it was {}.", name, taken.to); }
             if said.contains(&used.at) { continue; }
             said.insert(used.at);
-            found.push(check_refusal("NK2105", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, message, vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", name, taken.ty.text()), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("If both need it, hand over a copy: `{}.clone()`.", name))));
+            found.push(check_refusal("NK2105", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, message, vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", name, taken.ty.text()), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("If both need it, hand over a copy: `{}`.", a_copy_said(&name, &taken.ty)))));
         }
         self.handed = vec![];
         for one in found.iter() { self.findings.push(one.clone()); }
@@ -437,6 +436,11 @@ pub(crate) fn an_item_text(ty: &Ty) -> String {
         Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.text() },
         _ => String::from("?"),
     }
+}
+
+pub(crate) fn a_copy_said(path: &str, ty: &Ty) -> String {
+    if ty.text().ends_with('?') { return format!("{}?.clone()", path); }
+    format!("{}.clone()", path)
 }
 
 pub(crate) fn a_root_segment(path: &str) -> String {

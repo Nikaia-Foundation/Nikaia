@@ -375,10 +375,7 @@ impl CheckState {
         } else if what == "guard" || what == "bound" {
             again = f"a {what} only reads the labels of its alternative: they stay the alternative's, for its action"
         }
-        let mut copy = f"{path}.clone()"
-        if ty.text().ends_with("?") {
-            copy = f"{path}?.clone()"
-        }
+        let copy = a_copy_said(path, ty)
         self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"Hand over a copy each time: `{copy}`."))
     }
 
@@ -412,7 +409,7 @@ impl CheckState {
                 continue
             }
             said.insert(used.at)
-            found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.text()}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"If both need it, hand over a copy: `{name}.clone()`."))
+            found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.text()}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"If both need it, hand over a copy: `{a_copy_said(name, taken.ty)}`."))
         }
         self.handed = []
         for one in found {
@@ -707,6 +704,15 @@ fn an_item_text(ty: ref Ty) -> String {
         Ty::Seq { item, .. } => item.text(),
         else => "?",
     }
+}
+
+// The copy of `path` the help of `NK2105` suggests: `t?.clone()` for an
+// optional, whose `t.clone()` is refused (#1056).
+fn a_copy_said(path: ref String, ty: ref Ty) -> String {
+    if ty.text().ends_with("?") {
+        return f"{path}?.clone()"
+    }
+    return f"{path}.clone()"
 }
 
 // The first segment of a path: `p` for `p.name`.

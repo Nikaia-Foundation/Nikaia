@@ -1,0 +1,16 @@
+// An optional handed over and read again (#1056): NK2105's help writes the
+// copy that compiles, `t?.clone()`, not `t.clone()`.
+struct Node { name: String }
+
+fn keep(t: Node?) -> i64 {
+	return match t {
+		null => 0
+		v => v.name.len()
+	}
+}
+
+fn main() {
+	let t: Node? = Node { name: "a" }
+	println(keep(t))
+	println(keep(t))
+}
