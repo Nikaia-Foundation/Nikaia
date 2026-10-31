@@ -1633,7 +1633,7 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
     stored_arguments(contract, named, args, ask, unaliased, walk)
     let signature = contract.signature ?? return
     let result = signature.result ?? return
-    if !result.is_a_view() && !a_struct_of_views(result, ask) {
+    if !a_result_of_views(result, ask) {
         return
     }
     let copying: Vec[ref Ledger] = [ask.own, ask.library]
@@ -1677,6 +1677,15 @@ fn stored_arguments(contract: ref FnContract, named: ref String, args: ref Vec[E
         let mut origins: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
         origins.insert(id)
         flow_into(root, origins, walk)
+    }
+}
+
+/// A result that may view an argument: a view, a struct of views, or a
+/// tuple one part of which is either (`(ref(s) String, i64)`, #1036).
+fn a_result_of_views(result: ref Ty, ask: ref BufferAsk) -> bool {
+    return match result {
+        Ty::Tuple(parts) => parts.iter().any(fn(part) { a_result_of_views(part, ask) }),
+        else => result.is_a_view() || a_struct_of_views(result, ask),
     }
 }
 

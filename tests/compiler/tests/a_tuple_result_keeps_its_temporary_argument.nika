@@ -1,0 +1,9 @@
+fn pair(s: String) -> (String, i64) {
+    return (s.trim(), 1)
+}
+fn main() {
+    let p = pair(f" ab{1} ")
+    println(f"{p.0}")
+    let (k, n) = pair(f" cd{2} ")
+    println(f"{k} {n}")
+}

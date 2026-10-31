@@ -1235,7 +1235,7 @@ pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], 
     stored_arguments(contract, named, args, ask, unaliased, walk);
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
-    if !result.is_a_view() && !a_struct_of_views(result, ask) { return; }
+    if !a_result_of_views(result, ask) { return; }
     let copying: Vec<&Ledger> = vec![ask.own, ask.library];
     for k in 0..args.len() as i64 {
         if !made_in_the_call(nikaia_std::index::get(&args, nikaia_std::index::at(k))) || !lends_in(contract, k, &copying) || buffers_view_call(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, unaliased) { continue; }
@@ -1266,6 +1266,13 @@ pub(crate) fn stored_arguments(contract: &FnContract, named: &str, args: &[Expr]
         let mut origins: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
         origins.insert(id);
         flow_into(&root, &origins, walk);
+    }
+}
+
+pub(crate) fn a_result_of_views(result: &Ty, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+    match result {
+        Ty::Tuple(parts) => parts.iter().any(|part| { a_result_of_views(part, ask) }),
+        _ => result.is_a_view() || a_struct_of_views(result, ask),
     }
 }
 
