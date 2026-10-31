@@ -28,3 +28,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y2c-properties.md 1416633 33
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 1212819 32
 /home/user/Nikaia/docs/briefs/yaml/y15-1015-fmt-guard-label.md 192613 3
+/home/user/Nikaia/docs/briefs/yaml/y2c-properties.md 444764 14
