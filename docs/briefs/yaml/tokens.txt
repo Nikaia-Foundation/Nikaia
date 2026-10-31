@@ -14,3 +14,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y2-tree-properties.md 4119231 44
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 2267562 50
 /home/user/Nikaia/docs/briefs/yaml/y8-1026-grammar-label-struct.md 262634 4
+/home/user/Nikaia/docs/briefs/yaml/architect-task.md 2401227 53

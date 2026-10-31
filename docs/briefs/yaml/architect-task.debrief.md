@@ -1,13 +1,24 @@
-1. **Most turns:** getting the probes to run. Rebuilding the y2 report's probe took four tries: `('a'..'z')+` doesn't parse, a rule without an action needs `-> { }`, and `alpha` isn't a defined rule. The control probe through a function call took four more: NK1261 for `ref String`, String has no `slice`, NK1214 for cutting at a made-up number, NK2105 for a moved parameter. It only ran once I switched to literals.
+1. **What cost the most:** finding where the #1027 defect actually comes from. I read `check_grammar.nika` and `emit_pattern.nika` first, assuming the "Cannot find value" error came from Nikaia's checker. Only after running `nikaia check` (which passed) and `nikaia lower` did I see it came from rustc, through the `winnow-grammar` crate in `~/.cargo/git/checkouts`. Finding what the spec says about labels on groups also took about four greps that found nothing before I reached the 10.8 table.
 
-2. **Looked up that could have been handed to me:**
-   - The y2 report gave its probe as fragments, without the `Word` rule, so I had to rebuild it.
-   - Which grammar primitives exist (`digit`, `any`; no `alpha`, no character ranges).
-   - That the text-tier walk lives in `crates/nikaia-std/src/tools/text_tiers.nika`, not in `tools/`. Finding `bind_grammar_pattern` and `called_struct` took about five greps.
-   - That `wip/y2-properties` sits on the pre-rebase commit 9fe7210f, not on 9d92e474.
+2. **What the brief could have handed me:**
+   - The grammar vocabulary table lives in Part II 10.8 (around line 716 of `20-nikaia-advance.md`).
+   - The grammar backend is the pinned `winnow-grammar` crate, and its source is in the cargo checkout.
+   - `nikaia lower FILE` writes the emitted `.rs`, which shows what rustc is refusing.
+   - The `yaml` lane has no line in `docs/architect.md` *State*; its state lives in #928.
 
 3. **Checks:**
-   - Useful: the failing probe and the same probe with one alternative removed; the control probe showing the function path (#803) works; ADR-282 D12–D15; `git apply --check` of the draft onto `develop`; reading #928's *To build*.
-   - Partly wasted: the four failed control probes; reading the end of y2b's rules block; one find for a `tools/` directory that doesn't exist.
+   - Useful:
+     - the probe matrix on the current binary;
+     - the same probe with the brackets removed, which gave the expected output;
+     - `check` against `run`, which pinned the error to rustc;
+     - the CI runs query, which showed CI was not red;
+     - grepping the draft, which showed it never labels a group.
+   - Wasted:
+     - grepping for `Cannot find value`, which matched nothing;
+     - grepping `--help` for an emit flag;
+     - reading `check_grammar`'s binding code;
+     - the first `n:(P | Q)` probe, where my `sed` dropped a brace;
+     - a `gh api ... -c` call (gh has no `-c`);
+     - `git pull --rebase`, which refused to run because of another session's uncommitted files.
 
-4. **Biggest saving:** `builder.md` should require a `Found:` probe to be a complete file that runs as written, saved beside the report (`<brief>.probe.nika`). `docs/builder-facts.md` should also get a short list of grammar primitives and the smallest working grammar program. Together these would have saved about eight turns.
+4. **The change that would save the most:** the task brief should say: "When a rustc error ('Cannot find value', a type mismatch) comes from a grammar, run `nikaia check` and `nikaia lower` first. The backend is `winnow-grammar` (pinned rev, cargo checkout), so the fix belongs in `emit_*.nika`." It should also say: "When other sessions' uncommitted files block `git pull --rebase`, fetch and push fast-forward instead."
