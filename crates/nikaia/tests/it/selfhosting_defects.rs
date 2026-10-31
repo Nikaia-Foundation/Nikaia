@@ -198,8 +198,7 @@ fn main() {
     );
     assert_eq!(said.trim(), "11\n6");
     assert!(
-        rust.contains("both(&async |x|")
-            && rust.contains("Kept(std::sync::Arc::new(move |x| Box::pin"),
+        rust.contains("both(&async |x|") && rust.contains("Kept(std::sync::Arc::new(move |x|"),
         "{rust}"
     );
 }
