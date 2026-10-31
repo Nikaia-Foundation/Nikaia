@@ -30,6 +30,12 @@ fn lambda_own(world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol]) ->
     return own
 }
 
+/// Whether a binding is a parameter that arrives as a view.
+fn a_lent_parameter(local: ref CheckLocal) -> bool sync {
+    let kind = local.immutable?.kind ?? return false
+    return kind == CheckKind::Parameter && local.ty.is_a_view()
+}
+
 /// Whether a type is a hull: `Shared`, `SharedMut` or `Locked`.
 fn a_hull_type(ty: ref Ty) -> bool sync {
     return match ty {
@@ -105,11 +111,16 @@ impl CheckState {
             let found = self.binding(name)
             if found != null {
                 let local = found ?? return
-                if is_a_handle(local.ty) || !self.takes_away(world, local.ty) {
+                // **A lent parameter counts as what it is lent from** (#1024):
+                // `s: String` arrives as a view, which a kept lambda cannot
+                // hold past the call, so it is judged as the `String` a local
+                // would be, and its use afterwards is `NK2101`, not rustc's.
+                let ty = if a_lent_parameter(local) { local.ty.owned() } else { local.ty.clone() }
+                if is_a_handle(ty) || !self.takes_away(world, ty) {
                     continue
                 }
                 owned.push(name.clone())
-                self.moved_into_a_task.push((name.clone(), local.ty.clone(), span.end as i64, "a function kept for later"))
+                self.moved_into_a_task.push((name.clone(), ty, span.end as i64, "a function kept for later"))
             }
         }
         if pauses && owned.len() > 0 {

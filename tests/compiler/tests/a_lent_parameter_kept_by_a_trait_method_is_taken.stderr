@@ -1,0 +1,10 @@
+error[NK2101]: You're using `s` after a function kept for later took it.
+   --> tests/a_lent_parameter_kept_by_a_trait_method_is_taken.nika:13:5
+    |
+ 13 |     println(s)
+    |     ^
+    |
+    = note: A function kept to be called later - a supervisor's child, a handler - is called after this function has moved on, so it takes the variables it uses with it. `s` is a `String`, so it went to the function.
+    = note: Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.
+    = help: Make a copy before and hand over the copy: `let copy = s.clone()`, then use `copy` inside.
+1 value a task took with it

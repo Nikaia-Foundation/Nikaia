@@ -1,0 +1,17 @@
+// #1024: a lambda handed to a kept trait-method position takes what it
+// captures. A `String` parameter arrives lent, and is counted as the `String`
+// a local would be: its use afterwards is `NK2101`, not rustc's lifetime error.
+trait H {
+    fn take(ref mut self, f: fn(i64) -> i64)
+}
+struct Keep { held: Vec[fn(i64) -> i64] }
+impl H for Keep {
+    fn take(ref mut self, f: fn(i64) -> i64) { self.held.push(f) }
+}
+fn hand[T: H](mut h: T, s: String) {
+    h.take(fn(x) { x + s.len() })
+    println(s)
+}
+fn main() {
+    hand(Keep { held: [] }, "ab")
+}

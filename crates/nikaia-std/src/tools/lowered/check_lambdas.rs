@@ -30,6 +30,13 @@ pub(crate) fn lambda_own(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn a_lent_parameter(local: &CheckLocal) -> bool {
+    let kind = match local.immutable.as_ref().map(|__nikaia_it| &__nikaia_it.kind) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    *kind == CheckKind::Parameter && local.ty.is_a_view()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn a_hull_type(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => a_hull_named(name),
@@ -90,9 +97,10 @@ impl CheckState {
             let found = self.binding(name);
             if found.is_some() {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
-                if is_a_handle(&local.ty) || !self.takes_away(world, &local.ty) { continue; }
+                let ty = if a_lent_parameter(&local) { local.ty.owned() } else { local.ty.clone() };
+                if is_a_handle(&ty) || !self.takes_away(world, &ty) { continue; }
                 owned.push(name.to_string());
-                self.moved_into_a_task.push((name.to_string(), local.ty.clone(), span.end as i64, String::from("a function kept for later")));
+                self.moved_into_a_task.push((name.to_string(), ty, span.end as i64, String::from("a function kept for later")));
             }
         }
         if pauses && !owned.is_empty() { self.facts.kept_owned.insert(id_of(value) as i64, owned); }
