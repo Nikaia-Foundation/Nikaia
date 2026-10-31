@@ -187,3 +187,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 1015594 23
 /home/user/Nikaia/docs/briefs/b1029-kept-lambda-int-result.md 3766157 66
 /home/user/Nikaia/docs/briefs/architect-task.md 1018714 26
+/home/user/Nikaia/docs/briefs/b1031-kept-fn-name-copy.md 602346 6
