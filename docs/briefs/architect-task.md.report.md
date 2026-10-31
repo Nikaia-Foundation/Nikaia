@@ -1,7 +1,8 @@
 Result: done
-Batch: bt2-known-default.md, s920-process-streams.md
+Batch: s922b-metadata-times.md, k3b-comptime-bundle.md, p5c-project-drive.md
 Owner: none
-Red: f0ed954a's clippy failure (clippy 1.99 `chunks_exact_to_as_chunks`, hash.rs) fixed forward by b-fixforward-clippy199 (91510ca0, gate green); toolchain rule added to CLAUDE.md and builder-facts (6cbf22d9).
-Filed: nothing new (no report since the last run with Found:); #920 decided as written, `wip`, brief s920.
-Needs: main session runs `rustup update stable` at a quiet moment; Changelog lines owed for s922, b9, b10.
-Pushed: db9cac23
+Commit: 136be1ed (local; push rejected: develop is 11 driver-held commits ahead and 8 behind origin, and the tree has others' unstaged files, so no rebase; the driver's drive_push carries it)
+Bug lane: appended b15-1060-trusted-map-name-collision.md (Blocks: the GR re-land; #1060 now ready+wip, commented)
+Decided: #922 step 4 signatures (in s922b); P5c keeps report/libraries_in/executable_in/record_resolved_dependencies as host methods; CARGO_TARGET_DIR empty = unset
+Found filed: none new (reports since last run: bt2 done, s920 done, Found none)
+Changelog owed: s920 (its report's line)

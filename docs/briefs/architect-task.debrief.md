@@ -1,10 +1,20 @@
-1. **Most turns:** finding why CI was red. I could not download the job logs (the proxy blocked them), so I worked through check-run annotations. Then I installed clippy 1.99.1 and reproduced the failure in a scratch worktree. After that, choosing the third brief took a while: rows C7-a and C7-b of the plan turned out to be built already, and I only learned that by reading the code.
-2. **What the brief could have handed me:**
-   - The text of the failing clippy error, and that CI uses the newest stable while this machine has 1.97.
-   - Which plan rows are really still open.
-   - That `nikaia` is not on PATH (it is `target/fast/nikaia`) and that `nikaia test` has no name filter.
-   - After the interruption: that the driver had already committed my files (6cbf22d9) and run the first brief. I found that out from `git log`.
+1. **Most turns:** reading the source to design the two host traits. That was about 550 lines of `comptime_run.rs` (716-1264) and about 450 of `project.rs` (`drive_to`, 2137-2586). I also had to find every outside caller of what moves (`run_fast.rs`, `grammar_run.rs`, `sysroot.rs`, the `project.rs` imports). The second biggest cost was a dead end. `docs/architect.md` State said GR was done. I only learned it had been reverted (0fbe3d6b) when `where.nika` failed on `grammar_run.nika`, and then I had to trace #1060 myself.
+2. **What I looked up that could have been handed over:**
+   - which plan rows are ready, and what blocks each (K3b needs #922 step 4);
+   - the std entries a move needs (`process::run`'s signature, `fs::Metadata`, `in_nanos`, `hash::sha256_hex`);
+   - the host-trait conventions from earlier moves (b070adb9's `impl Error for CheckWall`, the `ProjectMembersRefusal` pattern);
+   - the free bug-brief number.
+
+   `gh api search` returned 403, which cost one call.
 3. **Checks:**
-   - Useful: clippy 1.99.1 on the scratch worktree, the reads of `known_default` and its caller, the issue text of #920, and `git log`/`git status` on resuming.
-   - Wasted: a log download that could never work, a spec grep that returned 52 KB, the C7 lookups, and one `CLAUDE.md` edit attempt with the wrong anchor text.
-4. **The one change that would have saved the most:** `drive.nika` should write the failing job's annotations, or the clippy output, into `architect-input.txt`. On a resumed run it should also list which briefs in the batch have already run.
+   - Useful: the `gh` issue listings, the `grep -n` passes for line ranges and callers, and the push that showed 11 commits held by the driver.
+   - Wasted: the `where.nika --outline` call, and re-reading `selfhosting-plan.md` rows I had already seen before the summary.
+   - Not run at all: no probe of the #1060 cause. The b15 brief marks it as a suspicion.
+4. **Change that would save the most:** the driver should write a fact block into `architect-input.txt`:
+   - reverts since the last run (`git log --grep=Revert`);
+   - plan rows with their prerequisites and status;
+   - open `ready` issues without `wip`;
+   - the next free `b<N>` number;
+   - whether local `develop` is ahead of or behind origin.
+
+   Also, the State section should be rewritten by the step that commits a revert. A stale "GR done" sent this run in the wrong direction at first.
