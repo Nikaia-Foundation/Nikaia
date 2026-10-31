@@ -217,3 +217,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 3435727 57
 /home/user/Nikaia/docs/briefs/s922b-metadata-times.md 146495 3
 /home/user/Nikaia/docs/briefs/k3b-comptime-bundle.md 3628457 52
+/home/user/Nikaia/docs/briefs/architect-task.md 5269869 79
