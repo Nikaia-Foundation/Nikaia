@@ -269,32 +269,37 @@ tokens and turns per finished step, steps per day; counted, not timed.
 *Current state only, rewritten (not appended) by the architect when it ends:
 open lanes, what blocks what, figures, decisions in force that no ADR or issue
 holds. What happened is in `git log` and the issues.*
-
-**2026-10-31 (after 0329f310).** Self-hosting: about 82 % of the toolchain
+**2026-10-31 (after d8deb660).** Self-hosting: about 82 % of the toolchain
 (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
 2026-11-04), rows and `Cut:` lines in `docs/selfhosting-plan.md`.
 
-* **Main lane** (`docs/briefs/batch.txt`): s922 (`s922-sha256-env.md`: #922
-  steps 1-2, then the four host `sha256_hex` methods go), GR
-  (`gr-grammar-run.md`; its BT pre-flight holds: `grammar_run::Wall` is
-  `CheckWall`). BT is built (f819d67d) except step 5: `known_default`
-  (`comptime_run.rs:642`) waits on #1055 (bug lane b9). Once b9 is on develop,
-  write a short BT2 brief for it (its `KNOWN` thread_local stays Rust; the
-  ledger read becomes a Nikaia function over `ref Ledger`).
-* **BT's NK2302 flips** on `tests/compiler/src/main.nika` (3 tests, setting
-  and test changing between runs) were blamed on the uncommitted
-  `check_core_*`/`check_takes` work in the tree (b8's); nothing filed. If
-  they persist after b8 commits, file them.
-* **Next main batch**: K3b (needs #920), P5c (#920), P5e (the O rows), and O1
-  once #922 steps 3-4 are built. GR leaves `shared_target` and `manifest` as
-  host methods for O1. After GR, fold `ComptimeRan` (`comptime_tree.nika`, a
-  copy of `Wall` plus `Answer`) into `CheckWall`. Also owed, each its own
-  brief: R0 (#921), `scripts/plan_rows.nika`, the driver's CI check.
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b9 #1055 (`Blocks: bt-build-time.md`), b10 #1057 step 1 (b8's `Found:`), b11 #1048, all `wip`. b6-b8 are on develop (#1010, #1016 part, #1044; #1044 keeps `wip` until promote closes it). `ready` defects no lane holds: #1038, #958, #1014, #947, #927. #1057 step 2 (rows b, c) after b9. b8's gate red was flakiness of whole-package runs while other agents rebuild `target/fast/nikaia` (`NK2302` on `tests/compiler/src/main.nika`, settings disagree): the driver's suite needs a binary of its own (main session).
+* **CI** was red from c80e63ac to f0ed954a: clippy 1.99's
+  `chunks_exact_to_as_chunks` on s922's `hash.rs`; this machine's `stable`
+  is 1.97. Fixed forward by 91510ca0 (`b-fixforward-clippy199.md`, gate
+  green). Toolchain 1.99.1 is installed beside it; the rule is in `CLAUDE.md`
+  and builder-facts *Traps already met*. Main session: `rustup update stable`
+  at a quiet moment (every `target/` rebuilds).
+* **Main lane** (`docs/briefs/batch.txt`): BT2 (`bt2-known-default.md`: BT
+  step 5, `known_default` into `build_eval.nika`; b9 #1055 is on develop),
+  s920 (`s920-process-streams.md`: #920 steps 1-3, decided, `wip`). s922 and
+  GR are done; GR's report asks for a fresh `lower-std` (TrustedMap ->
+  HashMap in `lowered/project_members.rs`, still uncommitted in the tree).
+* **Next main batch**: K3b and P5c (after s920; P5c keeps Cargo and the
+  serde_json readers behind a host), P5e (the O rows), O1 once #922 steps 3-4
+  are built. C7-a/C7-b of the plan are already built: the plan's C-7 table
+  is stale, refresh it with the next C row. Fold `ComptimeRan` into
+  `CheckWall`. Owed, each its own brief: R0 (#921), `scripts/plan_rows.nika`,
+  the driver writing the failing job's clippy output into
+  `architect-input.txt` (job logs cannot be fetched here: the proxy refuses
+  them).
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): b9 #1055 and b10 #1057 step 1
+  done; b11 #1048 `wip`. `ready` defects no lane holds: #1038, #958, #1014,
+  #947, #927; #1057 step 2. qa-task's note (dev-profile `cargo test -p
+  nikaia` hits the recursion limit in winnow-grammar `rt.rs:902`, fast
+  profile builds) is unfiled: file it if a dev-profile build is needed.
 * **yaml lane**: #928, #929, #604 (`wip`).
-* **Waiting on the owner** (`decision`): #1047, #1042. Owed version raise for
-  b1046 (see its report's Changelog line) if the supervisor has not done it.
+* **Owed to the supervisor**: version raise / Changelog lines for s922, b9,
+  b10, b6-b8, b1046 (their reports). **Waiting on the owner**: #1047, #1042.
 * **In force, in no other file**: `drive.nika`'s `drive_push` runs `git pull
-  --rebase --autostash` in the shared checkout (trap in builder-facts). Branch
-  `wip/bounding-candidates-2026-10-19` is parked (a sketch, stale; redo fresh
-  when self-hosting reaches `bounds`).
+  --rebase --autostash` in the shared checkout. Branch
+  `wip/bounding-candidates-2026-10-19` is parked.

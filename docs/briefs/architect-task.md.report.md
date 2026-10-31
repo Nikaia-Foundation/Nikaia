@@ -1,4 +1,6 @@
 Result: done
-Batch: b-fixforward-clippy199.md bt2-known-default.md s920-process-streams.md
+Batch: bt2-known-default.md, s920-process-streams.md
 Owner: none
-Notes: RED f0ed954a (bootstrap_compiler, clippy): CI's stable 1.99.1 has `chunks_exact_to_as_chunks`, this machine 1.97; three lines in crates/nikaia-std/src/hash.rs, fix-forward brief first. #920 wip. Toolchain trap in CLAUDE.md and builder-facts. Run ended at max turns before committing; report written by the main session from its debrief.
+Red: f0ed954a's clippy failure (clippy 1.99 `chunks_exact_to_as_chunks`, hash.rs) fixed forward by b-fixforward-clippy199 (91510ca0, gate green); toolchain rule added to CLAUDE.md and builder-facts (6cbf22d9).
+Filed: nothing new (no report since the last run with Found:); #920 decided as written, `wip`, brief s920.
+Needs: main session runs `rustup update stable` at a quiet moment; Changelog lines owed for s922, b9, b10.
