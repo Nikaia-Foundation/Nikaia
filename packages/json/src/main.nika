@@ -136,6 +136,7 @@ fn hex4(mut r: Reader, path: String) -> i64 throws {
         r.pos += 1
         k += 1
     }
+    assert(n >= 0 && n <= 0xFFFF)
     return n
 }
 
@@ -193,7 +194,7 @@ fn string(mut r: Reader, path: String) -> String throws {
                 r.pos = start
                 throw fail(r, "lone surrogate", path.clone())
             }
-            out.push(cp as scalar)
+            out.push(scalar::from(cp))
             continue
         }
         if e == 'n' {

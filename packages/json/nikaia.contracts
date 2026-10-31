@@ -73,6 +73,8 @@ sync = "inferred"
 throws = ["Error"]
 touches = []
 views = ["path: borrowed"]
+ensures = ["result >= 0 && result <= 65535"]
+from = ["assert(n >= 0 && n <= 65535)"]
 signature = "(mut r: Reader, path: String) -> i64"
 
 [fn."is_digit"]
