@@ -6,7 +6,7 @@ budget_usd: 25
 ---
 # Brief: #1012 step 2, `NK1264` refuses a foreign impl that keeps more than the column, `NK1265` warns on a column change (ADR-277 D17)
 
-Score: self-hosting lane; the build of an owner decision (#1012, option E). Step 2 of the *To build* list of #1012. Precondition: `b1012a-trait-column-fn.md` (step 1, the column computed in the fixpoint) is on `origin/develop`; if not, stop with `Result: blocked`, `Needs: b1012a`. **This brief may take `NK1264` and `NK1265`** (reserved by the supervisor for this decision; Part III's code table already states them); no other new code.
+Score: self-hosting lane; the build of an owner decision (#1012, option E). Step 2 of the *To build* list of #1012. Precondition: `b1012a-trait-column-fn.md` (step 1) and `b1024-kept-param-lent.md` (#1024) are on `origin/develop`; if not, stop with `Result: blocked`, `Needs:` the missing one. Second run: the first stopped on the edit set (report of 2026-10-31: `NK1264` needs keeps.rs -> sync::Noted -> modules.rs Program -> diagnostics::refuse; the causing impl reaches `changed_contracts` only through project.rs ~1217 via project_lower.nika; the lending note needs the keeper map in check/mod.rs Newly -> CheckWorld (check_state.nika) and a callee for method calls, which pass `callee: null` to check_core_arguments_given in check_core_call.nika). The supervisor widened the edit set to these files. **This brief may take `NK1264` and `NK1265`** (reserved by the supervisor for this decision; Part III's code table already states them); no other new code.
 
 ## Problem
 
@@ -26,7 +26,7 @@ After step 1, an impl of a trait from another package takes the library column. 
 (g) and (h) pass through `nikaia test`, the step-1 tests and `a_trait_method_callback_is_handed_on.nika` still pass, the `it` filter `contracts` and the guard set of `.claude/agents/builder.md` are green; pushed. Changelog: one line (`NK1264`, `NK1265`).
 
 ## Stop and report if
-An edit outside `crates/nikaia/src/contracts/`, `crates/nikaia/src/prove.rs`, `crates/nikaia-std/src/tools/*.nika` and their lowering, the checker's diagnostics, and the new tests; the causing impl cannot reach `changed_contracts` without a ledger field; an error in another agent's file.
+An edit outside `crates/nikaia/src/contracts/`, `crates/nikaia/src/prove.rs`, `crates/nikaia/src/modules.rs`, `crates/nikaia/src/project.rs`, `crates/nikaia/src/check/mod.rs`, the file of `sync::Noted`, `crates/nikaia-std/src/tools/*.nika` and their lowering, the checker's diagnostics, and the new tests; the causing impl cannot reach `changed_contracts` without a ledger field; an error in another agent's file.
 
 **Not yours, never stage**: every file `git status` shows modified or untracked at your start, and every `docs/briefs/*` file except your report.
 

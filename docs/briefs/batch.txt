@@ -1,3 +1,2 @@
-b1023b-shadowing-lambda-lent.md
-k3a2-comptime-compute.md
+b1024-kept-param-lent.md
 b1012b-trait-column-refusals.md
