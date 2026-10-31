@@ -1,0 +1,35 @@
+// A call with type arguments in brackets, `id[i64](3)`, is a call of `id`
+// (Part I 4.7, ADR-288): a `sync` caller and a `comptime` take the generic
+// function's promise, as for `id(3)` (#1095).
+
+struct Contact {
+	name: String,
+	age: i64 = 7,
+}
+
+fn id[T](x: T) -> T sync {
+	return x
+}
+
+fn number() -> i64 sync {
+	return id[i64](3)
+}
+
+fn turn[T: Struct]() -> String sync {
+	for f in T::fields {
+		if f.name == "age" { return f.name.clone() }
+	}
+	return ""
+}
+
+fn field() -> String sync {
+	return turn[Contact]()
+}
+
+comptime W: ref String = turn[Contact]()
+
+fn main() {
+	println(f"{number()}")
+	println(field())
+	println(W)
+}

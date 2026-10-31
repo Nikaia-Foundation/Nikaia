@@ -1,0 +1,18 @@
+warning[NK1233]: `g[…]` names a type the arguments of the call already say.
+   --> tests/a_sync_function_calls_a_pausing_generic_by_brackets.nika:11:2
+    |
+ 11 | 	return g[i64](1)
+    |  ^^^^^^^^^^^^^^^^
+    |
+    = note: Brackets after a function's name are allowed while their uses are collected; here the arguments already say the type.
+    = help: Leave the brackets out, `g(…)`, or add your use case to https://github.com/Nikaia-Language/Nikaia/issues/514.
+error[NK2202]: `v` is `sync`, but it calls `g`, which can pause.
+   --> tests/a_sync_function_calls_a_pausing_generic_by_brackets.nika:11:9
+    |
+ 11 | 	return g[i64](1)
+    |         ^ this can pause
+    |
+    = note: A `sync` function promises that it never pauses and does no I/O.
+    = note: `g` isn't declared `sync` in this program.
+    = help: Remove `sync` from `v`, or move the call out of it.
+1 call a `sync` function may not make

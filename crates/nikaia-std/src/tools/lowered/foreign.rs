@@ -303,6 +303,11 @@ pub(crate) fn a_named_call(func: &Expr, args: &[Expr], span: &Span, names: &winn
     let name = match func {
         Expr::Variable(name, _) => { let name = *name; names.resolve(name).to_string() },
         Expr::Path(segments, _) => written_path(names, segments),
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
+            Expr::Variable(name, _) => { let name = *name; names.resolve(name).to_string() },
+            Expr::Path(segments, _) => written_path(names, segments),
+            _ => String::from(""),
+        } },
         _ => String::from(""),
     };
     if name.is_empty() {

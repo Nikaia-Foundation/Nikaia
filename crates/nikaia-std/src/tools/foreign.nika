@@ -432,6 +432,13 @@ fn a_named_call(func: ref Expr, args: ref Vec[Expr], span: ref Span, names: ref 
     let name = match func {
         Expr::Variable(name, _) => names.resolve(name).clone(),
         Expr::Path(segments, _) => written_path(names, segments),
+        // `id[i64](3)` is a call of `id` (Part I 4.7, ADR-288: the callee is
+        // named before its arguments), so it takes `id`'s promise (#1095).
+        Expr::Index { base, .. } => match base {
+            Expr::Variable(name, _) => names.resolve(name).clone(),
+            Expr::Path(segments, _) => written_path(names, segments),
+            else => "",
+        },
         else => "",
     }
     if name.len() == 0 {

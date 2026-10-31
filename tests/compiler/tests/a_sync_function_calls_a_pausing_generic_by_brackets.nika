@@ -1,0 +1,16 @@
+// A bracket call of a generic function that can pause stays refused in a
+// `sync` caller, and the refusal names the function (#1095).
+use std::time
+
+fn g[T](x: T) -> T {
+	time::sleep(1)
+	return x
+}
+
+fn v() -> i64 sync {
+	return g[i64](1)
+}
+
+fn main() {
+	println(f"{v()}")
+}
