@@ -6,7 +6,7 @@ budget_usd: 25
 ---
 # Brief: #1012 step 3, the trait column covers data parameters; the Rust host impls take what the column says (ADR-277 D17)
 
-Score: self-hosting lane; the last step of the *To build* list of #1012 that changes the compiler. Precondition: `b1012a-trait-column-fn.md` and `b1012b-trait-column-refusals.md` are on `origin/develop`; if one is not, stop with `Result: blocked`, `Needs:` the missing one.
+Score: self-hosting lane; the last step of the *To build* list of #1012 that changes the compiler. Preconditions met (architect, 2026-10-31): step 1 (1c72e8b9), step 2 (51b0838a, NK1264/NK1265) and step 4 (k3a2, 829ce635) are on `origin/develop`, so this commit writes `Fixes #1012`. Step 2's tests `a_foreign_impl_keeping_beyond_the_column_is_refused` and `a_trait_column_change_warns` must stay green.
 
 ## Problem
 
@@ -14,10 +14,10 @@ D17 covers every by-value parameter, code or data (ADR-094 D2 does not tell them
 
 ## Locations
 * `crates/nikaia/src/contracts/keeps.rs`: drop the data seed of the trait node; data parameters get the same edge pairs as `fn` parameters (step 1).
-* The hand-written Rust impls of lowered tools traits: `check/host.rs`, `emit/host.rs`, `project.rs`, `modules.rs`, `comptime_run.rs`, `build_time.rs`, `fold_bound.rs`, `emit/seeds.rs`, `check/core.rs` (grep `impl .* for` against the trait names of `tools/*.nika`); each takes the signature its lowered trait now has, and its callers in Rust follow. A Rust impl that really keeps a parameter the column now runs (stores the `String`): stop, `Found:` with the trait method and the impl. The column is not widened from Rust (D17: impls in Rust are not evidence).
+* The hand-written Rust impls of lowered tools traits: `check/host.rs`, `emit/host.rs`, `project.rs`, `modules.rs`, `comptime_run.rs`, `build_time.rs`, `fold_bound.rs`, `emit/seeds.rs`, `check/core.rs`, `contracts/keeps.rs` and `contracts/sync.rs` (step 2 added impl lookups there) (grep `impl .* for` against the trait names of `tools/*.nika`); each takes the signature its lowered trait now has, and its callers in Rust follow. A Rust impl that really keeps a parameter the column now runs (stores the `String`): stop, `Found:` with the trait method and the impl. The column is not widened from Rust (D17: impls in Rust are not evidence).
 
 ## To build
-1. The seed removed; the lowered host traits and their Rust impls follow; `lower-std` fixpoint clean. Test in `tests/compiler/tests/` (+ `.stdout`): a trait method taking `text: String` that its only impl reads, called through a bound by a caller that uses its string after the call and with a borrowed one, prints both; a sibling row where a local impl stores the string keeps the column (the caller's string moves). Commit `contracts: a trait method's data parameter is a view unless its package's impls keep it (#1012)`; `Fixes #1012` if `k3a2-comptime-compute.md` (step 4) is on `origin/develop`, else `Part of #1012` and `Needs:` says step 4 is the last open one.
+1. The seed removed; the lowered host traits and their Rust impls follow; `lower-std` fixpoint clean. Test in `tests/compiler/tests/` (+ `.stdout`): a trait method taking `text: String` that its only impl reads, called through a bound by a caller that uses its string after the call and with a borrowed one, prints both; a sibling row where a local impl stores the string keeps the column (the caller's string moves). Commit `contracts: a trait method's data parameter is a view unless its package's impls keep it (#1012)`; `Fixes #1012`.
 
 ## Done when
 The test passes through `nikaia test`, the #1012 tests of steps 1-2 still pass, `cargo build --profile fast -p nikaia`, the `it` filter `contracts` and the guard set of `.claude/agents/builder.md` are green; pushed. Changelog: one line (a trait method's by-value data parameter is borrowed when no impl in its package keeps it).
