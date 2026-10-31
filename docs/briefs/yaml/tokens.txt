@@ -49,3 +49,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y23-scalar-written.md 1055264 27
 /home/user/Nikaia/docs/briefs/yaml/y21-events.md 1968777 47
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 2400186 44
+/home/user/Nikaia/docs/briefs/yaml/y24-1070-by-value-enum-not-a-view.md 187685 4
