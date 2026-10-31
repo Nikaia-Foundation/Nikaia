@@ -1,0 +1,68 @@
+// #1026: a view field read from a struct a grammar label binds stays a view.
+struct Props { a: String }
+pub struct Pair { pub a: String, pub b: String }
+struct Opt { a: String? }
+
+grammar G {
+	rule WS = "" -> { }
+	rule Word = digit+ -> { }
+	entry rule top -> Pair = x:text(Word) " " y:text(Word) eof -> { Pair { a: x, b: y } } | p:P " " y:text(Word) eof -> {
+		Pair { a: p.a, b: y }
+	}
+	rule P -> Props = "&" x:text(Word) -> { Props { a: x } }
+	entry rule opt -> Pair = x:text(Word) " " y:text(Word) eof -> { Pair { a: x, b: y } } | o:O " " y:text(Word) eof -> {
+		Pair { a: o.a ?? "", b: y }
+	}
+	rule O -> Opt = "?" x:text(Word) -> { Opt { a: x } }
+	entry rule bound -> Pair = x:text(Word) " " y:text(Word) eof -> { Pair { a: x, b: y } } | p:P " " y:text(Word) eof -> {
+		let an = p.a
+		Pair { a: an, b: y }
+	}
+	entry rule matched -> Pair = x:text(Word) " " y:text(Word) eof -> { Pair { a: x, b: y } } | p:P " " y:text(Word) eof -> {
+		match p {
+			Props { a: x } => Pair { a: x, b: y },
+		}
+	}
+	entry rule named -> Pair = x:text(Word) " " y:text(Word) eof -> { Pair { a: x, b: y } } | p:Props " " y:text(Word) eof -> {
+		Pair { a: p.a, b: y }
+	}
+	rule Props -> Props = "&" x:text(Word) -> { Props { a: x } }
+}
+
+fn show(r: ref Pair) {
+	println(f"{r.a} {r.b}")
+}
+
+fn main() {
+	for t in ["12 34", "&12 34"] {
+		let b = Bytes(t.bytes().collect())
+		let r = G::top(b) catch {
+			println("error")
+			continue
+		}
+		show(r)
+		let n = G::named(b) catch {
+			println("error")
+			continue
+		}
+		show(n)
+		let m = G::matched(b) catch {
+			println("error")
+			continue
+		}
+		show(m)
+		let l = G::bound(b) catch {
+			println("error")
+			continue
+		}
+		show(l)
+	}
+	for t in ["12 34", "?12 34"] {
+		let b = Bytes(t.bytes().collect())
+		let r = G::opt(b) catch {
+			println("error")
+			continue
+		}
+		show(r)
+	}
+}

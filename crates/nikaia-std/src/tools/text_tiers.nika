@@ -1470,6 +1470,13 @@ fn bind_a_payload(part: ref MatchPattern, owner: TextOwner, ty: ref Type, ask: r
     }
     if plain_string(ask.names, ty) {
         if !lasting_tier(tier_at(position_word(owner, no_path()), walk)) {
+            // **A text field a pattern binds holds what its position holds**
+            // (#1026), as a read of the field does: a view where only views
+            // go in. It was read out of that position, so going back into it
+            // adds nothing.
+            let mut local = plain_local(kinds_of(owner, ty, [], ask, walk))
+            local.from = seen(owner, no_path(), walk)
+            bind_tier_local(name, local, walk)
             return false
         }
         let mut local = plain_local(still_kinds())
@@ -5230,7 +5237,9 @@ fn bind_grammar_pattern(gname: ref String, rules: ref collections::BTreeSet[Stri
     match pattern {
         Pattern::Bind { name, pat } => {
             let kinds = grammar_pattern_kinds(gname, rules, pat.node, ask, walk)
-            bind_tier_local(ask.names.resolve(name).clone(), plain_local(kinds), walk)
+            let mut local = plain_local(kinds)
+            local.of = grammar_bound_struct(gname, rules, pat.node, ask, walk)
+            bind_tier_local(ask.names.resolve(name).clone(), local, walk)
             bind_grammar_pattern(gname, rules, pat.node, ask, walk)
         }
         Pattern::Seq(parts) => {
@@ -5253,6 +5262,33 @@ fn bind_grammar_pattern(gname: ref String, rules: ref collections::BTreeSet[Stri
         Pattern::Group(pat) => bind_grammar_pattern(gname, rules, pat.node, ask, walk),
         else => {}
     }
+}
+
+/// The struct a label binds where its pattern is a rule of the grammar
+/// (directly or through a group) whose declared result is one plain name, as
+/// `called_struct` names a call's (#1026): its fields then read as their
+/// positions, not as text of the label's own.
+fn grammar_bound_struct(gname: ref String, rules: ref collections::BTreeSet[String], pattern: ref Pattern, ask: ref TierAsk, walk: ref TierWalk) -> String? {
+    let called = match pattern {
+        Pattern::Group(pat) => return grammar_bound_struct(gname, rules, pat.node, ask, walk),
+        Pattern::Call { name, .. } => ask.names.resolve(name),
+        Pattern::Ref { name, generics, .. } => {
+            if generics.len() > 0 {
+                return null
+            }
+            ask.names.resolve(name)
+        }
+        else => return null,
+    }
+    if !rules.contains(called) {
+        return null
+    }
+    let function = walk.declared.fns[f"{gname}::{called}"] ?? return null
+    let ty = function.result ?? return null
+    if ty.generics.len() > 0 || ty.is_nullable || ty.is_tuple || ty.is_slice || ty.code != null {
+        return null
+    }
+    return ask.names.resolve(ty.name).clone()
 }
 
 /// What kind of text a pattern captures, as the checker types it: a rule of the

@@ -981,7 +981,12 @@ pub(crate) fn bind_a_payload(part: &MatchPattern, owner: TextOwner, ty: &Type, a
         _ => return false,
     };
     if plain_string(ask.names, ty) {
-        if !lasting_tier(tier_at(&position_word(&owner, &no_path()), walk)) { return false; }
+        if !lasting_tier(tier_at(&position_word(&owner, &no_path()), walk)) {
+            let mut local = plain_local(kinds_of(&owner, ty, &mut vec![], ask, walk));
+            local.from = Some(seen(&owner, &no_path(), walk));
+            bind_tier_local(name, local, walk);
+            return false;
+        }
         let mut local = plain_local(still_kinds());
         local.from = Some(seen(&owner, &no_path(), walk));
         bind_tier_local(name, local, walk);
@@ -3819,7 +3824,9 @@ pub(crate) fn bind_grammar_pattern(gname: &str, rules: &collections::BTreeSet<St
         Pattern::Bind { name, pat } => {
             let pat = nikaia_std::boxed::open(pat); let name = *name;
             let kinds = grammar_pattern_kinds(gname, rules, &pat.node, ask, walk);
-            bind_tier_local(ask.names.resolve(name).to_string(), plain_local(kinds), walk);
+            let mut local = plain_local(kinds);
+            local.of = grammar_bound_struct(gname, rules, &pat.node, ask, &walk);
+            bind_tier_local(ask.names.resolve(name).to_string(), local, walk);
             bind_grammar_pattern(gname, rules, &pat.node, ask, walk);
         },
         Pattern::Seq(parts) => { for part in parts.iter() { bind_grammar_pattern(gname, rules, &part.node, ask, walk); } },
@@ -3830,6 +3837,24 @@ pub(crate) fn bind_grammar_pattern(gname: &str, rules: &collections::BTreeSet<St
         Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); bind_grammar_pattern(gname, rules, &pat.node, ask, walk); },
         _ => { },
     }
+}
+
+pub(crate) fn grammar_bound_struct(gname: &str, rules: &collections::BTreeSet<String>, pattern: &Pattern, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> Option<String> {
+    let called = match pattern {
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); return grammar_bound_struct(gname, rules, &pat.node, ask, walk) },
+        Pattern::Call { name, .. } => { let name = *name; ask.names.resolve(name) },
+        Pattern::Ref { name, generics, .. } => {
+            let name = *name;
+            if !generics.is_empty() { return None; }
+            ask.names.resolve(name)
+        },
+        _ => return None,
+    };
+    if !rules.contains(called) { return None; }
+    let function = match *nikaia_std::index::get(&walk.declared.fns, &(format!("{}::{}", gname, called))) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let ty = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !ty.generics.is_empty() || ty.is_nullable || ty.is_tuple || ty.is_slice || (*ty.code).is_some() { return None; }
+    Some(ask.names.resolve(ty.name).to_string())
 }
 
 pub(crate) fn grammar_pattern_kinds(gname: &str, rules: &collections::BTreeSet<String>, pattern: &Pattern, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
