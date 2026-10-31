@@ -385,8 +385,8 @@ tethered = ["doc"]
 
 [type."Node"]
 pub = true
-fields = ["pub start: u32", "pub end: u32", "pub anchor: ref String?", "pub tag: ref String?", "pub flow: bool", "pub value: Value"]
-tethered = ["anchor", "tag", "value"]
+fields = ["pub start: u32", "pub end: u32", "pub anchor: ref String?", "pub tag: ref String?", "pub flow: bool", "pub raw: ref String", "pub style: Style", "pub value: Value"]
+tethered = ["anchor", "tag", "raw", "value"]
 
 [type."Props"]
 fields = ["start: u32", "end: u32", "anchor: ref String?", "tag: ref String?"]

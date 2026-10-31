@@ -31,6 +31,13 @@ pub struct Node {
 	// True for a flow sequence or mapping (`[a]`, `{a: b}`, the single pair
 	// `[a: b]`), false for everything else.
 	pub flow: bool,
+	// A scalar's text as written, whatever its `Value` (D7): a view, as
+	// `Scalar`'s `raw` takes it, between the quotes or after a block header,
+	// the escapes not decoded; and the style it was written in. So `~` and
+	// `null`, `True` and `true`, `!!int "1"` and `!!int 1` stay apart. A
+	// collection, an alias and an empty node have `""` and `Plain`.
+	pub raw: String,
+	pub style: Style,
 	pub value: Value,
 }
 
@@ -361,7 +368,16 @@ grammar Yaml {
 		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, -1) Eol Blanks -> { v }
 		| Eol Blanks v:Block(ds, left, -1) -> { v }
 		| a:here Eol Blanks -> {
-			Node { start: a, end: a, anchor: null, tag: null, flow: false, value: Value::Null }
+			Node {
+				start: a,
+				end: a,
+				anchor: null,
+				tag: null,
+				flow: false,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Null,
+			}
 		}
 
 	// `---` or `...` at the start of a line, where a document begins or ends.
@@ -405,7 +421,16 @@ grammar Yaml {
 			}
 			let mut all = [first]
 			all.extend(rest)
-			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: Value::Seq(all) }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: false,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Seq(all),
+			}
 		}
 	rule SeqMore(ds: Vec[Dir], left: i64, m: i64) -> Node = " "{m} e:SeqEntry(ds, left, m) -> { e }
 	rule SeqEntry(ds: Vec[Dir], left: i64, m: i64) -> Node = "-" v:After(ds, left, m) -> { v }
@@ -419,7 +444,16 @@ grammar Yaml {
 			}
 			let mut all = [first]
 			all.extend(rest)
-			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: Value::Map(all) }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: false,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Map(all),
+			}
 		}
 	// Where a block collection surely begins (`- `, `? `, `key:`, `: `), a
 	// level past the last is an error at once (the cut), not a reason to try
@@ -446,6 +480,8 @@ grammar Yaml {
 						anchor: null,
 						tag: null,
 						flow: false,
+						raw: "",
+						style: Style::Plain,
 						value: Value::Null,
 					},
 			}
@@ -461,6 +497,8 @@ grammar Yaml {
 					anchor: null,
 					tag: null,
 					flow: false,
+					raw: "",
+					style: Style::Plain,
 					value: Value::Null,
 				},
 				value: v,
@@ -483,6 +521,8 @@ grammar Yaml {
 				anchor: p.anchor,
 				tag: p.tag,
 				flow: v.flow,
+				raw: v.raw,
+				style: v.style,
 				value: v.value,
 			}
 		}
@@ -508,6 +548,8 @@ grammar Yaml {
 				anchor: p.anchor,
 				tag: p.tag,
 				flow: v.flow,
+				raw: v.raw,
+				style: v.style,
 				value: v.value,
 			}
 		}
@@ -518,6 +560,8 @@ grammar Yaml {
 				anchor: p.anchor,
 				tag: p.tag,
 				flow: v.flow,
+				raw: v.raw,
+				style: v.style,
 				value: v.value,
 			}
 		}
@@ -528,6 +572,8 @@ grammar Yaml {
 				anchor: p.anchor,
 				tag: p.tag,
 				flow: v.flow,
+				raw: v.raw,
+				style: v.style,
 				value: v.value,
 			}
 		}
@@ -549,7 +595,16 @@ grammar Yaml {
 				})
 				else => Value::Null
 			}
-			Node { start: p.start, end: p.end, anchor: p.anchor, tag: p.tag, flow: false, value: v }
+			Node {
+				start: p.start,
+				end: p.end,
+				anchor: p.anchor,
+				tag: p.tag,
+				flow: false,
+				raw: "",
+				style: Style::Plain,
+				value: v,
+			}
 		}
 	rule Nothing = "" -> { }
 
@@ -565,7 +620,16 @@ grammar Yaml {
 	rule AnchorChar = x:any if(!is_space(x) && !is_flow_indicator(x)) -> { }
 	// `c-ns-alias-node`: `*` and an anchor's name, not resolved (D6).
 	rule Alias -> Node = a:here "*" s:text(AnchorChar+) b:here -> {
-		Node { start: a, end: b, anchor: null, tag: null, flow: false, value: Value::Alias(s) }
+		Node {
+			start: a,
+			end: b,
+			anchor: null,
+			tag: null,
+			flow: false,
+			raw: "",
+			style: Style::Plain,
+			value: Value::Alias(s),
+		}
 	}
 	// `c-ns-tag-property`, as written: verbatim `!<uri>`, a shorthand with a
 	// named or the secondary handle (`!e!x`, `!!str`), with the primary one
@@ -594,7 +658,16 @@ grammar Yaml {
 		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, m) Eol Blanks -> { v }
 		| Eol Blanks v:Block(ds, left, m; c: c) -> { v }
 		| a:here Eol Blanks -> {
-			Node { start: a, end: a, anchor: null, tag: null, flow: false, value: Value::Null }
+			Node {
+				start: a,
+				end: a,
+				anchor: null,
+				tag: null,
+				flow: false,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Null,
+			}
 		}
 
 	rule Compact(ds: Vec[Dir], left: i64, m: i64) -> Node =
@@ -619,10 +692,28 @@ grammar Yaml {
 		Fs first:FlowItem(ds, left - 1) Fs rest:FlowNext(ds, left - 1)* ("," Fs)? "]" b:here -> {
 			let mut all = [first]
 			all.extend(rest)
-			Node { start: a, end: b, anchor: null, tag: null, flow: true, value: Value::Seq(all) }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: true,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Seq(all),
+			}
 		}
 		| a:here "[" if(left > 0, "nesting within the depth limit") Fs "]" b:here -> {
-			Node { start: a, end: b, anchor: null, tag: null, flow: true, value: Value::Seq([]) }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: true,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Seq([]),
+			}
 		}
 	rule FlowNext(ds: Vec[Dir], left: i64) -> Node = "," Fs v:FlowItem(ds, left) Fs -> { v }
 	// A flow sequence's entry may be a single pair, `[a: b]` or `[? a : b]`, a
@@ -630,7 +721,16 @@ grammar Yaml {
 	rule FlowItem(ds: Vec[Dir], left: i64) -> Node =
 		if(left > 0, "nesting within the depth limit") a:here "?" not(PlainSafe(true)) Fs p:FlowExplicit(ds, left - 1) -> {
 			let b = p.value.end
-			Node { start: a, end: b, anchor: null, tag: null, flow: true, value: Value::Map([p]) }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: true,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Map([p]),
+			}
 		}
 		| k:FlowAny(ds, left) t:FlowTail(ds, left - 1)?
 		if(pair_fits(left, k, t), "nesting within the depth limit") -> {
@@ -645,6 +745,8 @@ grammar Yaml {
 						anchor: null,
 						tag: null,
 						flow: true,
+						raw: "",
+						style: Style::Plain,
 						value: Value::Map([Entry { key: k, value: v }]),
 					}
 				}
@@ -656,7 +758,16 @@ grammar Yaml {
 	rule FlowTail(ds: Vec[Dir], left: i64) -> Node =
 		Fs ":" Fs v:FlowAny(ds, left) -> { v }
 		| Fs ":" b:here -> {
-			Node { start: b, end: b, anchor: null, tag: null, flow: false, value: Value::Null }
+			Node {
+				start: b,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: false,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Null,
+			}
 		}
 
 	rule FlowMap(ds: Vec[Dir], left: i64) -> Node =
@@ -665,10 +776,28 @@ grammar Yaml {
 		* ("," Fs)? "}" b:here -> {
 			let mut all = [first]
 			all.extend(rest)
-			Node { start: a, end: b, anchor: null, tag: null, flow: true, value: Value::Map(all) }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: true,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Map(all),
+			}
 		}
 		| a:here "{" if(left > 0, "nesting within the depth limit") Fs "}" b:here -> {
-			Node { start: a, end: b, anchor: null, tag: null, flow: true, value: Value::Map([]) }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: true,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Map([]),
+			}
 		}
 	rule FlowEntryNext(ds: Vec[Dir], left: i64) -> Entry = "," Fs e:FlowEntry(ds, left) Fs -> { e }
 	// An explicit entry, `? a : b`, or an implicit one.
@@ -687,6 +816,8 @@ grammar Yaml {
 					anchor: null,
 					tag: null,
 					flow: false,
+					raw: "",
+					style: Style::Plain,
 					value: Value::Null,
 				},
 				value: Node {
@@ -695,6 +826,8 @@ grammar Yaml {
 					anchor: null,
 					tag: null,
 					flow: false,
+					raw: "",
+					style: Style::Plain,
 					value: Value::Null,
 				},
 			}
@@ -712,6 +845,8 @@ grammar Yaml {
 						anchor: null,
 						tag: null,
 						flow: false,
+						raw: "",
+						style: Style::Plain,
 						value: Value::Null,
 					},
 			}
@@ -724,6 +859,8 @@ grammar Yaml {
 					anchor: null,
 					tag: null,
 					flow: false,
+					raw: "",
+					style: Style::Plain,
 					value: Value::Null,
 				},
 				value: v,
@@ -740,6 +877,8 @@ grammar Yaml {
 				anchor: p.anchor,
 				tag: p.tag,
 				flow: v.flow,
+				raw: v.raw,
+				style: v.style,
 				value: v.value,
 			}
 		}
@@ -761,7 +900,16 @@ grammar Yaml {
 				})
 				else => Value::Null
 			}
-			Node { start: p.start, end: p.end, anchor: p.anchor, tag: p.tag, flow: false, value: v }
+			Node {
+				start: p.start,
+				end: p.end,
+				anchor: p.anchor,
+				tag: p.tag,
+				flow: false,
+				raw: "",
+				style: Style::Plain,
+				value: v,
+			}
 		}
 		| v:FlowNode(ds, left, TagKind::Untagged) -> { v }
 	rule FlowNode(ds: Vec[Dir], left: i64, k: TagKind) -> Node =
@@ -797,7 +945,16 @@ grammar Yaml {
 					chomp: Chomp::Clip,
 				})
 			}
-			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: v }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: false,
+				raw: s,
+				style: Style::Double,
+				value: v,
+			}
 		}
 		| a:here "\"" s:text(parts:DoublePart*) "\"" b:here if(fits(k, s), "a scalar its tag fits") -> {
 			let mut d = String()
@@ -818,7 +975,16 @@ grammar Yaml {
 					chomp: Chomp::Clip,
 				})
 			}
-			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: v }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: false,
+				raw: s,
+				style: Style::Double,
+				value: v,
+			}
 		}
 	rule DoublePlain = x:any if(x != '"' && x != '\\' && x != '\n') -> { }
 	// One part of a double-quoted scalar's value (YAML 1.2.2 7.3.1): a run of
@@ -865,6 +1031,8 @@ grammar Yaml {
 				anchor: null,
 				tag: null,
 				flow: false,
+				raw: s,
+				style: st,
 				value: Value::Str(Scalar {
 					raw: s,
 					value: s,
@@ -918,7 +1086,16 @@ grammar Yaml {
 					chomp: Chomp::Clip,
 				})
 			}
-			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: v }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: false,
+				raw: s,
+				style: Style::Single,
+				value: v,
+			}
 		}
 	rule SingleChar = "''" -> { } | x:any if(x != '\'') -> { }
 
@@ -942,7 +1119,16 @@ grammar Yaml {
 					chomp: Chomp::Clip,
 				})
 			}
-			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: v }
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: false,
+				raw: s,
+				style: Style::Plain,
+				value: v,
+			}
 		}
 	rule PlainFirst(flow: bool) =
 		x:any if(plain_first(x)) -> { }

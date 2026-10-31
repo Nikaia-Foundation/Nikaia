@@ -1,16 +1,15 @@
-1. **Most time:** the two probe runs in a scratch copy of the package, a few minutes each. The first run was wasted by my own mistake: I assumed `yaml::parse` returns one `Node`, but it returns `Vec[Node]`.
-2. **What I looked up:**
-   - The `pub fn` signatures and tree types at the top of `packages/yaml/src/main.nika`.
-   - How each grammar rule fills `Scalar.raw`.
-   - #928's body, fetched through `gh`.
-   - The rules block, copied out of y21.
+1. **What cost the most.** Narrowing the three defects took the most time: about ten probe runs at roughly a minute each (a variant without the enum, without `extend`, without the `for`, a non-recursive version), and then tracing each refusal to its function in `views.nika` and `text_tiers.nika`. It was worth it, because each brief now names a single cause and a suspected place to fix.
 
-   A list of the package's public signatures in the task brief would have saved the first lookup and the wasted run.
+2. **What I looked up that the brief could have handed me:**
+   - that the y21 draft and its probes live only in the local branch `wip/y21-events`, not on origin;
+   - whether #1063 was still open, and what y22 had actually fixed;
+   - the current text of #928 step 4;
+   - which brief to copy the rules block from (the task named y1, the lane facts named the newest brief with an `Attribution:` block);
+   - whether these fixes belong in this lane or in `docs/briefs/bugs/`. `architect.md` says bug lane, the task says this batch; I followed the task without saying so.
+
 3. **Checks:**
-   - The y21 probe: needed, because it confirmed the gap and the tag-start span (28) before I wrote the decision.
-   - `pre-push-check.sh`: cheap and fine.
-   - `git ls-files` before `git mv`: needed.
-   - Wasted: the first probe run.
+   - Useful: re-running the five wip probes, the narrowing variants, re-running the (b)+(c) probe taken from the issue text, and the issue list scan for duplicates.
+   - Wasted: one Edit with a wrong anchor string, and a header I printed twice. The push was rejected as the task predicted.
+   - Process miss: I used `grep`/`rg` to find locations instead of `scripts/where.nika`, as `architect.md` requires.
 
-   On the way I noticed that a field read on a `Vec`, `n.value`, gets a misleading NK1245 ("can't tell what type"). I did not file it. It probably deserves an issue: the message should say that `Vec` has no field `value`.
-4. **The change that would save the most:** a script, e.g. `scripts/yaml-probe.nika -- <file.nika>`, that copies the package to the scratchpad, drops the test in and runs `nikaia test --project`. The architect's probing before each brief, and the builders' gap probes, would then each take one call instead of hand-written shell. Next to it, the task brief's *Lane facts* should list the public API: `documents`/`parse -> Vec[Node]`, `text`, `as_i64`, `as_f64`.
+4. **One change that would have saved the most.** Have the driver put into `architect-input.txt` the blocked brief's draft branch and probe paths, plus the status of any issue the last batch fixed. And state in the yaml task, once, that defect fixes stay in this lane and override the bug-lane rule.

@@ -132,6 +132,11 @@ paid for the rule):
 * a step resting on another brief's fix opens with a pre-flight probe of it;
   a draft (`wip/` branch, patch) is applied and run through `nikaia check` and
   one test first (y2c);
+* a step that builds new code over borrowed data is probed in its planned
+  shape, not only in the shape of the last fix: the walk's recursion, its
+  result type with view fields, the `match` payloads and `for` elements it
+  reads, the by-value arguments beside them (y21 run 2: three checker defects
+  a ten-line probe would have shown before the batch);
 * a fix that widens a rule names every function that repeats that rule
   (the same condition tested elsewhere, e.g. `views_the_call_s` beside the
   emitter's #703 branch) and allows its file, or drops the row (b11);

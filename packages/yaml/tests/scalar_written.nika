@@ -1,0 +1,65 @@
+// A scalar node keeps its text and style as written, whatever it resolves
+// to (ADR-yaml-1 D7): `~`, `null` and `NULL` are one `Null` but three texts,
+// `!!int "1"` keeps its quotes. A collection, an alias and an empty node have
+// `[]` and `plain`.
+use yaml
+
+fn style(s: ref yaml::Style) -> String {
+	match s {
+		yaml::Style::Plain => "plain"
+		yaml::Style::Single => "single"
+		yaml::Style::Double => "double"
+		yaml::Style::Literal => "literal"
+		yaml::Style::Folded => "folded"
+	}
+}
+
+fn walk(n: ref yaml::Node, depth: i64) {
+	let mut pad = String()
+	let mut i = 0
+	while i < depth {
+		pad.push_str("  ")
+		i += 1
+	}
+	let what = match n.value {
+		yaml::Value::Null => "null"
+		yaml::Value::Bool(b) => f"bool({b})"
+		yaml::Value::Int(_t) => "int"
+		yaml::Value::Float(_t) => "float"
+		yaml::Value::Str(_s) => "str"
+		yaml::Value::Alias(_a) => "alias"
+		yaml::Value::Seq(_items) => "seq"
+		yaml::Value::Map(_entries) => "map"
+	}
+	println(f"{pad}{what} [{n.raw}] {style(n.style)}")
+	match n.value {
+		yaml::Value::Seq(items) => {
+			for x in items {
+				walk(x, depth + 1)
+			}
+		}
+		yaml::Value::Map(entries) => {
+			for e in entries {
+				walk(e.key, depth + 1)
+				walk(e.value, depth + 1)
+			}
+		}
+		else => {}
+	}
+}
+
+fn show(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	for d in docs {
+		walk(d, 0)
+	}
+}
+
+fn main() {
+	show("[~, null, NULL, true, True, FALSE, 0x1F, .inf, \"x\", 'y', !!int \"1\", !!null '', \"a\\tb\", &a 7, *a, [a: ], {k: v}]")
+	show("- |\n  lit\n  eral\n- >-\n  fold\n  ed\n- \n- !!null\n- &b k: v\n")
+}
