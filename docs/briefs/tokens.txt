@@ -230,3 +230,4 @@
 /home/user/Nikaia/docs/briefs/s1082-or-default-cloned.md 421565 4
 /home/user/Nikaia/docs/briefs/architect-task.md 2194593 45
 /home/user/Nikaia/docs/briefs/c1a-ledger-items.md 3421994 56
+/home/user/Nikaia/docs/briefs/k3b-comptime-bundle.md 1298578 24

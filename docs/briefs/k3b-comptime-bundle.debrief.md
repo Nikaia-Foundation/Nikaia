@@ -1,11 +1,13 @@
-1. **What cost the most.** Chasing the two lowering defects to their cause took the most: hand-patching `lowered/comptime_bundle.rs`, running `cargo check` on it, then reducing each defect to a plain-program probe (p2). After I knew the slice was blocked, I still spent turns writing part of the Rust adapter. I did that in the shared `comptime_run.rs` rather than in scratch, so it sat in other agents' working tree for a while before I restored it. The rules said to stop at that point, so those turns were wasted, and editing the shared file was a mistake.
-2. **What the brief could have handed me:**
-   - That the tools preamble in `sysroot.rs` ~765-780 carries only some of the prelude's traits. That would have predicted defect 1.
-   - That `split_once` in closure patterns is still open in the #901 family. That would have predicted defect 2.
-   - The real return type of `runtime_dependencies`: the brief's was wrong.
-   - Where `CheckWall`'s `impl Error` from GR b070adb9 lives. I had to find it.
-3. **Checks run.**
-   - Useful: `lower-std` (old binary), `cargo check -p nikaia-std --features compiler` on the hand-patched lowered file, the p1/p2 probes, the #1060 `git status` guard, the disk check.
-   - Wasted: the partial adapter and its `Command`/serde greps. The `wip/` commit through a temporary index can only help a re-run, and the adapter part of it is unbuilt.
-   - Not run: no `it` tests, no compiler tests, no clippy. Correct, since nothing was committed.
-4. **One change.** The brief should list which `std` forms and lowerings the move uses for the first time in a `tools/*.nika` (here `Duration.in_nanos`, and `split_once` inside a closure's tuple pattern). Builder.md should then say to probe each of them as a three-line tools-file program before writing the move. Both defects would have shown up in about five turns, before any of the ~550 moved lines were written.
+1. **What cost the most.** The run was short, about 20 turns. The biggest cost was one wasted cycle. The cycle line's first `lower-std` hid the rustc errors, and only `cargo check -p nikaia-std --features compiler` showed the two clashes. One clash was the CheckWall duplicate: GR re-landed between the brief and my run, and the brief still told me to write my own copy. The other was the EitherText→PathBuf error. A second smaller cost was working out that `emit_core_leaves.rs` drifted because of another agent's uncommitted `.nika`, not because of anything I changed.
+
+2. **What the brief could have handed me.**
+   - That GR had re-landed (`grammar_run.nika` :28 already has `impl Error for CheckWall`).
+   - Which Rust callers of `rustc`/`toolchain`/`target_libdir` remain, which settles whether they are forwards or stay as they are. The brief's "Still to build: forwards `rustc`, `toolchain`, `target_libdir`" contradicted its own *Stays Rust* list.
+   - The fact that 13177b7c was rebased to 03c31a6a, so its pre-flight hash check fails.
+
+3. **Checks I ran.**
+   - Useful: the pre-flight greps, `lower-std`, `cargo check` on both crates, and a plain `nikaia run` probe that reproduced the defect.
+   - Wasted: the `cargo build` in the cycle. It could only fail once `nikaia-std` failed to compile, and running `cargo check --features compiler` first would have skipped it.
+   - I also built the wip commit through a separate index. That kept the shared staging area clean, but neither the brief nor builder.md covers it, so the supervisor should confirm it is acceptable.
+
+4. **The one change that would have saved the most.** Re-run briefs should require a step right after the cherry-pick: run `lower-std`, then `cargo check -p nikaia-std --features compiler` on the current HEAD. Add an explicit line saying whether the builder may fix a std or compiler defect of a few lines as its own commit. Here the fix was six verified lines, and stopping costs a whole extra round.
