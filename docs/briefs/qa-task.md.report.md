@@ -1,8 +1,9 @@
 Result: done
-Cause: 316e0721 (tiers; the lowering now writes TrustedMap/TrustedSet) left lowered/project_members.rs stale with HashMap: step lower-std "lowered drift"
-Fixed: committed the file as `nikaia lower-std` writes it (7 lines, HashMap/HashSet to TrustedMap/TrustedSet)
-Tests: nikaia lower-std rerun: second run changes nothing (fixpoint); cargo build --profile fast -p nikaia ok with the file; pre-push-check ok
+Cause: 91d5eb6b (ADR-384 record added without its index row), step pre-push (check-adr-refs.py: "ADR-384: a record with no index row")
+Fixed: added the ADR-384 row to docs/specification/adr/README.md
+Tests: scripts/pre-push-check.sh exit 0 (fmt, check-adr-refs, badges, bump check)
 Found: none
-Files: crates/nikaia-std/src/tools/lowered/project_members.rs docs/briefs/qa-task.md.report.md
-Commit: lowered: project_members.rs as lower-std writes it (TrustedMap, TrustedSet)
-Pushed: local 6220cab85db07a45c28ff3a72c319d2a1a6b9de7
+Files: docs/specification/adr/README.md
+Commit: adr: index row for ADR-384 (pre-push's check-adr-refs was red)
+Changelog: none
+Pushed: local 003eeea6fa830c171404a92376d0a19a58560f8a

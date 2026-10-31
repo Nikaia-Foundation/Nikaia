@@ -1,19 +1,13 @@
-1. **Time sink.** The `cargo build --profile fast` ran past the 120 s tool timeout and went to the background. I then wrote a wait loop with `pgrep -f "cargo build"`, which matched its own shell and hung for 10 minutes. The `pkill` I used to clear it killed my own shell as well. That cost about 3 calls and several minutes. The fix itself was trivial.
+1. **Time and turns:** Finding the actual failure cost the most. `qa-input.txt` said only "pre-push red failed without output", and its 30 KB was mostly passing test lines. I had to rerun each sub-check of `pre-push-check.sh` by hand to see which one failed. The first run hid the cause because I piped it through `tail` and `check-adr-refs.py` was silenced with `>/dev/null`. Locating the ADR index (`docs/specification/adr/README.md`, not `docs/adr*`) took a couple more calls.
 
-2. **Looked up.**
-   - The brief doesn't say how to run `scripts/commit.nika`. It isn't executable, and I had to find out that it runs as `target/fast/nikaia run scripts/commit.nika -- REPORT`.
-   - I had to work out that the stale lowered file was already modified in the working tree. A previous gate run in the same checkout had regenerated it, so the "fix" was just committing it.
-   - I read one builder report (b949) only to see the report format.
-   - `qa-input.txt` named the drifted file but not the commit that caused it. I never confirmed 316e0721 as the cause. I inferred it from `git log -S TrustedMap`, so the Cause line in my report is unverified.
+2. **What the brief could have handed me:**
+   - The path of the ADR index and the row format (number, summary, status, built).
+   - Which unpushed commit touched what. Here the cause, 91d5eb6b, was already pushed. The brief's "unpushed commits" framing sent me to look at three unrelated commits.
+   - The fact that `commit.nika` needs the built binary at `target/fast/nikaia`, and that the report file already existed.
 
-3. **Checks.**
-   - Useful: `git diff` of the lowered file, `lower-std` rerun to confirm it changes nothing more, the build, and `pre-push-check.sh`.
-   - Redundant: the first build, because the binary at `target/fast/nikaia` was already built and the drift was visible in the diff. The `cargo fmt` I ran was also pointless, since only a generated file changed.
-   - Skipped: clippy, because no hand-written Rust changed. I didn't rerun any `nikaia test` programs, because the failing step wasn't a test.
+3. **Checks:**
+   - Useful: `pre-push-check.sh`, then its four sub-checks run separately.
+   - Wasted: the initial `ls docs/briefs`, which dumped a huge listing, and the `grep` for ADR-384 across the whole repo, which a targeted look at the index would have replaced.
+   - I ran no clippy or tests, which was right for a docs-only fix.
 
-4. **Suggested change.** Add a "known recipes" block to `qa.md`:
-   - "Lowered drift: run `target/fast/nikaia lower-std`, check the file diff, commit it (no rebuild needed if the binary is current)."
-   - "Run scripts with `target/fast/nikaia run scripts/X.nika`."
-   - "Never wait on a build with `pgrep -f`."
-
-   `qa-input.txt` should also name the last commit that touched the drifted file's `.nika` source or the lowering.
+4. **Change with the biggest saving:** make the driver's `pre-push` step capture the failing sub-script's stderr and stdout into `qa-input.txt`, instead of "failed without output". Then I would have read the ADR-384 error straight away. Failing that, put in `qa.md` or the brief a line saying that for a pre-push red the first move is to run each line of `pre-push-check.sh` separately, and that the cause may lie in already-pushed commits.
