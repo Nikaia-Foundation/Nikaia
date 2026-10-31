@@ -2,3 +2,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b1-999-mixed-tuple-views.md 254036 10
 /home/user/Nikaia/docs/briefs/bugs/b1-999-mixed-tuple-views.md 677440 12
 /home/user/Nikaia/docs/briefs/bugs/b2-939-shift-in-heads.md 633681 12
+/home/user/Nikaia/docs/briefs/bugs/b3-1016-ref-list-result-slice.md 1090213 28
