@@ -2989,12 +2989,18 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
             failed.push((label, outcomes, Some(output)));
         }
     }
+    // One place per setting, kept from one program to the next.
+    let places = suite
+        .settings
+        .iter()
+        .map(|_| Sandbox::new())
+        .collect::<Result<Vec<_>>>()?;
     for program in suite.programs_of_their_own {
         let mut outcomes = Vec::new();
-        for setting in suite.settings {
+        for (setting, place) in suite.settings.iter().zip(&places) {
             outcomes.push((
                 setting.clone(),
-                run_program_test(program, suite.root, setting)?,
+                run_program_test(program, suite.root, setting, &place.0)?,
             ));
         }
         let label = project_tests::project_tests_program_label(program);
@@ -3049,6 +3055,14 @@ pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
 /// refusal is the outcome (`ended_well` false, `stderr` the message with the
 /// path written `tests/NAME.nika`); a program that builds is run there.
 ///
+/// **The directory, `own`, is kept for the next program at this setting**,
+/// with only the package's `target/` left in it: the package then stays at
+/// one path, so Cargo finds the tested package it depends on built and
+/// compiles only the program, where a new path each time made it compile the
+/// tested package again for every program. What the program sees is what a
+/// new directory held: `project/` with the manifest and `src/main.nika`, and
+/// no ledger, lock or file a program before it left.
+///
 /// **The built program is run directly**, not through a second `nikaia run`:
 /// that one would build again only to find nothing changed, and then do what
 /// is done here - start the binary in the same directory, with the same
@@ -3056,9 +3070,10 @@ pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
 /// process replaced by the program, #281). What the run wrote before the
 /// program started, the build's warnings, is the build's standard error with
 /// Cargo kept quiet as `run` keeps it (`CARGO_TERM_QUIET`).
-fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Outcome> {
-    let own = Sandbox::new()?;
-    let project = own.0.join("project");
+fn run_program_test(test: &ProgramTest, root: &Path, setting: &str, own: &Path) -> Result<Outcome> {
+    let project = own.join("project");
+    empty_but(own, "project")?;
+    empty_but(&project, "target")?;
     std::fs::create_dir_all(project.join("src"))?;
     let source = test.dir.join(format!("{}.nika", test.name));
     std::fs::copy(&source, project.join(ENTRY))
@@ -3080,7 +3095,7 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
         command
             .args([verb, "--user-parallelism", setting, "--project"])
             .arg(&project)
-            .current_dir(&own.0)
+            .current_dir(own)
             .env(nikaia_std::fs::TEST_DIR_VAR, scratch)
             .env_remove("CARGO_TARGET_DIR")
             .stdin(std::process::Stdio::null());
@@ -3098,7 +3113,7 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
             .replace(&entry.display().to_string(), &written)
             .replace(&canonical(&entry).display().to_string(), &written)
     };
-    let built = run("build", &own.0)?;
+    let built = run("build", own)?;
     if !built.status.success() {
         return Ok(project_tests::project_tests_refused_outcome(
             test,
@@ -3114,8 +3129,8 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
     let (out, said) = match binary.is_file() {
         true => {
             let out = std::process::Command::new(&binary)
-                .current_dir(&own.0)
-                .env(nikaia_std::fs::TEST_DIR_VAR, &own.0)
+                .current_dir(own)
+                .env(nikaia_std::fs::TEST_DIR_VAR, own)
                 .env_remove("CARGO_TARGET_DIR")
                 .stdin(std::process::Stdio::null())
                 .output()
@@ -3126,7 +3141,7 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
         }
         // Where the program is not where it is expected, `nikaia run` finds it.
         false => {
-            let out = run("run", &own.0)?;
+            let out = run("run", own)?;
             let said = out.stderr.clone();
             (out, said)
         }
@@ -3137,6 +3152,26 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
         out.stdout.into(),
         relocate(&said),
     ))
+}
+
+/// Remove everything in `dir` but the entry named `keep`.
+fn empty_but(dir: &Path, keep: &str) -> Result<()> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Ok(());
+    };
+    for entry in entries {
+        let entry = entry?;
+        if entry.file_name() == keep {
+            continue;
+        }
+        let path = entry.path();
+        match entry.file_type()?.is_dir() {
+            true => std::fs::remove_dir_all(&path),
+            false => std::fs::remove_file(&path),
+        }
+        .with_context(|| format!("emptying {}", path.display()))?;
+    }
+    Ok(())
 }
 
 /// A test that failed: what it is called, what each setting did, and the
