@@ -1,0 +1,23 @@
+{str(hr): [str(Mark McGwire), &SS str(Sammy Sosa)], str(rbi): [alias(SS), str(Ken Griffey)]}
+{str(First occurrence): &anchor str(Foo), str(Second occurrence): alias(anchor), str(Override anchor): &anchor str(Bar), str(Reuse anchor): alias(anchor)}
+{&a1 !!str str(foo): !!str str(bar), &a2 str(baz): alias(a1)}
+{!<tag:yaml.org,2002:str> str(foo): !<!bar> str(baz)}
+[str(12), int(12), ! str(12)]
+[!!str str(12), !!int int(12), !!float float(1.5), !!bool bool(true), !!null null, !!str str(true), !!str str(null)]
+[!local str(x), !e!tag%21 int(7), !foo str(bar)]
+{str(foo): !!str str(), !!str str(): str(bar)}
+{str(a): &x null, str(b): !!str str(), str(c): !!null null}
+!shape [!circle {str(center): &ORIGIN {str(x): int(73), str(y): int(129)}, str(radius): int(7)}, !line {str(start): alias(ORIGIN)}]
+{str(a): !!map {str(b): str(c)}, str(d): &s !!seq [str(e)]}
+&top [str(x), str(y)]
+[&a str(x), !!int int(3), alias(a), &b !!str str()]
+{str(a): !!str str(12\n), str(b): &l str(x y)}
+error 1:13
+error 2:1
+error 2:1
+error 1:15
+error 2:1
+error 3:1
+error 1:11
+error 1:12
+error 2:1
