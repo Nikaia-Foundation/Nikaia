@@ -15,7 +15,7 @@ Facts: Where things live, Traps already met, Commands
 ## Issue #1060 (summary; the issue holds the full text)
 Adding `crates/nikaia-std/src/tools/grammar_run.nika` (b070adb9) makes `lower-std` write `lowered/project_members.rs` with `collections::HashMap` where it wrote `collections::TrustedMap` (`seen`, `here`, `renames_in`'s parameter, `at_of`; `project_members.nika` :118, :124, :184, :238, :282), although `project_members.nika` did not change. Not a cache effect (fresh `NIKAIA_LOWER_CACHE_SALT`). The suite was green because `gate.nika --all` runs `lower-std` first and rewrites the drifted file; CI was red.
 
-Probe: `git show b070adb9 -- crates/nikaia-std/src/tools/grammar_run.nika crates/nikaia-std/src/tools/lowered.rs | git apply` (or just add `grammar_run.nika`), then `NIKAIA_LOWER_CACHE_SALT=f$RANDOM NIKAIA_SYSROOT=$PWD/crates target/fast/nikaia lower-std` and `git diff --stat crates/nikaia-std/src/tools/lowered/project_members.rs`. Restore only the files you applied, by name.
+Probe (architect re-ran it on origin/develop 524c5286, 2026-10-31 18:40: `seen`, `here`, `renames_in`'s `here` turn `HashMap`): `git show b070adb9:crates/nikaia-std/src/tools/grammar_run.nika > crates/nikaia-std/src/tools/grammar_run.nika` (the `lowered.rs` hunk of b070adb9 no longer applies; `lower-std` rewrites the index itself), then `NIKAIA_LOWER_CACHE_SALT=f$RANDOM NIKAIA_SYSROOT=$PWD/crates target/fast/nikaia lower-std` and `git diff --stat crates/nikaia-std/src/tools/lowered/project_members.rs`. Restore only the files you applied, by name.
 
 ## Suspected location (architect's trace, not run)
 `crates/nikaia-std/src/tools/trust.nika` `trusted_maps` :282-290 puts the **last `::` segment** of every library function with `Provenance::Untrusted` into `env.sources`. `GrammarRunHost::manifest` (a body-less host method, so untrusted) puts the bare word `manifest` there; in `project_members_packages_of` the parameter `manifest` (`manifest.paths.iter()`) then reads as an untrusted source and poisons the class of `seen`/`here`. Check where `env.sources` is matched (`tm_deps_of`, `tm_call_deps`): a source must be a **call** of that function (its full path, or a method call on a receiver of that type), never a variable or parameter that happens to share the name. If the trace is wrong, find the rule that demotes the maps; if the demotion is right by D9, stop and say why (`Needs: architect decision`).
@@ -33,7 +33,7 @@ The new test fails on the unfixed compiler and passes through `nikaia test --pro
 ## Stop and report if
 An edit is needed outside `trust.nika`, its lowered twin, `scripts/gate.nika`, the gate's test and the new test; an error in another agent's file.
 
-**Not yours, never stage**: every file `git status` shows modified or untracked at your start (`lowered/project_members.rs` is uncommitted residue at the time of writing: if your fix makes `lower-std` write it back to `HEAD`, say so; do not commit it), and every `docs/briefs/*` file except your report.
+**Not yours, never stage**: every file `git status` shows modified or untracked at your start (`lowered/project_members.rs` is committed as `TrustedMap` since 84fbfb99; with the probe applied, restore it, `lowered.rs`, `grammar_run.nika` and `lowered/grammar_run.rs` by name), and every `docs/briefs/*` file except your report.
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.

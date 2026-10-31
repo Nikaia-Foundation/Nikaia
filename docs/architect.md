@@ -295,18 +295,16 @@ holds. What happened is in `git log` and the issues.*
   `ComptimeRan` into `CheckWall`. Owed, each its own brief: R0 (#921),
   `scripts/plan_rows.nika`, the driver writing the failing job's clippy
   output into `architect-input.txt`.
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b12 #1061 done (e95ba850,
-  local), b13 #1057 step 2, b14 #947, b15 #1060 (steps 1-3, 5); all `wip`.
-  b16 #1065 (b12's Found: a field call lends nothing) written, `wip`, not yet
-  in `batch.txt`: append it after b15. The suite on 46e6179f went red with a
-  gate-error (`Cannot find Stream in process` compiling `gate.nika`) that does
-  not reproduce with the same binary (`cmp` identical) in the same worktree:
-  re-run the suite before suspecting a commit. `ready` defects no lane holds,
-  next: #1038, #958, #1014, #927, #1056, #1058. Unfiled: qa-task's
-  note (dev-profile `cargo test -p nikaia` hits the recursion limit in
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): b15 #1060 (steps 1-3, 5;
+  probe re-run on 524c5286, reproduces), b13 #1057 step 2, b14 #947; all
+  `wip`. b12 #1061 pushed (closes on promote, `wip` off). Next batch: b16
+  #1065 (written, `wip`), then the `ready` defects no lane holds: #1038, #958,
+  #1014, #927, #1056, #1058. The 18:07 suite red was QA's lock-line filter
+  (8debcc6e); the suite went green at 18:25. Unfiled: qa-task's note
+  (dev-profile `cargo test -p nikaia` hits the recursion limit in
   winnow-grammar `rt.rs:902`); a two-view `fn` field written with `String`
-  instead of `ref String` is NK1106 (b12's probe note); `String?` == `String`
-  refused (NK1102, GR's report): file each when met again.
+  instead of `ref String` is NK1106; `String?` == `String` refused (NK1102,
+  GR's report): file each when met again.
 * **yaml lane**: #928, #929, #604 (`wip`).
 * **Owed to the supervisor**: version raise / Changelog lines for s920 (its
   report), s922, b9, b10, b11, b6-b8, b1046. **Waiting on the owner**: #1047,
