@@ -60,3 +60,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y21-events.md 372481 14
 /home/user/Nikaia/docs/briefs/yaml/y27-load.md 2198176 39
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 1973462 38
+/home/user/Nikaia/docs/briefs/yaml/y29-1089-match-on-a-get-bound-local.md 2839714 54
