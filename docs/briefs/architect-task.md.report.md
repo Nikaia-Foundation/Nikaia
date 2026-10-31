@@ -1,4 +1,4 @@
 Result: done
-Batch: b1018-kept-fn-index-read.md, b1029-kept-lambda-int-result.md
+Batch: b1029-kept-lambda-int-result.md, b1031-kept-fn-name-copy.md
 Owner: none
-Notes: cut at b1017 on Found; #1017 done (ee9aa6a6, version raise owed). Found filed `ready` as #1029 (pausing kept lambda typed `-> i64` hands back i32 literals; cast `BoxedIn<'_, _>` in emit_flow_kept), probed six rows. CI red since 555fe6e9 was the json example's ledger, fixed forward by 71aa29ae (all examples pass `test --locked` locally; run in progress). Pushed 0db664aa.
+Notes: cut at b1018 on Found; #1018 done (d5995dbd, version raise owed for its Changelog line). Found probed (5 rows fail in rustc, 2 pass) and filed `ready` in brief form as #1031; brief b1031 written. Committed 1343082e.
