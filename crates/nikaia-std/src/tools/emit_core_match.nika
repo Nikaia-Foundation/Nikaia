@@ -616,6 +616,9 @@ impl EmitState {
             let mut held: Vec[(String, String?)] = []
             for at in 0..<names.len() {
                 let name = names[at].clone()
+                if name == "_" {
+                    continue
+                }
                 held.push((name.clone(), walk.type_names.get(name)?.clone()))
                 let part: String = parts.get(at)?.clone() ?? ty.clone()
                 walk.type_names.insert(name, part)

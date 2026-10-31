@@ -900,13 +900,10 @@ fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
             for rule in def.rules.iter().filter(|r| !r.generics.is_empty()) {
                 generic.insert((def.name, rule.name));
             }
-            // ADR-grammar-2 D2: a `match` on a kind is resolved by the copying
-            // too, also in a rule that takes no types.
-            chooses |= def.rules.iter().any(|r| {
-                r.alts
-                    .iter()
-                    .any(|a| matches!(a.pattern.node, ast::Pattern::Choose { .. }))
-            });
+            // ADR-grammar-2 D2, D3: a `match` on a kind and a `members[S]`
+            // are resolved by the copying too, also in a rule that takes no
+            // types.
+            chooses |= nikaia_std::tools::grammar_types::grammar_types_wanted(def);
         }
     }
     if generic.is_empty() && !chooses {
@@ -2514,7 +2511,53 @@ grammar! {
           | g:g_guard -> { g }
           | s:STRING -> { Spanned::new(Pattern::Literal(s), Span::from(_span)) }
           | g:g_group -> { g }
+          | m:g_members -> { m }
           | r:g_ref -> { r }
+
+        // **`members[S](key, value, sep; null: N, unknown: U)`**
+        // ([ADR-grammar-2](../../../../docs/specification/adr/adr-grammar-2.md)
+        // D3, Part II 10.8): `value` is a rule with `_` for its type, applied
+        // with each field's type; the options name rules. The fields are
+        // filled by the copy for a known `S` (`grammar_types.nika`). `name:`
+        // waits for j6.
+        rule g_members -> Spanned<Pattern> @=
+            "members" not(ident) "[" => ty:type_ref "]" "(" key:g_choice "," value:NAME "[" UNDERSCORE "]" ","
+            sep:g_choice options:g_members_options? ","? ")" -> {
+                let mut null = None;
+                let mut unknown = None;
+                for (which, r) in options.unwrap_or_default() {
+                    if which {
+                        null = Some(r);
+                    } else {
+                        unknown = Some(r);
+                    }
+                }
+                Spanned::new(
+                    Pattern::Members {
+                        ty,
+                        key: Box::new(key),
+                        value,
+                        sep: Box::new(sep),
+                        on_null: null,
+                        on_unknown: unknown,
+                        fields: Vec::new(),
+                    },
+                    Span::from(_span),
+                )
+            }
+
+        rule g_members_options -> Vec<(bool, Symbol)> =
+            ";" head:g_members_option tail:g_members_option_tail* -> {
+                let mut all = vec![head];
+                all.extend(tail);
+                all
+            }
+
+        rule g_members_option_tail -> (bool, Symbol) = "," o:g_members_option -> { o }
+
+        rule g_members_option -> (bool, Symbol) =
+            KW_NULL ":" r:NAME -> { (true, r) }
+          | "unknown" not(ident) ":" r:NAME -> { (false, r) }
 
         rule g_group -> Spanned<Pattern> @=
             "(" p:g_choice ")" -> {

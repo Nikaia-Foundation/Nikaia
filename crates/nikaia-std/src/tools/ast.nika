@@ -1422,6 +1422,32 @@ pub enum Pattern {
         value: Expr,
         arms: Vec[GrammarArm],
     },
+    /// `members[S](Key, Value[_], ","; null: Null, unknown: Skip)`: the
+    /// members `key value` of the struct `S`, separated by `sep`, in any
+    /// order, built into an `S` by the mapping rule
+    /// ([ADR-grammar-2](../../../docs/specification/adr/adr-grammar-2.md) D3,
+    /// D5, Part II 10.8). `value` is the rule written with `_` for its type;
+    /// `on_null` and `on_unknown` the rules the options `null:` and
+    /// `unknown:` name. `fields` is empty
+    /// after parsing: the copy for a known `S` fills it, one per field with
+    /// the copy of `value` for its type (`grammar_types.nika`).
+    Members {
+        ty: Type,
+        key: Spanned[Pattern],
+        value: winnow_grammar::Symbol,
+        sep: Spanned[Pattern],
+        on_null: winnow_grammar::Symbol?,
+        on_unknown: winnow_grammar::Symbol?,
+        fields: Vec[GrammarMember],
+    },
+}
+
+/// One field a `members[S]` fills: its name, its type, and the copy of the
+/// value rule that reads it (`Value__i64`).
+pub struct GrammarMember {
+    pub name: winnow_grammar::Symbol,
+    pub ty: Type,
+    pub value: winnow_grammar::Symbol,
 }
 
 /// One arm of a `match` on a kind in a rule body: the kind it names,

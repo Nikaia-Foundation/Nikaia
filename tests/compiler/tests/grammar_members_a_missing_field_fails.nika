@@ -1,0 +1,38 @@
+// A field the input leaves out takes its default, else `null` in a `T?`,
+// else the parse fails, naming the field (ADR-grammar-2 D5).
+struct Point { x: i64, y: i64 = 0, label: String?, }
+grammar J {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	rule Ch -> i64 = x:any if(x != '"') -> { 1 }
+	rule Key -> String = "\"" s:text(Ch*) "\"" ":" -> { s }
+	rule Null = "null" -> { }
+	rule Value[T] -> T = match T::kind {
+		I64 => d:dec[i64](digit+) -> { d }
+		Text => "\"" s:text(Ch*) "\"" -> { s }
+		Maybe(A) => v:Value[A] -> { v }
+		Struct(_) => v:Object[T] -> { v }
+	}
+	rule Object[S: Struct] -> S =
+		"{" => m:members[S](Key, Value[_], ","; null: Null) "}" -> { m }
+}
+fn show(input: String) {
+	let p: Point = J::read[Point](input) catch {
+		println(f"{input}: {first_line(f"{error}")}")
+		return
+	}
+	let label = p.label ?? "-"
+	println(f"{input}: {p.x} {p.y} {label}")
+}
+// The parse error's headline: what failed and where.
+fn first_line(said: String) -> String {
+	for line in said.split("\n") {
+		return line
+	}
+	return said
+}
+fn main() {
+	show("{\"x\":1}")
+	show("{\"y\":2}")
+	show("{}")
+}

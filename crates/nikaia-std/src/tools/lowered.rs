@@ -2009,7 +2009,7 @@ pub mod assets {
 }
 pub mod ast {
     #[allow(unused_imports)]
-    pub use super::{Span, Spanned, Attribute, Program, Item, Block, Stmt, Expr, id_of, node_key, fresh_id, numbered_id, FPart, Type, ExternMember, OpaqueType, Code, EnumVariant, VariantFields, SelectArm, MatchArm, PatternField, MatchPattern, GenericParam, TraitMethod, FnArg, ConfigArg, ConfigParam, FieldDef, FieldDefault, AsmBinding, FieldInit, UnaryOp, BinaryOp, GrammarDef, GrammarRule, FrameAttr, GrammarAlt, Pattern, GrammarArm, Repeat, FoldSpec, Receiver, FnParams, ConfigZone, LONGEST_SOURCE, offset};
+    pub use super::{Span, Spanned, Attribute, Program, Item, Block, Stmt, Expr, id_of, node_key, fresh_id, numbered_id, FPart, Type, ExternMember, OpaqueType, Code, EnumVariant, VariantFields, SelectArm, MatchArm, PatternField, MatchPattern, GenericParam, TraitMethod, FnArg, ConfigArg, ConfigParam, FieldDef, FieldDefault, AsmBinding, FieldInit, UnaryOp, BinaryOp, GrammarDef, GrammarRule, FrameAttr, GrammarAlt, Pattern, GrammarMember, GrammarArm, Repeat, FoldSpec, Receiver, FnParams, ConfigZone, LONGEST_SOURCE, offset};
 }
 pub mod boundaries {
     #[allow(unused_imports)]
@@ -2587,7 +2587,7 @@ pub mod grammar_decode {
 }
 pub mod grammar_types {
     #[allow(unused_imports)]
-    pub use super::{GrammarTypesCall, grammar_types_copy_name, GrammarTypesRefusal, GrammarTypesExpanded, grammar_types_expand, grammar_types_put};
+    pub use super::{GrammarTypesCall, grammar_types_copy_name, GrammarTypesRefusal, GrammarTypesExpanded, grammar_types_expand, grammar_types_wanted, grammar_types_put};
 }
 pub mod integers {
     #[allow(unused_imports)]

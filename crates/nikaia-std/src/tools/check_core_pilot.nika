@@ -660,7 +660,8 @@ fn check_reflect_case_parts(case: ref String) -> i64 {
 }
 
 /// **The case an arm of a `match` on a kind names, and the names it binds**
-/// (ADR-330 D4): `Text`, `meta::Type::Text`, `List(it)`; `""` for `else`.
+/// (ADR-330 D4): `Text`, `meta::Type::Text`, `List(it)`; `""` for `else`, `_`
+/// for a part the arm leaves unnamed, `Struct(_)`.
 /// `null` for a pattern of another shape.
 pub fn check_reflect_arm(words: ref winnow_grammar::InternerContext, pattern: ref MatchPattern) -> (String, Vec[String])? {
     return match pattern {
@@ -691,6 +692,8 @@ pub fn check_reflect_arm(words: ref winnow_grammar::InternerContext, pattern: re
                         }
                         names.push(words.resolve(written[0]).clone())
                     },
+                    // `Struct(_)`: a part the arm doesn't name (ADR-291 D17).
+                    MatchPattern::Otherwise => names.push("_"),
                     else => return null,
                 }
             }
@@ -755,6 +758,9 @@ pub fn check_reflect_match[H: CheckHost](mut state: CheckState, world: ref Check
         }
         let mut held: Vec[(String, Vec[String]?)] = []
         for name in names {
+            if name == "_" {
+                continue
+            }
             held.push((name.clone(), state.type_parameters.get(name)?.clone()))
             state.type_parameters.insert(name.clone(), bounds.clone())
             state.walks_fields.insert(f"$kind {name}", name.clone())

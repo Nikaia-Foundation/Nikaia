@@ -13,6 +13,14 @@ fn emit_list_rule() -> String {
     return "__nikaia_list"
 }
 
+/// The Rust tuple of `parts`, a one-part one with its comma.
+fn emit_members_tuple(parts: ref Vec[String]) -> String {
+    if parts.is_empty() {
+        return "()"
+    }
+    return f"({parts.join(", ")},)"
+}
+
 /// Whether a pattern writes `list(item, sep)` anywhere in it.
 fn emit_writes_a_list(world: ref EmitWorld, pattern: ref Spanned[Pattern]) -> bool {
     return match pattern.node {
@@ -278,6 +286,7 @@ impl EmitState {
             }
         }
         walk.grammar_values = valued
+        walk.grammar_members = []
         for rule in def.rules {
             out.push("\n")
             let st = out.mark()
@@ -343,6 +352,13 @@ impl EmitState {
             out.push("          empty @ at\n")
             out.push("            -> { ::nikaia_std::text::Span::of(at).start }\n")
         }
+        let mut at: i64 = 0
+        while at < walk.grammar_members.len() as i64 {
+            let members = walk.grammar_members[at].clone()
+            self.emit_members_rules(world, walk, out, host, at, members)
+            at += 1
+        }
+        walk.grammar_members = []
         if lists {
             let list = emit_list_rule()
             out.push(f"\n        rule {list}<T>(item: Rule<T>, sep) -> Vec<T> =\n")
@@ -496,6 +512,132 @@ impl EmitState {
     /// the error's message in the `ParseError` (the backend's `external`).
     /// Past a commit point it is the parse's error: no enclosing alternative
     /// is tried; before one, the next alternative is.
+    /// **The rules `members[S](key, value, sep; null:, unknown:)` lowers
+    /// to** (ADR-grammar-2 D3, D5; Part II 10.8). The members, `key value`
+    /// apart by `sep`, each read into a piece that holds one field, the
+    /// value rule chosen by the key's index among the fields; then `S` built
+    /// from the pieces by the mapping rule: a field left out takes its
+    /// default, else `null` in a `T?`, else the parse fails; a `null:` member
+    /// goes into a `T?`, into another field it takes the default, else the
+    /// parse fails; a field given twice fails; an unknown key fails unless
+    /// `unknown:` names the rule that skips its value.
+    fn emit_members_rules[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: i64, pattern: ref Spanned[Pattern]) sync throws {
+        match pattern.node {
+            Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
+                let rule = f"__nikaia_members_{at}"
+                let built = host.ty_named(walk, ty)
+                let owner = emit_text(world, ty.name)
+                let mut slots: Vec[String] = []
+                let mut names: Vec[String] = []
+                let mut nothing: Vec[String] = []
+                for field in fields {
+                    slots.push(f"Option<Option<{host.ty_named(walk, field.ty)}>>")
+                    names.push(rust_string(emit_text(world, field.name)))
+                    nothing.push("None")
+                }
+                let piece = emit_members_tuple(slots)
+                let fail = "return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, "
+                // The fields, from the pieces, by the mapping rule.
+                out.push(f"\n        rule {rule} -> {built} =\n")
+                out.push(f"          pieces:{rule}_all\n")
+                out.push("            -> { ")
+                for i in 0..<fields.len() {
+                    out.push(f"let mut f{i}: {slots[i]} = None; ")
+                }
+                out.push("for piece in pieces { ")
+                for i in 0..<fields.len() {
+                    out.push(f"if let Some(v) = piece.{i} {{ if f{i}.is_some() {{ {fail}::nikaia_std::grammar::member_error({names[i]}, \"is given twice\")))); }} f{i} = Some(v); }} ")
+                }
+                out.push("} ")
+                let defaults = self.field_defaults(world, owner)
+                let mut built_fields: Vec[String] = []
+                for i in 0..<fields.len() {
+                    let field = emit_text(world, fields[i].name)
+                    let mut default: String? = null
+                    for (named, written, held) in defaults {
+                        if named == field {
+                            default = held_literal(written, held)
+                        }
+                    }
+                    let missing = f"{fail}::nikaia_std::grammar::member_error({names[i]}, \"is missing\"))))"
+                    let refused = f"{fail}::nikaia_std::grammar::member_error({names[i]}, \"takes no null\"))))"
+                    let mut given = match default {
+                        d => if fields[i].ty.is_nullable { f"match f{i} {{ Some(Some(v)) => v, Some(None) => None, None => {d} }}" } else { f"match f{i} {{ Some(Some(v)) => v, _ => {d} }}" },
+                        null => if fields[i].ty.is_nullable { f"match f{i} {{ Some(Some(v)) => v, _ => None }}" } else { f"match f{i} {{ Some(Some(v)) => v, Some(None) => {refused}, None => {missing} }}" },
+                    }
+                    if self.is_boxed_field(owner, field) {
+                        given = f"Box::new({given})"
+                    }
+                    built_fields.push(f"{escaped_name(field)}: {given}")
+                }
+                out.push(f"{escaped_name(owner)} {{ {built_fields.join(", ")} }} }}\n")
+                // The members, or none.
+                out.push(f"\n        rule {rule}_all -> Vec<{piece}> =\n")
+                out.push(f"          first:{rule}_one rest:{rule}_more*\n")
+                out.push("            -> { let mut all = vec![first]; all.extend(rest); all }\n")
+                out.push("        | \"\"\n")
+                out.push("            -> { Vec::new() }\n")
+                out.push(f"\n        rule {rule}_more -> {piece} =\n")
+                out.push("          ")
+                self.emit_members_part(world, walk, out, host, sep)
+                out.push(f" p:{rule}_one\n")
+                out.push("            -> { p }\n")
+                // One member: the key, then the value its field takes.
+                out.push(f"\n        rule {rule}_one -> {piece} =\n")
+                out.push("          k:")
+                self.emit_members_part(world, walk, out, host, key)
+                out.push(f" => p:{rule}_value(i = ::nikaia_std::grammar::member_index(&k, &[{names.join(", ")}]))\n")
+                out.push(f"            -> {{ match p {{ Some(p) => p, None => {fail}::nikaia_std::grammar::member_unknown(&k)))) }} }}\n")
+                out.push(f"\n        rule {rule}_value(i: usize) -> Option<{piece}> =\n")
+                let mut separator = "  "
+                for i in 0..<fields.len() {
+                    match on_null {
+                        named => {
+                            let mut one = nothing.clone()
+                            one[i] = "Some(None)"
+                            out.push(f"        {separator}if(i == {i}) {emit_text(world, named)}\n")
+                            out.push(f"            -> {{ Some({emit_members_tuple(one)}) }}\n")
+                            separator = "| "
+                        },
+                        null => {},
+                    }
+                    let mut one = nothing.clone()
+                    one[i] = "Some(Some(::nikaia_std::grammar::IntoMember::into_member(v)))"
+                    out.push(f"        {separator}if(i == {i}) v:{emit_text(world, fields[i].value)}\n")
+                    out.push(f"            -> {{ Some({emit_members_tuple(one)}) }}\n")
+                    separator = "| "
+                }
+                match on_unknown {
+                    named => {
+                        out.push(f"        {separator}if(i == {fields.len()}) {emit_text(world, named)}\n")
+                        out.push(f"            -> {{ Some({emit_members_tuple(nothing)}) }}\n")
+                    },
+                    null => {
+                        out.push(f"        {separator}if(i == {fields.len()}) \"\"\n")
+                        out.push("            -> { None }\n")
+                    },
+                }
+            },
+            else => {},
+        }
+    }
+
+    /// A pattern a `members[S]` is given, in brackets unless it is a rule.
+    fn emit_members_part[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, part: ref Spanned[Pattern]) sync throws {
+        match part.node {
+            Pattern::Ref { args, .. } => {
+                if args.len() == 0 {
+                    self.emit_pattern(world, walk, out, host, part)
+                    return
+                }
+            },
+            else => {},
+        }
+        out.push("(")
+        self.emit_pattern(world, walk, out, host, part)
+        out.push(")")
+    }
+
     fn emit_failing_action[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, action: ref Block, cut: bool) sync throws {
         let mode = if cut { "Cut" } else { "Backtrack" }
         let inside = EmitFlow::plain() with { can_throw: true }

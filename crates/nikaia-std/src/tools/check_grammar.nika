@@ -85,6 +85,8 @@ impl CheckState {
             Pattern::Counted { pat, .. } => self.repeat_type(world, pat.node, Repeat::Star, rules),
             // a label on a literal binds the text matched (Part II 10.8, #1030)
             Pattern::Literal(_) => pattern_text(),
+            // `members[S](..)` builds an `S` (ADR-grammar-2 D3)
+            Pattern::Members { ty, .. } => if ty.generics.len() == 0 && !ty.is_tuple { pattern_named(world.words.resolve(ty.name), ty.is_nullable) } else { Ty::Unknown },
             else => Ty::Unknown,
         }
     }
@@ -414,6 +416,11 @@ impl CheckState {
             },
             // Resolved by the copying before any check (grammar_types.nika).
             Pattern::Choose { .. } => {
+                return scope
+            },
+            Pattern::Members { key, sep, .. } => {
+                self.grammar_values(world, host, gram, key, rules, scope.clone())
+                self.grammar_values(world, host, gram, sep, rules, scope.clone())
                 return scope
             },
             Pattern::Guard { cond, .. } => {

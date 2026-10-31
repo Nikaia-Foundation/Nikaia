@@ -235,6 +235,12 @@ pub(crate) fn numbers_pattern(pattern: Pattern, st: &mut NodeNumbersState) -> Pa
             }
             return Pattern::Choose { value: value2, arms: arms2 };
         },
+        Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
+            let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep);
+            let key2 = numbers_spanned_pattern(key, st);
+            let sep2 = numbers_spanned_pattern(sep, st);
+            return Pattern::Members { ty, key: Box::new(key2), value, sep: Box::new(sep2), on_null, on_unknown, fields };
+        },
         Pattern::Fold(spec) => {
             let init = numbers_expr(spec.init, st);
             let step = numbers_expr(spec.step, st);

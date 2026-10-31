@@ -520,6 +520,7 @@ pub fn check_reflect_arm(words: &winnow_grammar::InternerContext, pattern: &Matc
                         if written.len() != 1 { return None; }
                         names.push(words.resolve(*nikaia_std::index::get(&written, 0)).to_string());
                     },
+                    MatchPattern::Otherwise => { names.push(String::from("_")); },
                     _ => { return None; },
                 }
             }
@@ -569,6 +570,7 @@ pub fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         if case == "Struct" || case == "Enum" { bounds.push(case.to_string()); }
         let mut held: Vec<(String, Option<Vec<String>>)> = vec![];
         for name in names.iter() {
+            if name == "_" { continue; }
             held.push((name.to_string(), match state.type_parameters.get(name) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,

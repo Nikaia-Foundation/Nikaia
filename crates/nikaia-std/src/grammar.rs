@@ -278,3 +278,54 @@ where
         }
     }
 }
+
+/// **Where a member's key stands among the fields `members[S]` builds**
+/// (ADR-grammar-2 D3): its index, or the number of fields for a key that
+/// names none. The value rule is chosen by it.
+pub fn member_index<K: AsRef<[u8]> + ?Sized>(key: &K, names: &[&str]) -> usize {
+    let key = key.as_ref();
+    names
+        .iter()
+        .position(|name| name.as_bytes() == key)
+        .unwrap_or(names.len())
+}
+
+/// The failure of a `members[S]` that names the field: given twice,
+/// missing, or `null` into a field that takes none (ADR-grammar-2 D5).
+pub fn member_error(field: &str, what: &str) -> Box<dyn std::error::Error> {
+    format!("the field `{field}` {what}").into()
+}
+
+/// The failure of a `members[S]` at a key that names no field and that no
+/// `unknown:` rule skips (ADR-grammar-2 D5).
+pub fn member_unknown<K: AsRef<[u8]> + ?Sized>(key: &K) -> Box<dyn std::error::Error> {
+    format!(
+        "the member `{}` names no field",
+        String::from_utf8_lossy(key.as_ref())
+    )
+    .into()
+}
+
+/// **A value a member's rule read, as its field holds it**: the same type,
+/// or text the input lends as the `String` the field owns.
+pub trait IntoMember<T> {
+    fn into_member(self) -> T;
+}
+
+impl<T> IntoMember<T> for T {
+    fn into_member(self) -> T {
+        self
+    }
+}
+
+impl IntoMember<String> for &str {
+    fn into_member(self) -> String {
+        self.to_owned()
+    }
+}
+
+impl IntoMember<Option<String>> for Option<&str> {
+    fn into_member(self) -> Option<String> {
+        self.map(str::to_owned)
+    }
+}

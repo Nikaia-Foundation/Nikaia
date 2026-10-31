@@ -46,25 +46,27 @@ pub(crate) struct GrammarTypesWanted {
     pub(crate) path: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct GrammarTypesWork {
     pub(crate) queue: Vec<GrammarTypesWanted>,
     pub(crate) refused: Vec<GrammarTypesRefusal>,
     pub(crate) shapes: collections::BTreeMap<String, String>,
     pub(crate) traits: collections::BTreeSet<String>,
     pub(crate) impls: collections::BTreeSet<String>,
+    pub(crate) structs: collections::BTreeMap<String, (Vec<GenericParam>, Vec<FieldDef>)>,
     pub(crate) from: i64,
     pub(crate) path: Vec<String>,
 }
 
 pub fn grammar_types_expand(items: &mut Vec<Spanned<Item>>, calls: &[GrammarTypesCall], words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, put: &impl Fn(&Block, &collections::BTreeMap<String, Type>) -> Block) -> GrammarTypesExpanded {
     let none: Vec<String> = vec![];
-    let mut work = GrammarTypesWork { queue: vec![], refused: vec![], shapes: collections::BTreeMap::new(), traits: collections::BTreeSet::new(), impls: collections::BTreeSet::new(), from: -1, path: none };
+    let mut work = GrammarTypesWork { queue: vec![], refused: vec![], shapes: collections::BTreeMap::new(), traits: collections::BTreeSet::new(), impls: collections::BTreeSet::new(), structs: collections::BTreeMap::new(), from: -1, path: none };
     for item in items.iter() {
         match &item.node {
-            Item::Struct { name, .. } => {
+            Item::Struct { name, generics, fields, .. } => {
                 let name = *name;
                 work.shapes.insert(format!("{}", words.resolve(name)), String::from("Struct"));
+                work.structs.insert(format!("{}", words.resolve(name)), (generics.to_owned(), fields.to_owned()));
             },
             Item::Enum { name, .. } => {
                 let name = *name;
@@ -106,6 +108,40 @@ pub(crate) fn grammar_types_chooses(alts: &[GrammarAlt]) -> bool {
     false
 }
 
+pub fn grammar_types_wanted(def: &GrammarDef) -> bool {
+    for rule in def.rules.iter() {
+        if !rule.generics.is_empty() || grammar_types_chooses(&rule.alts) { return true; }
+        for alt in rule.alts.iter() { if grammar_types_has_members(&alt.pattern) { return true; } }
+    }
+    false
+}
+
+pub(crate) fn grammar_types_has_members(pattern: &Spanned<Pattern>) -> bool {
+    match &pattern.node {
+        Pattern::Members { .. } => { return true; },
+        Pattern::Seq(parts) => { for part in parts.iter() { if grammar_types_has_members(part) { return true; } } },
+        Pattern::Choice(parts) => { for part in parts.iter() { if grammar_types_has_members(part) { return true; } } },
+        Pattern::Bind { pat, .. } => {
+            let pat = nikaia_std::boxed::open(pat);
+            return grammar_types_has_members(pat);
+        },
+        Pattern::Repeat { pat, .. } => {
+            let pat = nikaia_std::boxed::open(pat);
+            return grammar_types_has_members(pat);
+        },
+        Pattern::Group(inner) => {
+            let inner = nikaia_std::boxed::open(inner);
+            return grammar_types_has_members(inner);
+        },
+        Pattern::Counted { pat, .. } => {
+            let pat = nikaia_std::boxed::open(pat);
+            return grammar_types_has_members(pat);
+        },
+        _ => { },
+    }
+    false
+}
+
 pub(crate) fn grammar_types_called(words: &winnow_grammar::InternerContext, rule: &str, types: &[Type]) -> String {
     let mut spelled: Vec<String> = vec![];
     for ty in types.iter() { spelled.push(grammar_types_spelled(words, ty)); }
@@ -114,9 +150,8 @@ pub(crate) fn grammar_types_called(words: &winnow_grammar::InternerContext, rule
 
 pub(crate) fn grammar_types_def(def: &GrammarDef, calls: &[GrammarTypesCall], words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, put: &impl Fn(&Block, &collections::BTreeMap<String, Type>) -> Block, work: &mut GrammarTypesWork) -> GrammarDef {
     let mut generic: collections::BTreeMap<String, GrammarRule> = collections::BTreeMap::new();
-    let mut chooses = false;
-    for rule in def.rules.iter() { if !rule.generics.is_empty() { generic.insert(format!("{}", words.resolve(rule.name)), rule.clone()); } else if grammar_types_chooses(&rule.alts) { chooses = true; } }
-    if generic.is_empty() && !chooses { return def.clone(); }
+    for rule in def.rules.iter() { if !rule.generics.is_empty() { generic.insert(format!("{}", words.resolve(rule.name)), rule.clone()); } }
+    if generic.is_empty() && !grammar_types_wanted(def) { return def.clone(); }
     let owner = def.name;
     work.queue = vec![];
     let mut index: i64 = 0;
@@ -309,7 +344,7 @@ pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Spa
         let parts = grammar_types_parts(&ty, &kind);
         let mut index: i64 = 0;
         for name in names.iter() {
-            if index < parts.len() as i64 { inner.insert(name.to_string(), (*nikaia_std::index::get(&parts, nikaia_std::index::at(index))).clone()); }
+            if index < parts.len() as i64 && name != "_" { inner.insert(name.to_string(), (*nikaia_std::index::get(&parts, nikaia_std::index::at(index))).clone()); }
             index += 1;
         }
         let reason: Option<String> = grammar_types_refused_why(&arm.alts, words);
@@ -358,6 +393,41 @@ pub(crate) fn grammar_types_put_expr(expr: &Expr, span: &Span, bound: &collectio
 pub(crate) fn grammar_types_put_exprs(exprs: &[Expr], span: &Span, bound: &collections::BTreeMap<String, Type>, put: &impl Fn(&Block, &collections::BTreeMap<String, Type>) -> Block) -> Vec<Expr> {
     let mut out: Vec<Expr> = vec![];
     for expr in exprs.iter() { out.push(grammar_types_put_expr(expr, span, bound, put)); }
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn grammar_types_members(built: &Type, value: winnow_grammar::Symbol, span: &Span, generic: &collections::BTreeMap<String, GrammarRule>, owner: winnow_grammar::Symbol, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, work: &mut GrammarTypesWork) -> Vec<GrammarMember> {
+    let mut out: Vec<GrammarMember> = vec![];
+    let declared: Option<(Vec<GenericParam>, Vec<FieldDef>)> = match work.structs.get(words.resolve(built.name)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if declared.is_none() {
+        let spelled = grammar_types_spelled(words, built);
+        grammar_types_refuse(work, "NK1164", Some(span.clone()), format!("`members[{}]` builds a struct, and `{}` isn't one this file declares.", spelled, spelled), String::from("`members[S]` reads the members of an object into the fields of the struct `S` (ADR-grammar-2 D3); its fields are known only for a struct declared beside the grammar."), String::from("Name a struct declared in the grammar's file."));
+        return out;
+    }
+    let (params, fields) = match declared { Some(__nikaia_value) => __nikaia_value, None => return out };
+    let mut inner: collections::BTreeMap<String, Type> = collections::BTreeMap::new();
+    let mut index: i64 = 0;
+    for parameter in params.iter() {
+        if index < built.generics.len() as i64 { inner.insert(format!("{}", words.resolve(parameter.name)), (*nikaia_std::index::get(&built.generics, nikaia_std::index::at(index))).clone()); }
+        index += 1;
+    }
+    let called = words.resolve(value);
+    for field in fields.iter() {
+        let fty = grammar_types_put(&field.ty, &inner, words);
+        let types: Vec<Type> = vec![fty.clone()];
+        let mut rule = value;
+        if generic.contains_key(called) {
+            let mut path = work.path.to_owned();
+            path.push(grammar_types_called(words, called, &types));
+            rule = intern(&grammar_types_copy_name(words, called, &types));
+            work.queue.push(GrammarTypesWanted { call: GrammarTypesCall { owner, rule: value, types }, from: work.from, path });
+        }
+        out.push(GrammarMember { name: field.name, ty: fty, value: rule });
+    }
     out
 }
 
@@ -431,6 +501,14 @@ pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collecti
             copy.node = Pattern::Call { name, args: grammar_types_put_exprs(args, &pattern.span, bound, &put), config: config2 };
         },
         Pattern::Choose { .. } => { grammar_types_refuse(work, "NK1310", Some(pattern.span.clone()), String::from("A `match` on a kind stands as a rule's whole body or a whole alternative, not inside a pattern."), String::from("A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-2 D2)."), String::from("Give the `match` a rule of its own, and call that rule here.")); },
+        Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
+            let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep); let on_null = *on_null; let on_unknown = *on_unknown; let value = *value;
+            let built = grammar_types_put(ty, bound, words);
+            let key2 = grammar_types_pattern(key, bound, generic, owner, words, intern, put, work);
+            let sep2 = grammar_types_pattern(sep, bound, generic, owner, words, intern, put, work);
+            let members = grammar_types_members(&built, value, &pattern.span, generic, owner, words, &intern, work);
+            copy.node = Pattern::Members { ty: built, key: Box::new(key2), value, sep: Box::new(sep2), on_null, on_unknown, fields: members };
+        },
         Pattern::Ref { name, generics, args } => {
             let name = *name;
             let mut types: Vec<Type> = vec![];

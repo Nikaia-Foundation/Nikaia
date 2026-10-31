@@ -277,6 +277,11 @@ fn numbers_pattern(pattern: Pattern, mut st: NodeNumbersState) -> Pattern {
             }
             return Pattern::Choose { value: value2, arms: arms2 }
         },
+        Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
+            let key2 = numbers_spanned_pattern(key, st)
+            let sep2 = numbers_spanned_pattern(sep, st)
+            return Pattern::Members { ty: ty, key: key2, value: value, sep: sep2, on_null: on_null, on_unknown: on_unknown, fields: fields }
+        },
         Pattern::Fold(spec) => {
             let init = numbers_expr(spec.init, st)
             let step = numbers_expr(spec.step, st)

@@ -1,0 +1,54 @@
+// `members[S](key, value, sep; null:)` builds a struct by the mapping rule
+// (ADR-grammar-2 D3, D5; Part II 10.8): the members in any order, the value
+// rule chosen by the key, a field left out takes its default, else `null` in
+// a `T?`, and a `null:` member goes into a `T?`.
+struct Point { x: i64, y: i64 = 0, label: String?, }
+struct Line { from: Point, to: Point, }
+grammar J {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	rule Ch -> i64 = x:any if(x != '"') -> { 1 }
+	rule Key -> String = "\"" s:text(Ch*) "\"" ":" -> { s }
+	rule Null = "null" -> { }
+	rule Value[T] -> T = match T::kind {
+		I64 => d:dec[i64](digit+) -> { d }
+		Text => "\"" s:text(Ch*) "\"" -> { s }
+		Maybe(A) => v:Value[A] -> { v }
+		Struct(_) => v:Object[T] -> { v }
+	}
+	rule Object[S: Struct] -> S =
+		"{" => m:members[S](Key, Value[_], ","; null: Null) "}" -> { m }
+}
+fn show(p: Point) -> String {
+	let label = p.label ?? "-"
+	return f"{p.x} {p.y} {label}"
+}
+// The parse error's headline: what failed and where.
+fn first_line(said: String) -> String {
+	for line in said.split("\n") {
+		return line
+	}
+	return said
+}
+fn main() {
+	let given = "{\"to\":{\"x\":3,\"label\":\"b\"},\"from\":{\"y\":2,\"x\":1,\"label\":null}" + "}"
+	let l: Line = J::read[Line](Bytes(given.bytes().collect())) catch {
+		println(f"error: {first_line(f"{error}")}")
+		return
+	}
+	let a = l.from.label ?? "-"
+	let b = l.to.label ?? "-"
+	println(f"{l.from.x} {l.from.y} {a} {l.to.x} {l.to.y} {b}")
+	// A `T?` the input leaves out is `null`.
+	let p: Point = J::read[Point]("{\"x\":7}") catch {
+		println(f"error: {first_line(f"{error}")}")
+		return
+	}
+	println(show(p))
+	// The members' order is the input's, not the struct's.
+	let q: Point = J::read[Point]("{\"label\":\"c\",\"y\":5,\"x\":4}") catch {
+		println(f"error: {first_line(f"{error}")}")
+		return
+	}
+	println(show(q))
+}

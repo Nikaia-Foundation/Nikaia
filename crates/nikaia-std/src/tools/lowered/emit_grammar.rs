@@ -3,6 +3,11 @@
 
 pub(crate) fn emit_list_rule() -> &'static str { "__nikaia_list" }
 
+pub(crate) fn emit_members_tuple(parts: &[String]) -> String {
+    if parts.is_empty() { return String::from("()"); }
+    format!("({},)", parts.join(", "))
+}
+
 pub(crate) fn emit_writes_a_list(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Spanned<Pattern>) -> bool {
     match &pattern.node {
         Pattern::Seq(parts) => emit_any_writes_a_list(world, parts),
@@ -188,6 +193,7 @@ impl EmitState {
         let mut valued: collections::BTreeMap<String, GrammarRule> = collections::BTreeMap::new();
         for rule in def.rules.iter() { if !rule.args.is_empty() || !rule.config.is_empty() { valued.insert(emit_text(world, rule.name), rule.clone()); } }
         walk.grammar_values = valued;
+        walk.grammar_members = vec![];
         for rule in def.rules.iter() {
             out.push("\n");
             let st = out.mark();
@@ -228,6 +234,13 @@ impl EmitState {
             out.push("          empty @ at\n");
             out.push("            -> { ::nikaia_std::text::Span::of(at).start }\n");
         }
+        let mut at: i64 = 0;
+        while at < walk.grammar_members.len() as i64 {
+            let members = (*nikaia_std::index::get(&walk.grammar_members, nikaia_std::index::at(at))).clone();
+            self.emit_members_rules(world, walk, out, host, at, &members)?;
+            at += 1;
+        }
+        walk.grammar_members = vec![];
         if lists {
             let list = emit_list_rule();
             out.push(&format!("\n        rule {}<T>(item: Rule<T>, sep) -> Vec<T> =\n", list));
@@ -330,6 +343,114 @@ impl EmitState {
             if fails { return true; }
         }
         false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_members_rules<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: i64, pattern: &Spanned<Pattern>) -> Result<(), Box<dyn std::error::Error>> {
+        match &pattern.node {
+            Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
+                let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep); let on_null = *on_null; let on_unknown = *on_unknown;
+                let rule = format!("__nikaia_members_{}", at);
+                let built = host.ty_named(walk, ty)?;
+                let owner = emit_text(world, ty.name);
+                let mut slots: Vec<String> = vec![];
+                let mut names: Vec<String> = vec![];
+                let mut nothing: Vec<String> = vec![];
+                for field in fields.iter() {
+                    slots.push(format!("Option<Option<{}>>", host.ty_named(walk, &field.ty)?));
+                    names.push(rust_string(&emit_text(world, field.name)));
+                    nothing.push(String::from("None"));
+                }
+                let piece = emit_members_tuple(&slots);
+                let fail = "return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ";
+                out.push(&format!("\n        rule {} -> {} =\n", rule, built));
+                out.push(&format!("          pieces:{}_all\n", rule));
+                out.push("            -> { ");
+                for i in 0..fields.len() as i64 { out.push(&format!("let mut f{}: {} = None; ", i, *nikaia_std::index::get(&slots, (i) as usize))); }
+                out.push("for piece in pieces { ");
+                for i in 0..fields.len() as i64 { out.push(&format!("if let Some(v) = piece.{} {{ if f{}.is_some() {{ {}::nikaia_std::grammar::member_error({}, \"is given twice\")))); }} f{} = Some(v); }} ", i, i, fail, *nikaia_std::index::get(&names, (i) as usize), i)); }
+                out.push("} ");
+                let defaults = self.field_defaults(world, &owner);
+                let mut built_fields: Vec<String> = vec![];
+                for i in 0..fields.len() as i64 {
+                    let field = emit_text(world, nikaia_std::index::get(&fields, (i) as usize).name);
+                    let mut default: Option<String> = None;
+                    for (named, written, held) in defaults.iter() { if *named == field { default = Some(held_literal(written, held)); } }
+                    let missing = format!("{}::nikaia_std::grammar::member_error({}, \"is missing\"))))", fail, *nikaia_std::index::get(&names, (i) as usize));
+                    let refused = format!("{}::nikaia_std::grammar::member_error({}, \"takes no null\"))))", fail, *nikaia_std::index::get(&names, (i) as usize));
+                    let mut given = match default {
+                        Some(ref d) => if nikaia_std::index::get(&fields, (i) as usize).ty.is_nullable { format!("match f{} {{ Some(Some(v)) => v, Some(None) => None, None => {} }}", i, d) } else { format!("match f{} {{ Some(Some(v)) => v, _ => {} }}", i, d) },
+                        None => if nikaia_std::index::get(&fields, (i) as usize).ty.is_nullable { format!("match f{} {{ Some(Some(v)) => v, _ => None }}", i) } else { format!("match f{} {{ Some(Some(v)) => v, Some(None) => {}, None => {} }}", i, refused, missing) },
+                    };
+                    if self.is_boxed_field(&owner, &field) { given = format!("Box::new({})", given); }
+                    built_fields.push(format!("{}: {}", escaped_name(&field), given));
+                }
+                out.push(&format!("{} {{ {} }} }}\n", escaped_name(&owner), built_fields.join(", ")));
+                out.push(&format!("\n        rule {}_all -> Vec<{}> =\n", rule, piece));
+                out.push(&format!("          first:{}_one rest:{}_more*\n", rule, rule));
+                out.push("            -> { let mut all = vec![first]; all.extend(rest); all }\n");
+                out.push("        | \"\"\n");
+                out.push("            -> { Vec::new() }\n");
+                out.push(&format!("\n        rule {}_more -> {} =\n", rule, piece));
+                out.push("          ");
+                self.emit_members_part(world, walk, out, host, sep)?;
+                out.push(&format!(" p:{}_one\n", rule));
+                out.push("            -> { p }\n");
+                out.push(&format!("\n        rule {}_one -> {} =\n", rule, piece));
+                out.push("          k:");
+                self.emit_members_part(world, walk, out, host, key)?;
+                out.push(&format!(" => p:{}_value(i = ::nikaia_std::grammar::member_index(&k, &[{}]))\n", rule, names.join(", ")));
+                out.push(&format!("            -> {{ match p {{ Some(p) => p, None => {}::nikaia_std::grammar::member_unknown(&k)))) }} }}\n", fail));
+                out.push(&format!("\n        rule {}_value(i: usize) -> Option<{}> =\n", rule, piece));
+                let mut separator = "  ";
+                for i in 0..fields.len() as i64 {
+                    match on_null {
+                        Some(named) => {
+                            let mut one = nothing.to_owned();
+                            { let __nikaia_stored = String::from("Some(None)"); nikaia_std::index::set(&mut one, (i) as usize, __nikaia_stored); }
+                            out.push(&format!("        {}if(i == {}) {}\n", separator, i, emit_text(world, named)));
+                            out.push(&format!("            -> {{ Some({}) }}\n", emit_members_tuple(&one)));
+                            separator = "| ";
+                        },
+                        None => { },
+                    }
+                    let mut one = nothing.to_owned();
+                    { let __nikaia_stored = String::from("Some(Some(::nikaia_std::grammar::IntoMember::into_member(v)))"); nikaia_std::index::set(&mut one, (i) as usize, __nikaia_stored); }
+                    out.push(&format!("        {}if(i == {}) v:{}\n", separator, i, emit_text(world, nikaia_std::index::get(&fields, (i) as usize).value)));
+                    out.push(&format!("            -> {{ Some({}) }}\n", emit_members_tuple(&one)));
+                    separator = "| ";
+                }
+                match on_unknown {
+                    Some(named) => {
+                        out.push(&format!("        {}if(i == {}) {}\n", separator, fields.len() as i64, emit_text(world, named)));
+                        out.push(&format!("            -> {{ Some({}) }}\n", emit_members_tuple(&nothing)));
+                    },
+                    None => {
+                        out.push(&format!("        {}if(i == {}) \"\"\n", separator, fields.len() as i64));
+                        out.push("            -> { None }\n");
+                    },
+                }
+            },
+            _ => { },
+        }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_members_part<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, part: &Spanned<Pattern>) -> Result<(), Box<dyn std::error::Error>> {
+        match &part.node {
+            Pattern::Ref { args, .. } => {
+                if args.is_empty() {
+                    self.emit_pattern(world, walk, out, host, part)?;
+                    return Ok(());
+                }
+            },
+            _ => { },
+        }
+        out.push("(");
+        self.emit_pattern(world, walk, out, host, part)?;
+        out.push(")");
+        Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

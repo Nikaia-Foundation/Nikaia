@@ -410,6 +410,7 @@ impl EmitState {
             let mut held: Vec<(String, Option<String>)> = vec![];
             for at in 0..names.len() as i64 {
                 let name = (*nikaia_std::index::get(&names, nikaia_std::index::at(at))).to_string();
+                if name == "_" { continue; }
                 held.push((name.to_string(), match walk.type_names.get(&name) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,

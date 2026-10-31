@@ -423,6 +423,14 @@ pub enum Pattern {
     Counted { pat: Box<Spanned<Pattern>>, low: Expr, high: Option<Expr>, comma: bool },
     Guard { cond: Expr, expected: Option<String> },
     Choose { value: Expr, arms: Vec<GrammarArm> },
+    Members { ty: Type, key: Box<Spanned<Pattern>>, value: winnow_grammar::Symbol, sep: Box<Spanned<Pattern>>, on_null: Option<winnow_grammar::Symbol>, on_unknown: Option<winnow_grammar::Symbol>, fields: Vec<GrammarMember> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GrammarMember {
+    pub name: winnow_grammar::Symbol,
+    pub ty: Type,
+    pub value: winnow_grammar::Symbol,
 }
 
 #[derive(Debug, Clone, PartialEq)]

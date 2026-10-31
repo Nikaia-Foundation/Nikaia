@@ -1,0 +1,48 @@
+// A member whose key names no field fails the parse, naming the key, unless
+// `unknown:` names the rule that skips its value (ADR-grammar-2 D5).
+struct Point { x: i64, y: i64 = 0, label: String?, }
+grammar J {
+	entry rule loose -> Point = "{" => m:members[Point](Key, Value[_], ","; null: Null, unknown: Skip) "}" eof -> { m }
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	rule Ch -> i64 = x:any if(x != '"') -> { 1 }
+	rule Key -> String = "\"" s:text(Ch*) "\"" ":" -> { s }
+	rule Null = "null" -> { }
+	rule Skip = "\"" Ch* "\"" -> { } | digit+ -> { }
+	rule Value[T] -> T = match T::kind {
+		I64 => d:dec[i64](digit+) -> { d }
+		Text => "\"" s:text(Ch*) "\"" -> { s }
+		Maybe(A) => v:Value[A] -> { v }
+		Struct(_) => v:Object[T] -> { v }
+	}
+	rule Object[S: Struct] -> S =
+		"{" => m:members[S](Key, Value[_], ","; null: Null) "}" -> { m }
+}
+fn show(input: String) {
+	let p: Point = J::read[Point](input) catch {
+		println(f"{input}: {first_line(f"{error}")}")
+		return
+	}
+	let label = p.label ?? "-"
+	println(f"{input}: {p.x} {p.y} {label}")
+}
+fn loose(input: String) {
+	let p: Point = J::loose(input) catch {
+		println(f"loose {input}: {first_line(f"{error}")}")
+		return
+	}
+	let label = p.label ?? "-"
+	println(f"loose {input}: {p.x} {p.y} {label}")
+}
+// The parse error's headline: what failed and where.
+fn first_line(said: String) -> String {
+	for line in said.split("\n") {
+		return line
+	}
+	return said
+}
+fn main() {
+	show("{\"x\":1,\"z\":2}")
+	loose("{\"x\":1,\"z\":2}")
+	loose("{\"w\":\"far\",\"x\":1,\"z\":9,\"label\":\"a\"}")
+}

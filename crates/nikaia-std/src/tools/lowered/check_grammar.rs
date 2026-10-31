@@ -79,6 +79,7 @@ impl CheckState {
             }, || Ty::Unknown) },
             Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); self.repeat_type(world, &pat.node, &Repeat::Star, rules) },
             Pattern::Literal(_) => pattern_text(),
+            Pattern::Members { ty, .. } => if ty.generics.is_empty() && !ty.is_tuple { pattern_named(world.words.resolve(ty.name), ty.is_nullable) } else { Ty::Unknown },
             _ => Ty::Unknown,
         }
     }
@@ -315,6 +316,12 @@ impl CheckState {
                 return scope;
             },
             Pattern::Choose { .. } => { return scope; },
+            Pattern::Members { key, sep, .. } => {
+                let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep);
+                self.grammar_values(world, host, gram, key, rules, scope.to_owned());
+                self.grammar_values(world, host, gram, sep, rules, scope.to_owned());
+                return scope;
+            },
             Pattern::Guard { cond, .. } => {
                 self.grammar_fixed(world, host, cond, pattern_named("bool", false), &scope, &pattern.span, "A guard", String::from("A guard is a condition: compare, as in `if(m > n)`."));
                 return scope;

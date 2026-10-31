@@ -120,6 +120,7 @@ impl<'a> FbWidths<'a> {
             Pattern::Fold(_) => return 0u64,
             Pattern::Counted { .. } => return 0u64,
             Pattern::Choose { .. } => return 0u64,
+            Pattern::Members { .. } => return 0u64,
             Pattern::Guard { .. } => return 0u64,
             Pattern::Call { name, .. } => {
                 let name = *name;

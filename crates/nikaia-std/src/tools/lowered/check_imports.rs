@@ -97,6 +97,7 @@ impl CheckState {
             Pattern::Fold(_) => { },
             Pattern::Call { .. } => { },
             Pattern::Choose { .. } => { },
+            Pattern::Members { .. } => { },
             Pattern::Guard { .. } => { },
         }
     }
