@@ -571,10 +571,7 @@ impl CheckState {
             }
         }
         if bound_again || named.is_empty() { return; }
-        for id in named.iter() {
-            let id = nikaia_std::num::value(id);
-            self.facts.lent_args.remove(&id);
-        }
+        self.facts.views_handed_on.extend(named);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -584,7 +584,7 @@ impl EmitState {
                     }
                     at += 1
                     // **What it takes as a view is lent to it** (D20).
-                    if self.facts.lent_args.contains(node_key(arg)) {
+                    if self.facts.lent_args.contains(node_key(arg)) && !self.facts.views_handed_on.contains(node_key(arg)) {
                         out.push("&")
                     }
                     self.emit_expr(world, walk, out, host, arg, depth, flow, scope)

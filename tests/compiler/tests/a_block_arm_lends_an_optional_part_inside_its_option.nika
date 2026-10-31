@@ -1,0 +1,40 @@
+// A part a `match` over an owned value binds, handed to a `ref T?` parameter
+// from an arm that is a block, is lent inside its option, as from an arm that
+// is an expression (#1029).
+enum Shape {
+    Dot(i64),
+    Pair { inner: Shape?, size: i64 },
+}
+
+struct Counter {
+    hits: i64,
+}
+
+impl Counter {
+    fn count(ref mut self, part: ref Shape?) {
+        match part {
+            null => {},
+            else => { self.hits += 1 },
+        }
+    }
+}
+
+fn present(part: ref Shape?) -> i64 {
+    return match part {
+        null => 0,
+        else => 1,
+    }
+}
+
+fn main() {
+    let mut counter = Counter { hits: 0 }
+    let shape: Shape = Shape::Pair { inner: Shape::Dot(1), size: 2 }
+    match shape {
+        Shape::Pair { inner, .. } => {
+            counter.count(inner)
+            println(present(inner))
+        },
+        else => {},
+    }
+    println(counter.hits)
+}

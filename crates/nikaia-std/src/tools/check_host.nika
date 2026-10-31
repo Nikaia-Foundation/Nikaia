@@ -782,9 +782,10 @@ impl CheckState {
         if bound_again || named.len() == 0 {
             return
         }
-        for id in named {
-            self.facts.lent_args.remove(id)
-        }
+        // Still lent, so a `ref T?` parameter opens the option the part is
+        // (`.as_ref()`, #1029); only the `&` is left out, as in an expression
+        // arm.
+        self.facts.views_handed_on.extend(named)
     }
 
     /// **The same for an arm that is an expression** (#456): it has no
