@@ -1,0 +1,31 @@
+// `documents`: each document with whether `---` was written before it and
+// `...` after it (ADR-yaml-1 D7); a `...` belongs to the document before it.
+use yaml
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::documents(input) catch {
+		println("error")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) {
+		let s = if d.start { "---" } else { "" }
+		let e = if d.end { "..." } else { "" }
+		f"[{s} {d.root.start}-{d.root.end} {d.root.flow} {e}]"
+	}).collect()
+	println(f"{docs.len()}: {parts.join(" ")}")
+}
+
+fn main() {
+	line("")
+	line("...\n")
+	line("a\n")
+	line("a\n...\n")
+	line("---\na\n")
+	line("--- [a]\n...\n")
+	line("a\n---\nb\n")
+	line("---\na\n...\n---\nb\n")
+	line("a\n...\nb\n...\n...\n")
+	line("%YAML 1.2\n---\n{a: b}\n...\n")
+	line("- [a: b]\n")
+}

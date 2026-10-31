@@ -25,7 +25,7 @@ throws = ["ParseError"]
 keeps = ["input", "lim"]
 touches = []
 views = ["input: borrowed", "<result>: borrowed"]
-signature = "(input: ?, lim: Limits) -> Vec[Node]"
+signature = "(input: ?, lim: Limits) -> Vec[Document]"
 
 [fn."as_f64"]
 pub = true
@@ -92,6 +92,16 @@ keeps = ["from"]
 touches = []
 views = ["s: borrowed"]
 signature = "(s: ref String, from: i64, radix: i64) -> bool"
+
+[fn."documents"]
+pub = true
+sync = true
+throws = ["Error"]
+returns = "ref(input)"
+keeps = ["input", "limits"]
+touches = []
+views = ["input: borrowed", "<result>: borrowed"]
+signature = "(input: ref Bytes; limits: Limits = Limits { alias_nodes: 10000, bytes: 4294967295, depth: 128 }) -> Vec[Document]"
 
 [fn."empty_fits"]
 sync = true
@@ -345,6 +355,11 @@ variants = ["BlockIn", "BlockOut"]
 fields = ["name: ref String", "handle: ref String", "prefix: ref String"]
 tethered = ["name", "handle", "prefix"]
 
+[type."Document"]
+pub = true
+fields = ["pub root: Node", "pub start: bool", "pub end: bool"]
+tethered = ["root"]
+
 [type."Entry"]
 pub = true
 fields = ["pub key: Node", "pub value: Node"]
@@ -364,9 +379,13 @@ variants = ["Null", "True", "False", "Int", "Float", "Str"]
 pub = true
 fields = ["pub depth: i64", "pub alias_nodes: i64", "pub bytes: i64"]
 
+[type."Next"]
+fields = ["ended: bool", "doc: Document"]
+tethered = ["doc"]
+
 [type."Node"]
 pub = true
-fields = ["pub start: u32", "pub end: u32", "pub anchor: ref String?", "pub tag: ref String?", "pub value: Value"]
+fields = ["pub start: u32", "pub end: u32", "pub anchor: ref String?", "pub tag: ref String?", "pub flow: bool", "pub value: Value"]
 tethered = ["anchor", "tag", "value"]
 
 [type."Props"]

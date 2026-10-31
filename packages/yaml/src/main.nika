@@ -28,7 +28,25 @@ pub struct Node {
 	pub end: u32,
 	pub anchor: String?,
 	pub tag: String?,
+	// True for a flow sequence or mapping (`[a]`, `{a: b}`, the single pair
+	// `[a: b]`), false for everything else.
+	pub flow: bool,
 	pub value: Value,
+}
+
+// A document of the stream: its root node, and whether `---` was written
+// before it (`start`) and `...` after it (`end`), as the events tell (D7).
+pub struct Document {
+	pub root: Node,
+	pub start: bool,
+	pub end: bool,
+}
+
+// A document as the grammar reads it after the first: whether `...` was
+// written before it, which ends the document before.
+struct Next {
+	ended: bool,
+	doc: Document,
 }
 
 pub enum Value {
@@ -275,25 +293,36 @@ grammar Yaml {
 	// `l-yaml-stream`: documents, with comments and blank lines between them.
 	// `lim` holds the parse's limits (D8): the nesting depth is handed down the
 	// rules as the levels `left`, which each collection takes one of.
-	entry rule stream(lim: Limits) -> Vec[Node] =
-		Blanks DocEnd* docs:Docs(lim.depth)? DocEnd* eof -> { docs ?? [] }
+	entry rule stream(lim: Limits) -> Vec[Document] =
+		Blanks DocEnd* docs:Docs(lim.depth)? eof -> { docs ?? [] }
 
 	// A bare document (no `---`) comes first or after `...` (`l-yaml-stream`).
-	rule Docs(left: i64) -> Vec[Node] =
-		first:AnyDoc(left) rest:NextDoc(left)* -> {
-			let mut all = [first]
-			all.extend(rest)
+	// A `...` belongs to the document before it: each further document says
+	// whether one came before it, and the stream's last `...` ends the last.
+	rule Docs(left: i64) -> Vec[Document] =
+		first:AnyDoc(left) rest:NextDoc(left)* last:count(DocEnd) -> {
+			let mut all: Vec[Document] = []
+			let mut d = first
+			for r in rest.drain() {
+				d.end = r.ended
+				all.push(d)
+				d = r.doc
+			}
+			d.end = last > 0
+			all.push(d)
 			all
 		}
 	// The rules below take the document's directives `ds`, where a tag's
 	// handle is looked up, and the nesting levels `left` still allowed.
-	rule NextDoc(left: i64) -> Node =
-		DocEnd+ v:AnyDoc(left) -> { v }
-		| v:Explicit([], left) -> { v }
-	rule AnyDoc(left: i64) -> Node =
-		v:Directed(left) -> { v }
-		| v:Explicit([], left) -> { v }
-		| not(Marker) v:Block([], left, -1) -> { v }
+	rule NextDoc(left: i64) -> Next =
+		DocEnd+ v:AnyDoc(left) -> { Next { ended: true, doc: v } }
+		| v:Explicit([], left) -> {
+			Next { ended: false, doc: Document { root: v, start: true, end: false } }
+		}
+	rule AnyDoc(left: i64) -> Document =
+		v:Directed(left) -> { Document { root: v, start: true, end: false } }
+		| v:Explicit([], left) -> { Document { root: v, start: true, end: false } }
+		| not(Marker) v:Block([], left, -1) -> { Document { root: v, start: false, end: false } }
 	rule Explicit(ds: Vec[Dir], left: i64) -> Node = "---" v:DocAfter(ds, left) -> { v }
 
 	// `l-directive-document`: directives, then `---`; they hold for this
@@ -332,7 +361,7 @@ grammar Yaml {
 		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, -1) Eol Blanks -> { v }
 		| Eol Blanks v:Block(ds, left, -1) -> { v }
 		| a:here Eol Blanks -> {
-			Node { start: a, end: a, anchor: null, tag: null, value: Value::Null }
+			Node { start: a, end: a, anchor: null, tag: null, flow: false, value: Value::Null }
 		}
 
 	// `---` or `...` at the start of a line, where a document begins or ends.
@@ -376,7 +405,7 @@ grammar Yaml {
 			}
 			let mut all = [first]
 			all.extend(rest)
-			Node { start: a, end: b, anchor: null, tag: null, value: Value::Seq(all) }
+			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: Value::Seq(all) }
 		}
 	rule SeqMore(ds: Vec[Dir], left: i64, m: i64) -> Node = " "{m} e:SeqEntry(ds, left, m) -> { e }
 	rule SeqEntry(ds: Vec[Dir], left: i64, m: i64) -> Node = "-" v:After(ds, left, m) -> { v }
@@ -390,7 +419,7 @@ grammar Yaml {
 			}
 			let mut all = [first]
 			all.extend(rest)
-			Node { start: a, end: b, anchor: null, tag: null, value: Value::Map(all) }
+			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: Value::Map(all) }
 		}
 	// Where a block collection surely begins (`- `, `? `, `key:`, `: `), a
 	// level past the last is an error at once (the cut), not a reason to try
@@ -410,7 +439,15 @@ grammar Yaml {
 			let b = k.end
 			Entry {
 				key: k,
-				value: v ?? Node { start: b, end: b, anchor: null, tag: null, value: Value::Null },
+				value: v
+					?? Node {
+						start: b,
+						end: b,
+						anchor: null,
+						tag: null,
+						flow: false,
+						value: Value::Null,
+					},
 			}
 		}
 		| k:Key(ds, left) Sp ":" v:After(ds, left, m; c: Ctx::BlockOut) -> {
@@ -418,7 +455,14 @@ grammar Yaml {
 		}
 		| a:here ":" v:After(ds, left, m; c: Ctx::BlockOut) -> {
 			Entry {
-				key: Node { start: a, end: a, anchor: null, tag: null, value: Value::Null },
+				key: Node {
+					start: a,
+					end: a,
+					anchor: null,
+					tag: null,
+					flow: false,
+					value: Value::Null,
+				},
 				value: v,
 			}
 		}
@@ -433,7 +477,14 @@ grammar Yaml {
 	// An implicit key: one line, a flow collection, a quoted or a plain scalar.
 	rule Key(ds: Vec[Dir], left: i64) -> Node =
 		p:Props(ds) Sep1 v:KeyNode(ds, left, tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
-			Node { start: p.start, end: v.end, anchor: p.anchor, tag: p.tag, value: v.value }
+			Node {
+				start: p.start,
+				end: v.end,
+				anchor: p.anchor,
+				tag: p.tag,
+				flow: v.flow,
+				value: v.value,
+			}
 		}
 		| v:KeyNode(ds, left, TagKind::Untagged) -> { v }
 	rule KeyNode(ds: Vec[Dir], left: i64, k: TagKind) -> Node =
@@ -451,13 +502,34 @@ grammar Yaml {
 	// is read, against its text; an alias takes no properties.
 	rule Propped(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn) -> Node =
 		p:Props(ds) s:count(" " | "\t") if(s > 0) v:BlockScalar(n; k: tag_kind(ds, p.tag)) Blanks -> {
-			Node { start: p.start, end: v.end, anchor: p.anchor, tag: p.tag, value: v.value }
+			Node {
+				start: p.start,
+				end: v.end,
+				anchor: p.anchor,
+				tag: p.tag,
+				flow: v.flow,
+				value: v.value,
+			}
 		}
 		| p:Props(ds) s:count(" " | "\t") if(s > 0) v:Inline(ds, left, n; k: tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") Eol Blanks -> {
-			Node { start: p.start, end: v.end, anchor: p.anchor, tag: p.tag, value: v.value }
+			Node {
+				start: p.start,
+				end: v.end,
+				anchor: p.anchor,
+				tag: p.tag,
+				flow: v.flow,
+				value: v.value,
+			}
 		}
 		| p:Props(ds) Eol Blanks v:Block(ds, left, n; c: c, k: tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
-			Node { start: p.start, end: v.end, anchor: p.anchor, tag: p.tag, value: v.value }
+			Node {
+				start: p.start,
+				end: v.end,
+				anchor: p.anchor,
+				tag: p.tag,
+				flow: v.flow,
+				value: v.value,
+			}
 		}
 		| p:Props(ds) if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") e:text(Nothing) Eol Blanks -> {
 			let v = match tag_kind(ds, p.tag) {
@@ -477,7 +549,7 @@ grammar Yaml {
 				})
 				else => Value::Null
 			}
-			Node { start: p.start, end: p.end, anchor: p.anchor, tag: p.tag, value: v }
+			Node { start: p.start, end: p.end, anchor: p.anchor, tag: p.tag, flow: false, value: v }
 		}
 	rule Nothing = "" -> { }
 
@@ -493,7 +565,7 @@ grammar Yaml {
 	rule AnchorChar = x:any if(!is_space(x) && !is_flow_indicator(x)) -> { }
 	// `c-ns-alias-node`: `*` and an anchor's name, not resolved (D6).
 	rule Alias -> Node = a:here "*" s:text(AnchorChar+) b:here -> {
-		Node { start: a, end: b, anchor: null, tag: null, value: Value::Alias(s) }
+		Node { start: a, end: b, anchor: null, tag: null, flow: false, value: Value::Alias(s) }
 	}
 	// `c-ns-tag-property`, as written: verbatim `!<uri>`, a shorthand with a
 	// named or the secondary handle (`!e!x`, `!!str`), with the primary one
@@ -522,7 +594,7 @@ grammar Yaml {
 		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, m) Eol Blanks -> { v }
 		| Eol Blanks v:Block(ds, left, m; c: c) -> { v }
 		| a:here Eol Blanks -> {
-			Node { start: a, end: a, anchor: null, tag: null, value: Value::Null }
+			Node { start: a, end: a, anchor: null, tag: null, flow: false, value: Value::Null }
 		}
 
 	rule Compact(ds: Vec[Dir], left: i64, m: i64) -> Node =
@@ -547,10 +619,10 @@ grammar Yaml {
 		Fs first:FlowItem(ds, left - 1) Fs rest:FlowNext(ds, left - 1)* ("," Fs)? "]" b:here -> {
 			let mut all = [first]
 			all.extend(rest)
-			Node { start: a, end: b, anchor: null, tag: null, value: Value::Seq(all) }
+			Node { start: a, end: b, anchor: null, tag: null, flow: true, value: Value::Seq(all) }
 		}
 		| a:here "[" if(left > 0, "nesting within the depth limit") Fs "]" b:here -> {
-			Node { start: a, end: b, anchor: null, tag: null, value: Value::Seq([]) }
+			Node { start: a, end: b, anchor: null, tag: null, flow: true, value: Value::Seq([]) }
 		}
 	rule FlowNext(ds: Vec[Dir], left: i64) -> Node = "," Fs v:FlowItem(ds, left) Fs -> { v }
 	// A flow sequence's entry may be a single pair, `[a: b]` or `[? a : b]`, a
@@ -558,7 +630,7 @@ grammar Yaml {
 	rule FlowItem(ds: Vec[Dir], left: i64) -> Node =
 		if(left > 0, "nesting within the depth limit") a:here "?" not(PlainSafe(true)) Fs p:FlowExplicit(ds, left - 1) -> {
 			let b = p.value.end
-			Node { start: a, end: b, anchor: null, tag: null, value: Value::Map([p]) }
+			Node { start: a, end: b, anchor: null, tag: null, flow: true, value: Value::Map([p]) }
 		}
 		| k:FlowAny(ds, left) t:FlowTail(ds, left - 1)?
 		if(pair_fits(left, k, t), "nesting within the depth limit") -> {
@@ -572,6 +644,7 @@ grammar Yaml {
 						end: b,
 						anchor: null,
 						tag: null,
+						flow: true,
 						value: Value::Map([Entry { key: k, value: v }]),
 					}
 				}
@@ -583,7 +656,7 @@ grammar Yaml {
 	rule FlowTail(ds: Vec[Dir], left: i64) -> Node =
 		Fs ":" Fs v:FlowAny(ds, left) -> { v }
 		| Fs ":" b:here -> {
-			Node { start: b, end: b, anchor: null, tag: null, value: Value::Null }
+			Node { start: b, end: b, anchor: null, tag: null, flow: false, value: Value::Null }
 		}
 
 	rule FlowMap(ds: Vec[Dir], left: i64) -> Node =
@@ -592,10 +665,10 @@ grammar Yaml {
 		* ("," Fs)? "}" b:here -> {
 			let mut all = [first]
 			all.extend(rest)
-			Node { start: a, end: b, anchor: null, tag: null, value: Value::Map(all) }
+			Node { start: a, end: b, anchor: null, tag: null, flow: true, value: Value::Map(all) }
 		}
 		| a:here "{" if(left > 0, "nesting within the depth limit") Fs "}" b:here -> {
-			Node { start: a, end: b, anchor: null, tag: null, value: Value::Map([]) }
+			Node { start: a, end: b, anchor: null, tag: null, flow: true, value: Value::Map([]) }
 		}
 	rule FlowEntryNext(ds: Vec[Dir], left: i64) -> Entry = "," Fs e:FlowEntry(ds, left) Fs -> { e }
 	// An explicit entry, `? a : b`, or an implicit one.
@@ -608,8 +681,22 @@ grammar Yaml {
 		e:FlowImplicit(ds, left) -> { e }
 		| a:here -> {
 			Entry {
-				key: Node { start: a, end: a, anchor: null, tag: null, value: Value::Null },
-				value: Node { start: a, end: a, anchor: null, tag: null, value: Value::Null },
+				key: Node {
+					start: a,
+					end: a,
+					anchor: null,
+					tag: null,
+					flow: false,
+					value: Value::Null,
+				},
+				value: Node {
+					start: a,
+					end: a,
+					anchor: null,
+					tag: null,
+					flow: false,
+					value: Value::Null,
+				},
 			}
 		}
 	// `{a: b}`, `{a: }`, `{a}` and `{: b}`: a missing key or value is `Null`.
@@ -618,12 +705,27 @@ grammar Yaml {
 			let b = k.end
 			Entry {
 				key: k,
-				value: t ?? Node { start: b, end: b, anchor: null, tag: null, value: Value::Null },
+				value: t
+					?? Node {
+						start: b,
+						end: b,
+						anchor: null,
+						tag: null,
+						flow: false,
+						value: Value::Null,
+					},
 			}
 		}
 		| a:here ":" Fs v:FlowAny(ds, left) -> {
 			Entry {
-				key: Node { start: a, end: a, anchor: null, tag: null, value: Value::Null },
+				key: Node {
+					start: a,
+					end: a,
+					anchor: null,
+					tag: null,
+					flow: false,
+					value: Value::Null,
+				},
 				value: v,
 			}
 		}
@@ -632,7 +734,14 @@ grammar Yaml {
 	// node.
 	rule FlowAny(ds: Vec[Dir], left: i64) -> Node =
 		p:Props(ds) Fs v:FlowNode(ds, left, tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
-			Node { start: p.start, end: v.end, anchor: p.anchor, tag: p.tag, value: v.value }
+			Node {
+				start: p.start,
+				end: v.end,
+				anchor: p.anchor,
+				tag: p.tag,
+				flow: v.flow,
+				value: v.value,
+			}
 		}
 		| p:Props(ds) if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") e:text(Nothing) -> {
 			let v = match tag_kind(ds, p.tag) {
@@ -652,7 +761,7 @@ grammar Yaml {
 				})
 				else => Value::Null
 			}
-			Node { start: p.start, end: p.end, anchor: p.anchor, tag: p.tag, value: v }
+			Node { start: p.start, end: p.end, anchor: p.anchor, tag: p.tag, flow: false, value: v }
 		}
 		| v:FlowNode(ds, left, TagKind::Untagged) -> { v }
 	rule FlowNode(ds: Vec[Dir], left: i64, k: TagKind) -> Node =
@@ -688,7 +797,7 @@ grammar Yaml {
 					chomp: Chomp::Clip,
 				})
 			}
-			Node { start: a, end: b, anchor: null, tag: null, value: v }
+			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: v }
 		}
 		| a:here "\"" s:text(parts:DoublePart*) "\"" b:here if(fits(k, s), "a scalar its tag fits") -> {
 			let mut d = String()
@@ -709,7 +818,7 @@ grammar Yaml {
 					chomp: Chomp::Clip,
 				})
 			}
-			Node { start: a, end: b, anchor: null, tag: null, value: v }
+			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: v }
 		}
 	rule DoublePlain = x:any if(x != '"' && x != '\\' && x != '\n') -> { }
 	// One part of a double-quoted scalar's value (YAML 1.2.2 7.3.1): a run of
@@ -755,6 +864,7 @@ grammar Yaml {
 				end: block_end(e, r, s),
 				anchor: null,
 				tag: null,
+				flow: false,
 				value: Value::Str(Scalar {
 					raw: s,
 					value: s,
@@ -808,7 +918,7 @@ grammar Yaml {
 					chomp: Chomp::Clip,
 				})
 			}
-			Node { start: a, end: b, anchor: null, tag: null, value: v }
+			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: v }
 		}
 	rule SingleChar = "''" -> { } | x:any if(x != '\'') -> { }
 
@@ -832,7 +942,7 @@ grammar Yaml {
 					chomp: Chomp::Clip,
 				})
 			}
-			Node { start: a, end: b, anchor: null, tag: null, value: v }
+			Node { start: a, end: b, anchor: null, tag: null, flow: false, value: v }
 		}
 	rule PlainFirst(flow: bool) =
 		x:any if(plain_first(x)) -> { }
@@ -1230,10 +1340,11 @@ fn place_of(input: ref Bytes, offset: i64) -> (i64, i64) sync {
 	return (line, column)
 }
 
-// The stream's documents, one `Node` each, within `limits` (D8): an input
-// longer than `limits.bytes` is refused before it is read, nesting deeper
-// than `limits.depth` where the level past the limit begins.
-pub fn parse(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Node] sync throws {
+// The stream's documents, each with its root node and its `---` and `...`
+// (D7), within `limits` (D8): an input longer than `limits.bytes` is refused
+// before it is read, nesting deeper than `limits.depth` where the level past
+// the limit begins.
+pub fn documents(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Document] sync throws {
 	if input.len() as i64 > limits.bytes {
 		let (line, column) = place_of(input, limits.bytes)
 		throw Error {
@@ -1257,6 +1368,17 @@ pub fn parse(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Node] s
 		}
 		throw error_of(input, rendered)
 	}
+}
+
+// The stream's documents, one root `Node` each: `documents` with each root
+// taken out, within the same `limits`.
+pub fn parse(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Node] sync throws {
+	let mut docs = documents(input; limits: limits)
+	let mut roots: Vec[Node] = []
+	for d in docs.drain() {
+		roots.push(d.root)
+	}
+	return roots
 }
 
 // A scalar's value: for a double-quoted one what the grammar decoded (D11);
