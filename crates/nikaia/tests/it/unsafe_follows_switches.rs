@@ -43,11 +43,15 @@ fn main() {
 
 const ON: &str = "remove-bounds-checks:on,remove-overflow-checks:on";
 
+/// Lowered at `unproved-claims = "warn"`: what is tested is the emitted
+/// `unsafe`, not whether the call into `f` is proved.
 fn lowered(name: &str, source: &str, optimization: Option<&str>) -> String {
     let dir = common::scratch_dir(name);
     std::fs::write(dir.join("main.nika"), source).expect("the source");
     let mut command = Command::new(env!("CARGO_BIN_EXE_nikaia"));
-    command.current_dir(&dir).args(["lower", "main.nika"]);
+    command
+        .current_dir(&dir)
+        .args(["--unproved-claims", "warn", "lower", "main.nika"]);
     if let Some(switches) = optimization {
         command.args(["--optimization", switches]);
     }
