@@ -24,3 +24,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y11-1032-guard-call-tiers.md 190234 5
 /home/user/Nikaia/docs/briefs/yaml/y12-1033-guard-text-label.md 620163 5
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 4816290 74
+/home/user/Nikaia/docs/briefs/yaml/y13-1037-dependency-places.md 329590 5
