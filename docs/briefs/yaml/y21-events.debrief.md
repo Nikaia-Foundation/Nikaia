@@ -1,20 +1,14 @@
-1. **What cost the most turns.** Probing the three view-checker defects took about 12 turns. The first refusals in the package mixed several causes together (NK2302 on `kind`, NK1106 on `value: a`, the `mut out` parameter rule). I had to build small programs one after another to separate them, and twice I wrote a probe that wasn't close enough to the package. Before that, finding how Nikaia spells a mutable parameter (`mut out: Vec[T]`) took about 5 turns of grep that missed.
-
-2. **What I looked up that the brief could have handed me:**
-   - the path of ADR-yaml-1 (`docs/specification/adr/`), which took 2 turns;
-   - that `nikaia check` takes one file and not `--project`;
-   - the spelling of a mutable parameter;
-   - that views can't be pushed into a `mut` output parameter (by rule, NK2302);
-   - how the tree keeps tags (short form, as written).
-
-   I did not read `docs/builder-facts.md` whole, although the brief told me to. I read only grep hits, and it might already have told me about the `mut` parameter and `check`.
-
-3. **Checks I ran, and which were wasted:**
-   - Useful: the pre-flight `rg`, the formatter on scratch copies, `nikaia check` on `main.nika` (three times), and about 15 probe programs.
-   - Partly wasted:
-     - The first draft built events by assigning fields after creation, which the checker refuses (NK1105).
-     - The `marker`/`bare` refactor changed nothing, because the cause was the enum parameter.
-     - Plain `check` on the package file also prints NK1127 for `limits`, which I filtered out without confirming whether it also shows on the unchanged file.
-   - Not run: the package tests and the `fmt::every_nika_file` test, since nothing was committed.
-
-4. **One change that would have saved the most.** The pre-flight should hold a probe of the actual planned shape, not only the #1063 shape. That means a recursive walk over a borrowed node that returns `Vec[Struct]` with view fields, taken from a match payload, plus an enum argument. With it, the defects would have shown up in the architect's probe before the batch, and this run would have taken 5 turns instead of about 40.
+1. **Most cost:** turning the brief's probes into files. They sit in fenced blocks inside other briefs, so I wrote an awk extractor and read three briefs to find which output each probe wanted. After that, five small probe programs narrowed the NK2302 down to returning a view-holding value through an `if` or `match`. The rebuild took about 2 minutes, and it was needed.
+2. **What I looked up:**
+   - The shape of `Scalar` and that `text()` returns owned text. The brief says both "value through `text()`" and "views, not `.clone()`d". Those conflict for a `Value::Str`, and the brief should have settled it, for example with an owned `text` field beside the view.
+   - D7's wording ("scalar (style, raw text)").
+   - The fields of `Node`.
+   - No converter, since this is no move.
+3. **Checks:**
+   - Useful: the pre-flight probes, fmt on a scratch copy, a one-file `check`, a `check` of HEAD's file (which showed NK1127 was a cascade), and the minimal shape probes.
+   - Wasted: none, really. The package tests and the bless were rightly never reached.
+4. **Something you should know:** I moved the local `wip/y21-events` ref with `git update-ref` (0433d662 → 1c1199d6) so the fix would not be lost. I did not delete the branch, but "leave a `wip/*` branch where it is" can fairly be read as "don't move it". If that was not wanted, the old commit is still 0433d662.
+5. **One change:**
+   - Put the pre-flight probes in the brief itself, inline, each with its wanted output, rather than in other briefs.
+   - When the draft hits a view-checker refusal, the brief (or builder.md) should name the first diagnostic step: run the failing shape as `return x` and as `let r = x; return r`. That one pair would have reached this defect, and the y24–y26 ones, in two probes.
+   - Better still, the architect's probe of the whole draft should run `check` on it before sending a builder, so all the view-checker defects show up in one batch rather than one run at a time.

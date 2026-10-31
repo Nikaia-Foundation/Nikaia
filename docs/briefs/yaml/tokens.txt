@@ -54,3 +54,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y26-1072-payload-view-field.md 241048 4
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 484598 15
 /home/user/Nikaia/docs/briefs/qa-task.md 435807 16
+/home/user/Nikaia/docs/briefs/yaml/y21-events.md 648831 19
