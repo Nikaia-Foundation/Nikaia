@@ -41,3 +41,14 @@ Report to exactly `docs/briefs/prover/architect-task.md.report.md` (the driver d
 * `Owner:` a question for the owner, or `none`
 
 The architect does not count as a batch brief.
+
+## Landing (owner, 2026-10-31, verbatim, German dictation)
+
+> bitte alles landen lassen. Darauf achten, dass alles Wichtige committed ist, alles Offene in Issues erfasst ist, dass auch die Tools für eine neue Session wieder verfügbar sind, dass erlerntes Wissen in Dokumentation steht.
+
+While this section stands, the run plans **no new batch**: leave `batch.txt` empty (p13 stays written, unqueued; name it first in `state.md` for the next session). Instead:
+
+1. `state.md`: current state, figure, the next briefs in order, and how a new session starts the lane (`cargo build --profile fast -p nikaia`, then `nikaia run scripts/drive.nika -- docs/briefs/prover --max 8 --ignore-ci-red`).
+2. Every open item of this lane in an issue with exactly one status label: the defects in the reports of p1-p12 not yet filed (search first), the open steps of #1053's *To build* list, p13. An issue this lane leaves unfinished gets a comment saying what is missing, and loses `wip`.
+3. Knowledge learned in this lane that is only in reports goes into the documents it belongs to (`docs/formal-verification.md`, `docs/facts-about-data.md`, `docs/builder-facts.md` *Traps already met*, `docs/supervisor.md` for the driver), briefly, current state only.
+4. Report `Result: done`, `Batch: none (landing)`, the figure, `Owner: none`.
