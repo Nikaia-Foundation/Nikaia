@@ -1,5 +1,3 @@
-b20-1088-tuple-option-part-in-arms.md
+b22-1099-fstring-no-hole-braces.md
 b21-1097-flat-map-seq-result.md
 b13-1057-field-of-a-coalesce-and-let.md
-b22-1099-fstring-no-hole-braces.md
-b23-1100-literal-list-walk-copied.md
