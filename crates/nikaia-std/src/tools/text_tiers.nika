@@ -675,6 +675,9 @@ struct TierWalk {
     /// The function walked, and the statement walked in it.
     function: String,
     stmt: Span,
+    /// What each part of a tuple literal holds, by the literal's node, so
+    /// that a part with no text adds nothing to the tuple's tier (#999).
+    tuple_items: collections::BTreeMap[i64, Vec[Kinds]],
 }
 
 /// A view a call's result may hold of the caller's text (#702): the word of
@@ -967,11 +970,30 @@ fn flow_tuple_parts(going: ref TierGoing, value: ref Expr, kinds: ref Kinds, ask
             // holds: walked again here, a name bound in the block the tuple
             // ends would be out of scope.
             tie_parts(going.owner, ty, going.path.clone(), ask, walk)
+            // **Only the parts that hold text make the tuple's tier** (#999):
+            // a `Value::Num(n)` beside a view of the input is no text of its
+            // own. Each other part goes in as what it is.
+            let parts: Vec[Kinds] = walk.tuple_items.get(node_key(value))?.clone() ?? []
+            let mut text = kinds.clone()
+            if parts.len() == items.len() {
+                text = no_kinds()
+                let mut at = 0
+                for part in parts {
+                    if tuple_part_holds_text(ask.names, ty.generics[at]) {
+                        text = kinds_joined(text, part)
+                    }
+                    at += 1
+                }
+            }
             let mut at = 0
             for item in items {
                 let mut path = going.path.clone()
                 path.push(at)
-                flow_value(going_into(going.owner, ty.generics[at], path, true), item, kinds, ask, walk)
+                let mut given = text.clone()
+                if parts.len() == items.len() && !tuple_part_holds_text(ask.names, ty.generics[at]) {
+                    given = parts[at].clone()
+                }
+                flow_value(going_into(going.owner, ty.generics[at], path, true), item, given, ask, walk)
                 at += 1
             }
             return true
@@ -2156,12 +2178,17 @@ fn kinds_of(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: ref Tie
         return view_kinds()
     }
     if a_container(ask.names, ty) || a_followed_tuple(ask.names, ty) {
+        let tuple = a_followed_tuple(ask.names, ty)
         let mut out = no_kinds()
         let mut at = 0
         for arg in ty.generics {
-            path.push(at)
-            out = kinds_joined(out, kinds_of(owner, arg, path.clone(), ask, walk))
-            path.pop()
+            // A tuple's part that holds no text adds no kind to it (#999):
+            // an `i64` beside a `String` leaves the `String`'s tier alone.
+            if !tuple || tuple_part_holds_text(ask.names, arg) {
+                path.push(at)
+                out = kinds_joined(out, kinds_of(owner, arg, path.clone(), ask, walk))
+                path.pop()
+            }
             at += 1
         }
         if !no_text(out) {
@@ -2169,6 +2196,12 @@ fn kinds_of(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: ref Tie
         }
     }
     return owned_kinds()
+}
+
+/// Whether a tuple's part holds text: `String`, a view of it, or a container
+/// or tuple declaring one inside it.
+fn tuple_part_holds_text(names: ref winnow_grammar::InternerContext, part: ref Type) -> bool {
+    return holds_text(names, part) || (part.is_view && names.resolve(part.name) == "String")
 }
 
 fn kinds_of_declared(declared: ref Declaring, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
@@ -4399,7 +4432,15 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             owned_kinds()
         }
         Expr::Tuple(items, _) => {
-            let out = items_kinds(items, ask, walk)
+            let mut parts: Vec[Kinds] = []
+            for item in items {
+                parts.push(tier_expr(item, ask, walk))
+            }
+            let mut out = no_kinds()
+            for part in parts {
+                out = kinds_joined(out, part)
+            }
+            walk.tuple_items.insert(node_key(expr), parts)
             if out.still {
                 for item in items {
                     kept_unseen(item, ask, walk)
@@ -5984,7 +6025,7 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 } }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap() }
     let found = late_arms(program, walk.declared, ask)
     walk.late = found.arms
     walk.late_args = found.args

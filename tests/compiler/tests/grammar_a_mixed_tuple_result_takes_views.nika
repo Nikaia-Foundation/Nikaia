@@ -1,0 +1,30 @@
+// A grammar rule whose result is a tuple mixing `String` with another type
+// takes the views its action builds, as an all-`String` tuple does, also
+// when another rule hands it on through a label (#999).
+
+enum Value {
+	Str(String),
+	Num(i64),
+}
+
+grammar Counted {
+	rule WS = "" -> { }
+	rule Pair -> (String, i64) = k:until(":") ":" n:dec[i64](digit+) -> { (k, n) }
+	entry rule doc -> (String, i64) = p:Pair eof -> { p }
+}
+
+grammar Valued {
+	rule WS = "" -> { }
+	rule Pair -> (String, Value) = k:until(":") ":" n:dec[i64](digit+) -> { (k, Value::Num(n)) }
+	entry rule doc -> (String, Value) = p:Pair eof -> { p }
+}
+
+fn main() throws {
+	let (k, n) = Counted::doc("ab:12")
+	println(f"{k} {n}")
+	let (key, value) = Valued::doc("cd:34")
+	match value {
+		Value::Num(num) => println(f"{key} num {num}"),
+		Value::Str(text) => println(f"{key} str {text}"),
+	}
+}

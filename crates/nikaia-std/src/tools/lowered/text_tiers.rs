@@ -411,6 +411,7 @@ pub(crate) struct TierWalk {
     pub(crate) reads: TierReads,
     pub(crate) function: String,
     pub(crate) stmt: Span,
+    pub(crate) tuple_items: collections::BTreeMap<i64, Vec<Kinds>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -629,11 +630,27 @@ pub(crate) fn flow_tuple_parts(going: &TierGoing, value: &Expr, kinds: &Kinds, a
         Expr::Tuple(items, _) => {
             if (items.len() as i64) != ty.generics.len() as i64 { return false; }
             tie_parts(&going.owner, &ty, &going.path.to_owned(), ask, walk);
+            let parts: Vec<Kinds> = nikaia_std::index::or(match walk.tuple_items.get(&node_key(value)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into());
+            let mut text = kinds.clone();
+            if (parts.len() as i64) == items.len() as i64 {
+                text = no_kinds();
+                let mut at: i64 = 0;
+                for part in parts.iter() {
+                    let part = *part;
+                    if tuple_part_holds_text(ask.names, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at))) { text = kinds_joined(&text, &part); }
+                    at += 1;
+                }
+            }
             let mut at: i64 = 0;
             for item in items.iter() {
                 let mut path = going.path.to_owned();
                 path.push(at);
-                flow_value(&going_into(&going.owner, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at)), path, true), Some(item), kinds, ask, walk);
+                let mut given = text.clone();
+                if (parts.len() as i64) == items.len() as i64 && !tuple_part_holds_text(ask.names, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at))) { given = (*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).clone(); }
+                flow_value(&going_into(&going.owner, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at)), path, true), Some(item), &given, ask, walk);
                 at += 1;
             }
             return true;
@@ -1488,18 +1505,23 @@ pub(crate) fn kinds_of(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &
     }
     if ty.is_view && ask.names.resolve(ty.name) == "String" { return view_kinds(); }
     if a_container(ask.names, ty) || a_followed_tuple(ask.names, ty) {
+        let tuple = a_followed_tuple(ask.names, ty);
         let mut out = no_kinds();
         let mut at: i64 = 0;
         for arg in ty.generics.iter() {
-            path.push(at);
-            out = kinds_joined(&out, &kinds_of(owner, arg, &mut path.to_owned(), ask, walk));
-            path.pop();
+            if !tuple || tuple_part_holds_text(ask.names, arg) {
+                path.push(at);
+                out = kinds_joined(&out, &kinds_of(owner, arg, &mut path.to_owned(), ask, walk));
+                path.pop();
+            }
             at += 1;
         }
         if !no_text(&out) { return out; }
     }
     owned_kinds()
 }
+
+pub(crate) fn tuple_part_holds_text(names: &winnow_grammar::InternerContext, part: &Type) -> bool { holds_text(names, part) || part.is_view && names.resolve(part.name) == "String" }
 
 pub(crate) fn kinds_of_declared(declared: &Declaring, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds { kinds_of(&declared.owner, &declared.ty, &mut vec![], ask, walk) }
 
@@ -3203,7 +3225,14 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
             owned_kinds()
         },
         Expr::Tuple(items, _) => {
-            let out = items_kinds(items, ask, walk);
+            let mut parts: Vec<Kinds> = vec![];
+            for item in items.iter() { parts.push(tier_expr(item, ask, walk)); }
+            let mut out = no_kinds();
+            for part in parts.iter() {
+                let part = *part;
+                out = kinds_joined(&out, &part);
+            }
+            walk.tuple_items.insert(node_key(expr), parts);
             if out.still { for item in items.iter() { kept_unseen(item, ask, walk); } }
             out
         },
@@ -4396,7 +4425,7 @@ pub(crate) fn tier_word(tier: Tier) -> &'static str {
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads(), function: String::from(""), stmt: Span { start: 0, end: 0 } };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads(), function: String::from(""), stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap::new() };
     let found = late_arms(program, &walk.declared, ask);
     walk.late = found.arms;
     walk.late_args = found.args;
