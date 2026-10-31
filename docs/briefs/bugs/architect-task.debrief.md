@@ -1,14 +1,13 @@
-1. **What cost the most.** Tracing #1048 took about six turns. The issue said `AsyncFn`, but only by running a `sync` variant did I see that the `code.is_sync` guard was the cause. Filing #1057 cost one extra turn: I built the JSON in a double-quoted `python3 -c`, so the shell ate the backticks in the title and I had to PATCH it afterwards. The push was rejected, and that only cost time.
+1. **Most cost:** checking the probes. `target/fast/nikaia` was older than b11's commit, so I had to find the suite binary and re-run row d with it. A side-trip on row d also cost two runs: writing `String` instead of `ref String` gets NK1106 at the field, which is a different matter from the defect.
+2. **Looked up:**
+   - which binary is current;
+   - where #1057 rows b and c and #947 go wrong: the field branch of `check_core_a_lent_place_given_away`, the places that set `copied_jump_reads`, and the callers of `views_the_call_s`;
+   - whether #938, which held #947 back, was closed;
+   - the format of the previous brief, to copy its rules block.
 
-2. **What the brief could have handed me.**
-   - Whether the CUT commit (b8, 920d8608) was already on `origin/develop`. I had to check `git log` myself.
-   - That `common.part` was out of date with `builder.md`'s commit-locally rule. I found it by chance while copying the rules block.
-   - That #1056 belongs to the yaml lane. It has no `wip` label; only its body says so.
-   - How the architect itself should push in a checkout full of other agents' unstaged files. Rebase, or leave it to the driver?
-
-3. **Checks.**
-   - Useful: the reports of b6-b8; the issue list; the probes (b8's Found rows a-e plus the map form, #1048 text, list and `sync` forms); reading `check_core_leaves.nika` and `emit_core_types.nika`; diffing `common.part` against b9's rules block.
-   - Wasted: the `nikaia --help` grep looking for a lowering command (I never used it), and grepping for the git history of the `'call` comment.
-   - Not run: row d of #1048 (a function kept in a struct field). The brief tells the builder to probe it first.
-
-4. **One change.** In `architect-task.md`, say that the architect commits locally and the driver pushes, as builders do. Also add a small `scripts/issue.nika -- TITLE_FILE BODY_FILE LABELS` that files an issue from files, so nothing passes through shell quoting. Together these would have saved the rejected push, the PATCH and the doubt about rebasing.
+   The task brief could have said that #938 is done, and that the suite binary is the current one.
+3. **Checks:** the issue list, b11's report and debrief, the probes (#1061 a, #1057 b and c, #947 a, b, c and the typed-list row), and `where.nika`.
+   - Wasted: the first round of probes on the stale `target/fast` binary. Its #1057 results matched the suite binary, but only by luck.
+   - Not run: #947 row d, which the b14 brief tells the builder to re-probe.
+   - The push failed: `git pull --rebase` cannot run while the tree holds other agents' unstaged files, so a rejected push can never be repaired by the architect.
+4. **Change that would save the most:** the architect task should say "probe with `/home/user/nikaia-suite/target/fast/nikaia`, the last tested commit". It should also say "on a rejected push, leave the commit local; the driver pushes it", instead of an instruction to rebase that cannot work in the shared checkout.
