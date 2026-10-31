@@ -94,6 +94,19 @@ the proofs.
   and the code it cannot type drops out. The rest keep their checks: a defect
   there stops the compiler, it does not miscompile silently. The `unsafe` in `tools/` is
   text the lowering writes, not code the tools run.
+* Where the bounds walk stops today (prover lane, 2026-10-31; work in #1053):
+  it states a goal only below 2^62 (`solvable()` in `bounds_walk.nika`, #444),
+  so a bound like `n <= 2^63 - 1` cannot prove `i + 1`; what proves it is the
+  relative goal against an `i64` (`bounding_relatives`), and every length is
+  such an `i64` (ADR-385 D1). It keeps no type for a local, only for
+  parameters. Its loop guesses are halves of the facts the loop starts with,
+  never the prover's relational closed forms (`s == i`), and its `if` join
+  forgets every name a branch changes. A list's length is known where the
+  checker records it (`std_lengths` / `sized_lengths`: a `.len()` receiver,
+  a `for`'s collection), and below 2^60 only where its elements take space
+  (ADR-306 D12), which now includes a struct another tools file declares.
+  `nikaia check --bounds FILE` checks a file alone (another file's struct is
+  unsized there); only `lower-std --bounds` checks it with the package.
 
 ## 3. Requirements and their category
 
@@ -123,9 +136,9 @@ solvers) or major rework; E probably never.
 
 ## 4. Honest claims short of (a)
 
-* **Now (A):** "the compiler's Nikaia code proves 58 % of its indexes and 51 %
-  of its arithmetic (on a784e6d, `nikaia lower-std --bounds --asserts`, §2) and
-  checks the rest, 1,929 checks at run time; no unproved `assert` builds; every
+* **Now (A):** "the compiler's Nikaia code proves 58 % of its indexes and 56 %
+  of its arithmetic (on ae09d77, `nikaia lower-std --bounds --asserts`, §2) and
+  checks the rest, 1,846 checks at run time; no unproved `assert` builds; every
   dropped check rests on a checked certificate"; "Stage 1 and the Rust stage
   agree on the whole suite".
 * **With extensions (B):** "the proof kernel is free of run-time errors"

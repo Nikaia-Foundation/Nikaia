@@ -171,7 +171,10 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   and runs tests/compiler beside `cargo test --workspace` with a 4G package
   cache. An escalated red leaves the commits
   local: read `DIR/suite.log` and the QA report, and fix forward or hand it to
-  a fresh QA run before restarting the driver. The suite runs in its own
+  a fresh QA run before restarting the driver. An empty `DIR/RED` means the
+  last report's gate was green (`agent.nika`), and `DIR/qa-input.txt` stays
+  from the last red round: neither says the suite is red now; `DIR/suite.log`
+  and `DIR/unpushed.txt` do (prover lane, 2026-10-31). The suite runs in its own
   detached worktree at the tested sha (`/home/user/nikaia-suite`, or
   `NIKAIA_SUITE_DIR`; its `target/` is kept, `CARGO_INCREMENTAL=0`), so the
   other lane's unfinished files never enter it. It needs 8 GB free: each run
