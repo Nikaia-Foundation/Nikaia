@@ -43,3 +43,4 @@
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 1193843 33
 /home/user/Nikaia/docs/briefs/yaml/y19-1002-hex-digit.md 453939 18
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 2205049 41
+/home/user/Nikaia/docs/briefs/yaml/y22-1063-view-field-copy.md 708224 7
