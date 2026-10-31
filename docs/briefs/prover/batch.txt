@@ -1,2 +1,3 @@
-p5-1069-bounds-expectation.md
-p6-1053-for-counters.md
+p7-1053-for-collection-length.md
+p8-1076-precondition-unread-argument.md
+p9-1053-claims-in-the-figure.md

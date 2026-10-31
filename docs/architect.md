@@ -56,7 +56,10 @@ probe is filed by the architect at its next run: a GitHub issue in brief form
 (`ready`, the probe, *To build*) and a bug brief
 `docs/briefs/bugs/b<N>-<issue>-<topic>.md` with a `Blocks:` line, appended to
 `docs/briefs/bugs/batch.txt`, issue labelled `wip`. An open issue that already
-holds the defect gets the new probe as a comment instead.
+holds the defect gets the new probe as a comment instead. A lane architect whose task
+forbids other lanes' briefs (`docs/briefs/prover/architect-task.md`) files
+the issue `ready` without `wip` and writes no bug brief: the bug lane's
+architect claims it (prover run after p6, 2026-10-31).
 
 ## Driver, suite and QA (owner, 2026-10-31)
 
