@@ -3,7 +3,7 @@
 2. **What the brief could have handed me:**
    - That the remaining plan rows (S1, P5e, K3b, C1b) all had a blocker or a prerequisite. I had to rediscover that from `selfhosting-plan.md`.
    - How plain programs write views: `ref T` locals, `Vec[ref T]` results, map `m[k]` against `.get(k)`.
-   - That ADR-222 is archived; `check-adr-refs` caught that only after I had written the brief.
+   - That the String-field record the brief first cited is archived (ADR-282 replaced it); `check-adr-refs` caught that only after I had written the brief.
    - That `LedgerOps::candidates` is dead code.
 
 3. **Checks:**
