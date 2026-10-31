@@ -317,17 +317,21 @@ holds. What happened is in `git log` and the issues.*
   each its own brief: R0 (#921), `scripts/plan_rows.nika`, the driver writing
   the failing job's clippy output into `architect-input.txt`, fold
   `ComptimeRan` into `CheckWall`.
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b13 #1057, b14 #947, b16 #1065,
-  b17 #1077, b18 #1078, b19 #1080; all `wip`. b15 done (1d88667d, Part #1060:
-  the gate catches lowered drift; #1060 step 2 not reproduced). `ready`
-  defects no lane holds, next: #1081 (`let a = call().field` borrows the
-  temporary, b15's Found), #1075, #1074, #1066, #1038, #958, #1014, #927,
-  #1056, #1058. Unfiled: qa-task's note (dev-profile `cargo test -p nikaia`
-  hits the recursion limit in winnow-grammar `rt.rs:902`); a two-view `fn`
-  field written with `String` instead of `ref String` is NK1106; `String?` ==
-  `String` refused (NK1102; GR keeps `sysroot_holds` for it): decide whether
-  that is by design when next met. A suite gate-error that does not
-  reproduce: re-run the suite before suspecting a commit.
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): b19 #1080, b17 #1077, b18
+  #1078 (the `Blocks:` briefs, for C1a and K3b). Queued after them, briefs
+  written and issues `wip`: b13 #1057, b14 #947, b16 #1065. b15 done
+  (1d88667d, Part #1060: the gate catches lowered drift; step 2 not
+  reproduced, #1060 stays open for it). `ready` defects no lane holds, next:
+  #1081 (`let a = call().field` borrows the temporary, b15's Found; gate.nika
+  writes `x.stdout + ..` over the kept result meanwhile), #1075, #1074,
+  #1066, #1038, #958, #1014, #927, #1056, #1058. Unfiled: qa-task's note
+  (dev-profile `cargo test -p nikaia` hits the recursion limit in
+  winnow-grammar `rt.rs:902`); a two-view `fn` field written with `String`
+  instead of `ref String` is NK1106; `String?` == `String` refused (NK1102;
+  GR keeps `sysroot_holds` for it): decide whether that is by design when
+  next met. A suite gate-error that does not reproduce: re-run the suite
+  before suspecting a commit. `docs/briefs/bugs/RED` is an empty stale
+  marker (18:43).
 * **yaml lane**: #928, #929, #604 (`wip`).
 * **Owed to the supervisor**: version raise / Changelog lines for s922b
   (`fs::Metadata::modified()`, `links()`, `file_id()`, `time::since_epoch()`,
