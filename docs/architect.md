@@ -147,6 +147,12 @@ paid for the rule):
   result type with view fields, the `match` payloads and `for` elements it
   reads, the by-value arguments beside them (y21 run 2: three checker defects
   a ten-line probe would have shown before the batch);
+* a probe of a view-checker defect is built like the case it came from: the
+  struct's field must really be a view there (built from a `trim()` inside a
+  function, not from a literal in `main`, which makes the field owned), or the
+  probe passes and the brief is wrong (y21 run 3, #1085). Before re-queueing a
+  draft that stopped on one, rewrite the refused part in scratch and `check`
+  and test the rest, so all its defects come out in one batch;
 * a fix that widens a rule names every function that repeats that rule
   (the same condition tested elsewhere, e.g. `views_the_call_s` beside the
   emitter's #703 branch) and allows its file, or drops the row (b11);

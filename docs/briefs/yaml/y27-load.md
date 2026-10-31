@@ -12,7 +12,7 @@ Read `docs/builder-facts.md`, ADR-yaml-1 **D4, D6, D8** (`docs/specification/adr
 
 ## Pre-flight
 
-`rg -n "pub fn events|pub fn event_line" packages/yaml/src/main.nika` shows both (y21 run 3 built). If not, build nothing here: `Result: blocked`, `Found: y21 not built`. Rebuild `target/fast/nikaia` first (`cargo build --profile fast -p nikaia`): it must hold #1070-#1072 (y24-y26).
+`rg -n "pub fn events|pub fn event_line" packages/yaml/src/main.nika` shows both (y21 run 4 built). If not, build nothing here: `Result: blocked`, `Found: y21 not built`. Rebuild `target/fast/nikaia` first (`cargo build --profile fast -p nikaia`): it must hold #1070-#1072 (y24-y26) and #1085 (y28; a value of views handed back through an `if`/`match` arm, which `load`'s resolving will likely write too). If a view-checker refusal stops you, narrow it in two probes (the shape as `return x` and as `let r = x; return r`) and report it as `Found:`; do not rewrite the code around it.
 
 ## To build (architect's decisions, 2026-10-31; names yours where not given)
 
