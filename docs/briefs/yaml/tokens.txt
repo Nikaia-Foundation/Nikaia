@@ -53,3 +53,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y25-1071-list-of-views-literal-extend.md 250543 5
 /home/user/Nikaia/docs/briefs/yaml/y26-1072-payload-view-field.md 241048 4
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 484598 15
+/home/user/Nikaia/docs/briefs/qa-task.md 435807 16

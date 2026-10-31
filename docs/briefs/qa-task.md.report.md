@@ -1,9 +1,9 @@
 Result: done
-Cause: 33ed1119 (on origin/develop, not in the tested HEAD) - test red tests/compiler: a_trait_column_change_warns printed Cargo's "Blocking waiting for file lock" line under parallel builds; the suite ran on a base without 33ed1119's filter line.
-Fixed: the same one-line filter of "Blocking waiting for file lock" in a_trait_column_change_warns.nika (identical hunk to 33ed1119, rebases cleanly).
-Tests: nikaia test --both-settings --project tests/compiler: 473 passed, 0 failed (was 472/1).
-Found: none (the test is timing-sensitive to lock contention; the filter covers it).
-Files: tests/compiler/tests/a_trait_column_change_warns.nika
-Commit: tests: a_trait_column_change_warns filters Cargo's file-lock line (as 33ed1119 on origin/develop)
+Cause: 91d5eb6b (already pushed-range brief commit) added docs/specification/adr/adr-384.md without its index row; pre-push step (check-adr-refs.py) red
+Fixed: added the ADR-384 row to docs/specification/adr/README.md
+Tests: scripts/pre-push-check.sh green (fmt, ADR refs, badges, bump)
+Found: none (the "Unused import ProbePlain" warning in the suite log is a lint note in scripts/gate.nika, not a failure)
+Files: docs/specification/adr/README.md
+Commit: ADR index: add the row for ADR-384 (Entry::or_default, Seq::cloned)
 Changelog: none
-Pushed: local 8debcc6e896320376bb18436695be63dd024d7ce
+Pushed: local eadeb8f8b1342d97ed78392bf27a6de6382e30bf

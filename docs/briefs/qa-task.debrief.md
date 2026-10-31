@@ -1,20 +1,17 @@
-1. **Most time:** `suite.log` named only the red step (`test red tests/compiler`), not the failing test. I had to rerun the whole `tests/compiler` package (about 10 minutes) to find the one failure. I also spent several calls on three wrong leads:
-   - `target/it-fail.txt` was stale (Oct 26).
-   - The `docs/briefs/` listing was huge.
-   - The first `qa-input.txt` lookup was in the wrong directory.
+1. **Turns and time.** Finding the driver's directory cost the most. The brief said `docs/briefs/qa-input.txt` or `docs/briefs/bugs/qa-input.txt`, and neither existed. I had to `find` the file, which turned up under `docs/briefs/yaml/`. My first `ls` of `docs/briefs` also dumped hundreds of lines. The fix itself was a one-line index row.
 
-   After that I had to work out that 33ed1119 was already on `origin/develop` and missing from the tested HEAD.
+2. **What I looked up that the brief could have handed me.**
+   - The lane directory. The task text should have named it, as the instructions say it would.
+   - That `pre-push` failing "without output" means one of four sub-checks in `scripts/pre-push-check.sh`. I only learned it was `check-adr-refs.py` by running them one by one.
+   - The ADR index format and where it lives (`docs/specification/adr/README.md`).
+   - That `nikaia` isn't on PATH. I had to use `target/fast/nikaia`.
+   - The commit script's report fields. I read the header of `scripts/commit.nika` to get them.
 
-2. **What the brief could have handed me:**
-   - Which lane's directory holds `qa-input.txt`. The brief gave two paths and I guessed wrong first.
-   - The exact command for the red step (`nikaia test --both-settings --project tests/compiler`). I read it out of `gate.nika`.
-   - The fact that HEAD was behind `origin/develop`.
-   - The failed-test names. The newest unpushed commit, 0a550483, adds exactly that logging to `gate.nika`, but the suite that failed ran before it.
+3. **Checks run and wasted.**
+   - Useful: `pre-push-check.sh` alone, then its sub-checks separately, then `pre-push-check.sh` again after the fix.
+   - Wasted: my first `pre-push-check.sh | tail` hid the exit code, so I ran it twice.
+   - Wasted: two `grep`/`ls` guesses for an `adr-384` index row in the wrong files.
+   - Wasted: I did not need `git diff --stat` or the ADR-384 header reading.
+   - The report's `Cause:` line is slightly muddled: 91d5eb6b was not in the unpushed list. The unpushed commit was 0c3303d1, so the broken state was probably already on `develop`. I should have checked that.
 
-3. **Checks:**
-   - I ran the failing package twice: once to find the failure, once to confirm the fix. Both were needed.
-   - The first call, a grep of `suite.log` for failures, found nothing because the log was only 13 lines.
-   - I did not run clippy or `pre-push-check.sh`, because the change was one `.nika` test line. I said so in the report.
-   - Nothing was wasted beyond the stale-file reads.
-
-4. **Change that would have saved the most:** have the driver write the failing test names, and the first diff lines of each failure, into `qa-input.txt` when a suite step goes red. Add one line to `qa.md`: "if the cause is a test already fixed on `origin/develop`, compare with `git merge-base` and `git log HEAD..origin/develop` first."
+4. **One change.** The driver should write its directory into the task text. For example, "Input: docs/briefs/yaml/qa-input.txt". Failing that, `qa.md` could say to run `ls docs/briefs/*/qa-input.txt`. A second fix: `pre-push-check.sh` should print which sub-check failed, so "failed without output" is no longer opaque.
