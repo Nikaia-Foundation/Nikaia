@@ -635,8 +635,9 @@ grammar Ids {
     let emitted = emit(source, Build::default());
 
     assert!(emitted.contains("n:dec<i32>(digit{1,2})"), "{emitted}");
-    // A built-in without type arguments keeps its call exactly as written.
-    assert!(emitted.contains("t:text(alpha1 digit*)"), "{emitted}");
+    // A built-in without type arguments keeps its call; a lone sequence is
+    // written as the group it means (#1049).
+    assert!(emitted.contains("t:text((alpha1 digit*))"), "{emitted}");
 }
 
 /// **A grammar with two `pub` rules is entered by either**
