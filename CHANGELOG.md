@@ -8,6 +8,19 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1327] — 2026-10-31
+
+**prover: loop turns and collection lengths bound counters, argument lengths, every length below 2^63, sound preconditions; claims in the figure (#1053, #1054, #1069, #1076, #1084, #1090)**
+- An `assert` inside a loop body that reads a name the loop changes is proved through that loop's invariant at the head of the turn, with the loop condition and the path from the head (ADR-361 D2, D3); before, only a claim after the loop was.
+- `nikaia test` compares a test program's `--bounds` report with `tests/NAME.bounds` (at `prove-through-loops:off`) and `tests/NAME.loops.bounds` (at `:on`) where they exist, and `--bless` writes them, so a proof is guarded by a test.
+- The prover counts a loop's turns (ADR-361 D13): a counter that a `for` over a range or a `while` with a step counter grows by constants is bounded by those turns, so its overflow check is proved.
+- The prover counts a `for` over a list, map or set as one turn per element, so a counter stepped once a turn in such a loop is proved within the collection's length and loses its overflow check.
+- A call whose argument the prover cannot read no longer counts as proving the callee's precondition: `--asserts` lists it as not proved, and the default build refuses it with NK1300 (#1076).
+- `nikaia lower-std --asserts` (with or without `--bounds`) prints each tools file's `--asserts` report, so `scripts/proved.nika` can count the tools package's claims beside its indexes and operations.
+- The prover knows the length of `Bytes(x)` (x's), of a bound `[v; n]` (`let` as well as `let mut`), and of a list literal or repeat passed straight to a function, so a length precondition these plainly meet is proved (#1084).
+- A precondition carried back through a call is now proved only where the outer callers' calls prove it; a call that does not is refused with NK1300 instead of passing as "proved at every call" (#1090).
+- Every length is at most 2^63 - 1 for a proof, so `i < xs.len()` proves `i + 1` and a `for`'s counter is proved for every element type, and a list of a struct another file declares is bounded below 2^60 as one of the file's own (ADR-385 D1, #1053).
+
 ## [0.0.1326] — 2026-10-31
 
 **Grammars build a struct from keyed members; a function takes a reflected field (#1019)**
