@@ -1,20 +1,20 @@
-1. **Most turns and time.**
-   - The first test run used the debug profile. It hit the 120s timeout and then a winnow recursion-limit compile error, which cost about three calls and several minutes before I switched to `--profile fast`.
-   - Finding the emitter took about ten turns. I started in `crates/nikaia/src/emit`, and the grammar emitter is actually in `crates/nikaia-std/src/tools/emit_pattern.nika`.
+1. **Most turns and time.** Finding the driver's input and then the real cause.
+   - The brief named `docs/briefs/qa-input.txt` and `docs/briefs/bugs/qa-input.txt`. Neither existed. The file was in `docs/briefs/prover/`, a third lane the brief doesn't mention.
+   - The step line only said `rs2nika/convert` red, with no failure detail in `suite.log`. I had to rerun the package myself.
+   - My first run printed about 1,500 lines of unrelated warnings, so I wasted a round grepping noise before redirecting to a file.
 
 2. **What I looked up that the brief could have handed me.**
-   - The brief said `docs/briefs/qa-input.txt` or `docs/briefs/bugs/qa-input.txt`. The real file was in `docs/briefs/prover/`, a third lane, so I had to run `find`.
-   - Tests must run with `--profile fast`. The gate's `cargo test` command is in `gate.nika`, and the brief could have quoted it.
-   - Grammar emission is written in Nikaia under `crates/nikaia-std/src/tools/*.nika`, not in the Rust `emit/` directory.
-   - `scripts/commit.nika` allows one report per commit, so two causes meant rewriting the same report file between commits.
+   - The lane directory, so the brief should have named the exact `qa-input.txt` path.
+   - What the failing test does: it runs `nikaia test --both-settings --locked --project <pkg>`. I read `examples.rs` to find that out.
+   - The expected toolchain, which includes the `rust-analyzer` component. The rs2nika converter needs it, and no document I read said so.
+   - That an earlier QA run's report already existed in git history (deleted in the working tree). It turned out to be about a different failure.
 
-3. **Checks.**
-   - Run: the failing test, `badges.py --check`, `cargo fmt --check` and `pre-push-check.sh`.
-   - Wasted: the debug-profile `cargo test` and `cargo build`, plus about six greps for the emitter in the wrong places.
-   - I did not run clippy. That is fine, because I changed only a test file and badge output, but I could have said so in the report.
-   - The seven `rs2nika` lock and proofs files were already modified when I started. I assumed the suite run produced them and left them alone. I never confirmed that.
+3. **Checks run and wasted.**
+   - Useful: the `--locked` package run, the `rustup component add rust-analyzer` fix, the rerun that went green, and `cargo test --profile fast` on the gate test.
+   - Wasted: the first package run piped to `tail`, and a second identical run just to capture output to a file. Those were two full runs of about 140 tests where one redirected run would have done.
+   - Not run: `pre-push-check.sh`, clippy and fmt. I changed no files, so skipping them was deliberate.
 
 4. **One change.**
-   - Have the driver put the input directory, the exact gate commands (`cargo test --profile fast ...`) and each failing test's file path into the task text, or into the top of `qa-input.txt`.
-   - Add one line to `qa.md`: "red on the `fast` profile only; the debug profile does not build".
-   - That would have saved most of the lost turns.
+   - The driver should write the failing test's own output tail into `qa-input.txt`, not only the step line. The gate would then show "rust-analyzer: Unknown binary" immediately, and I would have gone straight to the environment.
+   - The brief should also say to look in `docs/briefs/*/qa-input.txt` when the two named paths are missing.
+   - builder.md or `qa.md` could add a line: "if the failure is the environment, say so and commit nothing."
