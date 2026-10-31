@@ -19,11 +19,15 @@ use nikaia_std::list::ListExt as _;
 #[allow(unused_imports)]
 use nikaia_std::collections;
 #[allow(unused_imports)]
+use nikaia_std::env;
+#[allow(unused_imports)]
 use nikaia_std::fs;
 #[allow(unused_imports)]
 use nikaia_std::hash;
 #[allow(unused_imports)]
 use nikaia_std::node_id;
+#[allow(unused_imports)]
+use nikaia_std::process;
 #[allow(unused_imports)]
 use nikaia_std::text;
 
@@ -1371,6 +1375,14 @@ mod grammar_decode_lowered {
 #[allow(unused_imports)]
 pub use grammar_decode_lowered::*;
 
+mod grammar_run_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/grammar_run.rs");
+}
+#[allow(unused_imports)]
+pub use grammar_run_lowered::*;
+
 mod grammar_types_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2584,6 +2596,10 @@ pub mod foreign {
 pub mod grammar_decode {
     #[allow(unused_imports)]
     pub use super::{GrDecoded, gr_decode, gr_manifest, gr_dump_helpers, gr_main};
+}
+pub mod grammar_run {
+    #[allow(unused_imports)]
+    pub use super::{GrammarRunHost, grammar_run_compile_and_run};
 }
 pub mod grammar_types {
     #[allow(unused_imports)]
