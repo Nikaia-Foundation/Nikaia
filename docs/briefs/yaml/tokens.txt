@@ -52,3 +52,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y24-1070-by-value-enum-not-a-view.md 187685 4
 /home/user/Nikaia/docs/briefs/yaml/y25-1071-list-of-views-literal-extend.md 250543 5
 /home/user/Nikaia/docs/briefs/yaml/y26-1072-payload-view-field.md 241048 4
+/home/user/Nikaia/docs/briefs/yaml/architect-task.md 484598 15
