@@ -18,3 +18,4 @@
 /home/user/Nikaia/docs/briefs/prover/p10-1084-argument-lengths.md 264089 3
 /home/user/Nikaia/docs/briefs/prover/architect-task.md 1163125 28
 /home/user/Nikaia/docs/briefs/prover/p11-1090-carried-precondition-count.md 1775382 40
+/home/user/Nikaia/docs/briefs/prover/p9-1053-claims-in-the-figure.md 157020 2
