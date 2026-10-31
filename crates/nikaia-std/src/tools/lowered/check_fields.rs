@@ -163,6 +163,13 @@ pub(crate) fn an_operation_in_one_type(op: &BinaryOp) -> bool { !(*op == BinaryO
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_fields_holds(frame: &[CheckLocal], name: &str) -> bool {
+    for local in frame.iter() { if local.name == name { return true; } }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn a_map_name(name: &str) -> bool {
     let base = type_last_segment(name);
     base == "HashMap" || base == "BTreeMap" || base == "Map"
@@ -192,6 +199,9 @@ impl CheckState {
             scan = scan + 1;
         }
         if at < 0 { return false; }
+        let mut first: i64 = 0;
+        while first < self.scope.len() as i64 && !check_fields_holds(nikaia_std::index::get(&self.scope, nikaia_std::index::at(first)), &name) { first = first + 1; }
+        if self.frame_holding(&name) != first { return false; }
         lends_in_own(&contract, at, &vec![world.library])
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

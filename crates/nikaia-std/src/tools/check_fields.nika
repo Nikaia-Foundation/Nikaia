@@ -201,6 +201,16 @@ fn an_operation_in_one_type(op: ref BinaryOp) -> bool sync {
     return !(op == BinaryOp::Eq || op == BinaryOp::Ne || op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge || op == BinaryOp::And || op == BinaryOp::Or)
 }
 
+/// Whether a frame of the scope binds a name.
+fn check_fields_holds(frame: ref Vec[CheckLocal], name: ref String) -> bool sync {
+    for local in frame {
+        if local.name == name {
+            return true
+        }
+    }
+    return false
+}
+
 /// A map type's name, by its last segment.
 fn a_map_name(name: ref String) -> bool sync {
     let base = type_last_segment(name)
@@ -227,6 +237,18 @@ impl CheckState {
             scan = scan + 1
         }
         if at < 0 {
+            return false
+        }
+        // **The name is the parameter only while its innermost binding is the
+        // parameter's own** (#1023): a `let` that shadows it binds in a deeper
+        // frame. The walk of a function begins on an empty scope, so the
+        // parameter's frame is the outermost one that holds the name; a
+        // lambda's capture of the parameter still finds it there.
+        let mut first = 0
+        while first < self.scope.len() && !check_fields_holds(self.scope[first], name) {
+            first = first + 1
+        }
+        if self.frame_holding(name) != first {
             return false
         }
         return lends_in_own(contract, at, [world.library])

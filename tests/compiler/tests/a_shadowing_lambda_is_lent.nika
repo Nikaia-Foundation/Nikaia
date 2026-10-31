@@ -1,0 +1,9 @@
+// #1023: a `let` lambda that shadows a `fn` parameter is not the lent
+// parameter, so the call that hands it on lends it with `&`.
+fn alt(name: String) -> i64? sync { return name.len() }
+fn use_it(known: fn(ref String) -> i64? sync) -> i64 sync { return known("ab") ?? 0 }
+fn outer(known: fn(ref String) -> i64? sync) -> i64 sync {
+    let known = fn(name) { known(name) ?? alt(name) }
+    return use_it(known)
+}
+fn main() { println(f"{outer(fn(_name) { null })}") }
