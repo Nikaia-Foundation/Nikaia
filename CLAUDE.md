@@ -134,7 +134,10 @@ the background in a cloud session.
   `Found:` what is missing in Nikaia (the gap that makes Rust necessary), and
   `Needs: architect decision`; the architect makes closing that gap the
   next brief, never a brief that writes the Rust. Briefs and agent files
-  that still order Rust are read with this rule over them.
+  that still order Rust are read with this rule over them. A defect in
+  existing Rust may be fixed in Rust only where that code cannot be
+  converted to Nikaia directly (owner, 2026-10-31); where it can, the fix is
+  made by moving it into Nikaia.
 * **Helper tools are written in Nikaia, not in Python or shell.** A new tool
   (a migration aid, a checker, a generator) is a `tools/*.nika` behind a
   `nikaia` subcommand or a program run with `nikaia run`; the existing Python
