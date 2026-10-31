@@ -5,3 +5,4 @@ Tests: nikaia lower-std rerun: second run changes nothing (fixpoint); cargo buil
 Found: none
 Files: crates/nikaia-std/src/tools/lowered/project_members.rs docs/briefs/qa-task.md.report.md
 Commit: lowered: project_members.rs as lower-std writes it (TrustedMap, TrustedSet)
+Pushed: local 6220cab85db07a45c28ff3a72c319d2a1a6b9de7

@@ -1,17 +1,19 @@
-1. **Turns and time.** Finding the driver's directory cost the most. The brief said `docs/briefs/qa-input.txt` or `docs/briefs/bugs/qa-input.txt`, and neither existed. I had to `find` the file, which turned up under `docs/briefs/yaml/`. My first `ls` of `docs/briefs` also dumped hundreds of lines. The fix itself was a one-line index row.
+1. **Time sink.** The `cargo build --profile fast` ran past the 120 s tool timeout and went to the background. I then wrote a wait loop with `pgrep -f "cargo build"`, which matched its own shell and hung for 10 minutes. The `pkill` I used to clear it killed my own shell as well. That cost about 3 calls and several minutes. The fix itself was trivial.
 
-2. **What I looked up that the brief could have handed me.**
-   - The lane directory. The task text should have named it, as the instructions say it would.
-   - That `pre-push` failing "without output" means one of four sub-checks in `scripts/pre-push-check.sh`. I only learned it was `check-adr-refs.py` by running them one by one.
-   - The ADR index format and where it lives (`docs/specification/adr/README.md`).
-   - That `nikaia` isn't on PATH. I had to use `target/fast/nikaia`.
-   - The commit script's report fields. I read the header of `scripts/commit.nika` to get them.
+2. **Looked up.**
+   - The brief doesn't say how to run `scripts/commit.nika`. It isn't executable, and I had to find out that it runs as `target/fast/nikaia run scripts/commit.nika -- REPORT`.
+   - I had to work out that the stale lowered file was already modified in the working tree. A previous gate run in the same checkout had regenerated it, so the "fix" was just committing it.
+   - I read one builder report (b949) only to see the report format.
+   - `qa-input.txt` named the drifted file but not the commit that caused it. I never confirmed 316e0721 as the cause. I inferred it from `git log -S TrustedMap`, so the Cause line in my report is unverified.
 
-3. **Checks run and wasted.**
-   - Useful: `pre-push-check.sh` alone, then its sub-checks separately, then `pre-push-check.sh` again after the fix.
-   - Wasted: my first `pre-push-check.sh | tail` hid the exit code, so I ran it twice.
-   - Wasted: two `grep`/`ls` guesses for an `adr-384` index row in the wrong files.
-   - Wasted: I did not need `git diff --stat` or the ADR-384 header reading.
-   - The report's `Cause:` line is slightly muddled: 91d5eb6b was not in the unpushed list. The unpushed commit was 0c3303d1, so the broken state was probably already on `develop`. I should have checked that.
+3. **Checks.**
+   - Useful: `git diff` of the lowered file, `lower-std` rerun to confirm it changes nothing more, the build, and `pre-push-check.sh`.
+   - Redundant: the first build, because the binary at `target/fast/nikaia` was already built and the drift was visible in the diff. The `cargo fmt` I ran was also pointless, since only a generated file changed.
+   - Skipped: clippy, because no hand-written Rust changed. I didn't rerun any `nikaia test` programs, because the failing step wasn't a test.
 
-4. **One change.** The driver should write its directory into the task text. For example, "Input: docs/briefs/yaml/qa-input.txt". Failing that, `qa.md` could say to run `ls docs/briefs/*/qa-input.txt`. A second fix: `pre-push-check.sh` should print which sub-check failed, so "failed without output" is no longer opaque.
+4. **Suggested change.** Add a "known recipes" block to `qa.md`:
+   - "Lowered drift: run `target/fast/nikaia lower-std`, check the file diff, commit it (no rebuild needed if the binary is current)."
+   - "Run scripts with `target/fast/nikaia run scripts/X.nika`."
+   - "Never wait on a build with `pgrep -f`."
+
+   `qa-input.txt` should also name the last commit that touched the drifted file's `.nika` source or the lowering.
