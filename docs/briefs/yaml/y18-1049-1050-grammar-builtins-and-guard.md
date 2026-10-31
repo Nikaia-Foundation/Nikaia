@@ -69,3 +69,7 @@ Fields of `docs/architect.md`, *Briefs and reports*: `Result: done|noop|partial|
 Attribution:
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01UVxJDveRM5qKZKyCqq6Y24
+
+## Earlier attempt (supervisor, 2026-10-31)
+
+The first builder on this brief was stopped mid-work when its driver hit a time limit. **#1049 (step 1) is built and committed** (0c9f96a4, gate green, report `y18-1049-1050-grammar-builtins-and-guard.md.step1.report.md`). Build #1050 only, and copy step 1's `Changelog:` line into your report beside your own. The unfinished #1050 work is saved outside the checkout: `/tmp/claude-0/-home-user-Nikaia/e431aae9-4983-5166-8583-f9b3eb3b6f61/scratchpad/y18-step2-partial/` (`tracked.diff` for `check_grammar`/`check_takes`, plus the started test `grammar_a_guard_hands_an_optional_label_by_value.*`). Read it, take over what holds up, and check every piece of it. It has not passed any gate.
