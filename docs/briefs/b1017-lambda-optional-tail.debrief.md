@@ -1,0 +1,9 @@
+1. **Most cost:** a wrong error location. The NK1125 (*a `ref Ty?` may be missing*) pointed at the start of the statement, not at `result.clone()`, and I didn't know `Ty::Fn.result` is a `Ty?`. That cost about 4 turns: a probe program and two `lower-std` cycles, one of them wasted because my `sed` edit addressed the wrong line number. A second full build cycle went on a fourth probe (a literal `match`) that was outside the brief: the `number_asked` attempt didn't help, and I reverted it.
+2. **Lookups the brief could have handed me:**
+   - The brief named the wrong site. `check_core_lambda_leave`'s `outer` is the enclosing function's expected type. The lambda's declared type is `declared` in `check_core_ops_closure` (`check_core_ops.nika` about line 1052). Tracing the callers took 3 turns.
+   - The field shapes `Ty::Fn { params, result: Ty?, .. }`.
+   - That `emit_expr_unmixed` reads `some_tails` and `wrapped` on any node. This would have settled "verify the emitter" in one line.
+3. **Checks run:**
+   - Useful: four probes on the old binary before the first build (they confirmed the cause and gave me the unfixed baseline); one fixpoint check by md5 after `lower-std`; one background gate (clippy, the guard set, `tests/compiler` at both settings), all green; `pre-push-check`.
+   - Wasted: the `NIKAIA_LOWER_CACHE_SALT` rerun (it wasn't the cache), the second build with `number_asked`, and two no-op "waiting" tool calls.
+4. **The one change:** a brief's *Locations* line should say where the value the fix needs actually lives, checked by the architect with a grep of the callers. Here that is "the lambda's declared type is `declared` in `check_core_ops_closure`". It should also give the field types the edit touches (`result: Ty?`). Separately, `builder-facts.md` could warn that NK1125 points at the start of the statement, not at the method call it refuses.
