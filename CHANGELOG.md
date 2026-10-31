@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1322] — 2026-10-31
+
+**nikaia test on parallel workers; loop checks through the prover's candidates; --bounds names its reasons (#1053, #1054)**
+- `nikaia test` builds each output test once against a kept package directory, runs the built program directly, and runs the tests on parallel workers (`NIKAIA_TEST_JOBS`, default the core count), with the same output in the same order; a package's ledger, proofs and lockfile are written whole, so builds side by side never read them half-written.
+- `--bounds` names why a check stayed from how the name was bound: a counter a loop changes, an `if`/`match` value, a parameter, a value read out of a list, or another list's length (#1053).
+- A `while` loop's open checks are asked with the prover's loop candidates (closed forms, intervals, guess and check) and the values the loop is reached with (ADR-361 D10, #1054 step 2); an `assert` inside a loop body is proved through that loop's invariant (ADR-361 D2, D3).
+- `nikaia lower-std --bounds` prints the `--bounds` report of each tools file, checked with the package beside it (#1053).
+
 ## [0.0.1321] — 2026-10-31
 
 **check, emit: type arguments at a call reached by a path (ADR-grammar-2 D11)**
