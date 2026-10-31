@@ -1,0 +1,21 @@
+{str(a): str(x\ny\n), str(b): str(x\ny), str(c): str(x\ny\n)}
+{str(a): str(x\n), str(b): str(x), str(c): str(x\n\n\n), str(d): str(e)}
+{str(a): str(x y\n), str(b): str(x y), str(c): str(x y\n\n)}
+{str(a): str(), str(b): str(), str(c): str(\n), str(d): str()}
+{str(a): str(x)}
+{str(a): str(x)}
+{str(a): str(\nx\n)}
+str(\nfolded line\nnext line\n  * bullet\n\n  * list\n  * lines\n\nlast line\n)
+{str(a): str(x\n  y\nz\n)}
+{str(a): str(x\n y\n\nz\n)}
+{str(a): str( \nx\n)}
+{str(a): str( x\n)}
+{str(a): str( x), str(b): str( y\n\n)}
+[str(a\n), str(b c)]
+str(x\n)
+str(foo\n) | str(bar\n)
+{str(a): str(x\ty\n)}
+error 1:6
+error 1:6
+error 1:6
+error 3:3
