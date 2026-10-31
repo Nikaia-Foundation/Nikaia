@@ -39,6 +39,14 @@ fn bare_reference(pattern: ref Pattern, world: ref CheckWorld) -> String sync {
     }
 }
 
+/// The built-in `text(..)` with a pattern inside, not a rule of that name.
+fn grammar_a_text_call(world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String]) -> bool sync {
+    return match pattern {
+        Pattern::Ref { name, generics, args } => generics.len() == 0 && args.len() >= 1 && world.words.resolve(name) == "text" && !rules.contains(world.words.resolve(name)),
+        else => false,
+    }
+}
+
 fn an_offered_number_name(name: ref String) -> bool sync {
     return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64"
 }
@@ -307,6 +315,8 @@ impl CheckState {
     /// values and the bindings written before it in its sequence. Hands back
     /// what is in scope after it: a sequence's bindings are its followers',
     /// and what an alternative, a group or a repetition binds stays inside.
+    /// What the pattern inside a bound `text(..)` binds is handed on as well
+    /// (#1013): a guard after `s:text(d:P+)` reads `d`, as the action does.
     pub fn grammar_values[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, pattern: ref Spanned[Pattern], rules: ref collections::BTreeSet[String], scope: Vec[CheckLocal]) -> Vec[CheckLocal] sync {
         match pattern.node {
             Pattern::Seq(parts) => {
@@ -317,10 +327,19 @@ impl CheckState {
                 return now
             },
             Pattern::Bind { name, pat } => {
-                self.grammar_values(world, host, gram, pat, rules, scope.clone())
+                let mut out = scope.clone()
+                match pat.node {
+                    Pattern::Ref { args, .. } if grammar_a_text_call(world, pat.node, rules) => {
+                        for arg in args {
+                            out = self.grammar_values(world, host, gram, arg, rules, out)
+                        }
+                    },
+                    else => {
+                        self.grammar_values(world, host, gram, pat, rules, scope.clone())
+                    },
+                }
                 let ty = self.pattern_type(world, pat.node, rules)
                 self.next_binding = self.next_binding + 1
-                let mut out = scope
                 out.push(CheckLocal::free(world.words.resolve(name).clone(), ty, self.next_binding))
                 return out
             },

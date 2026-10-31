@@ -1,0 +1,21 @@
+// A guard reads a name bound inside `text(..)` (#1013 step 4): what the
+// pattern inside binds is in scope for what follows in the sequence, the
+// guard as well as the action.
+grammar G {
+	rule WS = "" -> { }
+	rule Ch -> i64 = x:any if(x >= '0' && x <= '9') -> { 1 }
+	entry rule plain -> String = s:text(d:Ch+) if(d.len() > 1) ";" -> { s }
+}
+
+fn main() {
+	let r = G::plain("12;") catch {
+		println("error")
+		return
+	}
+	println(r)
+	let e = G::plain("1;") catch {
+		println("error")
+		return
+	}
+	println(e)
+}

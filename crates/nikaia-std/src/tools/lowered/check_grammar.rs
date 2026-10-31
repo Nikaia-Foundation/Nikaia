@@ -31,6 +31,15 @@ pub(crate) fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn grammar_a_text_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> bool {
+    match pattern {
+        Pattern::Ref { name, generics, args } => { let name = *name; generics.is_empty() && !args.is_empty() && world.words.resolve(name) == "text" && !rules.contains(world.words.resolve(name)) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" }
 
 impl CheckState {
@@ -241,10 +250,13 @@ impl CheckState {
             },
             Pattern::Bind { name, pat } => {
                 let pat = nikaia_std::boxed::open(pat); let name = *name;
-                self.grammar_values(world, host, gram, pat, rules, scope.to_owned());
+                let mut out = scope.to_owned();
+                match &pat.node {
+                    Pattern::Ref { args, .. } if grammar_a_text_call(world, &pat.node, rules) => { for arg in args.iter() { out = self.grammar_values(world, host, gram, arg, rules, out); } },
+                    _ => { self.grammar_values(world, host, gram, pat, rules, scope.to_owned()); },
+                }
                 let ty = self.pattern_type(world, &pat.node, rules);
                 self.next_binding = self.next_binding + 1;
-                let mut out = scope;
                 out.push(CheckLocal::free(world.words.resolve(name).to_string(), ty, self.next_binding));
                 return out;
             },
