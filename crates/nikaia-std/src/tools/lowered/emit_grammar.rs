@@ -211,7 +211,7 @@ impl EmitState {
         if covers {
             out.push(&format!("\n        rule {}(at: ::core::ops::Range<usize>) -> &'a str =\n", emit_covered_rule()));
             out.push("          empty\n");
-            if bytes { out.push("            -> { ::nikaia_std::grammar::covered_bytes::<_, E>(input, at.clone())? }\n"); } else { out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()) }\n"); }
+            if bytes { out.push("            -> { ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, at.clone())? }\n"); } else { out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()) }\n"); }
         }
         if counts {
             out.push(&format!("\n        rule {}<T>(p: Rule<T>) -> i64 =\n", emit_count_rule()));
@@ -284,7 +284,7 @@ impl EmitState {
                     let mut as_texts: Vec<String> = vec![];
                     let mut covered: Vec<String> = vec![];
                     emit_text_bindings(world, &walk, &alt.pattern.node, &mut as_texts, &mut covered);
-                    for (name, range) in as_texts.iter().zip(covered.iter()) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, E>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
+                    for (name, range) in as_texts.iter().zip(covered.iter()) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
                     if self.emit_action_can_fail(world, action) {
                         if prelude != "" { out.push(&format!("{{ {}", prelude)); }
                         self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?;
@@ -339,7 +339,7 @@ impl EmitState {
         out.push("{ let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = ");
         self.emit_core_block(world, walk, out, host, action, 3, inside, &EmitScope::plain(), EmitTail::Value)?;
         out.push("; Ok(__nikaia_done) })(); ");
-        out.push(&format!("match __nikaia_acted {{ Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::{}(<E as ::winnow_grammar::error::Diagnostics>::external(input, failed))) }} }}", mode));
+        out.push(&format!("match __nikaia_acted {{ Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::{}(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) }} }}", mode));
         Ok(())
     }
 }

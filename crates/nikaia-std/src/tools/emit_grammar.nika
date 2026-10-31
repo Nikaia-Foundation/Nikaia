@@ -312,7 +312,7 @@ impl EmitState {
             out.push(f"\n        rule {emit_covered_rule()}(at: ::core::ops::Range<usize>) -> &'a str =\n")
             out.push("          empty\n")
             if bytes {
-                out.push("            -> { ::nikaia_std::grammar::covered_bytes::<_, E>(input, at.clone())? }\n")
+                out.push("            -> { ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, at.clone())? }\n")
             } else {
                 out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()) }\n")
             }
@@ -408,7 +408,7 @@ impl EmitState {
                     emit_text_bindings(world, walk, alt.pattern.node, as_texts, covered)
                     for (name, range) in as_texts.iter().zip(covered.iter()) {
                         if bytes {
-                            prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered_bytes::<_, E>(input, {range})?; "
+                            prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {range})?; "
                         } else {
                             prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered(input, {range}); "
                         }
@@ -491,7 +491,7 @@ impl EmitState {
         out.push("{ let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = ")
         self.emit_core_block(world, walk, out, host, action, 3, inside, EmitScope::plain(), EmitTail::Value)
         out.push("; Ok(__nikaia_done) })(); ")
-        out.push(f"match __nikaia_acted {{ Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::{mode}(<E as ::winnow_grammar::error::Diagnostics>::external(input, failed))) }} }}")
+        out.push(f"match __nikaia_acted {{ Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::{mode}(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) }} }}")
     }
 }
 

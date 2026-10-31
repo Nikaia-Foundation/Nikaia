@@ -1,0 +1,18 @@
+// #1013: a user type named `S` or `E` in a rule's type or action is the
+// user's, not a type parameter of the generated parser (winnow-grammar
+// 1f6d053 renamed its own to `__WgS`, `__WgEr` and `__WgB`).
+struct S { a: i64 }
+struct E { b: i64 }
+grammar G {
+	rule WS = "" -> { }
+	rule Digit -> i64 = x:any if(x >= '0' && x <= '9') -> { 1 }
+	rule One -> S = Digit -> { S { a: 1 } }
+	entry rule top -> E = s:One "+" t:One eof -> { E { b: s.a + t.a } }
+}
+fn main() {
+	let r = G::top("1+2") catch {
+		println("error")
+		return
+	}
+	println(r.b)
+}
