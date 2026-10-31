@@ -325,13 +325,14 @@ holds. What happened is in `git log` and the issues.*
   brief: R0 (#921), `scripts/plan_rows.nika`, the driver writing the failing
   job's clippy output into `architect-input.txt`, fold `ComptimeRan` into
   `CheckWall`.
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b17 #1077 done (cf98a769,
-  `wip` off; its Found, no Nikaia test reaching the tools preamble, is a
-  coverage note on #1077, not filed), b19 #1080 done. Batch: b18 #1078 (Blocks
-  K3b), b20 #1088 (Blocks P5c), b13 #1057; probes of b18/b20 re-run at da12a9ca,
-  both still fail. Queued after, briefs written and `wip`: b14 #947, b16 #1065.
-  #1060 stays open for step 2 (not reproduced). `ready` defects no lane holds,
-  next: #1081 (`let a = call().field` borrows the temporary), #1075, #1074,
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): b17 #1077, b19 #1080 done;
+  b18 #1078 done (46824f2b, local, `wip` stays until promote closes it), its
+  Founds filed as #1097 (flat_map over a `Seq` result, `ready,wip`, decided on
+  the issue: a `Seq`/`Vec`/`Array` result binds `U`) and #1098 (named fn and
+  `filter_map` `if`/`null` over `iter()` of copy elements, `ready`). Batch:
+  b20 #1088 (Blocks P5c), b21 #1097, b13 #1057. Queued after, briefs written
+  and `wip`: b14 #947, b16 #1065. #1060 stays open for step 2 (not
+  reproduced). `ready` defects no lane holds, next: #1098, #1081 (`let a = call().field` borrows the temporary), #1075, #1074,
   #1083, #1086, #1066, #1038, #958, #1014, #927, #1056, #1058. Unfiled:
   qa-task's note (dev-profile `cargo test -p nikaia` hits the recursion limit
   in winnow-grammar `rt.rs:902`); a two-view `fn` field written with `String`

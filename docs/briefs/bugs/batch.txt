@@ -1,3 +1,3 @@
-b18-1078-filter-map-split-parts.md
 b20-1088-tuple-option-part-in-arms.md
+b21-1097-flat-map-seq-result.md
 b13-1057-field-of-a-coalesce-and-let.md
