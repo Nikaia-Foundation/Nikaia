@@ -148,6 +148,17 @@ suite's `test.event` form (`+STR`, `+DOC ---`, `+MAP {}`, `=VAL :a`, `=ALI *x`),
 which is what the tests compare. Events one at a time with fixed memory are
 the `stream` stage (D10).
 
+What the walk needs and the tree did not yet keep is kept in the tree, as
+written (D6), so the walk reads nothing from the input again (architect,
+2026-10-31): a `Node` has `pub flow: bool`, true for a flow sequence or
+mapping, false otherwise, so every `match` on `Value` stays as it is; and
+`documents(input; limits)` gives `Vec[Document]`, a `Document` holding its
+`root: Node` and whether `---` and `...` were written (`start: bool`,
+`end: bool`). `parse` stays the call for a program that wants the nodes: it
+is `documents` with each root taken out, so it pays for nothing it does not
+read. `events` walks `documents`; an event's line form is the package's own
+function, not the caller's.
+
 ### D8 — Limits are on by default, a value the caller may pass, and an exceeded limit is an error.
 
 `Limits` holds the nesting depth (default 128), the nodes an alias expansion
