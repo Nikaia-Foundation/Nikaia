@@ -15,3 +15,4 @@
 /home/user/Nikaia/docs/briefs/tools/j5-1019-comptime-field.md 7697630 123
 /home/user/Nikaia/docs/briefs/tools/architect-task.md 2981558 53
 /home/user/Nikaia/docs/briefs/tools/j8-1019-cut-item-frame.md 1046943 25
+/home/user/Nikaia/docs/briefs/tools/architect-task.md 427932 13

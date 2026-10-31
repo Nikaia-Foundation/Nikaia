@@ -1,14 +1,14 @@
-1. **Most cost:** tracing the cause of #1108. That took about 8 calls: grep for the message, then `bt_may_not_run`, `callee_named`, and the `sync.nika` and `touch.nika` arms. Setting up the probes cost more turns:
-   - My first probe used `sync fn` and failed to parse; `sync` goes after the return type.
-   - Several runs printed a page of rustc warnings, so I had to rerun each one with `2>/dev/null` and a grep.
-2. **What I had to look up that the brief could have handed me:**
-   - The brief says "j1, j2 are done", but j1-j7 were done. One line naming the last finished brief would help.
-   - Whether `RED`, `qa-input.txt` and `suite.log` were stale. `qa-input.txt` was from 19:58 and `suite.log` was cut off. The input file decided it, but the brief could say which of these files are current.
-   - The spec's file names (`20-nikaia-advance.md`) and where `NK1244` and Part II 10.2 sit.
-   - That #97 already tracks boxed patterns.
-   - Whether a push could ever succeed with untested builder commits on HEAD. The task says to push; it is always rejected or risky here.
+1. **Most turns or time:** reading context. That was `docs/architect.md` (I read about 350 lines, though the task named 1-260), the whole j8 brief to copy its Rules block, and the j6 run-1 report to re-derive what j6 run 2 needs. Two `--amend` rounds on my own report (the `Pushed:` line, then a stale sha in it) wasted two turns.
+
+2. **What the brief could have handed me:**
+   - Whether winnow-grammar has a CI that runs clippy. I had to look in the clone's `.github/workflows/ci.yaml`, and the answer decided whether j8's Found mattered at all.
+   - Whether e9de602c was already on `origin/main`. I checked with `git ls-remote`.
+   - A one-line pointer that `qa-input.txt` in the lane directory can be stale.
+   - The fact that the architect report may carry a `Pushed:` line.
+
 3. **Checks:**
-   - Useful: probes of both Found defects, the panic-free turn shape for j9, `NK1244` on an overflow, and the per-field `wire_name` run at build time for 3c.
-   - Wasted: the first `sync fn` probe, an unfiltered run, and a `gh` search that only found #97.
-   - Not done: j8's test rows are still unprobed. The previous architect flagged this and I did not fix it. j9's `NK1244`-on-panic row cannot be probed before the fix.
-4. **One change:** in the tools `architect-task.md`, replace "j1, j2 are done" with "read `batch.txt` and the newest reports; push only your own commit with the merge-tree recipe (`docs/architect.md`), never a HEAD that carries unpushed builder commits". Also add a line to builder-facts on where `sync` and `throws` go in a signature, for probes.
+   - Useful: `architect-input.txt`, the j8 report, `ls-remote`, the clone's log and `rt.rs:711`, the CI workflow, #1019's body and #1108's labels, the j9 brief's tail.
+   - Wasted: reading `qa-input.txt` and `unpushed.txt`, both from an older batch.
+   - Missed, against the charter's rule that a route a brief offers must be probed: I did not check that `vec![(0..input.len())]` passes clippy 1.97 and 1.99. j10 leaves it to the builder with a fallback.
+
+4. **One change that would have saved the most:** the driver writes into `architect-input.txt` the facts a cut report needs: whether the backend patch is pushed (`ls-remote` result), whether `qa-input.txt` and `unpushed.txt` belong to the current batch (their sha or date), and the pre-push `origin/develop` distance. That would have spared about a third of my reads.
