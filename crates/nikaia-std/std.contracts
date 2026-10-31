@@ -1865,6 +1865,39 @@ sync = true
 touches = []
 signature = "(crc: u32, word: u64) -> u32"
 
+# ## The SHA-256 digest (#922)
+#
+# **`hash::sha256_hex(data)` is the SHA-256 digest of `data` (FIPS 180-4) as 64
+# lowercase hex characters**, the text the toolchain's build cache keys on.
+
+# The SHA-256 digest of `data`, in lowercase hex.
+[fn."hash::sha256_hex"]
+pub = true
+sync = true
+touches = []
+signature = "(data: ref Vec[u8]) -> String"
+
+# ## The environment (#922)
+#
+# **`env::var(name)` is the value of an environment variable, null where it is
+# unset, empty or not Unicode; `env::temp_dir()` is the directory for
+# temporary files.** Neither has a `touches` line: an absent one means *touches
+# everything* (Part III 13.5), so a read of the environment keeps its order
+# against every other effect, one of which may set the variable. Both are
+# `sync`: a read of the process's own memory, nothing to pause on.
+
+# The value of the environment variable `name`, null where unset, empty or not Unicode.
+[fn."env::var"]
+pub = true
+sync = true
+signature = "(name: ref String) -> String?"
+
+# The directory for temporary files, as the system names it.
+[fn."env::temp_dir"]
+pub = true
+sync = true
+signature = "() -> fs::Path"
+
 # ## The CPU level a program is built for (ADR-371 D6)
 #
 # **`target::has(i)` answers whether the level `--cpu` named has the instruction

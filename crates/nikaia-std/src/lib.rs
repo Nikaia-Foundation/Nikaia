@@ -42,6 +42,7 @@ pub mod cli;
 pub mod concat;
 pub mod count;
 pub mod either_text;
+pub mod env;
 pub mod error;
 pub mod fixed;
 pub mod foreign;
@@ -660,6 +661,7 @@ pub mod prelude {
     // A text's graphemes, `s.graphemes` (ADR-320 D9).
     pub use crate::cli;
     pub use crate::collections;
+    pub use crate::env;
     pub use crate::graphemes::TextGraphemes as _;
     // A text in a normalisation form, `s.normalized(form)` (ADR-320 D10).
     pub use crate::text::TextNormalized as _;

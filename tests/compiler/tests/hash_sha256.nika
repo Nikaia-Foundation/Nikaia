@@ -1,0 +1,24 @@
+// #922 step 1: `hash::sha256_hex` against the NIST vectors (FIPS 180-4) and
+// `sha256sum`: the empty message, one block, the 448-bit message whose padding
+// takes a second block, the asset text of `it/cache.rs`, and 1000 bytes.
+use std::hash
+
+fn digest(text: String) -> String {
+    let mut data: Vec[u8] = []
+    for b in text.bytes() {
+        data.push(b)
+    }
+    return hash::sha256_hex(data)
+}
+
+fn main() {
+    println(digest(""))
+    println(digest("abc"))
+    println(digest("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"))
+    println(digest("one\n"))
+    let mut long: Vec[u8] = []
+    for i in 0..<1000 {
+        long.push(((i * 7 + 3) % 256) as u8)
+    }
+    println(hash::sha256_hex(long))
+}

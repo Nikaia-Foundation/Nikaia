@@ -1,0 +1,26 @@
+// #922 step 2: `env::var` is null for an unset name and for an empty value,
+// read in a child started with its own environment; `env::temp_dir` names a
+// directory (its path is the machine's, so only that is printed).
+use std::cli
+use std::env
+use std::fs
+use std::process
+
+fn shown(value: String?) -> String {
+    return value ?? "null"
+}
+
+fn main() throws {
+    let mut args = cli::args()
+    let me = args.nth(0) ?? ""
+    // `nth` reads on from where the last call stopped: this is the first word typed.
+    if (args.nth(0) ?? "") == "child" {
+        println(shown(env::var("NIKAIA_PROBE")))
+        println(shown(env::var("NIKAIA_EMPTY")))
+        println(shown(env::var("NIKAIA_NEVER_SET_922")))
+        return
+    }
+    let out = process::run(me, ["child"]; env: [("NIKAIA_PROBE", "x"), ("NIKAIA_EMPTY", "")])
+    print(out.stdout)
+    println(fs::metadata(env::temp_dir(), fs::Root::Anywhere).is_dir())
+}
