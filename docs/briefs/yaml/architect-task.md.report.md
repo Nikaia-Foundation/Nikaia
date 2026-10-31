@@ -1,7 +1,6 @@
 Result: done
-Batch: y17-1041-entry-takes-a-parameter.md, y2b-keys-directives-limits.md, y16-1039-unbound-text-names.md
-Owner: #1040 (a `return` inside a grammar action reaches rustc): A, it gives the action's value as in a function body (recommended), or B, it is refused? Nothing in yaml needs it.
-Pushed: 477879ca
-Found: y14's Found filed as #1039 (ready; an unbound text(d:P+) and a name below a repeat read by an action reach rustc). Probing y2b turned up #1041 (ready; a function parameter handed to an entry rule's value parameter stays lent, rustc), which blocks y2b step 2, so y17 runs first, and #1040 (decision).
-Changed: #928 To build updated (y2c, y14, y15 done; new order); 95a690fe linked to #928 by a comment; .claude/agents/builder.md: never `Fixes: none` in a report (commit.nika writes it into the message).
-Needs: scripts/commit.nika should skip `Fixes: none` as it skips `Body: none` (a script change, for a builder of the main lane).
+Batch: y16-1039-unbound-text-names.md y18-1049-1050-grammar-builtins-and-guard.md y3-1000-views-from-ref.md
+Owner: none
+Pushed: f213fbe6
+Issues: y2b's Found filed as #1049 (peek/not over a sequence, check passes, run fails; probed), #1050 (guard hands optional label to by-value `Node?`, rustc; needs reduction), #1051 (fmt breaks before a postfix `*`), all `ready`; #1000 reopened (closed unbuilt by the prose "the compiler fix #1000" in 5d7be91e; both probes still fail on 5817b28d); #928 To build updated (y17, y2b done; y18 added; #1051 waits).
+Process: CLAUDE.md, a closing keyword in prose closes too; architect.md, nothing after a brief's Attribution block (commit.nika copies it); builder-facts, a grammar probe to copy (last debrief's one change).

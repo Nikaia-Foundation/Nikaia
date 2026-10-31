@@ -1,10 +1,11 @@
-1. **Biggest cost:** the y2b probes, because I wrote the scratch programs from memory. Three runs failed on my own mistakes before any of them tested what I wanted: I used `match` on an entry's result (it needs `catch`), wrote `Bytes("...")` (it needs `.bytes().collect()`), and threw a `String` (a throw needs a type with `impl Error`). Next came finding where #1041 lives. Four grep rounds for how parameters get marked owned or lent mostly found nothing, until `where.nika` on `grammar_entry` led me to `check_core_grammar_call`.
+1. **Biggest cost:** finding out that #1000 had been closed by mistake. It took about 6 calls: issue events, the commit message, and the `fixed-issues.py` regex. After that I re-ran both of y3's examples to make sure the defect was still there. Next came the grammar examples. One failed because I wrote a character class as `"0".."9"`, which is wrong; the right form is `digit`. Another first looked like a new defect but was only my mistake: a lowercase rule skips whitespace, so the `" "` element never matched. A small cost: my first CLAUDE.md edit missed because I guessed the line wrapping without reading the file.
 2. **What I looked up that the brief could have handed me:**
-   - The small Nikaia patterns a probe needs: `catch` on an entry call, building `Bytes` from text, an error type to throw. One working probe in the yaml directory to copy would have done.
-   - That `gh api search/issues` is blocked, so duplicates can't be searched this way. Only repository-scoped endpoints work.
-   - Whether `return` in a grammar action is specified. It isn't, and grepping Part II proved that only by finding nothing.
-   - Where the checker decides lent versus owned for a call's argument. I never found one function for it.
+   - That y3's issue #1000 was already closed. One line in `architect-input.txt` giving the state of each brief's issue would have caught it.
+   - That y16 is still unrun, so `batch.txt` already holds it.
+   - Which brief has the newest rules block (y16, not y2b, whose block is followed by an "Earlier attempt" section).
+   - That `Found:` (1) parses: its line break is already in the committed file.
+   - The character-class syntax for a grammar example.
 3. **Checks:**
-   - Useful: probes a–e for y14's Found, which separated the unbound, nested, guard and repeat cases. The `Vec[Dir]`/`Limits` probe (h). Reading the generated Rust (i), which showed the `&Limits`. The `j`/`k`/`l` trio (parameter, local, ordinary call), which narrowed #1041 to one cause.
-   - Wasted: the search API call, the `match` probe, the `Bytes`/throw retries, and the greps for `consum`/`ParamMode`/`entry`.
-4. **The one change:** add to `docs/builder-facts.md`, pointed to from the architect's lane facts, a ten-line probe skeleton for a grammar over `ref Bytes`. It would have an entry with values after the input, `catch`, `Bytes(text.bytes().collect())`, a throwable error struct, and the place under `~/.cache/nikaia/run/<name>-*/target/nikaia/gen/` to read the generated Rust. It would have saved about five probe runs, and it serves builders as much as the architect.
+   - Useful: y3's two examples on develop (both still fail), the `peek`/`not` example plus its variants, which narrowed #1049 to those two built-ins, the closing-keyword regex, and the `gen/` path.
+   - Wasted: the `text("-" Gap)` variant (it failed on whitespace skipping, my own mistake), the first `dec[i64]` example, and the failed Edit.
+4. **The one change:** have `drive.nika` write the open/closed state of each issue the queued and next briefs name into `architect-input.txt`, with a warning when a brief's issue is already closed. That would have caught #1000 at once. It would also catch any other issue closed by prose before the lane sends a builder to fix something already marked done.
