@@ -81,6 +81,10 @@ pub struct CheckFacts {
     pub unrolled: collections::BTreeMap[(String, String), Vec[FieldContract]],
     pub walks_fields: collections::BTreeMap[String, String],
     pub unrolled_calls: collections::BTreeMap[i64, String],
+    /// **The copies of a function that takes a reflected field** (Part II
+    /// 10.3, ADR-grammar-2 D4): keyed by the function and the struct whose
+    /// fields it is called with, one copy per field.
+    pub field_copies: collections::BTreeMap[(String, String), Vec[FieldContract]],
     /// **The kind of each type a copy is made for, or a path names**
     /// (ADR-330 D3): `Vec[i64]` is `List`, keyed by the type as written.
     pub type_kinds: collections::BTreeMap[String, String],
@@ -477,6 +481,7 @@ impl CheckFacts {
             unrolled: collections::BTreeMap(),
             walks_fields: collections::BTreeMap(),
             unrolled_calls: collections::BTreeMap(),
+            field_copies: collections::BTreeMap(),
             type_kinds: collections::BTreeMap(),
             type_parts: collections::BTreeMap(),
             type_fields: collections::BTreeMap(),

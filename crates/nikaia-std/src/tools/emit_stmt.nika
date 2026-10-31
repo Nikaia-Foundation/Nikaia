@@ -907,6 +907,9 @@ impl EmitState {
                 let list = fields ?? return
                 let outer_name = walk.field_names.get(first)?.clone()
                 let outer_type = walk.field_types.get(first)?.clone()
+                let outer_owner = walk.field_owners.get(first)?.clone()
+                let owner = self.unrolled_owner(world, walk, on, iter)
+                walk.field_owners.insert(first.clone(), owner)
                 for field in list {
                     let outer = walk.at_field?.clone()
                     walk.at_field = EmitPair { first: first.clone(), second: field.name.clone() }
@@ -917,6 +920,10 @@ impl EmitState {
                 }
                 walk.field_names.remove(first)
                 walk.field_types.remove(first)
+                walk.field_owners.remove(first)
+                if outer_owner != null {
+                    walk.field_owners.insert(first.clone(), (outer_owner ?? "").clone())
+                }
                 if outer_name != null {
                     walk.field_names.insert(first.clone(), (outer_name ?? "").clone())
                     walk.field_types.insert(first.clone(), (outer_type ?? "").clone())

@@ -1,0 +1,10 @@
+// A reflected field exists only while the program is built (Part II 10.3):
+// `meta::Field` as a struct's field is `NK1320`.
+
+struct Holder {
+	f: meta::Field,
+}
+
+fn main() {
+	println("unreachable")
+}

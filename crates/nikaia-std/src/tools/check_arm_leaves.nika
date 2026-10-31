@@ -474,6 +474,10 @@ impl CheckState {
     /// the taking stands where the whole value is handed over (`span`), so
     /// a read in another arm is not after it.
     fn hands_over_read_at(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, to: ref String, span: ref Span, read_at: i64) sync {
+        // **A reflected field is handed over, never moved** (Part II 10.3).
+        if check_reflect_a_field(ty) {
+            return
+        }
         // **Text chosen in arms is the choice's own** (ADR-282 D13, #744): a
         // view where every arm is one, else each arm copied; nothing moves.
         let a_text = is_text_type(ty) || match ty {

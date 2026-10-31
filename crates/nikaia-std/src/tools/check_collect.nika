@@ -30,6 +30,7 @@ impl CheckState {
     /// whose key has no order refused.
     fn collect_declared(ref mut self, world: ref CheckWorld, beside: ref collections::BTreeMap[String, Vec[Ty]], ty: ref Type, span: ref Span) -> Ty sync {
         self.spelling(world, ty, span)
+        check_reflected_field_kept(self, world, ty, span, false)
         let written = written_ty(world.here.words, world.here.aliases, ty)
         let refused = collect_keys_unordered(beside, self.structs, self.enums, self.enum_payloads, self.struct_parameters, world, written, span)
         for finding in refused {

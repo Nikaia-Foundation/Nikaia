@@ -47,6 +47,13 @@ impl EmitState {
                 }
                 continue
             }
+            // **One copy per field it was called with, and no original**
+            // (Part II 10.3): a reflected field exists only while building.
+            let field_slot = emit_field_slot_in(world, item.node)
+            if field_slot >= 0 {
+                self.emit_program_field_copies(world, walk, out, host, item, field_slot)
+                continue
+            }
             let st = out.mark()
             host.refuse_unwritten_item(item)
             self.emit_item(world, walk, out, host, item)
@@ -55,6 +62,50 @@ impl EmitState {
         }
         self.emit_program_tether_wrappers(world, walk, out)
         self.emit_program_entry_point(world, out, host)
+    }
+
+    /// **The copies of a function that takes a reflected field** (Part II
+    /// 10.3, ADR-grammar-2 D4): one per field the checker found it called
+    /// with, its parameter at `slot` bound to that field as a turn's binding is.
+    fn emit_program_field_copies[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, item: ref Spanned[Item], slot: i64) sync throws {
+        let name: String = match item.node {
+            Item::Fn { name, args, .. } => {
+                let held = name ?? return
+                world.words.resolve(held).clone()
+            },
+            else => return,
+        }
+        let parameter: String = match item.node {
+            Item::Fn { args, .. } => emit_text(world, args[slot].name).clone(),
+            else => return,
+        }
+        let mut copies: Vec[(String, Vec[FieldContract])] = []
+        for ((written, on), fields) in self.facts.field_copies {
+            if written == name {
+                copies.push((on.clone(), fields.clone()))
+            }
+        }
+        for (on, fields) in copies {
+            for field in fields {
+                walk.specialising = EmitPair { first: "", second: on.clone() }
+                walk.field_copy = EmitPair { first: parameter.clone(), second: field.name.clone() }
+                walk.at_field = EmitPair { first: parameter.clone(), second: field.name.clone() }
+                walk.field_names.insert(parameter.clone(), field.name.clone())
+                walk.field_types.insert(parameter.clone(), check_reflect_written(field.ty))
+                walk.field_owners.insert(parameter.clone(), on.clone())
+                let st = out.mark()
+                host.refuse_unwritten_item(item)
+                self.emit_item(world, walk, out, host, item)
+                out.record(item.span, st)
+                out.push("\n")
+                walk.field_names.remove(parameter)
+                walk.field_types.remove(parameter)
+                walk.field_owners.remove(parameter)
+                walk.at_field = null
+                walk.field_copy = null
+                walk.specialising = null
+            }
+        }
     }
 
     /// What a whole program opens with.

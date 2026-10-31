@@ -189,7 +189,7 @@ fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld,
         state.a_reflected_variant_has_two_members(field, span)
         return Ty::Unknown
     }
-    if ty == "$Field" {
+    if ty == "meta::Field" {
         if field == "name" {
             return check_core_places_str_view()
         }
@@ -251,7 +251,7 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
     // field's `.ty` is one.
     if field.contains("::") && !safe {
         let reflected = match on {
-            Ty::Named { name: held, .. } => held == "$Field",
+            Ty::Named { name: held, .. } => held == "meta::Field",
             else => false,
         }
         if !reflected {

@@ -578,6 +578,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if ty.is_some() {
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         let want = host.declared(state, t, span);
+        check_reflected_field_kept(state, world, t, span, false);
         state.constant_fits(world, value, Some(&want), span);
         check_core_stmt_wraps_into_nullable(state, world, host, &found, &want, value, span);
         let by_use = check_core_literal_by_use(state, world, host, &found, &want, value, span);

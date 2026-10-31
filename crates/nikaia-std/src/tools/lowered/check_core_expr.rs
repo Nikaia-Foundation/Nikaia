@@ -352,7 +352,7 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
 pub(crate) fn check_core_expr_shape_element(state: &CheckState, ty: &str, member: &str) -> String {
     let bounds = match state.type_parameters.get(ty) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
     for bound in bounds.iter() {
-        if bound == "Struct" && member == "fields" { return String::from("$Field"); }
+        if bound == "Struct" && member == "fields" { return String::from("meta::Field"); }
         if bound == "Enum" && member == "variants" { return String::from("$Variant"); }
     }
     String::from("")

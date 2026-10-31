@@ -184,7 +184,7 @@ pub fn check_core_type_argument(state: &mut CheckState, world: &CheckWorld<'_, '
                         let held = *held;
                         let ty: Ty = nikaia_std::index::or(state.lookup(world.words.resolve(held)), || Ty::Unknown);
                         match ty {
-                            Ty::Named { name: ref written, .. } => { if written == "$Field" { return Ty::Unknown; } },
+                            Ty::Named { name: ref written, .. } => { if written == "meta::Field" { return Ty::Unknown; } },
                             _ => { },
                         }
                     },
@@ -380,10 +380,53 @@ pub fn check_reflect_field_type(state: &mut CheckState, expr: &Expr, member: &st
                 return Ty::Unknown;
             }
         }
-        return Ty::Named { name: String::from("Vec"), args: vec![Ty::Named { name: String::from("$Field"), args: vec![], view: false }], view: false };
+        return Ty::Named { name: String::from("Vec"), args: vec![Ty::Named { name: String::from("meta::Field"), args: vec![], view: false }], view: false };
     }
     state.a_field_type_has_no_member(member, span);
     Ty::Unknown
+}
+
+pub fn check_reflect_a_field(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => name == "meta::Field",
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_field_copies(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, callee: Option<&FnContract>) {
+    let contract: FnContract = match match callee {
+        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let signature: Signature = match match contract.signature.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut takes = false;
+    for param in signature.params.iter() { if check_reflect_a_field(&param.1) { takes = true; } }
+    if !takes { return; }
+    let turn: CheckUnrolling = match match state.flow.unrolling.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    for on in check_program_reached(&state, &turn.on) {
+        if !state.structs.contains_key(&on) { continue; }
+        let fields: Vec<FieldContract> = match state.shape_of(&world.here, world, &on) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        state.facts.field_copies.insert((name.to_string(), on.to_string()), fields);
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_reflected_field_kept(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span, parameter: bool) {
+    let plain = parameter && !ty.is_nullable && !ty.is_slice;
+    if !plain && world.words.resolve(ty.name) == "meta::Field" {
+        state.findings.push(check_refusal("NK1320", span, String::from("A reflected field exists only while the program is built, so it can't be kept here."), vec![String::from("`meta::Field` stands only as a parameter's type: each call is made with the field of an unrolled turn (Part II 10.3).")], Some(String::from("Take the field as a parameter, `fn f(field: meta::Field)`, and keep what you read of it, such as `field.name`."))));
+        return;
+    }
+    for inner in ty.generics.iter() { check_reflected_field_kept(state, world, inner, span, false); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -398,7 +441,7 @@ pub(crate) fn check_reflect_field_kind(state: &CheckState, world: &CheckWorld<'_
                     let held = *held;
                     let ty: Ty = match state.lookup(world.words.resolve(held)) { Some(__nikaia_value) => __nikaia_value, None => return false };
                     match ty {
-                        Ty::Named { name: ref written, .. } => written == "$Field",
+                        Ty::Named { name: ref written, .. } => written == "meta::Field",
                         _ => false,
                     }
                 },

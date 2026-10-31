@@ -18,6 +18,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn collect_declared(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, ty: &Type, span: &Span) -> Ty {
         self.spelling(world, ty, span);
+        check_reflected_field_kept(&mut *self, world, ty, span, false);
         let written = written_ty(world.here.words, world.here.aliases, ty);
         let refused = collect_keys_unordered(beside, &self.structs, &self.enums, &self.enum_payloads, &self.struct_parameters, world, &written, span);
         for finding in refused.iter() { self.findings.push(finding.clone()); }

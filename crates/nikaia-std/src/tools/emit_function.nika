@@ -553,6 +553,12 @@ impl EmitState {
                 let mut either_first: Vec[String] = []
                 let mut k = 0
                 for each in args {
+                    // **A reflected field is no parameter of the copy** (Part
+                    // II 10.3): the copy is made for it.
+                    if emit_text(world, each.ty.name) == "meta::Field" {
+                        k += 1
+                        continue
+                    }
                     let is_source = (source_at ?? -1) == k || several_at.contains(k)
                     let pname = emit_text(world, each.name)
                     let at = k + recv
@@ -911,6 +917,14 @@ impl EmitState {
                     pair => {
                         emitted = check_specialised(emitted, pair.second)
                         copy = true
+                    },
+                    null => {},
+                }
+                // **One copy per field a reflected field's function was
+                // called with** (Part II 10.3).
+                match walk.field_copy {
+                    pair => {
+                        emitted = emit_field_copy_name(escaped_name(own_name), (walk.specialising?.second ?? "").clone(), pair.second)
                     },
                     null => {},
                 }

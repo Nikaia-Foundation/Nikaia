@@ -43,6 +43,36 @@ pub(crate) fn emit_type_names(world: &EmitWorld<'_, '_, '_, '_>, ty: &Type, para
     false
 }
 
+pub fn emit_field_slot_in(world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> i64 {
+    match item {
+        Item::Fn { args, .. } => {
+            let mut at: i64 = 0;
+            for each in args.iter() {
+                if emit_text(world, each.ty.name) == "meta::Field" { return at; }
+                at += 1;
+            }
+        },
+        _ => { },
+    }
+    -1
+}
+
+pub fn emit_field_slot_of(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 {
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Fn { name: written, .. } => {
+                let written = *written;
+                let called = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if emit_text(world, called) == name { return emit_field_slot_in(world, &item.node); }
+            },
+            _ => { },
+        }
+    }
+    -1
+}
+
+pub fn emit_field_copy_name(function: &str, on: &str, field: &str) -> String { check_specialised(function, &format!("{}::{}", on, field)) }
+
 pub fn emit_slot_of(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 {
     for item in world.items.iter() {
         match &item.node {
@@ -190,6 +220,16 @@ impl EmitState {
     pub fn enclosing_shape_walk(&self, on: &str) -> Option<String> {
         for key in self.facts.unrolled.keys() { if key.1 == on { return Some(key.0.to_string()); } }
         None
+    }
+    pub fn unrolled_owner(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, on: &str, iter: &Expr) -> String {
+        match iter {
+            Expr::Field { base, name: member, .. } => { let base = nikaia_std::boxed::open(base); let member = *member; nikaia_std::index::or(self.reflected_field_type(world, walk, base, member, "ty::fields"), || "".into()) },
+            Expr::Path(segments, _) => nikaia_std::index::or(match walk.type_names.get(world.words.resolve(*nikaia_std::index::get(&segments, 0))) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || on.to_string().into()),
+            _ => on.to_string(),
+        }
     }
     pub fn unrolls_here(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, on: &str, iter: &Expr) -> Option<Vec<FieldContract>> {
         match iter {

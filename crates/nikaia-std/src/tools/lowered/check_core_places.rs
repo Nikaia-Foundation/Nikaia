@@ -124,7 +124,7 @@ pub(crate) fn check_core_places_a_named_field(state: &mut CheckState, world: &Ch
         state.a_reflected_variant_has_two_members(field, span);
         return Ty::Unknown;
     }
-    if ty == "$Field" {
+    if ty == "meta::Field" {
         if field == "name" { return check_core_places_str_view(); }
         if field == "default" { return check_core_places_unrolled_default((state.flow.unrolling).as_ref()); }
         if field == "ty" {
@@ -173,7 +173,7 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
     let field: String = format!("{}", world.words.resolve(name));
     if field.contains("::") && !safe {
         let reflected = match on {
-            Ty::Named { name: ref held, .. } => held == "$Field",
+            Ty::Named { name: ref held, .. } => held == "meta::Field",
             _ => false,
         };
         if !reflected {

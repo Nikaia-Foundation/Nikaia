@@ -98,6 +98,8 @@ pub struct EmitWalk {
     pub at_field: Option<EmitPair>,
     pub field_names: collections::BTreeMap<String, String>,
     pub field_types: collections::BTreeMap<String, String>,
+    pub field_owners: collections::BTreeMap<String, String>,
+    pub field_copy: Option<EmitPair>,
     pub type_names: collections::BTreeMap<String, String>,
     pub code_parameter_runs: bool,
     pub held: collections::BTreeMap<i64, String>,
@@ -117,6 +119,6 @@ pub struct EmitWalk {
 }
 
 impl EmitWalk {
-    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), grammar_rules: collections::BTreeSet::new(), grammar_values: collections::BTreeMap::new(), grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), dyn_code: false, nonnegative: collections::BTreeMap::new(), specialising: None, slotted: false, at_field: None, field_names: collections::BTreeMap::new(), field_types: collections::BTreeMap::new(), type_names: collections::BTreeMap::new(), code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, method_callee: None, hoisted_args: None, hoisted_lets: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1, path_types: String::from("") } }
+    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), grammar_rules: collections::BTreeSet::new(), grammar_values: collections::BTreeMap::new(), grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), dyn_code: false, nonnegative: collections::BTreeMap::new(), specialising: None, slotted: false, at_field: None, field_names: collections::BTreeMap::new(), field_types: collections::BTreeMap::new(), field_owners: collections::BTreeMap::new(), field_copy: None, type_names: collections::BTreeMap::new(), code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, method_callee: None, hoisted_args: None, hoisted_lets: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1, path_types: String::from("") } }
 }
 

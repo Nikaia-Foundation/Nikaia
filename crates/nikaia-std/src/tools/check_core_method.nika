@@ -984,7 +984,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     // **`field.of(value)`, the one method a reflected field has** (ADR-304
     // D2): the field's type on this unrolling, `?` on the generic walk.
-    if type_name == "$Field" {
+    if type_name == "meta::Field" {
         if name == "attribute" || name == "attributes" {
             let read: String = check_attributes_an_attribute_read(state, world, args, span) ?? return Ty::Unknown
             return check_core_method_attribute(name, read)

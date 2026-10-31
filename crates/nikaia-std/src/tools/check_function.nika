@@ -525,6 +525,7 @@ fn check_function_frame[H: CheckHost](mut state: CheckState, world: ref CheckWor
         } else {
             ty = host.declared(state, arg.ty, arg.span)
         }
+        check_reflected_field_kept(state, world, arg.ty, arg.span, true)
         let id = state.a_new_binding()
         let mut local = CheckLocal::free(name, ty.erase(parameters), id)
         if !arg.mutable {
@@ -758,6 +759,7 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     let mut expected: Ty? = null
     match ret_type {
         written => {
+            check_reflected_field_kept(state, world, written, at, false)
             expected = host.type_of(written).erase(parameters)
         },
         null => {},

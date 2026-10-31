@@ -1,0 +1,9 @@
+error[NK1320]: A reflected field exists only while the program is built, so it can't be kept here.
+  --> tests/a_reflected_field_kept_past_the_build_is_refused.nika:5:2
+   |
+ 5 | 	f: meta::Field,
+   |  ^^^^^^^^^^^^^^
+   |
+   = note: `meta::Field` stands only as a parameter's type: each call is made with the field of an unrolled turn (Part II 10.3).
+   = help: Take the field as a parameter, `fn f(field: meta::Field)`, and keep what you read of it, such as `field.name`.
+1 type error

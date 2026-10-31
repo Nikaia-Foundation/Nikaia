@@ -687,6 +687,11 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         state.a_byte_set_written_empty(world, key, args, span)
     }
     let declared_here = have && world.own.functions.contains_key(key)
+    // **A reflected field handed to a function** (Part II 10.3): the copy
+    // for the turn's field.
+    if declared_here && !key.contains("::") {
+        check_core_field_copies(state, world, key, callee)
+    }
     // **A parameter of code is a place, given what every caller hands it**
     // (ADR-351 D1, D4).
     let feeds = declared_here && !key.contains("::") && check_core_call_takes_code(callee)

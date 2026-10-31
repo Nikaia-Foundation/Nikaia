@@ -303,6 +303,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn hands_over_read_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, to: &str, span: &Span, read_at: i64) {
+        if check_reflect_a_field(ty) { return; }
         let a_text = is_text_type(ty) || match ty {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); is_text_type(inner) },
             _ => false,

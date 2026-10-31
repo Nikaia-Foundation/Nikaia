@@ -1,0 +1,38 @@
+// A function takes a reflected field (Part II 10.3, ADR-grammar-2 D4): each
+// call in an unrolled turn goes to the copy made for that field, so two
+// copies differ by attribute and by type, and the turn's field stays readable
+// after it is handed over.
+
+@meta::Attribute(field)
+pub struct Name { value: String }
+
+struct Contact {
+	@Name("full_name")
+	name: String,
+	age: i64 = 7,
+	email: String?,
+}
+
+fn wire_name(f: meta::Field) -> String {
+	return f.attribute(Name)?.value ?? f.name
+}
+
+fn kind_of(f: meta::Field) -> String {
+	match f.ty::kind {
+		I64 => return "a number",
+		Text => return "text",
+		else => return "something else",
+	}
+}
+
+fn show[T: Struct]() {
+	for f in T::fields {
+		let w = wire_name(f)
+		let k = kind_of(f)
+		println(f"{f.name} -> {w}, {k}")
+	}
+}
+
+fn main() {
+	show[Contact]()
+}

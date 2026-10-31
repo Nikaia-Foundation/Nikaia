@@ -669,6 +669,12 @@ impl EmitState {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 };
+                let outer_owner = match walk.field_owners.get(&first) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+                let owner = self.unrolled_owner(world, &walk, &on, iter);
+                walk.field_owners.insert(first.to_string(), owner);
                 for field in list.iter() {
                     let outer = match walk.at_field.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -682,6 +688,8 @@ impl EmitState {
                 }
                 walk.field_names.remove(&first);
                 walk.field_types.remove(&first);
+                walk.field_owners.remove(&first);
+                if outer_owner.is_some() { walk.field_owners.insert(first.to_string(), nikaia_std::index::or(outer_owner.as_deref(), || "").to_string()); }
                 if outer_name.is_some() {
                     walk.field_names.insert(first.to_string(), nikaia_std::index::or(outer_name.as_deref(), || "").to_string());
                     walk.field_types.insert(first.to_string(), nikaia_std::index::or(outer_type.as_deref(), || "").to_string());

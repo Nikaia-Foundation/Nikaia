@@ -227,6 +227,13 @@ pub struct EmitWalk {
     pub field_names: collections::BTreeMap[String, String],
     /// The same bindings and the field's type as written (ADR-330 D5).
     pub field_types: collections::BTreeMap[String, String],
+    /// The same bindings and the struct the field is one of (Part II 10.3):
+    /// a call that hands the binding to a function goes to its copy for it.
+    pub field_owners: collections::BTreeMap[String, String],
+    /// **The copy of a function that takes a reflected field being written**
+    /// (Part II 10.3): the parameter, which the copy does not take, and the
+    /// field it is made for.
+    pub field_copy: EmitPair?,
     /// **The names that stand for a type in this copy** (ADR-330 D4): what
     /// an arm of a `match` on a kind binds, `Struct(s)`, `List(it)`.
     pub type_names: collections::BTreeMap[String, String],
@@ -271,6 +278,6 @@ pub struct EmitWalk {
 impl EmitWalk {
     /// Nothing written yet.
     pub fn fresh() -> EmitWalk {
-        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", dyn_code: false, nonnegative: collections::BTreeMap(), specialising: null, slotted: false, at_field: null, field_names: collections::BTreeMap(), field_types: collections::BTreeMap(), type_names: collections::BTreeMap(), code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1, path_types: "" }
+        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", dyn_code: false, nonnegative: collections::BTreeMap(), specialising: null, slotted: false, at_field: null, field_names: collections::BTreeMap(), field_types: collections::BTreeMap(), field_owners: collections::BTreeMap(), field_copy: null, type_names: collections::BTreeMap(), code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1, path_types: "" }
     }
 }

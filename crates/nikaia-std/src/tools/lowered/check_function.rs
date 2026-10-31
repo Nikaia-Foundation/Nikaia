@@ -420,6 +420,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
             viewed.is_view = true;
             ty = host.declared(state, &viewed, &arg.span);
         } else { ty = host.declared(state, &arg.ty, &arg.span); }
+        check_reflected_field_kept(state, world, &arg.ty, &arg.span, true);
         let id = state.a_new_binding();
         let mut local = CheckLocal::free(name, ty.erase(parameters), id);
         if !arg.mutable { local.immutable = Some(CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter, over: String::from("") }); }
@@ -605,7 +606,10 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     let frame = check_function_frame(state, world, host, receiver, args, config, spread, &target, &key, &parameters);
     let mut expected: Option<Ty> = None;
     match ret_type {
-        Some(written) => { expected = Some(host.type_of(written).erase(&parameters)); },
+        Some(written) => {
+            check_reflected_field_kept(state, world, written, at, false);
+            expected = Some(host.type_of(written).erase(&parameters));
+        },
         None => { },
     }
     let outer: Option<Ty> = match state.expected.as_ref() {

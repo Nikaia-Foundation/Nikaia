@@ -174,6 +174,34 @@ pub fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckW
             }
         }
     }
+    check_program_field_copies(state, world, host);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_program_field_copies<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+    let mut walked: collections::BTreeSet<(String, String)> = collections::BTreeSet::new();
+    loop {
+        let mut pending: Vec<(String, String, Vec<FieldContract>)> = vec![];
+        for ((name, on), fields) in state.facts.field_copies.iter() { if !walked.contains(&(name.to_string(), on.to_string())) { pending.push((name.to_string(), on.to_string(), fields.to_owned())); } }
+        if pending.is_empty() { break; }
+        for (name, on, fields) in pending.iter() {
+            walked.insert((name.to_string(), on.to_string()));
+            for item in world.here.items.iter() {
+                match &item.node {
+                    Item::Fn { name: written, .. } => {
+                        let written = *written;
+                        let called = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        if world.here.text(called) == *name {
+                            check_program_turns(state, world, host, &item.node, &item.span, name, on, fields);
+                            break;
+                        }
+                    },
+                    _ => { },
+                }
+            }
+        }
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -197,7 +225,7 @@ pub(crate) fn check_program_copies_called(state: &mut CheckState, world: &CheckW
     }
 }
 
-pub(crate) fn check_program_reached(state: &CheckState, on: &str) -> Vec<String> {
+pub fn check_program_reached(state: &CheckState, on: &str) -> Vec<String> {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut queue: Vec<String> = vec![on.to_string()];
     let mut out: Vec<String> = vec![];

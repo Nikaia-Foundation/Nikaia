@@ -1,0 +1,3 @@
+name -> full_name, text
+age -> age, a number
+email -> email, something else

@@ -254,7 +254,7 @@ pub fn check_core_type_argument(mut state: CheckState, world: ref CheckWorld, ar
                         let ty: Ty = state.lookup(world.words.resolve(held)) ?? Ty::Unknown
                         match ty {
                             Ty::Named { name: written, .. } => {
-                                if written == "$Field" {
+                                if written == "meta::Field" {
                                     return Ty::Unknown
                                 }
                             },
@@ -518,10 +518,59 @@ pub fn check_reflect_field_type(mut state: CheckState, expr: ref Expr, member: r
                 return Ty::Unknown
             }
         }
-        return Ty::Named { name: "Vec", args: [Ty::Named { name: "$Field", args: [], view: false }], view: false }
+        return Ty::Named { name: "Vec", args: [Ty::Named { name: "meta::Field", args: [], view: false }], view: false }
     }
     state.a_field_type_has_no_member(member, span)
     return Ty::Unknown
+}
+
+/// Whether `ty` is a reflected field's, `meta::Field` (Part II 10.3).
+pub fn check_reflect_a_field(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, .. } => name == "meta::Field",
+        else => false,
+    }
+}
+
+/// **A function that takes a reflected field, called in an unrolled turn**
+/// (Part II 10.3, ADR-grammar-2 D4): its parameter is `comptime` by its type,
+/// so the call is made with the turn's field and goes to the copy for it. A
+/// copy for each field of the turn's struct and of each struct that one is
+/// made of, which a walk over `field.ty::fields` reaches.
+pub fn check_core_field_copies(mut state: CheckState, world: ref CheckWorld, name: ref String, callee: ref FnContract?) sync {
+    let contract: FnContract = callee?.clone() ?? return
+    let signature: Signature = contract.signature?.clone() ?? return
+    let mut takes = false
+    for param in signature.params {
+        if check_reflect_a_field(param.1) {
+            takes = true
+        }
+    }
+    if !takes {
+        return
+    }
+    let turn: CheckUnrolling = state.flow.unrolling?.clone() ?? return
+    for on in check_program_reached(state, turn.on) {
+        if !state.structs.contains_key(on) {
+            continue
+        }
+        let fields: Vec[FieldContract] = state.shape_of(world.here, world, on) ?? continue
+        state.facts.field_copies.insert((name.clone(), on.clone()), fields)
+    }
+}
+
+/// **`NK1320`: a reflected field kept past the build** (Part II 10.3,
+/// ADR-grammar-2 D4): `meta::Field` stands only as a parameter's type, so
+/// `parameter` says the outermost name of `ty` may be it.
+pub fn check_reflected_field_kept(mut state: CheckState, world: ref CheckWorld, ty: ref Type, span: ref Span, parameter: bool) sync {
+    let plain = parameter && !ty.is_nullable && !ty.is_slice
+    if !plain && world.words.resolve(ty.name) == "meta::Field" {
+        state.findings.push(check_refusal("NK1320", span, "A reflected field exists only while the program is built, so it can't be kept here.", ["`meta::Field` stands only as a parameter's type: each call is made with the field of an unrolled turn (Part II 10.3)."], "Take the field as a parameter, `fn f(field: meta::Field)`, and keep what you read of it, such as `field.name`."))
+        return
+    }
+    for inner in ty.generics {
+        check_reflected_field_kept(state, world, inner, span, false)
+    }
 }
 
 /// Whether `side` is `x.ty::kind` over a field from `T::fields`.
@@ -535,7 +584,7 @@ fn check_reflect_field_kind(state: ref CheckState, world: ref CheckWorld, side: 
                 Expr::Variable(held, _) => {
                     let ty: Ty = state.lookup(world.words.resolve(held)) ?? return false
                     match ty {
-                        Ty::Named { name: written, .. } => written == "$Field",
+                        Ty::Named { name: written, .. } => written == "meta::Field",
                         else => false,
                     }
                 },

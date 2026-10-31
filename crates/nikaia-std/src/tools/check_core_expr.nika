@@ -450,7 +450,7 @@ fn check_core_expr_shape_element(state: ref CheckState, ty: ref String, member: 
     let bounds = state.type_parameters.get(ty) ?? return ""
     for bound in bounds {
         if bound == "Struct" && member == "fields" {
-            return "$Field"
+            return "meta::Field"
         }
         if bound == "Enum" && member == "variants" {
             return "$Variant"

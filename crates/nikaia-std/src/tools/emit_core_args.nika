@@ -1194,6 +1194,9 @@ impl EmitState {
         if self.emit_call_slotted(world, walk, out, host, func, args, depth, flow, scope) {
             return true
         }
+        if self.emit_call_field_copy(world, walk, out, host, func, args, depth, flow, scope) {
+            return true
+        }
         if self.emit_call_filled(world, walk, out, host, func, args, depth, flow, scope) {
             return true
         }
@@ -1262,6 +1265,41 @@ impl EmitState {
             copy = check_specialised(callee, on)
         }
         out.push(f"{copy}(")
+        let mut first = true
+        let mut at: i64 = 0
+        for arg in args {
+            if at != slot {
+                if !first {
+                    out.push(", ")
+                }
+                first = false
+                self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
+            }
+            at += 1
+        }
+        out.push(")")
+        return true
+    }
+
+    /// **A call that hands a reflected field to a function** (Part II 10.3,
+    /// ADR-grammar-2 D4): it goes to the copy for the field the binding stands
+    /// at in this turn, and the field is no argument of it.
+    fn emit_call_field_copy[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let callee: String = match func {
+            Expr::Variable(name, _) => emit_text(world, name).clone(),
+            else => return false,
+        }
+        let slot = emit_field_slot_of(world, callee)
+        if slot < 0 || slot >= args.len() as i64 {
+            return false
+        }
+        let binding: String = match args[slot] {
+            Expr::Variable(name, _) => emit_text(world, name).clone(),
+            else => return false,
+        }
+        let field: String = walk.field_names.get(binding)?.clone() ?? return false
+        let on: String = walk.field_owners.get(binding)?.clone() ?? return false
+        out.push(f"{emit_field_copy_name(escaped_name(callee), on, field)}(")
         let mut first = true
         let mut at: i64 = 0
         for arg in args {

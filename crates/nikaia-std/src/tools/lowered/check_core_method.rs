@@ -716,7 +716,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         }
         return check_core_method_named("bool");
     }
-    if type_name == "$Field" {
+    if type_name == "meta::Field" {
         if name == "attribute" || name == "attributes" {
             let read: String = match check_attributes_an_attribute_read(state, world, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
             return check_core_method_attribute(&name, &read);

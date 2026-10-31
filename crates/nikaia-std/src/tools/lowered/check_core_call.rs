@@ -535,6 +535,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
         state.a_byte_set_written_empty(world, &key, args, span);
     }
     let declared_here = have && world.own.functions.contains_key(&key);
+    if declared_here && !key.contains("::") { check_core_field_copies(state, world, &key, (callee).as_ref()); }
     let feeds = declared_here && !key.contains("::") && check_core_call_takes_code((callee).as_ref());
     if feeds { state.stored_frames.push(CheckStoredCode::empty()); }
     let slot = check_core_slot_index(world, name);

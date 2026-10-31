@@ -30,6 +30,11 @@ impl EmitState {
                 }
                 continue;
             }
+            let field_slot = emit_field_slot_in(world, &item.node);
+            if field_slot >= 0 {
+                self.emit_program_field_copies(world, walk, out, host, item, field_slot)?;
+                continue;
+            }
             let st = out.mark();
             host.refuse_unwritten_item(item)?;
             self.emit_item(world, walk, out, host, item)?;
@@ -38,6 +43,46 @@ impl EmitState {
         }
         self.emit_program_tether_wrappers(world, &walk, out);
         self.emit_program_entry_point(world, out, host);
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_program_field_copies<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, item: &Spanned<Item>, slot: i64) -> Result<(), Box<dyn std::error::Error>> {
+        let name: String = match &item.node {
+            Item::Fn { name, args, .. } => {
+                let name = *name;
+                let held = match name { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                world.words.resolve(held).to_string()
+            },
+            _ => return Ok(()),
+        };
+        let parameter: String = match &item.node {
+            Item::Fn { args, .. } => emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(slot)).name).to_string(),
+            _ => return Ok(()),
+        };
+        let mut copies: Vec<(String, Vec<FieldContract>)> = vec![];
+        for ((written, on), fields) in self.facts.field_copies.iter() { if *written == name { copies.push((on.to_string(), fields.to_owned())); } }
+        for (on, fields) in copies.iter() {
+            for field in fields.iter() {
+                walk.specialising = Some(EmitPair { first: String::from(""), second: on.to_string() });
+                walk.field_copy = Some(EmitPair { first: parameter.to_string(), second: field.name.to_string() });
+                walk.at_field = Some(EmitPair { first: parameter.to_string(), second: field.name.to_string() });
+                walk.field_names.insert(parameter.to_string(), field.name.to_string());
+                walk.field_types.insert(parameter.to_string(), check_reflect_written(&field.ty));
+                walk.field_owners.insert(parameter.to_string(), on.to_string());
+                let st = out.mark();
+                host.refuse_unwritten_item(item)?;
+                self.emit_item(world, walk, out, host, item)?;
+                out.record(&item.span, st);
+                out.push("\n");
+                walk.field_names.remove(&parameter);
+                walk.field_types.remove(&parameter);
+                walk.field_owners.remove(&parameter);
+                walk.at_field = None;
+                walk.field_copy = None;
+                walk.specialising = None;
+            }
+        }
         Ok(())
     }
     pub(crate) fn emit_program_preamble(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {

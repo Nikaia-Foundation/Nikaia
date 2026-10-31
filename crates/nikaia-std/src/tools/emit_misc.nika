@@ -118,6 +118,47 @@ fn emit_type_names(world: ref EmitWorld, ty: ref Type, parameter: ref String) ->
     return false
 }
 
+/// **Where a function's parameter list takes a reflected field** (Part II
+/// 10.3), `-1` where it takes none: the parameter whose type is `meta::Field`.
+pub fn emit_field_slot_in(world: ref EmitWorld, item: ref Item) -> i64 {
+    match item {
+        Item::Fn { args, .. } => {
+            let mut at: i64 = 0
+            for each in args {
+                if emit_text(world, each.ty.name) == "meta::Field" {
+                    return at
+                }
+                at += 1
+            }
+        },
+        else => {},
+    }
+    return -1
+}
+
+/// [`emit_field_slot_in`] for the function of this unit called `name`.
+pub fn emit_field_slot_of(world: ref EmitWorld, name: ref String) -> i64 {
+    for item in world.items {
+        match item.node {
+            Item::Fn { name: written, .. } => {
+                let called = written ?? continue
+                if emit_text(world, called) == name {
+                    return emit_field_slot_in(world, item.node)
+                }
+            },
+            else => {},
+        }
+    }
+    return -1
+}
+
+/// The name of the copy of `function` made for the field `field` of `on`
+/// (Part II 10.3): the emitter writes the same name at the call and at the
+/// definition.
+pub fn emit_field_copy_name(function: ref String, on: ref String, field: ref String) -> String {
+    return check_specialised(function, f"{on}::{field}")
+}
+
 /// [`emit_slot_in`] for the function of this unit called `name`.
 pub fn emit_slot_of(world: ref EmitWorld, name: ref String) -> i64 {
     for item in world.items {
@@ -339,6 +380,16 @@ impl EmitState {
             }
         }
         return null
+    }
+
+    /// **The struct whose fields an unrolled `for` walks** (Part II 10.3):
+    /// the copy's type, a type an arm binds, or a field's type.
+    pub fn unrolled_owner(ref self, world: ref EmitWorld, walk: ref EmitWalk, on: ref String, iter: ref Expr) -> String {
+        return match iter {
+            Expr::Field { base, name: member, .. } => self.reflected_field_type(world, walk, base, member, "ty::fields") ?? "",
+            Expr::Path(segments, _) => walk.type_names.get(world.words.resolve(segments[0]))?.clone() ?? on.clone(),
+            else => on.clone(),
+        }
     }
 
     /// The fields a `for` over `T::fields` or `T::variants` walks, where the

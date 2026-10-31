@@ -348,6 +348,10 @@ impl EmitState {
                 let mut either_first: Vec<String> = vec![];
                 let mut k: i64 = 0;
                 for each in args.iter() {
+                    if emit_text(world, each.ty.name) == "meta::Field" {
+                        k += 1;
+                        continue;
+                    }
                     let is_source = nikaia_std::index::or(source_at, || -1) == k || several_at.contains(nikaia_std::index::AsKey::as_key(&k));
                     let pname = emit_text(world, each.name);
                     let at = k + recv;
@@ -554,6 +558,10 @@ impl EmitState {
                         emitted = check_specialised(&emitted, &pair.second);
                         copy = true;
                     },
+                    None => { },
+                }
+                match walk.field_copy {
+                    Some(ref pair) => { emitted = emit_field_copy_name(&escaped_name(&own_name), &nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string(), &pair.second); },
                     None => { },
                 }
                 if emitted == "__nikaia_main" { host.set_main_params(&params); }

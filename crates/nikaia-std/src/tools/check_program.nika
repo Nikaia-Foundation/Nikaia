@@ -234,6 +234,40 @@ pub fn check_program_unroll[H: CheckHost](mut state: CheckState, world: ref Chec
             }
         }
     }
+    check_program_field_copies(state, world, host)
+}
+
+/// **Each copy of a function that takes a reflected field** (Part II 10.3,
+/// ADR-grammar-2 D4), walked at its field as a turn of the loop is; what a
+/// copy calls with its field asks for more copies, walked in the next round.
+fn check_program_field_copies[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+    let mut walked: collections::BTreeSet[(String, String)] = collections::BTreeSet()
+    while true {
+        let mut pending: Vec[(String, String, Vec[FieldContract])] = []
+        for ((name, on), fields) in state.facts.field_copies {
+            if !walked.contains((name.clone(), on.clone())) {
+                pending.push((name.clone(), on.clone(), fields.clone()))
+            }
+        }
+        if pending.len() == 0 {
+            break
+        }
+        for (name, on, fields) in pending {
+            walked.insert((name.clone(), on.clone()))
+            for item in world.here.items {
+                match item.node {
+                    Item::Fn { name: written, .. } => {
+                        let called = written ?? continue
+                        if world.here.text(called) == name {
+                            check_program_turns(state, world, host, item.node, item.span, name, on, fields)
+                            break
+                        }
+                    },
+                    else => {},
+                }
+            }
+        }
+    }
 }
 
 /// **The copies a copy calls** (ADR-330 D1): a call in a copied body that
@@ -264,7 +298,7 @@ fn check_program_copies_called(mut state: CheckState, world: ref CheckWorld) syn
 
 /// A type and every type it is made of, as written: the parts and the
 /// fields' types the reflection facts hold, as far as they reach.
-fn check_program_reached(state: ref CheckState, on: ref String) -> Vec[String] {
+pub fn check_program_reached(state: ref CheckState, on: ref String) -> Vec[String] {
     let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
     let mut queue: Vec[String] = [on.clone()]
     let mut out: Vec[String] = []
