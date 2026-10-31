@@ -1,13 +1,14 @@
-1. **Most turns and time:** trying to reproduce b1046's `Found:` myself. I started with a copied probe package (`target/arch-probe`), which `nikaia test` and `check` didn't support the way I needed. Then I ran the whole `tests/compiler` package at both settings in the background. It was still far from done when I killed it, and it settled only one of the three tests. Second came the #922 research: whether `sha2` is a dependency of `std` (it isn't), and what a missing `touches` line means in Part III.
-2. **Lookups the brief could have handed me:**
-   - The plan rows' blocker status: which rows wait on #920 or #922, and that BT waits on nothing.
-   - That `nikaia-std` has no `sha2` (its `Cargo.toml` :116, ADR-002 D4).
-   - The `touches` rule (Part III :332).
-   - The `process::run` signature, and that no tools file calls it yet.
-   - The four stand-in `sha256_hex` methods in the tools files.
-   - `docs/briefs/s3-fs-canonical.md` as the model for a `std`-entry brief.
-   - The bug lane's naming scheme (`b<N>-<issue>`) and its next free number.
+1. **What cost the most turns:** rebuilding the defect probe. BT's report pointed to `bt/probe.nika` in its own scratchpad, which no longer exists. I rewrote the probe from memory and failed four times on Nikaia syntax: how to build a `BTreeMap`, `usize` instead of `int`, a redundant `ref String`, and `.to_string()` on a text literal. Getting a correct, minimal probe took about 6 turns.
+
+2. **What the brief could have handed me:**
+   - The probe text itself, not a path to it.
+   - Where `known_default` lives: I first grepped `build_time.rs`, but it is in `comptime_run.rs:642`.
+   - How to see the generated Rust (`nikaia lower FILE` writes `FILE.rs`). I scanned `--help` to find that.
+   - That CI's state was not red: the input file said `RED`, but that meant BT's gate, not CI.
+   - The current list of other agents' uncommitted files. `git status` gave it, but only after a long listing.
+
 3. **Checks:**
-   - Useful: `where.nika` and outline reads, the converter draft for BT and GR, the `std.contracts` greps, `gh api` on the issue labels, `git diff --cached --stat` before the commit.
-   - Wasted: the `arch-probe` copy; the background both-settings run, which mostly ran unrelated tests and never reached two of the three; one failed `git add` on a path `git mv` had already staged.
-4. **The change that would save the most:** a rule in the architect task that the architect does not reproduce a builder's `Found:` itself. It files the `Found:` as it stands, in brief form for the bug lane, and reproducing it becomes that brief's first step. The builder's report should also give the binary's sha and the exact command it ran. That alone would have saved a third of my turns.
+   - Useful: CI runs through `gh api`, the probe rows a–e on today's binary, lowering the probe to see the moving `match`, tracing `lent_coalesces` into `check_core_ops_coalesce` / `check_core_ops_behind_a_view`, a duplicate-issue search, GR's pre-flight on `Wall`, and `git diff` on `30-nikaia-tooling.md`.
+   - Partly wasted: the full `ls docs/briefs` (very long), printing the whole b8 brief when only its layout mattered, the `--help` grep, and a `git diff` whose output was too large to show.
+
+4. **The one change:** a report's `Found:` must paste the probe inline (at most 15 lines), or commit it under `docs/briefs/probes/`, never cite a scratchpad path. That rule belongs in `docs/architect.md` (*The report*) and `.claude/agents/builder.md`. Second best: a "probe skeleton" entry in builder-facts showing a map or list of structs, a `T?` field and `nikaia lower`. That would have saved most of the syntax round-trips.
