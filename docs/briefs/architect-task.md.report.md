@@ -1,5 +1,5 @@
 Result: done
-Batch: gr2-grammar-run-reland.md, s1082-or-default-cloned.md
+Batch: gr2-grammar-run-reland.md s1082-or-default-cloned.md c1a-ledger-items.md
 Owner: none
-Found: P5c's Found filed as #1088 (ready, wip): a tuple's `T?` part at a match/if end gets no `Some`. Probed rows a-e; suspected location `check_overflow.nika` `check_overflow_list_into_nullables`. Bug brief b20 appended to `docs/briefs/bugs/batch.txt`, `Blocks: p5c-project-drive.md`. P5c's brief has a *Re-run* section for landing branch `wip/p5c-project-drive` cc40334f.
-Needs: none. Batch is two briefs: every other move waits on a bug-lane fix (P5c b20, C1a b19+s1082, K3b b17/b18, S1 b17).
+Decided: GR's `needs architect decision` (trust per package or per file) is already answered by ADR-010 D9: per class after the whole package, per file and a toolchain exemption both rejected. `process::run` is untrusted in `std.contracts`, the first untrusted source in `tools`; `project_members.rs`'s fs::Path keys come through a trait (a D9.5 barrier), so its maps become keyed. The brief now has that drift committed with the move, starting from the saved resolution `gr2-grammar-run-reland.wip.patch`.
+Filed: nothing new (b19 done, no Found). To check later (in State): `trust.rs` `join` makes everything fast when no untrusted source is read, even for keys from a trait barrier.
