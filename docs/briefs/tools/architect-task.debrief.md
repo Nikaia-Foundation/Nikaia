@@ -1,14 +1,14 @@
-1. **Most cost:** working out how winnow-grammar is changed and who can push to it. I went through `git log` (705a5db, 627af41), `builder-facts`, a GitHub API call that came back 403, and `git ls-remote`. About 6 of my roughly 20 calls went there before I could write a brief a builder can actually carry out.
-
-2. **What the brief could have handed me:**
-   - winnow-grammar is the owner's public repo. Builders and lane architects cannot push to it; the main session pushes, and earlier upstream changes went that way.
-   - How a backend change reaches a builder: a local clone plus a patch file, never a `[patch]` in the shared checkout.
-   - That `batch.nika` accepts any `Pushed:` value other than `none` or `rejected`. I grepped for that.
-
+1. **Most cost:** tracing the cause of #1108. That took about 8 calls: grep for the message, then `bt_may_not_run`, `callee_named`, and the `sync.nika` and `touch.nika` arms. Setting up the probes cost more turns:
+   - My first probe used `sync fn` and failed to parse; `sync` goes after the return type.
+   - Several runs printed a page of rustc warnings, so I had to rerun each one with `2>/dev/null` and a grep.
+2. **What I had to look up that the brief could have handed me:**
+   - The brief says "j1, j2 are done", but j1-j7 were done. One line naming the last finished brief would help.
+   - Whether `RED`, `qa-input.txt` and `suite.log` were stale. `qa-input.txt` was from 19:58 and `suite.log` was cut off. The input file decided it, but the brief could say which of these files are current.
+   - The spec's file names (`20-nikaia-advance.md`) and where `NK1244` and Part II 10.2 sit.
+   - That #97 already tracks boxed patterns.
+   - Whether a push could ever succeed with untested builder commits on HEAD. The task says to push; it is always rejected or risky here.
 3. **Checks:**
-   - Useful: reading the five `.item(` sites in `rt.rs`/`stream.rs`, which confirmed the run 1 report; looking at `emit_list_rule`; reading #1019's body before editing it.
-   - Wasted: the `gh api` call on winnow-grammar, and opening j5's header, which told me nothing new.
-   - Not run, and the charter asks for it: I did not probe the test rows I prescribed in j8. The backend grammar syntax comes from memory, not from `SYNTAX.md`, and I did not confirm that `ababac` and `[{x}]` produce those stacks. j8's builder may have to correct the rows.
-   - My push also carried the driver's unpushed report commit 9c76435 (harmless, but not mine).
-
-4. **One change:** add a *Lane facts* line to the tools `architect-task.md` and a row to `docs/builder-facts.md`, *Traps already met*. The line: "winnow-grammar changes: builder works in a clone at `/home/user/winnow-grammar` from `https://github.com/keywan-ghadami/winnow-grammar`, saves the commit as a patch in the lane dir, reports `Pushed: winnow-grammar <sha>`; the main session pushes, and the pin moves in a later brief." That would have saved the lookup and made a backend brief routine.
+   - Useful: probes of both Found defects, the panic-free turn shape for j9, `NK1244` on an overflow, and the per-field `wire_name` run at build time for 3c.
+   - Wasted: the first `sync fn` probe, an unfiltered run, and a `gh` search that only found #97.
+   - Not done: j8's test rows are still unprobed. The previous architect flagged this and I did not fix it. j9's `NK1244`-on-panic row cannot be probed before the fix.
+4. **One change:** in the tools `architect-task.md`, replace "j1, j2 are done" with "read `batch.txt` and the newest reports; push only your own commit with the merge-tree recipe (`docs/architect.md`), never a HEAD that carries unpushed builder commits". Also add a line to builder-facts on where `sync` and `throws` go in a signature, for probes.

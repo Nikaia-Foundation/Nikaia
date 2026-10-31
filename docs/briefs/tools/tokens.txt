@@ -13,3 +13,4 @@
 /home/user/Nikaia/docs/briefs/tools/architect-task.md 1107399 28
 /home/user/Nikaia/docs/briefs/tools/j7-1095-sync-bracket-call.md 1224358 33
 /home/user/Nikaia/docs/briefs/tools/j5-1019-comptime-field.md 7697630 123
+/home/user/Nikaia/docs/briefs/tools/architect-task.md 2981558 53
