@@ -1,0 +1,40 @@
+// #1044: an element read by `first()`, `last()`, `get(i)` or a map's `m[k]`
+// is a view of what the list or map keeps; handed back by value it is
+// `NK1131`, never a copy behind the reader's back (Part III).
+use std::collections
+
+struct Sym { name: String, n: i64 }
+
+fn last_sym(path: Vec[Sym]) -> Sym? {
+	let s = path.last() ?? return null
+	return s
+}
+
+fn first_sym(path: Vec[Sym]) -> Sym? {
+	let s = path.first() ?? return null
+	return s
+}
+
+fn get_sym(path: Vec[Sym], i: i64) -> Sym? {
+	let s = path.get(i) ?? return null
+	return s
+}
+
+fn last_directly(path: Vec[Sym]) -> Sym? {
+	return path.last()
+}
+
+fn from_map(m: collections::HashMap[i64, Sym]) -> Sym? {
+	let s = m[1] ?? return null
+	return s
+}
+
+fn from_a_local_list() -> Sym? {
+	let v = [Sym { name: "a", n: 1 }, Sym { name: "b", n: 2 }]
+	let s = v.last() ?? return null
+	return s
+}
+
+fn main() {
+	println("unreached")
+}

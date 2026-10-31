@@ -101,7 +101,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_changing_view(&self, name: &str) -> bool {
         let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        local.view_of != "" || local.written_mut && self.lent_here(name)
+        local.written_mut && (local.view_of != "" || self.lent_here(name))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

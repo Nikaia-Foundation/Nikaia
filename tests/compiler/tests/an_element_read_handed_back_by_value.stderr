@@ -1,0 +1,49 @@
+error[NK1131]: You can't give away `s` here: it is an element of `path`, which keeps it.
+   --> tests/an_element_read_handed_back_by_value.nika:10:2
+    |
+ 10 | 	return s
+    |  ^^^^^^^^
+    |
+    = note: `path.last()` reads an element `path` keeps, and what `path` keeps is lent, whether `path` is owned here or borrowed. Giving it away by value would take it out of `path`, and Nikaia never copies behind your back.
+    = help: Write `path.last()?.clone()` for a copy.
+error[NK1131]: You can't give away `s` here: it is an element of `path`, which keeps it.
+   --> tests/an_element_read_handed_back_by_value.nika:15:2
+    |
+ 15 | 	return s
+    |  ^^^^^^^^
+    |
+    = note: `path.first()` reads an element `path` keeps, and what `path` keeps is lent, whether `path` is owned here or borrowed. Giving it away by value would take it out of `path`, and Nikaia never copies behind your back.
+    = help: Write `path.first()?.clone()` for a copy.
+error[NK1131]: You can't give away `s` here: it is an element of `path`, which keeps it.
+   --> tests/an_element_read_handed_back_by_value.nika:20:2
+    |
+ 20 | 	return s
+    |  ^^^^^^^^
+    |
+    = note: `path.get(i)` reads an element `path` keeps, and what `path` keeps is lent, whether `path` is owned here or borrowed. Giving it away by value would take it out of `path`, and Nikaia never copies behind your back.
+    = help: Write `path.get(i)?.clone()` for a copy.
+error[NK1131]: You can't give away `path.last()` here: it is an element of `path`, which keeps it.
+   --> tests/an_element_read_handed_back_by_value.nika:24:2
+    |
+ 24 | 	return path.last()
+    |  ^^^^^^^^^^^^^^^^^^
+    |
+    = note: `path.last()` reads an element `path` keeps, and what `path` keeps is lent, whether `path` is owned here or borrowed. Giving it away by value would take it out of `path`, and Nikaia never copies behind your back.
+    = help: Write `path.last()?.clone()` for a copy.
+error[NK1131]: You can't give away `s` here: it is an element of `m`, which keeps it.
+   --> tests/an_element_read_handed_back_by_value.nika:29:2
+    |
+ 29 | 	return s
+    |  ^^^^^^^^
+    |
+    = note: `m[1]` reads an element `m` keeps, and what `m` keeps is lent, whether `m` is owned here or borrowed. Giving it away by value would take it out of `m`, and Nikaia never copies behind your back.
+    = help: Write `m[1]?.clone()` for a copy.
+error[NK1131]: You can't give away `s` here: it is an element of `v`, which keeps it.
+   --> tests/an_element_read_handed_back_by_value.nika:35:2
+    |
+ 35 | 	return s
+    |  ^^^^^^^^
+    |
+    = note: `v.last()` reads an element `v` keeps, and what `v` keeps is lent, whether `v` is owned here or borrowed. Giving it away by value would take it out of `v`, and Nikaia never copies behind your back.
+    = help: Write `v.last()?.clone()` for a copy.
+6 type errors

@@ -381,14 +381,48 @@ pub(crate) fn check_core_stmt_read_shown(world: &CheckWorld<'_, '_, '_, '_, '_, 
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
             let held = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return String::from("…") };
-            let at: String = match index {
-                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
-                Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; if negative { format!("-{}", value) } else { format!("{}", value) } },
-                _ => String::from("…"),
-            };
-            format!("{}[{}]", held, at)
+            format!("{}[{}]", held, check_core_stmt_key_shown(world, index))
         },
         _ => nikaia_std::index::or(dotted_path(world, value), || "…".into()),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_key_shown(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &Expr) -> String {
+    match key {
+        Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+        Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; if negative { format!("-{}", value) } else { format!("{}", value) } },
+        _ => String::from("…"),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_element_read(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<String> {
+    match value {
+        Expr::Coalesce { value: read, fallback, .. } => {
+            let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback);
+            if !state.jumps(world, fallback) { return None; }
+            match read {
+                Expr::MethodCall { receiver, method, args, .. } => {
+                    let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                    let held = match dotted_path(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let key = match state.facts.method_callees.get(&(id_of(receiver) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let name = world.words.resolve(method).to_string();
+                    let a_list_end = (key == "Vec::first" || key == "Vec::last") && args.is_empty();
+                    let a_get = key == "Vec::get" || key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get";
+                    if a_list_end { Some(format!("{}.{}()", held, name)) } else if a_get && args.len() == 1 { Some(format!("{}.{}({})", held, name, check_core_stmt_key_shown(world, nikaia_std::index::get(&args, 0)))) } else { None }
+                },
+                Expr::Index { base, index, .. } => {
+                    let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                    let held = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    if state.facts.map_read_views.contains(&(id_of(value) as i64)) { Some(format!("{}[{}]", held, check_core_stmt_key_shown(world, index))) } else { None }
+                },
+                _ => None,
+            }
+        },
+        _ => None,
     }
 }
 
@@ -486,6 +520,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let was_read = state.flow.read_a_map;
     state.flow.read_a_map = outer_read;
     let of_a_map = was_read && check_core_stmt_a_map_read(value);
+    let element_read = check_core_stmt_element_read(&state, world, value);
     let got = check_core_stmt_got(&state, world, value);
     for n in names.iter() {
         let n = *n;
@@ -762,6 +797,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         _ => { },
     }
     let mut local = CheckLocal::free(name, bound, id);
+    if !mutable && element_read.is_some() && state.does_not_copy(world, &local.ty) { local.view_of = nikaia_std::index::or(element_read.as_deref(), || "").to_string(); }
     local.constant = constant;
     local.lent = read_through_a_jump;
     local.empty_list = pending;

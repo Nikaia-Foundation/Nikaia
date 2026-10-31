@@ -1,0 +1,35 @@
+// #1044: the copy of an element read is written where it happens,
+// `…?.clone()`, and then it is the caller's own (Part I 4.5).
+use std::collections
+
+struct Sym { name: String, n: i64 }
+
+fn last_sym(path: Vec[Sym]) -> Sym? {
+	let s = path.last()?.clone() ?? return null
+	return s
+}
+
+fn first_sym(path: Vec[Sym]) -> Sym? {
+	let s = path.first()?.clone() ?? return null
+	return s
+}
+
+fn get_sym(path: Vec[Sym], i: i64) -> Sym? {
+	let s = path.get(i)?.clone() ?? return null
+	return s
+}
+
+fn from_map(m: collections::HashMap[i64, Sym]) -> Sym? {
+	let s = m[1]?.clone() ?? return null
+	return s
+}
+
+fn main() {
+	let v = [Sym { name: "a", n: 1 }, Sym { name: "b", n: 2 }]
+	println(last_sym(v)?.name ?? "")
+	println(first_sym(v)?.name ?? "")
+	println(get_sym(v, 1)?.name ?? "")
+	let mut m: collections::HashMap[i64, Sym] = collections::HashMap()
+	m.insert(1, Sym { name: "c", n: 3 })
+	println(from_map(m)?.name ?? "")
+}

@@ -182,9 +182,10 @@ impl CheckState {
 
     /// **A `let mut` view of a place, or the element of a `for mut`**
     /// (ADR-views-1 D1, ADR-views-2): a change through it reaches the place.
+    /// A `let` of an element read is a view too (#1044), but changes nothing.
     pub fn a_changing_view(ref self, name: ref String) -> bool sync {
         let local = self.binding(name) ?? return false
-        return local.view_of != "" || (local.written_mut && self.lent_here(name))
+        return local.written_mut && (local.view_of != "" || self.lent_here(name))
     }
 
     /// The place a `let mut` view or a `for mut` element stands for, as the

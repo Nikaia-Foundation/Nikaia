@@ -948,8 +948,10 @@ pub(crate) fn check_core_flow_parts_handed_on_in_place(state: &mut CheckState, b
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_changed_copies(state: &mut CheckState, body: &Expr, changed_from: i64, in_place: &collections::BTreeSet<i64>, over_a_mut_parameter: bool) {
     let at = id_of(body) as i64;
-    if state.scope.is_empty() { return; }
-    let frame = (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(state.scope.len() as i64 - 1))).to_owned();
+    let frame = match match state.scope.last() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
     for local in frame.iter() {
         let copied = state.facts.copied_bindings.contains(&(at, local.name.to_string()));
         if !copied && (local.lent || over_a_mut_parameter && in_place.contains(&local.id)) { continue; }

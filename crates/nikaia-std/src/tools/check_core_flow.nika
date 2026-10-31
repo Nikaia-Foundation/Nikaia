@@ -1202,10 +1202,7 @@ fn check_core_flow_parts_handed_on_in_place(mut state: CheckState, body: ref Exp
 /// parameter is a `&mut` already, and is left as it is.
 fn check_core_flow_changed_copies(mut state: CheckState, body: ref Expr, changed_from: i64, in_place: ref collections::BTreeSet[i64], over_a_mut_parameter: bool) sync {
     let at = id_of(body) as i64
-    if state.scope.len() == 0 {
-        return
-    }
-    let frame = state.scope[state.scope.len() - 1].clone()
+    let frame = state.scope.last()?.clone() ?? return
     for local in frame {
         let copied = state.facts.copied_bindings.contains((at, local.name.clone()))
         if !copied && (local.lent || (over_a_mut_parameter && in_place.contains(local.id))) {

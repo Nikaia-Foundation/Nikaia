@@ -71,6 +71,49 @@ pub fn check_core_a_lent_place_passed[H: CheckHost](mut state: CheckState, world
     check_core_a_lent_place_given_away(state, world, host, value, span, false, keeps)
 }
 
+/// **A value that does not copy** (#1044): handing it away whole takes it
+/// out of its owner. A view, text (ADR-282) and a function value (Part I 5.4)
+/// are not such a value, nor a type that copies here or in the package.
+impl CheckState {
+    pub fn does_not_copy(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+        if ty.is_unknown() || copies_plainly(ty) || ty.is_a_view() || self.copied(world, ty) {
+            return false
+        }
+        return match ty {
+            Ty::Named { name, .. } => !self.copies_in_the_package.contains(name) && a_type_base(name) != "String" && a_type_base(name) != "str",
+            Ty::Fn { .. } => false,
+            else => true,
+        }
+    }
+}
+
+// The list or map a read as `view_of` holds it names (`path` of
+// `path.last()`, `m` of `m[k]`); `null` for a `for mut`'s list, which is a
+// dotted path with no call or brackets.
+fn check_core_leaves_list_of_a_read(read: ref String) -> String? sync {
+    let bracket = read.find("[")
+    if bracket != null {
+        let at = bracket ?? return null
+        return read[0..<at].clone()
+    }
+    if !read.ends_with(")") {
+        return null
+    }
+    let open = read.find("(") ?? return null
+    let before = read[0..<open].clone()
+    let dot = before.rfind(".") ?? return null
+    return before[0..<dot].clone()
+}
+
+// `NK1131` for an element a list or a map keeps, given away whole by value
+// (#1044, Part III): `what` is the name or the read handed back, `read` the
+// read as written, which the help copies with `?.clone()`.
+fn check_core_leaves_an_element_read_given_away(mut state: CheckState, what: ref String, list: ref String, read: ref String, span: ref Span) sync {
+    let notes: Vec[String] = [f"`{read}` reads an element `{list}` keeps, and what `{list}` keeps is lent, whether `{list}` is owned here or borrowed. Giving it away by value would take it out of `{list}`, and Nikaia never copies behind your back."]
+    let help: String = f"Write `{read}?.clone()` for a copy."
+    state.findings.push(check_refusal("NK1131", span, f"You can't give away `{what}` here: it is an element of `{list}`, which keeps it.", notes, help))
+}
+
 fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, handed_back: bool, keeps: bool) sync {
     // **An element read out of a lent list is a place of it too** (#738):
     // `return v[0]` out of `v: ref Vec[String]`.
@@ -89,21 +132,7 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
                 return
             }
             let ty = check_core_expr(state, world, host, value, span)
-            if ty.is_unknown() || copies_plainly(ty) || ty.is_a_view() || state.copied(world, ty) {
-                return
-            }
-            let in_package = match ty {
-                Ty::Named { name, .. } => state.copies_in_the_package.contains(name),
-                else => false,
-            }
-            if in_package {
-                return
-            }
-            let text = match ty {
-                Ty::Named { name, .. } => a_type_base(name) == "String" || a_type_base(name) == "str",
-                else => false,
-            }
-            if text {
+            if !state.does_not_copy(world, ty) {
                 return
             }
             if a_let_view {
@@ -114,6 +143,13 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
                 return
             }
             let list = local.view_of.clone()
+            // **An element read by `first`, `last`, `get` or a map's
+            // brackets** (#1044): `view_of` holds the read as written.
+            let of = check_core_leaves_list_of_a_read(list)
+            if of != null {
+                check_core_leaves_an_element_read_given_away(state, written, of ?? "", list, span)
+                return
+            }
             let notes: Vec[String] = [f"`{written}` is the element of `{list}` itself, and `{list}` belongs to whoever lent it. Giving the element away would take a piece out of something this function doesn't own."]
             let help: String = f"Write `{written}.clone()` for a copy, or take the elements out of `{list}` with `{list}.drain()`."
             state.findings.push(check_refusal("NK1131", span, f"You can't give away `{written}` here: it is an element of `{list}`, which is only borrowed.", notes, help))
@@ -139,6 +175,45 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
                     else => return,
                 }
             }
+        }
+        // **An element read by `first`, `last` or `get`, handed back
+        // directly** (#1044): `return path.last()`.
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if !handed_back || !keeps {
+                return
+            }
+            let name = world.words.resolve(method).clone()
+            if name != "first" && name != "last" && name != "get" {
+                return
+            }
+            let held = dotted_path(world, receiver) ?? return
+            let mut shown: String = ""
+            if args.len() == 1 {
+                shown = match args[0] {
+                    Expr::Variable(arg, _) => world.words.resolve(arg).clone(),
+                    Expr::LitInt { value: at, negative, .. } => if negative { f"-{at}" } else { f"{at}" },
+                    else => return,
+                }
+            } else if args.len() > 1 {
+                return
+            }
+            let ty = check_core_expr(state, world, host, value, span)
+            let key = state.facts.method_callees.get(id_of(receiver) as i64) ?? return
+            let a_list_end = (key == "Vec::first" || key == "Vec::last") && args.len() == 0
+            let a_get = (key == "Vec::get" || key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get") && args.len() == 1
+            if !a_list_end && !a_get {
+                return
+            }
+            let held_ty: Ty = match ty {
+                Ty::Nullable(inner) => inner.clone(),
+                else => return,
+            }
+            if !state.does_not_copy(world, held_ty) {
+                return
+            }
+            let read = f"{held}.{name}({shown})"
+            check_core_leaves_an_element_read_given_away(state, read, held, read, span)
+            return
         }
         Expr::Index { base, .. } => {
             let list = state.place_path(world, base) ?? return

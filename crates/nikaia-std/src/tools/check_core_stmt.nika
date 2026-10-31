@@ -487,14 +487,55 @@ fn check_core_stmt_read_shown(world: ref CheckWorld, value: ref Expr) -> String 
     return match value {
         Expr::Index { base, index, .. } => {
             let held = dotted_path(world, base) ?? return "…"
-            let at: String = match index {
-                Expr::Variable(name, _) => world.words.resolve(name).clone(),
-                Expr::LitInt { value, negative, .. } => if negative { f"-{value}" } else { f"{value}" },
-                else => "…",
-            }
-            f"{held}[{at}]"
+            f"{held}[{check_core_stmt_key_shown(world, index)}]"
         }
         else => dotted_path(world, value) ?? "…",
+    }
+}
+
+// A key or a position as the message writes it: a name, a whole number.
+fn check_core_stmt_key_shown(world: ref CheckWorld, key: ref Expr) -> String sync {
+    return match key {
+        Expr::Variable(name, _) => world.words.resolve(name).clone(),
+        Expr::LitInt { value, negative, .. } => if negative { f"-{value}" } else { f"{value}" },
+        else => "…",
+    }
+}
+
+/// **An element a list or a map keeps, read past a jump** (#1044):
+/// `path.last() ?? return`, `path.get(i) ?? continue`, `m[k] ?? break`. The
+/// read as written (`path.last()`), which is what the name is a view of;
+/// `null` for any other value.
+fn check_core_stmt_element_read(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> String? sync {
+    return match value {
+        Expr::Coalesce { value: read, fallback, .. } => {
+            if !state.jumps(world, fallback) {
+                return null
+            }
+            match read {
+                Expr::MethodCall { receiver, method, args, .. } => {
+                    let held = dotted_path(world, receiver) ?? return null
+                    let key = state.facts.method_callees.get(id_of(receiver) as i64) ?? return null
+                    let name = world.words.resolve(method).clone()
+                    let a_list_end = (key == "Vec::first" || key == "Vec::last") && args.len() == 0
+                    let a_get = key == "Vec::get" || key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get"
+                    if a_list_end {
+                        f"{held}.{name}()"
+                    } else if a_get && args.len() == 1 {
+                        f"{held}.{name}({check_core_stmt_key_shown(world, args[0])})"
+                    } else {
+                        null
+                    }
+                }
+                Expr::Index { base, index, .. } => {
+                    let held = dotted_path(world, base) ?? return null
+                    // A map's, which `??` past a jump records (ADR-293 D28).
+                    if state.facts.map_read_views.contains(id_of(value) as i64) { f"{held}[{check_core_stmt_key_shown(world, index)}]" } else { null }
+                }
+                else => null,
+            }
+        }
+        else => null,
     }
 }
 
@@ -628,6 +669,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     let was_read = state.flow.read_a_map
     state.flow.read_a_map = outer_read
     let of_a_map = was_read && check_core_stmt_a_map_read(value)
+    let element_read = check_core_stmt_element_read(state, world, value)
     // **A value `get` hands back past a jump is a reference** (D30).
     let got = check_core_stmt_got(state, world, value)
     for n in names {
@@ -1068,6 +1110,12 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         else => {},
     }
     let mut local = CheckLocal::free(name, bound, id)
+    // **A name bound to an element a list or a map keeps is a view of it**
+    // (#1044, Part III `NK1131`): handed back whole, it is refused as a `for
+    // mut` element is, never copied behind the reader's back.
+    if !mutable && element_read != null && state.does_not_copy(world, local.ty) {
+        local.view_of = (element_read ?? "").clone()
+    }
     local.constant = constant
     local.lent = read_through_a_jump
     local.empty_list = pending
