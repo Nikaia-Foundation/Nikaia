@@ -24,6 +24,7 @@ Read `docs/architect.md` lines 1-260 (roles, briefs, batches; its *State* sectio
 * Re-queue a blocked brief: rename its report to `<brief>.runN.report.md` (`git mv` when tracked), and add a paragraph to the brief on what changed between the runs.
 * Known open: #1079 (`f[i64?](x)` does not parse in a call's brackets) is for the bug lane; a brief here that needs it waits.
 * Version raises are the supervisor's: no brief touches version lines, `CHANGELOG.md` or badges.
+* winnow-grammar (the backend) is the owner's repo `https://github.com/keywan-ghadami/winnow-grammar`: a builder changes it in its own clone `/home/user/winnow-grammar`, saves the commit with `format-patch` into this directory and reports `Pushed: winnow-grammar <sha>`; the main session pushes it, and the pin in `Cargo.toml` moves in a later brief. Never a `[patch]` in the shared checkout; no `gh api` on that repo (403).
 
 Report to exactly `docs/briefs/tools/architect-task.md.report.md` (the driver deletes the old one before the run) with:
 

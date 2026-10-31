@@ -1,3 +1,2 @@
-j7-1095-sync-bracket-call.md
-j5-1019-comptime-field.md
 j8-1019-cut-item-frame.md
+j9-1108-panic-at-build-time.md
