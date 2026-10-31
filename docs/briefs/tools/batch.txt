@@ -1,0 +1,2 @@
+j1-1019-rule-type-parameters.md
+j2-1019-match-on-a-kind.md
