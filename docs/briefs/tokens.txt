@@ -198,3 +198,4 @@
 /home/user/Nikaia/docs/briefs/b938b-nested-number-lists.md 662443 8
 /home/user/Nikaia/docs/briefs/b1034b-returned-lambda-keeps-param.md 400377 7
 /home/user/Nikaia/docs/briefs/architect-task.md 1872672 38
+/home/user/Nikaia/docs/briefs/b1043-let-lambda-kept.md 5586166 85
