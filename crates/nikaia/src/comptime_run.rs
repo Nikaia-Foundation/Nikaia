@@ -94,6 +94,11 @@ pub(crate) fn unit_without_its_constants(
 /// through: a function that calls a dropped one goes too, so the files are
 /// gone over until nothing more goes. What went is handed back.
 pub(crate) fn without_readers(units: &mut [Parsed], absent: BTreeSet<String>) -> BTreeSet<String> {
+    readers_dropped(&mut units.iter_mut().collect::<Vec<_>>(), absent)
+}
+
+/// `without_readers` over units held apart (`ComputeHost::without_readers`).
+fn readers_dropped(units: &mut [&mut Parsed], absent: BTreeSet<String>) -> BTreeSet<String> {
     let mut gone = absent;
     loop {
         let before = gone.len();
@@ -205,7 +210,7 @@ impl tree::ComptimeLowerHost for LowerHost<'_> {
 /// `comptime_lowered_units`): `entry` is the file that holds the value
 /// function and so the `fn main`.
 pub(crate) fn lowered_units(
-    units: &[Parsed],
+    units: &[&Parsed],
     entry: usize,
     build: crate::emit::Build,
     contracts: &crate::contracts::Ledger,
@@ -213,10 +218,13 @@ pub(crate) fn lowered_units(
     library: &crate::contracts::Ledger,
 ) -> Option<crate::emit::Lowered> {
     let home = &units[entry].package;
-    let beside: Vec<&Parsed> = units.iter().filter(|u| &u.package == home).collect();
+    let beside: Vec<&Parsed> = units
+        .iter()
+        .copied()
+        .filter(|u| &u.package == home)
+        .collect();
     let provenance = crate::contracts::trust::analyse_package(&beside, library).provenance;
-    let refs: Vec<&Parsed> = units.iter().collect();
-    let host = LowerHost::new(&refs, build, provenance);
+    let host = LowerHost::new(units, build, provenance);
     let rust = tree::comptime_lowered_units(&host, entry as i64, contracts, packages)?;
     Some(crate::emit::Lowered {
         rust,
@@ -266,12 +274,9 @@ pub(crate) fn by_package(units: &[&Parsed]) -> BTreeMap<String, crate::contracts
 /// `CheckComputed` (`tools/check_host.nika`).
 pub(crate) use nikaia_std::tools::check_host::CheckComputed as Computed;
 
-/// What a call's left-out option stands for where its default is not known in
-/// a run (#468), and a default's type as its run builds it: Nikaia's
+/// A default's type as its run builds it: Nikaia's
 /// (`tools/comptime_tree.nika`).
-pub(crate) use nikaia_std::tools::comptime_tree::{
-    NOT_COMPUTED_YET, comptime_as_built as as_built,
-};
+pub(crate) use nikaia_std::tools::comptime_tree::comptime_as_built as as_built;
 
 /// **Compile and run an initialiser** (ADR-321 D1): `value`, standing in
 /// `files[here]`, of type `ty`, with every file of the program around it and
@@ -298,241 +303,262 @@ pub(crate) fn compute(
     // program's ledger is at hand, they read what it recorded (#468).
     defaults_known_from(outer, || {
         defaults_compiled_in(None, || {
-            computed(
-                files, here, bound, value, ty, known, typed, library, workshop, bounds,
-            )
+            let host = ComputeHost {
+                files,
+                units: RefCell::new(Vec::new()),
+                library,
+                workshop,
+                bounds,
+            };
+            tree::comptime_computed(&host, here as i64, bound, value, ty, known, typed)
         })
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-fn computed(
-    files: &[&Parsed],
-    here: usize,
-    bound: &str,
-    value: &Expr,
-    ty: &Ty,
-    known: &dyn Fn(&str) -> Option<Value>,
-    typed: &dyn Fn(&str) -> Option<Ty>,
-    library: &crate::contracts::Ledger,
-    workshop: &crate::grammar_run::Workshop,
+/// **What computing a build-time constant asks of the compiler**
+/// (`ComptimeComputeHost`, K3a): the program's files, the units made from
+/// them, the inference, the emitter and the workshop stay here; Nikaia names
+/// files by their place and units by their index in `units`.
+struct ComputeHost<'a> {
+    files: &'a [&'a Parsed],
+    units: RefCell<Vec<Parsed>>,
+    library: &'a crate::contracts::Ledger,
+    workshop: &'a crate::grammar_run::Workshop,
     bounds: Bounds,
-) -> Computed {
-    use crate::contracts::LedgerOps;
-    let not_here = |why: &str| Computed::NotHere(why.to_string());
-    let Some(sub) = sub_program(files[here], bound, value, ty, known, typed) else {
-        // **A callee nothing declares is named** (0.0.113): its result has no
-        // type, so neither has the value, and the callee is why.
-        if let Some(callee) = undeclared_callee(files, here, value, library) {
-            return Computed::NotHere(format!(
-                "It calls `{callee}`, which no file of your program declares and `std` doesn't have"
-            ));
-        }
-        // The earlier constants, or else the type, had no written form.
-        return match unit_without_its_constants(files[here], bound, known, typed) {
-            None => not_here(NOT_CARRIED),
-            Some(_) => not_here(
-                "Its type has no form this compiler writes into the program that computes it",
-            ),
-        };
-    };
-    let mut sub = Some(sub);
-    let mut units: Vec<Parsed> = Vec::with_capacity(files.len());
-    for (at, file) in files.iter().enumerate() {
-        let unit = match at == here {
-            true => sub.take(),
-            false => unit_without_its_constants(file, bound, known, typed),
-        };
-        match unit {
-            Some(unit) => units.push(unit),
-            None => return not_here(NOT_CARRIED),
-        }
-    }
-    let carried = constants_of(&units);
-    let absent: BTreeSet<String> = constants_of(files.iter().copied())
-        .into_iter()
-        .filter(|name| !carried.contains(name))
-        .collect();
-    let left_out: BTreeSet<String> = without_readers(&mut units, absent.clone())
-        .difference(&absent)
-        .cloned()
-        .collect();
-    // **A value that reads what went** - a constant not worked out yet (one
-    // that is, it holds as a `let`), or a function that reads one - has it
-    // worked out first, here, as an item
-    // read before its declaration is (Part II 10.2), and runs again with it.
-    if units[here]
-        .program
-        .items
-        .iter()
-        .any(|item| match &item.node {
-            Item::Fn {
-                name: Some(name),
-                body,
-                ..
-            } if units[here].text(*name) == VALUE_FN => {
-                let mut named = BTreeSet::new();
-                nikaia_std::tools::names::names_in_block(body, &units[here].interner, &mut named);
-                named.iter().any(|name| {
-                    left_out.contains(name) || (absent.contains(name) && known(name).is_none())
-                })
-            }
-            _ => false,
-        })
-    {
-        let ahead = worked_out_ahead(
-            files, bound, &absent, known, typed, library, workshop, bounds,
-        );
-        // **Only a constant worked out anew is a reason to run again**: one
-        // that stays out stays out, and asking again went round without end.
-        if ahead.keys().all(|name| known(name).is_some()) {
-            return not_here(
-                "It reads a `comptime` that can't be computed before it: one that reads it in turn",
-            );
-        }
-        let known = |name: &str| known(name).or_else(|| ahead.get(name).cloned());
-        return computed(
-            files, here, bound, value, ty, &known, typed, library, workshop, bounds,
-        );
-    }
-    // **A dependency's functions are the program's to call** (ADR-321 D13):
-    // each package's units are derived on their own, and the program's
-    // against `std` and those entries, under the package's name - as the
-    // program's own ledger has them.
-    // **The run's home is the package of the file it stands in**: a default
-    // of a dependency's function is computed in that dependency, where the
-    // program's own files are not visible and the other packages are.
-    let home = units[here].package.clone();
-    let others: Vec<&Parsed> = units
-        .iter()
-        .filter(|u| u.package.is_some() && u.package != home)
-        .collect();
-    let packages = by_package(&others);
-    let mut with_packages = library.clone();
-    for (name, ledger) in &packages {
-        with_packages.absorb(Some(name), ledger.clone());
-    }
-    let unit_refs: Vec<&Parsed> = units.iter().filter(|u| u.package == home).collect();
-    let derived = crate::contracts::Ledger::infer_package(&unit_refs, &with_packages);
-    if let Some(because) = derived
-        .functions
-        .get(VALUE_FN)
-        .and_then(crate::build_time::may_not_run)
-    {
-        let callee =
-            culprit(files[here], value, &derived, library).unwrap_or_else(|| bound.to_string());
-        return Computed::Forbidden {
-            callee,
-            because: because.to_string(),
-        };
-    }
-    let counted = crate::emit::Build {
-        counts_steps: true,
-        ..Default::default()
-    };
-    let lowered = match units.len() {
-        1 => crate::emit::emit_program(&units[here], counted).ok(),
-        _ => lowered_units(&units, here, counted, &derived, &packages, library),
-    };
-    let Some(lowered) = lowered else {
-        return not_here(NOT_LOWERED);
-    };
-    let dump = match crate::grammar_run::dumper(&units[here], ty) {
-        Ok(dump) => dump,
-        Err(Wall::NoCrossedForm { ty, because }) => {
-            return Computed::NotHere(format!(
-                "Its type `{ty}` can't be handed back from the program that computes it: {because}"
-            ));
-        }
-        Err(_) => {
-            return not_here("Its type can't be handed back from the program that computes it");
-        }
-    };
-    let Some(program) = with_driver(&lowered, &dump, bounds) else {
-        return not_here(NOT_LOWERED);
-    };
-    match workshop.run_comptime(&program, bound) {
-        Ok(text) => match crate::grammar_run::decode(&text) {
-            Ok(computed) => Computed::Value(computed),
-            Err(_) => not_here(NOT_READ),
-        },
-        // A default this run did not have is the default's own refusal,
-        // said where it is written.
-        Err(Wall::Refused { detail }) if detail.contains(NOT_COMPUTED_YET) => {
-            not_here("It leaves out an option whose default isn't computed")
-        }
-        Err(Wall::Refused { detail }) => Computed::Stopped(detail),
-        Err(Wall::NowhereToBuild) => not_here(NOWHERE),
-        Err(Wall::InsideAnother { .. }) => not_here(
-            "It is met while another build-time program is built, and one isn't built inside another",
-        ),
-        Err(Wall::NoCrossedForm { ty, because }) => Computed::NotHere(format!(
-            "`{ty}` has no form that crosses from build time: {because}"
-        )),
-        Err(Wall::DidNotBuild { .. }) => not_here(NOT_LOWERED),
-        Err(Wall::Unreadable { .. }) => not_here(NOT_READ),
+}
+
+impl ComputeHost<'_> {
+    /// `unit` kept, and its index.
+    fn made(&self, unit: Option<Parsed>) -> Option<i64> {
+        let mut units = self.units.borrow_mut();
+        units.push(unit?);
+        Some(units.len() as i64 - 1)
     }
 }
 
-/// **The constants a run reads before their turn**, worked out ahead
-/// (Part II 10.2: an item-level `comptime` may read one declared below it): a
-/// constant of literals folded, one that runs code and writes its type
-/// compiled and run as any `comptime` is. One already being worked out
-/// further up is left alone, which is how a ring ends: its run stays without
-/// it and is refused.
-#[allow(clippy::too_many_arguments)]
-fn worked_out_ahead(
-    files: &[&Parsed],
-    bound: &str,
-    absent: &BTreeSet<String>,
-    known: &dyn Fn(&str) -> Option<Value>,
-    typed: &dyn Fn(&str) -> Option<Ty>,
-    library: &crate::contracts::Ledger,
-    workshop: &crate::grammar_run::Workshop,
-    bounds: Bounds,
-) -> std::collections::BTreeMap<String, Value> {
-    let mut ahead = std::collections::BTreeMap::new();
-    let entered = AHEAD.with(|held| held.borrow_mut().insert(bound.to_string()));
-    if !entered {
-        return ahead;
+impl tree::ComptimeComputeHost for ComputeHost<'_> {
+    fn file_count(&self) -> i64 {
+        self.files.len() as i64
     }
-    let reads = crate::assets::Reads::none();
-    for (at, file) in files.iter().enumerate() {
-        for item in &file.program.items {
-            let Item::Comptime {
-                name, ty, value, ..
+
+    fn sub_program(
+        &self,
+        here: i64,
+        bound: &str,
+        value: &Expr,
+        ty: &Ty,
+        known: &impl Fn(&str) -> Option<Value>,
+        typed: &impl Fn(&str) -> Option<Ty>,
+    ) -> Option<i64> {
+        self.made(sub_program(
+            self.files[here as usize],
+            bound,
+            value,
+            ty,
+            known,
+            typed,
+        ))
+    }
+
+    fn unit_without_its_constants(
+        &self,
+        at: i64,
+        bound: &str,
+        known: &impl Fn(&str) -> Option<Value>,
+        typed: &impl Fn(&str) -> Option<Ty>,
+    ) -> Option<i64> {
+        self.made(unit_without_its_constants(
+            self.files[at as usize],
+            bound,
+            known,
+            typed,
+        ))
+    }
+
+    fn undeclared_callee(&self, here: i64, value: &Expr) -> Option<String> {
+        undeclared_callee(self.files, here as usize, value, self.library)
+    }
+
+    fn constants_of_files(&self) -> BTreeSet<String> {
+        constants_of(self.files.iter().copied())
+    }
+
+    fn constants_of_units(&self, units: &[i64]) -> BTreeSet<String> {
+        let held = self.units.borrow();
+        constants_of(units.iter().map(|&at| &held[at as usize]))
+    }
+
+    fn without_readers(&self, units: &[i64], absent: BTreeSet<String>) -> BTreeSet<String> {
+        let mut held = self.units.borrow_mut();
+        let mut slots: Vec<Option<&mut Parsed>> = held.iter_mut().map(Some).collect();
+        let mut picked: Vec<&mut Parsed> = units
+            .iter()
+            .map(|&at| slots[at as usize].take().expect("each unit once"))
+            .collect();
+        readers_dropped(&mut picked, absent)
+    }
+
+    fn value_fn_names(&self, unit: i64) -> BTreeSet<String> {
+        let held = self.units.borrow();
+        let unit = &held[unit as usize];
+        let mut named = BTreeSet::new();
+        for item in &unit.program.items {
+            if let Item::Fn {
+                name: Some(name),
+                body,
+                ..
             } = &item.node
-            else {
-                continue;
-            };
-            let named = file.text(*name);
-            if !absent.contains(named) || AHEAD.with(|held| held.borrow().contains(named)) {
-                continue;
-            }
-            let so_far = |name: &str| known(name);
-            let folded = crate::build_time::BuildTime::new(file, files, &reads, &so_far)
-                .evaluate(value)
-                .ok();
-            let worked = match (folded, ty) {
-                (Some(value), _) => Some(value),
-                (None, Some(written)) => {
-                    let ty = <Ty as crate::contracts::ty::TyOps>::from_ast(file, written);
-                    match computed(
-                        files, at, named, value, &ty, known, typed, library, workshop, bounds,
-                    ) {
-                        Computed::Value(value) => Some(value),
-                        _ => None,
-                    }
-                }
-                (None, None) => None,
-            };
-            if let Some(value) = worked {
-                ahead.insert(named.to_string(), value);
+                && unit.text(*name) == VALUE_FN
+            {
+                nikaia_std::tools::names::names_in_block(body, &unit.interner, &mut named);
             }
         }
+        named
     }
-    AHEAD.with(|held| held.borrow_mut().remove(bound));
-    ahead
+
+    fn unit_package(&self, unit: i64) -> Option<String> {
+        self.units.borrow()[unit as usize].package.clone()
+    }
+
+    fn by_package(&self, units: &[i64]) -> BTreeMap<String, crate::contracts::Ledger> {
+        let held = self.units.borrow();
+        let refs: Vec<&Parsed> = units.iter().map(|&at| &held[at as usize]).collect();
+        by_package(&refs)
+    }
+
+    fn derived(
+        &self,
+        units: &[i64],
+        packages: &BTreeMap<String, crate::contracts::Ledger>,
+    ) -> crate::contracts::Ledger {
+        use crate::contracts::LedgerOps;
+        let mut with_packages = self.library.clone();
+        for (name, ledger) in packages {
+            with_packages.absorb(Some(name), ledger.clone());
+        }
+        let held = self.units.borrow();
+        let refs: Vec<&Parsed> = units.iter().map(|&at| &held[at as usize]).collect();
+        crate::contracts::Ledger::infer_package(&refs, &with_packages)
+    }
+
+    fn forbidden_because(&self, derived: &crate::contracts::Ledger) -> Option<String> {
+        derived
+            .functions
+            .get(VALUE_FN)
+            .and_then(crate::build_time::may_not_run)
+            .map(|because| because.to_string())
+    }
+
+    fn culprit(
+        &self,
+        here: i64,
+        value: &Expr,
+        derived: &crate::contracts::Ledger,
+    ) -> Option<String> {
+        culprit(self.files[here as usize], value, derived, self.library)
+    }
+
+    fn driven(
+        &self,
+        units: &[i64],
+        here: i64,
+        derived: &crate::contracts::Ledger,
+        packages: &BTreeMap<String, crate::contracts::Ledger>,
+        ty: &Ty,
+    ) -> tree::ComptimeDriven {
+        let held = self.units.borrow();
+        let refs: Vec<&Parsed> = units.iter().map(|&at| &held[at as usize]).collect();
+        let here = here as usize;
+        let counted = crate::emit::Build {
+            counts_steps: true,
+            ..Default::default()
+        };
+        let lowered = match refs.len() {
+            1 => crate::emit::emit_program(refs[here], counted).ok(),
+            _ => lowered_units(&refs, here, counted, derived, packages, self.library),
+        };
+        let Some(lowered) = lowered else {
+            return tree::ComptimeDriven::NotLowered;
+        };
+        let dump = match crate::grammar_run::dumper(refs[here], ty) {
+            Ok(dump) => dump,
+            Err(Wall::NoCrossedForm { ty, because }) => {
+                return tree::ComptimeDriven::Uncrossed { ty, because };
+            }
+            Err(_) => return tree::ComptimeDriven::NoHandBack,
+        };
+        match with_driver(&lowered, &dump, self.bounds) {
+            Some(program) => tree::ComptimeDriven::Program(program),
+            None => tree::ComptimeDriven::NotLowered,
+        }
+    }
+
+    fn run_comptime(&self, program: &str, bound: &str) -> tree::ComptimeRan {
+        match self.workshop.run_comptime(program, bound) {
+            Ok(text) => tree::ComptimeRan::Answer(text),
+            Err(Wall::NowhereToBuild) => tree::ComptimeRan::NowhereToBuild,
+            Err(Wall::InsideAnother { grammar }) => {
+                tree::ComptimeRan::InsideAnother { name: grammar }
+            }
+            Err(Wall::NoCrossedForm { ty, because }) => {
+                tree::ComptimeRan::NoCrossedForm { ty, because }
+            }
+            Err(Wall::DidNotBuild { detail }) => tree::ComptimeRan::DidNotBuild { detail },
+            Err(Wall::Refused { detail }) => tree::ComptimeRan::Refused { detail },
+            Err(Wall::Unreadable { detail }) => tree::ComptimeRan::Unreadable { detail },
+        }
+    }
+
+    fn decode(&self, text: &str) -> Option<Value> {
+        crate::grammar_run::decode(text).ok()
+    }
+
+    fn enter_ahead(&self, bound: &str) -> bool {
+        AHEAD.with(|held| held.borrow_mut().insert(bound.to_string()))
+    }
+
+    fn is_ahead(&self, name: &str) -> bool {
+        AHEAD.with(|held| held.borrow().contains(name))
+    }
+
+    fn leave_ahead(&self, bound: &str) {
+        AHEAD.with(|held| held.borrow_mut().remove(bound));
+    }
+
+    fn comptimes_of(&self, at: i64) -> Vec<tree::ComptimeDeclared> {
+        let file = self.files[at as usize];
+        file.program
+            .items
+            .iter()
+            .filter_map(|item| match &item.node {
+                Item::Comptime {
+                    name, ty, value, ..
+                } => Some(tree::ComptimeDeclared {
+                    name: file.text(*name).to_string(),
+                    ty: ty.clone(),
+                    value: value.clone(),
+                }),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn folded(
+        &self,
+        at: i64,
+        value: &Expr,
+        known: &impl Fn(&str) -> Option<Value>,
+    ) -> Option<Value> {
+        let reads = crate::assets::Reads::none();
+        let so_far = |name: &str| known(name);
+        crate::build_time::BuildTime::new(self.files[at as usize], self.files, &reads, &so_far)
+            .evaluate(value)
+            .ok()
+    }
+
+    fn ty_of(&self, at: i64, written: &crate::ast::Type) -> Ty {
+        <Ty as crate::contracts::ty::TyOps>::from_ast(self.files[at as usize], written)
+    }
 }
 
 thread_local! {
@@ -540,19 +566,6 @@ thread_local! {
     static AHEAD: std::cell::RefCell<BTreeSet<String>> =
         const { std::cell::RefCell::new(BTreeSet::new()) };
 }
-
-/// Why a value is not computed, where this compiler cannot build its program.
-const NOT_LOWERED: &str =
-    "This compiler couldn't build the program that computes it, which is this compiler's fault";
-
-/// Why a value is not computed, where its run's answer could not be read.
-const NOT_READ: &str = "What the program that computed it handed back couldn't be read";
-
-/// Why a value is not computed, where an earlier `comptime` has no literal.
-const NOT_CARRIED: &str = "A `comptime` declared beside it came to a value this compiler can't write into the program that computes it";
-
-/// **ADR-321 D19's note**: a check with no place to compile build-time code.
-pub(crate) const NOWHERE: &str = "This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it";
 
 /// **The callee nothing declares** (`comptime_undeclared_callee`): neither
 /// `library` nor a file of the program, each read with its own interner.

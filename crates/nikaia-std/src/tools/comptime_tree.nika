@@ -584,3 +584,245 @@ pub fn comptime_by_package[H: ComptimeLowerHost](host: ref H) -> collections::BT
     }
     return out
 }
+
+/// Why a value is not computed, where this compiler cannot build its program.
+pub comptime COMPTIME_NOT_LOWERED: ref String = "This compiler couldn't build the program that computes it, which is this compiler's fault"
+
+/// Why a value is not computed, where its run's answer could not be read.
+pub comptime COMPTIME_NOT_READ: ref String = "What the program that computed it handed back couldn't be read"
+
+/// Why a value is not computed, where an earlier `comptime` has no literal.
+pub comptime COMPTIME_NOT_CARRIED: ref String = "A `comptime` declared beside it came to a value this compiler can't write into the program that computes it"
+
+/// **ADR-321 D19's note**: a check with no place to compile build-time code.
+pub comptime NOWHERE: ref String = "This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it"
+
+/// What lowering a run's units and giving them a `main` came to
+/// (`ComptimeComputeHost::driven`).
+pub enum ComptimeDriven {
+    /// The program, ready to compile.
+    Program(String),
+    /// The emitter refused the units, or the driver could not be written.
+    NotLowered,
+    /// The value's type has no form that crosses back, and why.
+    Uncrossed { ty: String, because: String },
+    /// The value's type cannot be handed back, for another reason.
+    NoHandBack,
+}
+
+/// What a compiled build-time run came to: its answer, or the wall it met
+/// (the grammar runner's `Wall`, `grammar_run.rs`).
+pub enum ComptimeRan {
+    Answer(String),
+    NowhereToBuild,
+    InsideAnother { name: String },
+    NoCrossedForm { ty: String, because: String },
+    DidNotBuild { detail: String },
+    Refused { detail: String },
+    Unreadable { detail: String },
+}
+
+/// One `comptime` a file declares, as `comptime_worked_out_ahead` reads it.
+pub struct ComptimeDeclared {
+    pub name: String,
+    pub ty: Type?,
+    pub value: Expr,
+}
+
+/// What computing a build-time constant asks of the compiler (K3a, #125):
+/// the program's files, the units made from them, the inference, the emitter
+/// and the workshop stay Rust. Files are named by their place among the
+/// program's, units by the index the host handed out.
+pub trait ComptimeComputeHost {
+    /// How many files the program has.
+    fn file_count(ref self) -> i64 sync
+    /// The sub-program for `value` in file `here` (`comptime_sub_program`),
+    /// as a new unit; `null` where this stage builds none.
+    fn sub_program(ref self, here: i64, bound: ref String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync) -> i64? sync
+    /// File `at` as the sub-program carries it
+    /// (`comptime_unit_without_its_constants`), as a new unit; `null` where a
+    /// constant worked out has no literal.
+    fn unit_without_its_constants(ref self, at: i64, bound: ref String, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync) -> i64? sync
+    /// The callee `value` in file `here` calls that nothing declares
+    /// (`comptime_undeclared_callee`).
+    fn undeclared_callee(ref self, here: i64, value: ref Expr) -> String? sync
+    /// Every `comptime` the program's files declare.
+    fn constants_of_files(ref self) -> collections::BTreeSet[String] sync
+    /// Every `comptime` the units declare.
+    fn constants_of_units(ref self, units: ref Vec[i64]) -> collections::BTreeSet[String] sync
+    /// The units without what reads a name of `absent`, followed through
+    /// (`comptime_drop_readers`); what went.
+    fn without_readers(ref self, units: ref Vec[i64], absent: collections::BTreeSet[String]) -> collections::BTreeSet[String] sync
+    /// The names the value function of unit `unit` reads.
+    fn value_fn_names(ref self, unit: i64) -> collections::BTreeSet[String] sync
+    /// The package unit `unit` belongs to: `null` for the program's own.
+    fn unit_package(ref self, unit: i64) -> String? sync
+    /// Each dependency's units derived as their package (`comptime_by_package`).
+    fn by_package(ref self, units: ref Vec[i64]) -> collections::BTreeMap[String, Ledger] sync
+    /// The ledger `units` come to against `std` and `packages`, each under
+    /// its name.
+    fn derived(ref self, units: ref Vec[i64], packages: ref collections::BTreeMap[String, Ledger]) -> Ledger sync
+    /// Why the value function of `derived` may not run at build time.
+    fn forbidden_because(ref self, derived: ref Ledger) -> String? sync
+    /// The callee the rule forbids (`comptime_culprit`) of `value` in file `here`.
+    fn culprit(ref self, here: i64, value: ref Expr, derived: ref Ledger) -> String? sync
+    /// `units` lowered with `units[here]` as the entry, with the dump of `ty`
+    /// and a `main` that writes it.
+    fn driven(ref self, units: ref Vec[i64], here: i64, derived: ref Ledger, packages: ref collections::BTreeMap[String, Ledger], ty: ref Ty) -> ComptimeDriven sync
+    /// `program` compiled and run in the workshop under `bound`.
+    fn run_comptime(ref self, program: ref String, bound: ref String) -> ComptimeRan sync
+    /// A run's answer read back as a value.
+    fn decode(ref self, text: ref String) -> BuildValue? sync
+    /// `bound` marked as being worked out ahead; `false` where it already was.
+    fn enter_ahead(ref self, bound: ref String) -> bool sync
+    /// Whether `name` is being worked out ahead further up.
+    fn is_ahead(ref self, name: ref String) -> bool sync
+    /// `bound` no longer worked out ahead.
+    fn leave_ahead(ref self, bound: ref String) sync
+    /// The `comptime`s file `at` declares, in order.
+    fn comptimes_of(ref self, at: i64) -> Vec[ComptimeDeclared] sync
+    /// `value` of file `at` folded as literals, with `known` for the constants.
+    fn folded(ref self, at: i64, value: ref Expr, known: fn(ref String) -> BuildValue? sync) -> BuildValue? sync
+    /// The type `written` in file `at` names.
+    fn ty_of(ref self, at: i64, written: ref Type) -> Ty sync
+}
+
+/// **Compile and run an initialiser** (ADR-321 D1): `value`, standing in file
+/// `here`, of type `ty`, with every file of the program around it and `known`
+/// for what earlier `comptime`s came to. The rule is asked first (D2), of the
+/// ledger entry derived for the function that hands the value back: every
+/// call it reaches, by name or on a value.
+pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync) -> CheckComputed sync {
+    let not_here: fn(ref String) -> CheckComputed sync = fn(why) { CheckComputed::NotHere(why.clone()) }
+    let sub = match host.sub_program(here, bound, value, ty, known, typed) {
+        null => {
+            // **A callee nothing declares is named** (0.0.113): its result has no
+            // type, so neither has the value, and the callee is why.
+            match host.undeclared_callee(here, value) {
+                null => {},
+                callee => {
+                    return CheckComputed::NotHere(f"It calls `{callee}`, which no file of your program declares and `std` doesn't have")
+                },
+            }
+            // The earlier constants, or else the type, had no written form.
+            return match host.unit_without_its_constants(here, bound, known, typed) {
+                null => not_here(COMPTIME_NOT_CARRIED),
+                else => not_here("Its type has no form this compiler writes into the program that computes it"),
+            }
+        },
+        sub => sub,
+    }
+    let mut units: Vec[i64] = []
+    for at in 0..<host.file_count() {
+        let unit: i64? = match at == here {
+            true => sub,
+            false => host.unit_without_its_constants(at, bound, known, typed),
+        }
+        match unit {
+            null => return not_here(COMPTIME_NOT_CARRIED),
+            unit => units.push(unit),
+        }
+    }
+    let carried = host.constants_of_units(units)
+    let declared = host.constants_of_files()
+    let absent: collections::BTreeSet[String] = declared.difference(carried).map(fn(s) { s.clone() }).collect()
+    let gone = host.without_readers(units, absent.clone())
+    let left_out: collections::BTreeSet[String] = gone.difference(absent).map(fn(s) { s.clone() }).collect()
+    // **A value that reads what went** - a constant not worked out yet (one
+    // that is, it holds as a `let`), or a function that reads one - has it
+    // worked out first, here, as an item
+    // read before its declaration is (Part II 10.2), and runs again with it.
+    let named = host.value_fn_names(units[here])
+    if named.iter().any(fn(name) { left_out.contains(name) || (absent.contains(name) && known(name) == null) }) {
+        let ahead = comptime_worked_out_ahead(host, bound, absent, known, typed)
+        // **Only a constant worked out anew is a reason to run again**: one
+        // that stays out stays out, and asking again went round without end.
+        if ahead.keys().all(fn(name) { known(name) != null }) {
+            return not_here("It reads a `comptime` that can't be computed before it: one that reads it in turn")
+        }
+        let known = fn(name) { known(name) ?? ahead.get(name)?.clone() }
+        return comptime_computed(host, here, bound, value, ty, known, typed)
+    }
+    // **A dependency's functions are the program's to call** (ADR-321 D13):
+    // each package's units are derived on their own, and the program's
+    // against `std` and those entries, under the package's name - as the
+    // program's own ledger has them.
+    // **The run's home is the package of the file it stands in**: a default
+    // of a dependency's function is computed in that dependency, where the
+    // program's own files are not visible and the other packages are.
+    let home = host.unit_package(units[here])
+    let others: Vec[i64] = units.iter().filter(fn(u) { host.unit_package(u) != null && host.unit_package(u) != home }).collect()
+    let packages = host.by_package(others)
+    let unit_refs: Vec[i64] = units.iter().filter(fn(u) { host.unit_package(u) == home }).collect()
+    let derived = host.derived(unit_refs, packages)
+    match host.forbidden_because(derived) {
+        null => {},
+        because => {
+            let callee: String = host.culprit(here, value, derived) ?? bound
+            return CheckComputed::Forbidden { callee: callee, because: because }
+        },
+    }
+    let program = match host.driven(units, here, derived, packages, ty) {
+        ComptimeDriven::Program(program) => program,
+        ComptimeDriven::NotLowered => return not_here(COMPTIME_NOT_LOWERED),
+        ComptimeDriven::Uncrossed { ty, because } => {
+            return CheckComputed::NotHere(f"Its type `{ty}` can't be handed back from the program that computes it: {because}")
+        },
+        ComptimeDriven::NoHandBack => return not_here("Its type can't be handed back from the program that computes it"),
+    }
+    return match host.run_comptime(program, bound) {
+        ComptimeRan::Answer(text) => match host.decode(text) {
+            null => not_here(COMPTIME_NOT_READ),
+            computed => CheckComputed::Value(computed),
+        },
+        // A default this run did not have is the default's own refusal,
+        // said where it is written.
+        ComptimeRan::Refused { detail } if detail.contains(NOT_COMPUTED_YET) => not_here("It leaves out an option whose default isn't computed"),
+        ComptimeRan::Refused { detail } => CheckComputed::Stopped(detail),
+        ComptimeRan::NowhereToBuild => not_here(NOWHERE),
+        ComptimeRan::InsideAnother { .. } => not_here("It is met while another build-time program is built, and one isn't built inside another"),
+        ComptimeRan::NoCrossedForm { ty, because } => CheckComputed::NotHere(f"`{ty}` has no form that crosses from build time: {because}"),
+        ComptimeRan::DidNotBuild { .. } => not_here(COMPTIME_NOT_LOWERED),
+        ComptimeRan::Unreadable { .. } => not_here(COMPTIME_NOT_READ),
+    }
+}
+
+/// **The constants a run reads before their turn**, worked out ahead
+/// (Part II 10.2: an item-level `comptime` may read one declared below it): a
+/// constant of literals folded, one that runs code and writes its type
+/// compiled and run as any `comptime` is. One already being worked out
+/// further up is left alone, which is how a ring ends: its run stays without
+/// it and is refused.
+fn comptime_worked_out_ahead[H: ComptimeComputeHost](host: ref H, bound: String, absent: ref collections::BTreeSet[String], known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync) -> collections::BTreeMap[String, BuildValue] sync {
+    let mut ahead: collections::BTreeMap[String, BuildValue] = collections::BTreeMap()
+    let entered = host.enter_ahead(bound)
+    if !entered {
+        return ahead
+    }
+    for at in 0..<host.file_count() {
+        for item in host.comptimes_of(at) {
+            let named = item.name
+            if !absent.contains(named) || host.is_ahead(named) {
+                continue
+            }
+            let folded = host.folded(at, item.value, known)
+            let worked: BuildValue? = match folded {
+                null => match item.ty {
+                    null => null,
+                    written => {
+                        let ty = host.ty_of(at, written)
+                        match comptime_computed(host, at, named, item.value, ty, known, typed) {
+                            CheckComputed::Value(value) => value,
+                            else => null,
+                        }
+                    },
+                },
+                value => value,
+            }
+            let value = worked ?? continue
+            ahead.insert(named.clone(), value)
+        }
+    }
+    host.leave_ahead(bound)
+    return ahead
+}

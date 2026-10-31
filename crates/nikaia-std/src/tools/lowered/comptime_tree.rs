@@ -408,3 +408,172 @@ pub fn comptime_by_package<H: ComptimeLowerHost>(host: &H) -> collections::BTree
     out
 }
 
+pub const COMPTIME_NOT_LOWERED: &str = "This compiler couldn't build the program that computes it, which is this compiler's fault";
+
+pub const COMPTIME_NOT_READ: &str = "What the program that computed it handed back couldn't be read";
+
+pub const COMPTIME_NOT_CARRIED: &str = "A `comptime` declared beside it came to a value this compiler can't write into the program that computes it";
+
+pub const NOWHERE: &str = "This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComptimeDriven {
+    Program(String),
+    NotLowered,
+    Uncrossed { ty: String, because: String },
+    NoHandBack,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComptimeRan {
+    Answer(String),
+    NowhereToBuild,
+    InsideAnother { name: String },
+    NoCrossedForm { ty: String, because: String },
+    DidNotBuild { detail: String },
+    Refused { detail: String },
+    Unreadable { detail: String },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComptimeDeclared {
+    pub name: String,
+    pub ty: Option<Type>,
+    pub value: Expr,
+}
+
+pub trait ComptimeComputeHost {
+    fn file_count(&self) -> i64;
+    fn sub_program(&self, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &impl Fn(&str) -> Option<BuildValue>, typed: &impl Fn(&str) -> Option<Ty>) -> Option<i64>;
+    fn unit_without_its_constants(&self, at: i64, bound: &str, known: &impl Fn(&str) -> Option<BuildValue>, typed: &impl Fn(&str) -> Option<Ty>) -> Option<i64>;
+    fn undeclared_callee(&self, here: i64, value: &Expr) -> Option<String>;
+    fn constants_of_files(&self) -> collections::BTreeSet<String>;
+    fn constants_of_units(&self, units: &[i64]) -> collections::BTreeSet<String>;
+    fn without_readers(&self, units: &[i64], absent: collections::BTreeSet<String>) -> collections::BTreeSet<String>;
+    fn value_fn_names(&self, unit: i64) -> collections::BTreeSet<String>;
+    fn unit_package(&self, unit: i64) -> Option<String>;
+    fn by_package(&self, units: &[i64]) -> collections::BTreeMap<String, Ledger>;
+    fn derived(&self, units: &[i64], packages: &collections::BTreeMap<String, Ledger>) -> Ledger;
+    fn forbidden_because(&self, derived: &Ledger) -> Option<String>;
+    fn culprit(&self, here: i64, value: &Expr, derived: &Ledger) -> Option<String>;
+    fn driven(&self, units: &[i64], here: i64, derived: &Ledger, packages: &collections::BTreeMap<String, Ledger>, ty: &Ty) -> ComptimeDriven;
+    fn run_comptime(&self, program: &str, bound: &str) -> ComptimeRan;
+    fn decode(&self, text: &str) -> Option<BuildValue>;
+    fn enter_ahead(&self, bound: &str) -> bool;
+    fn is_ahead(&self, name: &str) -> bool;
+    fn leave_ahead(&self, bound: &str);
+    fn comptimes_of(&self, at: i64) -> Vec<ComptimeDeclared>;
+    fn folded(&self, at: i64, value: &Expr, known: &impl Fn(&str) -> Option<BuildValue>) -> Option<BuildValue>;
+    fn ty_of(&self, at: i64, written: &Type) -> Ty;
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &dyn Fn(&str) -> Option<BuildValue>, typed: &dyn Fn(&str) -> Option<Ty>) -> CheckComputed {
+    let not_here: nikaia_std::func::Kept<dyn Fn(&str) -> CheckComputed + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |why| { CheckComputed::NotHere(why.to_string()) }));
+    let sub = match host.sub_program(here, bound, value, ty, &known, &typed) {
+        None => {
+            match host.undeclared_callee(here, value) {
+                None => { },
+                Some(ref callee) => { return CheckComputed::NotHere(format!("It calls `{}`, which no file of your program declares and `std` doesn't have", callee)); },
+            }
+            return match host.unit_without_its_constants(here, bound, &known, &typed) {
+                None => not_here(COMPTIME_NOT_CARRIED),
+                _ => not_here("Its type has no form this compiler writes into the program that computes it"),
+            };
+        },
+        Some(sub) => sub,
+    };
+    let mut units: Vec<i64> = vec![];
+    for at in 0..host.file_count() {
+        let unit: Option<i64> = match at == here {
+            true => Some(sub),
+            false => host.unit_without_its_constants(at, bound, &known, &typed),
+        };
+        match unit {
+            None => { return not_here(COMPTIME_NOT_CARRIED); },
+            Some(unit) => { units.push(unit); },
+        }
+    }
+    let carried = host.constants_of_units(&units);
+    let declared = host.constants_of_files();
+    let absent: collections::BTreeSet<String> = declared.difference(&carried).map(|s| { s.to_string() }).collect();
+    let gone = host.without_readers(&units, absent.to_owned());
+    let left_out: collections::BTreeSet<String> = gone.difference(&absent).map(|s| { s.to_string() }).collect();
+    let named = host.value_fn_names(*nikaia_std::index::get(&units, nikaia_std::index::at(here)));
+    if named.iter().any(|name| { left_out.contains(name) || absent.contains(name) && known(name).is_none() }) {
+        let ahead = comptime_worked_out_ahead(host, bound, &absent, &known, &typed);
+        if ahead.keys().all(|name| { known(name).is_some() }) { return not_here("It reads a `comptime` that can't be computed before it: one that reads it in turn"); }
+        let known = |name: &str| {
+            nikaia_std::index::or_maybe(known(name), || match ahead.get(name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            })
+        };
+        return comptime_computed(host, here, bound, value, ty, &known, typed);
+    }
+    let home = host.unit_package(*nikaia_std::index::get(&units, nikaia_std::index::at(here)));
+    let others: Vec<i64> = units.iter().copied().filter(|&u| { host.unit_package(u).is_some() && host.unit_package(u) != home }).collect::<Vec<_>>();
+    let packages = host.by_package(&others);
+    let unit_refs: Vec<i64> = units.iter().copied().filter(|&u| { host.unit_package(u) == home }).collect::<Vec<_>>();
+    let derived = host.derived(&unit_refs, &packages);
+    match host.forbidden_because(&derived) {
+        None => { },
+        Some(because) => {
+            let callee: String = nikaia_std::index::or(host.culprit(here, value, &derived).map(String::from), || String::from(bound));
+            return CheckComputed::Forbidden { callee, because };
+        },
+    }
+    let program = match host.driven(&units, here, &derived, &packages, ty) {
+        ComptimeDriven::Program(program) => program,
+        ComptimeDriven::NotLowered => return not_here(COMPTIME_NOT_LOWERED),
+        ComptimeDriven::Uncrossed { ref ty, ref because } => { return CheckComputed::NotHere(format!("Its type `{}` can't be handed back from the program that computes it: {}", ty, because)); },
+        ComptimeDriven::NoHandBack => return not_here("Its type can't be handed back from the program that computes it"),
+    };
+    match host.run_comptime(&program, bound) {
+        ComptimeRan::Answer(ref text) => match host.decode(text) {
+            None => not_here(COMPTIME_NOT_READ),
+            Some(computed) => CheckComputed::Value(computed),
+        },
+        ComptimeRan::Refused { ref detail } if detail.contains(NOT_COMPUTED_YET) => not_here("It leaves out an option whose default isn't computed"),
+        ComptimeRan::Refused { detail } => CheckComputed::Stopped(detail),
+        ComptimeRan::NowhereToBuild => not_here(NOWHERE),
+        ComptimeRan::InsideAnother { .. } => not_here("It is met while another build-time program is built, and one isn't built inside another"),
+        ComptimeRan::NoCrossedForm { ref ty, ref because } => CheckComputed::NotHere(format!("`{}` has no form that crosses from build time: {}", ty, because)),
+        ComptimeRan::DidNotBuild { .. } => not_here(COMPTIME_NOT_LOWERED),
+        ComptimeRan::Unreadable { .. } => not_here(COMPTIME_NOT_READ),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_worked_out_ahead<H: ComptimeComputeHost>(host: &H, bound: &str, absent: &collections::BTreeSet<String>, known: &dyn Fn(&str) -> Option<BuildValue>, typed: &dyn Fn(&str) -> Option<Ty>) -> collections::BTreeMap<String, BuildValue> {
+    let mut ahead: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
+    let entered = host.enter_ahead(bound);
+    if !entered { return ahead; }
+    for at in 0..host.file_count() {
+        for item in host.comptimes_of(at) {
+            let named = &item.name;
+            if !absent.contains(named) || host.is_ahead(&named) { continue; }
+            let folded = host.folded(at, &item.value, &known);
+            let worked: Option<BuildValue> = match folded {
+                None => match item.ty {
+                    None => None,
+                    Some(ref written) => {
+                        let ty = host.ty_of(at, written);
+                        match comptime_computed(host, at, &named, &item.value, &ty, &known, &typed) {
+                            CheckComputed::Value(value) => Some(value),
+                            _ => None,
+                        }
+                    },
+                },
+                Some(value) => Some(value),
+            };
+            let value = match worked { Some(__nikaia_value) => __nikaia_value, None => continue };
+            ahead.insert(named.to_string(), value);
+        }
+    }
+    host.leave_ahead(bound);
+    ahead
+}
+
