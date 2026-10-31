@@ -85,8 +85,29 @@ pub fn dump(shapes: ref Shapes, ty: ref Ty, expr: ref String, depth: i64, mut ou
             true => dump_tuple(shapes, parts, expr, depth, out),
             false => uncrossable(ty, NO_FORM),
         },
+        Ty::Nullable(inner) => dump_nullable(shapes, inner, expr, depth, out),
         else => uncrossable(ty, NO_FORM),
     }
+}
+
+// **A `T?` crosses where `T` does** (Part II 10.2, #1087): `null` as
+// `(v Option None)`, any other value as `(v Option Some …)` around its `T`,
+// which the decoder reads as the variant Rust spells it with.
+fn dump_nullable(shapes: ref Shapes, inner: ref Ty, expr: ref String, depth: i64, mut out: String) -> Uncrossable? {
+    let pad = "    ".repeat(depth)
+    let held = f"__nikaia_o{depth}"
+    out.push_str(f"{pad}match &{expr} {{\n")
+    out.push_str(f"{pad}    None => out.push_str(\"(v Option None)\"),\n")
+    out.push_str(f"{pad}    Some({held}) => {{\n")
+    out.push_str(f"{pad}        out.push_str(\"(v Option Some \");\n")
+    let refused = dump(shapes, inner, held, depth + 2, out)
+    if refused != null {
+        return refused
+    }
+    out.push_str(f"{pad}        out.push(')');\n")
+    out.push_str(f"{pad}    }}\n")
+    out.push_str(f"{pad}}}\n")
+    return null
 }
 
 // **A tuple, part by part, as `(p …)`** (Part II 10.2: a pair may be held).

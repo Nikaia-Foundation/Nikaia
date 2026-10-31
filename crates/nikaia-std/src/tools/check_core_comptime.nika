@@ -70,7 +70,28 @@ fn check_core_comptime_first_type(n: ref Integer, beyond: bool) -> String {
 /// The type below for a `comptime` that declares one: Part I 2.2's, a type of
 /// this program, or the struct the value names.
 fn check_core_comptime_declared_below(state: ref CheckState, world: ref CheckWorld, want: ref Ty, evaluated: ref BuildValue?) -> String? {
+    let arrives = check_core_comptime_arrives(want)
+    match arrives {
+        Ty::Nullable(inner) => {
+            let none: BuildValue? = null
+            let held = check_core_comptime_declared_below(state, world, inner, none) ?? return null
+            return f"Option<{held}>"
+        },
+        else => {}
+    }
     return rust_constant_type(world.library, want) ?? state.declared_below(world, want) ?? check_core_comptime_struct_named(want, evaluated)
+}
+
+/// **The type a `comptime` arrives as** (Part II 10.2, #1087): a `String?`
+/// as a `ref String?`, every other type as itself.
+fn check_core_comptime_arrives(want: ref Ty) -> Ty {
+    return match want {
+        Ty::Nullable(inner) => match inner {
+            Ty::Named { name, args, view } if name == "String" && args.len() == 0 && !view => Ty::Nullable(Ty::Named { name: "str", args: [], view: true }),
+            else => want.clone(),
+        },
+        else => want.clone(),
+    }
 }
 
 /// The struct the value names, where it is the type `want` names.
@@ -193,6 +214,11 @@ fn check_core_comptime_other(mut state: CheckState, world: ref CheckWorld, bound
             return
         }
     }
+    // **A value where its `T?` is declared** is the value present: it arrives
+    // as what the `T?` arrives as (Part II 10.2, #1087).
+    if check_core_comptime_nullable(want) && narrowed.fits(check_core_comptime_arrives(want)) {
+        return
+    }
     state.expect_type(world, narrowed, want, span, "const", fn(found_text, wanted_text) { f"This value is `{found_text}`, but the `comptime` declares `{wanted_text}`." })
 }
 
@@ -206,7 +232,36 @@ fn check_core_comptime_a_field_local(state: ref CheckState, world: ref CheckWorl
 
 // Whether `value` reads a local that holds the reflected field.
 fn check_core_comptime_reads_a_field(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool {
-    return check_visit_preorder(value).iter().any(fn(read) { check_core_comptime_a_field_local(state, world, read) })
+    return check_core_comptime_field_local(state, world, value) != null
+}
+
+// The first local `value` reads that holds the reflected field, the holes of
+// its `f"…"` literals included.
+fn check_core_comptime_field_local(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> String? {
+    for read in check_visit_preorder(value) {
+        match read {
+            Expr::Variable(name, _) => {
+                if check_core_comptime_a_field_local(state, world, read) {
+                    return world.words.resolve(name).clone()
+                }
+            },
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts {
+                    match part {
+                        FPart::Hole { expr, .. } => {
+                            let found = check_core_comptime_field_local(state, world, expr)
+                            if found != null {
+                                return found
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return null
 }
 
 /// **A turn's field, read for its name** (Part II 10.3, #1087): in an
@@ -305,19 +360,34 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
     let waits_for_a_turn = reads_a_field && turn == null
     let mut read: Expr = value.clone()
     let mut at_turn: String? = null
+    let mut marked = false
     if reads_a_field && turn != null {
         let here = turn ?? return Ty::Unknown
         read = check_core_comptime_turned(state, world, value, here.field.name)
         at_turn = f"{span.start}:{here.on}:{here.field.name}"
+        // **The field itself is read** - handed to a function, asked for an
+        // attribute: the run goes through the same turn (`TURN_MARK`).
+        let local: String? = check_core_comptime_field_local(state, world, read)
+        if local != null {
+            read = comptime_turn_marked(here.on, here.field.name, local ?? "", read)
+            marked = true
+        }
     }
     let mut folded: CheckConstant? = null
-    if !waits_for_a_turn {
+    if !waits_for_a_turn && !marked {
         folded = state.constant_of(world, read)
     }
     let mut fold_type: String? = null
     let mut evaluated: BuildValue? = null
     let mut said = waits_for_a_turn
+    let is_null = match read {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
     if waits_for_a_turn {
+    } else if is_null && check_core_comptime_nullable(want ?? Ty::Unknown) {
+        // **`null` is a `const`** (Part II 10.2, #1087): nothing to run.
+        evaluated = BuildValue::Variant { ty: "Option", variant: "None", payload: [] }
     } else if folded != null {
         let one = folded ?? return Ty::Unknown
         let pinned: String? = one.pinned?.clone()
@@ -379,6 +449,8 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
     } else {
         if fold_type != null {
             below = fold_type
+        } else if check_core_comptime_nullable(found) {
+            below = check_core_comptime_declared_below(state, world, found, evaluated)
         } else {
             below = check_core_comptime_value_below(world, found, evaluated)
         }
@@ -410,6 +482,16 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
     if evaluated != null {
         let computed: BuildValue = evaluated?.clone() ?? return Ty::Unknown
         written = written_below(state, world, computed, want, fn(of, variant) { check_walked_payload_of(world, of, variant) }, fn(number) { host.float_text(number) })
+        // **A `T?` given its `T`** - the literal the sub-program carries - is
+        // the value present.
+        let optional = match computed {
+            BuildValue::Variant { ty, .. } => ty == "Option",
+            else => false,
+        }
+        if written != null && !optional && check_core_comptime_nullable(want ?? Ty::Unknown) {
+            let text = written ?? ""
+            written = f"Option::Some({text})"
+        }
     }
     if crossed {
         below = table_below
@@ -447,7 +529,7 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
     let open = !declared && shape == 1
     let mut held: Ty = Ty::Unknown
     if !open {
-        held = want ?? found
+        held = check_core_comptime_arrives(want ?? found)
     }
     // **A tuple of numbers nothing typed** (#837): each part is the type a
     // lone number of its value takes, the one its `const` is written with.
@@ -530,4 +612,12 @@ pub fn check_core_a_block_over_a_grammar[H: CheckHost](mut state: CheckState, wo
     let contract = world.own.functions.get(f"{owner}::{entry}") ?? return Ty::Unknown
     let signature = contract.signature ?? return Ty::Unknown
     return signature.result?.clone() ?? Ty::Unknown
+}
+
+/// Whether a type is a `T?`.
+fn check_core_comptime_nullable(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
 }

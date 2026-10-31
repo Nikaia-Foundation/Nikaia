@@ -1,8 +1,13 @@
 // A `comptime` reads the reflected field (Part II 10.2, 10.3): in each
 // unrolled turn it is worked out with the field that turn stands at, its name
-// read directly and handed to a function.
+// read directly and handed to a function, its attribute asked for, and its
+// name written into text.
+
+@meta::Attribute(field)
+pub struct Name { value: String }
 
 struct Contact {
+	@Name("full_name")
 	name: String,
 	age: i64 = 7,
 }
@@ -16,7 +21,9 @@ fn show[T: Struct]() {
 		comptime A = f.name
 		comptime B = shout(f.name)
 		comptime N: i64 = f.name.len()
-		println(f"{A} {B} {N}")
+		comptime W = f.attribute(Name)?.value ?? "-"
+		comptime D = f"<{f.name}>"
+		println(f"{A} {B} {N} {W} {D}")
 	}
 }
 

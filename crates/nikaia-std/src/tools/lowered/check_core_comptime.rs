@@ -48,7 +48,29 @@ pub(crate) fn check_core_comptime_first_type(n: &Integer, beyond: bool) -> Strin
     String::from("i64")
 }
 
-pub(crate) fn check_core_comptime_declared_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, evaluated: Option<&BuildValue>) -> Option<String> { nikaia_std::index::or_maybe(rust_constant_type(world.library, want), || nikaia_std::index::or_maybe(state.declared_below(world, want), || check_core_comptime_struct_named(want, evaluated))) }
+pub(crate) fn check_core_comptime_declared_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
+    let arrives = check_core_comptime_arrives(want);
+    match arrives {
+        Ty::Nullable(ref inner) => {
+            let inner = nikaia_std::boxed::open(inner);
+            let none: Option<BuildValue> = None;
+            let held = match check_core_comptime_declared_below(state, world, inner, (none).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(format!("Option<{}>", held));
+        },
+        _ => { },
+    }
+    nikaia_std::index::or_maybe(rust_constant_type(world.library, want), || nikaia_std::index::or_maybe(state.declared_below(world, want), || check_core_comptime_struct_named(want, evaluated)))
+}
+
+pub(crate) fn check_core_comptime_arrives(want: &Ty) -> Ty {
+    match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { name, args, view } if { let view = *view; name == "String" && args.is_empty() && !view } => Ty::Nullable(Box::new(Ty::Named { name: String::from("str"), args: vec![], view: true })),
+            _ => want.clone(),
+        } },
+        _ => want.clone(),
+    }
+}
 
 pub(crate) fn check_core_comptime_struct_named(want: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
     let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -152,6 +174,7 @@ pub(crate) fn check_core_comptime_other(state: &mut CheckState, world: &CheckWor
             return;
         }
     }
+    if check_core_comptime_nullable(want) && narrowed.fits(&check_core_comptime_arrives(want)) { return; }
     state.expect_type(world, narrowed, want, span, "const", &|found_text, wanted_text| { format!("This value is `{}`, but the `comptime` declares `{}`.", found_text, wanted_text) });
 }
 
@@ -162,7 +185,31 @@ pub(crate) fn check_core_comptime_a_field_local(state: &CheckState, world: &Chec
     }
 }
 
-pub(crate) fn check_core_comptime_reads_a_field(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool { check_visit_preorder(value).iter().any(|read| { check_core_comptime_a_field_local(state, world, read) }) }
+pub(crate) fn check_core_comptime_reads_a_field(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool { check_core_comptime_field_local(state, world, value).is_some() }
+
+pub(crate) fn check_core_comptime_field_local(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<String> {
+    for read in check_visit_preorder(value) {
+        match read {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                if check_core_comptime_a_field_local(state, world, read) { return Some(world.words.resolve(name).to_string()); }
+            },
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts.iter() {
+                    match part {
+                        FPart::Hole { expr, .. } => {
+                            let found = check_core_comptime_field_local(state, world, expr);
+                            if found.is_some() { return std::convert::identity(found); }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    None
+}
 
 pub(crate) fn check_core_comptime_turned(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, field: &str) -> Expr {
     match value {
@@ -243,17 +290,24 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
     let waits_for_a_turn = reads_a_field && turn.is_none();
     let mut read: Expr = value.clone();
     let mut at_turn: Option<String> = None;
+    let mut marked = false;
     if reads_a_field && turn.is_some() {
         let here = match turn { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         read = check_core_comptime_turned(&state, world, value, &here.field.name);
         at_turn = Some(format!("{}:{}:{}", span.start, here.on, here.field.name));
+        let local: Option<String> = check_core_comptime_field_local(&state, world, &read);
+        if local.is_some() {
+            read = comptime_turn_marked(&here.on, &here.field.name, nikaia_std::index::or(local.as_deref(), || ""), &read);
+            marked = true;
+        }
     }
     let mut folded: Option<CheckConstant> = None;
-    if !waits_for_a_turn { folded = state.constant_of(world, &read); }
+    if !waits_for_a_turn && !marked { folded = state.constant_of(world, &read); }
     let mut fold_type: Option<String> = None;
     let mut evaluated: Option<BuildValue> = None;
     let mut said = waits_for_a_turn;
-    if waits_for_a_turn { } else if folded.is_some() {
+    let is_null = matches!(read, Expr::LitNull(_));
+    if waits_for_a_turn { } else if is_null && check_core_comptime_nullable(nikaia_std::index::or(want.as_ref(), || &Ty::Unknown)) { evaluated = Some(BuildValue::Variant { ty: String::from("Option"), variant: String::from("None"), payload: vec![] }); } else if folded.is_some() {
         let one = match folded { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let pinned: Option<String> = match one.pinned.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -302,7 +356,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
             None => None,
         }, || Ty::Unknown);
         below = check_core_comptime_declared_below(&state, world, &wanted, (evaluated).as_ref());
-    } else if fold_type.is_some() { below = std::convert::identity(fold_type); } else { below = check_core_comptime_value_below(world, &found, (evaluated).as_ref()); }
+    } else if fold_type.is_some() { below = std::convert::identity(fold_type); } else if check_core_comptime_nullable(&found) { below = check_core_comptime_declared_below(&state, world, &found, (evaluated).as_ref()); } else { below = check_core_comptime_value_below(world, &found, (evaluated).as_ref()); }
     let mut said_a_table = false;
     let mut crossed = false;
     let mut table_below: String = String::from("");
@@ -329,6 +383,14 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         written = written_below(&state, world, &computed, (want).as_ref(), &|of, variant| { check_walked_payload_of(world, of, variant) }, &|number| { host.float_text(number) });
+        let optional = match computed {
+            BuildValue::Variant { ref ty, .. } => ty == "Option",
+            _ => false,
+        };
+        if written.is_some() && !optional && check_core_comptime_nullable(nikaia_std::index::or(want.as_ref(), || &Ty::Unknown)) {
+            let text = nikaia_std::index::or(written, || "".into());
+            written = Some(format!("Option::Some({})", text));
+        }
     }
     if crossed {
         below = Some(table_below);
@@ -358,7 +420,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
     let declared = want.is_some();
     let open = !declared && shape == 1;
     let mut held: Ty = Ty::Unknown;
-    if !open { held = nikaia_std::index::or(want, || found.into()); }
+    if !open { held = check_core_comptime_arrives(nikaia_std::index::or(want.as_ref(), || &found)); }
     if !open && !declared && shape == 6 { held = check_core_comptime_tuple_parts(&held, (evaluated).as_ref()); }
     let id = state.a_new_binding();
     if open { state.open_comptimes.insert(id, Span { start: span.start, end: span.end }); }
@@ -414,4 +476,6 @@ pub fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckState, w
         None => None,
     }, || Ty::Unknown)
 }
+
+pub(crate) fn check_core_comptime_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
 

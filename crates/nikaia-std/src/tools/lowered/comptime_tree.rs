@@ -13,6 +13,8 @@ pub fn comptime_keeps(item: &Item, words: &winnow_grammar::InternerContext) -> b
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub fn comptime_sub_program(items: &mut Vec<Spanned<Item>>, source: &[Spanned<Item>], words: &winnow_grammar::InternerContext, bound: &str, value: &Expr, ty: &Ty, known: &impl Fn(&str) -> Option<BuildValue>, typed: &impl Fn(&str) -> Option<Ty>, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> bool {
     if !comptime_unit_without_its_constants(items, source, words, bound, known, typed, intern) { return false; }
@@ -21,9 +23,91 @@ pub fn comptime_sub_program(items: &mut Vec<Spanned<Item>>, source: &[Spanned<It
     let value_fn = intern(VALUE_FN);
     items.push(Spanned { node: comptime_a_function(Some(main), None, vec![]), span: Span::nowhere(), doc: None, attributes: vec![] });
     let mut stmts = comptime_constants_as_lets(source, words, bound, known, intern);
-    stmts.push(Spanned { node: Stmt::Return(Some(value.clone())), span: Span::nowhere(), doc: None, attributes: vec![] });
+    let mut handed: Expr = value.clone();
+    let turn: Option<ComptimeTurn> = comptime_turn_of(value);
+    if turn.is_some() {
+        let one = match turn { Some(__nikaia_value) => __nikaia_value, None => return false };
+        items.push(Spanned { node: comptime_turn_function(&one, &returns, intern), span: Span::nowhere(), doc: None, attributes: vec![] });
+        handed = comptime_turn_call(&one, intern);
+    }
+    stmts.push(Spanned { node: Stmt::Return(Some(handed)), span: Span::nowhere(), doc: None, attributes: vec![] });
     items.push(Spanned { node: comptime_a_function(Some(value_fn), Some(returns), stmts), span: Span::nowhere(), doc: None, attributes: vec![] });
     true
+}
+
+pub const TURN_MARK: &str = "__nikaia_comptime_turn";
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn comptime_turn_marked(on: &str, field: &str, local: &str, value: &Expr) -> Expr {
+    let texts: Vec<Expr> = vec![on, field, local].iter().map(|text| { Expr::LitStr { text: text.to_string(), id: fresh_id() } }).collect::<Vec<_>>();
+    let mut args = texts;
+    args.push(value.clone());
+    Expr::Call { func: Box::new(Expr::LitStr { text: TURN_MARK.to_string(), id: fresh_id() }), args, config: vec![], id: fresh_id() }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ComptimeTurn {
+    pub(crate) on: String,
+    pub(crate) field: String,
+    pub(crate) local: String,
+    pub(crate) value: Expr,
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_turn_of(value: &Expr) -> Option<ComptimeTurn> {
+    let (func, args) = match value {
+        Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); (func, args) },
+        _ => return None,
+    };
+    match func {
+        Expr::LitStr { text, .. } if text == TURN_MARK && args.len() == 4 => {
+            let mut texts: Vec<String> = vec![];
+            for arg in args.iter().take(3) {
+                match arg {
+                    Expr::LitStr { text: one, .. } => { texts.push(one.to_string()); },
+                    _ => { return None; },
+                }
+            }
+            Some(ComptimeTurn { on: (*nikaia_std::index::get(&texts, 0)).to_string(), field: (*nikaia_std::index::get(&texts, 1)).to_string(), local: (*nikaia_std::index::get(&texts, 2)).to_string(), value: (*nikaia_std::index::get(&args, 3)).clone() })
+        },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_turn_function(turn: &ComptimeTurn, returns: &Type, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Item {
+    let mut element = returns.clone();
+    element.is_view = false;
+    let mut list = comptime_plain(String::from("Vec"), intern);
+    list.generics = vec![element];
+    let kept = intern("__nikaia_turned");
+    let local = intern(&turn.local);
+    let t = intern("T");
+    let nowhere: nikaia_std::func::Kept<dyn Fn(Stmt) -> Spanned<Stmt> + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |node| { Spanned { node, span: Span::nowhere(), doc: None, attributes: vec![] } }));
+    let push = Expr::MethodCall { receiver: Box::new(Expr::Variable(kept, fresh_id())), method: intern("push"), args: vec![turn.value.clone()], config: vec![], id: fresh_id() };
+    let at_field = Expr::Binary { op: BinaryOp::Eq, lhs: Box::new(Expr::Field { base: Box::new(Expr::Variable(local, fresh_id())), name: intern("name"), id: fresh_id() }), rhs: Box::new(Expr::LitStr { text: turn.field.to_string(), id: fresh_id() }), span: Span::nowhere(), grouped: false, id: fresh_id() };
+    let pick = Expr::If { cond: Box::new(at_field), then_branch: Block { stmts: vec![nowhere(Stmt::Expr(push))] }, else_branch: None, id: fresh_id() };
+    let each = Stmt::For { bindings: vec![local], shape: vec![], mutable: false, iter: Expr::Path(vec![t, intern("fields")], fresh_id()), body: Block { stmts: vec![nowhere(Stmt::Expr(pick))] } };
+    let start = Stmt::Let { names: vec![kept], shape: vec![], mutable: true, ty: Some(list.clone()), value: Expr::ListLit { items: vec![], id: fresh_id() } };
+    let stmts: Vec<Spanned<Stmt>> = vec![nowhere(start), nowhere(each), nowhere(Stmt::Return(Some(Expr::Variable(kept, fresh_id()))))];
+    let generics: Vec<GenericParam> = vec![GenericParam { name: t, bounds: vec![intern("Struct")] }];
+    Item::Fn { name: Some(intern(TURN_MARK)), generics, receiver: None, args: vec![], config: vec![], spread: None, ret_type: Some(list), body: Block { stmts }, is_sync: true, sync_by: vec![], is_public: false, can_throw: false, is_extern: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_turn_call(turn: &ComptimeTurn, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Expr {
+    let path: Vec<winnow_grammar::Symbol> = turn.on.split("::").map(|segment| { intern(segment) }).collect::<Vec<_>>();
+    let on = match path.len() == 1 {
+        true => Expr::Variable(*nikaia_std::index::get(&path, 0), fresh_id()),
+        false => Expr::Path(path, fresh_id()),
+    };
+    let instance = Expr::Index { base: Box::new(Expr::Variable(intern(TURN_MARK), fresh_id())), index: Box::new(on), id: fresh_id() };
+    let called = Expr::Call { func: Box::new(instance), args: vec![], config: vec![], id: fresh_id() };
+    Expr::MethodCall { receiver: Box::new(called), method: intern("remove"), args: vec![Expr::LitInt { value: 0, negative: false, id: fresh_id() }], config: vec![], id: fresh_id() }
 }
 
 pub(crate) fn comptime_constants_as_lets(source: &[Spanned<Item>], words: &winnow_grammar::InternerContext, bound: &str, known: &impl Fn(&str) -> Option<BuildValue>, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Vec<Spanned<Stmt>> {
@@ -234,6 +318,10 @@ pub(crate) fn comptime_literal_of(value: &BuildValue, intern: &dyn Fn(&str) -> w
                 inits.push(FieldInit { name: intern(field), value: Some(value) });
             }
             Some(Expr::StructLit { name: named, fields: inits, id: fresh_id() })
+        },
+        BuildValue::Variant { ty, variant, payload } if ty == "Option" => match variant == "Some" && payload.len() == 1 {
+            true => Some(match comptime_literal_of(nikaia_std::index::get(&payload, 0), intern) { Some(__nikaia_value) => __nikaia_value, None => return None }),
+            false => Some(Expr::LitNull(fresh_id())),
         },
         BuildValue::Variant { ty, variant, payload } => {
             let segments: Vec<winnow_grammar::Symbol> = vec![intern(ty), intern(variant)];

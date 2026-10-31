@@ -1,0 +1,41 @@
+// A `T?` crosses from build time where `T` does (Part II 10.2, #1087):
+// `null` as itself, any other value as its `T`; a `String?` arrives as a
+// `ref String?`. In a turn too, from a function over the turn's field.
+
+@meta::Attribute(field)
+pub struct Name { value: String }
+
+struct Contact {
+	@Name("full_name")
+	name: String,
+	age: i64 = 7,
+	secret: String,
+}
+
+fn pick(b: bool) -> String? {
+	if b { return "x" }
+	return null
+}
+
+fn wire_name(f: meta::Field) -> String? {
+	if f.name == "secret" {
+		return null
+	}
+	return f.attribute(Name)?.value ?? f.name
+}
+
+comptime P: String? = pick(true)
+comptime Q: String? = pick(false)
+
+fn show[T: Struct]() {
+	for f in T::fields {
+		comptime W: String? = wire_name(f)
+		println(W ?? "-")
+	}
+}
+
+fn main() {
+	println(P ?? "-")
+	println(Q ?? "-")
+	show[Contact]()
+}

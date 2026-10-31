@@ -45,8 +45,24 @@ pub fn dump(shapes: &Shapes, ty: &Ty, expr: &str, depth: i64, out: &mut String) 
             true => dump_tuple(shapes, parts, expr, depth, out),
             false => uncrossable(ty, NO_FORM),
         },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); dump_nullable(shapes, inner, expr, depth, out) },
         _ => uncrossable(ty, NO_FORM),
     }
+}
+
+pub(crate) fn dump_nullable(shapes: &Shapes, inner: &Ty, expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {
+    let pad = "    ".repeat(nikaia_std::count::of(depth));
+    let held = format!("__nikaia_o{}", depth);
+    out.push_str(&format!("{}match &{} {{\n", pad, expr));
+    out.push_str(&format!("{}    None => out.push_str(\"(v Option None)\"),\n", pad));
+    out.push_str(&format!("{}    Some({}) => {{\n", pad, held));
+    out.push_str(&format!("{}        out.push_str(\"(v Option Some \");\n", pad));
+    let refused = dump(shapes, inner, &held, depth + 2, out);
+    if refused.is_some() { return std::convert::identity(refused); }
+    out.push_str(&format!("{}        out.push(')');\n", pad));
+    out.push_str(&format!("{}    }}\n", pad));
+    out.push_str(&format!("{}}}\n", pad));
+    None
 }
 
 pub(crate) fn dump_tuple(shapes: &Shapes, parts: &[Ty], expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {

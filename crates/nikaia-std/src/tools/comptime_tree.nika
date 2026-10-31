@@ -35,7 +35,7 @@ pub fn comptime_keeps(item: ref Item, words: ref winnow_grammar::InternerContext
 /// `bound` is the `comptime` being worked out; `known` is what an earlier one
 /// came to, by name, and nothing for one not worked out yet - which is left
 /// out, as the one being worked out is.
-pub fn comptime_sub_program(mut items: Vec[Spanned[Item]], source: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> bool {
+pub fn comptime_sub_program(mut items: Vec[Spanned[Item]], source: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> bool sync {
     if !comptime_unit_without_its_constants(items, source, words, bound, known, typed, intern) {
         return false
     }
@@ -44,9 +44,95 @@ pub fn comptime_sub_program(mut items: Vec[Spanned[Item]], source: ref Vec[Spann
     let value_fn = intern(VALUE_FN)
     items.push(Spanned { node: comptime_a_function(main, null, []), span: Span::nowhere(), doc: null, attributes: [] })
     let mut stmts = comptime_constants_as_lets(source, words, bound, known, intern)
-    stmts.push(Spanned { node: Stmt::Return(value.clone()), span: Span::nowhere(), doc: null, attributes: [] })
+    let mut handed: Expr = value.clone()
+    let turn: ComptimeTurn? = comptime_turn_of(value)
+    if turn != null {
+        let one = turn ?? return false
+        items.push(Spanned { node: comptime_turn_function(one, returns, intern), span: Span::nowhere(), doc: null, attributes: [] })
+        handed = comptime_turn_call(one, intern)
+    }
+    stmts.push(Spanned { node: Stmt::Return(handed), span: Span::nowhere(), doc: null, attributes: [] })
     items.push(Spanned { node: comptime_a_function(value_fn, returns, stmts), span: Span::nowhere(), doc: null, attributes: [] })
     return true
+}
+
+/// **A `comptime` that reads an unrolled turn's field** (Part II 10.3, #1087),
+/// as the checker hands it: a call of the text `TURN_MARK`, which no program
+/// writes, with the type gone through, the turn's field, the local that holds
+/// it and the value. The sub-program runs it in the same unrolled turn the
+/// program has, so a function over `meta::Field` runs the copy made for that
+/// field, at build time as at run time.
+pub comptime TURN_MARK: ref String = "__nikaia_comptime_turn"
+
+/// The checker's half: `value` read in the turn of `on` at `field`, the turn's
+/// field held by `local`.
+pub fn comptime_turn_marked(on: ref String, field: ref String, local: ref String, value: ref Expr) -> Expr sync {
+    let texts: Vec[Expr] = [on, field, local].iter().map(fn(text) { Expr::LitStr { text: text.clone(), id: fresh_id() } }).collect()
+    let mut args = texts
+    args.push(value.clone())
+    return Expr::Call { func: Expr::LitStr { text: TURN_MARK.clone(), id: fresh_id() }, args: args, config: [], id: fresh_id() }
+}
+
+struct ComptimeTurn {
+    on: String,
+    field: String,
+    local: String,
+    value: Expr,
+}
+
+// The turn `comptime_turn_marked` wrote into `value`, or nothing.
+fn comptime_turn_of(value: ref Expr) -> ComptimeTurn? sync {
+    let (func, args) = match value {
+        Expr::Call { func, args, .. } => (func, args),
+        else => return null,
+    }
+    return match func {
+        Expr::LitStr { text, .. } if text == TURN_MARK && args.len() == 4 => {
+            let mut texts: Vec[String] = []
+            for arg in args.iter().take(3) {
+                match arg {
+                    Expr::LitStr { text: one, .. } => texts.push(one.clone()),
+                    else => return null,
+                }
+            }
+            ComptimeTurn { on: texts[0].clone(), field: texts[1].clone(), local: texts[2].clone(), value: args[3].clone() }
+        },
+        else => null,
+    }
+}
+
+// `fn __nikaia_comptime_turn[T: Struct]() -> Vec[R] sync`: each turn over
+// `T::fields` that stands at the field pushes the value. A list, not a
+// `return` in the turn, so the function needs no end that is never reached.
+fn comptime_turn_function(turn: ref ComptimeTurn, returns: ref Type, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Item sync {
+    let mut element = returns.clone()
+    element.is_view = false
+    let mut list = comptime_plain("Vec", intern)
+    list.generics = [element]
+    let kept = intern("__nikaia_turned")
+    let local = intern(turn.local)
+    let t = intern("T")
+    let nowhere: fn(Stmt) -> Spanned[Stmt] sync = fn(node) { Spanned { node: node, span: Span::nowhere(), doc: null, attributes: [] } }
+    let push = Expr::MethodCall { receiver: Expr::Variable(kept, fresh_id()), method: intern("push"), args: [turn.value.clone()], config: [], id: fresh_id() }
+    let at_field = Expr::Binary { op: BinaryOp::Eq, lhs: Expr::Field { base: Expr::Variable(local, fresh_id()), name: intern("name"), id: fresh_id() }, rhs: Expr::LitStr { text: turn.field.clone(), id: fresh_id() }, span: Span::nowhere(), grouped: false, id: fresh_id() }
+    let pick = Expr::If { cond: at_field, then_branch: Block { stmts: [nowhere(Stmt::Expr(push))] }, else_branch: null, id: fresh_id() }
+    let each = Stmt::For { bindings: [local], shape: [], mutable: false, iter: Expr::Path([t, intern("fields")], fresh_id()), body: Block { stmts: [nowhere(Stmt::Expr(pick))] } }
+    let start = Stmt::Let { names: [kept], shape: [], mutable: true, ty: list.clone(), value: Expr::ListLit { items: [], id: fresh_id() } }
+    let stmts: Vec[Spanned[Stmt]] = [nowhere(start), nowhere(each), nowhere(Stmt::Return(Expr::Variable(kept, fresh_id())))]
+    let generics: Vec[GenericParam] = [GenericParam { name: t, bounds: [intern("Struct")] }]
+    return Item::Fn { name: intern(TURN_MARK), generics: generics, receiver: null, args: [], config: [], spread: null, ret_type: list, body: Block { stmts: stmts }, is_sync: true, sync_by: [], is_public: false, can_throw: false, is_extern: false }
+}
+
+// `__nikaia_comptime_turn[On]().remove(0)`: the one value the turn pushed.
+fn comptime_turn_call(turn: ref ComptimeTurn, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Expr sync {
+    let path: Vec[winnow_grammar::Symbol] = turn.on.split("::").map(fn(segment) { intern(segment) }).collect()
+    let on = match path.len() == 1 {
+        true => Expr::Variable(path[0], fresh_id()),
+        false => Expr::Path(path, fresh_id()),
+    }
+    let instance = Expr::Index { base: Expr::Variable(intern(TURN_MARK), fresh_id()), index: on, id: fresh_id() }
+    let called = Expr::Call { func: instance, args: [], config: [], id: fresh_id() }
+    return Expr::MethodCall { receiver: called, method: intern("remove"), args: [Expr::LitInt { value: 0, negative: false, id: fresh_id() }], config: [], id: fresh_id() }
 }
 
 /// **An earlier `comptime` that holds a `std` type's value**, as a `let` at
@@ -352,6 +438,11 @@ fn comptime_literal_of(value: ref BuildValue, intern: fn(ref String) -> winnow_g
                 inits.push(FieldInit { name: intern(field), value: value })
             }
             Expr::StructLit { name: named, fields: inits, id: fresh_id() }
+        },
+        // **A `T?` as the program writes it** (#1087): `null`, or the value.
+        BuildValue::Variant { ty, variant, payload } if ty == "Option" => match variant == "Some" && payload.len() == 1 {
+            true => comptime_literal_of(payload[0], intern) ?? return null,
+            false => Expr::LitNull(fresh_id()),
         },
         BuildValue::Variant { ty, variant, payload } => {
             let segments: Vec[winnow_grammar::Symbol] = [intern(ty), intern(variant)]

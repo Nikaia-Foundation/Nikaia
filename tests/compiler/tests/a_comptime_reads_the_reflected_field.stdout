@@ -1,2 +1,2 @@
-name name! 4
-age age! 3
+name name! 4 full_name <name>
+age age! 3 - <age>
