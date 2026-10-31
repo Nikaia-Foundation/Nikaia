@@ -1,5 +1,8 @@
 Result: done
-Batch: b1-999-mixed-tuple-views.md b2-939-shift-in-heads.md b3-1016-ref-list-result-slice.md
+Batch: b4-1016-list-view-result-slice.md b5-1002-hex-digit-built-in.md b6-1010-let-mut-literal-owned-field.md
 Owner: none
-Pushed: rejected (local HEAD of develop; rebase refused: other agents' unstaged files in the shared tree; supervisor rebases)
-Notes: first bug-lane batch (input BATCH DONE, no prior reports). All three probes re-run at c30b7bc0 and reproduce; #939 traced to the head chain in parser/mod.rs skipping the bit/shift levels, #1016 reduced to `fn f(a: ref Vec[i64]) -> ref Vec[i64] { return a }`. `wip` set on #999, #939, #1016 (status `ready` kept). Filed #1036 (ready): a tuple result holding a view of a temporary argument gets no keep (rustc), found probing #999. Held back: #947 (wider than filed, commented) until #938 of the main lane lands, both touch `check_core_stmt.nika`; #1002 lives in the pinned `winnow-grammar` (no `hex_digit` builtin there), needs a lowering mapping or a spec correction, next batch.
+Red: e064b36e (b1, #999) failed arm64 Test once; 832b07dd, which contains it, passed: a flake (NK2302 under concurrent runs, as b1/b2 reported), no fix-forward.
+b3-1016 partial: decided emit_core_types.nika belongs to the fix and ref Vec[T]? follows the same rule; patch and test draft copied to docs/briefs/bugs/b4-1016.* (b4 removes them). Comment on #1016.
+Labels: wip set on #1002, #1010 (#1016 kept); wip taken off #939 (b6c7c3b7 Fixes #939, closes on promote).
+Probed on target/fast/nikaia (08:38): #1002 "Undefined rule: 'hex_digit'", #1010 rustc Mismatched types, #1016 nullable case rustc E0308.
+Next candidates: #1014 (interface key misses inferred sync; a builder wrote around it), #1038, #1001, #1004.

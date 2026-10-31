@@ -1,0 +1,36 @@
+diff --git a/crates/nikaia-std/src/tools/emit_function.nika b/crates/nikaia-std/src/tools/emit_function.nika
+index ad65c951..d0be001d 100644
+--- a/crates/nikaia-std/src/tools/emit_function.nika
++++ b/crates/nikaia-std/src/tools/emit_function.nika
+@@ -765,6 +765,13 @@ impl EmitState {
+                             walk.trusting = fast
+                             returned = self.emit_fn_ty(world, walk, host, ty, result, key, "<result>")
+                             walk.trusting = outer
++                            // **A list handed back as a view is a slice**, as
++                            // the parameter it comes from is (#1016): `&Vec<T>`
++                            // written `&[T]`; a field's `&Vec<T>` coerces.
++                            let plain_list = emit_text(world, ty.name) == "Vec" && ty.generics.len() == 1 && !ty.is_nullable && !ty.is_slice
++                            if plain_list {
++                                returned = a_list_read_as_a_slice(returned)
++                            }
+                         }
+                     },
+                     null => {
+diff --git a/crates/nikaia-std/src/tools/emit_item.nika b/crates/nikaia-std/src/tools/emit_item.nika
+index baa28191..484bdb06 100644
+--- a/crates/nikaia-std/src/tools/emit_item.nika
++++ b/crates/nikaia-std/src/tools/emit_item.nika
+@@ -147,7 +147,12 @@ impl EmitState {
+         if foreign {
+             return self.emit_foreign_ty(world, walk, host, ty)
+         }
+-        return self.emit_item_ty(world, walk, host, ty, EmitLifetimes::Elided)
++        let written = self.emit_item_ty(world, walk, host, ty, EmitLifetimes::Elided)
++        // **A list handed back as a view is a slice**, as the impl's is (#1016).
++        if emit_text(world, ty.name) == "Vec" && ty.generics.len() == 1 && !ty.is_nullable && !ty.is_slice {
++            return a_list_read_as_a_slice(written)
++        }
++        return written
+     }
+ 
+     /// A type, with the atomic floor for any `Shared` inside it.

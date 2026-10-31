@@ -1,0 +1,31 @@
+// #1016: a `ref Vec[T]` result is a slice, as its parameter is.
+enum P { Seq(Vec[P]), Leaf(i64) }
+
+fn f(a: ref Vec[i64]) -> ref Vec[i64] {
+	return a
+}
+
+fn inner(a: ref Vec[P]) -> ref Vec[P] {
+	if a.len() == 1 {
+		match a[0] {
+			P::Seq(parts) => return parts,
+			else => {},
+		}
+	}
+	return a
+}
+
+fn apply(g: fn(ref Vec[i64]) -> ref Vec[i64], v: ref Vec[i64]) -> i64 {
+	return g(v).len()
+}
+
+fn main() {
+	let v = [1, 2]
+	println(f"{f(v).len()}")
+	let w = [P::Seq([P::Leaf(1), P::Leaf(2)])]
+	println(f"{inner(w).len()}")
+	let mut c = f(v).clone()
+	c.push(3)
+	println(f"{c.len()}")
+	println(f"{apply(f, v)}")
+}
