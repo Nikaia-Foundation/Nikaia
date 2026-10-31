@@ -47,3 +47,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y21-events.md 2064370 37
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 1152969 28
 /home/user/Nikaia/docs/briefs/yaml/y23-scalar-written.md 1055264 27
+/home/user/Nikaia/docs/briefs/yaml/y21-events.md 1968777 47
