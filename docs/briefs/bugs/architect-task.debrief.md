@@ -1,13 +1,10 @@
-1. **Most cost:** checking the probes. `target/fast/nikaia` was older than b11's commit, so I had to find the suite binary and re-run row d with it. A side-trip on row d also cost two runs: writing `String` instead of `ref String` gets NK1106 at the field, which is a different matter from the defect.
-2. **Looked up:**
-   - which binary is current;
-   - where #1057 rows b and c and #947 go wrong: the field branch of `check_core_a_lent_place_given_away`, the places that set `copied_jump_reads`, and the callers of `views_the_call_s`;
-   - whether #938, which held #947 back, was closed;
-   - the format of the previous brief, to copy its rules block.
-
-   The task brief could have said that #938 is done, and that the suite binary is the current one.
-3. **Checks:** the issue list, b11's report and debrief, the probes (#1061 a, #1057 b and c, #947 a, b, c and the typed-list row), and `where.nika`.
-   - Wasted: the first round of probes on the stale `target/fast` binary. Its #1057 results matched the suite binary, but only by luck.
-   - Not run: #947 row d, which the b14 brief tells the builder to re-probe.
-   - The push failed: `git pull --rebase` cannot run while the tree holds other agents' unstaged files, so a rejected push can never be repaired by the architect.
-4. **Change that would save the most:** the architect task should say "probe with `/home/user/nikaia-suite/target/fast/nikaia`, the last tested commit". It should also say "on a rejected push, leave the commit local; the driver pushes it", instead of an instruction to rebase that cannot work in the shared checkout.
+1. **What cost the most:** working out whether the red was real. `architect-input.txt` said only `RED`, and `suite.log` was 200 lines of repeated compile errors. I had to compare the binaries, check `gate.nika` with both of them, and do a dry run that failed on a flag I had guessed (`--dry`). Tracing #1065 cost about 8 turns. Two of those were wasted: I searched the wrong file for `emit_core_a_field_call`, which was in `emit_core_reads.nika`, and the `sed` then got an empty line number.
+2. **What I had to look up:**
+   - **How the driver runs the suite:** which binary runs `gate.nika` (a copy at `target/suite-nikaia`, made in `drive_launch`) and in which worktree. The input could have named both.
+   - **CI state:** fetched with `gh api` and not needed in the end.
+   - **The trace:** `check_core_call_kept` and `check_core_call_lent` as the model for the fix. `where.nika` gave the definition but not the parallel path, so I found it with grep.
+   - **Formats:** the brief format and `common.part`. These were cheap.
+3. **Checks run:**
+   - **Useful:** the binary `cmp`, `check` of `gate.nika`, the probes for rows a, b and c, and the one-view and kept-call variants that narrowed the cause.
+   - **Wasted:** the `gate.nika` dry run, the CI run listing, and the push attempt. The push could only fail, because HEAD held b12's untested commit, and I could have seen that from `git log origin/develop..HEAD` before trying.
+4. **Change that would have saved the most:** a `gate-error` (the gate failing to compile, as opposed to a failing test) should get its own stop line, `GATE-ERROR`, with the first error and the sha of the suite binary. The driver should then re-run the suite once with a freshly built binary before it starts the architect. Separately, the architect task should say: "with unpushed builder commits below yours, do not push; the driver pushes".
