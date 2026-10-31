@@ -8,7 +8,7 @@
 
 ## How a new session restarts the lane
 
-1. `git fetch origin develop && git checkout -B develop origin/develop` (CLAUDE.md); check p12 (ae09d77, "every length is an i64") is on `origin/develop`: at landing its suite was running and it was local only (`unpushed.txt`). If not pushed, the driver's next suite run pushes it.
+1. `git fetch origin develop && git checkout -B develop origin/develop` (CLAUDE.md); p1-p12 and the landing run are on `origin/develop` (suite green at 8d310d25, pushed fb930117).
 2. `cargo build --profile fast -p nikaia`.
 3. Queue the next brief: write `p13-1053-sequence-counts.md` into `batch.txt` (re-run its probe first: written on the 21:11 binary), or let the architect plan: first remove the *Landing* section from `architect-task.md`, or its run plans nothing.
 4. `target/fast/nikaia run scripts/drive.nika -- docs/briefs/prover --max 8 --ignore-ci-red` with `run_in_background`.
@@ -58,4 +58,4 @@ Lane start (p1): 1,929 / 1,891 left. Claims: 0 asserts in the tools. Panics: the
 
 ## CI and the tree (landing, 2026-10-31)
 
-p1-p11 and p9 pushed; p12 (ae09d77) committed locally, its suite running at landing. `lowered/project_members.rs` is residue (#1060): never stage it. Defects this lane found went to the bug lane: #1074 (`opt ?? other` over `ref T`, p6), #1081 second shape (view of a temporary's field, p9). Owed to the supervisor (version heading): the `Changelog:` lines of p5-p12; ADR-385 lands with p12's (D1) and #1103's (D2) Part III text.
+p1-p12 pushed after a green suite. `lowered/project_members.rs` is residue (#1060): never stage it. Defects this lane found went to the bug lane: #1074 (`opt ?? other` over `ref T`, p6), #1081 second shape (view of a temporary's field, p9). Version: p2, p5-p12 raised in 0.0.1327 (`released.txt` lists the released reports; #1111 for `release.nika`); ADR-385 lands with p12's (D1) and #1103's (D2) Part III text.
