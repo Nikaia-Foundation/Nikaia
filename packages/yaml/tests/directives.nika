@@ -1,0 +1,82 @@
+// Directives (YAML 1.2.2 6.8): `%YAML` of major version 1, `%TAG` giving a
+// handle its prefix for its document only, a reserved directive ignored; a
+// directive needs `---`. A tag is kept as written. The references are the
+// specification's examples named beside each line (the yaml-test-suite's
+// "Spec Example" cases).
+use yaml
+
+fn props(n: ref yaml::Node) -> String {
+	let a = match n.anchor {
+		null => ""
+		x => f"&{x} "
+	}
+	let t = match n.tag {
+		null => ""
+		x => f"{x} "
+	}
+	return f"{a}{t}"
+}
+
+fn show(n: ref yaml::Node) -> String {
+	let p = props(n)
+	return match n.value {
+		yaml::Value::Null => f"{p}null"
+		yaml::Value::Bool(b) => f"{p}bool({b})"
+		yaml::Value::Int(t) => f"{p}int({t})"
+		yaml::Value::Float(t) => f"{p}float({t})"
+		yaml::Value::Str(s) => f"{p}str({yaml::text(s).replace("\n", "\\n")})"
+		yaml::Value::Alias(a) => f"{p}alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"{p}[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{p}{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println(f"error {error.line}:{error.column}")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+fn main() {
+	// a reserved directive (example 6.13)
+	line("%FOO  bar baz # Should be ignored\n              # with a warning.\n--- \"foo\"\n")
+	// a later minor version read as 1.2 (example 6.14), and 1.1
+	line("%YAML 1.3 # Attempt parsing\n           # with a warning\n---\n\"foo\"\n")
+	line("%YAML 1.1\n--- yes\n")
+	// another major version
+	line("%YAML 2.0\n--- foo\n")
+	// two %YAML directives (example 6.15)
+	line("%YAML 1.2\n%YAML 1.1\n--- foo\n")
+	// %TAG (example 6.16); the secondary handle given another prefix, so
+	// `!!int` is no integer (example 6.19)
+	line("%TAG !yaml! tag:yaml.org,2002:\n---\n!yaml!str \"foo\"\n")
+	line("%TAG !yaml! tag:yaml.org,2002:\n---\n!yaml!int x\n")
+	line("%TAG !! tag:example.com,2000:app/\n---\n!!int 1 - 3 # Interval, not integer\n")
+	// two %TAG directives for one handle (example 6.17)
+	line("%TAG ! !foo\n%TAG ! !foo\n--- bar\n")
+	// tag handles (example 6.20, 6.22)
+	line("%TAG !e! tag:example.com,2000:\n---\n!e!foo \"bar\"\n")
+	line("%TAG !e! tag:example.com,2000:app/\n---\n- !e!foo \"bar\"\n")
+	// a named handle no directive declares
+	line("--- !e!foo bar\n")
+	// a directive holds for its document only, after `...` and after `---`
+	line("%TAG !e! tag:a:\n--- !e!x 1\n...\n--- !e!y 2\n")
+	line("%TAG !e! tag:a:\n--- !e!x 1\n...\n%TAG !e! tag:b:\n--- !e!y 2\n")
+	line("%TAG !e! tag:a:\n--- !e!x 1\n--- !e!y 2\n")
+	// a directive needs `---`
+	line("%YAML 1.2\nfoo\n")
+	// inside a document a `%` line is no directive: here it continues a plain
+	// scalar (yaml-test-suite XLQ9)
+	line("a\n%YAML 1.2\n--- b\n")
+}

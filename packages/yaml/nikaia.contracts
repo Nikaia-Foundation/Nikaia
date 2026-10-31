@@ -22,10 +22,10 @@ signature = "(ref self) -> String"
 [fn."Yaml::stream"]
 sync = true
 throws = ["ParseError"]
-keeps = ["input"]
+keeps = ["input", "lim"]
 touches = []
 views = ["input: borrowed", "<result>: borrowed"]
-signature = "(input: ?) -> Vec[Node]"
+signature = "(input: ?, lim: Limits) -> Vec[Node]"
 
 [fn."as_f64"]
 pub = true
@@ -67,6 +67,24 @@ signature = "(k: TagKind) -> bool"
 sync = true
 touches = []
 signature = "(n: i64) -> String"
+
+[fn."declared"]
+sync = true
+touches = []
+views = ["ds: borrowed", "t: borrowed"]
+signature = "(ds: ref Vec[Dir], t: ref String) -> bool"
+
+[fn."default_limits"]
+pub = true
+sync = true
+touches = []
+signature = "() -> Limits"
+
+[fn."depth_of"]
+sync = true
+touches = []
+views = ["n: borrowed"]
+signature = "(n: ref Node) -> i64"
 
 [fn."digits_in"]
 sync = true
@@ -119,6 +137,12 @@ touches = []
 views = ["raw: borrowed"]
 signature = "(raw: ref String, single: bool) -> String"
 
+[fn."handles_once"]
+sync = true
+touches = []
+views = ["ds: borrowed"]
+signature = "(ds: ref Vec[Dir]) -> bool"
+
 [fn."hex_value"]
 sync = true
 touches = []
@@ -127,8 +151,8 @@ signature = "(x: scalar) -> i64"
 [fn."is_core"]
 sync = true
 touches = []
-views = ["s: borrowed", "name: borrowed"]
-signature = "(s: String, name: String) -> bool"
+views = ["ds: borrowed", "s: borrowed", "name: borrowed"]
+signature = "(ds: ref Vec[Dir], s: String, name: String) -> bool"
 
 [fn."is_escape"]
 sync = true
@@ -225,15 +249,27 @@ keeps = ["c"]
 touches = []
 signature = "(c: scalar) -> String"
 
+[fn."pair_fits"]
+sync = true
+touches = []
+views = ["k: borrowed", "t: borrowed"]
+signature = "(left: i64, k: ref Node, t: ref Node?) -> bool"
+
 [fn."parse"]
 pub = true
 sync = true
 throws = ["Error"]
 returns = "ref(input)"
-keeps = ["input"]
+keeps = ["input", "limits"]
 touches = []
 views = ["input: borrowed", "<result>: borrowed"]
-signature = "(input: ref Bytes) -> Vec[Node]"
+signature = "(input: ref Bytes; limits: Limits = Limits { alias_nodes: 10000, bytes: 4294967295, depth: 128 }) -> Vec[Node]"
+
+[fn."place_of"]
+sync = true
+touches = []
+views = ["input: borrowed"]
+signature = "(input: ref Bytes, offset: i64) -> (i64, i64)"
 
 [fn."plain_char"]
 sync = true
@@ -279,8 +315,8 @@ signature = "(cs: ref Vec[scalar], from: i64) -> i64"
 [fn."tag_kind"]
 sync = true
 touches = []
-views = ["t: borrowed"]
-signature = "(t: ref String?) -> TagKind"
+views = ["ds: borrowed", "t: borrowed"]
+signature = "(ds: ref Vec[Dir], t: ref String?) -> TagKind"
 
 [fn."text"]
 pub = true
@@ -289,6 +325,12 @@ keeps = ["s"]
 touches = []
 views = ["s: borrowed"]
 signature = "(s: ref Scalar) -> String"
+
+[fn."yaml_once"]
+sync = true
+touches = []
+views = ["ds: borrowed"]
+signature = "(ds: ref Vec[Dir]) -> bool"
 
 [impl."Error for ConvertError"]
 
@@ -304,6 +346,10 @@ fields = ["pub message: String"]
 [type."Ctx"]
 variants = ["BlockIn", "BlockOut"]
 
+[type."Dir"]
+fields = ["name: ref String", "handle: ref String", "prefix: ref String"]
+tethered = ["name", "handle", "prefix"]
+
 [type."Entry"]
 pub = true
 fields = ["pub key: Node", "pub value: Node"]
@@ -318,6 +364,10 @@ fields = ["indent: i64", "chomp: Chomp"]
 
 [type."Kind"]
 variants = ["Null", "True", "False", "Int", "Float", "Str"]
+
+[type."Limits"]
+pub = true
+fields = ["pub depth: i64", "pub alias_nodes: i64", "pub bytes: i64"]
 
 [type."Node"]
 pub = true

@@ -1,0 +1,10 @@
+{str(explicit key): null, str(block key\n): [str(one), str(two)]}
+{[str(Detroit Tigers), str(Chicago cubs)]: [str(2001-07-23)], [str(New York Yankees), str(Atlanta Braves)]: [str(2001-07-02), str(2001-08-12), str(2001-08-14)]}
+!!set {str(Mark McGwire): null, str(Sammy Sosa): null, str(Ken Griff): null}
+[{str(sun): str(yellow)}, {{str(earth): str(blue)}: {str(moon): str(white)}}]
+{str(explicit): str(entry), str(implicit): str(entry), null: null}
+[{str(foo bar): str(baz)}]
+{str(a): int(1), &k [str(x), str(y)]: !!str str(2), str(b): alias(k)}
+{str(?x): int(1)}
+{str(a): str(b), null: str(c)}
+{null: str(a), null: str(b)}

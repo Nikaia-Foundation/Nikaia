@@ -1,0 +1,48 @@
+// Limits (ADR yaml-1 D8): nesting deeper than `depth` (128 by default) and
+// input longer than `bytes` are refused with an error naming the limit, its
+// value and the place; `parse(input; limits: l)` raises or lowers them.
+// YAML 1.2.2 sets no limit; the nested flow sequences are built for this test.
+use yaml
+
+fn run(text: String, limits: yaml::Limits) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input; limits: limits) catch {
+		println(f"error {error.line}:{error.column}: {error.message}")
+		return
+	}
+	println(f"ok, {docs.len()} document(s)")
+}
+
+fn run_default(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println(f"error {error.line}:{error.column}: {error.message}")
+		return
+	}
+	println(f"ok, {docs.len()} document(s)")
+}
+
+fn nested(n: i64) -> String {
+	return f"{"[".repeat(n)}{"]".repeat(n)}\n"
+}
+
+fn main() {
+	let d = yaml::default_limits()
+	println(f"defaults: depth {d.depth}, alias nodes {d.alias_nodes}, bytes {d.bytes}")
+	// 128 nested flow sequences are within the default depth, 129 are not
+	run(nested(128), yaml::default_limits())
+	run(nested(129), yaml::default_limits())
+	// limits left out are the defaults
+	run_default(nested(129))
+	// a raised depth accepts them
+	run(nested(129), yaml::Limits { depth: 200, alias_nodes: 10000, bytes: 4294967295 })
+	// block collections count too
+	run("- - - x\n", yaml::Limits { depth: 2, alias_nodes: 10000, bytes: 4294967295 })
+	run("a:\n  b: {c: x}\n", yaml::Limits { depth: 3, alias_nodes: 10000, bytes: 4294967295 })
+	run("a:\n  b: {c: x}\n", yaml::Limits { depth: 2, alias_nodes: 10000, bytes: 4294967295 })
+	run("a:\n  b:\n    c: x\n", yaml::Limits { depth: 2, alias_nodes: 10000, bytes: 4294967295 })
+	run("- a: [x]\n", yaml::Limits { depth: 1, alias_nodes: 10000, bytes: 4294967295 })
+	// input longer than the size limit
+	run("a: 1\nb: 2\n", yaml::Limits { depth: 128, alias_nodes: 10000, bytes: 10 })
+	run("a: 1\nb: 2\n", yaml::Limits { depth: 128, alias_nodes: 10000, bytes: 8 })
+}

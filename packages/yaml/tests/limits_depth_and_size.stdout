@@ -1,0 +1,12 @@
+defaults: depth 128, alias nodes 10000, bytes 4294967295
+ok, 1 document(s)
+error 1:130: nesting deeper than the depth limit of 128
+error 1:130: nesting deeper than the depth limit of 128
+ok, 1 document(s)
+error 1:5: nesting deeper than the depth limit of 2
+ok, 1 document(s)
+error 2:7: nesting deeper than the depth limit of 2
+error 3:5: nesting deeper than the depth limit of 2
+error 1:3: nesting deeper than the depth limit of 1
+ok, 1 document(s)
+error 2:4: input longer than the size limit of 8 bytes

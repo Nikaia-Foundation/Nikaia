@@ -1,0 +1,73 @@
+// Explicit keys (YAML 1.2.2 8.2.2, 7.4): `? key` and `: value`, in block
+// and in flow; a key may be any node, a collection too. The references are
+// the specification's examples named beside each line (the yaml-test-suite's
+// "Spec Example" cases).
+use yaml
+
+fn props(n: ref yaml::Node) -> String {
+	let a = match n.anchor {
+		null => ""
+		x => f"&{x} "
+	}
+	let t = match n.tag {
+		null => ""
+		x => f"{x} "
+	}
+	return f"{a}{t}"
+}
+
+fn show(n: ref yaml::Node) -> String {
+	let p = props(n)
+	return match n.value {
+		yaml::Value::Null => f"{p}null"
+		yaml::Value::Bool(b) => f"{p}bool({b})"
+		yaml::Value::Int(t) => f"{p}int({t})"
+		yaml::Value::Float(t) => f"{p}float({t})"
+		yaml::Value::Str(s) => f"{p}str({yaml::text(s).replace("\n", "\\n")})"
+		yaml::Value::Alias(a) => f"{p}alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"{p}[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{p}{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println(f"error {error.line}:{error.column}")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+fn main() {
+	// explicit block entries, a block scalar as key, a compact sequence as
+	// value (example 8.17)
+	line("? explicit key # Empty value\n? |\n  block key\n: - one # Explicit compact\n  - two # block value\n")
+	// collections as keys (example 2.11)
+	line("? - Detroit Tigers\n  - Chicago cubs\n: - 2001-07-23\n\n? [ New York Yankees,\n    Atlanta Braves ]\n: [ 2001-07-02, 2001-08-12,\n    2001-08-14 ]\n")
+	// a set: keys without values (example 2.25)
+	line("--- !!set\n? Mark McGwire\n? Sammy Sosa\n? Ken Griff\n")
+	// compact mappings, an explicit key that is a mapping (example 8.19)
+	line("- sun: yellow\n- ? earth: blue\n  : moon: white\n")
+	// explicit and implicit entries, and an empty one, in a flow mapping
+	// (example 7.16)
+	line("{\n? explicit: entry,\nimplicit: entry,\n?\n}\n")
+	// an explicit single pair in a flow sequence (example 7.20)
+	line("[\n? foo\n bar : baz\n]\n")
+	// an explicit key beside implicit ones, with properties
+	line("a: 1\n? &k [x, y]\n: !!str 2\nb: *k\n")
+	// `?` with no space after it starts a plain scalar
+	line("?x: 1\n")
+	// a value with no key before it is an entry with an empty key, null
+	// (yaml-test-suite 2JQS)
+	line("? a\n: b\n: c\n")
+	line(": a\n: b\n")
+}

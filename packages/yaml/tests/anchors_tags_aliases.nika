@@ -65,7 +65,7 @@ fn main() {
 	line("- !!str 12\n- !!int \"12\"\n- !!float '1.5'\n- !!bool true\n- !!null ''\n- !!str true\n- !!str null\n")
 	// a local tag and a named handle, kept as written; the scalar resolves as
 	// if the tag were not there
-	line("- !local x\n- !e!tag%21 7\n- !foo \"bar\"\n")
+	line("%TAG !e! tag:example.com,2000:app/\n---\n- !local x\n- !e!tag%21 7\n- !foo \"bar\"\n")
 	// properties alone are an empty node: null, with `!!str` an empty string
 	// (example 7.2)
 	line("{\n  foo : !!str,\n  !!str : bar,\n}\n")
