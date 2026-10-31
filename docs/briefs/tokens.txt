@@ -192,3 +192,4 @@
 /home/user/Nikaia/docs/briefs/b938-loop-copy-inferred-list.md 230032 4
 /home/user/Nikaia/docs/briefs/architect-task.md 2423145 56
 /home/user/Nikaia/docs/briefs/bred2-kept-lambda-test.md 162061 7
+/home/user/Nikaia/docs/briefs/b1034a-kept-lambda-captured-fn.md 293929 7
