@@ -289,9 +289,7 @@ holds. What happened is in `git log` and the issues.*
   host methods for O1. After GR, fold `ComptimeRan` (`comptime_tree.nika`, a
   copy of `Wall` plus `Answer`) into `CheckWall`. Also owed, each its own
   brief: R0 (#921), `scripts/plan_rows.nika`, the driver's CI check.
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b6 #1010, b7 #1016, b8 #1044,
-  b9 #1055 (`Blocks: bt-build-time.md`), all `wip`. `ready` defects no lane
-  holds: #1048, #1038, #958, #1014.
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): b9 #1055 (`Blocks: bt-build-time.md`), b10 #1057 step 1 (b8's `Found:`), b11 #1048, all `wip`. b6-b8 are on develop (#1010, #1016 part, #1044; #1044 keeps `wip` until promote closes it). `ready` defects no lane holds: #1038, #958, #1014, #947, #927. #1057 step 2 (rows b, c) after b9. b8's gate red was flakiness of whole-package runs while other agents rebuild `target/fast/nikaia` (`NK2302` on `tests/compiler/src/main.nika`, settings disagree): the driver's suite needs a binary of its own (main session).
 * **yaml lane**: #928, #929, #604 (`wip`).
 * **Waiting on the owner** (`decision`): #1047, #1042. Owed version raise for
   b1046 (see its report's Changelog line) if the supervisor has not done it.
