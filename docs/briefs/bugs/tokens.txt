@@ -16,3 +16,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b10-1057-field-of-an-element-read.md 139584 3
 /home/user/Nikaia/docs/briefs/qa-task.md 630843 25
 /home/user/Nikaia/docs/briefs/bugs/b11-1048-two-view-function-type.md 286853 4
+/home/user/Nikaia/docs/briefs/bugs/b12-1061-pausing-two-view-field.md 175733 4
