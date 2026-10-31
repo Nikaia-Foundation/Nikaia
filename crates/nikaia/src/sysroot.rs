@@ -773,6 +773,13 @@ fn lower_tools_files_cached(
     rust.push_str(
         "#[allow(unused_imports)]\nuse nikaia_std::bytes::{ByteCopy as _, ByteReads as _};\n",
     );
+    // **The prelude's method traits** (Part I 1.3): a trait method such as
+    // `d.in_nanos()` or `x.low_bits(n)` needs its trait in scope.
+    rust.push_str(
+        "#[allow(unused_imports)]\nuse nikaia_std::time::{DurationExt as _, DurationIn as _, InstantSince as _};\n",
+    );
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::num::LowBits as _;\n");
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::list::ListExt as _;\n");
     imports.sort();
     for import in imports {
         rust.push_str("#[allow(unused_imports)]\n");
