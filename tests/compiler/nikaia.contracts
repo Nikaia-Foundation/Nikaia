@@ -18,7 +18,7 @@ signature = "()"
 pub = true
 sync = "inferred"
 touches = []
-signature = "[T](n: i64) -> Vec[T]"
+signature = "[T](_n: i64) -> Vec[T]"
 
 [fn."places"]
 pub = true
