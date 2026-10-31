@@ -1,10 +1,9 @@
-1. **What cost the most:** working out whether the red was real. `architect-input.txt` said only `RED`, and `suite.log` was 200 lines of repeated compile errors. I had to compare the binaries, check `gate.nika` with both of them, and do a dry run that failed on a flag I had guessed (`--dry`). Tracing #1065 cost about 8 turns. Two of those were wasted: I searched the wrong file for `emit_core_a_field_call`, which was in `emit_core_reads.nika`, and the `sed` then got an empty line number.
-2. **What I had to look up:**
-   - **How the driver runs the suite:** which binary runs `gate.nika` (a copy at `target/suite-nikaia`, made in `drive_launch`) and in which worktree. The input could have named both.
-   - **CI state:** fetched with `gh api` and not needed in the end.
-   - **The trace:** `check_core_call_kept` and `check_core_call_lent` as the model for the fix. `where.nika` gave the definition but not the parallel path, so I found it with grep.
-   - **Formats:** the brief format and `common.part`. These were cheap.
-3. **Checks run:**
-   - **Useful:** the binary `cmp`, `check` of `gate.nika`, the probes for rows a, b and c, and the one-view and kept-call variants that narrowed the cause.
-   - **Wasted:** the `gate.nika` dry run, the CI run listing, and the push attempt. The push could only fail, because HEAD held b12's untested commit, and I could have seen that from `git log origin/develop..HEAD` before trying.
-4. **Change that would have saved the most:** a `gate-error` (the gate failing to compile, as opposed to a failing test) should get its own stop line, `GATE-ERROR`, with the first error and the sha of the suite binary. The driver should then re-run the suite once with a freshly built binary before it starts the architect. Separately, the architect task should say: "with unpushed builder commits below yours, do not push; the driver pushes".
+1. **Most turns and time:** sorting out the driver's state. `architect-input.txt` held only the CUT line, while `qa-input.txt`, `suite.log`, an empty `RED` marker and `qa-task.md.report.md` each showed a different moment (red at 18:07, green at 18:25). I needed about four reads to work out that the red was already fixed and pushed. The longest single step was re-running the #1060 probe in a scratch worktree, since `lower-std` takes minutes. The first attempt failed because the patch from the old brief no longer applied.
+
+2. **What I looked up:** whether an empty `RED` means "no red". I deleted it, then grepped `agent.nika` and put it back, which was a wasted turn. I also had to check whether b12's commit had reached `origin/develop` and why #1061 was still open (it closes only on promote). And I looked up whether 84fbfb99 had made #1060 go away; it had not, it only rewrote that one file. The input could have stated all of this: the suite result after the cut, what is pushed, and what each marker file means.
+
+3. **Checks I ran:**
+   - Useful: the issue labels; the other lanes' `batch.txt`; the b15 probe on today's develop, which found the stale apply line and the stale note about leftover files; `git log` against origin.
+   - Wasted: deleting and restoring `RED`; the `git apply` attempt; the push and the `pull --rebase`.
+
+4. **The change that would have saved the most:** the architect task's push rule (step 8) cannot work in the shared checkout. Other agents' unstaged files always block `git pull --rebase`, so every architect push that is rejected ends as `Pushed: rejected`. Step 8 should say: commit locally, report `Pushed: local <sha>`, and let `drive_push`, which rebases with `--autostash`, push it. Second, `architect-input.txt` should also carry the latest suite verdict and its sha, and the list of unpushed commits.
