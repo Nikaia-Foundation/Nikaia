@@ -2,3 +2,4 @@
 /home/user/Nikaia/docs/briefs/prover/p1-1053-measure.md 660779 8
 /home/user/Nikaia/docs/briefs/prover/p2-1054-in-loop-claims.md 628661 5
 /home/user/Nikaia/docs/briefs/prover/architect-task.md 1633548 32
+/home/user/Nikaia/docs/briefs/qa-task.md 1513838 42
