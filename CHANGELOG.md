@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1326] — 2026-10-31
+
+**Grammars build a struct from keyed members; a function takes a reflected field (#1019)**
+- A function may take a reflected field, `fn f(field: meta::Field)`: each call in an unrolled turn calls a copy made for that field, the field is not moved, and `meta::Field` anywhere but as a parameter's type is NK1320.
+- `members[S](key, value, sep; null:, unknown:)` in a grammar builds the struct `S` from keyed members by the mapping rule of ADR-grammar-2 D3, D5: a missing field takes its default or null, a member given twice or an unknown member fails, with a message naming the field or key.
+- Part II 10.2: a `T?` crosses from build time wherever `T` does (`null` is a constant), decided for #1087; its build follows.
+
 ## [0.0.1325] — 2026-10-31
 
 **Grammar rules choose a pattern by a type's kind**
