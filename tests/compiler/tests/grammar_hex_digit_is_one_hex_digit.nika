@@ -1,0 +1,49 @@
+// `hex_digit` is one hexadecimal digit, a `scalar`; `hex_digit{2}` is exactly
+// two and `hex_digit+` a run, both text (Part II 10.8, #1002). Either case is
+// taken, over text and over bytes, and a letter past `f` is not a digit.
+
+grammar One {
+	rule WS = "" -> { }
+	entry rule top -> String = "x" h:hex_digit eof -> { f"{h}" }
+}
+
+grammar Pair {
+	rule WS = "" -> { }
+	rule HEX -> String = d:hex_digit{2} -> { d }
+	entry rule top -> String = "#" r:HEX g:HEX b:HEX eof -> { f"{r} {g} {b}" }
+}
+
+grammar Run {
+	rule WS = "" -> { }
+	entry rule top -> String = "0x" d:hex_digit+ eof -> { d }
+}
+
+fn main() {
+	for s in ["x7", "xa", "xF", "xg", "x"] {
+		let h = One::top(s) catch {
+			println(f"{s}: error")
+			continue
+		}
+		println(f"{s}: {h}")
+	}
+	let p = Pair::top("#ff00aA") catch {
+		println("error")
+		return
+	}
+	println(p)
+	let run = Run::top("0xDEADbeef") catch {
+		println("error")
+		return
+	}
+	println(run)
+	let bytes = One::top(Bytes("xC".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(bytes)
+	let short = Pair::top("#ff00a") catch {
+		println("#ff00a: error")
+		return
+	}
+	println(short)
+}

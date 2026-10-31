@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1318] — 2026-10-31
+
+**Grammar: `hex_digit` is one hexadecimal digit (#1002)**
+- `hex_digit`, listed in Part II 10.8, reached the engine as `Undefined rule`. winnow-grammar now has it as it has `digit`: one scalar of `0-9a-fA-F`, `hex_digit{2}` a fixed-width run on the same fast path, `hex_digit+` a run as text, expected as "a hex digit". The pinned rev moves to `4f8e6691`.
+
 ## [0.0.1317] — 2026-10-31
 
 **check, emit: type kinds, a reflected field's .ty, match on a kind (ADR-330 D2-D6, #859 steps 3, 1, 4)**
