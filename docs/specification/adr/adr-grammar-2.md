@@ -202,8 +202,10 @@ hand-written reader is retired.
 
 ```nika
 let c = json::read[Contact](bytes)        // no NK1233: nothing else says what T is
-let n = parse[Config](text)               // still warning[NK1233] where the form is not needed
+let n = id[i64](3)                        // still warning[NK1233]: the argument already says T
 ```
+
+*The example was corrected by the owner on 2026-10-31: `parse[Config](text)` is not warned under this rule, since no value argument says `T`.*
 
 ADR-330 D9's `NK1233` is narrowed to calls where a value argument's type could
 have said the type. `read(Contact, bytes)`, a type in a value's place, stays

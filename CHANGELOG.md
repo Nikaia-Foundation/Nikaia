@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1320] — 2026-10-31
+
+**spec: NK1233's example is one a value already says (ADR-grammar-2 D11, ADR-330 D9)**
+- NK1233's example is now `id[i64](3)`: `parse[Config](text)`, shown as warned in ADR-330 D9, ADR-grammar-2 D11 and Part III, is not warned under D11's rule (no value argument says `T`), as built at 0.0.1319. The rule stands; the examples are corrected (owner, 2026-10-31).
+
 ## [0.0.1319] — 2026-10-31
 
 **parser, check, emit: a type as an argument, type arguments at a call (ADR-330 D1, D9, ADR-grammar-2 D11, #859 steps 2, 8)**
