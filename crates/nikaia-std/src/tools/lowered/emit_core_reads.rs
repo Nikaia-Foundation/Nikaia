@@ -290,7 +290,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_index_read<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, index: &Expr, deref: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let slicing = self.slices(index);
-        if deref && !slicing { out.push("*"); }
+        let shares = deref && !slicing && self.facts.kept_fn_reads.contains(&node_key(base));
+        if deref && !slicing && !shares { out.push("*"); }
         let nested = self.emit_read_nested(world, &walk, &scope.function, base);
         if !slicing && self.proven_indices.contains(&node_key(base)) && self.map_key(index, false).is_none() {
             out.push("unsafe { nikaia_std::proven::read(");
@@ -302,6 +303,7 @@ impl EmitState {
             if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
             out.push(") as usize) }");
             if self.reads_through_handle(world, &walk, &scope.function, base) { out.push(".get()"); }
+            if shares { out.push(".clone()"); }
             return Ok(());
         }
         if slicing && self.proven_indices.contains(&node_key(base)) && self.map_key(index, false).is_none() && !nested && !self.reads_through_handle(world, &walk, &scope.function, base) {
@@ -364,6 +366,7 @@ impl EmitState {
         }
         out.push(")");
         if self.reads_through_handle(world, &walk, &scope.function, base) { out.push(".get()"); }
+        if shares { out.push(".clone()"); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

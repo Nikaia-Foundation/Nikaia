@@ -390,7 +390,11 @@ impl EmitState {
     /// the base of a read is written (0.0.238).
     pub fn emit_core_index_read[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, index: ref Expr, deref: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let slicing = self.slices(index)
-        if deref && !slicing {
+        // **A function value read by index is a copy** (Part I, #1018): the
+        // list keeps its `Kept`, and the read is a clone of that handle, so
+        // both share the one closure.
+        let shares = deref && !slicing && self.facts.kept_fn_reads.contains(node_key(base))
+        if deref && !slicing && !shares {
             out.push("*")
         }
         let nested = self.emit_read_nested(world, walk, scope.function, base)
@@ -414,6 +418,9 @@ impl EmitState {
             out.push(") as usize) }")
             if self.reads_through_handle(world, walk, scope.function, base) {
                 out.push(".get()")
+            }
+            if shares {
+                out.push(".clone()")
             }
             return
         }
@@ -519,6 +526,9 @@ impl EmitState {
         // exactly as for a list of plain structs.
         if self.reads_through_handle(world, walk, scope.function, base) {
             out.push(".get()")
+        }
+        if shares {
+            out.push(".clone()")
         }
     }
 

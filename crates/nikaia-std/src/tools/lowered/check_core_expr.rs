@@ -223,7 +223,15 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::Break(_) => check_core_expr_jump(state, "break", span),
         Expr::Continue(_) => check_core_expr_jump(state, "continue", span),
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); check_core_ops_coalesce(state, world, host, expr, value, fallback, span) },
-        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); check_core_index(state, world, host, expr, base, index, span) },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            let read = check_core_index(state, world, host, expr, base, index, span);
+            match read {
+                Ty::Fn { .. } => { state.facts.kept_fn_reads.insert(id_of(base) as i64); },
+                _ => { },
+            }
+            read
+        },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); check_core_range(state, world, host, start, end, span) },
         Expr::TryCatch { expr: guarded, handler, .. } => { let guarded = nikaia_std::boxed::open(guarded); check_core_flow_try_catch(state, world, host, expr, guarded, handler, span) },
         Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); check_core_ops_spawn(state, world, host, body, span) },
