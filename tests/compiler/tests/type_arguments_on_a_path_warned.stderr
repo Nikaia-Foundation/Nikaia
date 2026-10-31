@@ -1,0 +1,8 @@
+warning[NK1233]: `compiler_tests::same[…]` names a type the arguments of the call already say.
+  --> tests/type_arguments_on_a_path_warned.nika:7:2
+   |
+ 7 | 	println(compiler_tests::same[i64](3))
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Brackets after a function's name are allowed while their uses are collected; here the arguments already say the type.
+   = help: Leave the brackets out, `compiler_tests::same(…)`, or add your use case to https://github.com/Nikaia-Language/Nikaia/issues/514.

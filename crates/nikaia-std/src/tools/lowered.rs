@@ -2146,7 +2146,7 @@ pub mod check_core_args {
 }
 pub mod check_core_call {
     #[allow(unused_imports)]
-    pub use super::{check_core_free_call, check_core_call, check_core_tuple};
+    pub use super::{check_core_free_call, signature_type_variables, check_core_call, check_core_tuple};
 }
 pub mod check_core_call_on {
     #[allow(unused_imports)]

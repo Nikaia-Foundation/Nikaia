@@ -471,6 +471,19 @@ impl EmitState {
         // **An `assert` is a claim checked here** (ADR-269 D2, D4) unless it was
         // proved, and the failure is written with what only this compiler knew -
         // the claim as written and its operands by name.
+        // **`path::f[T](…)` is the call to the path** (ADR-330 D9,
+        // ADR-grammar-2 D11), its types written after the callee's name.
+        match func {
+            Expr::Index { base, index, .. } => {
+                let types: String = self.emit_call_path_types(world, base, index) ?? ""
+                if types != "" {
+                    walk.path_types = types
+                    self.emit_core_call_inner(world, walk, out, host, base, args, config, unchecked, depth, flow, scope)
+                    return
+                }
+            },
+            else => {},
+        }
         if self.emit_call_assert(world, walk, out, host, func, args, config, depth, flow, scope) {
             return
         }

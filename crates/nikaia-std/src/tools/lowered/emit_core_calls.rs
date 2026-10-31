@@ -345,6 +345,18 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_call_inner<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        match func {
+            Expr::Index { base, index, .. } => {
+                let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                let types: String = nikaia_std::index::or(self.emit_call_path_types(world, base, index), || "".into());
+                if types != "" {
+                    walk.path_types = types;
+                    self.emit_core_call_inner(world, walk, out, host, base, args, config, unchecked, depth, flow, scope)?;
+                    return Ok(());
+                }
+            },
+            _ => { },
+        }
         if self.emit_call_assert(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
         if self.emit_call_kept(world, walk, out, host, func, args, depth, flow, scope)? { return Ok(()); }
         if self.emit_call_grammar(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }

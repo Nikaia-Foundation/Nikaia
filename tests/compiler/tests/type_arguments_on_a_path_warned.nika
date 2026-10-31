@@ -1,0 +1,8 @@
+// `path::f[T](…)` where a value argument could have said the type is warned
+// with `NK1233`, as a bare name is (ADR-grammar-2 D11, #514).
+
+use compiler_tests
+
+fn main() {
+	println(compiler_tests::same[i64](3))
+}

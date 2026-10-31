@@ -262,11 +262,15 @@ pub struct EmitWalk {
     /// argument decides whether it is copied, so `emit_expr` does not
     /// clone it again; `-1` for none.
     pub uncopied: i64,
+    /// **The type arguments of a call reached by a path** (ADR-330 D9,
+    /// ADR-grammar-2 D11), `::<T>`, written after the callee's name by the
+    /// call being written; `""` for none.
+    pub path_types: String,
 }
 
 impl EmitWalk {
     /// Nothing written yet.
     pub fn fresh() -> EmitWalk {
-        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", dyn_code: false, nonnegative: collections::BTreeMap(), specialising: null, slotted: false, at_field: null, field_names: collections::BTreeMap(), field_types: collections::BTreeMap(), type_names: collections::BTreeMap(), code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1 }
+        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", dyn_code: false, nonnegative: collections::BTreeMap(), specialising: null, slotted: false, at_field: null, field_names: collections::BTreeMap(), field_types: collections::BTreeMap(), type_names: collections::BTreeMap(), code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1, path_types: "" }
     }
 }

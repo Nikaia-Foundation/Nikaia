@@ -1,0 +1,13 @@
+// `path::f[T](…)` fills the type parameters in order, as a bare name does
+// (ADR-330 D9, ADR-grammar-2 D11, #1019): a function of another package and
+// one of `std`, whose `T` no value parameter names, so no warning is given.
+
+use compiler_tests
+use std::channel
+
+fn main() {
+	let found = compiler_tests::none_of[String](2)
+	println(f"{found.len()}")
+	let (_tx, _rx) = channel::bounded[i64](4)
+	println("made")
+}

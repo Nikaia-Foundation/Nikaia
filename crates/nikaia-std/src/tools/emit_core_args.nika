@@ -878,6 +878,9 @@ fn emit_call_owned_text(ty: ref Ty) -> bool {
 impl EmitState {
     /// The call itself, without ADR-023 D8's propagation.
     pub fn emit_core_called[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // The types `path::f[T](…)` wrote, for this call alone.
+        let path_types = walk.path_types.clone()
+        walk.path_types = ""
         if self.emit_call_special(world, walk, out, host, func, args, config, depth, flow, scope) {
             return
         }
@@ -935,6 +938,7 @@ impl EmitState {
         if unchecked {
             out.push("__unchecked")
         }
+        out.push(path_types)
         // **A hidden map parameter no argument fixes is filled here** (ADR-010
         // D9): the call names the hasher of the package it stands in.
         let callee_name = emit_callee_text(world, func) ?? ""
@@ -1300,6 +1304,42 @@ impl EmitState {
         }
         out.push(")")
         return true
+    }
+
+    /// **`path::f[T](…)`, the type parameters of a function reached by a
+    /// path** (ADR-330 D9, ADR-grammar-2 D11): `::<T>`, written after the
+    /// callee's name, where `base` is a path to a function of a ledger whose
+    /// signature names one type parameter and every type written is a name;
+    /// `null` where the brackets are an index.
+    pub fn emit_call_path_types(ref self, world: ref EmitWorld, base: ref Expr, index: ref Expr) -> String? {
+        let segments = match base {
+            Expr::Path(segments, _) => segments,
+            else => return null,
+        }
+        let key = unaliased_in(world.aliases, emit_arg_joined(world, segments))
+        let mut contract: FnContract? = self.own_contracts.functions.get(key)?.clone()
+        if contract == null {
+            contract = world.library.functions.get(key)?.clone()
+        }
+        let found: FnContract = contract ?? return null
+        let signature: Signature = found.signature?.clone() ?? return null
+        // The one type parameter the signature names, as the checker reads it.
+        if signature_type_variables(signature).len() != 1 {
+            return null
+        }
+        let parts: Vec[Expr] = match index {
+            Expr::Tuple(parts, _) => parts.clone(),
+            else => [index.clone()],
+        }
+        let mut types: Vec[String] = []
+        for part in parts {
+            match part {
+                Expr::Variable(name, _) => types.push(emit_text(world, name).clone()),
+                Expr::Path(named, _) => types.push(unaliased_in(world.aliases, emit_arg_joined(world, named))),
+                else => return null,
+            }
+        }
+        return f"::<{types.join(", ")}>"
     }
 
     fn emit_call_walks(ref self, world: ref EmitWorld, func: ref Expr, copy: ref String) -> bool {

@@ -537,6 +537,8 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_called<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let path_types = walk.path_types.to_string();
+        walk.path_types = String::from("");
         if self.emit_call_special(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
         if self.opens_a_paused_scope(world, func, args) && self.emit_call_paused_scope(world, walk, out, host, args, depth, flow, scope)? { return Ok(()); }
         self.emit_expr(world, walk, out, host, func, depth, flow, scope)?;
@@ -567,6 +569,7 @@ impl EmitState {
             _ => { },
         }
         if unchecked { out.push("__unchecked"); }
+        out.push(&path_types);
         let callee_name = nikaia_std::index::or(emit_callee_text(world, func), || "".into());
         let callee_parts: Vec<&str> = callee_name.split("::").collect::<Vec<_>>();
         let mut callee_last: String = String::from("");
@@ -845,6 +848,42 @@ impl EmitState {
         }
         out.push(")");
         Ok(true)
+    }
+    pub fn emit_call_path_types(&self, world: &EmitWorld<'_, '_, '_, '_>, base: &Expr, index: &Expr) -> Option<String> {
+        let segments = match base {
+            Expr::Path(segments, _) => segments,
+            _ => return None,
+        };
+        let key = unaliased_in(world.aliases, &emit_arg_joined(world, segments));
+        let mut contract: Option<FnContract> = match self.own_contracts.functions.get(&key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if contract.is_none() {
+            contract = match world.library.functions.get(&key) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+        }
+        let found: FnContract = match contract { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let signature: Signature = match match found.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if signature_type_variables(&signature).len() != 1 { return None; }
+        let parts: Vec<Expr> = match index {
+            Expr::Tuple(parts, _) => parts.to_owned(),
+            _ => vec![index.clone()],
+        };
+        let mut types: Vec<String> = vec![];
+        for part in parts.iter() {
+            match part {
+                Expr::Variable(name, _) => { let name = *name; types.push(emit_text(world, name).to_string()); },
+                Expr::Path(named, _) => { types.push(unaliased_in(world.aliases, &emit_arg_joined(world, named))); },
+                _ => { return None; },
+            }
+        }
+        Some(format!("::<{}>", types.join(", ")))
     }
     pub(crate) fn emit_call_walks(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, copy: &str) -> bool {
         match func {

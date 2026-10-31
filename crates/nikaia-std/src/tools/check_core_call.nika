@@ -856,16 +856,38 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
 /// are an index. `NK1233` is said only where a value argument's type could
 /// have said every type written (ADR-grammar-2 D11).
 fn check_core_call_filled[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, base: ref Expr, index: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty? sync {
+    // **A path to a generic function is the same form as its bare name**
+    // (ADR-grammar-2 D11, `json::read[Contact](bytes)`): another package's,
+    // `std`'s, under the name the ledger keys it by.
+    let pathed = match base {
+        Expr::Path(_, _) => true,
+        else => false,
+    }
     let name: String = match base {
         Expr::Variable(word, _) => f"{world.words.resolve(word)}",
+        Expr::Path(segments, _) => world.here.unaliased(check_core_call_joined(world, segments)),
         else => return null,
     }
-    if state.lookup(name) != null {
+    if !pathed && state.lookup(name) != null {
         return null
     }
     let resolved: CheckResolved = resolve_call(world, name) ?? return null
+    // A type's constructor written with brackets is not a function's.
+    if pathed && resolved.key != name {
+        return null
+    }
     let signature: Signature = resolved.contract.signature?.clone() ?? return null
-    let parameters: Vec[String] = check_core_call_type_parameters(world, name)
+    let mut parameters: Vec[String] = []
+    if pathed {
+        // A ledger's entry keeps only the type parameters with a bound, not
+        // the order written: one that the signature names is the order.
+        parameters = signature_type_variables(signature)
+        if parameters.len() != 1 {
+            return null
+        }
+    } else {
+        parameters = check_core_call_type_parameters(world, name)
+    }
     if parameters.len() == 0 {
         return null
     }
@@ -923,6 +945,44 @@ fn check_core_call_type_parameters(world: ref CheckWorld, name: ref String) -> V
         }
     }
     return found
+}
+
+/// **The type parameters a ledger's signature names**, each once, in the
+/// order its parameters and then its result first name them.
+pub fn signature_type_variables(signature: ref Signature) -> Vec[String] sync {
+    let mut found: Vec[String] = []
+    for param in signature.params {
+        check_core_call_variables_in(param.1, found)
+    }
+    if signature.result != null {
+        let result: Ty = signature.result?.clone() ?? Ty::Unknown
+        check_core_call_variables_in(result, found)
+    }
+    return found
+}
+
+fn check_core_call_variables_in(ty: ref Ty, mut found: Vec[String]) sync {
+    match ty {
+        Ty::Var { name, .. } => {
+            if !found.contains(name) {
+                found.push(name.clone())
+            }
+        },
+        Ty::Named { args, .. } => {
+            for arg in args {
+                check_core_call_variables_in(arg, found)
+            }
+        },
+        Ty::Nullable(inner) => check_core_call_variables_in(inner, found),
+        Ty::Pointed { item, .. } => check_core_call_variables_in(item, found),
+        Ty::Seq { item, .. } => check_core_call_variables_in(item, found),
+        Ty::Tuple(parts) => {
+            for part in parts {
+                check_core_call_variables_in(part, found)
+            }
+        },
+        else => {},
+    }
 }
 
 /// Whether a value parameter's type names the type parameter `parameter`.

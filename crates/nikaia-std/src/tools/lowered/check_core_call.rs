@@ -672,17 +672,24 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, base: &Expr, index: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Option<Ty> {
+    let pathed = matches!(base, Expr::Path(_, _));
     let name: String = match base {
         Expr::Variable(word, _) => { let word = *word; format!("{}", world.words.resolve(word)) },
+        Expr::Path(segments, _) => world.here.unaliased(&check_core_call_joined(world, segments)),
         _ => return None,
     };
-    if state.lookup(&name).is_some() { return None; }
+    if !pathed && state.lookup(&name).is_some() { return None; }
     let resolved: CheckResolved<'_> = match resolve_call(world, &name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if pathed && resolved.key != name { return None; }
     let signature: Signature = match match resolved.contract.signature.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let parameters: Vec<String> = check_core_call_type_parameters(world, &name);
+    let mut parameters: Vec<String> = vec![];
+    if pathed {
+        parameters = signature_type_variables(&signature);
+        if parameters.len() != 1 { return None; }
+    } else { parameters = check_core_call_type_parameters(world, &name); }
     if parameters.is_empty() { return None; }
     let mut written: Vec<Expr> = vec![];
     match index {
@@ -731,6 +738,35 @@ pub(crate) fn check_core_call_type_parameters(world: &CheckWorld<'_, '_, '_, '_,
         }
     }
     found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn signature_type_variables(signature: &Signature) -> Vec<String> {
+    let mut found: Vec<String> = vec![];
+    for param in signature.params.iter() { check_core_call_variables_in(&param.1, &mut found); }
+    if signature.result.is_some() {
+        let result: Ty = nikaia_std::index::or(match signature.result.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown);
+        check_core_call_variables_in(&result, &mut found);
+    }
+    found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_variables_in(ty: &Ty, found: &mut Vec<String>) {
+    match ty {
+        Ty::Var { name, .. } => { if !nikaia_std::list::contains(&found, &name) { found.push(name.to_string()); } },
+        Ty::Named { args, .. } => { for arg in args.iter() { check_core_call_variables_in(arg, found); } },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_core_call_variables_in(inner, found); },
+        Ty::Pointed { item, .. } => { let item = nikaia_std::boxed::open(item); check_core_call_variables_in(item, found); },
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); check_core_call_variables_in(item, found); },
+        Ty::Tuple(parts) => { for part in parts.iter() { check_core_call_variables_in(part, found); } },
+        _ => { },
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

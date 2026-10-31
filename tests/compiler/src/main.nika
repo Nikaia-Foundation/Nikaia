@@ -13,5 +13,17 @@ pub fn places(s: String) -> Vec[Places] {
 	return [Places { a: s.strip_prefix("l"), b: null, value: PlacesValue::Bool(true) }, Places { a: null, b: s.trim(), value: PlacesValue::Str(s.trim()) }]
 }
 
+/// A generic function whose type only brackets can say, reached by a path
+/// (`type_arguments_on_a_path`, ADR-grammar-2 D11).
+pub fn none_of[T](n: i64) -> Vec[T] {
+	let found: Vec[T] = []
+	return found
+}
+
+/// A generic function whose value says the type (`type_arguments_on_a_path_warned`).
+pub fn same[T](x: T) -> T {
+	return x
+}
+
 fn main() {
 }
