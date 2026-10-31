@@ -222,3 +222,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 3056211 47
 /home/user/Nikaia/docs/briefs/qa-task.md 322226 13
 /home/user/Nikaia/docs/briefs/qa-task.md 242294 13
+/home/user/Nikaia/docs/briefs/p5c-project-drive.md 5080573 73
