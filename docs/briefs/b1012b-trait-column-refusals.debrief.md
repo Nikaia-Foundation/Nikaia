@@ -1,8 +1,21 @@
-1. **Most turns:** tracing how the data would flow, before writing any code. I read `keeps.rs`, `contracts/mod.rs`, `sync.rs`, `modules.rs` (`Program`, `ProgramHost`), `project.rs` (`check_units`, `newly`, `changed_contracts`), `check/mod.rs`, `check_state.nika` and `check_core_args`/`check_core_call`/`check_takes`. Only after all that was it clear that none of the three features could be reached from the allowed files. The search for an NK12 refusal raised from `contracts/` came up empty, and that undid the brief's premise late.
+1. **What cost the most.** Working out the plumbing the brief left open: how the impls' own column gets from `keeps::infer` through `Noted`, the `ProgramHost` and `Program` to both `changed_contracts` and `CheckWorld`. Finding where the checker turns a kept lambda into NK2101 took about four reads across `check_core_args`, `check_lambdas`, `check_takes` and `check_core_call_on`. The second biggest cost was my own: I ran `nikaia fmt` on the touched `.nika` files, it rewrote them with tabs and rewrapped them, and I had to rebuild seven files from HEAD and re-apply my edits.
+
 2. **What the brief could have handed me:**
-   - That the contract pass raises no refusals today, and where program-level refusals are raised instead (the `Noted` → `Program` → `diagnostics::refuse` pattern, `modules.rs` ~128).
-   - That the only caller of `changed_contracts` is `project.rs:1217`, reached through `project_lower.nika`.
-   - That method calls pass `callee: null` to `check_core_arguments_given`, so the lending note has no impl to name.
-   - The path for NK2101 on kept lambdas (`a_kept_lambda_takes_these`).
-3. **Checks:** no build, test or gate, because nothing was edited. I ran two probes: the lending caller with a `String` parameter (raw lifetime error, a defect) and with a local `let` (NK2101, correct). Both were useful. The first one confirmed the defect. The second showed the defect is specific to parameters. Nothing was wasted except maybe one extra probe edit.
-4. **The one change:** the brief's research step should check its premise against the code. It should name the call path for each new diagnostic (where it is raised, how the data gets there) and list every file on that path in the allowed edit set. A stop condition that the brief's own design trips by construction cost the whole run.
+   - Where a kept lambda becomes NK2101 (`a_kept_lambda_takes_these` → `moved_into_a_task` → `a_task_took_what_is_used_again`).
+   - That the committed ledger is simply `nikaia.contracts` on disk, so a test only has to build twice and needs no git.
+   - Where `changed_contracts` is called (project.rs → prove.rs → contract_changes.nika).
+   - The one line in project.rs where `newly` is built with the program in scope.
+   - Nikaia's parameter syntax (`mut t: T`, not `t: ref mut T`) and that a literal is never taken, so a lending test needs an owned String.
+
+3. **Checks.**
+   - Useful: the lower-std/build cycle (ran twice, because two `Newly` initialisers lacked the new field), the hand probes of (g) and (h) with a scratch binary, `tests/compiler --both-settings`, the `it` gate set, `--lib`, clippy and pre-push.
+   - Wasted:
+     - `nikaia fmt --check` and `fmt`: the guard checks only that formatting is idempotent, not that files are formatted.
+     - A `--lib` run whose filters lacked `--`, so it printed nothing.
+     - A whole second `tests/compiler` run just to confirm one updated `.stderr`, because `nikaia test` has no filter.
+   - Missed: I expected that `a_lent_parameter_kept_by_a_trait_method_is_taken.stderr` would change with the NK2101 wording, but did not update it before the first run.
+   - Not done: neither new test was run against the unfixed compiler, because no older binary was on disk.
+
+4. **The one change that would have saved most.** A line in builder.md: "Never run `nikaia fmt` on `crates/nikaia-std/src/tools/*.nika` or the tests; `fmt::every_nika_file` checks only idempotence." After that, the brief naming the checker's NK2101 path and the `Newly` construction sites up front.
+
+Also: the push was rejected because `develop` moved on, so the brief's "pushed" condition is not met. Commit a39c219f still needs your rebase and push.

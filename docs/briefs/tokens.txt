@@ -178,3 +178,4 @@
 /home/user/Nikaia/docs/briefs/b1024-kept-param-lent.md 446365 6
 /home/user/Nikaia/docs/briefs/architect-task.md 1281456 31
 /home/user/Nikaia/docs/briefs/b1025-kept-lambda-names.md 299025 6
+/home/user/Nikaia/docs/briefs/b1012b-trait-column-refusals.md 487086 6
