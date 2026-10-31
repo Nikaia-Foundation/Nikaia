@@ -55,7 +55,7 @@ Today (architect's probe, 2026-10-31): `Expected ')' here, but found ','` at `me
 * [ADR-grammar-2](../../specification/adr/adr-grammar-2.md) D3, D5; Part II 10.8 (`docs/specification/20-nikaia-advance.md`, *`members[S]` builds a struct, and the compiler owns it*). `members[S](key, value, sep; name:, null:, unknown:)` reads `key value` members separated by `sep`, in any order, and yields an `S`. `value` is a rule with `_` for its type, applied with each field's type (one copy of `Value` per field type, through j1's copies). **The mapping rule**: a field the input does not give takes its default, else `null` in a `T?`, else the parse fails; a member matching `null:` goes into a `T?`, into another field it takes the default, else the parse fails; a member given twice fails the parse; a member no field takes fails the parse unless `unknown:` names a rule that skips it. Left out, `name:` is the field's own name, `null:` matches nothing, `unknown:` skips nothing (Part II 10.8, architect 2026-10-31).
 * Key dispatch is the compiler's (D5): any form rustc accepts (a `match` on the key's bytes is enough here). The `unknown:` rule builds nothing.
 * A parse failure is the entry's `ParseError` with a message naming the field (missing, twice) or the key (unknown); the exact text is yours, the tests pin it. The path on the stack (`$.to.label`) and strings as views are **not** this step (j-next).
-* **Not this step**: `name:` (j5, needs j3), `NK1311`, `NK1312`.
+* **Not this step**: `name:` (j6, needs j3 and j5), `NK1311`, `NK1312`.
 
 ## Locations
 * Parser: `crates/nikaia/src/parser/mod.rs`, `rule grammar_rule` (~2247) and the pattern rules under it; j1's `expand_grammar_types` (894) and j2's `put_rule_types` (1053).

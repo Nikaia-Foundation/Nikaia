@@ -157,7 +157,9 @@ writes the length into the type, and `String` as a `ref String`. A run of
 it has crossed. A value that owns memory is refused by what it *is* and never by
 its parse: by its **type** for a `struct`, and for an `enum` by the **variant
 the value is**. `Shape::Empty` is a `const` and `Shape::Many([1, 2])` is not,
-though both are a `Shape`. A value of a `std` type crosses where its ledger
+though both are a `Shape`. A `T?` crosses where `T` does: `null` is a `const`,
+and any other value crosses as its `T`, so a `String?` arrives as a
+`ref String?` (#1087). A value of a `std` type crosses where its ledger
 entry names a `constant` (Part III 13.5): it is written as that constructor over
 its parts, so `comptime T: time::Duration = 30.seconds()` is a `const`. A `std`
 type without one is refused with `NK1167`. A grammar call's result crosses when it is a whole
