@@ -1,6 +1,6 @@
 Result: done
-Batch: y9-1027-group-label.md, y2c-properties.md, y2b-keys-directives-limits.md
+Batch: y10-1030-literal-label.md y2c-properties.md y2b-keys-directives-limits.md
 Owner: none
-Input: CUT at y8 on Found (not RED: the `RED` file is empty; CI green to 511e513a, 49569ede..7f6b8151 running). y8 done (555fe6e9, `Fixes #1026`; Changelog line in its report, version raise owed).
-Found: filed #1027 (`ready`, brief form): a label on a one-element group (`n:(P)`, `((P))`, `(text(..))`) reaches rustc "Cannot find value"; the backend winnow-grammar scopes a one-alternative labelled group; fix in `emit_pattern.nika` (emit the element without the parens). Probed on 7f6b8151; `n:(P | Q)` and `m:(P)?` already work. Not needed by yaml (the y2 draft labels rules directly), batched first as a small bug fix.
-Changed: y2c notes y8 done and #1027; #928 *To build* 2b and *Found* updated (labels `ready` + `wip`); builder.md: probe each shape on the old binary before the first build; architect.md: a brief marks which test shapes were traced (y8 debrief).
+Cut: y9 done (9293d338, #1027); its Found filed as #1030 (label `ready`): a label on a literal returned or stored as `String` reaches rustc; cause traced to `CheckState::pattern_type` lacking a `Pattern::Literal` arm. Fix brief y10 first (small, nothing in yaml needs it); y2c (properties; draft captures with `text(..)`, checked) and y2b follow unchanged except y2c's pointer to y10.
+Changed: #928 To build (y9 struck, y10 added), #1030 filed; docs/builder-facts.md: two y9 traps (grammar rustc errors: check+lower first; tests/compiler past 10 min needs timeout 3600000).
+Decided for the supervisor: y10 adds a sentence to Part II 10.8 (`"text"` row: a label on it binds the text matched), so it raises the version.

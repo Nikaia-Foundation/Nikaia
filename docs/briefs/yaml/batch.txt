@@ -1,3 +1,3 @@
-y9-1027-group-label.md
+y10-1030-literal-label.md
 y2c-properties.md
 y2b-keys-directives-limits.md
