@@ -146,12 +146,7 @@ fn numbers_item(item: Item, mut st: NodeNumbersState) -> Item {
         Item::Grammar(def) => {
             let mut rules: Vec[GrammarRule] = []
             for rule in def.rules.drain() {
-                let mut alts: Vec[GrammarAlt] = []
-                for alt in rule.alts.drain() {
-                    let pattern = numbers_spanned_pattern(alt.pattern, st)
-                    let action = numbers_maybe_block(alt.action, st)
-                    alts.push(GrammarAlt { pattern: pattern, action: action })
-                }
+                let alts = numbers_alts(rule.alts, st)
                 let args = numbers_fn_args(rule.args, st)
                 let config = numbers_config_params(rule.config, st)
                 rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts: alts, span: rule.span, args: args, config: config, generics: rule.generics })
@@ -223,6 +218,16 @@ fn numbers_spanned_pattern(pattern: Spanned[Pattern], mut st: NodeNumbersState) 
     return Spanned { node: node, span: pattern.span, doc: pattern.doc, attributes: attributes }
 }
 
+fn numbers_alts(alts: Vec[GrammarAlt], mut st: NodeNumbersState) -> Vec[GrammarAlt] {
+    let mut out: Vec[GrammarAlt] = []
+    for alt in alts.drain() {
+        let pattern = numbers_spanned_pattern(alt.pattern, st)
+        let action = numbers_maybe_block(alt.action, st)
+        out.push(GrammarAlt { pattern: pattern, action: action })
+    }
+    return out
+}
+
 fn numbers_spanned_patterns(patterns: Vec[Spanned[Pattern]], mut st: NodeNumbersState) -> Vec[Spanned[Pattern]] {
     let mut out: Vec[Spanned[Pattern]] = []
     for p in patterns.drain() {
@@ -262,6 +267,15 @@ fn numbers_pattern(pattern: Pattern, mut st: NodeNumbersState) -> Pattern {
         },
         Pattern::Guard { cond, expected } => {
             return Pattern::Guard { cond: numbers_expr(cond, st), expected: expected }
+        },
+        Pattern::Choose { value, arms } => {
+            let value2 = numbers_expr(value, st)
+            let mut arms2: Vec[GrammarArm] = []
+            for arm in arms.drain() {
+                let pattern = numbers_match_pattern(arm.pattern, st)
+                arms2.push(GrammarArm { pattern: pattern, alts: numbers_alts(arm.alts, st), span: arm.span })
+            }
+            return Pattern::Choose { value: value2, arms: arms2 }
         },
         Pattern::Fold(spec) => {
             let init = numbers_expr(spec.init, st)

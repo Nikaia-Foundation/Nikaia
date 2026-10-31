@@ -1,0 +1,8 @@
+error[NK1164]: `Obj::read[i64]` needs a `Struct` here, but `i64` isn't one.
+   --> tests/grammar_a_rule_bound_is_checked.nika:10:15
+    |
+ 10 | 	let n: i64 = Obj::read[i64](Bytes("42".bytes().collect())) catch {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `[S: Struct]` asks what a type is, not what it does, so it's answered by the declaration, not an `impl`. `i64` is a built-in type, which is neither.
+    = help: Pass a type declared with `struct`, or remove the bound.

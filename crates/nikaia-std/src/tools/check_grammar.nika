@@ -412,6 +412,10 @@ impl CheckState {
                 }
                 return scope
             },
+            // Resolved by the copying before any check (grammar_types.nika).
+            Pattern::Choose { .. } => {
+                return scope
+            },
             Pattern::Guard { cond, .. } => {
                 self.grammar_fixed(world, host, cond, pattern_named("bool", false), scope, pattern.span, "A guard", "A guard is a condition: compare, as in `if(m > n)`.")
                 return scope

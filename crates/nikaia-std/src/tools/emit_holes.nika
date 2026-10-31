@@ -271,6 +271,7 @@ fn emit_holes_fold_steps(pattern: ref Pattern) -> Vec[ref Expr] {
         Pattern::Literal(_) => {},
         Pattern::Cut => {},
         Pattern::Call { .. } => {},
+        Pattern::Choose { .. } => {},
         Pattern::Guard { .. } => {},
     }
     return out

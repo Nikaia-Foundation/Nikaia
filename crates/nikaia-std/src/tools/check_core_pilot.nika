@@ -346,6 +346,13 @@ fn check_reflect_named_kind(state: ref CheckState, name: ref String, args: ref V
     if state.enums.contains_key(name) {
         return "Enum"
     }
+    return check_reflect_builtin_kind(name)
+}
+
+/// **The kind of a type the language itself names** (Part II 10.3, the table
+/// of `T::kind`): `Opaque` for any other name. Shared with the copies of a
+/// grammar rule that chooses by kind (`grammar_types.nika`).
+pub fn check_reflect_builtin_kind(name: ref String) -> String {
     return match name {
         "i64" => "I64",
         "i32" => "I32",

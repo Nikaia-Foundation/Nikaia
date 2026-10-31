@@ -1413,6 +1413,23 @@ pub enum Pattern {
         cond: Expr,
         expected: String?,
     },
+    /// `match T::kind { Bool => "true" -> { true } | … }`: a rule body
+    /// chosen by the kind of a type the rule takes
+    /// ([ADR-grammar-2](../../../docs/specification/adr/adr-grammar-2.md) D2,
+    /// D6). Never reaches the checker: each copy of the rule keeps the arm its
+    /// type takes (`grammar_types.nika`).
+    Choose {
+        value: Expr,
+        arms: Vec[GrammarArm],
+    },
+}
+
+/// One arm of a `match` on a kind in a rule body: the kind it names,
+/// `Maybe(A)`, and its alternatives, each with its own action.
+pub struct GrammarArm {
+    pub pattern: MatchPattern,
+    pub alts: Vec[GrammarAlt],
+    pub span: Span,
 }
 
 pub enum Repeat {

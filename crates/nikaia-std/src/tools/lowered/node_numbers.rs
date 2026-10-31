@@ -114,12 +114,7 @@ pub(crate) fn numbers_item(item: Item, st: &mut NodeNumbersState) -> Item {
         Item::Grammar(def) => {
             let mut rules: Vec<GrammarRule> = vec![];
             for rule in def.rules.into_iter() {
-                let mut alts: Vec<GrammarAlt> = vec![];
-                for alt in rule.alts.into_iter() {
-                    let pattern = numbers_spanned_pattern(alt.pattern, st);
-                    let action = numbers_maybe_block(alt.action, st);
-                    alts.push(GrammarAlt { pattern, action });
-                }
+                let alts = numbers_alts(rule.alts, st);
                 let args = numbers_fn_args(rule.args, st);
                 let config = numbers_config_params(rule.config, st);
                 rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts, span: rule.span, args, config, generics: rule.generics });
@@ -189,6 +184,16 @@ pub(crate) fn numbers_spanned_pattern(pattern: Spanned<Pattern>, st: &mut NodeNu
     Spanned { node, span: pattern.span, doc: pattern.doc, attributes }
 }
 
+pub(crate) fn numbers_alts(alts: Vec<GrammarAlt>, st: &mut NodeNumbersState) -> Vec<GrammarAlt> {
+    let mut out: Vec<GrammarAlt> = vec![];
+    for alt in alts.into_iter() {
+        let pattern = numbers_spanned_pattern(alt.pattern, st);
+        let action = numbers_maybe_block(alt.action, st);
+        out.push(GrammarAlt { pattern, action });
+    }
+    out
+}
+
 pub(crate) fn numbers_spanned_patterns(patterns: Vec<Spanned<Pattern>>, st: &mut NodeNumbersState) -> Vec<Spanned<Pattern>> {
     let mut out: Vec<Spanned<Pattern>> = vec![];
     for p in patterns.into_iter() { out.push(numbers_spanned_pattern(p, st)); }
@@ -221,6 +226,15 @@ pub(crate) fn numbers_pattern(pattern: Pattern, st: &mut NodeNumbersState) -> Pa
             return Pattern::Counted { pat: Box::new(inner), low: low2, high: high2, comma };
         },
         Pattern::Guard { cond, expected } => { return Pattern::Guard { cond: numbers_expr(cond, st), expected }; },
+        Pattern::Choose { value, arms } => {
+            let value2 = numbers_expr(value, st);
+            let mut arms2: Vec<GrammarArm> = vec![];
+            for arm in arms.into_iter() {
+                let pattern = numbers_match_pattern(arm.pattern, st);
+                arms2.push(GrammarArm { pattern, alts: numbers_alts(arm.alts, st), span: arm.span });
+            }
+            return Pattern::Choose { value: value2, arms: arms2 };
+        },
         Pattern::Fold(spec) => {
             let init = numbers_expr(spec.init, st);
             let step = numbers_expr(spec.step, st);

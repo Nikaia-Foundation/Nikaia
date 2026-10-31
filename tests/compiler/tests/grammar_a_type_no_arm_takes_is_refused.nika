@@ -1,0 +1,21 @@
+// ADR-grammar-2 D6: a type no arm of a rule's `match` takes is refused at
+// the call (NK1250), naming the rule and the rules with types that led
+// there: `maybe[f64]` hands `f64?` to `Value`, whose `Maybe(A)` arm hands
+// `f64` on, and no arm takes `F64`.
+grammar Lit {
+	rule WS = "" -> { }
+	entry rule maybe[T] -> T? = v:Value[T?] eof -> { v }
+	rule Value[T] -> T = match T::kind {
+		Bool => "true" -> { true } | "false" -> { false }
+		I64 => d:dec[i64](digit+) -> { d }
+		Maybe(A) => "null" -> { null } | v:Value[A] -> { v }
+	}
+}
+
+fn main() {
+	let x: f64? = Lit::maybe[f64](Bytes("null".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{x ?? 0.0}")
+}

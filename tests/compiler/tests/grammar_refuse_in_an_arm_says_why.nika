@@ -1,0 +1,19 @@
+// ADR-grammar-2 D6: an arm that is `refuse("why")` refuses the types it
+// takes at the call (NK1250), with the reason it gives.
+grammar Lit {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	rule Value[T] -> T = match T::kind {
+		Bool => "true" -> { true } | "false" -> { false }
+		Text => refuse("this grammar reads no strings")
+		else => d:dec[i64](digit+) -> { d as T }
+	}
+}
+
+fn main() {
+	let s: String = Lit::read[String](Bytes("abc".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(s)
+}

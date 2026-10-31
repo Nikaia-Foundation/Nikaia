@@ -166,6 +166,8 @@ impl EmitState {
                 }
                 out.push("}")
             },
+            // Resolved by the copying before any emit (grammar_types.nika).
+            Pattern::Choose { .. } => {},
             Pattern::Guard { cond, expected } => {
                 out.push("if(")
                 self.emit_grammar_value(world, walk, out, host, cond)
@@ -431,6 +433,7 @@ fn emit_texts_a_guard_reads(world: ref EmitWorld, walk: ref EmitWalk, mut out: E
 /// Whether a guard anywhere in a pattern names `name`.
 fn emit_guard_reads(world: ref EmitWorld, pattern: ref Pattern, name: String) -> bool {
     return match pattern {
+        Pattern::Choose { .. } => false,
         Pattern::Guard { cond, .. } => emit_mentions(world, cond, name),
         Pattern::Seq(parts) => parts.iter().any(fn(part) { emit_guard_reads(world, part.node, name) }),
         Pattern::Choice(parts) => parts.iter().any(fn(part) { emit_guard_reads(world, part.node, name) }),

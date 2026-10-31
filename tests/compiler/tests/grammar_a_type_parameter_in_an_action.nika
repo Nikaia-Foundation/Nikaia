@@ -1,0 +1,30 @@
+// ADR-grammar-2 D1, Part II 10.8: inside each copy of a rule that takes
+// types, the type parameter names the copy's type in the actions and guards
+// too: `d as T` and `let x: T` are `u8` in the copy `read[u8]` and `i64` in
+// `read[i64]`.
+grammar Num {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Digits[T] eof -> { v }
+	rule Digits[T] -> T = d:dec[i64](digit+) if(d as T >= 1 as T) -> {
+		let x: T = d as T
+		x
+	}
+}
+
+fn main() {
+	let small: u8 = Num::read[u8](Bytes("42".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{small}")
+	let big: i64 = Num::read[i64](Bytes("4200000000".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{big}")
+	let zero: i64 = Num::read[i64](Bytes("0".bytes().collect())) catch {
+		println("the guard refused 0")
+		return
+	}
+	println(f"{zero}")
+}

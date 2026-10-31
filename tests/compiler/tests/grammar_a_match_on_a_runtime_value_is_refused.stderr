@@ -1,0 +1,8 @@
+error[NK1310]: A `match` in a rule's pattern chooses while the program is built, and `n` isn't known then.
+  --> tests/grammar_a_match_on_a_runtime_value_is_refused.nika:6:35
+   |
+ 6 | 	entry rule read(n: i64) -> i64 = match n {
+   |                                   ^^^^^^^^^
+   |
+   = note: A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-2 D2), which is decided while building; a value is only known while the input is read.
+   = help: Match on the kind of a type the rule takes, `match T::kind { … }`, or choose while reading with alternatives and a guard, `if(cond)`.

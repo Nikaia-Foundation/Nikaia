@@ -118,6 +118,7 @@ impl EmitState {
                 }
                 out.push("}");
             },
+            Pattern::Choose { .. } => { },
             Pattern::Guard { cond, expected } => {
                 out.push("if(");
                 self.emit_grammar_value(world, walk, out, host, cond)?;
@@ -327,6 +328,7 @@ pub(crate) fn emit_texts_a_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, walk: 
 
 pub(crate) fn emit_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Pattern, name: &str) -> bool {
     match pattern {
+        Pattern::Choose { .. } => false,
         Pattern::Guard { cond, .. } => emit_mentions(world, cond, name),
         Pattern::Seq(parts) => parts.iter().any(|part| { emit_guard_reads(world, &part.node, name) }),
         Pattern::Choice(parts) => parts.iter().any(|part| { emit_guard_reads(world, &part.node, name) }),

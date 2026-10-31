@@ -2003,7 +2003,7 @@ pub mod assets {
 }
 pub mod ast {
     #[allow(unused_imports)]
-    pub use super::{Span, Spanned, Attribute, Program, Item, Block, Stmt, Expr, id_of, node_key, fresh_id, numbered_id, FPart, Type, ExternMember, OpaqueType, Code, EnumVariant, VariantFields, SelectArm, MatchArm, PatternField, MatchPattern, GenericParam, TraitMethod, FnArg, ConfigArg, ConfigParam, FieldDef, FieldDefault, AsmBinding, FieldInit, UnaryOp, BinaryOp, GrammarDef, GrammarRule, FrameAttr, GrammarAlt, Pattern, Repeat, FoldSpec, Receiver, FnParams, ConfigZone, LONGEST_SOURCE, offset};
+    pub use super::{Span, Spanned, Attribute, Program, Item, Block, Stmt, Expr, id_of, node_key, fresh_id, numbered_id, FPart, Type, ExternMember, OpaqueType, Code, EnumVariant, VariantFields, SelectArm, MatchArm, PatternField, MatchPattern, GenericParam, TraitMethod, FnArg, ConfigArg, ConfigParam, FieldDef, FieldDefault, AsmBinding, FieldInit, UnaryOp, BinaryOp, GrammarDef, GrammarRule, FrameAttr, GrammarAlt, Pattern, GrammarArm, Repeat, FoldSpec, Receiver, FnParams, ConfigZone, LONGEST_SOURCE, offset};
 }
 pub mod boundaries {
     #[allow(unused_imports)]
@@ -2174,7 +2174,7 @@ pub mod check_core_ops {
 }
 pub mod check_core_pilot {
     #[allow(unused_imports)]
-    pub use super::{check_specialised, check_core_grammar_call, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_instantiate, check_core_slot_index, check_core_type_argument, check_core_a_mut_parameter_given_away, check_reflect_kind, check_reflect_written, check_reflect_compared, check_reflect_path, check_reflect_field_type, check_reflect_arm, check_reflect_match};
+    pub use super::{check_specialised, check_core_grammar_call, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_instantiate, check_core_slot_index, check_core_type_argument, check_core_a_mut_parameter_given_away, check_reflect_kind, check_reflect_builtin_kind, check_reflect_written, check_reflect_compared, check_reflect_path, check_reflect_field_type, check_reflect_arm, check_reflect_match};
 }
 pub mod check_core_places {
     #[allow(unused_imports)]
@@ -2581,7 +2581,7 @@ pub mod grammar_decode {
 }
 pub mod grammar_types {
     #[allow(unused_imports)]
-    pub use super::{GrammarTypesCall, grammar_types_copy_name, grammar_types_expand};
+    pub use super::{GrammarTypesCall, grammar_types_copy_name, GrammarTypesRefusal, GrammarTypesExpanded, grammar_types_expand, grammar_types_put};
 }
 pub mod integers {
     #[allow(unused_imports)]

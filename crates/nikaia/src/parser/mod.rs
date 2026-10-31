@@ -894,18 +894,27 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
 fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
     use std::collections::BTreeSet;
     let mut generic: BTreeSet<(Symbol, Symbol)> = BTreeSet::new();
+    let mut chooses = false;
     for item in &parsed.program.items {
         if let ast::Item::Grammar(def) = &item.node {
             for rule in def.rules.iter().filter(|r| !r.generics.is_empty()) {
                 generic.insert((def.name, rule.name));
             }
+            // ADR-grammar-2 D2: a `match` on a kind is resolved by the copying
+            // too, also in a rule that takes no types.
+            chooses |= def.rules.iter().any(|r| {
+                r.alts
+                    .iter()
+                    .any(|a| matches!(a.pattern.node, ast::Pattern::Choose { .. }))
+            });
         }
     }
-    if generic.is_empty() {
+    if generic.is_empty() && !chooses {
         return Ok(());
     }
     let interner = parsed.interner.clone();
     let mut calls: Vec<nikaia_std::tools::grammar_types::GrammarTypesCall> = Vec::new();
+    let mut call_ids: Vec<u32> = Vec::new();
     let mut refused: Option<(u32, String)> = None;
     let mut items = std::mem::take(&mut parsed.program.items);
     for item in &mut items {
@@ -913,6 +922,7 @@ fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
             crate::text_tiers::visit_block_mut(
                 block,
                 &mut |expr| {
+                    let call_id = ast::id_of(expr);
                     let ast::Expr::Call { func, .. } = expr else {
                         return;
                     };
@@ -954,6 +964,7 @@ fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
                         interner.resolve(*rule),
                         &types,
                     );
+                    call_ids.push(call_id);
                     calls.push(nikaia_std::tools::grammar_types::GrammarTypesCall {
                         owner: *owner,
                         rule: *rule,
@@ -998,10 +1009,83 @@ fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
         ));
     }
     let intern = |text: &str| interner.intern_string(text);
-    parsed.program.items = nikaia_std::tools::grammar_types::grammar_types_expand(
-        &mut items, &calls, &interner, &intern,
+    let put = |block: &ast::Block, bound: &std::collections::BTreeMap<String, ast::Type>| {
+        put_rule_types(&interner, block, bound)
+    };
+    let expanded = nikaia_std::tools::grammar_types::grammar_types_expand(
+        &mut items, &calls, &interner, &intern, &put,
     );
-    Ok(())
+    parsed.program.items = expanded.items;
+    let Some(first) = expanded.refused.into_iter().next() else {
+        return Ok(());
+    };
+    // A refusal stands at the call that asked for the copy; one no call
+    // asked for, at the pattern it is about.
+    let span = usize::try_from(first.call)
+        .ok()
+        .and_then(|at| call_ids.get(at))
+        .and_then(|id| parsed.expr_spans.get(id).copied())
+        .unwrap_or_else(|| ast::Span::new(first.span.start as usize, first.span.end as usize));
+    let finding = crate::check::Finding {
+        severity: crate::check::Severity::Error,
+        span,
+        code: first.code.clone(),
+        message: first.message.clone(),
+        notes: vec![first.note],
+        help: Some(first.help),
+        labels: vec![crate::check::Label {
+            span,
+            word: String::new(),
+            text: String::new(),
+            main: true,
+        }],
+    };
+    Err(crate::diagnostics::refuse_finding(
+        finding,
+        format!("{}: {}", first.code, first.message),
+    ))
+}
+
+/// **A copy's actions, guards and bounds with the rule's type parameters
+/// put in** (ADR-grammar-2 D1): a type written in them (`d as T`,
+/// `let x: T`), and a parameter standing as a value's head (`T::kind`,
+/// `T::from(…)`), names the type the copy is for.
+fn put_rule_types(
+    interner: &winnow_grammar::InternerContext,
+    block: &ast::Block,
+    bound: &std::collections::BTreeMap<String, ast::Type>,
+) -> ast::Block {
+    use nikaia_std::tools::grammar_types::grammar_types_put;
+    let mut copy = block.clone();
+    let plain = |name: Symbol| -> Option<Symbol> {
+        let ty = bound.get(interner.resolve(name))?;
+        let simple = ty.generics.is_empty() && !ty.is_nullable && !ty.is_tuple;
+        simple.then_some(ty.name)
+    };
+    crate::text_tiers::visit_block_mut(
+        &mut copy,
+        &mut |expr| match expr {
+            ast::Expr::Cast { ty, .. } => *ty = grammar_types_put(ty, bound, interner),
+            ast::Expr::Variable(name, _) => {
+                if let Some(to) = plain(*name) {
+                    *name = to;
+                }
+            }
+            ast::Expr::Path(segments, _) => {
+                if let Some(to) = segments.first().and_then(|head| plain(*head)) {
+                    segments[0] = to;
+                }
+            }
+            _ => {}
+        },
+        &mut |stmt, _| match stmt {
+            ast::Stmt::Let { ty: Some(ty), .. } | ast::Stmt::Comptime { ty: Some(ty), .. } => {
+                *ty = grammar_types_put(ty, bound, interner);
+            }
+            _ => {}
+        },
+    );
+    copy
 }
 
 /// The type a call's brackets write where an expression stands for it:
@@ -2270,10 +2354,15 @@ grammar! {
         // **The form without the arrow is refused by name** and not by
         // *expected `->`*, with the caret on the brace the arrow goes in front of.
         rule g_alt -> GrammarAlt =
+            // **A `match` on a kind chooses the pattern** (ADR-grammar-2 D2):
+            // the alternative is the arm the type takes, chosen per copy.
+            c:g_choose -> {
+                GrammarAlt { pattern: c, action: None }
+            }
             // **A fold first**: `par_fold` and `fold` are words of this
             // sublanguage and never a rule's name, and a fold with the wrong
             // count is told so at the call rather than at the rule's end.
-            f:g_fold -> {
+          | f:g_fold -> {
                 GrammarAlt { pattern: f, action: None }
             }
           | p:g_seq "->" action:block -> {
@@ -2294,6 +2383,74 @@ grammar! {
                 // binding is here because the action has to be well-typed.
                 GrammarAlt { pattern: p, action: None }
             }
+
+        // **`match T::kind { Kind => alternatives … }`** in a rule body
+        // ([ADR-grammar-2](../../../../docs/specification/adr/adr-grammar-2.md)
+        // D2, D6, Part II 10.8): each arm names a kind as an arm of a `match`
+        // on a kind does (ADR-330 D4), and holds alternatives with their own
+        // actions; `refuse("why")` there needs none. The value is a
+        // `head_expr` for `match_expr`'s reason. Which arm a copy keeps, and
+        // whether the value is known while building (`NK1310`), is
+        // `grammar_types.nika`'s.
+        rule g_choose -> Spanned<Pattern> @=
+            KW_MATCH value:head_expr "{" arms:g_arm+ "}" -> {
+                Spanned::new(Pattern::Choose { value, arms }, Span::from(_span))
+            }
+
+        rule g_arm -> GrammarArm @=
+            pattern:match_pattern "=>" alts:g_arm_alts ","? -> {
+                GrammarArm { pattern, alts, span: Span::from(_span) }
+            }
+
+        rule g_arm_alts -> Vec<GrammarAlt> =
+            head:g_arm_alt tail:g_arm_alt_tail* -> {
+                let mut alts = vec![head];
+                alts.extend(tail);
+                alts
+            }
+
+        rule g_arm_alt_tail -> GrammarAlt = "|" a:g_arm_alt -> { a }
+
+        rule g_arm_alt -> GrammarAlt =
+            c:g_choose -> {
+                GrammarAlt { pattern: c, action: None }
+            }
+          | p:g_arm_seq "->" action:block -> {
+                GrammarAlt { pattern: p, action: Some(action) }
+            }
+          | p:g_arm_seq -> {
+                GrammarAlt { pattern: p, action: None }
+            }
+
+        // **An arm's pattern ends where the next arm begins**: arms stand one
+        // after another with no separator, so `Kind =>`, `Kind(A, B) =>` or
+        // `else =>` starts the next arm, and a cut right after a rule's name
+        // in an arm is written in parentheses, `(Key) =>`.
+        rule g_arm_seq -> Spanned<Pattern> @=
+            head:g_elem tail:g_arm_elem_tail* -> {
+                if tail.is_empty() {
+                    head
+                } else {
+                    let mut parts = vec![head];
+                    parts.extend(tail);
+                    Spanned::new(Pattern::Seq(parts), Span::from(_span))
+                }
+            }
+
+        rule g_arm_elem_tail -> Spanned<Pattern> = not(g_arm_head) e:g_elem -> { e }
+
+        rule g_arm_head =
+            KW_ELSE "=>" -> { () }
+          | UNDERSCORE "=>" -> { () }
+          | NAME g_arm_head_path* g_arm_head_parts? "=>" -> { () }
+
+        rule g_arm_head_path = "::" NAME -> { () }
+
+        rule g_arm_head_parts = "(" g_arm_head_part g_arm_head_part_tail* ")" -> { () }
+
+        rule g_arm_head_part_tail = "," g_arm_head_part -> { () }
+
+        rule g_arm_head_part = UNDERSCORE -> { () } | NAME -> { () }
 
         rule g_seq -> Spanned<Pattern> @=
             head:g_elem tail:g_elem_tail* -> {

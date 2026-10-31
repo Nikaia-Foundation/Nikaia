@@ -8,6 +8,15 @@
 // (`check_specialised`, ADR-330 D2), and shared between the calls that reach
 // it with the same list. The generic rule itself is not kept (ADR-304 D6), so
 // the checker, the analyses and the emitter only ever see single-type rules.
+//
+// **A copy keeps the arm its type takes** (ADR-grammar-2 D2, D6): a rule body
+// `match T::kind { … }` becomes the alternatives of the one arm `T`'s kind
+// takes, with the names the arm binds (`Maybe(A)`) standing for the parts of
+// the type; a type no arm takes, or one an arm `refuse`s, is refused at the
+// call that led there (`NK1250`), a `match` on anything but a kind is
+// `NK1310`, and a bound on a rule's type parameter is checked at that call
+// (`NK1164`). Inside each copy the type parameters are put in in the actions,
+// guards and bounds too, by the host's walk (`put`).
 
 use std::collections
 
@@ -50,39 +59,129 @@ fn grammar_types_spelled(words: ref winnow_grammar::InternerContext, ty: ref Typ
     return text
 }
 
+/// **What a copy cannot be made for**, said at the call that asked for it
+/// (`call`, the place in the calls handed in; -1 where no call did, and
+/// `span` says where).
+pub struct GrammarTypesRefusal {
+    pub code: String,
+    pub call: i64,
+    pub span: Span,
+    pub message: String,
+    pub note: String,
+    pub help: String,
+}
+
+/// The items with the copies put in, and what could not be copied.
+pub struct GrammarTypesExpanded {
+    pub items: Vec[Spanned[Item]],
+    pub refused: Vec[GrammarTypesRefusal],
+}
+
+/// A copy asked for, with the call it comes from and the rules with types
+/// that led to it (`Lit::read[f64?]`, `Value[f64?]`, `Value[f64]`).
+struct GrammarTypesWanted {
+    call: GrammarTypesCall,
+    from: i64,
+    path: Vec[String],
+}
+
+/// What the copying of one program carries: the copies still to make, what
+/// is refused, the program's declared shapes, traits and `impl`s, and the
+/// call and path of the copy being made.
+struct GrammarTypesWork {
+    queue: Vec[GrammarTypesWanted],
+    refused: Vec[GrammarTypesRefusal],
+    shapes: collections::BTreeMap[String, String],
+    traits: collections::BTreeSet[String],
+    impls: collections::BTreeSet[String],
+    from: i64,
+    path: Vec[String],
+}
+
 /// **The items with each grammar's rules that take types replaced by the
-/// copies `calls` reach.** A grammar with no such rule is returned as it was.
-pub fn grammar_types_expand(mut items: Vec[Spanned[Item]], calls: ref Vec[GrammarTypesCall], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Vec[Spanned[Item]] {
+/// copies `calls` reach**, and each `match` on a kind by the arm its copy's
+/// type takes. A grammar with neither is returned as it was.
+pub fn grammar_types_expand(mut items: Vec[Spanned[Item]], calls: ref Vec[GrammarTypesCall], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync) -> GrammarTypesExpanded {
+    let none: Vec[String] = []
+    let mut work = GrammarTypesWork { queue: [], refused: [], shapes: collections::BTreeMap(), traits: collections::BTreeSet(), impls: collections::BTreeSet(), from: -1, path: none }
+    for item in items {
+        match item.node {
+            Item::Struct { name, .. } => {
+                work.shapes.insert(f"{words.resolve(name)}", "Struct")
+            },
+            Item::Enum { name, .. } => {
+                work.shapes.insert(f"{words.resolve(name)}", "Enum")
+            },
+            Item::Trait { name, .. } => {
+                work.traits.insert(f"{words.resolve(name)}")
+            },
+            Item::Impl { trait_name, target, .. } => {
+                if trait_name != null {
+                    let named: winnow_grammar::Symbol = trait_name ?? target.name
+                    work.impls.insert(f"{words.resolve(named)} for {words.resolve(target.name)}")
+                }
+            },
+            else => {},
+        }
+    }
     let mut out: Vec[Spanned[Item]] = []
     for item in items.drain() {
         let mut kept = item.clone()
         match item.node {
             Item::Grammar(def) => {
-                kept.node = Item::Grammar(grammar_types_def(def, calls, words, intern))
+                kept.node = Item::Grammar(grammar_types_def(def, calls, words, intern, put, work))
             },
             else => {},
         }
         out.push(kept)
     }
-    return out
+    return GrammarTypesExpanded { items: out, refused: work.refused }
 }
 
-fn grammar_types_def(def: ref GrammarDef, calls: ref Vec[GrammarTypesCall], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarDef {
+/// Whether a rule's alternatives hold a `match` on a kind.
+fn grammar_types_chooses(alts: ref Vec[GrammarAlt]) -> bool {
+    for alt in alts {
+        match alt.pattern.node {
+            Pattern::Choose { .. } => {
+                return true
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+/// A call of a rule with types, as the program writes it: `Value[f64?]`.
+fn grammar_types_called(words: ref winnow_grammar::InternerContext, rule: ref String, types: ref Vec[Type]) -> String {
+    let mut spelled: Vec[String] = []
+    for ty in types {
+        spelled.push(grammar_types_spelled(words, ty))
+    }
+    return f"{rule}[{spelled.join(", ")}]"
+}
+
+fn grammar_types_def(def: ref GrammarDef, calls: ref Vec[GrammarTypesCall], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> GrammarDef {
     let mut generic: collections::BTreeMap[String, GrammarRule] = collections::BTreeMap()
+    let mut chooses = false
     for rule in def.rules {
         if rule.generics.len() > 0 {
             generic.insert(f"{words.resolve(rule.name)}", rule.clone())
+        } else if grammar_types_chooses(rule.alts) {
+            chooses = true
         }
     }
-    if generic.len() == 0 {
+    if generic.len() == 0 && !chooses {
         return def.clone()
     }
     let owner = def.name
-    let mut queue: Vec[GrammarTypesCall] = []
+    work.queue = []
+    let mut index: i64 = 0
     for call in calls {
         if call.owner == owner {
-            queue.push(call.clone())
+            let first = f"{words.resolve(owner)}::{grammar_types_called(words, words.resolve(call.rule), call.types)}"
+            work.queue.push(GrammarTypesWanted { call: call.clone(), from: index, path: [first] })
         }
+        index += 1
     }
     // The rules without types stay, and a rule of theirs that hands types
     // to a generic one asks for its copy too.
@@ -90,37 +189,119 @@ fn grammar_types_def(def: ref GrammarDef, calls: ref Vec[GrammarTypesCall], word
     let none: collections::BTreeMap[String, Type] = collections::BTreeMap()
     for rule in def.rules {
         if rule.generics.len() == 0 {
-            rules.push(grammar_types_rule(rule, none, rule.name, generic, queue, owner, words, intern))
+            work.from = -1
+            work.path = [f"{words.resolve(rule.name)}"]
+            rules.push(grammar_types_rule(rule, none, rule.name, generic, owner, words, intern, put, work))
         }
     }
     let mut done: collections::BTreeSet[String] = collections::BTreeSet()
     let mut at: i64 = 0
-    while at < queue.len() as i64 {
-        let call = queue[at].clone()
+    while at < work.queue.len() as i64 {
+        let wanted = work.queue[at].clone()
         at += 1
+        let call = wanted.call
         let copy = grammar_types_copy_name(words, words.resolve(call.rule), call.types)
         if done.contains(copy) {
             continue
         }
         done.insert(copy.clone())
         let rule: GrammarRule = generic.get(words.resolve(call.rule))?.clone() ?? continue
+        work.from = wanted.from
+        work.path = wanted.path.clone()
         let mut bound: collections::BTreeMap[String, Type] = collections::BTreeMap()
         let mut index: i64 = 0
         for parameter in rule.generics {
             if index < call.types.len() as i64 {
-                bound.insert(f"{words.resolve(parameter.name)}", call.types[index].clone())
+                let given = call.types[index].clone()
+                grammar_types_bounds(parameter, given, words, work)
+                bound.insert(f"{words.resolve(parameter.name)}", given)
             }
             index += 1
         }
-        rules.push(grammar_types_rule(rule, bound, intern(copy), generic, queue, owner, words, intern))
+        rules.push(grammar_types_rule(rule, bound, intern(copy), generic, owner, words, intern, put, work))
     }
     let mut expanded = def.clone()
     expanded.rules = rules
     return expanded
 }
 
+/// **A bound on a rule's type parameter, checked at the call** (`NK1164`,
+/// as at a function's call): a shape bound by the declaration, a trait the
+/// program declares by its `impl`s. It fails open where the program
+/// declares neither the type nor the trait.
+fn grammar_types_bounds(parameter: ref GenericParam, given: ref Type, words: ref winnow_grammar::InternerContext, mut work: GrammarTypesWork) {
+    let actual = grammar_types_spelled(words, given)
+    let kind = grammar_types_kind(given, work.shapes, words)
+    let entry = work.path[0].clone()
+    for wanted in parameter.bounds {
+        let trait_name = f"{words.resolve(wanted)}"
+        if (trait_name == "Struct" || trait_name == "Enum") && !work.traits.contains(trait_name) {
+            if kind == trait_name || kind == "Opaque" {
+                continue
+            }
+            let mut article: String = "a"
+            if trait_name == "Enum" {
+                article = "an"
+            }
+            let mut what: String = "a built-in type, which is neither"
+            if kind == "Struct" {
+                what = f"a `struct`, so the bound it matches is `[{actual}: Struct]`"
+            } else if kind == "Enum" {
+                what = f"an `enum`, so the bound it matches is `[{actual}: Enum]`"
+            }
+            grammar_types_refuse(work, "NK1164", null, f"`{entry}` needs {article} `{trait_name}` here, but `{actual}` isn't one.", f"`[{words.resolve(parameter.name)}: {trait_name}]` asks what a type is, not what it does, so it's answered by the declaration, not an `impl`. `{actual}` is {what}.", f"Pass a type declared with `{trait_name.to_lowercase()}`, or remove the bound.")
+        } else if work.traits.contains(trait_name) && !work.impls.contains(f"{trait_name} for {words.resolve(given.name)}") {
+            grammar_types_refuse(work, "NK1164", null, f"`{entry}` needs a `{trait_name}` here, but `{actual}` isn't one.", f"`[{words.resolve(parameter.name)}: {trait_name}]` says the type passed has to have `{trait_name}`'s methods, and `{actual}` doesn't implement it.", f"Write `impl {trait_name} for {actual} {{ … }}`, or pass a type that already has one.")
+        }
+    }
+}
+
+/// One refusal, at the call the copy being made comes from, or at `span`
+/// where no call led there.
+fn grammar_types_refuse(mut work: GrammarTypesWork, code: ref String, span: Span?, message: String, note: String, help: String) {
+    let at: Span = span ?? Span { start: 0, end: 0 }
+    work.refused.push(GrammarTypesRefusal { code: code.clone(), call: work.from, span: at, message: message, note: note, help: help })
+}
+
+/// **What `T::kind` is for a type as the program writes it** (Part II 10.3):
+/// a declared `struct` or `enum` by its declaration, the language's own by
+/// `check_reflect_builtin_kind`.
+fn grammar_types_kind(ty: ref Type, shapes: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext) -> String {
+    if ty.is_nullable {
+        return "Maybe"
+    }
+    if ty.is_tuple {
+        return "Tuple"
+    }
+    let name = f"{words.resolve(ty.name)}"
+    let shape: String? = shapes.get(name)?.clone()
+    if shape != null {
+        return shape ?? "Opaque"
+    }
+    return check_reflect_builtin_kind(name)
+}
+
+/// The types an arm's names stand for: `A` of `Maybe(A)` and `List(A)`,
+/// `K` and `V` of `Map(K, V)`, the type itself for `Struct(S)`, `Enum(E)`
+/// and `Opaque(T)`.
+fn grammar_types_parts(ty: ref Type, kind: ref String) -> Vec[Type] {
+    let mut parts: Vec[Type] = []
+    if kind == "Maybe" {
+        let mut inner = ty.clone()
+        inner.is_nullable = false
+        parts.push(inner)
+    } else if kind == "List" || kind == "Map" || kind == "Array" {
+        for arg in ty.generics {
+            parts.push(arg.clone())
+        }
+    } else if kind == "Struct" || kind == "Enum" || kind == "Opaque" {
+        parts.push(ty.clone())
+    }
+    return parts
+}
+
 /// One rule with the types `bound` says put in, under the name `name`.
-fn grammar_types_rule(rule: ref GrammarRule, bound: ref collections::BTreeMap[String, Type], name: winnow_grammar::Symbol, generic: ref collections::BTreeMap[String, GrammarRule], mut queue: Vec[GrammarTypesCall], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarRule {
+fn grammar_types_rule(rule: ref GrammarRule, bound: ref collections::BTreeMap[String, Type], name: winnow_grammar::Symbol, generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> GrammarRule {
     let mut copy = rule.clone()
     copy.name = name
     copy.generics = []
@@ -142,18 +323,154 @@ fn grammar_types_rule(rule: ref GrammarRule, bound: ref collections::BTreeMap[St
         config.push(c)
     }
     copy.config = config
-    let mut alts: Vec[GrammarAlt] = []
-    for alt in rule.alts {
-        let mut a = alt.clone()
-        a.pattern = grammar_types_pattern(alt.pattern, bound, generic, queue, owner, words, intern)
-        alts.push(a)
-    }
-    copy.alts = alts
+    copy.alts = grammar_types_alts(rule.alts, bound, f"{words.resolve(rule.name)}", generic, owner, words, intern, put, work)
     return copy
 }
 
+/// A rule's alternatives in a copy: a `match` on a kind gives the arm the
+/// type takes, every other alternative its pattern and action with the
+/// types put in.
+fn grammar_types_alts(alts: ref Vec[GrammarAlt], bound: ref collections::BTreeMap[String, Type], rule: ref String, generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> Vec[GrammarAlt] {
+    let mut out: Vec[GrammarAlt] = []
+    for alt in alts {
+        match alt.pattern.node {
+            Pattern::Choose { value, arms } => {
+                for one in grammar_types_choose(value, arms, alt.pattern.span, bound, rule, generic, owner, words, intern, put, work) {
+                    out.push(one)
+                }
+            },
+            else => {
+                let mut a = alt.clone()
+                a.pattern = grammar_types_pattern(alt.pattern, bound, generic, owner, words, intern, put, work)
+                if bound.len() > 0 && alt.action != null {
+                    let block: Block = alt.action?.clone() ?? Block { stmts: [] }
+                    a.action = put(block, bound)
+                }
+                out.push(a)
+            },
+        }
+    }
+    return out
+}
+
+/// **The arm of a `match` on a kind a copy keeps** (ADR-grammar-2 D2, D6):
+/// the first whose kind is the type's, or `else`; its names stand for the
+/// type's parts. No arm, or an arm that is `refuse("why")`, is `NK1250` at
+/// the call; a value other than a type's `::kind` is `NK1310`.
+fn grammar_types_choose(value: ref Expr, arms: ref Vec[GrammarArm], span: ref Span, bound: ref collections::BTreeMap[String, Type], rule: ref String, generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> Vec[GrammarAlt] {
+    let none: Vec[GrammarAlt] = []
+    let mut written: String = "this value"
+    let mut subject: String = ""
+    match value {
+        Expr::Path(segments, _) => {
+            let mut parts: Vec[String] = []
+            for segment in segments {
+                parts.push(f"{words.resolve(segment)}")
+            }
+            written = parts.join("::")
+            if segments.len() == 2 && parts[1] == "kind" {
+                subject = parts[0].clone()
+            }
+        },
+        Expr::Variable(name, _) => {
+            written = f"{words.resolve(name)}"
+        },
+        else => {},
+    }
+    let given: Type? = bound.get(subject)?.clone()
+    if given == null {
+        grammar_types_refuse(work, "NK1310", span.clone(), f"A `match` in a rule's pattern chooses while the program is built, and `{written}` isn't known then.", "A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-2 D2), which is decided while building; a value is only known while the input is read.", "Match on the kind of a type the rule takes, `match T::kind { … }`, or choose while reading with alternatives and a guard, `if(cond)`.")
+        return none
+    }
+    let ty: Type = given ?? return none
+    let kind = grammar_types_kind(ty, work.shapes, words)
+    let spelled = grammar_types_spelled(words, ty)
+    let entry = work.path[0].clone()
+    let mut reached: String = ""
+    if work.path.len() > 1 {
+        reached = f", reached by `{work.path.join("` then `")}`"
+    }
+    for arm in arms {
+        let read: (String, Vec[String])? = check_reflect_arm(words, arm.pattern)
+        let (case, names) = read ?? continue
+        if case != "" && case != kind {
+            continue
+        }
+        let mut inner = bound.clone()
+        let parts = grammar_types_parts(ty, kind)
+        let mut index: i64 = 0
+        for name in names {
+            if index < parts.len() as i64 {
+                inner.insert(name.clone(), parts[index].clone())
+            }
+            index += 1
+        }
+        let reason: String? = grammar_types_refused_why(arm.alts, words)
+        if reason != null {
+            let why: String = reason ?? ""
+            let mut named: String = case.clone()
+            if case == "" {
+                named = "else"
+            }
+            grammar_types_refuse(work, "NK1250", span.clone(), f"`{entry}` can't read a `{spelled}`: {why}", f"The arm `{named}` of the `match` in `{rule}` refuses it with `refuse(…)` (ADR-grammar-2 D6){reached}.", "Call it with a type the grammar reads.")
+            return none
+        }
+        return grammar_types_alts(arm.alts, inner, rule, generic, owner, words, intern, put, work)
+    }
+    grammar_types_refuse(work, "NK1250", span.clone(), f"`{entry}` can't read a `{spelled}`: no arm of the `match` in `{rule}` takes `{kind}`.", f"`{rule}` chooses its pattern by `{written}` (ADR-grammar-2 D6){reached}.", f"Add an arm for `{kind}` to the `match` in `{rule}`, or call it with a type an arm takes.")
+    return none
+}
+
+/// The reason of an arm that is `refuse("why")` alone; `null` for any other.
+fn grammar_types_refused_why(alts: ref Vec[GrammarAlt], words: ref winnow_grammar::InternerContext) -> String? {
+    if alts.len() != 1 || alts[0].action != null {
+        return null
+    }
+    match alts[0].pattern.node {
+        Pattern::Call { name, args, .. } => {
+            if words.resolve(name) != "refuse" || args.len() != 1 {
+                return null
+            }
+            match args[0] {
+                Expr::LitStr { text, .. } => {
+                    return text.clone()
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    return null
+}
+
+/// An expression of a pattern with the types put in, by the host's walk.
+fn grammar_types_put_expr(expr: ref Expr, span: ref Span, bound: ref collections::BTreeMap[String, Type], put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync) -> Expr {
+    if bound.len() == 0 {
+        return expr.clone()
+    }
+    let block = Block { stmts: [Spanned { node: Stmt::Expr(expr.clone()), span: span.clone(), doc: null, attributes: [] }] }
+    let done = put(block, bound)
+    if done.stmts.len() == 1 {
+        match done.stmts[0].node {
+            Stmt::Expr(e) => {
+                return e.clone()
+            },
+            else => {},
+        }
+    }
+    return expr.clone()
+}
+
+fn grammar_types_put_exprs(exprs: ref Vec[Expr], span: ref Span, bound: ref collections::BTreeMap[String, Type], put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync) -> Vec[Expr] {
+    let mut out: Vec[Expr] = []
+    for expr in exprs {
+        out.push(grammar_types_put_expr(expr, span, bound, put))
+    }
+    return out
+}
+
 /// A type with each type parameter `bound` names put in.
-fn grammar_types_put(ty: ref Type, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext) -> Type {
+pub fn grammar_types_put(ty: ref Type, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext) -> Type {
     if ty.generics.len() == 0 && !ty.is_tuple {
         let given: Type? = bound.get(words.resolve(ty.name))?.clone()
         if given != null {
@@ -171,47 +488,67 @@ fn grammar_types_put(ty: ref Type, bound: ref collections::BTreeMap[String, Type
     return copy
 }
 
-fn grammar_types_patterns(parts: ref Vec[Spanned[Pattern]], bound: ref collections::BTreeMap[String, Type], generic: ref collections::BTreeMap[String, GrammarRule], mut queue: Vec[GrammarTypesCall], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Vec[Spanned[Pattern]] {
+fn grammar_types_patterns(parts: ref Vec[Spanned[Pattern]], bound: ref collections::BTreeMap[String, Type], generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> Vec[Spanned[Pattern]] {
     let mut out: Vec[Spanned[Pattern]] = []
     for part in parts {
-        out.push(grammar_types_pattern(part, bound, generic, queue, owner, words, intern))
+        out.push(grammar_types_pattern(part, bound, generic, owner, words, intern, put, work))
     }
     return out
 }
 
 /// A pattern with the types put in, and each rule it hands types to,
 /// `Value[A]`, called by its copy's name, which is queued.
-fn grammar_types_pattern(pattern: ref Spanned[Pattern], bound: ref collections::BTreeMap[String, Type], generic: ref collections::BTreeMap[String, GrammarRule], mut queue: Vec[GrammarTypesCall], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Spanned[Pattern] {
+fn grammar_types_pattern(pattern: ref Spanned[Pattern], bound: ref collections::BTreeMap[String, Type], generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> Spanned[Pattern] {
     let mut copy = pattern.clone()
     match pattern.node {
         Pattern::Seq(parts) => {
-            copy.node = Pattern::Seq(grammar_types_patterns(parts, bound, generic, queue, owner, words, intern))
+            copy.node = Pattern::Seq(grammar_types_patterns(parts, bound, generic, owner, words, intern, put, work))
         },
         Pattern::Choice(parts) => {
-            copy.node = Pattern::Choice(grammar_types_patterns(parts, bound, generic, queue, owner, words, intern))
+            copy.node = Pattern::Choice(grammar_types_patterns(parts, bound, generic, owner, words, intern, put, work))
         },
         Pattern::Bind { name, pat } => {
-            copy.node = Pattern::Bind { name: name, pat: grammar_types_pattern(pat, bound, generic, queue, owner, words, intern) }
+            copy.node = Pattern::Bind { name: name, pat: grammar_types_pattern(pat, bound, generic, owner, words, intern, put, work) }
         },
         Pattern::Repeat { pat, rep } => {
-            copy.node = Pattern::Repeat { pat: grammar_types_pattern(pat, bound, generic, queue, owner, words, intern), rep: rep.clone() }
+            copy.node = Pattern::Repeat { pat: grammar_types_pattern(pat, bound, generic, owner, words, intern, put, work), rep: rep.clone() }
         },
         Pattern::Group(inner) => {
-            copy.node = Pattern::Group(grammar_types_pattern(inner, bound, generic, queue, owner, words, intern))
+            copy.node = Pattern::Group(grammar_types_pattern(inner, bound, generic, owner, words, intern, put, work))
         },
         Pattern::Counted { pat, low, high, comma } => {
-            copy.node = Pattern::Counted { pat: grammar_types_pattern(pat, bound, generic, queue, owner, words, intern), low: low.clone(), high: high?.clone(), comma: comma }
+            let mut top: Expr? = null
+            if high != null {
+                let given: Expr = high?.clone() ?? low.clone()
+                top = grammar_types_put_expr(given, pattern.span, bound, put)
+            }
+            copy.node = Pattern::Counted { pat: grammar_types_pattern(pat, bound, generic, owner, words, intern, put, work), low: grammar_types_put_expr(low, pattern.span, bound, put), high: top, comma: comma }
+        },
+        Pattern::Guard { cond, expected } => {
+            copy.node = Pattern::Guard { cond: grammar_types_put_expr(cond, pattern.span, bound, put), expected: expected?.clone() }
+        },
+        Pattern::Call { name, args, config } => {
+            let mut config2: Vec[ConfigArg] = []
+            for one in config {
+                config2.push(ConfigArg { name: one.name, value: grammar_types_put_expr(one.value, pattern.span, bound, put) })
+            }
+            copy.node = Pattern::Call { name: name, args: grammar_types_put_exprs(args, pattern.span, bound, put), config: config2 }
+        },
+        Pattern::Choose { .. } => {
+            grammar_types_refuse(work, "NK1310", pattern.span.clone(), "A `match` on a kind stands as a rule's whole body or a whole alternative, not inside a pattern.", "A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-2 D2).", "Give the `match` a rule of its own, and call that rule here.")
         },
         Pattern::Ref { name, generics, args } => {
             let mut types: Vec[Type] = []
             for ty in generics {
                 types.push(grammar_types_put(ty, bound, words))
             }
-            let parts = grammar_types_patterns(args, bound, generic, queue, owner, words, intern)
+            let parts = grammar_types_patterns(args, bound, generic, owner, words, intern, put, work)
             let called = words.resolve(name)
             if generic.contains_key(called) && types.len() > 0 {
                 let copied = grammar_types_copy_name(words, called, types)
-                queue.push(GrammarTypesCall { owner: owner, rule: name, types: types })
+                let mut path = work.path.clone()
+                path.push(grammar_types_called(words, called, types))
+                work.queue.push(GrammarTypesWanted { call: GrammarTypesCall { owner: owner, rule: name, types: types }, from: work.from, path: path })
                 copy.node = Pattern::Ref { name: intern(copied), generics: [], args: parts }
             } else {
                 copy.node = Pattern::Ref { name: name, generics: types, args: parts }

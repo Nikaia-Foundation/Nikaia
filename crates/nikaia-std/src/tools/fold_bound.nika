@@ -180,6 +180,7 @@ impl FbWidths {
             // A bound this walk cannot evaluate takes at least none
             // (ADR-grammar-1 D3); a guard matches nothing.
             Pattern::Counted { .. } => return 0,
+            Pattern::Choose { .. } => return 0,
             Pattern::Guard { .. } => return 0,
             // What a rule takes does not depend on the values it is handed:
             // every bound that does is counted as none.

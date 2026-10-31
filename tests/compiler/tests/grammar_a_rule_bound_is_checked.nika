@@ -1,0 +1,15 @@
+// ADR-grammar-2 D1, Part II 10.8: a bound on a rule's type parameter is
+// checked at the call, as a function's is (NK1164): `[S: Struct]` takes a
+// type declared with `struct`, and `i64` is not one.
+grammar Obj {
+	rule WS = "" -> { }
+	entry rule read[S: Struct] -> S = v:dec[i64](digit+) eof -> { v }
+}
+
+fn main() {
+	let n: i64 = Obj::read[i64](Bytes("42".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{n}")
+}

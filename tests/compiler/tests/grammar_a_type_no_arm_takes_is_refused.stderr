@@ -1,0 +1,8 @@
+error[NK1250]: `Lit::maybe[f64]` can't read a `f64`: no arm of the `match` in `Value` takes `F64`.
+   --> tests/grammar_a_type_no_arm_takes_is_refused.nika:16:16
+    |
+ 16 | 	let x: f64? = Lit::maybe[f64](Bytes("null".bytes().collect())) catch {
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `Value` chooses its pattern by `T::kind` (ADR-grammar-2 D6), reached by `Lit::maybe[f64]` then `Value[f64?]` then `Value[f64]`.
+    = help: Add an arm for `F64` to the `match` in `Value`, or call it with a type an arm takes.

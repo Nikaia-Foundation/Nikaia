@@ -422,6 +422,14 @@ pub enum Pattern {
     Call { name: winnow_grammar::Symbol, args: Vec<Expr>, config: Vec<ConfigArg> },
     Counted { pat: Box<Spanned<Pattern>>, low: Expr, high: Option<Expr>, comma: bool },
     Guard { cond: Expr, expected: Option<String> },
+    Choose { value: Expr, arms: Vec<GrammarArm> },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GrammarArm {
+    pub pattern: MatchPattern,
+    pub alts: Vec<GrammarAlt>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -314,6 +314,7 @@ impl CheckState {
                 }
                 return scope;
             },
+            Pattern::Choose { .. } => { return scope; },
             Pattern::Guard { cond, .. } => {
                 self.grammar_fixed(world, host, cond, pattern_named("bool", false), &scope, &pattern.span, "A guard", String::from("A guard is a condition: compare, as in `if(m > n)`."));
                 return scope;

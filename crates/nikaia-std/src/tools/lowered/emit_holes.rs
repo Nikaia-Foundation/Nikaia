@@ -193,6 +193,7 @@ pub(crate) fn emit_holes_fold_steps(pattern: &Pattern) -> Vec<&Expr> {
         Pattern::Literal(_) => { },
         Pattern::Cut => { },
         Pattern::Call { .. } => { },
+        Pattern::Choose { .. } => { },
         Pattern::Guard { .. } => { },
     }
     out

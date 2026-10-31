@@ -1,0 +1,18 @@
+// ADR-grammar-2 D2: a `match` in a rule body chooses while the program is
+// built, by the kind of a type the rule takes; a value such as a parameter
+// is only known while reading, so a `match` on it is refused (NK1310).
+grammar R {
+	rule WS = "" -> { }
+	entry rule read(n: i64) -> i64 = match n {
+		I64 => d:dec[i64](digit+) -> { d }
+	}
+}
+
+fn main() {
+	let input = Bytes("42".bytes().collect())
+	let n = R::read(input, 1) catch {
+		println("error")
+		return
+	}
+	println(f"{n}")
+}

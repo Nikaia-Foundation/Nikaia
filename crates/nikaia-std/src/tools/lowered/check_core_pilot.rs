@@ -246,6 +246,10 @@ pub(crate) fn check_reflect_named_kind(state: &CheckState, name: &str, args: &[T
     if (name == "Shared" || name == "SharedMut") && args.len() == 1 { return check_reflect_kind(state, nikaia_std::index::get(&args, 0)); }
     if state.structs.contains_key(name) { return String::from("Struct"); }
     if state.enums.contains_key(name) { return String::from("Enum"); }
+    check_reflect_builtin_kind(name)
+}
+
+pub fn check_reflect_builtin_kind(name: &str) -> String {
     match name {
         "i64" => String::from("I64"),
         "i32" => String::from("I32"),

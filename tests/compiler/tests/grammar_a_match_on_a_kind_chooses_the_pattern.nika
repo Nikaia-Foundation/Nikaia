@@ -1,0 +1,43 @@
+// ADR-grammar-2 D2, D6, Part II 10.8: a rule body `match T::kind { … }`
+// chooses its pattern by the kind of the type each copy is for. `Maybe(A)`
+// names the type inside, and its arm hands it on to `Value[A]`; the arm no
+// copy takes (`Text`) is not copied at all.
+grammar Lit {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	entry rule maybe[T] -> T? = v:Value[T?] eof -> { v }
+	rule Value[T] -> T = match T::kind {
+		Bool => "true" -> { true } | "false" -> { false }
+		I64 => d:dec[i64](digit+) -> { d }
+		Maybe(A) => "null" -> { null } | v:Value[A] -> { v }
+		Text => refuse("no strings in this test")
+	}
+}
+
+fn main() {
+	let b: bool = Lit::read[bool](Bytes("false".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{b}")
+	let n: i64 = Lit::read[i64](Bytes("42".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{n}")
+	let none: i64? = Lit::maybe[i64](Bytes("null".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{none ?? -1}")
+	let some: bool? = Lit::maybe[bool](Bytes("true".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{some ?? false}")
+	let wrong: i64 = Lit::read[i64](Bytes("true".bytes().collect())) catch {
+		println("not a number")
+		return
+	}
+	println(f"{wrong}")
+}
