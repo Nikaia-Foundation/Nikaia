@@ -170,3 +170,4 @@
 /home/user/Nikaia/docs/briefs/b1012a-trait-column-fn.md 71258 1
 /home/user/Nikaia/docs/briefs/k3a2-comptime-compute.md 1614685 31
 /home/user/Nikaia/docs/briefs/architect-task.md 2293786 42
+/home/user/Nikaia/docs/briefs/b1023-fn-param-cycle.md 6239833 85
