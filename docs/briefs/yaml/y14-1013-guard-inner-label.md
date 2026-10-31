@@ -6,7 +6,7 @@ budget_usd: 18
 ---
 # Brief: #1013 step 4, a guard reads a name bound inside `text(..)`
 
-Score: a defect of a decided form (owner, 2026-10-30: bindings inside `text(..)` are supported), found by this lane (y12); nothing in `packages/yaml` needs it today, it closes #1013. Runs after `y2c-properties.md`.
+Score: a defect of a decided form (owner, 2026-10-30: bindings inside `text(..)` are supported), found by this lane (y12); nothing in `packages/yaml` needs it today, it closes #1013. Runs after `y2c-properties.md` (run 3), which waits on `y15-1015-fmt-guard-label.md`.
 
 ## Issue (#1013, copied)
 

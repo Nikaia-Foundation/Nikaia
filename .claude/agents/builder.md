@@ -32,6 +32,11 @@ You build one small slice of an issue in the Nikaia repository and end.
   it is incomplete. Under 60% kept, the driver stops the pipeline and the
   converter is repaired first (owner, 2026-10-27). The draft's iterator chains stay chains: one that does not
   compile is a gap, and stops the slice as below, it is not rewritten as a loop.
+* **A run that starts from a draft or a `wip/*` branch checks it whole first**
+  (y2c run 2, 2026-10-31: the fmt scan, run last, found #1015 after the test
+  was written): right after applying it, `nikaia fmt` every changed `.nika`
+  (on a scratch copy where `fmt` is not allowed), then `check` and the tests,
+  before writing a line. A refusal there stops the run at once.
 * **A compiler defect stops the slice.** Do not work around it in the moved
   code: fix it in the compiler as its own commit if the task allows, else stop
   and report it with a probe of a few lines.
