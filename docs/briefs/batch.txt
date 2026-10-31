@@ -1,3 +1,2 @@
-b1012c-trait-column-data.md
 b1017-lambda-optional-tail.md
 b1018-kept-fn-index-read.md
