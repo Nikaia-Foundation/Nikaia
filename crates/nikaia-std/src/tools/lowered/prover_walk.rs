@@ -222,7 +222,7 @@ pub(crate) fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut Pro
     let mut untracked: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut pinned: collections::BTreeSet<String> = collections::BTreeSet::new();
     if prover_binds_mutable(block) {
-        untracked = untracked_in(block, words);
+        untracked = untracked_in(block, &walk.state.value_readers, words);
         pinned = pinned_in(block, words);
     }
     for index in 0..block.stmts.len() as i64 {
@@ -436,7 +436,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
     let mut called_whole = false;
     let mut called_facts: Vec<i64> = vec![];
     let mut called_summed: Option<Vec<SummaryAlt>> = None;
-    if names.len() == 1 && !mutable {
+    if names.len() == 1 {
         match value {
             Expr::Call { func, args, config, .. } => {
                 let func = nikaia_std::boxed::open(func);
@@ -468,6 +468,17 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
             let bound = words.resolve(*nikaia_std::index::get(&names, 0)).to_string();
             scope.bounded_bits(&mut walk.arena, &bound, &match bits { Some(__nikaia_value) => __nikaia_value, None => return });
         }
+    }
+    if names.len() == 1 && mutable && called && called_whole {
+        let bound = words.resolve(*nikaia_std::index::get(&names, 0)).to_string();
+        scope.ints.insert(bound.to_string());
+        scope.loose.insert(bound.to_string());
+        for fact in called_facts.iter() {
+            let fact = nikaia_std::num::value(fact);
+            scope.facts.push(fact);
+        }
+        if called_summed.is_some() { scope.summed.insert(bound, nikaia_std::index::or(called_summed, || vec![].into())); }
+        return;
     }
     if names.len() != 1 || mutable { return; }
     let name = words.resolve(*nikaia_std::index::get(&names, 0)).to_string();
@@ -1034,11 +1045,11 @@ pub(crate) fn prover_join(walk: &mut ProverWalk, scope: &mut ProverScope, then_s
     let mut sides: Vec<i64> = vec![];
     if !then_leaves {
         let own = prover_own_names(then_branch, words);
-        sides.push(prover_side(&mut walk.arena, then_scope, &own, &before, &outer, &dropped, &earlier, &then_assigns));
+        sides.push(prover_side(&mut walk.arena, then_scope, &own, &before, &outer, &dropped, &earlier, &then_assigns, &format!("{}t", span.start)));
     }
     if !else_leaves {
         let own = prover_else_own_names(else_branch, words);
-        sides.push(prover_side(&mut walk.arena, else_scope, &own, &before, &outer, &dropped, &earlier, &else_assigns));
+        sides.push(prover_side(&mut walk.arena, else_scope, &own, &before, &outer, &dropped, &earlier, &else_assigns, &format!("{}e", span.start)));
     }
     if !followed.is_empty() { if sides.len() == 1 { scope.history.push(*nikaia_std::index::get(&sides, 0)); } else { scope.history.push(walk.arena.or(sides)); } }
     for n in followed.iter() {
@@ -1049,16 +1060,22 @@ pub(crate) fn prover_join(walk: &mut ProverWalk, scope: &mut ProverScope, then_s
     scope.exact = false;
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_side(arena: &mut TermArena, side: &ProverScope, own: &collections::BTreeSet<String>, before: &collections::BTreeSet<i64>, outer: &collections::BTreeSet<String>, dropped: &collections::BTreeSet<String>, earlier: &collections::BTreeMap<String, String>, assigns: &collections::BTreeSet<String>) -> i64 {
+pub(crate) fn prover_side(arena: &mut TermArena, side: &ProverScope, own: &collections::BTreeSet<String>, before: &collections::BTreeSet<i64>, outer: &collections::BTreeSet<String>, dropped: &collections::BTreeSet<String>, earlier: &collections::BTreeMap<String, String>, assigns: &collections::BTreeSet<String>, tag: &str) -> i64 {
     let mut parts: Vec<i64> = vec![];
     for fact in side.with_history() {
         if before.contains(&fact) { continue; }
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         arena.variables(fact, &mut read);
         let mut lives = true;
-        for name in read.iter() { if !name.contains('#') && (!outer.contains(name) || own.contains(name) || dropped.contains(name)) { lives = false; } }
-        if lives { parts.push(fact); }
+        let mut apart: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+        for name in read.iter() {
+            if name.contains('#') { continue; }
+            if dropped.contains(name) { lives = false; } else if !outer.contains(name) || own.contains(name) { apart.insert(name.to_string(), arena.var(&format!("{}#{}", name, tag))); }
+        }
+        if lives && apart.is_empty() { parts.push(fact); } else if lives { parts.push(arena.substitute(fact, &apart)); }
     }
     for (n, old) in earlier.iter() {
         if !assigns.contains(n) {
@@ -1609,17 +1626,19 @@ pub(crate) fn prover_follow_mutables(walk: &mut ProverWalk, stmt: &Stmt, span: &
             if mutable && names.len() == 1 {
                 let n = words.resolve(*nikaia_std::index::get(&names, 0)).to_string();
                 if !pinned.contains(&n) { prover_mutable_list(walk, &n, (ty).as_ref(), value, scope, words); }
-                if !untracked.contains(&n) {
-                    let term = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
-                    if term.is_some() && !walk.arena.mentions(nikaia_std::index::or(term, || 0), &n) {
-                        let v = nikaia_std::index::or(term, || 0);
-                        let at_entry = scope.at_entry(&mut walk.arena, v);
-                        scope.ints.insert(n.to_string());
-                        scope.mutables.insert(n.to_string());
-                        let named = walk.arena.var(&n);
-                        scope.facts.push(walk.arena.equal(named, v));
-                        if at_entry.is_some() { scope.entry.insert(n.to_string(), nikaia_std::index::or(at_entry, || 0)); }
-                    }
+                let term = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                let of_call = term.is_none() && match value {
+                    Expr::Call { .. } => scope.ints.contains(&n),
+                    _ => false,
+                };
+                if of_call && untracked.contains(&n) { scope.rebind(&walk.arena, &n); } else if of_call { scope.mutables.insert(n.to_string()); } else if !untracked.contains(&n) && term.is_some() && !walk.arena.mentions(nikaia_std::index::or(term, || 0), &n) {
+                    let v = nikaia_std::index::or(term, || 0);
+                    let at_entry = scope.at_entry(&mut walk.arena, v);
+                    scope.ints.insert(n.to_string());
+                    scope.mutables.insert(n.to_string());
+                    let named = walk.arena.var(&n);
+                    scope.facts.push(walk.arena.equal(named, v));
+                    if at_entry.is_some() { scope.entry.insert(n.to_string(), nikaia_std::index::or(at_entry, || 0)); }
                 }
             }
         },
@@ -1959,6 +1978,24 @@ pub(crate) fn prover_assigns_inside(walk: &mut ProverWalk, block: &Block, name: 
         for inner in blocks_of_stmt(&stmt.node) { if !prover_assigns_inside(walk, inner, name, bounds, scope, words) { return false; } }
     }
     true
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn prover_value_readers(readers: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger) -> collections::BTreeSet<String> {
+    let mut all = readers.to_owned();
+    for (key, contract) in library.functions.iter() { if prover_reads_only(contract) { all.insert(key.to_string()); } }
+    for (key, contract) in own.functions.iter() { if prover_reads_only(contract) { all.insert(key.to_string()); } }
+    all
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn prover_reads_only(contract: &FnContract) -> bool {
+    match &contract.signature {
+        None => false,
+        Some(sig) => !sig.takes_a_receiver() && sig.mutable.is_empty(),
+    }
 }
 
 pub(crate) fn prover_readers(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {

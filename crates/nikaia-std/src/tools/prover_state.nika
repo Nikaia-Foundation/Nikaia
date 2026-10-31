@@ -35,6 +35,10 @@ pub struct ProverState {
     /// **The free functions whose parameters are all read-only** (#782): a
     /// list handed to one keeps its length.
     pub readers: collections::BTreeSet[String],
+    /// **The functions, the program's and the ledgers', that change no
+    /// argument** (Part I: only a `mut` parameter changes the caller's
+    /// value): a whole number handed to one stays followed (ADR-361 D1).
+    pub value_readers: collections::BTreeSet[String],
     /// **Names whose value the build knows** (ADR-359 D7, D11): each
     /// integer `comptime` of the program's items, and each call run while
     /// the program was built, by `call_result_name`. A local of the same name
@@ -111,6 +115,7 @@ impl ProverState {
             collecting: true,
             in_test: false,
             readers: collections::BTreeSet(),
+            value_readers: collections::BTreeSet(),
             pinned: collections::BTreeMap(),
             comptime_at: collections::BTreeMap(),
             call_sites: collections::BTreeMap(),
@@ -611,6 +616,17 @@ impl ProverState {
                     outcome.held.push(ClaimHeld::Proved)
                 }
                 continue
+            }
+            // **Asked once more with what the earlier values of the mutable
+            // whole numbers make known** (ADR-361 D9, D2), as an `assert` is.
+            if goal != null && scope.history_reads(arena, goal ?? 0) {
+                self.second_queries += 1
+                if is_proved(ask(arena, scope.with_history(), goal ?? 0)) {
+                    if of_std {
+                        outcome.held.push(ClaimHeld::Proved)
+                    }
+                    continue
+                }
             }
             let site = CarriedFrom { at: span.start as i64, callee: callee.clone(), place: index }
             if of_std && self.in_test {

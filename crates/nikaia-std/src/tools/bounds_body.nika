@@ -35,8 +35,11 @@ enum Ask {
     /// **The names the prover may not follow as a mutable whole number**
     /// (ADR-361 D1): what a deferred body changes, and every name handed to a
     /// call or a method, which a `mut` parameter changes in place with
-    /// nothing at the call to show it (Part I 6.4).
-    Untracked,
+    /// nothing at the call to show it (Part I 6.4). Not a name handed to one
+    /// of the functions named in the set, whose parameters are all read-only,
+    /// nor a method's receiver: no method on a whole number changes it. Both
+    /// only outside a deferred body.
+    Untracked(collections::BTreeSet[String]),
 }
 
 struct Tally {
@@ -91,10 +94,12 @@ pub fn assigned_in(body: ref Block, words: ref winnow_grammar::InternerContext) 
 
 /// **The names in `body` the prover may not follow as mutable whole
 /// numbers** (ADR-361 D1): changed by a deferred body or through an index or
-/// a field, or handed to a call or a method.
-pub fn untracked_in(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+/// a field, or handed to a call or a method that may change it: not to one
+/// of `readers`, the functions whose parameters are all read-only (Part I:
+/// only a `mut` parameter changes the caller's value).
+pub fn untracked_in(body: ref Block, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] sync {
     let mut found = tally()
-    tally_block(body, Ask::Untracked, false, words, found)
+    tally_block(body, Ask::Untracked(readers.clone()), false, words, found)
     return found.names
 }
 
@@ -148,6 +153,24 @@ fn pushed_onto(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> St
 fn variable_text(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     return match expr {
         Expr::Variable(name, _) => words.resolve(name).clone(),
+        else => null,
+    }
+}
+
+/// A callee by the name it is written with: `f`, `scalar::from`.
+fn body_callee_text(func: ref Expr, words: ref winnow_grammar::InternerContext) -> String? sync {
+    return match func {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        Expr::Path(segments, _) => {
+            let mut joined: String = ""
+            for segment in segments {
+                if !joined.is_empty() {
+                    joined.push_str("::")
+                }
+                joined.push_str(words.resolve(segment))
+            }
+            joined
+        },
         else => null,
     }
 }
@@ -245,7 +268,7 @@ fn tally_statement(stmt: ref Stmt, ask: ref Ask, deferred: bool, words: ref winn
             },
             else => {},
         },
-        Ask::Untracked => {
+        Ask::Untracked(_) => {
             match stmt {
                 Stmt::Assign { target, .. } => {
                     // Through an index or a field, or from a deferred body.
@@ -349,16 +372,24 @@ fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
             else => {},
         },
         Ask::Assigned => {},
-        Ask::Untracked => match expr {
+        Ask::Untracked(readers) => match expr {
             Expr::MethodCall { receiver, args, .. } => {
-                add_variable(receiver, words, tally.names)
+                if deferred {
+                    add_variable(receiver, words, tally.names)
+                }
                 add_variables(args, words, tally.names)
             },
             Expr::SafeMethod { receiver, args, .. } => {
-                add_variable(receiver, words, tally.names)
+                if deferred {
+                    add_variable(receiver, words, tally.names)
+                }
                 add_variables(args, words, tally.names)
             },
-            Expr::Call { args, .. } => add_variables(args, words, tally.names),
+            Expr::Call { func, args, .. } => {
+                if deferred || !readers.contains(body_callee_text(func, words) ?? "") {
+                    add_variables(args, words, tally.names)
+                }
+            },
             else => {},
         },
         // **A deferred body that may change a value pins the name it is

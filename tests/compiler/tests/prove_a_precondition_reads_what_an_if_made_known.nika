@@ -1,0 +1,36 @@
+// #1009: a call's precondition reads what an `if` made known of a mutable
+// whole number (ADR-361 D9), as an `assert` in its place does.
+enum Bad { No }
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn four(x: i64) -> i64 throws {
+	if x < 0 || x > 0xFFFF {
+		throw Bad::No
+	}
+	assert(x >= 0 && x <= 0xFFFF)
+	return x
+}
+
+fn decode(a: i64) -> scalar throws {
+	let first = four(a)
+	let mut cp = first
+	if cp >= 55296 && cp <= 56319 {
+		cp = 65536
+	} else if cp >= 56320 && cp <= 57343 {
+		throw Bad::No
+	}
+	let fin = cp
+	return scalar::from(fin)
+}
+
+fn main() {
+	let c = decode(65) catch { 'x' }
+	println(f"{c}")
+	let d = decode(55296) catch { 'x' }
+	println(f"{d}")
+}

@@ -1,0 +1,25 @@
+// #1009: what a branch's own `let` of a call bounds of a mutable whole
+// number reaches the join after the `if` (ADR-361 D9).
+fn small(a: i64) -> i64 {
+	if a < 0 || a > 10 {
+		return 0
+	}
+	assert(a >= 0 && a <= 10)
+	return a
+}
+
+fn pick(a: i64, b: i64) -> i64 {
+	let first = small(a)
+	let mut cp = first
+	if cp > 5 {
+		let low = small(b)
+		cp = cp + low
+	}
+	assert(cp >= 0 && cp <= 20)
+	return cp
+}
+
+fn main() {
+	println(f"{pick(3, 4)}")
+	println(f"{pick(7, 4)}")
+}

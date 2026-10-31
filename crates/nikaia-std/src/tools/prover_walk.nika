@@ -318,7 +318,7 @@ fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, 
     let mut untracked: collections::BTreeSet[String] = collections::BTreeSet()
     let mut pinned: collections::BTreeSet[String] = collections::BTreeSet()
     if prover_binds_mutable(block) {
-        untracked = untracked_in(block, words)
+        untracked = untracked_in(block, walk.state.value_readers, words)
         pinned = pinned_in(block, words)
     }
     for index in 0..<block.stmts.len() {
@@ -597,7 +597,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     let mut called_whole = false
     let mut called_facts: Vec[i64] = []
     let mut called_summed: Vec[SummaryAlt]? = null
-    if names.len() == 1 && !mutable {
+    if names.len() == 1 {
         match value {
             Expr::Call { func, args, config, .. } => {
                 let callee = prover_bound_callee(func, scope, words, unaliased)
@@ -628,6 +628,21 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
             let bound = words.resolve(names[0]).clone()
             scope.bounded_bits(walk.arena, bound, bits ?? return)
         }
+    }
+    // **A `let mut` of a call knows what the call ensures** (#1009), as a
+    // `let` does; `prover_follow_mutables` follows it from there, or drops
+    // it where the block may change it unseen.
+    if names.len() == 1 && mutable && called && called_whole {
+        let bound = words.resolve(names[0]).clone()
+        scope.ints.insert(bound.clone())
+        scope.loose.insert(bound.clone())
+        for fact in called_facts {
+            scope.facts.push(fact)
+        }
+        if called_summed != null {
+            scope.summed.insert(bound, called_summed ?? [])
+        }
+        return
     }
     if names.len() != 1 || mutable {
         return
@@ -1406,11 +1421,11 @@ fn prover_join(mut walk: ProverWalk, mut scope: ProverScope, then_scope: ref Pro
     let mut sides: Vec[i64] = []
     if !then_leaves {
         let own = prover_own_names(then_branch, words)
-        sides.push(prover_side(walk.arena, then_scope, own, before, outer, dropped, earlier, then_assigns))
+        sides.push(prover_side(walk.arena, then_scope, own, before, outer, dropped, earlier, then_assigns, f"{span.start}t"))
     }
     if !else_leaves {
         let own = prover_else_own_names(else_branch, words)
-        sides.push(prover_side(walk.arena, else_scope, own, before, outer, dropped, earlier, else_assigns))
+        sides.push(prover_side(walk.arena, else_scope, own, before, outer, dropped, earlier, else_assigns, f"{span.start}e"))
     }
     if !followed.is_empty() {
         if sides.len() == 1 {
@@ -1431,11 +1446,13 @@ fn prover_join(mut walk: ProverWalk, mut scope: ProverScope, then_scope: ref Pro
     scope.exact = false
 }
 
-/// **What one side of an `if` adds**, as one term: the facts it made known
-/// that read only names living past the `if` - not one its own block binds,
-/// nor one the walk stops following - and, for each followed name the side
-/// does not assign, that it is still its old value.
-fn prover_side(mut arena: TermArena, side: ref ProverScope, own: ref collections::BTreeSet[String], before: ref collections::BTreeSet[i64], outer: ref collections::BTreeSet[String], dropped: ref collections::BTreeSet[String], earlier: ref collections::BTreeMap[String, String], assigns: ref collections::BTreeSet[String]) -> i64 {
+/// **What one side of an `if` adds**, as one term: the facts it made known,
+/// but none that reads a name the walk stops following, and, for each
+/// followed name the side does not assign, that it is still its old value. A
+/// name that does not live past the `if` - one its own block binds - is
+/// renamed apart (`low#12t`, `tag` naming the side): what it bounds of the
+/// names that live on is kept (ADR-361 D9, #1009).
+fn prover_side(mut arena: TermArena, side: ref ProverScope, own: ref collections::BTreeSet[String], before: ref collections::BTreeSet[i64], outer: ref collections::BTreeSet[String], dropped: ref collections::BTreeSet[String], earlier: ref collections::BTreeMap[String, String], assigns: ref collections::BTreeSet[String], tag: ref String) -> i64 sync {
     let mut parts: Vec[i64] = []
     for fact in side.with_history() {
         if before.contains(fact) {
@@ -1444,13 +1461,21 @@ fn prover_side(mut arena: TermArena, side: ref ProverScope, own: ref collections
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
         arena.variables(fact, read)
         let mut lives = true
+        let mut apart: collections::BTreeMap[String, i64] = collections::BTreeMap()
         for name in read {
-            if !name.contains("#") && (!outer.contains(name) || own.contains(name) || dropped.contains(name)) {
+            if name.contains("#") {
+                continue
+            }
+            if dropped.contains(name) {
                 lives = false
+            } else if !outer.contains(name) || own.contains(name) {
+                apart.insert(name.clone(), arena.var(f"{name}#{tag}"))
             }
         }
-        if lives {
+        if lives && apart.is_empty() {
             parts.push(fact)
+        } else if lives {
+            parts.push(arena.substitute(fact, apart))
         }
     }
     for (n, old) in earlier {
@@ -2202,18 +2227,26 @@ fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut 
                 if !pinned.contains(n) {
                     prover_mutable_list(walk, n, ty, value, scope, words)
                 }
-                if !untracked.contains(n) {
-                    let term = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
-                    if term != null && !walk.arena.mentions(term ?? 0, n) {
-                        let v = term ?? 0
-                        let at_entry = scope.at_entry(walk.arena, v)
-                        scope.ints.insert(n.clone())
-                        scope.mutables.insert(n.clone())
-                        let named = walk.arena.var(n)
-                        scope.facts.push(walk.arena.equal(named, v))
-                        if at_entry != null {
-                            scope.entry.insert(n.clone(), at_entry ?? 0)
-                        }
+                // A call's result `prover_let` read (#1009): followed from
+                // what the callee ensures, or dropped if not followed.
+                let term = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                let of_call = term == null && match value {
+                    Expr::Call { .. } => scope.ints.contains(n),
+                    else => false,
+                }
+                if of_call && untracked.contains(n) {
+                    scope.rebind(walk.arena, n)
+                } else if of_call {
+                    scope.mutables.insert(n.clone())
+                } else if !untracked.contains(n) && term != null && !walk.arena.mentions(term ?? 0, n) {
+                    let v = term ?? 0
+                    let at_entry = scope.at_entry(walk.arena, v)
+                    scope.ints.insert(n.clone())
+                    scope.mutables.insert(n.clone())
+                    let named = walk.arena.var(n)
+                    scope.facts.push(walk.arena.equal(named, v))
+                    if at_entry != null {
+                        scope.entry.insert(n.clone(), at_entry ?? 0)
                     }
                 }
             }
@@ -2705,6 +2738,32 @@ fn prover_assigns_inside(mut walk: ProverWalk, block: ref Block, name: ref Strin
 
 /// **The free functions of `program` with no `mut` parameter** (#782): a
 /// list handed to one of them keeps its length.
+/// **The functions a whole number handed to keeps its value**: the
+/// program's free functions without a `mut` parameter, and each free function
+/// of the ledgers whose signature has none.
+fn prover_value_readers(readers: ref collections::BTreeSet[String], own: ref Ledger, library: ref Ledger) -> collections::BTreeSet[String] sync {
+    let mut all = readers.clone()
+    for (key, contract) in library.functions {
+        if prover_reads_only(contract) {
+            all.insert(key.clone())
+        }
+    }
+    for (key, contract) in own.functions {
+        if prover_reads_only(contract) {
+            all.insert(key.clone())
+        }
+    }
+    return all
+}
+
+/// A ledger's free function with no `mut` parameter.
+fn prover_reads_only(contract: ref FnContract) -> bool sync {
+    return match contract.signature {
+        null => false,
+        sig => !sig.takes_a_receiver() && sig.mutable.is_empty(),
+    }
+}
+
 fn prover_readers(program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut readers: collections::BTreeSet[String] = collections::BTreeSet()
     for item in program.items {

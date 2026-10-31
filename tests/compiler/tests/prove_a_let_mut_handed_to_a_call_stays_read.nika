@@ -1,0 +1,32 @@
+// #1009: a `let mut` whole number handed to a parameter that is not `mut`,
+// or the receiver of a method on it, keeps its value (Part I), so the prover
+// still reads it.
+fn small(a: i64) -> i64 {
+	if a < 0 || a > 10 {
+		return 0
+	}
+	assert(a >= 0 && a <= 10)
+	return a
+}
+
+fn id(n: i64) -> i64 {
+	return n
+}
+
+fn pick(a: i64) -> i64 {
+	let first = small(a)
+	let mut cp = first
+	if cp > 5 {
+		cp = cp + 1
+	}
+	assert(cp >= 0 && cp <= 0x10000)
+	let s = id(cp)
+	let t = cp.to_string()
+	println(t)
+	return s
+}
+
+fn main() {
+	println(f"{pick(3)}")
+	println(f"{pick(7)}")
+}

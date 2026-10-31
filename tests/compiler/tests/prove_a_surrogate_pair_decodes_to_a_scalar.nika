@@ -1,0 +1,36 @@
+// #1009, #1003: json's `\u` decoding, a surrogate pair made one scalar,
+// proved a valid `scalar` at `scalar::from`.
+enum Bad { No }
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn four(x: i64) -> i64 throws {
+	if x < 0 || x > 0xFFFF {
+		throw Bad::No
+	}
+	assert(x >= 0 && x <= 0xFFFF)
+	return x
+}
+
+fn decode(a: i64, b: i64) -> scalar throws {
+	let mut cp = four(a)
+	if cp >= 55296 && cp <= 56319 {
+		let low = four(b)
+		if low < 56320 || low > 57343 {
+			throw Bad::No
+		}
+		cp = 65536 + (cp - 55296) * 1024 + (low - 56320)
+	} else if cp >= 56320 && cp <= 57343 {
+		throw Bad::No
+	}
+	return scalar::from(cp)
+}
+
+fn main() {
+	let c = decode(65, 0) catch { 'x' }
+	println(f"{c}")
+}

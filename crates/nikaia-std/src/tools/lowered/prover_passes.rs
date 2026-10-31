@@ -12,6 +12,7 @@ pub struct ProverAnswers {
 #[allow(clippy::too_many_arguments)]
 pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> ProverAnswers {
     walk.state.readers = prover_readers(program, words);
+    walk.state.value_readers = prover_value_readers(&walk.state.readers, own, library);
     let bound = program.items.len() as i64 + 2;
     let mut preconditions: collections::BTreeMap<String, Precondition> = collections::BTreeMap::new();
     for _ in 0..bound {

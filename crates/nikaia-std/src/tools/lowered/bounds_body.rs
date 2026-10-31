@@ -9,7 +9,7 @@ pub(crate) enum Ask {
     Changes(String, collections::BTreeSet<String>),
     Pinned,
     Assigned,
-    Untracked,
+    Untracked(collections::BTreeSet<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,9 +51,11 @@ pub fn assigned_in(body: &Block, words: &winnow_grammar::InternerContext) -> col
     found.names
 }
 
-pub fn untracked_in(body: &Block, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn untracked_in(body: &Block, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut found = tally();
-    tally_block(body, &Ask::Untracked, false, words, &mut found);
+    tally_block(body, &Ask::Untracked(readers.to_owned()), false, words, &mut found);
     found.names
 }
 
@@ -96,6 +98,24 @@ pub(crate) fn pushed_onto(stmt: &Stmt, words: &winnow_grammar::InternerContext) 
 pub(crate) fn variable_text(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn body_callee_text(func: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match func {
+        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+        Expr::Path(segments, _) => {
+            let mut joined: String = String::from("");
+            for segment in segments.iter() {
+                let segment = *segment;
+                if !joined.is_empty() { joined.push_str("::"); }
+                joined.push_str(words.resolve(segment));
+            }
+            Some(joined)
+        },
         _ => None,
     }
 }
@@ -175,7 +195,7 @@ pub(crate) fn tally_statement(stmt: &Stmt, ask: &Ask, deferred: bool, words: &wi
             },
             _ => { },
         }; },
-        Ask::Untracked => {
+        Ask::Untracked(_) => {
             match stmt {
                 Stmt::Assign { target, .. } => {
                     let root = assigned_root(target, words);
@@ -252,18 +272,21 @@ pub(crate) fn tally_here(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_
             _ => { },
         }; },
         Ask::Assigned => { },
-        Ask::Untracked => { match expr {
+        Ask::Untracked(readers) => { match expr {
             Expr::MethodCall { receiver, args, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver);
-                add_variable(receiver, words, &mut tally.names);
+                if deferred { add_variable(receiver, words, &mut tally.names); }
                 add_variables(args, words, &mut tally.names);
             },
             Expr::SafeMethod { receiver, args, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver);
-                add_variable(receiver, words, &mut tally.names);
+                if deferred { add_variable(receiver, words, &mut tally.names); }
                 add_variables(args, words, &mut tally.names);
             },
-            Expr::Call { args, .. } => { add_variables(args, words, &mut tally.names); },
+            Expr::Call { func, args, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                if deferred || !readers.contains(&nikaia_std::index::or(body_callee_text(func, words), || "".into())) { add_variables(args, words, &mut tally.names); }
+            },
             _ => { },
         }; },
         Ask::Pinned => {

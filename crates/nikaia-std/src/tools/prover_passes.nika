@@ -27,6 +27,7 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
     // carried back, so every chain of carrying is at most as long as the
     // functions are many.
     walk.state.readers = prover_readers(program, words)
+    walk.state.value_readers = prover_value_readers(walk.state.readers, own, library)
     let bound = program.items.len() + 2
     let mut preconditions: collections::BTreeMap[String, Precondition] = collections::BTreeMap()
     for _ in 0..<bound {

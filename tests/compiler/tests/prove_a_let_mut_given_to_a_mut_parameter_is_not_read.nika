@@ -1,0 +1,19 @@
+// #1009: a whole number handed to a `mut` parameter may change with nothing
+// at the call to show it, so the prover stops reading it.
+fn bump(mut n: i64) {
+	n += 1000
+}
+
+fn pick(a: i64) -> i64 {
+	if a < 0 || a > 10 {
+		return 0
+	}
+	let mut cp = a
+	bump(cp)
+	assert(cp >= 0 && cp <= 10)
+	return cp
+}
+
+fn main() {
+	println(f"{pick(3)}")
+}
