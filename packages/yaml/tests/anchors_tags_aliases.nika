@@ -1,0 +1,93 @@
+// Node properties (YAML 1.2.2 6.9) and alias nodes (7.1): an anchor and a tag
+// are kept on the node as written, an alias is a `Value::Alias` node, not
+// resolved (ADR-yaml-1 D6). A core tag fixes the kind (D5) and its scalar's
+// shape is checked in the grammar, so a scalar that does not fit is a parse
+// error at its position. The references are the specification's examples
+// named beside each line (the yaml-test-suite's "Spec Example" cases).
+use yaml
+
+fn props(n: ref yaml::Node) -> String {
+	let a = match n.anchor {
+		null => ""
+		x => f"&{x} "
+	}
+	let t = match n.tag {
+		null => ""
+		x => f"{x} "
+	}
+	return f"{a}{t}"
+}
+
+fn show(n: ref yaml::Node) -> String {
+	let p = props(n)
+	return match n.value {
+		yaml::Value::Null => f"{p}null"
+		yaml::Value::Bool(b) => f"{p}bool({b})"
+		yaml::Value::Int(t) => f"{p}int({t})"
+		yaml::Value::Float(t) => f"{p}float({t})"
+		yaml::Value::Str(s) => f"{p}str({yaml::text(s).replace("\n", "\\n")})"
+		yaml::Value::Alias(a) => f"{p}alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"{p}[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{p}{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println(f"error {error.line}:{error.column}")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+
+fn main() {
+	// anchors and aliases (example 2.10; example 7.1: an anchor named again
+	// overrides, the alias is not resolved)
+	line("hr:\n  - Mark McGwire\n  # Following node labeled SS\n  - &SS Sammy Sosa\nrbi:\n  - *SS # Subsequent occurrence\n  - Ken Griffey\n")
+	line("First occurrence: &anchor Foo\nSecond occurrence: *anchor\nOverride anchor: &anchor Bar\nReuse anchor: *anchor\n")
+	// node properties in either order, on a key and on a value (example 6.23)
+	line("!!str &a1 \"foo\":\n  !!str bar\n&a2 baz : *a1\n")
+	// verbatim tags (example 6.24)
+	line("!<tag:yaml.org,2002:str> foo :\n  !<!bar> baz\n")
+	// the non-specific tag: a plain scalar tagged `!` is a string (example 6.28)
+	line("# Assuming conventional resolution:\n- \"12\"\n- 12\n- ! 12\n")
+	// a core tag fixes the kind: `!!str 12` is a string, `!!int \"12\"` an int
+	line("- !!str 12\n- !!int \"12\"\n- !!float '1.5'\n- !!bool true\n- !!null ''\n- !!str true\n- !!str null\n")
+	// a local tag and a named handle, kept as written; the scalar resolves as
+	// if the tag were not there
+	line("- !local x\n- !e!tag%21 7\n- !foo \"bar\"\n")
+	// properties alone are an empty node: null, with `!!str` an empty string
+	// (example 7.2)
+	line("{\n  foo : !!str,\n  !!str : bar,\n}\n")
+	line("a: &x\nb: !!str\nc: !!null\n")
+	// properties on the line above a block collection (example 2.24's
+	// `--- !shape`)
+	line("--- !shape\n- !circle\n  center: &ORIGIN {x: 73, y: 129}\n  radius: 7\n- !line\n  start: *ORIGIN\n")
+	line("a: !!map\n  b: c\nd: &s !!seq\n- e\n")
+	line("&top\n- x\n- y\n")
+	// properties in flow collections and on a block scalar
+	line("[&a x, !!int 3, *a, &b !!str ]\n")
+	line("a: !!str |\n  12\nb: &l >-\n  x\n  y\n")
+	// a scalar its core tag does not fit is an error: a quoted one after its
+	// closing quote, a plain one where reading stopped (the furthest failure)
+	line("a: !!int \"x\"\n")
+	line("a: !!int x\n")
+	line("a: !!bool yes\n")
+	line("a: !!int \"1.5\"\n")
+	line("a: !!seq x\n")
+	line("a: !!map\n  - x\n")
+	line("a: !!int |\n  12\n")
+	line("[!!float x]\n")
+	// an alias takes no properties
+	line("a: &x *y\n")
+}

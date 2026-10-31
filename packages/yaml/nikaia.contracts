@@ -57,6 +57,12 @@ touches = []
 views = ["s: borrowed"]
 signature = "(header: u32, from: u32, s: ref String) -> u32"
 
+[fn."block_fits"]
+sync = true
+keeps = ["k"]
+touches = []
+signature = "(k: TagKind) -> bool"
+
 [fn."breaks"]
 sync = true
 touches = []
@@ -68,6 +74,12 @@ keeps = ["from"]
 touches = []
 views = ["s: borrowed"]
 signature = "(s: ref String, from: i64, radix: i64) -> bool"
+
+[fn."empty_fits"]
+sync = true
+keeps = ["k"]
+touches = []
+signature = "(k: TagKind) -> bool"
 
 [fn."error_of"]
 sync = true
@@ -88,6 +100,19 @@ touches = []
 inferred = ["!(n < 0) || result == d", "!!(n < 0) || result == n + d"]
 signature = "(n: i64, d: i64) -> i64"
 
+[fn."fits"]
+sync = true
+keeps = ["k"]
+touches = []
+views = ["s: borrowed"]
+signature = "(k: TagKind, s: ref String) -> bool"
+
+[fn."fits_node"]
+sync = true
+touches = []
+views = ["v: borrowed"]
+signature = "(k: TagKind, v: ref Node) -> bool"
+
 [fn."fold"]
 sync = true
 touches = []
@@ -99,10 +124,22 @@ sync = true
 touches = []
 signature = "(x: scalar) -> i64"
 
+[fn."is_core"]
+sync = true
+touches = []
+views = ["s: borrowed", "name: borrowed"]
+signature = "(s: String, name: String) -> bool"
+
 [fn."is_escape"]
 sync = true
 touches = []
 signature = "(x: scalar) -> bool"
+
+[fn."is_false"]
+sync = true
+touches = []
+views = ["s: borrowed"]
+signature = "(s: ref String) -> bool"
 
 [fn."is_float"]
 sync = true
@@ -131,7 +168,29 @@ touches = []
 views = ["s: borrowed"]
 signature = "(s: ref String) -> bool"
 
+[fn."is_null"]
+sync = true
+touches = []
+views = ["s: borrowed"]
+signature = "(s: ref String) -> bool"
+
 [fn."is_space"]
+sync = true
+touches = []
+signature = "(x: scalar) -> bool"
+
+[fn."is_true"]
+sync = true
+touches = []
+views = ["s: borrowed"]
+signature = "(s: ref String) -> bool"
+
+[fn."is_uri"]
+sync = true
+touches = []
+signature = "(x: scalar) -> bool"
+
+[fn."is_word"]
 sync = true
 touches = []
 signature = "(x: scalar) -> bool"
@@ -203,12 +262,25 @@ touches = []
 views = ["t: borrowed"]
 signature = "(t: String, radix: i64) -> i64?"
 
+[fn."resolve"]
+sync = true
+keeps = ["k"]
+touches = []
+views = ["s: borrowed"]
+signature = "(k: TagKind, s: ref String, plain: bool) -> Kind"
+
 [fn."skip_blanks"]
 sync = true
 keeps = ["from"]
 touches = []
 views = ["cs: borrowed"]
 signature = "(cs: ref Vec[scalar], from: i64) -> i64"
+
+[fn."tag_kind"]
+sync = true
+touches = []
+views = ["t: borrowed"]
+signature = "(t: ref String?) -> TagKind"
 
 [fn."text"]
 pub = true
@@ -249,8 +321,12 @@ variants = ["Null", "True", "False", "Int", "Float", "Str"]
 
 [type."Node"]
 pub = true
-fields = ["pub start: u32", "pub end: u32", "pub anchor: String?", "pub tag: String?", "pub value: Value"]
-tethered = ["value"]
+fields = ["pub start: u32", "pub end: u32", "pub anchor: ref String?", "pub tag: ref String?", "pub value: Value"]
+tethered = ["anchor", "tag", "value"]
+
+[type."Props"]
+fields = ["start: u32", "end: u32", "anchor: ref String?", "tag: ref String?"]
+tethered = ["anchor", "tag"]
 
 [type."Scalar"]
 pub = true
@@ -261,7 +337,10 @@ tethered = ["raw", "value"]
 pub = true
 variants = ["Plain", "Single", "Double", "Literal", "Folded"]
 
+[type."TagKind"]
+variants = ["Untagged", "NonSpecific", "Null", "Bool", "Int", "Float", "Str", "Seq", "Map", "Other"]
+
 [type."Value"]
 pub = true
-variants = ["Null", "Bool(bool)", "Int(ref String)", "Float(ref String)", "Str(Scalar)", "Seq(Vec[Node])", "Map(Vec[Entry])", "Alias(String)"]
-tethered = ["Int", "Float", "Str", "Seq", "Map"]
+variants = ["Null", "Bool(bool)", "Int(ref String)", "Float(ref String)", "Str(Scalar)", "Seq(Vec[Node])", "Map(Vec[Entry])", "Alias(ref String)"]
+tethered = ["Int", "Float", "Str", "Seq", "Map", "Alias"]
