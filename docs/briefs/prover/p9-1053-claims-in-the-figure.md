@@ -10,7 +10,7 @@ Facts: Where things live, Traps already met, Commands
 
 Score: S=3 (the owner's 100 % target is only honest if the count covers every run-time check: an `assert` moved to a precondition (ADR-269 D5) is a check at its callers, and a `panic` is a run-time error claim (b) must count), O=1 (the lane's own measure), C=4 M (a flag on `lower-std`, the script, one doc section). Area: prover. Must land before the lane puts `assert`s into `tools/*.nika` (#1053 step 8).
 
-Pre-flight: p8 (#1076, 788981d) and p10 (#1084) are committed (`git log --oneline -12 | grep -e 788981d -e "checked entry"`, and `git log -12 --format=%B | grep "#1084"`); if not, stop: `Result: blocked`, `Needs: p8 and p10 first` (without it the claim count would report unproved preconditions as proved).
+Pre-flight: p8 (#1076, 788981d), p10 (#1084, 76c216e) and p11 (#1090) are committed (`git log --oneline -15 | grep -e 788981d -e 76c216e`, and `git log -15 --format=%B | grep "#1090"`); if not, stop: `Result: blocked`, `Needs: p8, p10 and p11 first` (without them the claim count would report unproved preconditions as proved).
 
 ## Decision (architect, 2026-10-31; a development aid, no language change)
 
@@ -25,6 +25,7 @@ Pre-flight: p8 (#1076, 788981d) and p10 (#1084) are committed (`git log --onelin
 * `scripts/proved.nika` (102 lines; `number_before` reads the header fields).
 * `docs/formal-verification.md` §2 (lines 77-91, the figure paragraph) and §4 (line 120, *Now (A)*).
 * No `tools/*.nika` changes, so no `lower-std` re-lowering.
+* `sysroot.rs` is also in the bug lane's b17 (#1077, the tools preamble, :768-775), which may run beside you in the same checkout. Before committing, `git diff crates/nikaia/src/sysroot.rs` must show only your hunks; if it shows another's, stage yours alone (your hunks into a patch file, `git apply --cached` it, then `git add` your other files by name and `git commit -F` the message without `-a`, not `scripts/commit.nika`, which would add the whole file; write `Pushed: local <sha>` into the report yourself) and say so in `Body:`. Never revert or stage the other hunks.
 
 ## Steps
 

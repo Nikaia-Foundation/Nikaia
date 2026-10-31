@@ -1,6 +1,5 @@
 Result: done
-Batch: p10-1084-argument-lengths.md, p9-1053-claims-in-the-figure.md
-Figure: 58a1ff9 (p7), lower-std --bounds + proved.nika: off 1,531/2,648 indexes, 835/1,622 operations; prove-through-loops:on 1,563/2,648 indexes, 841/1,622 operations. Claims and panics are not counted yet (p9)
+Batch: p11-1090-carried-precondition-count.md, p9-1053-claims-in-the-figure.md
+Figure: off 1,536/2,659 indexes (57.8 %), 838/1,625 operations (51.6 %); prove-through-loops:on 1,568/2,659 (59.0 %), 844/1,625 (51.9 %); binary of 76c216e
 Owner: none
-Notes: p8 partial: its 4 newly refused `it` tests are true unproved calls (`Bytes(v)` loses v's length). Decided (#1084, obvious): `Bytes(x)` has x's length, a bound `[v; n]` has n, a literal argument has its count; p10 builds it and rebuilds the 4 programs (`[59; 40]`, `resize`), never `warn`. p9's pre-flight now waits for p10 as well. RED/qa-input.txt here are stale (an older rs2nika/examples round). Changelog lines owed: p7, p8 (in their reports).
-Pushed: none (local develop holds p7/p8, red until p10; the driver pushes after its suite)
+Notes: p10's Found (a precondition carried back to a caller's entry, ADR-269 D15, counted as proved although the call to the caller proves nothing; NK1300 missing, the run stops) is the prover's own: filed #1090 (ready, wip), briefed as p11 ahead of p9, whose claim count would otherwise publish it as proved. p9 unchanged but for its pre-flight (needs p11) and a staging rule for `sysroot.rs`, which bug-lane b17 also edits. Next run: the prover walk's `for` (state item 12). Push: local develop holds p10 unpushed and is behind origin by 13; this commit is local, the driver rebases and pushes.
