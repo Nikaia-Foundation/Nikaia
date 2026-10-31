@@ -1,3 +1,4 @@
 b12-1061-pausing-two-view-field.md
 b13-1057-field-of-a-coalesce-and-let.md
 b14-947-get-or-return-compared.md
+b15-1060-trusted-map-name-collision.md
