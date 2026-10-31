@@ -18,3 +18,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y9-1027-group-label.md 1288635 32
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 1732077 37
 /home/user/Nikaia/docs/briefs/yaml/y10-1030-literal-label.md 238261 5
+/home/user/Nikaia/docs/briefs/yaml/architect-task.md 344824 13
