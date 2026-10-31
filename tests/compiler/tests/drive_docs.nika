@@ -1,0 +1,38 @@
+// scripts/drive.nika --docs-only FILE: the path rule of scripts/ci-changes.sh by
+// which the driver pushes unpushed documentation commits without the suite.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn case(nikaia: String, repo: String, tmp: String, name: String, paths: String) throws {
+    fs::write(f"{tmp}/{name}", fs::Root::Anywhere, paths)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--docs-only", f"{tmp}/{name}"]; dir: repo)
+    println(f"== {name}")
+    println(out.stdout.trim())
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "docs", "docs/briefs/b1.md.report.md\nguide/intro.txt\nwebsite/index.html\nREADME.md\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "run-json", "docs/briefs/b1.md.report.md\ndocs/briefs/b1.md.run.json\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "trees", "CHANGELOG.md\ncrates/nikaia/README.md\ndocs/specification/part1.md\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "workflow", "docs/a.md\n.github/workflows/nikaia.yml\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "ci-changes", "docs/a.md\nscripts/ci-changes.sh\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "empty", "\n")
+    process::run("rm", ["-rf", tmp])
+}
