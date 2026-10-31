@@ -1,0 +1,2 @@
+// rs2nika: `shared_target` may be in Nikaia already: tools/grammar_decode.nika `fn gr_manifest` (the same doc comment)
+// rs2nika: called but not in Nikaia yet (move them first, or name the equivalent in rs2nika.names): digest, driver, manifest

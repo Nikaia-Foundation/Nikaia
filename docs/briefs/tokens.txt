@@ -208,3 +208,4 @@
 /home/user/Nikaia/docs/briefs/bt-build-time.md 6356154 84
 /home/user/Nikaia/docs/briefs/architect-task.md 1824845 39
 /home/user/Nikaia/docs/briefs/s922-sha256-env.md 633681 7
+/home/user/Nikaia/docs/briefs/gr-grammar-run.md 488842 7

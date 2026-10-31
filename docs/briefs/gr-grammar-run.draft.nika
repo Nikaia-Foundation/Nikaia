@@ -1,0 +1,82 @@
+use std::collections
+use std::fs
+
+impl Workshop {
+    fn compile_and_run[H: GrammarRunHost](ref self, at: ref fs::Path, parsed: ref Parsed, ask: ref Ask, host: ref H) -> String throws {
+        let program = driver(parsed, ask)
+        // **Keyed on what went into it** — the driver text carries the
+        // grammar's lowering, the types it uses and the dump, so a digest of it
+        // is a digest of everything this sub-project is.
+        let key = digest(program.bytes)
+        let dir = at.join(key)
+        let source = dir.join("src").join("main.rs")
+        grammar_run_write_if_changed(source, program)
+        grammar_run_write_if_changed(dir.join("Cargo.toml"), manifest(key, program))
+
+        // **One target directory for every parser on the machine**: what a
+        // parser depends on - `std`, `winnow`, the grammar runtime - is the
+        // same for all of them, and under each project's workshop it was
+        // compiled again for every new project (half a minute before the
+        // first grammar could run). Each parser is a crate of its own name
+        // (`p<key>`), so they share the directory without meeting.
+        let target = grammar_run_shared_target()
+        let built = Command::new(grammar_run_cargo(host)).current_dir(orchestrator::cache::Layout::where_tools_start()).arg("build").arg("--quiet").arg("--manifest-path").arg(dir.join("Cargo.toml")).arg("--target-dir").arg(target).output().map_err(fn(error) { Wall::DidNotBuild { detail: f"running cargo: {error}" } })
+        if !built.status.success() {
+            throw Wall::DidNotBuild { detail: (built.stderr.text() catch { "" }).to_string() }
+        }
+
+        // **The bytes go in a file**, because that is what a parser is pointed
+        // at and what the diagnostic's line and column are counted against.
+        let input = dir.join("input")
+        grammar_run_write_if_changed(input, ask.input)
+
+        let binary = target.join("debug").join(f"p{key}")
+        let ran = Command::new(binary).arg(input).output().map_err(fn(error) { Wall::DidNotBuild { detail: f"running {binary.display()}: {error}" } })
+        return match ran.status.success() {
+            true => (ran.stdout.text() catch { "" }).trim().to_string(),
+            false => throw Wall::Refused { detail: (ran.stderr.text() catch { "" }).to_string() },
+        }
+    }
+}
+
+fn grammar_run_cargo[H: GrammarRunHost](host: ref H) -> String {
+    return (host.env_var("CARGO") ?? "cargo")
+}
+
+/// **Written only when it changed**, which is what keeps Cargo's own freshness
+/// working: a file rewritten with identical bytes is newer than the fingerprint
+/// and rebuilds for ever. The build cache learned this the same way
+/// ([ADR-021](../../../docs/specification/adr/adr-021.md)).
+fn grammar_run_write_if_changed(path: ref fs::Path, text: String) throws {
+    match path.parent() {
+        parent => {
+            fs::create_dir(parent, fs::Root::Anywhere; recursive: true).map_err(fn(error) { Wall::DidNotBuild { detail: f"creating {parent.display()}: {error}" } })
+        },
+        null => {}
+    }
+    if fs::read_to_string(path, fs::Root::Anywhere).is_ok_and(fn(held) { held == text }) {
+        return
+    }
+    fs::write(path, fs::Root::Anywhere, text).map_err(fn(error) { Wall::DidNotBuild { detail: f"writing {path.display()}: {error}" } })
+}
+
+/// The sub-project's manifest.
+///
+/// **Its own workspace**, because it lives under a `target/` that may be inside
+/// one: a member Cargo did not expect is an error about a file nobody wrote.
+/// The dependencies are the ones a generated program already gets
+/// (`project::runtime_dependencies`), so the parser compiled here is the parser
+/// the program links.
+/// Where every grammar run's parser is compiled: the user cache, beside the
+/// compiled `std` (ADR-002 D4).
+///
+/// One entry per compiler, so an old compiler's parsers are evicted as a whole
+/// (#615).
+fn grammar_run_shared_target() -> fs::Path {
+    let hole_1 = rs2nika_env("CARGO_PKG_VERSION") /* TODO(rs2nika): the macro `env!`: `env!("CARGO_PKG_VERSION")` */
+    let hole_2 = rs2nika_env("NIKAIA_RUSTC_VERSION") /* TODO(rs2nika): the macro `env!`: `env!("NIKAIA_RUSTC_VERSION")` */
+    let compiler = orchestrator::cache::sha256_hex(f"{hole_1}\n{hole_2}".bytes)
+    let entry = orchestrator::cache::Layout::user_cache_dir().join("build-time-parsers").join(compiler[..<16])
+    orchestrator::cache::use_entry(entry)
+    return entry.join("target")
+}
