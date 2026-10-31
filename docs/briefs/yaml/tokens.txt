@@ -7,3 +7,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y7a-639-loop-ranges.md 6876914 78
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 5644680 64
 /home/user/Nikaia/docs/briefs/yaml/y7b-1009-let-reads.md 518290 5
+/home/user/Nikaia/docs/briefs/yaml/architect-task.md 693390 22

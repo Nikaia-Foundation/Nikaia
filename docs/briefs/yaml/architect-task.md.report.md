@@ -1,8 +1,10 @@
 Result: done
-Batch: y7b-1009-let-reads.md, y4c-1003-finish.md
+Batch: y4c-1003-finish.md, y7c-match-join.md, y2-tree-properties.md
 Owner: none
-Pushed: a8ff9d31
-Notes: y7a is done (a7f3843f, Fixes #639; its Changelog line in its report, version raise owed). Its `Gate: red` was develop's `sequences` guard (18/16 since 75e25ed8). The guard went red with this lane's 43312d30, but the main lane's `b-fixforward-corpus-unanswered.md` already owns the fix (first in `docs/briefs/batch.txt`), so this lane does not duplicate it. CI is red on that test only.
-Probes (develop 1e179d9c): json's `hex4` proves its range once it carries `assert(n <= 0xFFFF)` (ADR-359 D3). The caller's `scalar::from(cp)` is refused for four prover defects, narrowed into y7b and commented on #1009.
-Process: builder.md's gate and builder-facts' new *Red on develop now* section mean a guard already red on develop no longer cuts a batch. architect.md: a prover brief probes at the limit it claims (from y7a's debrief).
-Issues: #928 *To build* updated (ready + wip); #1009 commented (ready).
+Stop: CUT on y7b's Found (y7b itself done, gate green, 65d86e57, Fixes #1009). The `RED` file in this dir is an empty driver marker (gitignored), not a red CI.
+Found filed: #1021 (label ready): a `match` arm's assignment to a `let mut` is not joined as after an `if`. A defect: ADR-361 D9 says "a branch". Its fix is y7c (Fixes #1021). It touches only prover files, so it runs after y4c.
+y2: cut to steps 1-2 (block scalars, properties, aliases), 100 turns. Steps 3-4 (explicit keys, directives, Limits) moved to y2b-keys-directives-limits.md, for the next batch. Both now carry the stop-15-turns rule.
+#928: To build updated (y7b struck, y4c/y7c/y2/y2b listed, #1021 under Found); labels stay ready,wip.
+Pushed: 35f48c51
+Not mine, left alone: packages/yaml/nikaia.lock is modified in the tree (compiler hash), and the old report was deleted by the driver.
+Process: y7b's debrief asks builder.md for `cp target/fast/nikaia $S/nikaia.before` before the first build, and for clippy grep -A3. I put both into y7c. builder.md belongs to the main session: worth adopting there.

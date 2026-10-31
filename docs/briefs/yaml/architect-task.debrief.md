@@ -1,10 +1,14 @@
-1. **Most cost:** turning json's single NK1300 into four separate bugs took about 15 probe rounds. Several were lost to my own tooling: a shell function I defined didn't carry into the next call, and a `sed` placeholder substitution silently matched nothing (probes n1/n2). The `j_hex4` probe also led nowhere: an index `% ds.len()` I added myself made it fail, not json's shape.
+1. **Most turns:** working out what the stop actually was. `architect-input.txt` held only a `CUT` line, but `ls` also showed an empty `RED` file, so I read the driver code (`drive_action`, its input writing) and ran `git check-ignore` before I could rule out a red CI. After that, the failed `git pull --rebase` (refused because of another agent's uncommitted `nikaia.lock`) cost one more round before I pushed fast-forward instead.
+
 2. **Looked up, could have been handed over:**
-   - Whether the red came from this lane: 43312d30 is a yaml-lane commit, and the main lane had already queued a fix-forward for it. Finding that meant reading the main lane's `batch.txt` and brief, plus `architect.md`'s long *State* section.
-   - ADR-359 D1 (summaries skip loops) and D3 (a function promises its result with an `assert`), and Part I's rule that only a `mut` parameter changes the caller's value.
-   - Code locations: `prover_state` `an_assert` vs `precondition_call`, `bounds_body` `untracked_in`, `prover_let`, `prover_join`.
-   - That NK1241 already exists, and where dfe7bac6 stands relative to develop.
+   - That `RED` in a lane dir is the driver's gitignored marker, not a CI state.
+   - ADR-361 D9's exact wording ("a branch"), which decides whether #1021 is a defect or needs the owner.
+   - Where the prover handles `Expr::If` and `Expr::Match` in `prover_walk.nika`.
+   - That y2 had no stop-15-turns rule and was too big for one run.
+
 3. **Checks:**
-   - Useful: the CI run list plus job annotations (one failing test), the spike probes run against develop, the narrowing probes (q1-q7, m1-m9, r1-r11, s1), and `pre-push-check`.
-   - Wasted: n1/n2 (broken `sed`), `j_hex4` (the `%` index), a 64 KB grep for "ensures" across the spec, and reading all of the *State* history when one entry was enough.
-4. **One change:** when the driver writes `architect-input.txt` for a red gate or a red CI, it should add the failing test, the commit that first broke it, and whether some lane's `batch.txt` already holds a fix-forward for it. That alone would have saved about 8 turns of working out who owns the red. Second: the architect brief should say "write the probe generator to a script file first" (as `docs/tokensaverstrategy.md` asks), since my inline shell functions broke twice.
+   - Useful: reading y7b's report and debrief, #928's *To build*, ADR-361 D9, a grep for the `If`/`Match` arms, and a grep of the new briefs for report paths and the stop rule.
+   - Wasted: the 64 KB grep of Part III for `match` (spilled to a file, never read), and the `architect.md` State grep (nothing for this lane).
+   - Gap: I didn't re-check y4c's facts (json's line 196, that dfe7bac6 is still on its branch) before putting it in the batch again.
+
+4. **One change:** in `drive.nika`, write `architect-input.txt` with an explicit first line `STOP: CUT|RED|BATCH DONE`, plus the stopping report's `Found:` line in full instead of cut off. A note in the architect task saying `RED` files are markers would have done the same. Second: the architect brief should say how to push when someone else's unstaged files block `git pull --rebase` (fetch, then push fast-forward).
