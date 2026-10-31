@@ -1,0 +1,13 @@
+use std::collections
+
+// `or_default` needs a value made with no arguments (ADR-384 D1).
+struct Point {
+    x: i64,
+    y: i64 = 0,
+}
+
+fn main() {
+    let mut points: collections::BTreeMap[String, Point] = collections::BTreeMap()
+    points.entry(["p"].join("")).or_default()
+    println(f"{points.len()}")
+}

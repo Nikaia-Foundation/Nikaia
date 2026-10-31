@@ -672,16 +672,34 @@ impl EmitState {
                 out.push(", ")
             }
             after_one = true
-            let mut value = held_literal(default, ty)
-            if self.is_boxed_field(owner, field) {
-                value = f"Box::new({value})"
-            }
-            out.push(f"{escaped_name(field)}: {value}")
+            out.push(self.emit_place_field_default(owner, field, default, ty))
         }
         out.push(" }")
         if cleaned {
             out.push(")")
         }
+    }
+
+    /// A field left out, with its default: `name: value`, boxed where the
+    /// field is.
+    fn emit_place_field_default(ref self, owner: ref String, field: ref String, default: ref String, ty: ref Ty) -> String {
+        let mut value = held_literal(default, ty)
+        if self.is_boxed_field(owner, field) {
+            value = f"Box::new({value})"
+        }
+        return f"{escaped_name(field)}: {value}"
+    }
+
+    /// **`V()` for a struct every field of which has a default** (ADR-384
+    /// D1): what `or_default` puts in where the language below has no
+    /// `Default` for `V`.
+    pub fn emit_place_all_defaults(ref self, world: ref EmitWorld, name: ref String) -> String {
+        let owner = unaliased_in(world.aliases, name)
+        let mut parts: Vec[String] = []
+        for (field, default, ty) in self.field_defaults(world, owner) {
+            parts.push(self.emit_place_field_default(owner, field, default, ty))
+        }
+        return f"{owner} {{ {parts.join(", ")} }}"
     }
 
     /// **`p with { x: p.x + 1 }`** is Rust's functional update (ADR-118 D1, D3):

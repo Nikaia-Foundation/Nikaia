@@ -640,8 +640,14 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if key == "Vec::get" || key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get" {
         let gets = state.flow.std_gets.insert(id_of(expr) as i64)
     }
-    if key == "Entry::or_insert" || key == "Entry::or_insert_with" {
+    if key == "Entry::or_insert" || key == "Entry::or_insert_with" || key == "Entry::or_default" {
         state.flow.std_entry_views.insert(id_of(expr) as i64)
+    }
+    if key == "Entry::or_default" {
+        check_core_method_or_default(state, world, expr, unviewed_type(value), span)
+    }
+    if key == "Seq::cloned" {
+        walked = check_core_method_cloned(state, expr, on, walked)
     }
     if key == "Vec::get" || key == "Vec::first" || key == "Vec::last" {
         match value {
@@ -741,6 +747,61 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
         return changed ?? Ty::Unknown
     }
     return walked
+}
+
+/// **What `or_default` puts in is `V()`** (ADR-384 D1): a collection,
+/// `String`, a number or `bool` has it below as `Default`; a struct every field
+/// of which has a default is built from them (`defaulted_entries`); any other
+/// `V` is refused, since nothing makes one from no arguments.
+fn check_core_method_or_default(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, value: Ty, span: ref Span) sync {
+    let name: String = match value {
+        Ty::Named { name, .. } => name.clone(),
+        Ty::Unknown => return,
+        Ty::Var { .. } => return,
+        else => "",
+    }
+    let base = check_core_method_base(name)
+    if a_number_name(base) || base == "bool" || base == "String" || base == "Vec" || base == "List" || base == "HashMap" || base == "HashSet" || base == "BTreeMap" || base == "BTreeSet" {
+        return
+    }
+    let fields: Vec[FieldContract] = if name == "" { [] } else { state.fields_of(world, name) ?? [] }
+    let mut defaulted = fields.len() > 0
+    for f in fields {
+        if f.default == "" {
+            defaulted = false
+        }
+    }
+    if defaulted {
+        state.facts.defaulted_entries.insert(id_of(expr) as i64, name)
+        return
+    }
+    let shown = value.text()
+    state.findings.push(check_refusal("NK1102", span, f"`or_default` puts in the value `{shown}()` makes, but `{shown}` cannot be made with no arguments.", ["`or_default` is offered where the map's value is a collection, `String`, a number, `bool`, or a struct every field of which has a default (ADR-384 D1)."], f"Say what goes in: `or_insert_with(fn {{ {shown}(...) }})`, or `or_insert(value)`.".clone()))
+}
+
+/// **What `cloned` hands on is owned** (ADR-384 D2): over views it is the
+/// language below's `cloned`; over elements that are already owned there, it
+/// is nothing (`owned_clones`), and over views of values that copy it is the
+/// `copied` the walk is given anyway.
+fn check_core_method_cloned(mut state: CheckState, expr: ref Expr, on: ref Ty, walked: Ty) -> Ty sync {
+    let item: Ty = match on {
+        Ty::Seq { item, .. } => item.clone(),
+        else => return walked,
+    }
+    let lent = match item {
+        Ty::Named { view, .. } => view && !copies_as_a_view(item),
+        else => false,
+    }
+    if !lent && !item.is_unknown() && !state.facts.copied_walks.contains(id_of(expr) as i64) {
+        state.facts.owned_clones.insert(id_of(expr) as i64)
+    }
+    if copies_as_a_view(item) {
+        state.facts.owned_clones.insert(id_of(expr) as i64)
+    }
+    return match walked {
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: unviewed_type(item), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
+        else => walked,
+    }
 }
 
 /// `s.extend(NAMES)` with `comptime NAMES: Array[ref String, N]` into a list or

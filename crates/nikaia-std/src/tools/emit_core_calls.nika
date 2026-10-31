@@ -1499,7 +1499,18 @@ impl EmitState {
                 return
             }
         }
-        self.emit_core_method_call(world, walk, out, host, receiver, node_key(receiver), method, args, config, depth, flow, scope)
+        // **`cloned()` over elements owned below is nothing** (ADR-384 D2),
+        // and **`or_default()` of a struct of defaults builds it** (D1): the
+        // language below has no `Default` for the struct.
+        if name == "cloned" && args.len() == 0 && self.facts.owned_clones.contains(node_key(node)) {
+            self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)
+        } else if name == "or_default" && args.len() == 0 && self.facts.defaulted_entries.contains_key(node_key(node)) {
+            let made = self.emit_place_all_defaults(world, self.facts.defaulted_entries[node_key(node)] ?? "")
+            self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)
+            out.push(f".or_insert_with(|| {made})")
+        } else {
+            self.emit_core_method_call(world, walk, out, host, receiver, node_key(receiver), method, args, config, depth, flow, scope)
+        }
         // **Views of values that copy are the values** (ADR-231 D1).
         if self.facts.copied_walks.contains(node_key(node)) {
             out.push(".copied()")

@@ -254,6 +254,13 @@ pub struct CheckFacts {
     /// where nothing annotates it, so the call names it (`.sum::<i64>()`).
     pub summed: collections::BTreeMap[i64, String],
     pub copied_walks: collections::BTreeSet[i64],
+    /// **A `cloned()` over elements already owned below**, by the call
+    /// (ADR-384 D2): nothing else holds them, so the lowering writes nothing.
+    pub owned_clones: collections::BTreeSet[i64],
+    /// **An `or_default()` whose value is a struct of defaults**, by the call:
+    /// the struct's name (ADR-384 D1). The language below has no `Default`
+    /// for it, so the lowering writes `or_insert_with` and the literal.
+    pub defaulted_entries: collections::BTreeMap[i64, String],
     pub filter_patterns: collections::BTreeSet[i64],
     /// **An `and_modify` lambda handed a number, `bool` or `char` in the
     /// map** (#684), by the lambda: its parameter is the value, read out of
@@ -562,6 +569,8 @@ impl CheckFacts {
             collected_into: collections::BTreeSet(),
             summed: collections::BTreeMap(),
             copied_walks: collections::BTreeSet(),
+            owned_clones: collections::BTreeSet(),
+            defaulted_entries: collections::BTreeMap(),
             filter_patterns: collections::BTreeSet(),
             copied_entry_lambdas: collections::BTreeSet(),
             lambda_params_by_use: collections::BTreeMap(),

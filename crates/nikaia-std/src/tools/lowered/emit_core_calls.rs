@@ -987,7 +987,11 @@ impl EmitState {
                 return Ok(());
             }
         }
-        self.emit_core_method_call(world, walk, out, host, Some(receiver), node_key(receiver), method, args, config, depth, flow, scope)?;
+        if name == "cloned" && args.is_empty() && self.facts.owned_clones.contains(&node_key(node)) { self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?; } else if name == "or_default" && args.is_empty() && self.facts.defaulted_entries.contains_key(&node_key(node)) {
+            let made = self.emit_place_all_defaults(world, nikaia_std::index::or(*nikaia_std::index::get(&self.facts.defaulted_entries, &(node_key(node))), || ""));
+            self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?;
+            out.push(&format!(".or_insert_with(|| {})", made));
+        } else { self.emit_core_method_call(world, walk, out, host, Some(receiver), node_key(receiver), method, args, config, depth, flow, scope)?; }
         if self.facts.copied_walks.contains(&node_key(node)) { out.push(".copied()"); }
         Ok(())
     }

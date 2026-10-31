@@ -101,7 +101,7 @@ pub(crate) fn shape_sized(ty: &Ty) -> bool {
 }
 
 pub fn a_paused_chain(key: &str, on: &Ty) -> bool {
-    let a_step = key == "Seq::map" || key == "Seq::filter" || key == "Seq::take" || key == "Seq::skip" || key == "Seq::step_by" || key == "Seq::zip";
+    let a_step = key == "Seq::map" || key == "Seq::cloned" || key == "Seq::filter" || key == "Seq::take" || key == "Seq::skip" || key == "Seq::step_by" || key == "Seq::zip";
     a_step && match on {
         Ty::Seq { pauses, .. } => { let pauses = *pauses; pauses },
         _ => false,

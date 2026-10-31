@@ -1,0 +1,42 @@
+use std::collections
+
+// `Entry::or_default` and `Seq::cloned` (ADR-384, #1082).
+struct Tally {
+    count: i64 = 0,
+    label: String = "none",
+}
+
+fn main() {
+    // The probe of #1082.
+    let mut m: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    m.entry(["a"].join("")).or_default().insert(["x"].join(""))
+    let names = [["b"].join(""), ["c"].join("")]
+    let copies: Vec[String] = names.iter().cloned().collect()
+    println(f"{m.len()} {copies.len()} {names.len()}")
+    // A list made empty, then pushed to.
+    let mut lists: collections::HashMap[String, Vec[i64]] = collections::HashMap()
+    lists.entry(["k"].join("")).or_default().push(1)
+    lists.entry(["k"].join("")).or_default().push(2)
+    let total: i64 = lists.values().map(fn(v) { v.len() as i64 }).sum()
+    println(f"{lists.len()} {total}")
+    // A text made empty.
+    let mut texts: collections::BTreeMap[i64, String] = collections::BTreeMap()
+    texts.entry(1).or_default().push_str("ab")
+    texts.entry(1).or_default().push_str("cd")
+    for (k, v) in texts {
+        println(f"{k} {v}")
+    }
+    // A struct every field of which has a default.
+    let mut tallies: collections::BTreeMap[String, Tally] = collections::BTreeMap()
+    tallies.entry(["t"].join("")).or_default()
+    for (k, v) in tallies {
+        println(f"{k} {v.count} {v.label}")
+    }
+    // Owned elements, after a `map`.
+    let loud: Vec[String] = names.iter().map(fn(n) { f"{n}!" }).cloned().collect()
+    println(loud.join(","))
+    // Numbers, which copy.
+    let nums: Vec[i64] = [1, 2, 3]
+    let sum: i64 = nums.iter().cloned().sum()
+    println(f"{sum} {nums.len()}")
+}

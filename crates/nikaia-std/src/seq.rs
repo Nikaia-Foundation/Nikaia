@@ -264,6 +264,18 @@ impl<S: Step> Paused<S> {
         Paused(Map { inner: self.0, f })
     }
 
+    /// A copy of each item a view hands (ADR-384 D2); the step still pauses.
+    #[allow(clippy::type_complexity)]
+    pub fn cloned<'a, T: Clone + 'a>(self) -> Paused<Map<S, fn(&'a T) -> T>>
+    where
+        S: Step<Item = &'a T>,
+    {
+        Paused(Map {
+            inner: self.0,
+            f: T::clone,
+        })
+    }
+
     /// Only the items a plain lambda says yes to; the step still pauses.
     pub fn filter<F: FnMut(&S::Item) -> bool>(self, f: F) -> Paused<Filter<S, F>> {
         Paused(Filter { inner: self.0, f })
@@ -471,6 +483,18 @@ impl<S: Step<Item = Result<T, E>>, T, E> Failing<S> {
     /// Each item through a plain lambda.
     pub fn map<U, F: FnMut(T) -> U>(self, f: F) -> Failing<OkMap<S, F>> {
         Failing(OkMap { inner: self.0, f })
+    }
+
+    /// A copy of each item a view hands (ADR-384 D2).
+    #[allow(clippy::type_complexity)]
+    pub fn cloned<'a, V: Clone + 'a>(self) -> Failing<OkMap<S, fn(&'a V) -> V>>
+    where
+        S: Step<Item = Result<&'a V, E>>,
+    {
+        Failing(OkMap {
+            inner: self.0,
+            f: V::clone,
+        })
     }
 
     /// Only the items a plain lambda says yes to.

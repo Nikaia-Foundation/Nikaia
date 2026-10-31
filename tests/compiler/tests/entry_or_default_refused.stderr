@@ -1,0 +1,9 @@
+error[NK1102]: `or_default` puts in the value `Point()` makes, but `Point` cannot be made with no arguments.
+   --> tests/entry_or_default_refused.nika:11:5
+    |
+ 11 |     points.entry(["p"].join("")).or_default()
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `or_default` is offered where the map's value is a collection, `String`, a number, `bool`, or a struct every field of which has a default (ADR-384 D1).
+    = help: Say what goes in: `or_insert_with(fn { Point(...) })`, or `or_insert(value)`.
+1 type error

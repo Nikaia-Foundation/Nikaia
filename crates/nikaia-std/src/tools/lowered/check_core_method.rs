@@ -462,7 +462,9 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     }
     let key: String = nikaia_std::index::or(resolved, || "".into());
     if key == "Vec::get" || key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get" { let gets = state.flow.std_gets.insert(id_of(expr) as i64); }
-    if key == "Entry::or_insert" || key == "Entry::or_insert_with" { state.flow.std_entry_views.insert(id_of(expr) as i64); }
+    if key == "Entry::or_insert" || key == "Entry::or_insert_with" || key == "Entry::or_default" { state.flow.std_entry_views.insert(id_of(expr) as i64); }
+    if key == "Entry::or_default" { check_core_method_or_default(state, world, expr, unviewed_type(&value), span); }
+    if key == "Seq::cloned" { walked = check_core_method_cloned(state, expr, &on, walked); }
     if key == "Vec::get" || key == "Vec::first" || key == "Vec::last" {
         match value {
             Ty::Nullable(ref inner) => {
@@ -539,6 +541,47 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     let changed: Option<Ty> = check_simd_method_result(&lanes, &name);
     if changed.is_some() { return nikaia_std::index::or(changed, || Ty::Unknown); }
     walked
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_or_default(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, value: Ty, span: &Span) {
+    let name: String = match value {
+        Ty::Named { ref name, .. } => name.to_string(),
+        Ty::Unknown => return,
+        Ty::Var { .. } => return,
+        _ => String::from(""),
+    };
+    let base = check_core_method_base(&name);
+    if a_number_name(&base) || base == "bool" || base == "String" || base == "Vec" || base == "List" || base == "HashMap" || base == "HashSet" || base == "BTreeMap" || base == "BTreeSet" { return; }
+    let fields: Vec<FieldContract> = if name == "" { vec![] } else { nikaia_std::index::or(state.fields_of(world, &name), || vec![].into()) };
+    let mut defaulted = !fields.is_empty();
+    for f in fields.iter() { if f.default == "" { defaulted = false; } }
+    if defaulted {
+        state.facts.defaulted_entries.insert(id_of(expr) as i64, name);
+        return;
+    }
+    let shown = value.text();
+    state.findings.push(check_refusal("NK1102", span, format!("`or_default` puts in the value `{}()` makes, but `{}` cannot be made with no arguments.", shown, shown), vec![String::from("`or_default` is offered where the map's value is a collection, `String`, a number, `bool`, or a struct every field of which has a default (ADR-384 D1).")], Some(format!("Say what goes in: `or_insert_with(fn {{ {}(...) }})`, or `or_insert(value)`.", shown).to_string())));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_cloned(state: &mut CheckState, expr: &Expr, on: &Ty, walked: Ty) -> Ty {
+    let item: Ty = match on {
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.clone() },
+        _ => return walked,
+    };
+    let lent = match item {
+        Ty::Named { view, .. } => view && !copies_as_a_view(&item),
+        _ => false,
+    };
+    if !lent && !item.is_unknown() && !state.facts.copied_walks.contains(&(id_of(expr) as i64)) { state.facts.owned_clones.insert(id_of(expr) as i64); }
+    if copies_as_a_view(&item) { state.facts.owned_clones.insert(id_of(expr) as i64); }
+    match walked {
+        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: Box::new(unviewed_type(item)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
+        _ => walked,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

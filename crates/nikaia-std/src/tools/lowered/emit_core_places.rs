@@ -431,13 +431,22 @@ impl EmitState {
             if nikaia_std::list::contains(&names, &field) { continue; }
             if after_one { out.push(", "); }
             after_one = true;
-            let mut value = held_literal(&default, &ty);
-            if self.is_boxed_field(&owner, &field) { value = format!("Box::new({})", value); }
-            out.push(&format!("{}: {}", escaped_name(&field), value));
+            out.push(&self.emit_place_field_default(&owner, &field, &default, &ty));
         }
         out.push(" }");
         if cleaned { out.push(")"); }
         Ok(())
+    }
+    pub(crate) fn emit_place_field_default(&self, owner: &str, field: &str, default: &str, ty: &Ty) -> String {
+        let mut value = held_literal(default, ty);
+        if self.is_boxed_field(owner, field) { value = format!("Box::new({})", value); }
+        format!("{}: {}", escaped_name(field), value)
+    }
+    pub fn emit_place_all_defaults(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> String {
+        let owner = unaliased_in(world.aliases, name);
+        let mut parts: Vec<String> = vec![];
+        for (field, default, ty) in self.field_defaults(world, &owner) { parts.push(self.emit_place_field_default(&owner, &field, &default, &ty)); }
+        format!("{} {{ {} }}", owner, parts.join(", "))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

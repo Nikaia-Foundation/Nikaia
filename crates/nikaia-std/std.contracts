@@ -2683,6 +2683,19 @@ pub = true
 sync = "sync(f)"
 signature = "[V](self: Entry[V], f: fn()) -> ref V"
 
+# The same as `or_insert_with(fn { V() })`: the value that is there, putting in
+# first the one `V()` makes where there is none ([ADR-384](../../docs/specification/adr/adr-384.md) D1).
+#
+# Offered where `V` is made with no arguments: a collection, `String`, a
+# number, `bool`, or a struct every field of which has a default. Another `V`
+# is refused (`NK1102`), with `or_insert_with` named. It runs nothing of the
+# program's, so it never pauses.
+[fn."Entry::or_default"]
+pub = true
+sync = true
+touches = []
+signature = "[V](self: Entry[V]) -> ref V"
+
 # `Shared[T]` is the type several parts of a program own at once (Part I 6.2).
 # It is here rather than inferred for the reason the whole of this section is
 # here: what it expands to is Rust - a reference count chosen per value
@@ -3066,6 +3079,18 @@ pub = true
 sync = "sync(f)"
 touches = []
 signature = "[T, U](self: Seq[T], f: fn(T) -> U) -> Seq[U] ends sized"
+
+# A copy of each element, the program's own ([ADR-384](../../docs/specification/adr/adr-384.md) D2):
+# `map fn(x) { x.clone() }` said once for the whole sequence.
+#
+# Over views it is the language below's `cloned`; over elements already owned
+# it is nothing, since nothing else holds them. With no lambda, no step of it
+# pauses.
+[fn."Seq::cloned"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: Seq[T]) -> Seq[T] ends sized"
 
 # Only the elements the function says yes to.
 #

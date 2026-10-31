@@ -128,7 +128,7 @@ fn shape_sized(ty: ref Ty) -> bool {
 
 /// A step of a chain over a sequence that pauses: what it makes pauses too.
 pub fn a_paused_chain(key: ref String, on: ref Ty) -> bool {
-    let a_step = key == "Seq::map" || key == "Seq::filter" || key == "Seq::take" || key == "Seq::skip" || key == "Seq::step_by" || key == "Seq::zip"
+    let a_step = key == "Seq::map" || key == "Seq::cloned" || key == "Seq::filter" || key == "Seq::take" || key == "Seq::skip" || key == "Seq::step_by" || key == "Seq::zip"
     return a_step && match on {
         Ty::Seq { pauses, .. } => pauses,
         else => false,
