@@ -573,39 +573,48 @@ fn check_function_tail_checks[H: CheckHost](mut state: CheckState, world: ref Ch
                 }
                 shown = result ?? shown
             }
-            let branches = check_function_is_branching(value)
-            let how = check_widened_slot(state, world, host, shown, expected, value, span)
-            let wrap: FactWrap = how ?? FactWrap::Path
-            let node = id_of(value) as i64
-            match wrap {
-                FactWrap::Constructor => {
-                    if branches && nullable {
-                        state.some_at_the_tails(value)
-                    } else {
-                        state.facts.wrapped.insert(node, FactWrap::Constructor)
-                    }
-                },
-                FactWrap::Conversion => {
-                    if branches && nullable {
-                        state.some_at_the_tails(value)
-                    }
-                },
-                FactWrap::Widen(into) => {
-                    state.facts.wrapped.insert(node, FactWrap::Widen(into.clone()))
-                },
-                FactWrap::WidenSome(into) => {
-                    state.facts.wrapped.insert(node, FactWrap::WidenSome(into.clone()))
-                },
-                FactWrap::Unsigned(into) => {
-                    state.facts.wrapped.insert(node, FactWrap::Unsigned(into.clone()))
-                },
-                else => {},
-            }
+            check_function_wrap_tail(state, world, host, shown, expected, value, span)
             state.expect_kept_asked(world, shown, expected, value, "the function returns it, and the caller keeps it after the call ends", span, "returns", fn(found, want) { f"This function returns `{found}`, but it's declared to return `{want}`." })
         },
         else => {
             state.expect_kept_asked(world, shown, expected, null, "the function returns it, and the caller keeps it after the call ends", span, "returns", fn(found, want) { f"This function returns `{found}`, but it's declared to return `{want}`." })
         },
+    }
+}
+
+/// **The wrap a tail takes into its declared result** (ADR-279, ADR-285
+/// D32): a branching tail under a nullable result is `Some` at each plain
+/// end, another tail takes the wrap of its slot. A named function's tail and
+/// a lambda's whose type the place declares (#1017) take it alike.
+pub fn check_function_wrap_tail[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, shown: ref Ty, expected: ref Ty, value: ref Expr, span: ref Span) sync {
+    let nullable = check_function_is_nullable(expected)
+    let branches = check_function_is_branching(value)
+    let how = check_widened_slot(state, world, host, shown, expected, value, span)
+    let wrap: FactWrap = how ?? FactWrap::Path
+    let node = id_of(value) as i64
+    match wrap {
+        FactWrap::Constructor => {
+            if branches && nullable {
+                state.some_at_the_tails(value)
+            } else {
+                state.facts.wrapped.insert(node, FactWrap::Constructor)
+            }
+        },
+        FactWrap::Conversion => {
+            if branches && nullable {
+                state.some_at_the_tails(value)
+            }
+        },
+        FactWrap::Widen(into) => {
+            state.facts.wrapped.insert(node, FactWrap::Widen(into.clone()))
+        },
+        FactWrap::WidenSome(into) => {
+            state.facts.wrapped.insert(node, FactWrap::WidenSome(into.clone()))
+        },
+        FactWrap::Unsigned(into) => {
+            state.facts.wrapped.insert(node, FactWrap::Unsigned(into.clone()))
+        },
+        else => {},
     }
 }
 

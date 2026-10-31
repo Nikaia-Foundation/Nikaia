@@ -463,21 +463,28 @@ pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, w
                 if result.is_none() { result = number_where_no_number_is(expected, value); }
                 shown = nikaia_std::index::or(result, || shown.into());
             }
-            let branches = check_function_is_branching(value);
-            let how = check_widened_slot(state, world, host, &shown, expected, Some(value), span);
-            let wrap: FactWrap = nikaia_std::index::or(how, || FactWrap::Path);
-            let node = id_of(value) as i64;
-            match wrap {
-                FactWrap::Constructor => { if branches && nullable { state.some_at_the_tails(value); } else { state.facts.wrapped.insert(node, FactWrap::Constructor); } },
-                FactWrap::Conversion => { if branches && nullable { state.some_at_the_tails(value); } },
-                FactWrap::Widen(ref into) => { state.facts.wrapped.insert(node, FactWrap::Widen(into.to_string())); },
-                FactWrap::WidenSome(ref into) => { state.facts.wrapped.insert(node, FactWrap::WidenSome(into.to_string())); },
-                FactWrap::Unsigned(ref into) => { state.facts.wrapped.insert(node, FactWrap::Unsigned(into.to_string())); },
-                _ => { },
-            }
+            check_function_wrap_tail(state, world, host, &shown, expected, value, span);
             state.expect_kept_asked(world, &shown, expected, Some(value), "the function returns it, and the caller keeps it after the call ends", span, "returns", &|found, want| { format!("This function returns `{}`, but it's declared to return `{}`.", found, want) });
         },
         _ => { state.expect_kept_asked(world, &shown, expected, None, "the function returns it, and the caller keeps it after the call ends", span, "returns", &|found, want| { format!("This function returns `{}`, but it's declared to return `{}`.", found, want) }); },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, shown: &Ty, expected: &Ty, value: &Expr, span: &Span) {
+    let nullable = check_function_is_nullable(expected);
+    let branches = check_function_is_branching(value);
+    let how = check_widened_slot(state, world, host, shown, expected, Some(value), span);
+    let wrap: FactWrap = nikaia_std::index::or(how, || FactWrap::Path);
+    let node = id_of(value) as i64;
+    match wrap {
+        FactWrap::Constructor => { if branches && nullable { state.some_at_the_tails(value); } else { state.facts.wrapped.insert(node, FactWrap::Constructor); } },
+        FactWrap::Conversion => { if branches && nullable { state.some_at_the_tails(value); } },
+        FactWrap::Widen(ref into) => { state.facts.wrapped.insert(node, FactWrap::Widen(into.to_string())); },
+        FactWrap::WidenSome(ref into) => { state.facts.wrapped.insert(node, FactWrap::WidenSome(into.to_string())); },
+        FactWrap::Unsigned(ref into) => { state.facts.wrapped.insert(node, FactWrap::Unsigned(into.to_string())); },
+        _ => { },
     }
 }
 

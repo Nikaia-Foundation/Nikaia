@@ -1085,7 +1085,8 @@ pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref Ch
     // **A map's read as its last value is copied out** (#997), as a lambda's
     // handed to a call is.
     state.a_map_read_handed_back(world, walked, body)
-    check_core_lambda_leave(state, outer, walked, body)
+    let tail = check_core_lambda_leave(state, outer, walked, body)
+    check_core_ops_lambda_tail_wrapped(state, world, host, declared, tail, body)
     state.leave_boundary(saved)
     state.scope.pop()
     state.repeats.pop()
@@ -1094,6 +1095,30 @@ pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref Ch
         return declared ?? Ty::Unknown
     }
     return Ty::Unknown
+}
+
+/// **A lambda whose place declares a nullable result widens a plain tail**
+/// (#1017, ADR-279), as a named function's tail does: `Some` at each plain
+/// end of a branching tail, else around the one value.
+fn check_core_ops_lambda_tail_wrapped[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, declared: ref Ty?, tail: ref Ty, body: ref Block) sync {
+    let ty: ref Ty = declared ?? return
+    let want: Ty = match ty {
+        Ty::Fn { result, .. } => result?.clone() ?? Ty::Unknown,
+        else => return,
+    }
+    let nullable = match want {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+    if !nullable || body.stmts.len() == 0 || a_body_never_ends(body) {
+        return
+    }
+    let last = body.stmts[body.stmts.len() - 1]
+    let at = Span { start: last.span.start, end: last.span.end }
+    match last.node {
+        Stmt::Expr(value) => check_function_wrap_tail(state, world, host, tail, want, value, at),
+        else => {},
+    }
 }
 
 /// **A task's lambda, walked** (Part I 8.2, ADR-055 D5, ADR-312, ADR-281 D29):

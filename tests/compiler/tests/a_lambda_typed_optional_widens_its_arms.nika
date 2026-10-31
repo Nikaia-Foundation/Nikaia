@@ -1,0 +1,10 @@
+// #1017: a lambda whose declared result is `T?` widens its non-null tail
+// arms into `Some`, as a named function's tail is.
+fn main() {
+	let f: fn(i64) -> i64? = fn(x) { if x > 0 { x } else { 0 } }
+	println(f(3) ?? 9)
+	let g: fn(i64) -> i64? = fn(x) { if x > 0 { x } else { null } }
+	println(g(-1) ?? 9)
+	let h: fn(i64) -> i64? = fn(x) { x + 1 }
+	println(h(1) ?? 9)
+}

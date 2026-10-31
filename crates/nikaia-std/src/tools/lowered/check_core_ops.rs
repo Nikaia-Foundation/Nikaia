@@ -736,12 +736,34 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     let outer = check_core_lambda_enter(state);
     let walked = check_core_block(state, world, host, body);
     state.a_map_read_handed_back(world, &walked, body);
-    check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
+    let tail = check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
+    check_core_ops_lambda_tail_wrapped(state, world, host, (declared).as_ref(), &tail, body);
     state.leave_boundary(&saved);
     state.scope.pop();
     state.repeats.pop();
     if check_core_ops_a_fn((declared).as_ref()) && (!given.is_empty() || params.is_empty()) { return nikaia_std::index::or(declared, || Ty::Unknown); }
     Ty::Unknown
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_lambda_tail_wrapped<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, declared: Option<&Ty>, tail: &Ty, body: &Block) {
+    let ty: &Ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return };
+    let want: Ty = match ty {
+        Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); nikaia_std::index::or(match result {
+            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            None => None,
+        }, || Ty::Unknown) },
+        _ => return,
+    };
+    let nullable = matches!(want, Ty::Nullable(_));
+    if !nullable || body.stmts.is_empty() || a_body_never_ends(body) { return; }
+    let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+    let at = Span { start: last.span.start, end: last.span.end };
+    match &last.node {
+        Stmt::Expr(value) => { check_function_wrap_tail(state, world, host, tail, &want, value, &at); },
+        _ => { },
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
