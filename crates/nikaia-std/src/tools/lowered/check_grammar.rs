@@ -47,6 +47,7 @@ impl CheckState {
                 None => None,
             }, || Ty::Unknown) },
             Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); self.repeat_type(world, &pat.node, &Repeat::Star, rules) },
+            Pattern::Literal(_) => pattern_text(),
             _ => Ty::Unknown,
         }
     }

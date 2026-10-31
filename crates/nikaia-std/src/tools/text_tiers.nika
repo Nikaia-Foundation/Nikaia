@@ -5304,6 +5304,8 @@ fn grammar_pattern_kinds(gname: ref String, rules: ref collections::BTreeSet[Str
         Pattern::Group(pat) => grammar_pattern_kinds(gname, rules, pat.node, ask, walk),
         Pattern::Choice(parts) => grammar_choice_kinds(gname, rules, parts, ask, walk),
         Pattern::Ref { name, generics, args } => grammar_reference_kinds(gname, rules, ask.names.resolve(name), generics.len(), args, ask, walk),
+        // a label on a literal binds the text matched (Part II 10.8, #1030)
+        Pattern::Literal(_) => view_kinds(),
         else => no_kinds(),
     }
 }

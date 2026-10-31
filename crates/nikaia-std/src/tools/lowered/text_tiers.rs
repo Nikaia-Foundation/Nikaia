@@ -3865,6 +3865,7 @@ pub(crate) fn grammar_pattern_kinds(gname: &str, rules: &collections::BTreeSet<S
         Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); grammar_pattern_kinds(gname, rules, &pat.node, ask, walk) },
         Pattern::Choice(parts) => grammar_choice_kinds(gname, rules, parts, ask, walk),
         Pattern::Ref { name, generics, args } => { let name = *name; grammar_reference_kinds(gname, rules, ask.names.resolve(name), generics.len() as i64, args, ask, walk) },
+        Pattern::Literal(_) => view_kinds(),
         _ => no_kinds(),
     }
 }

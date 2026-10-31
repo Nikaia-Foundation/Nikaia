@@ -1,0 +1,48 @@
+// A label on a literal binds the text matched (Part II 10.8, #1030): returned
+// from a rule over text and over bytes, stored in a struct field from a
+// choice of literals, and used inside the action from an optional one.
+
+grammar G {
+	rule WS = "" -> { }
+	entry rule top -> String = x:"ab" eof -> { x }
+}
+
+struct T {
+	s: String,
+}
+
+grammar C {
+	rule WS = "" -> { }
+	entry rule top -> T = x:("+" | "-") eof -> { T { s: x } }
+}
+
+grammar O {
+	rule WS = "" -> { }
+	entry rule top -> String = n:"-"? d:digit+ eof -> { f"{n ?? "+"}{d}" }
+}
+
+fn main() {
+	let a = G::top("ab") catch {
+		println("error")
+		return
+	}
+	println(a)
+	let input = Bytes("ab".bytes().collect())
+	let b = G::top(input) catch {
+		println("error")
+		return
+	}
+	println(b)
+	let c = C::top("-") catch {
+		println("error")
+		return
+	}
+	println(c.s)
+	for s in ["-12", "7"] {
+		let o = O::top(s) catch {
+			println("error")
+			return
+		}
+		println(o)
+	}
+}

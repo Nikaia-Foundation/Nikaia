@@ -715,7 +715,7 @@ and `rule WS = "" { }` skips nothing.
 
 | element | matches | yields |
 | :--- | :--- | :--- |
-| `"text"` | that text, exactly | nothing |
+| `"text"` | that text, exactly | nothing; a label on it binds the text matched |
 | `x:p` | `p`, and binds what it yields to `x` for the action | — |
 | `p q` | `p` then `q` (whitespace between them in a syntactic rule) | each binding |
 | `p \| q` | `p`, or where `p` fails without a cut, `q` | the alternative's action |

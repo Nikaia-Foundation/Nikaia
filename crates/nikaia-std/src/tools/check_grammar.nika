@@ -54,6 +54,8 @@ impl CheckState {
             // a rule handed values hands back its result (ADR-grammar-1 D2)
             Pattern::Call { name, .. } => self.rule_results[world.words.resolve(name).clone()]?.clone() ?? Ty::Unknown,
             Pattern::Counted { pat, .. } => self.repeat_type(world, pat.node, Repeat::Star, rules),
+            // a label on a literal binds the text matched (Part II 10.8, #1030)
+            Pattern::Literal(_) => pattern_text(),
             else => Ty::Unknown,
         }
     }
