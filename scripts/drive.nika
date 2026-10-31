@@ -30,16 +30,39 @@
 // pid lives; a dead owner's lock is taken over. The lock is held through the
 // whole red -> QA -> suite loop (both lanes' QA writes
 // docs/briefs/qa-task.md.report.md) and released on every path, an escalation
-// too. It notes the tested sha, runs `gate.nika -- --all` (its output in
-// DIR/suite.log, overwritten) and prints `SUITE <sha8> green|red <steps>`.
+// too. It notes the tested sha and runs the suite in a worktree of its own
+// (owner, 2026-10-31): the shared checkout holds the other lane's and other
+// sessions' unfinished files, which a suite run there would test although they
+// are not in the tested commit (a false red, or a green owed to a file never
+// pushed). The suite worktree is /home/user/nikaia-suite, or $NIKAIA_SUITE_DIR;
+// it is only the driver's. Not yet a worktree of this repository: `git worktree
+// add --detach <path> <sha>`; else `git -C <path> checkout --detach --force
+// <sha>` and `git -C <path> clean -fdx -e target` (force and clean there only,
+// never in the shared checkout; it never checks out `develop`). Its target/ is
+// kept between runs: it is the suite's build cache. Before that, the disk
+// guard: `df -Pk` of the path (or its parent), one line `SUITE disk <N> GB
+// free`; under 8 GB it deletes the worktree's target/fast/incremental and
+// target/debug and reads again; still under, it prints (and writes into
+// DIR/suite.log) `ESCALATE drive: disk: <N> GB free, the suite needs 8`, the
+// lock released and the commits left local. Then a copy of the driver's binary
+// (<path>/target/suite-nikaia: builders rebuild the shared one meanwhile) runs
+// the tested sha's `scripts/gate.nika -- --all` with the worktree as working
+// directory, so its `target/fast/nikaia`, crates/ and tests/ are the
+// worktree's (its `build` step builds that binary first), with
+// CARGO_INCREMENTAL=0 (incremental data costs about 10 GB a tree and a suite
+// build gains nothing from it) and NIKAIA_CACHE_LIMIT=2G. Its output goes to
+// DIR/suite.log of the shared checkout (overwritten), and the driver prints
+// `SUITE <sha8> green|red <steps>`. `--df FILE` reads a `df -Pk` output from
+// FILE and prints the disk line and `ok` or the escalation (for tests).
 // Green: `git push origin <sha>:develop`, exactly the tested commit; when
 // rejected (other sessions push too), `git pull --rebase` and push HEAD: the
 // rebased commits are CI's to judge. Still rejected: escalate. Then it prints
 // `PUSHED <sha8>` and empties unpushed.txt. Red: DIR/qa-input.txt gets the
 // suite's step lines, the last 200 lines of suite.log, `git log
 // origin/develop..HEAD`, and the brief and report of each brief in
-// unpushed.txt; the QA agent runs (docs/briefs/qa-task.md, role `qa`), its
-// report is committed as the others, and the suite runs again. At most 2 QA
+// unpushed.txt; the QA agent runs (docs/briefs/qa-task.md, role `qa`) in the
+// shared checkout, its report is committed as the others, and the suite runs
+// again on the new HEAD, in the worktree the same way. At most 2 QA
 // rounds: a third red prints `ESCALATE drive: suite red after 2 QA rounds:
 // <steps>` and leaves the commits local. Nothing else pushes.
 // `--no-bump` leaves the version raise to another driver: a second lane in the
@@ -65,6 +88,7 @@
 // The scripts are run as programs: a script cannot `use` another.
 
 use std::cli
+use std::env
 use std::fs
 use std::process
 use std::text
@@ -338,6 +362,95 @@ fn drive_red_steps(out: String) -> String throws {
     return "gate-error"
 }
 
+// The suite's own worktree (header comment): NIKAIA_SUITE_DIR, else
+// /home/user/nikaia-suite.
+fn drive_suite_dir() -> String {
+    let set = env::var("NIKAIA_SUITE_DIR") ?? ""
+    if set != "" { return set.clone() }
+    return "/home/user/nikaia-suite"
+}
+
+// The free KiB in the 4th field of `df -Pk`'s second line, -1 when unread.
+fn drive_df_kib(out: String) -> i64 throws {
+    let lines = out.trim().split("\n").collect()
+    if lines.len() < 2 { return -1 }
+    let mut fields: Vec[String] = []
+    for f in lines[1].split(" ") {
+        if f.trim() != "" { fields.push(f.trim().clone()) }
+    }
+    if fields.len() < 4 { return -1 }
+    return text::parse_i64(fields[3].clone()) ?? -1
+}
+
+// The free KiB of the filesystem holding `path` (its parent while it does not exist).
+fn drive_free_kib(path: String) -> i64 throws {
+    let mut at = path.clone()
+    if !fs::exists(at.clone(), fs::Root::Anywhere) { at = process::run("dirname", [path]).stdout.trim().clone() }
+    return drive_df_kib(process::run("df", ["-Pk", at]).stdout)
+}
+
+// The suite needs 8 GB: below, the worktree's incremental data and debug build
+// go first; still below, the driver escalates (header comment).
+fn drive_disk(wt: String, dir: String) throws {
+    let need: i64 = 8 * 1048576
+    let mut free = drive_free_kib(wt.clone())
+    if free >= 0 && free < need {
+        process::run("rm", ["-rf", f"{wt}/target/fast/incremental", f"{wt}/target/debug"])
+        free = drive_free_kib(wt.clone())
+    }
+    println(drive_disk_line(free))
+    let why = drive_disk_short(free)
+    if why != "" {
+        fs::write(f"{dir}/suite.log", fs::Root::Anywhere, f"ESCALATE drive: {why}\n")
+        drive_escalate(why)
+    }
+}
+
+// The run's disk line; a `df` that could not be read does not stop the suite.
+fn drive_disk_line(free: i64) -> String {
+    if free < 0 { return "SUITE disk unread (df -Pk printed no free space)" }
+    return f"SUITE disk {free / 1048576} GB free"
+}
+
+// Why `free` KiB are too few for the suite, "" when enough (or unread).
+fn drive_disk_short(free: i64) -> String {
+    if free < 0 || free >= 8 * 1048576 { return "" }
+    return f"disk: {free / 1048576} GB free, the suite needs 8"
+}
+
+// Puts the suite worktree at `sha`, detached: added the first time, else
+// checked out with force and cleaned of everything but its target/ (the build
+// cache). Force and clean happen only there, never in the shared checkout.
+fn drive_worktree(wt: String, sha: String) throws {
+    let listed = process::run("git", ["worktree", "list", "--porcelain"]).stdout
+    let mut known = false
+    for l in listed.split("\n") {
+        if l.trim() == f"worktree {wt}" { known = true }
+    }
+    if !known {
+        process::run("git", ["worktree", "prune"])
+        let added = process::run("git", ["worktree", "add", "--detach", wt.clone(), sha.clone()])
+        if !added.ok { drive_escalate(f"git worktree add {wt} failed: {added.stderr.trim()}") }
+        return
+    }
+    let moved = process::run("git", ["-C", wt.clone(), "checkout", "--detach", "--force", sha.clone()])
+    if !moved.ok { drive_escalate(f"git -C {wt} checkout {drive_short(sha)} failed: {moved.stderr.trim()}") }
+    process::run("git", ["-C", wt.clone(), "clean", "-fdx", "-e", "target"])
+}
+
+// One suite run in the worktree: the tested sha's scripts/gate.nika, run by a
+// copy of the driver's binary (the shared one is rebuilt by builders meanwhile),
+// with the worktree as working directory.
+fn drive_gate(exe: String, wt: String) -> String throws {
+    let own = process::run("realpath", [exe]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{wt}/target"])
+    let copy = f"{wt}/target/suite-nikaia"
+    let copied = process::run("cp", ["-f", own, copy.clone()])
+    if !copied.ok { drive_escalate(f"cp of the driver's binary to {copy} failed: {copied.stderr.trim()}") }
+    let run = process::run(copy, ["run", "scripts/gate.nika", "--", "--all"]; dir: wt, env: [("CARGO_INCREMENTAL", "0"), ("NIKAIA_CACHE_LIMIT", "2G")])
+    return run.stdout + run.stderr
+}
+
 // After a run's commit: test the unpushed commits with the complete suite, push
 // them when green, else let the QA agent fix forward (header comment).
 fn drive_suite(exe: String, dry: bool, dir: String, brief: String) throws {
@@ -345,7 +458,11 @@ fn drive_suite(exe: String, dry: bool, dir: String, brief: String) throws {
     drive_say(dry, f"append {brief} to {dir}/unpushed.txt")
     drive_say(dry, "git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)")
     drive_say(dry, "mkdir target/suite.lock (wait while its owner's pid lives)")
-    drive_say(dry, f"{exe} run scripts/gate.nika -- --all > {dir}/suite.log")
+    let wt = drive_suite_dir()
+    drive_say(dry, f"df -Pk {wt} (or its parent): under 8 GB free, rm -rf {wt}/target/fast/incremental {wt}/target/debug; still under, ESCALATE drive: disk")
+    drive_say(dry, f"not yet a worktree: git worktree add --detach {wt} <sha>; else git -C {wt} checkout --detach --force <sha>; git -C {wt} clean -fdx -e target")
+    drive_say(dry, f"cp {exe} {wt}/target/suite-nikaia")
+    drive_say(dry, f"in {wt}, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: {wt}/target/suite-nikaia run scripts/gate.nika -- --all > {dir}/suite.log")
     drive_say(dry, f"green: git push origin <sha>:develop, empty {dir}/unpushed.txt")
     drive_say(dry, f"red: write {dir}/qa-input.txt, rm -f {qa}.report.md, {exe} run scripts/agent.nika -- {qa} --dir {dir}, commit its report, the suite again (at most 2 QA rounds)")
     drive_say(dry, "rm -rf target/suite.lock")
@@ -361,8 +478,9 @@ fn drive_suite(exe: String, dry: bool, dir: String, brief: String) throws {
     let mut rounds: i64 = 0
     while true {
         let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
-        let run = process::run(exe.clone(), ["run", "scripts/gate.nika", "--", "--all"])
-        let out = run.stdout + run.stderr
+        drive_disk(wt.clone(), dir.clone())
+        drive_worktree(wt.clone(), sha.clone())
+        let out = drive_gate(exe.clone(), wt.clone())
         fs::write(f"{dir}/suite.log", fs::Root::Anywhere, out.clone())
         let steps = drive_red_steps(out.clone())
         if steps == "" {
@@ -506,6 +624,13 @@ fn main() throws {
     if args.len() == 3 && args[1] == "--kept" {
         let why = drive_kept(drive_read(args[2].clone()))
         if why == "" { println("ok") } else { println(f"CONVERT drive: {why}") }
+        return
+    }
+    if args.len() == 3 && args[1] == "--df" {
+        let free = drive_df_kib(drive_read(args[2].clone()))
+        println(drive_disk_line(free))
+        let why = drive_disk_short(free)
+        if why == "" { println("ok") } else { println(f"ESCALATE drive: {why}") }
         return
     }
     if args.len() == 3 && args[1] == "--changed" {

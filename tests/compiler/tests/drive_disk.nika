@@ -1,0 +1,38 @@
+// scripts/drive.nika --df FILE: the suite's disk guard reads the free space
+// from `df -Pk` and escalates under 8 GB (the suite worktree, owner 2026-10-31).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn case(nikaia: String, repo: String, tmp: String, name: String, df: String) throws {
+    fs::write(f"{tmp}/df", fs::Root::Anywhere, df)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--df", f"{tmp}/df"]; dir: repo)
+    println(f"== {name}")
+    println(out.stdout.trim())
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    let head = "Filesystem     1024-blocks      Used Available Capacity Mounted on\n"
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "plenty", head + "/dev/vda       61255492  20000000  41255492      33% /\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "exactly 8 GB", head + "/dev/vda       61255492  52866884   8388608      87% /\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "just under", head + "/dev/vda       61255492  52866885   8388607      87% /\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "low", head + "/dev/vda       61255492  58000000   3255492      95% /\n")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "unread", "df: /nowhere: No such file or directory\n")
+    process::run("rm", ["-rf", tmp])
+}

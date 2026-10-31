@@ -6,7 +6,10 @@ would run: git checkout -- crates/rs2nika/convert/nikaia.lock
 would run: append T/b1.md to T/unpushed.txt
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: mkdir target/suite.lock (wait while its owner's pid lives)
-would run: target/fast/nikaia run scripts/gate.nika -- --all > T/suite.log
+would run: df -Pk /home/user/nikaia-suite (or its parent): under 8 GB free, rm -rf /home/user/nikaia-suite/target/fast/incremental /home/user/nikaia-suite/target/debug; still under, ESCALATE drive: disk
+would run: not yet a worktree: git worktree add --detach /home/user/nikaia-suite <sha>; else git -C /home/user/nikaia-suite checkout --detach --force <sha>; git -C /home/user/nikaia-suite clean -fdx -e target
+would run: cp target/fast/nikaia /home/user/nikaia-suite/target/suite-nikaia
+would run: in /home/user/nikaia-suite, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: /home/user/nikaia-suite/target/suite-nikaia run scripts/gate.nika -- --all > T/suite.log
 would run: green: git push origin <sha>:develop, empty T/unpushed.txt
 would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again (at most 2 QA rounds)
 would run: rm -rf target/suite.lock
@@ -21,7 +24,10 @@ would run: git checkout -- crates/rs2nika/convert/nikaia.lock
 would run: append T/architect-task.md to T/unpushed.txt
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: mkdir target/suite.lock (wait while its owner's pid lives)
-would run: target/fast/nikaia run scripts/gate.nika -- --all > T/suite.log
+would run: df -Pk /home/user/nikaia-suite (or its parent): under 8 GB free, rm -rf /home/user/nikaia-suite/target/fast/incremental /home/user/nikaia-suite/target/debug; still under, ESCALATE drive: disk
+would run: not yet a worktree: git worktree add --detach /home/user/nikaia-suite <sha>; else git -C /home/user/nikaia-suite checkout --detach --force <sha>; git -C /home/user/nikaia-suite clean -fdx -e target
+would run: cp target/fast/nikaia /home/user/nikaia-suite/target/suite-nikaia
+would run: in /home/user/nikaia-suite, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: /home/user/nikaia-suite/target/suite-nikaia run scripts/gate.nika -- --all > T/suite.log
 would run: green: git push origin <sha>:develop, empty T/unpushed.txt
 would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again (at most 2 QA rounds)
 would run: rm -rf target/suite.lock
@@ -36,7 +42,10 @@ would run: git checkout -- crates/rs2nika/convert/nikaia.lock
 would run: append T/architect-task.md to T/unpushed.txt
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: mkdir target/suite.lock (wait while its owner's pid lives)
-would run: target/fast/nikaia run scripts/gate.nika -- --all > T/suite.log
+would run: df -Pk /home/user/nikaia-suite (or its parent): under 8 GB free, rm -rf /home/user/nikaia-suite/target/fast/incremental /home/user/nikaia-suite/target/debug; still under, ESCALATE drive: disk
+would run: not yet a worktree: git worktree add --detach /home/user/nikaia-suite <sha>; else git -C /home/user/nikaia-suite checkout --detach --force <sha>; git -C /home/user/nikaia-suite clean -fdx -e target
+would run: cp target/fast/nikaia /home/user/nikaia-suite/target/suite-nikaia
+would run: in /home/user/nikaia-suite, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: /home/user/nikaia-suite/target/suite-nikaia run scripts/gate.nika -- --all > T/suite.log
 would run: green: git push origin <sha>:develop, empty T/unpushed.txt
 would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again (at most 2 QA rounds)
 would run: rm -rf target/suite.lock
@@ -51,7 +60,10 @@ would run: git checkout -- crates/rs2nika/convert/nikaia.lock
 would run: append T/architect-task.md to T/unpushed.txt
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: mkdir target/suite.lock (wait while its owner's pid lives)
-would run: target/fast/nikaia run scripts/gate.nika -- --all > T/suite.log
+would run: df -Pk /home/user/nikaia-suite (or its parent): under 8 GB free, rm -rf /home/user/nikaia-suite/target/fast/incremental /home/user/nikaia-suite/target/debug; still under, ESCALATE drive: disk
+would run: not yet a worktree: git worktree add --detach /home/user/nikaia-suite <sha>; else git -C /home/user/nikaia-suite checkout --detach --force <sha>; git -C /home/user/nikaia-suite clean -fdx -e target
+would run: cp target/fast/nikaia /home/user/nikaia-suite/target/suite-nikaia
+would run: in /home/user/nikaia-suite, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: /home/user/nikaia-suite/target/suite-nikaia run scripts/gate.nika -- --all > T/suite.log
 would run: green: git push origin <sha>:develop, empty T/unpushed.txt
 would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again (at most 2 QA rounds)
 would run: rm -rf target/suite.lock

@@ -1,0 +1,15 @@
+== plenty
+SUITE disk 39 GB free
+ok
+== exactly 8 GB
+SUITE disk 8 GB free
+ok
+== just under
+SUITE disk 7 GB free
+ESCALATE drive: disk: 7 GB free, the suite needs 8
+== low
+SUITE disk 3 GB free
+ESCALATE drive: disk: 3 GB free, the suite needs 8
+== unread
+SUITE disk unread (df -Pk printed no free space)
+ok

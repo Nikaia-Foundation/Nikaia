@@ -13,7 +13,7 @@ fn root() -> String throws {
 
 fn case(nikaia: String, repo: String, tmp: String, name: String, cycle: String) throws {
     fs::write(f"{tmp}/lines", fs::Root::Anywhere, cycle.replace("%T", tmp.clone()) + "\n")
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines"]; dir: repo)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines"]; dir: repo, env_remove: ["NIKAIA_SUITE_DIR"])
     println(f"== {name} (exit {out.code})")
     println(out.stdout.trim().replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia"))
 }
