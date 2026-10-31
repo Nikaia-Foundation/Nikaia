@@ -9,7 +9,7 @@ Deviation: step 2's test holds row a and a twice(x) row, not row b, which is ref
 Found: none
 Needs: none
 Changelog: An untyped lambda bound by `let` and put into a function field no longer makes a call through the field refused NK2605.
-Owner: should #997's typing of an untyped lambda by its first use also take a function field it is put into (`H { f: g }`), so `let g = fn(x) { 5 }` there runs instead of NK1245?
+Owner: none (filed as decision #1047: should #997's typing by first use also take a function field)
 Rs2nika: none
 Disk freed: 0 GB (cache 3.3G, disk 7.5G free; no new entry over 100 MB; no clone)
 Pushed: a79b8cd8 (pushed by drive.nika)
