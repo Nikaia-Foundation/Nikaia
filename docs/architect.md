@@ -22,6 +22,13 @@ on: its report comes to the architect, whose next order is the repair (the
 compiler defect first, `CLAUDE.md`'s *Fix, do not work around*), then the
 blocked step.
 
+**Pushing from a checkout that is behind** (a dirty shared tree, so no
+rebase): push a merge, `T=$(git merge-tree --write-tree HEAD origin/develop)`,
+then `git commit-tree $T -p HEAD -p origin/develop` and push that sha. Never
+rebuild your files on `origin/develop`'s tree with a scratch index: a file
+another session changed there is overwritten (architect 2026-10-31: the y21
+probe rule, restored by f96bb09a). Chain such steps with `&&`, never `;`.
+
 ## Language decisions (owner, 2026-10-31)
 
 Language principles (owner, 2026-10-31), the measure for every language
