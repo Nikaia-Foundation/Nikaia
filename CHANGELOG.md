@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1329] — 2026-10-31
+
+**spec: `ref` in front of a tuple (#1115); a path orders, equates and hashes (ADR-319 D9, #1116)**
+- Part I: `ref` may stand in front of a tuple type, as in front of a type name; a tuple whose parts all copy is refused with NK1257 (#1115, to build).
+- Part III 17.1, ADR-319 D9: `fs::Path` equates, orders part by part and hashes (#1116, to build).
+
 ## [0.0.1328] — 2026-10-31
 
 **Comptime hands a turn's field to a function; a sync call with type arguments in brackets (#1087, #1095)**
