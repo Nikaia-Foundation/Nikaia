@@ -1,6 +1,7 @@
-Result: blocked
-Batch: unchanged (red not from prover: arm64, bootstrap_compiler) - p4-1054-loop-checks.md next; p3 done (41ea2c3)
-Figure: 1,514 / 2,620 indexes (57.8 %), 718 / 1,605 arithmetic steps (44.7 %), `off`, p3's count on 41ea2c3
+Result: done
+Batch: p5-1069-bounds-expectation.md, p6-1053-for-counters.md
+Figure: off 1518/2628 indexes (57.8 %), 729/1612 operations (45.2 %); prove-through-loops:on 1550/2628 (59.0 %), 736/1612 (45.7 %) (ecf435a, 246 files, 0 refused)
 Owner: none
-Found: CI red since a99ce32 (#1049, yaml lane); every run to 28bfacae fails the same three tests in `arm64` and `bootstrap_compiler`: sysroot::the_committed_rust_is_what_this_compiler_lowers, sysroot::the_tools_lower_the_same_on_one_thread_as_on_every_core, sysroot::stds_nikaia_half_lowers_the_same_at_both_switches (check-run annotations). Known cause: the fresh lowering of `crates/nikaia-std/src/tools/lowered/project_members.rs` (TrustedMap -> HashMap, 14 lines) sits uncommitted in the shared checkout (GR's and p3's reports); the third test may have a second cause in std's Nikaia half. Needs the supervisor: commit that file's `lower-std` output, check std's half (`lower-std` fixpoint at both switches), push. 84aa402 (QA's #1049 fixture fix) is on no branch.
-Needs: help from main session (fix-forward of the lower-std fixpoint above)
+Decided: ADR-361 D13 (a `for` counts its turns; a counter is bounded by k times them), #1069 (`.bounds` / `.loops.bounds` beside a program test). Both under *Language decisions*; p5 and p6 write the Part III text and their Changelog lines.
+Filed: #1066, #1067, #1068 (bug lane, `ready`); #1069 (`ready`, `wip`). Comments on #1053 (figure, plan) and #432 (D13 covers its loop part).
+Supervisor: Part III `30-nikaia-tooling.md` :315 writes `time::Duration::new(30, 0)`, refused by NK1149; `async e` refused is #984, not a defect; the reassigned `split().collect()` probe did not reproduce.
