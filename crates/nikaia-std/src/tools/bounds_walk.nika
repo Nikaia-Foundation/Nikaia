@@ -200,6 +200,10 @@ struct BoundsWalk {
     /// guard `if c { break }`, which holds at each turn's head and not where
     /// the loop is left, so nothing past the loop reads it.
     leaving: collections::BTreeSet[i64],
+    /// **The whole-number parameters the body never binds again**, with
+    /// their types: a value of such a type is what a goal may be stated
+    /// against (`bounding_relative`).
+    typed: collections::BTreeMap[String, String],
 }
 
 /// **A loop's candidate invariant, while its body is walked** (ADR-361 D4):
@@ -304,6 +308,14 @@ pub fn bounds_aggressive(args: ref Vec[FnArg], body: ref Block, nonnegative: col
         through_loops: context.through_loops,
         turns: [],
         leaving: collections::BTreeSet(),
+        typed: collections::BTreeMap(),
+    }
+    for arg in args {
+        let name = words.resolve(arg.name).clone()
+        let ty = words.resolve(arg.ty.name).clone()
+        if arg.ty.generics.is_empty() && is_whole_number(ty) && !walk.shape.twice.contains(name) {
+            walk.typed.insert(name, ty)
+        }
     }
     let mut settled = false
     if !walk.shape.roots.is_empty() {
@@ -469,6 +481,12 @@ fn bounding_proves_goal(mut walk: BoundsWalk, facts: ref BoundsFacts, goal: i64,
     if bounding_proves(walk, facts, goal, ask) {
         return true
     }
+    bounding_missed(walk, facts, goal)
+    return false
+}
+
+/// A goal left open: where the walk keeps them (ADR-361 D2), what it read.
+fn bounding_missed(mut walk: BoundsWalk, facts: ref BoundsFacts, goal: i64) {
     if walk.through_loops {
         walk.open += 1
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
@@ -481,7 +499,6 @@ fn bounding_proves_goal(mut walk: BoundsWalk, facts: ref BoundsFacts, goal: i64,
             walk.missed_goals.remove(0)
         }
     }
-    return false
 }
 
 /// **A goal left open**, with what held where it was asked: the cheap test
@@ -854,7 +871,14 @@ fn bounding_fits(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: ref
         } else if side < 0 {
             goal = above
         }
-        return bounding_proves_goal(walk, facts, goal, ask)
+        if bounding_proves(walk, facts, goal, ask) {
+            return true
+        }
+        if side != 0 && bounding_relative(walk, t, side, bounds, facts, ask) {
+            return true
+        }
+        bounding_missed(walk, facts, goal)
+        return false
     }
     // **A side the walk only bounds** (#714): `l + x` with `a <= x <= b`
     // lies between `l + a` and `l + b`, linear goals the solver can state.
@@ -874,6 +898,54 @@ fn bounding_fits(mut walk: BoundsWalk, op: ref BinaryOp, lhs: ref Expr, rhs: ref
     }
     let range = bounding_range_of(walk, op, lhs, rhs, -1, facts, context, program, words, ask) ?? return false
     return bounds.holds(range)
+}
+
+/// How many names a goal is stated against (`bounding_relative`).
+fn most_relatives() -> i64 {
+    return 8
+}
+
+/// **A goal relative to a value of the type** (ADR-306, #1054): `t <= y`
+/// (`t >= y` where `side < 0`) for a name `y` whose type lies inside
+/// `bounds`, so `t` does too. Each `y` is one a fact bounds a name of `t` by,
+/// the newest facts first, at most `most_relatives()`: a goal with no
+/// constant past 2^62, so `i + 1` under `i < n`, `n: i64`, is proved.
+fn bounding_relative(mut walk: BoundsWalk, t: i64, side: i64, bounds: ref Range, facts: ref BoundsFacts, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    if walk.typed.is_empty() {
+        return false
+    }
+    let mut own: collections::BTreeSet[String] = collections::BTreeSet()
+    walk.arena.variables(t, own)
+    let mut tried: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut at = facts.facts.len()
+    while at > 0 && tried.len() < most_relatives() {
+        at -= 1
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        walk.arena.variables(facts.facts[at], read)
+        if !read.iter().any(fn(name) { own.contains(name) }) {
+            continue
+        }
+        for y in read {
+            if own.contains(y) || tried.contains(y) || tried.len() >= most_relatives() {
+                continue
+            }
+            let ty = walk.typed.get(y) ?? continue
+            let held = Range::held_by_type(ty) ?? continue
+            if !bounds.holds(held) {
+                continue
+            }
+            tried.insert(y.clone())
+            let v = walk.arena.var(y)
+            let mut goal = walk.arena.le(t, v)
+            if side < 0 {
+                goal = walk.arena.ge(t, v)
+            }
+            if bounding_proves(walk, facts, goal, ask) {
+                return true
+            }
+        }
+    }
+    return false
 }
 
 /// `linear + ranged` (or `linear - ranged` where `subtracts`) inside `lo..=hi`:
