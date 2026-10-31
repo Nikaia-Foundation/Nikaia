@@ -10,7 +10,7 @@ Facts: Where things live, Traps already met, Commands
 
 Score: S=3 (the owner's 100 % target is only honest if the count covers every run-time check: an `assert` moved to a precondition (ADR-269 D5) is a check at its callers, and a `panic` is a run-time error claim (b) must count), O=1 (the lane's own measure), C=4 M (a flag on `lower-std`, the script, one doc section). Area: prover. Must land before the lane puts `assert`s into `tools/*.nika` (#1053 step 8).
 
-Pre-flight: p8 (#1076) is committed (`git log --oneline -12 | grep -i 1076`); if not, stop: `Result: blocked`, `Needs: p8 first` (without it the claim count would report unproved preconditions as proved).
+Pre-flight: p8 (#1076, 788981d) and p10 (#1084) are committed (`git log --oneline -12 | grep -e 788981d -e "checked entry"`, and `git log -12 --format=%B | grep "#1084"`); if not, stop: `Result: blocked`, `Needs: p8 and p10 first` (without it the claim count would report unproved preconditions as proved).
 
 ## Decision (architect, 2026-10-31; a development aid, no language change)
 

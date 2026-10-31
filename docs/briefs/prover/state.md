@@ -6,14 +6,14 @@
 
 **The headline counts at `prove-through-loops:on`** (architect, 2026-10-31): claim (b) is about what is proved, the strongest setting the toolchain offers; which proved checks a build drops is a separate setting (ADR-361 D11: `std` and the tools are lowered with it `off`). Both figures are recorded. **The figure must also count claims** before `assert`s go into the tools: a precondition (ADR-269 D5) moves a check to its callers, and an unproved one there is still a run-time check.
 
-## Figure (2026-10-31, 28acd94, p6's report: `lower-std --bounds` + `scripts/proved.nika`, 246 files, 0 refused)
+## Figure (2026-10-31, 58a1ff9, p7's report: `lower-std --bounds` + `scripts/proved.nika`)
 
 | Setting | Indexes | Operations |
 | :--- | :--- | :--- |
-| `off` | 1,520 / 2,646 (57.4 %) | 733 / 1,620 (45.2 %) |
-| `prove-through-loops:on` | 1,552 / 2,646 (58.7 %) | 740 / 1,620 (45.7 %) |
+| `off` | 1,531 / 2,648 (57.8 %) | 835 / 1,622 (51.5 %) |
+| `prove-through-loops:on` | 1,563 / 2,648 (59.0 %) | 841 / 1,622 (51.8 %) |
 
-Counter reason 541 (on), 579 (off). The rest by reason as at ecf435a (693 catch-all, 379 parameter, 127 list element, 96 another list's length, 60 call result, 37 list of lists...). `tools/*.nika` holds no `assert` and 13 `panic(` in 9 files: p9 puts both into the figure (`left at run time`, the lane's target: 0).
+Counter reason 470 (off), 433 (on), was 541. The rest by reason as at ecf435a (693 catch-all, 379 parameter, 127 list element, 96 another list's length, 60 call result, 37 list of lists...). `tools/*.nika` holds no `assert` and 13 `panic(` in 9 files: p9 puts both into the figure (`left at run time`, the lane's target: 0).
 
 ## Lane facts (for the architect and briefs)
 
@@ -28,16 +28,15 @@ Counter reason 541 (on), 579 (off). The rest by reason as at ecf435a (693 catch-
 
 | # | Work | Issue | S | O | C | Score |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1-6 | Count, in-loop asserts, reasons, D10 portfolio, `.bounds` tests (p5), D13 in the bounds walk (p6) | #1053.1-4, #1054, #1069 | | | | done |
-| 7 | p7: the checker records a `for`'s collection length, so D13 reaches `for x in xs` | #1053.4 | 3 | 3 | 3 | 11, batch |
-| 8 | p8: a precondition counted "proved at every call" where a call's argument is unread (false proof in the report; NK1300 missed) | #1076 | 3 | 3 | 4 | 8.3, batch |
-| 9 | p9: `lower-std --asserts`, `proved.nika` counts claims and `panic`s, `left at run time`; `formal-verification.md` §2/§4 | #1053.9 | 3 | 1 | 4 | 7.8, batch, after p8 |
-| 10 | The prover walk's `for` over a collection: a turn count (D13) as `loop_record_range` over `0..len`, so claims after/inside a `for` read its counters (today `n` is "not a whole number the prover reads" after `for x in xs { n += 1 }`, probed) | #1053.4 | 3 | 3 | 8 | 4.1, next run |
-| 11 | Certificate checker at zero: preconditions as `assert`s, guards for malformed certificates | #1053.5 | 3 | 1 | 6 | 5.2, after 9-10 |
-| 12 | The catch-all's 693 re-split once p7 lands | #1053.3 | 2 | 2 | 4 | 5.5, after 7 |
-| 13 | `assert`s at the 379 parameter sites, file by file, files clear of the main lane | #1053.8 | 3 | 1 | 10 | 3.1, after 9-10 |
-| 14 | The 13 `panic`s: each a proved-unreachable `assert(false)`-like claim or a `throw` | #1053 | 2 | 1 | 4 | 5.3, after 9 |
-| 15 | By the table: list elements #797, other list's length #388 (decision), call results (postconditions: decision paper due), #384, #385, #386 | | | | | by the table |
+| 1-8 | Count, in-loop asserts, reasons, D10 portfolio, `.bounds` tests, D13 in the bounds walk, a `for`'s collection length (p7), `Through` calls not proving (p8) | #1053.1-4, #1054, #1069, #1076 | | | | done (local, unpushed) |
+| 9 | p10: `Bytes(x)` keeps `x`'s length, a bound `[v; n]` has `n`, a literal or repeat argument its count; the four `it` tests p8 turned red rebuilt to use it | #1084 | 3 | 3 | 3 | 11, batch, first |
+| 10 | p9: `lower-std --asserts`, `proved.nika` counts claims and `panic`s, `left at run time`; `formal-verification.md` §2/§4 | #1053.9 | 3 | 1 | 4 | 7.8, batch, after p10 |
+| 11 | The prover walk's `for`: a turn count (D13) as `loop_record_range` over `0..len`, so claims after/inside a `for` read its counters, and a `push` once a turn in a `for` over `0..<n` gives the length `old + n` (probed: `for j in 0..<4 { u.push(j) }` then `g(u)` with `u.len() >= 4` refused at both settings) | #1053.4 | 3 | 3 | 8 | 4.1, next run |
+| 12 | Certificate checker at zero: preconditions as `assert`s, guards for malformed certificates | #1053.5 | 3 | 1 | 6 | 5.2, after 10-11 |
+| 13 | The catch-all's 693 re-split (p7 landed) | #1053.3 | 2 | 2 | 4 | 5.5, with p9's run |
+| 14 | `assert`s at the 379 parameter sites, file by file, files clear of the main lane | #1053.8 | 3 | 1 | 10 | 3.1, after 10-11 |
+| 15 | The 13 `panic`s: each a proved-unreachable claim or a `throw` | #1053 | 2 | 1 | 4 | 5.3, after 10 |
+| 16 | By the table: list elements #797, other list's length #388 (decision), call results (postconditions: decision paper due), #384, #385, #386 | | | | | by the table |
 
 ## Decisions in force
 
@@ -45,15 +44,16 @@ Counter reason 541 (on), 579 (off). The rest by reason as at ecf435a (693 catch-
 * ADR-361 D2, D3, D10: claims and checks are asked through loops (p2, p4). D13 (architect, 2026-10-31): a `for` counts its turns; a counter is bounded by `k` times them, at both settings; built in the bounds walk (p6), the collection length via the checker (p7), the prover walk next (item 10).
 * p7 (architect, 2026-10-31): `check_core_stmt_for` records the iterable in `std_lengths` (and `sized_lengths` where elements take space), as `.len()` does. `for c in text` over a `String` passes check and fails in rustc: #1075 (bug lane).
 * #1076 (architect, 2026-10-31): a call that reaches the checked entry (`CallReach::Through`, ADR-269 D20) checks the precondition when it runs; it counts as not proving it.
+* #1084 (architect, 2026-10-31, obvious): `Bytes(x)` has `x`'s length (like `find_all`, ADR-375 D5); `[v; n]` has length `n` bound by `let` or passed; a literal argument has its count. Tests p8 turned red are rebuilt so the prover reads the length, never lowered with `unproved-claims = "warn"` to pass.
 * #1069 (architect, 2026-10-31): `NAME.bounds` (off) and `NAME.loops.bounds` (on) beside a program test, path relative, the build-dependent tail cut.
 * p4: `bounding_fits` may state a one-way goal as `t <= y` for a name `y` whose type lies inside the operation's, at most 8 per goal.
 * Open decisions this lane may need: #388 (equal lengths), #385 (lists of lists, `decision`), #386 (products), #798 (element rules), postconditions (`ensures`, no issue yet: write the decision paper when item 12 reaches call results).
 * NK codes: `NK1320`-`NK1329`, `NK2720`-`NK2729`.
 
-## CI and the tree (2026-10-31, after 1160418)
+## CI and the tree (2026-10-31, after 3feaff4)
 
-Local `develop` holds 5 unpushed commits (p5, p6, reports) for the driver to test and push; the lane's last `suite.log` holds only gate.nika's bogus `ProbePlain` warning (#1068), no step lines, `RED` empty: the driver's next suite decides. p6's `Found:` (tools lowering of `ref T? ?? ref T`) filed as #1074 (`ready`, for the bug lane; this lane touches no bug-lane brief). `lowered/project_members.rs` is still uncommitted residue (#1060, b15); briefs say never to stage it. Owed to the supervisor (version heading): p5's and p6's `Changelog:` lines.
+Local `develop` holds p7 (58a1ff9) and p8 (788981d) unpushed: the driver's suite is red on four `it` tests p8 rightly refuses (NK1300, true unproved calls through `Bytes(v)`); p10 makes them green by #1084, then the driver pushes. `RED`/`qa-input.txt` in this directory are an older QA round's (rs2nika/examples), not this lane's. `lowered/project_members.rs` is uncommitted residue (#1060, b15); briefs say never to stage it. Owed to the supervisor (version heading): p5's, p6's, p7's and p8's `Changelog:` lines.
 
 ## Batch
 
-`batch.txt`: p7 (`check_core_stmt.nika`, `check_core_method.nika`, test `.bounds`), p8 (`prover_passes.nika`), p9 (`main.rs`, `sysroot.rs`, `scripts/proved.nika`, `formal-verification.md`; after p8). None touches a file of the main or bug lane's current briefs. Next run: item 10 (the prover walk's `for`), then 11 or 13 by p9's figure.
+`batch.txt`: p10 (`prover_walk.nika`, `prover_state.nika`, two `it` test files, new `tests/compiler` tests), then p9 (`main.rs`, `sysroot.rs`, `scripts/proved.nika`, `formal-verification.md`). None touches a file of the main, bug or yaml lane's current briefs. Next run: item 11 (the prover walk's `for`, push lengths), then 12 or 14 by p9's figure.

@@ -1,3 +1,2 @@
-p7-1053-for-collection-length.md
-p8-1076-precondition-unread-argument.md
+p10-1084-argument-lengths.md
 p9-1053-claims-in-the-figure.md
