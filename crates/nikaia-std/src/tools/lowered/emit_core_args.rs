@@ -739,6 +739,8 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_call_special<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+        if self.emit_call_slotted(world, walk, out, host, func, args, depth, flow, scope)? { return Ok(true); }
+        if self.emit_call_filled(world, walk, out, host, func, args, depth, flow, scope)? { return Ok(true); }
         if self.facts.unrolled_calls.contains_key(&node_key(func)) {
             let copy = match self.facts.unrolled_calls.get(&node_key(func)) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
             if self.emit_call_walks(world, func, &copy) {
@@ -765,6 +767,84 @@ impl EmitState {
             Expr::Path(segments, _) => { return Ok(self.emit_call_by_path(world, walk, out, host, segments, args, depth, flow, scope)?); },
             _ => return Ok(false),
         })
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_call_slotted<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+        let callee: String = match func {
+            Expr::Variable(name, _) => { let name = *name; emit_text(world, name).to_string() },
+            _ => return Ok(false),
+        };
+        let slot = emit_slot_of(world, &callee);
+        if slot < 0 || slot >= args.len() as i64 { return Ok(false); }
+        let mut copy: String = nikaia_std::index::or(match self.facts.unrolled_calls.get(&node_key(func)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into());
+        if copy == "" {
+            let on: String = match nikaia_std::index::get(&args, nikaia_std::index::at(slot)) {
+                Expr::Variable(name, _) => { let name = *name; self.type_named(world, &walk, &emit_text(world, name)) },
+                Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; nikaia_std::index::or(self.reflected_field_type(world, &walk, base, name, "ty"), || "".into()) },
+                _ => String::from(""),
+            };
+            if on == "" { return Ok(false); }
+            copy = check_specialised(&callee, &on);
+        }
+        out.push(&format!("{}(", copy));
+        let mut first = true;
+        let mut at: i64 = 0;
+        for arg in args.iter() {
+            if at != slot {
+                if !first { out.push(", "); }
+                first = false;
+                self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
+            }
+            at += 1;
+        }
+        out.push(")");
+        Ok(true)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_call_filled<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+        let (base, index) = match func {
+            Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); (base, index) },
+            _ => return Ok(false),
+        };
+        let callee: String = match base {
+            Expr::Variable(name, _) => { let name = *name; emit_text(world, name).to_string() },
+            _ => return Ok(false),
+        };
+        if !emit_generic_fn(world, &callee) { return Ok(false); }
+        let mut written: String = nikaia_std::index::or(match self.facts.unrolled_calls.get(&node_key(base)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into());
+        if written == "" {
+            let mut types: Vec<String> = vec![];
+            let parts: Vec<Expr> = match index {
+                Expr::Tuple(parts, _) => parts.to_owned(),
+                _ => vec![index.clone()],
+            };
+            for part in parts.iter() {
+                match part {
+                    Expr::Variable(name, _) => { let name = *name; types.push(emit_text(world, name).to_string()); },
+                    _ => { return Ok(false); },
+                }
+            }
+            written = format!("{}::<{}>", callee, types.join(", "));
+        }
+        out.push(&format!("{}(", written));
+        let mut at = 0;
+        for arg in args.iter() {
+            if at > 0 { out.push(", "); }
+            at += 1;
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
+        }
+        out.push(")");
+        Ok(true)
     }
     pub(crate) fn emit_call_walks(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, copy: &str) -> bool {
         match func {

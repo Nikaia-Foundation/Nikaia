@@ -1,0 +1,16 @@
+// `f[T](…)` fills the type parameters in order (ADR-330 D9, #859 step 8):
+// `T` appears in no value parameter, so only the brackets can say it, and
+// no warning is given.
+
+struct User {
+    name: String,
+}
+
+fn pick[T](n: i64) -> String {
+    return f"{T::name} {n}"
+}
+
+fn main() {
+    println(pick[User](1))
+    println(pick[i64](2))
+}

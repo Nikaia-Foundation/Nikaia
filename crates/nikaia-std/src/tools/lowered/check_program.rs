@@ -156,6 +156,7 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+    check_program_copies_called(state, world);
     let mut instantiations: Vec<(String, String, Vec<FieldContract>)> = vec![];
     for ((name, on), fields) in state.facts.unrolled.iter() { instantiations.push((name.to_string(), on.to_string(), fields.to_owned())); }
     for (name, on, fields) in instantiations.iter() {
@@ -173,5 +174,102 @@ pub fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckW
             }
         }
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_program_copies_called(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    let mut pending: Vec<(String, String)> = vec![];
+    for (key, _) in state.facts.unrolled.iter() { pending.push(key.clone()); }
+    while !pending.is_empty() {
+        let next = match pending.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        let reached = check_program_reached(&state, &next.1);
+        for called in check_program_slot_calls(&state, world, &next.0) {
+            for on in reached.iter() {
+                let key = (called.to_string(), on.to_string());
+                if !state.facts.unrolled.contains_key(&key) {
+                    let fields: Vec<FieldContract> = nikaia_std::index::or(state.shape_of(&world.here, world, on), || vec![].into());
+                    state.facts.unrolled.insert(key.clone(), fields);
+                    pending.push(key);
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn check_program_reached(state: &CheckState, on: &str) -> Vec<String> {
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut queue: Vec<String> = vec![on.to_string()];
+    let mut out: Vec<String> = vec![];
+    while !queue.is_empty() {
+        let next = match queue.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        if next == "" || seen.contains(&next) { continue; }
+        seen.insert(next.to_string());
+        out.push(next.to_string());
+        for part in nikaia_std::index::or(match state.facts.type_parts.get(&next) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into()) { queue.push(part); }
+        for field in nikaia_std::index::or(match state.facts.type_fields.get(&next) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into()) { queue.push(check_reflect_written(&field.ty)); }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_program_slot_calls(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for item in world.here.items.iter() {
+        match &item.node {
+            Item::Fn { name: written, body, .. } => {
+                let written = *written;
+                let called = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if world.here.text(called) != name { continue; }
+                for expr in visited_in_block(body) {
+                    match expr {
+                        Expr::Call { func, args, .. } => {
+                            let func = nikaia_std::boxed::open(func);
+                            let callee: String = match func {
+                                Expr::Variable(symbol, _) => { let symbol = *symbol; world.here.text(symbol).to_string() },
+                                _ => continue,
+                            };
+                            let slot = check_core_slot_index(world, &callee);
+                            if slot < 0 || slot >= args.len() as i64 || nikaia_std::list::contains(&out, &callee) || !check_program_declares(world, &callee) { continue; }
+                            let held = match nikaia_std::index::get(&args, nikaia_std::index::at(slot)) {
+                                Expr::Variable(symbol, _) => {
+                                    let symbol = *symbol;
+                                    let ty = world.here.text(symbol);
+                                    !(state.structs.contains_key(&ty) || state.enums.contains_key(&ty) || check_reflect_named_kind(state, &ty, &vec![]) != "Opaque")
+                                },
+                                Expr::Field { .. } => true,
+                                _ => false,
+                            };
+                            if held { out.push(callee); }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn check_program_declares(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+    for item in world.here.items.iter() {
+        match &item.node {
+            Item::Fn { name: written, .. } => {
+                let written = *written;
+                let called = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if world.here.text(called) == name { return true; }
+            },
+            _ => { },
+        }
+    }
+    false
 }
 

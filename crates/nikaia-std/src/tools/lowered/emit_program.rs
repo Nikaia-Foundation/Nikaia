@@ -18,11 +18,13 @@ impl EmitState {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     }, || self.walked_parameter(world, &item.node).to_string().into());
+                    walk.slotted = emit_slot_in(world, &item.node) >= 0 || !emit_values_name(world, &item.node, &walked);
                     walk.specialising = Some(EmitPair { first: walked, second: on.to_string() });
                     let st = out.mark();
                     host.refuse_unwritten_item(item)?;
                     self.emit_item(world, walk, out, host, item)?;
                     walk.specialising = None;
+                    walk.slotted = false;
                     out.record(&item.span, st);
                     out.push("\n");
                 }

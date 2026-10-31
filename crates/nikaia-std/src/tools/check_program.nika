@@ -215,6 +215,7 @@ fn check_program_turns[H: CheckHost](mut state: CheckState, world: ref CheckWorl
 /// others. After the ordinary walk, because the instantiations are what that
 /// walk found.
 pub fn check_program_unroll[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+    check_program_copies_called(state, world)
     let mut instantiations: Vec[(String, String, Vec[FieldContract])] = []
     for ((name, on), fields) in state.facts.unrolled {
         instantiations.push((name.clone(), on.clone(), fields.clone()))
@@ -233,4 +234,113 @@ pub fn check_program_unroll[H: CheckHost](mut state: CheckState, world: ref Chec
             }
         }
     }
+}
+
+/// **The copies a copy calls** (ADR-330 D1): a call in a copied body that
+/// writes a type the body holds, `schema(field.ty)` or `schema(it)`, needs a
+/// copy for each type that one may stand for, which is the copy's own type
+/// and every type it is made of, its parts and its fields' types, as far as
+/// they reach. Only a function of this unit, which writes its copies.
+fn check_program_copies_called(mut state: CheckState, world: ref CheckWorld) sync {
+    let mut pending: Vec[(String, String)] = []
+    for (key, _) in state.facts.unrolled {
+        pending.push(key.clone())
+    }
+    while pending.len() > 0 {
+        let next = pending.pop() ?? break
+        let reached = check_program_reached(state, next.1)
+        for called in check_program_slot_calls(state, world, next.0) {
+            for on in reached {
+                let key = (called.clone(), on.clone())
+                if !state.facts.unrolled.contains_key(key) {
+                    let fields: Vec[FieldContract] = state.shape_of(world.here, world, on) ?? []
+                    state.facts.unrolled.insert(key.clone(), fields)
+                    pending.push(key)
+                }
+            }
+        }
+    }
+}
+
+/// A type and every type it is made of, as written: the parts and the
+/// fields' types the reflection facts hold, as far as they reach.
+fn check_program_reached(state: ref CheckState, on: ref String) -> Vec[String] {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut queue: Vec[String] = [on.clone()]
+    let mut out: Vec[String] = []
+    while queue.len() > 0 {
+        let next = queue.pop() ?? break
+        if next == "" || seen.contains(next) {
+            continue
+        }
+        seen.insert(next.clone())
+        out.push(next.clone())
+        for part in state.facts.type_parts.get(next)?.clone() ?? [] {
+            queue.push(part)
+        }
+        for field in state.facts.type_fields.get(next)?.clone() ?? [] {
+            queue.push(check_reflect_written(field.ty))
+        }
+    }
+    return out
+}
+
+/// The functions of this unit with a type in their parameter list that the
+/// body of `name` calls with a type it holds rather than one it names.
+fn check_program_slot_calls(state: ref CheckState, world: ref CheckWorld, name: ref String) -> Vec[String] sync {
+    let mut out: Vec[String] = []
+    for item in world.here.items {
+        match item.node {
+            Item::Fn { name: written, body, .. } => {
+                let called = written ?? continue
+                if world.here.text(called) != name {
+                    continue
+                }
+                for expr in visited_in_block(body) {
+                    match expr {
+                        Expr::Call { func, args, .. } => {
+                            let callee: String = match func {
+                                Expr::Variable(symbol, _) => world.here.text(symbol).clone(),
+                                else => continue,
+                            }
+                            let slot = check_core_slot_index(world, callee)
+                            if slot < 0 || slot >= args.len() as i64 || out.contains(callee) || !check_program_declares(world, callee) {
+                                continue
+                            }
+                            let held = match args[slot] {
+                                Expr::Variable(symbol, _) => {
+                                    let ty = world.here.text(symbol)
+                                    !(state.structs.contains_key(ty) || state.enums.contains_key(ty) || check_reflect_named_kind(state, ty, []) != "Opaque")
+                                },
+                                Expr::Field { .. } => true,
+                                else => false,
+                            }
+                            if held {
+                                out.push(callee)
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+/// Whether this unit declares a function of this name.
+fn check_program_declares(world: ref CheckWorld, name: ref String) -> bool {
+    for item in world.here.items {
+        match item.node {
+            Item::Fn { name: written, .. } => {
+                let called = written ?? continue
+                if world.here.text(called) == name {
+                    return true
+                }
+            },
+            else => {},
+        }
+    }
+    return false
 }

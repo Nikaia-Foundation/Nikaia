@@ -163,9 +163,11 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<String>, owner_declared_by: Option<String>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         match &written.node {
-            Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
+            Item::Fn { name, generics, receiver, args: written_args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;
                 let throws_ = can_throw;
+                let mut args: Vec<FnArg> = vec![];
+                for each in written_args.iter() { if emit_text(world, each.name) != "" { args.push(each.clone()); } }
                 let has_owner = owner_target.is_some();
                 let target: String = nikaia_std::index::or(match owner_target.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -423,7 +425,7 @@ impl EmitState {
                 }
                 if has_kept { params.push(format!("__keep: {}nikaia_std::tether::Keep", kept_lt.reference())); }
                 let mut declared: Vec<String> = vec![];
-                if walk.specialising.is_some() && self.copy_substitutes(&nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string()) {
+                if walk.specialising.is_some() && (walk.slotted || self.copy_substitutes(&nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string())) {
                     if has_dsl { declared.push(String::from("NikaiaDsl")); }
                     for each in open.iter() { declared.push(each.to_string()); }
                 } else {

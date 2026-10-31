@@ -63,10 +63,16 @@ impl CheckState {
     pub(crate) fn field_walks_in(&mut self, file: &ParsedView<'_, '_, '_, '_, '_, '_>) {
         for item in file.items.iter() {
             match &item.node {
-                Item::Fn { name, generics, body, .. } => {
+                Item::Fn { name, generics, args, body, .. } => {
                     let name = *name;
                     let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                     let mut walked: Option<String> = None;
+                    for arg in args.iter() {
+                        if walked.is_none() && file.text(arg.name) == "" && arg.ty.generics.is_empty() {
+                            let written = file.text(arg.ty.name);
+                            for g in generics.iter() { if file.text(g.name) == written { walked = Some(written.to_string()); } }
+                        }
+                    }
                     for g in generics.iter() {
                         if walked.is_some() { continue; }
                         let parameter = file.text(g.name);

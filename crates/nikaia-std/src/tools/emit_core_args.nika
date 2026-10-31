@@ -1173,6 +1173,12 @@ impl EmitState {
         // (ADR-304 D6), and which copy is the checker's answer: this emitter has
         // no types (ADR-288), so the name is handed over keyed by the callee's
         // node (ADR-340 D5).
+        if self.emit_call_slotted(world, walk, out, host, func, args, depth, flow, scope) {
+            return true
+        }
+        if self.emit_call_filled(world, walk, out, host, func, args, depth, flow, scope) {
+            return true
+        }
         if self.facts.unrolled_calls.contains_key(node_key(func)) {
             let copy = self.facts.unrolled_calls.get(node_key(func)) ?? return false
             if self.emit_call_walks(world, func, copy) {
@@ -1212,6 +1218,90 @@ impl EmitState {
     }
 
     /// Whether the callee is a name that the copy `copy` is a copy of.
+    /// **A call that writes a type where the parameter list holds one**
+    /// (ADR-330 D1): it goes to the copy for that type, and the type is no
+    /// argument of it. A type the body holds, a parameter, an arm's binding or
+    /// `field.ty`, is the one it stands for in this copy.
+    fn emit_call_slotted[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let callee: String = match func {
+            Expr::Variable(name, _) => emit_text(world, name).clone(),
+            else => return false,
+        }
+        let slot = emit_slot_of(world, callee)
+        if slot < 0 || slot >= args.len() as i64 {
+            return false
+        }
+        let mut copy: String = self.facts.unrolled_calls.get(node_key(func))?.clone() ?? ""
+        if copy == "" {
+            let on: String = match args[slot] {
+                Expr::Variable(name, _) => self.type_named(world, walk, emit_text(world, name)),
+                Expr::Field { base, name, .. } => self.reflected_field_type(world, walk, base, name, "ty") ?? "",
+                else => "",
+            }
+            if on == "" {
+                return false
+            }
+            copy = check_specialised(callee, on)
+        }
+        out.push(f"{copy}(")
+        let mut first = true
+        let mut at: i64 = 0
+        for arg in args {
+            if at != slot {
+                if !first {
+                    out.push(", ")
+                }
+                first = false
+                self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
+            }
+            at += 1
+        }
+        out.push(")")
+        return true
+    }
+
+    /// **`f[T](…)`, the type parameters filled in order** (ADR-330 D9): the
+    /// copy the checker chose for the type, or else `f::<T>`.
+    fn emit_call_filled[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let (base, index) = match func {
+            Expr::Index { base, index, .. } => (base, index),
+            else => return false,
+        }
+        let callee: String = match base {
+            Expr::Variable(name, _) => emit_text(world, name).clone(),
+            else => return false,
+        }
+        if !emit_generic_fn(world, callee) {
+            return false
+        }
+        let mut written: String = self.facts.unrolled_calls.get(node_key(base))?.clone() ?? ""
+        if written == "" {
+            let mut types: Vec[String] = []
+            let parts: Vec[Expr] = match index {
+                Expr::Tuple(parts, _) => parts.clone(),
+                else => [index.clone()],
+            }
+            for part in parts {
+                match part {
+                    Expr::Variable(name, _) => types.push(emit_text(world, name).clone()),
+                    else => return false,
+                }
+            }
+            written = f"{callee}::<{types.join(", ")}>"
+        }
+        out.push(f"{written}(")
+        let mut at = 0
+        for arg in args {
+            if at > 0 {
+                out.push(", ")
+            }
+            at += 1
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
+        }
+        out.push(")")
+        return true
+    }
+
     fn emit_call_walks(ref self, world: ref EmitWorld, func: ref Expr, copy: ref String) -> bool {
         return match func {
             Expr::Variable(name, _) => copy.starts_with(ref f"{emit_text(world, name)}__"),

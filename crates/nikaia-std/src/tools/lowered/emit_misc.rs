@@ -15,6 +15,62 @@ pub fn emit_local_name(comptimes: &collections::BTreeSet<String>, name: &str) ->
 
 pub fn opaque_type_text(name: &str, release: &str) -> String { format!("#[repr(transparent)]\n#[derive(Debug)]\n// A C type keeps the name its header gives it, which is not the\n// shape Rust's own lint expects (Part III, C.1: what `rustc` would\n// say here is about a file nobody wrote).\n#[allow(non_camel_case_types)]\npub struct {}(core::ptr::NonNull<core::ffi::c_void>);\n\n#[allow(dead_code)]\nimpl {} {{\n    /// What a declaration that says `-> {}` hands back\n    /// (ADR-302 D12): the address, or an abort naming the\n    /// declaration that claimed it would be one.\n    #[track_caller]\n    fn from_c(declaration: &str, address: *mut core::ffi::c_void) -> {} {{\n        match core::ptr::NonNull::new(address) {{\n            Some(address) => {}(address),\n            None => nikaia_std::foreign::nothing_came_back(declaration),\n        }}\n    }}\n\n    /// The same, where the declaration **does** say `?` (D1).\n    fn maybe(address: *mut core::ffi::c_void) -> Option<{}> {{\n        core::ptr::NonNull::new(address).map({})\n    }}\n\n    /// The same address, without giving the handle away\n    /// (ADR-302 D7): what a C function is handed is the\n    /// pointer, and this handle stays the caller's to close.\n    fn lent(&self) -> {} {{\n        {}(self.0)\n    }}\n}}\n\nimpl Drop for {} {{\n    fn drop(&mut self) {{\n        let _released = unsafe {{ {}(self.lent()) }};\n    }}\n}}\n\n", name, name, name, name, name, name, name, name, name, name, release) }
 
+pub fn emit_slot_in(world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> i64 {
+    match item {
+        Item::Fn { args, .. } => {
+            let mut at: i64 = 0;
+            for each in args.iter() {
+                if emit_text(world, each.name) == "" { return at; }
+                at += 1;
+            }
+        },
+        _ => { },
+    }
+    -1
+}
+
+pub fn emit_values_name(world: &EmitWorld<'_, '_, '_, '_>, item: &Item, parameter: &str) -> bool {
+    match item {
+        Item::Fn { args, .. } => { for each in args.iter() { if emit_text(world, each.name) != "" && emit_type_names(world, &each.ty, parameter) { return true; } } },
+        _ => { },
+    }
+    false
+}
+
+pub(crate) fn emit_type_names(world: &EmitWorld<'_, '_, '_, '_>, ty: &Type, parameter: &str) -> bool {
+    if !ty.is_tuple && emit_text(world, ty.name) == parameter { return true; }
+    for inner in ty.generics.iter() { if emit_type_names(world, inner, parameter) { return true; } }
+    false
+}
+
+pub fn emit_slot_of(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 {
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Fn { name: written, .. } => {
+                let written = *written;
+                let called = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if emit_text(world, called) == name { return emit_slot_in(world, &item.node); }
+            },
+            _ => { },
+        }
+    }
+    -1
+}
+
+pub fn emit_generic_fn(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> bool {
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Fn { name: written, generics, .. } => {
+                let written = *written;
+                let called = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if emit_text(world, called) == name { return !generics.is_empty(); }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+
 pub(crate) fn emit_field_type(contract: Option<&FieldContract>) -> Ty {
     let held = match contract { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     held.ty.clone()

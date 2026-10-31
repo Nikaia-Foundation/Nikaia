@@ -1,0 +1,17 @@
+error[NK1230]: `schema` takes a type here, not a value.
+   --> tests/type_as_argument_value_refused.nika:17:20
+    |
+ 17 |     println(schema(5))
+    |                    ^
+    |
+    = note: `schema` has a type in its parameter list, so the call writes a type there: a type's name, a type parameter, a type a `match` arm binds, or a field's `.ty` (ADR-330 D1).
+    = help: Write the type: `schema(User)`, not a value of it.
+error[NK1230]: `User` is a type, not a value.
+   --> tests/type_as_argument_value_refused.nika:18:5
+    |
+ 18 |     println(g(User))
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: A type stands for a value only through its constructor, and this one has none.
+    = help: Build one with `User { … }`, or give `User` a constructor, `pub fn() -> User`, in its `impl`.
+2 type errors

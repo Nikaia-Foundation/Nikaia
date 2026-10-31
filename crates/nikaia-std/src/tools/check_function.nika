@@ -82,9 +82,22 @@ impl CheckState {
     fn field_walks_in(ref mut self, file: ref ParsedView) sync {
         for item in file.items {
             match item.node {
-                Item::Fn { name, generics, body, .. } => {
+                Item::Fn { name, generics, args, body, .. } => {
                     let called = name ?? continue
                     let mut walked: String? = null
+                    // **A type in the parameter list makes a copy per type**
+                    // (ADR-330 D1): the call names the type, and nothing else
+                    // could tell the copies apart.
+                    for arg in args {
+                        if walked == null && file.text(arg.name) == "" && arg.ty.generics.len() == 0 {
+                            let written = file.text(arg.ty.name)
+                            for g in generics {
+                                if file.text(g.name) == written {
+                                    walked = written.clone()
+                                }
+                            }
+                        }
+                    }
                     for g in generics {
                         if walked != null {
                             continue

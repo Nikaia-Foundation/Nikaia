@@ -108,11 +108,25 @@ pub fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut Check
 pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, call: i64, args: &[Expr], span: &Span) {
     if !state.walks_fields.contains_key(name) { return; }
     if args.is_empty() { return; }
+    let slot = check_core_slot_index(world, name);
+    if slot >= args.len() as i64 { return; }
     let before = state.findings.len() as i64;
-    let given = check_core_expr(state, world, host, nikaia_std::index::get(&args, 0), span);
+    let mut given: Ty = Ty::Unknown;
+    if slot >= 0 {
+        given = check_core_type_argument(state, world, nikaia_std::index::get(&args, nikaia_std::index::at(slot)), name, span);
+        state.findings.truncate(nikaia_std::count::of(before));
+        if given.is_unknown() { return; }
+    } else { given = check_core_expr(state, world, host, nikaia_std::index::get(&args, 0), span); }
     state.findings.truncate(nikaia_std::count::of(before));
+    let literal = slot < 0 && matches!(*nikaia_std::index::get(&args, 0), Expr::LitInt { .. });
+    check_core_instantiate(state, world, name, call, &given, literal);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_instantiate(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, call: i64, given: &Ty, literal: bool) {
     let named: String = match given {
-        Ty::Named { ref name, .. } => name.to_string(),
+        Ty::Named { name, .. } => name.to_string(),
         _ => String::from(""),
     };
     let mut on: String = named.to_string();
@@ -120,18 +134,69 @@ pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: 
     let shape: Option<Vec<FieldContract>> = state.shape_of(&world.here, world, &named);
     let shaped = shape.is_some();
     if shaped { fields = nikaia_std::index::or(shape, || vec![].into()); } else {
-        let literal = matches!(*nikaia_std::index::get(&args, 0), Expr::LitInt { .. });
         let unknown = matches!(given, Ty::Unknown);
         if unknown && !literal { return; }
-        on = check_reflect_written(&given);
+        on = check_reflect_written(given);
         if on == "" { return; }
     }
-    let mut kind = check_reflect_kind(&state, &check_reflect_plain(&given));
+    let mut kind = check_reflect_kind(&state, &check_reflect_plain(given));
     if shaped && kind == "Opaque" { kind = String::from("Struct"); }
     state.facts.type_kinds.insert(on.to_string(), kind);
-    check_reflect_record(state, world, &check_reflect_plain(&given));
+    check_reflect_record(state, world, &check_reflect_plain(given));
     state.facts.unrolled_calls.insert(call, check_specialised(name, &on));
     state.facts.unrolled.insert((name.to_string(), on.to_string()), fields);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_slot_index(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> i64 {
+    let resolved: CheckResolved<'_> = match resolve_call(world, name) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+    let signature: Signature = match match resolved.contract.signature.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+    let mut at: i64 = 0;
+    for param in signature.params.iter() {
+        if param.0 == "" { return at; }
+        at += 1;
+    }
+    -1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_type_argument(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr, callee: &str, span: &Span) -> Ty {
+    match arg {
+        Expr::Variable(symbol, _) => {
+            let symbol = *symbol;
+            let name = world.words.resolve(symbol).to_string();
+            if state.type_parameters.contains_key(&name) { return Ty::Unknown; }
+            if state.lookup(&name).is_none() && check_reflect_a_type(&state, &name) { return Ty::Named { name, args: vec![], view: false }; }
+            let before = state.findings.len() as i64;
+            state.nothing_declares_it(world, arg, &check_span_at(world, arg, span));
+            if (state.findings.len() as i64) > before { return Ty::Unknown; }
+        },
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            if world.words.resolve(name) == "ty" {
+                match base {
+                    Expr::Variable(held, _) => {
+                        let held = *held;
+                        let ty: Ty = nikaia_std::index::or(state.lookup(world.words.resolve(held)), || Ty::Unknown);
+                        match ty {
+                            Ty::Named { name: ref written, .. } => { if written == "$Field" { return Ty::Unknown; } },
+                            _ => { },
+                        }
+                    },
+                    _ => { },
+                }
+            }
+        },
+        _ => { },
+    }
+    let at = check_span_at(world, arg, span);
+    state.findings.push(check_refusal("NK1230", &at, format!("`{}` takes a type here, not a value.", callee), vec![format!("`{}` has a type in its parameter list, so the call writes a type there: a type's name, a type parameter, a type a `match` arm binds, or a field's `.ty` (ADR-330 D1).", callee)], Some(format!("Write the type: `{}(User)`, not a value of it.", callee))));
+    Ty::Unknown
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

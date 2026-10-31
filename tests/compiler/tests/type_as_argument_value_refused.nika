@@ -1,0 +1,19 @@
+// A value where the parameter list holds a type, and a type where it holds a
+// value, are refused with `NK1230` (ADR-330 D1, #859 step 2).
+
+struct User {
+    name: String,
+}
+
+fn schema[T](T) -> String {
+    return f"{T::name}"
+}
+
+fn g(x: i64) -> i64 {
+    return x
+}
+
+fn main() {
+    println(schema(5))
+    println(g(User))
+}

@@ -171,6 +171,14 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
     found
 }
 
+pub(crate) fn check_core_args_slot(callee: Option<&FnContract>, at: i64) -> bool {
+    let signature: Signature = match match callee.as_ref().and_then(|__nikaia_it| __nikaia_it.signature.as_ref()) {
+        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return false };
+    at < signature.params.len() as i64 && nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).0 == ""
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
@@ -178,7 +186,7 @@ pub fn check_core_arguments_given<H: CheckHost>(state: &mut CheckState, world: &
     let mut out: Vec<Ty> = vec![];
     let mut at: i64 = 0;
     for arg in args.iter() {
-        if check_core_args_is_lambda(arg, expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, span)); } else { out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, span)); }
+        if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, span)); } else { out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, span)); }
         at += 1;
     }
     out
@@ -191,7 +199,7 @@ pub fn check_core_arguments_bound<H: CheckHost>(state: &mut CheckState, world: &
     let mut out: Vec<Ty> = vec![];
     let mut at: i64 = 0;
     for arg in args.iter() {
-        if check_core_args_is_lambda(arg, &expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, span)); } else { out.push(check_core_args_other(state, world, host, arg, &expected, declared_here, callee, at, span)); }
+        if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, &expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, span)); } else { out.push(check_core_args_other(state, world, host, arg, &expected, declared_here, callee, at, span)); }
         if at < patterns.len() as i64 {
             let before = bound.len() as i64;
             bind(nikaia_std::index::get(&patterns, nikaia_std::index::at(at)), nikaia_std::index::get(&out, nikaia_std::index::at(at)), bound);

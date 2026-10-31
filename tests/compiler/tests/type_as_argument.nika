@@ -1,0 +1,42 @@
+// A type as an argument where the parameter list holds one (ADR-330 D1,
+// #859 step 2): `schema(User)` names the type, and the body hands on the
+// types it holds, a field's `.ty` and a type a `match` arm binds, so one copy
+// is written for each type the walk reaches.
+
+struct Address {
+    city: String,
+}
+
+struct User {
+    name: String,
+    age: i64,
+    tags: Vec[String],
+    home: Address,
+}
+
+fn schema[T](T) -> String {
+    return match T::kind {
+        Text => "\"string\"",
+        I64 => "\"integer\"",
+        List(it) => f"[{schema(it)}]",
+        Struct(s) => {
+            let mut out = "{"
+            let mut first = true
+            for field in s::fields {
+                if !first {
+                    out += ", "
+                }
+                first = false
+                out += f"\"{field.name}\": {schema(field.ty)}"
+            }
+            out + "}"
+        },
+        else => "\"other\"",
+    }
+}
+
+fn main() {
+    println(schema(User))
+    println(schema(i64))
+    println(schema(Address))
+}

@@ -1767,6 +1767,16 @@ grammar! {
           | attributes:attribute* UNDERSCORE ":" ty:type_ref -> {
                 FnArg { name: _state.intern("_"), ty, mutable: false, span: Span::from(_span), attributes }
             }
+          // **A type in the parameter list** (ADR-330 D1): `fn schema[T](T)`,
+          // a slot the call fills with a type rather than a value. It has no
+          // name, and the empty name, which no program can write, is what
+          // marks the slot for the checker and the emitter.
+          | attributes:attribute* ty:type_ref peek(",") -> {
+                FnArg { name: _state.intern(""), ty, mutable: false, span: Span::from(_span), attributes }
+            }
+          | attributes:attribute* ty:type_ref peek(")") -> {
+                FnArg { name: _state.intern(""), ty, mutable: false, span: Span::from(_span), attributes }
+            }
 
         rule return_type_arrow -> Type =
             "->" ty:type_ref -> { ty }
@@ -4292,17 +4302,26 @@ grammar! {
         // own is a path. Nothing else can follow a path here, so the optional
         // lambda cannot take a `{` that belonged to something else: it has to
         // start with the keyword `fn`.
+        //
+        // **`f[T](…)` fills the type parameters in order**
+        // ([ADR-330](../../../../docs/specification/adr/adr-330.md) D9): the
+        // `[…]` is read only where a `(` follows it on the line, and kept as
+        // the index of the name it follows, so the checker tells a generic
+        // function's type arguments from an index into a value.
         rule path_expr -> Expr =
-            head:NAME tail:path_segment* args:called?
+            head:NAME tail:path_segment* types:type_arguments? args:called?
             lambda:trailing_lambda?
             -> {
                 let mut segments = vec![head];
                 segments.extend(tail);
-                let base = if segments.len() == 1 {
+                let mut base = if segments.len() == 1 {
                     Expr::Variable(segments[0], NodeId::parsed())
                 } else {
                     Expr::Path(segments, NodeId::parsed())
                 };
+                if let Some(index) = types {
+                    base = Expr::Index { base: Box::new(base), index: Box::new(index), id: NodeId::parsed() };
+                }
                 match (args, lambda) {
                     (Some((mut args, config)), lambda) => {
                         args.extend(lambda);
@@ -4318,6 +4337,15 @@ grammar! {
                         config: Vec::new(), id: NodeId::parsed()
                     },
                     (None, None) => base,
+                }
+            }
+
+        rule type_arguments -> Expr =
+            same_line "[" args:call_args "]" peek("(") -> {
+                if args.len() == 1 {
+                    args.into_iter().next().unwrap()
+                } else {
+                    Expr::Tuple(args, NodeId::parsed())
                 }
             }
 

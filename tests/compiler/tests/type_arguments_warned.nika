@@ -1,0 +1,10 @@
+// `f[T](…)` where a value argument could have said the type is warned with
+// `NK1233` (ADR-grammar-2 D11, #514): the value says it already.
+
+fn id[T](x: T) -> T {
+    return x
+}
+
+fn main() {
+    println(id[i64](3))
+}

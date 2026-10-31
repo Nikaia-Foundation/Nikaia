@@ -1,0 +1,3 @@
+{"name": "string", "age": "integer", "tags": ["string"], "home": {"city": "string"}}
+"integer"
+{"city": "string"}

@@ -111,6 +111,14 @@ pub fn visited_in_expr(expr: &Expr) -> Vec<&Expr> {
             out.extend(visited_in_block(handler));
         },
         Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); out.extend(visited_in_expr(body)); },
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts.iter() {
+                match part {
+                    FPart::Hole { expr, .. } => { out.extend(visited_in_expr(expr)); },
+                    _ => { },
+                }
+            }
+        },
         _ => { },
     }
     out

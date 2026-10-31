@@ -481,7 +481,7 @@ pub(crate) fn check_core_call_names(state: &mut CheckState, world: &CheckWorld<'
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, name: &str, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, name: &str, args: &[Expr], config: &[ConfigArg], span: &Span, filled: bool) -> Ty {
     check_core_call_names(state, world, func, name, args, span);
     let lanes = name.starts_with("simd::");
     let mut wanted: Option<Ty> = None;
@@ -497,7 +497,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
         let entered_path: String = nikaia_std::index::or(entered, || "".into());
         return check_core_grammar_call(state, world, host, &entered_path, args, config, span);
     }
-    check_core_an_instantiation(state, world, host, name, id_of(func) as i64, args, span);
+    if !filled { check_core_an_instantiation(state, world, host, name, id_of(func) as i64, args, span); }
     if !config.is_empty() && args.is_empty() && state.declares_a_type(world, name) {
         state.a_literal_written_like_a_call(world, name, config, span);
         for option in config.iter() { check_core_expr(state, world, host, &option.value, span); }
@@ -537,6 +537,8 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     let declared_here = have && world.own.functions.contains_key(&key);
     let feeds = declared_here && !key.contains("::") && check_core_call_takes_code((callee).as_ref());
     if feeds { state.stored_frames.push(CheckStoredCode::empty()); }
+    let slot = check_core_slot_index(world, name);
+    if slot >= 0 && slot < args.len() as i64 { check_core_type_argument(state, world, nikaia_std::index::get(&args, nikaia_std::index::at(slot)), name, span); }
     let found = check_core_arguments_given(state, world, host, args, &expected, declared_here, (callee).as_ref(), span);
     let mut seen_key: String = String::from("");
     if declared_here && !key.contains("::") { seen_key = key.to_string(); }
@@ -632,6 +634,14 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
             name = format!("{}", world.words.resolve(word));
         },
         Expr::Path(segments, _) => { name = world.here.unaliased(&check_core_call_joined(world, segments)); },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            let given: Option<Ty> = check_core_call_filled(state, world, host, base, index, args, config, span);
+            if given.is_some() { return nikaia_std::index::or(given, || Ty::Unknown); }
+            check_core_expr(state, world, host, func, span);
+            state.facts.kept_fn_copies.remove(&(id_of(func) as i64));
+            return Ty::Unknown;
+        },
         _ => {
             check_core_expr(state, world, host, func, span);
             state.facts.kept_fn_copies.remove(&(id_of(func) as i64));
@@ -655,7 +665,100 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
         }
     }
     if state.variant_parts.contains_key(&name) { return check_core_call_variant_parts(state, world, host, args, &name, span); }
-    check_core_call_named_call(state, world, host, func, &name, args, config, span)
+    check_core_call_named_call(state, world, host, func, &name, args, config, span, false)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, base: &Expr, index: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Option<Ty> {
+    let name: String = match base {
+        Expr::Variable(word, _) => { let word = *word; format!("{}", world.words.resolve(word)) },
+        _ => return None,
+    };
+    if state.lookup(&name).is_some() { return None; }
+    let resolved: CheckResolved<'_> = match resolve_call(world, &name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let signature: Signature = match match resolved.contract.signature.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let parameters: Vec<String> = check_core_call_type_parameters(world, &name);
+    if parameters.is_empty() { return None; }
+    let mut written: Vec<Expr> = vec![];
+    match index {
+        Expr::Tuple(parts, _) => { written = parts.to_owned(); },
+        _ => { written.push(index.clone()); },
+    }
+    let mut filled: Vec<Ty> = vec![];
+    for arg in written.iter() { filled.push(check_core_type_argument(state, world, arg, &name, span)); }
+    let mut needed = false;
+    let mut at: i64 = 0;
+    for parameter in parameters.iter() {
+        if at < written.len() as i64 && !check_core_call_param_names(&signature, parameter) { needed = true; }
+        at += 1;
+    }
+    if !needed {
+        let note: String = String::from("Brackets after a function's name are allowed while their uses are collected; here the arguments already say the type.");
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1233"), message: format!("`{}[…]` names a type the arguments of the call already say.", name), notes: vec![note], help: Some(format!("Leave the brackets out, `{}(…)`, or add your use case to https://github.com/Nikaia-Language/Nikaia/issues/514.", name)), labels: vec![] });
+    }
+    let walked: String = nikaia_std::index::or(match state.walks_fields.get(&name) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "".into());
+    at = 0;
+    for parameter in parameters.iter() {
+        if *parameter == walked && at < filled.len() as i64 && !(*nikaia_std::index::get(&filled, nikaia_std::index::at(at))).is_unknown() { check_core_instantiate(state, world, &name, id_of(base) as i64, nikaia_std::index::get(&filled, nikaia_std::index::at(at)), false); }
+        at += 1;
+    }
+    Some(check_core_call_named_call(state, world, host, base, &name, args, config, span, true))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_type_parameters(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Vec<String> {
+    let mut found: Vec<String> = vec![];
+    for item in world.here.items.iter() {
+        match &item.node {
+            Item::Fn { name: written, generics, .. } => {
+                let written = *written;
+                let called = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if world.here.text(called) == name {
+                    for generic in generics.iter() { found.push(world.here.text(generic.name).to_string()); }
+                    return found;
+                }
+            },
+            _ => { },
+        }
+    }
+    found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_param_names(signature: &Signature, parameter: &str) -> bool {
+    for param in signature.params.iter() { if param.0 != "" && check_core_call_ty_names(&param.1, parameter) { return true; } }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_ty_names(ty: &Ty, parameter: &str) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if name == parameter { return true; }
+            for arg in args.iter() { if check_core_call_ty_names(arg, parameter) { return true; } }
+            false
+        },
+        Ty::Var { name, .. } => name == parameter,
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_core_call_ty_names(inner, parameter) },
+        Ty::Pointed { item, .. } => { let item = nikaia_std::boxed::open(item); check_core_call_ty_names(item, parameter) },
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); check_core_call_ty_names(item, parameter) },
+        Ty::Tuple(parts) => {
+            for part in parts.iter() { if check_core_call_ty_names(part, parameter) { return true; } }
+            false
+        },
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

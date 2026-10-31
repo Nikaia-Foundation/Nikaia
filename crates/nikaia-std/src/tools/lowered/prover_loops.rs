@@ -813,8 +813,8 @@ pub(crate) fn loop_term_word(arena: &TermArena, id: i64) -> String {
         SolverTerm::Gt(a, b) => loop_pair_word(arena, "gt", a, b),
         SolverTerm::Eq(a, b) => loop_pair_word(arena, "eq", a, b),
         SolverTerm::Ne(a, b) => loop_pair_word(arena, "ne", a, b),
-        SolverTerm::And(ref parts) => format!("and({})", loop_list_word(arena, &parts)),
-        SolverTerm::Or(ref parts) => format!("or({})", loop_list_word(arena, &parts)),
+        SolverTerm::And(ref parts) => format!("and({})", loop_list_word(arena, parts)),
+        SolverTerm::Or(ref parts) => format!("or({})", loop_list_word(arena, parts)),
         SolverTerm::Not(a) => format!("not({})", loop_term_word(arena, a)),
         _ => "?".to_string(),
     }

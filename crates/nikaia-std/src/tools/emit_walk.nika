@@ -126,6 +126,16 @@ pub fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
             out.extend(visited_in_block(handler))
         },
         Expr::Spawn { body, .. } => out.extend(visited_in_expr(body)),
+        // **A hole is an expression of the tree like any other** (ADR-309
+        // D1): `f"{schema(field.ty)}"` calls `schema`.
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Hole { expr, .. } => out.extend(visited_in_expr(expr)),
+                    else => {},
+                }
+            }
+        },
         else => {},
     }
     return out

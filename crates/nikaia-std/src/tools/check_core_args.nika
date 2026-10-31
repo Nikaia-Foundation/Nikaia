@@ -243,6 +243,13 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     return found
 }
 
+/// Whether the parameter at `at` is a type in the parameter list (ADR-330
+/// D1), which has no name.
+fn check_core_args_slot(callee: ref FnContract?, at: i64) -> bool {
+    let signature: Signature = callee?.signature?.clone() ?? return false
+    return at < signature.params.len() as i64 && signature.params[at].0 == ""
+}
+
 /// **Walk a call's arguments, telling a lambda what it will be handed**
 /// (ADR-288). `declared_here` says whether the signature came from this
 /// program's ledger rather than from `std`'s (ADR-277 D12); `callee` is read
@@ -251,7 +258,10 @@ pub fn check_core_arguments_given[H: CheckHost](mut state: CheckState, world: re
     let mut out: Vec[Ty] = []
     let mut at = 0
     for arg in args {
-        if check_core_args_is_lambda(arg, expected, at) {
+        if check_core_args_slot(callee, at) {
+            // A type, read by the call itself (ADR-330 D1).
+            out.push(Ty::Unknown)
+        } else if check_core_args_is_lambda(arg, expected, at) {
             out.push(check_core_args_lambda(state, world, host, arg, expected[at], declared_here, callee, at, span))
         } else {
             out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, span))
@@ -270,7 +280,10 @@ pub fn check_core_arguments_bound[H: CheckHost](mut state: CheckState, world: re
     let mut out: Vec[Ty] = []
     let mut at = 0
     for arg in args {
-        if check_core_args_is_lambda(arg, expected, at) {
+        if check_core_args_slot(callee, at) {
+            // A type, read by the call itself (ADR-330 D1).
+            out.push(Ty::Unknown)
+        } else if check_core_args_is_lambda(arg, expected, at) {
             out.push(check_core_args_lambda(state, world, host, arg, expected[at], declared_here, callee, at, span))
         } else {
             out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, span))

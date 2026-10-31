@@ -259,8 +259,16 @@ impl EmitState {
     /// A function or a method, with its signature and body.
     pub fn emit_function[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, written: ref Spanned[Item], depth: i64, lifetimes: EmitLifetimes, carries_input: ref collections::BTreeSet[String], owner_target: String?, owner_declared_by: String?, owner_bridged: bool?) sync throws {
         match written.node {
-            Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
+            Item::Fn { name, generics, receiver, args: written_args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let throws_ = can_throw
+                // **A type in the parameter list is no parameter of a copy**
+                // (ADR-330 D1): the call names the copy, and hands the rest.
+                let mut args: Vec[FnArg] = []
+                for each in written_args {
+                    if emit_text(world, each.name) != "" {
+                        args.push(each.clone())
+                    }
+                }
                 let has_owner = owner_target != null
                 let target: String = owner_target?.clone() ?? ""
                 let declared_by: String = owner_declared_by?.clone() ?? ""
@@ -679,7 +687,7 @@ impl EmitState {
                 // copy has no type parameter left (ADR-304 D6), and a length a
                 // parameter left open is a `const` parameter (ADR-184 D3).
                 let mut declared: Vec[String] = []
-                if walk.specialising != null && self.copy_substitutes((walk.specialising?.second ?? "").clone()) {
+                if walk.specialising != null && (walk.slotted || self.copy_substitutes((walk.specialising?.second ?? "").clone())) {
                     if has_dsl {
                         declared.push("NikaiaDsl")
                     }

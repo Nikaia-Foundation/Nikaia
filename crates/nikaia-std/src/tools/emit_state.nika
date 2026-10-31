@@ -216,6 +216,10 @@ pub struct EmitWalk {
     pub nonnegative: collections::BTreeMap[String, collections::BTreeSet[String]],
     /// The parameter a copy of a function is specialised on, and the type.
     pub specialising: EmitPair?,
+    /// Whether the copy being written is of a function with a type in its
+    /// parameter list (ADR-330 D1): it has no argument the language below
+    /// could infer the type from, so the type is written in, whatever it is.
+    pub slotted: bool,
     /// The binding and the field a walk over a shape is at.
     pub at_field: EmitPair?,
     /// **Each unrolled loop's binding and the field it is at**, outermost
@@ -263,6 +267,6 @@ pub struct EmitWalk {
 impl EmitWalk {
     /// Nothing written yet.
     pub fn fresh() -> EmitWalk {
-        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", dyn_code: false, nonnegative: collections::BTreeMap(), specialising: null, at_field: null, field_names: collections::BTreeMap(), field_types: collections::BTreeMap(), type_names: collections::BTreeMap(), code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1 }
+        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", dyn_code: false, nonnegative: collections::BTreeMap(), specialising: null, slotted: false, at_field: null, field_names: collections::BTreeMap(), field_types: collections::BTreeMap(), type_names: collections::BTreeMap(), code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1 }
     }
 }

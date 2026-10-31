@@ -116,7 +116,7 @@
 20-nikaia-advance.md #3 refused (as written) [NK1181]  fn parse_input(input: String) throws {
 20-nikaia-advance.md #4 lowered (as written)  comptime ROUTES: Fixed[ref String, i64] = [("get", 1), …
 20-nikaia-advance.md #5 lowered (as written)  fn describe[T: Struct](value: T) {
-20-nikaia-advance.md #6 fragment (as written)  fn schema[T](T) -> String {
+20-nikaia-advance.md #6 refused (items, then a body) [NK1117]  fn schema[T](T) -> String {
 20-nikaia-advance.md #7 refused (as written) [NK1135]  struct User {
 20-nikaia-advance.md #8 refused (as written) [NK1135,NK1181]  @meta::Attribute(field)
 20-nikaia-advance.md #9 fragment (as written)  use sqlite                                // a driver p…
@@ -179,5 +179,5 @@
 30-nikaia-tooling.md #32 fragment (as written)  pub fn exists(path: Path, root: Root) -> bool throws
 30-nikaia-tooling.md #33 refused (a body) [NK1109,NK1117,NK2605]  // A benchmark reading a file it generated itself.
 30-nikaia-tooling.md #34 fragment (as written) [about-a-refusal]  use sqlite                                    // a driv…
-30-nikaia-tooling.md #35 fragment (as written)  comptime SCHEMA = asset("contact.schema.json")
+30-nikaia-tooling.md #35 refused (items, then a body) [NK1175,NK1181,NK1230]  comptime SCHEMA = asset("contact.schema.json")
 30-nikaia-tooling.md #36 fragment (as written)  // std::collections::List

@@ -143,11 +143,37 @@ pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: r
     if args.len() == 0 {
         return
     }
+    // **A function with a type in its parameter list is copied on the type
+    // written there** (ADR-330 D1); one the body holds, a parameter, an arm's
+    // binding or `field.ty`, is decided per copy (`check_program_unroll`).
+    let slot = check_core_slot_index(world, name)
+    if slot >= args.len() as i64 {
+        return
+    }
     // Walked with the walk switched off, because the argument is walked again
     // by the ordinary path and a message said twice is two problems to a reader.
     let before = state.findings.len()
-    let given = check_core_expr(state, world, host, args[0], span)
+    let mut given: Ty = Ty::Unknown
+    if slot >= 0 {
+        given = check_core_type_argument(state, world, args[slot], name, span)
+        state.findings.truncate(before)
+        if given.is_unknown() {
+            return
+        }
+    } else {
+        given = check_core_expr(state, world, host, args[0], span)
+    }
     state.findings.truncate(before)
+    let literal = slot < 0 && match args[0] {
+        Expr::LitInt { .. } => true,
+        else => false,
+    }
+    check_core_instantiate(state, world, name, call, given, literal)
+}
+
+/// The copy of `name` for the type `given`, kept for the emitter under the
+/// call `call`; `literal` where the type is an integer literal's.
+pub fn check_core_instantiate(mut state: CheckState, world: ref CheckWorld, name: ref String, call: i64, given: ref Ty, literal: bool) sync {
     // **A type of no shape is a copy too** (ADR-330 D2): a function that asks
     // `T::kind` or `T::name` is written once per type, with no field to walk.
     let named: String = match given {
@@ -162,10 +188,6 @@ pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: r
         fields = shape ?? []
     } else {
         // An unknown type is an integer literal's, else no copy is made.
-        let literal = match args[0] {
-            Expr::LitInt { .. } => true,
-            else => false,
-        }
         let unknown = match given {
             Ty::Unknown => true,
             else => false,
@@ -186,6 +208,68 @@ pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: r
     check_reflect_record(state, world, check_reflect_plain(given))
     state.facts.unrolled_calls.insert(call, check_specialised(name, on))
     state.facts.unrolled.insert((name.clone(), on.clone()), fields)
+}
+
+/// **Where a function's parameter list holds a type** (ADR-330 D1), `-1`
+/// where it holds none: the parameter written as a type alone, which has no
+/// name.
+pub fn check_core_slot_index(world: ref CheckWorld, name: ref String) -> i64 sync {
+    let resolved: CheckResolved = resolve_call(world, name) ?? return -1
+    let signature: Signature = resolved.contract.signature?.clone() ?? return -1
+    let mut at: i64 = 0
+    for param in signature.params {
+        if param.0 == "" {
+            return at
+        }
+        at += 1
+    }
+    return -1
+}
+
+/// **The type a call writes where the parameter list holds one** (ADR-330
+/// D1): a type's name is that type; a type parameter, a type a `match` arm
+/// binds and a reflected field's `.ty` are `Ty::Unknown`, decided per copy.
+/// A value there is `NK1230`, as a type where a value belongs is.
+pub fn check_core_type_argument(mut state: CheckState, world: ref CheckWorld, arg: ref Expr, callee: ref String, span: ref Span) -> Ty sync {
+    match arg {
+        Expr::Variable(symbol, _) => {
+            let name = world.words.resolve(symbol).clone()
+            if state.type_parameters.contains_key(name) {
+                return Ty::Unknown
+            }
+            if state.lookup(name) == null && check_reflect_a_type(state, name) {
+                return Ty::Named { name: name, args: [], view: false }
+            }
+            // A name nothing declares is `NK1117`'s, a type or a value alike.
+            let before = state.findings.len()
+            state.nothing_declares_it(world, arg, check_span_at(world, arg, span))
+            if state.findings.len() > before {
+                return Ty::Unknown
+            }
+        },
+        Expr::Field { base, name, .. } => {
+            if world.words.resolve(name) == "ty" {
+                match base {
+                    Expr::Variable(held, _) => {
+                        let ty: Ty = state.lookup(world.words.resolve(held)) ?? Ty::Unknown
+                        match ty {
+                            Ty::Named { name: written, .. } => {
+                                if written == "$Field" {
+                                    return Ty::Unknown
+                                }
+                            },
+                            else => {},
+                        }
+                    },
+                    else => {},
+                }
+            }
+        },
+        else => {},
+    }
+    let at = check_span_at(world, arg, span)
+    state.findings.push(check_refusal("NK1230", at, f"`{callee}` takes a type here, not a value.", [f"`{callee}` has a type in its parameter list, so the call writes a type there: a type's name, a type parameter, a type a `match` arm binds, or a field's `.ty` (ADR-330 D1)."], f"Write the type: `{callee}(User)`, not a value of it."))
+    return Ty::Unknown
 }
 
 /// **`NK1131`: a `mut` parameter given away whole** (issue #161, Part I 6.6).

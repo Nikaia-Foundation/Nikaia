@@ -74,7 +74,7 @@ pub(crate) fn term_inner(id: i64, at_least: i64, arrow: bool, term_of: &dyn Fn(i
     text
 }
 
-pub(crate) fn term_binary(op: &str, a: i64, b: i64, r: i64, arrow: bool, term_of: &impl Fn(i64) -> SolverTerm) -> String { format!("{} {} {}", term_inner(a, r, arrow, term_of), op, term_inner(b, r + 1, arrow, term_of)) }
+pub(crate) fn term_binary(op: &str, a: i64, b: i64, r: i64, arrow: bool, term_of: &dyn Fn(i64) -> SolverTerm) -> String { format!("{} {} {}", term_inner(a, r, arrow, &term_of), op, term_inner(b, r + 1, arrow, &term_of)) }
 
 pub(crate) fn term_joined(op: &str, parts: &[i64], r: i64, arrow: bool, term_of: &dyn Fn(i64) -> SolverTerm) -> String {
     let mut written: Vec<String> = vec![];
