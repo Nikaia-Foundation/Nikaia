@@ -1,1 +1,3 @@
-y2-tree-properties.md
+y8-1026-grammar-label-struct.md
+y2c-properties.md
+y2b-keys-directives-limits.md

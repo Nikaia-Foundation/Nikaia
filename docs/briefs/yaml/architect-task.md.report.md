@@ -1,5 +1,4 @@
-Result: blocked
-Batch: unchanged (red not from yaml: arm64, bootstrap_compiler - touch_sets::the_two_console_handles_keep_their_order, red since 36761b04 (#994, b994-overlap-note-seq, main lane); its fix forward 0b8a3acb is in CI run 41150991393)
+Result: done
+Batch: y8-1026-grammar-label-struct.md y2c-properties.md y2b-keys-directives-limits.md
 Owner: none
-Done: y4c (Fixes #1003) and y7c (Fixes #1021) are on develop and ticked in #928's To build. y7c's Found (a match guard gives its arm no fact; ADR-361 D9 silent) filed as #1022, label `decision`, with a paper: nothing needs it now, recommendation is to keep today's behaviour until a program needs it. Next batch once develop is green: y2-tree-properties.md (already the last entry of batch.txt), then y2b.
-Files: none committed (only this report).
+Decided: y2 stopped on a compiler defect, filed as #1026 (ready): a grammar label binds its local without the struct it holds (`bind_grammar_pattern`, text_tiers.nika), so a view field read through it counts as owned text (NK1106); the function-call path (#803) works. y8 fixes it (`Fixes #1026`, crates/, Changelog owed); y2c resumes y2 step 2 from the draft on wip/y2-properties (applies cleanly on develop); y2b unchanged but for its reference. #928's To build updated. architect.md: a grammar brief probes its tree shapes across rules (the y2 lesson).
