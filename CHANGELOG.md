@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1325] — 2026-10-31
+
+**Grammar rules choose a pattern by a type's kind**
+- A grammar rule chooses its pattern by a type's kind with `match T::kind { … }`, refuses a type with `refuse("why")`, and checks its type parameters' bounds at the call.
+
 ## [0.0.1324] — 2026-10-31
 
 **views: a by-value parameter that holds no text is no view source (#1070); views: a list of views handed back may be a literal or grown with extend (#1071); tiers: a view field read off a match payload of a lent struct is a view (#1072)**
