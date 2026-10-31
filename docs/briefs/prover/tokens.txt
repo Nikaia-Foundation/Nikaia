@@ -12,3 +12,4 @@
 /home/user/Nikaia/docs/briefs/prover/p6-1053-for-counters.md 7747141 75
 /home/user/Nikaia/docs/briefs/prover/architect-task.md 5904048 74
 /home/user/Nikaia/docs/briefs/prover/p7-1053-for-collection-length.md 382157 8
+/home/user/Nikaia/docs/briefs/prover/p8-1076-precondition-unread-argument.md 283067 5
