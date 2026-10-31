@@ -1,3 +1,3 @@
-b938-loop-copy-inferred-list.md
+bred2-kept-lambda-test.md
 b1034a-kept-lambda-captured-fn.md
 b1035-fn-field-from-loan.md
