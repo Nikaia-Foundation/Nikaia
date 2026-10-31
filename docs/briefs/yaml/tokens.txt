@@ -9,3 +9,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y7b-1009-let-reads.md 518290 5
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 693390 22
 /home/user/Nikaia/docs/briefs/yaml/y4c-1003-finish.md 638340 10
+/home/user/Nikaia/docs/briefs/yaml/y7c-match-join.md 800708 7

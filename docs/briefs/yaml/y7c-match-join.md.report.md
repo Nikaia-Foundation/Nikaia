@@ -1,0 +1,15 @@
+Result: done
+Files: crates/nikaia-std/src/tools/prover_walk.nika crates/nikaia-std/src/tools/bounds_body.nika crates/nikaia-std/src/tools/lowered/prover_walk.rs crates/nikaia-std/src/tools/lowered/bounds_body.rs crates/nikaia-std/src/tools/lowered.rs tests/compiler/tests/prove_a_match_on_a_bool_joins_like_an_if.nika tests/compiler/tests/prove_a_match_on_a_bool_joins_like_an_if.stdout tests/compiler/tests/prove_a_match_arm_assignment_reaches_the_join.nika tests/compiler/tests/prove_a_match_arm_assignment_reaches_the_join.stdout tests/compiler/tests/prove_a_match_arm_that_breaks_a_bound_is_refused.nika tests/compiler/tests/prove_a_match_arm_that_breaks_a_bound_is_refused.stderr
+Commit: prover: a match statement joins what its arms assign, as an if does (ADR-361 D9, #1021)
+Body: A `match` standing as a statement is walked by `prover_match` as a branch of n sides: each arm gets the scope with what its pattern says of the matched value (`true`/`false` of a condition the prover reads, an `else` or bare-name arm of a bool match the side the unguarded arms above left, a whole-number literal, an inclusive range or an or-pattern of them over a whole number it reads; else nothing), its pattern's names bound again, and is walked as a branch (a block body with `prover_block`, any other with `prover_expr_stmt`). `prover_join` is generalised to n sides (`prover_join_arms` over `ProverArm`, not pairwise folding); the `if` builds its two sides into it with the same tags (`t`/`e`), the arms are tagged `a<i>`. An arm that always leaves drops out; where one arm alone goes on its pattern's fact holds after the match. `prover_a_branch` (was `prover_an_if`) now covers a `match`, so `prover_follow_mutables` and the length follower no longer drop what its arms assign. `bounds_body.nika` gains `assigned_in_expr` and `changes_length_in_expr` for an arm whose body is not a block. Both steps of the brief are built in this one commit.
+Fixes: #1021
+Pushed: 541c387d (pushed by drive.nika)
+Tests: the three new tests/compiler programs fail with NK1300 on the unfixed compiler (all three refused, "`cp`/`w` is not a whole number the prover reads") and pass on the fixed one; gate: tests/compiler --both-settings 388 passed, it filters prove unproved_claims bounds + guard set 203 passed (sequences guard green), clippy clean, packages/yaml 9 passed, pre-push-check clean
+Gate: green
+Deviation: none
+Found: A guard on an arm (`x if g =>`) gives its arm no fact: ADR-361 D9 does not say what a guard gives; the guard is walked for its calls only, and a guarded arm's scope is not exact and ends the path.
+Needs: supervisor rebase and push of 541c387d (push rejected, develop moved)
+Changelog: The prover follows a `let mut` whole number through a `match` statement as through an `if`: each arm knows what its `bool`, literal or range pattern says of the matched value, and after the `match` the number is one arm's value or another's (ADR-361 D9).
+Owner: none
+Rs2nika: none
+Disk freed: 0 GB (no own clone; project-tests cache 5.8G, 11G free; new entry over 100 MB: run-bundle/b2db8b4e959f1cfc 341 MB)
