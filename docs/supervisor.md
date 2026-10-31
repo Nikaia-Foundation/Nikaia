@@ -155,8 +155,12 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   [--dry-run] [--loop M] DIR` raises the version once for the done reports'
   `Changelog:` lines.
 * **Suite watch (owner, 2026-10-31; replaces the builders' gate of #852).**
-  Builders and QA commit locally; after each run the driver runs
-  `gate.nika -- --all` (lock `target/suite.lock`, so the two lanes' drivers
+  Builders and QA commit locally; the driver runs `gate.nika -- --all` once
+  per batch (owner, 2026-10-31: once per batch): when the batch ends it starts
+  the suite on HEAD in the background (`SUITE <sha8> started in the
+  background`) beside the architect, and waits for it (`SUITE <sha8> waiting`)
+  before the next batch's first builder, a bump or its own end (lock
+  `target/suite.lock`, so the two lanes' drivers
   take turns), prints `SUITE <sha8> green|red <steps>`, pushes the tested
   commit on green (`PUSHED <sha8>`), and on red starts QA
   (`docs/briefs/qa-task.md`, input `DIR/qa-input.txt`, log `DIR/suite.log`),
@@ -170,7 +174,10 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   incremental and debug data, still below it escalates
   (`ESCALATE drive: disk: ...`). Then free space (old
   `target/fast/incremental` entries of the shared checkout, `target/debug`)
-  and restart the driver.
+  and restart the driver. A lane whose pushes its own suite gates runs with
+  `--ignore-ci-red`: a red CI line on `develop` (another lane's) no longer goes
+  to its architect, and only its bump waits for green; the main lane runs
+  without it.
 * **Gaps and defects from reports go to the architect** (owner, 2026-10-31):
   it files every `partial|blocked` report's defect (issue `ready` and bug
   brief) and decides obvious language gaps itself (`docs/architect.md`,

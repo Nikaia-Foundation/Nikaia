@@ -87,8 +87,10 @@ the background in a cloud session.
 * **Builders commit, the driver tests and pushes** (owner, 2026-10-31). A
   builder or QA agent started by `scripts/drive.nika` commits locally after
   cheap checks (build, touched tests, fmt, clippy, `pre-push-check.sh`) and
-  never pushes. After each commit the driver runs the complete suite
-  (`gate.nika --all`, one at a time per checkout, in its own detached worktree
+  never pushes. The driver runs the complete suite once per batch (owner,
+  2026-10-31: once per batch): when the batch ends it starts it on HEAD in
+  the background beside the architect and waits for it before the next
+  batch's first builder (`gate.nika --all`, one at a time per checkout, in its own detached worktree
   at the tested commit, `/home/user/nikaia-suite`, with an 8 GB disk guard); green, it pushes the tested
   commit; red, a QA agent (`.claude/agents/qa.md`) gets the briefs and reports
   of the unpushed commits and fixes forward, at most two rounds, then the

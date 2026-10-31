@@ -1,16 +1,17 @@
 // One driver for a whole batch: builders and the architect, until an escalation.
 //
-//     nikaia run scripts/drive.nika -- DIR [--max N] [--no-bump] [--dry-run] [--lines FILE]
+//     nikaia run scripts/drive.nika -- DIR [--max N] [--no-bump] [--ignore-ci-red] [--dry-run] [--lines FILE]
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time:
 //
 //     NEXT <brief> ...            agent.nika -- <brief> --dir DIR, then the
-//                                 run's files are committed (locally) and
-//                                 the suite runs
+//                                 run's files are committed (locally); no
+//                                 suite until the batch ends
 //     BUMP pending, CI green      cycle.nika -- DIR --apply
-//     CUT, RED, BATCH DONE        the architect: agent.nika -- DIR/architect-task.md,
-//                                 the stop line (and failing jobs) in
-//                                 DIR/architect-input.txt
+//     CUT, RED, BATCH DONE        the batch's suite starts in the background,
+//                                 and the architect beside it: agent.nika --
+//                                 DIR/architect-task.md, the stop line (and
+//                                 failing jobs) in DIR/architect-input.txt
 //
 // Output: one line per agent run (`builder done ...`, `architect done ...`).
 // Escalation: one final line, exit 2, on an OWNER line, an ESCALATE of
@@ -19,11 +20,22 @@
 // seen before with no builder to run, `--max` agent runs (default 8), a push
 // rejected after one rebase, a suite still red after 2 QA rounds.
 //
-// **Builders commit, the driver tests and pushes** (owner, 2026-10-31). After
-// each builder or architect run and its report commit, the run's brief is
-// appended to DIR/unpushed.txt (one brief path a line) and the suite runs
-// (`drive_suite`): when `git rev-list --count origin/develop..HEAD` is 0 after a
-// fetch, there is nothing to test (unpushed.txt is emptied). Else the driver
+// `--ignore-ci-red`: a RED line of the cycle (CI red on develop) is not handed
+// to the architect; NEXT and BATCH DONE go on as if CI were green, and a BUMP
+// still waits for green CI (a lane whose pushes its own suite gates does not
+// fix other lanes' reds; the main lane runs without it).
+//
+// **Builders commit, the driver tests and pushes** (owner, 2026-10-31: once
+// per batch). After each builder or architect run and its report commit, the
+// run's brief is appended to DIR/unpushed.txt (one brief path a line). The
+// builders of a batch run one after the other with no suite between them. When
+// the batch ends (CUT, RED or BATCH DONE, right before the architect starts)
+// the suite starts on HEAD in the background (`drive_suite`) and the architect
+// runs beside it; before the next batch's first builder, a bump, or the end of
+// the run (an escalation and a RESTART too) the driver waits for it
+// (`drive_settle`: one line `SUITE <sha8> waiting`, a poll every 10 s) and
+// handles its result. When `git rev-list --count origin/develop..HEAD` is 0
+// after a fetch, there is nothing to test (unpushed.txt is emptied). Else the driver
 // takes the checkout's suite lock, `mkdir target/suite.lock` with
 // `<pid> <DIR>` in target/suite.lock/owner: two drivers (the main lane and the
 // bug lane) share this checkout, so one waits in 60 s steps while the owner's
@@ -46,23 +58,30 @@
 // DIR/suite.log) `ESCALATE drive: disk: <N> GB free, the suite needs 8`, the
 // lock released and the commits left local. Then a copy of the driver's binary
 // (<path>/target/suite-nikaia: builders rebuild the shared one meanwhile) runs
-// the tested sha's `scripts/gate.nika -- --all` with the worktree as working
+// the tested sha's `scripts/gate.nika -- --all`, detached from the driver
+// (`sh -c '( ... ) &'`), with the worktree as working
 // directory, so its `target/fast/nikaia`, crates/ and tests/ are the
 // worktree's (its `build` step builds that binary first), with
 // CARGO_INCREMENTAL=0 (incremental data costs about 10 GB a tree and a suite
 // build gains nothing from it) and NIKAIA_CACHE_LIMIT=2G. Its output goes to
-// DIR/suite.log of the shared checkout (overwritten), and the driver prints
+// DIR/suite.log of the shared checkout (overwritten), its exit status to
+// target/suite.lock/exit-<sha>, and target/suite.lock/testing notes `<sha> <N>`,
+// N the lines of unpushed.txt the tested sha covers; the driver prints
+// `SUITE <sha8> started in the background`, and when it has waited,
 // `SUITE <sha8> green|red <steps>`. `--df FILE` reads a `df -Pk` output from
 // FILE and prints the disk line and `ok` or the escalation (for tests).
 // Green: `git push origin <sha>:develop`, exactly the tested commit; when
 // rejected (other sessions push too), `git pull --rebase` and push HEAD: the
 // rebased commits are CI's to judge. Still rejected: escalate. Then it prints
-// `PUSHED <sha8>` and empties unpushed.txt. Red: DIR/qa-input.txt gets the
+// `PUSHED <sha8>` and drops the N tested lines from unpushed.txt (the
+// architect's commit made beside the suite waits for the next batch's suite;
+// after a rebased push of HEAD it empties the file). Red: DIR/qa-input.txt gets the
 // suite's step lines, the last 200 lines of suite.log, `git log
 // origin/develop..HEAD`, and the brief and report of each brief in
 // unpushed.txt; the QA agent runs (docs/briefs/qa-task.md, role `qa`) in the
 // shared checkout, its report is committed as the others, and the suite runs
-// again on the new HEAD, in the worktree the same way. At most 2 QA
+// again on the new HEAD, in the worktree the same way, and is waited for at
+// once (the next batch starts only on green). At most 2 QA
 // rounds: a third red prints `ESCALATE drive: suite red after 2 QA rounds:
 // <steps>` and leaves the commits local. Nothing else pushes.
 // `--no-bump` leaves the version raise to another driver: a second lane in the
@@ -100,7 +119,15 @@ fn drive_exe() -> String throws {
     return ""
 }
 
+// Ends the run with exit 2; a suite still running is waited for and handled
+// first (drive_settle), with one line naming the escalation it delays.
 fn drive_escalate(why: String) throws {
+    let lane = drive_lock_lane()
+    if lane != "" && drive_testing() != "" {
+        println(f"SUITE before escalating: {why}")
+        let exe = drive_exe()
+        drive_settle(exe.clone(), lane)
+    }
     drive_unlock()
     println(f"ESCALATE drive: {why}")
     process::exit(2)
@@ -196,7 +223,9 @@ fn drive_kept(report: String) -> String {
 //   ESCALATE <why> | RED <line> | BUMP | NEXT <abs brief> | ARCHITECT <stop line>
 // `red_seen`: " sha " for each RED already handed to the architect;
 // `last_stop`: the stop line of the last architect run.
-fn drive_action(lines: Vec[String], red_seen: String, last_stop: String) -> String {
+// `ignore_red` (--ignore-ci-red): a RED line leads nowhere; NEXT and BATCH DONE
+// go on as if CI were green, and BUMP still waits for a green CI line.
+fn drive_action(lines: Vec[String], red_seen: String, last_stop: String, ignore_red: bool) -> String {
     let mut ci: String = ""
     let mut red: String = ""
     let mut batch: String = ""
@@ -209,7 +238,7 @@ fn drive_action(lines: Vec[String], red_seen: String, last_stop: String) -> Stri
         if l.starts_with("NEXT ") || l.starts_with("CUT") || l.starts_with("BATCH") { batch = l.clone() }
         if l.starts_with("BUMP pending") { bump = l.clone() }
     }
-    if red != "" {
+    if red != "" && !ignore_red {
         let sha = red.split(" ").collect()[1].clone()
         if !red_seen.contains(f" {sha} ") { return f"RED {red}" }
         if !batch.starts_with("NEXT ") { return f"ESCALATE second RED on {sha}" }
@@ -283,10 +312,12 @@ fn drive_say(dry: bool, line: String) {
 }
 
 // Pushes the tested commit; rejected, rebases once and pushes HEAD (the
-// rebased commits are CI's to judge). Prints `PUSHED <sha8>`.
-fn drive_push(sha: String) throws {
+// rebased commits are CI's to judge). Prints `PUSHED <sha8>`. True when HEAD
+// was pushed (after the rebase), false when exactly `sha`.
+fn drive_push(sha: String) -> bool throws {
     let first = process::run("git", ["push", "origin", f"{sha}:develop"])
     let mut pushed = sha.clone()
+    let mut head = false
     if !first.ok {
         // The shared checkout holds other agents' unfinished files and build locks:
         // they are stashed around the rebase, not a reason to stop (2026-10-28).
@@ -295,8 +326,10 @@ fn drive_push(sha: String) throws {
         let second = process::run("git", ["push", "origin", "HEAD:develop"])
         if !second.ok { drive_escalate("push rejected after one rebase") }
         pushed = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+        head = true
     }
     println(f"PUSHED {drive_short(pushed)}")
+    return head
 }
 
 fn drive_short(sha: String) -> String throws {
@@ -438,55 +471,88 @@ fn drive_worktree(wt: String, sha: String) throws {
     process::run("git", ["-C", wt.clone(), "clean", "-fdx", "-e", "target"])
 }
 
-// One suite run in the worktree: the tested sha's scripts/gate.nika, run by a
-// copy of the driver's binary (the shared one is rebuilt by builders meanwhile),
-// with the worktree as working directory.
-fn drive_gate(exe: String, wt: String) -> String throws {
+// Starts one suite run in the worktree, in the background: the tested sha's
+// scripts/gate.nika, run by a copy of the driver's binary (the shared one is
+// rebuilt by builders meanwhile), with the worktree as working directory. Its
+// output goes to DIR/suite.log, its exit status to
+// target/suite.lock/exit-<sha>, and target/suite.lock/testing notes
+// `<sha> <lines of unpushed.txt it covers>` (drive_settle reads both).
+fn drive_launch(exe: String, dir: String, wt: String) throws {
+    let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+    drive_disk(wt.clone(), dir.clone())
+    drive_worktree(wt.clone(), sha.clone())
     let own = process::run("realpath", [exe]).stdout.trim().clone()
     process::run("mkdir", ["-p", f"{wt}/target"])
     let copy = f"{wt}/target/suite-nikaia"
     let copied = process::run("cp", ["-f", own, copy.clone()])
     if !copied.ok { drive_escalate(f"cp of the driver's binary to {copy} failed: {copied.stderr.trim()}") }
-    let run = process::run(copy, ["run", "scripts/gate.nika", "--", "--all"]; dir: wt, env: [("CARGO_INCREMENTAL", "0"), ("NIKAIA_CACHE_LIMIT", "2G")])
-    return run.stdout + run.stderr
+    let log = process::run("realpath", [dir.clone()]).stdout.trim().clone() + "/suite.log"
+    let exit = process::run("realpath", [drive_lock_dir()]).stdout.trim().clone() + f"/exit-{sha}"
+    process::run("rm", ["-f", exit.clone(), log.clone()])
+    let mut covered: i64 = 0
+    for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
+        if l.trim() != "" { covered += 1 }
+    }
+    let gate = f"cd '{wt}' && CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G '{copy}' run scripts/gate.nika -- --all > '{log}' 2>&1; echo $? > '{exit}.tmp'; mv '{exit}.tmp' '{exit}'"
+    let started = process::run("sh", ["-c", f"( {gate} ) < /dev/null > /dev/null 2>&1 &"])
+    if !started.ok { drive_escalate(f"the suite did not start in {wt}: {started.stderr.trim()}") }
+    fs::write(drive_lock_dir() + "/testing", fs::Root::Anywhere, f"{sha} {covered}\n")
+    println(f"SUITE {drive_short(sha)} started in the background")
 }
 
-// After a run's commit: test the unpushed commits with the complete suite, push
-// them when green, else let the QA agent fix forward (header comment).
-fn drive_suite(exe: String, dry: bool, dir: String, brief: String) throws {
+// The suite this driver started and has not handled yet: `<sha> <covered>`
+// from target/suite.lock/testing while it holds the lock, else "".
+fn drive_testing() -> String throws {
+    let owner = drive_read(drive_lock_dir() + "/owner")
+    if owner == "" || owner.split(" ").collect()[0].trim() != drive_pid() { return "" }
+    return drive_read(drive_lock_dir() + "/testing").trim().clone()
+}
+
+// The lane directory of the lock this driver holds, "" when it holds none.
+fn drive_lock_lane() -> String throws {
+    let owner = drive_read(drive_lock_dir() + "/owner").trim().clone()
+    let words = owner.split(" ").collect()
+    if words.len() < 2 || words[0].trim() != drive_pid() { return "" }
+    return words[1].trim().clone()
+}
+
+// Waits for the background suite, if one runs, and handles its result: green
+// pushes the tested sha and drops the briefs it covered from unpushed.txt; red
+// starts the QA agent, and QA's commit gets its suite at once, waited for, at
+// most 2 QA rounds. Releases the lock on every path. One `SUITE <sha8> waiting`
+// line, polls every 10 s.
+fn drive_settle(exe: String, dir: String) throws {
     let qa = "docs/briefs/qa-task.md"
-    drive_say(dry, f"append {brief} to {dir}/unpushed.txt")
-    drive_say(dry, "git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)")
-    drive_say(dry, "mkdir target/suite.lock (wait while its owner's pid lives)")
     let wt = drive_suite_dir()
-    drive_say(dry, f"df -Pk {wt} (or its parent): under 8 GB free, rm -rf {wt}/target/fast/incremental {wt}/target/debug; still under, ESCALATE drive: disk")
-    drive_say(dry, f"not yet a worktree: git worktree add --detach {wt} <sha>; else git -C {wt} checkout --detach --force <sha>; git -C {wt} clean -fdx -e target")
-    drive_say(dry, f"cp {exe} {wt}/target/suite-nikaia")
-    drive_say(dry, f"in {wt}, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: {wt}/target/suite-nikaia run scripts/gate.nika -- --all > {dir}/suite.log")
-    drive_say(dry, f"green: git push origin <sha>:develop, empty {dir}/unpushed.txt")
-    drive_say(dry, f"red: write {dir}/qa-input.txt, rm -f {qa}.report.md, {exe} run scripts/agent.nika -- {qa} --dir {dir}, commit its report, the suite again (at most 2 QA rounds)")
-    drive_say(dry, "rm -rf target/suite.lock")
-    if dry { return }
-    drive_append(f"{dir}/unpushed.txt", brief.clone())
-    process::run("git", ["fetch", "--quiet", "origin", "develop"])
-    let count = process::run("git", ["rev-list", "--count", "origin/develop..HEAD"]).stdout.trim().clone()
-    if count == "0" {
-        fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
-        return
-    }
-    drive_lock(dir.clone())
     let mut rounds: i64 = 0
     while true {
-        let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
-        drive_disk(wt.clone(), dir.clone())
-        drive_worktree(wt.clone(), sha.clone())
-        let out = drive_gate(exe.clone(), wt.clone())
-        fs::write(f"{dir}/suite.log", fs::Root::Anywhere, out.clone())
+        let testing = drive_testing()
+        if testing == "" { return }
+        let parts = testing.split(" ").collect()
+        let sha = parts[0].clone()
+        let mut covered: i64 = 0
+        if parts.len() > 1 { covered = text::parse_i64(parts[1].clone()) ?? 0 }
+        let exit = f"{drive_lock_dir()}/exit-{sha}"
+        if !fs::exists(exit.clone(), fs::Root::Anywhere) {
+            println(f"SUITE {drive_short(sha.clone())} waiting")
+            while !fs::exists(exit.clone(), fs::Root::Anywhere) { process::run("sleep", ["10"]) }
+        }
+        process::run("rm", ["-f", exit, drive_lock_dir() + "/testing"])
+        let out = drive_read(f"{dir}/suite.log")
         let steps = drive_red_steps(out.clone())
         if steps == "" {
             println(f"SUITE {drive_short(sha.clone())} green")
-            drive_push(sha)
-            fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
+            let all = drive_push(sha)
+            let mut left: Vec[String] = []
+            let mut seen: i64 = 0
+            for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
+                if l.trim() == "" { continue }
+                seen += 1
+                if seen > covered && !all { left.push(l.trim().clone()) }
+            }
+            let mut body: String = ""
+            if left.len() > 0 { body = left.join("\n") + "\n" }
+            fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, body)
             drive_unlock()
             return
         }
@@ -499,7 +565,35 @@ fn drive_suite(exe: String, dry: bool, dir: String, brief: String) throws {
         drive_commit(false, dir.clone(), qa.to_string(), [])
         drive_tidy(false, dir.clone())
         drive_append(f"{dir}/unpushed.txt", qa.to_string())
+        drive_launch(exe.clone(), dir.clone(), wt.clone())
     }
+}
+
+// At the end of a batch: waits for a suite still running (drive_settle), then
+// starts the complete suite on HEAD in the background and returns at once; the
+// architect runs beside it (header comment).
+fn drive_suite(exe: String, dry: bool, dir: String) throws {
+    let qa = "docs/briefs/qa-task.md"
+    let wt = drive_suite_dir()
+    drive_say(dry, "a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)")
+    drive_say(dry, "git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)")
+    drive_say(dry, "mkdir target/suite.lock (wait while its owner's pid lives)")
+    drive_say(dry, f"df -Pk {wt} (or its parent): under 8 GB free, rm -rf {wt}/target/fast/incremental {wt}/target/debug; still under, ESCALATE drive: disk")
+    drive_say(dry, f"not yet a worktree: git worktree add --detach {wt} <sha>; else git -C {wt} checkout --detach --force <sha>; git -C {wt} clean -fdx -e target")
+    drive_say(dry, f"cp {exe} {wt}/target/suite-nikaia")
+    drive_say(dry, f"in the background, in {wt}, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=2G: {wt}/target/suite-nikaia run scripts/gate.nika -- --all > {dir}/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once")
+    drive_say(dry, f"before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock")
+    drive_say(dry, f"red: write {dir}/qa-input.txt, rm -f {qa}.report.md, {exe} run scripts/agent.nika -- {qa} --dir {dir}, commit its report, the suite again and waited for (at most 2 QA rounds)")
+    if dry { return }
+    drive_settle(exe.clone(), dir.clone())
+    process::run("git", ["fetch", "--quiet", "origin", "develop"])
+    let count = process::run("git", ["rev-list", "--count", "origin/develop..HEAD"]).stdout.trim().clone()
+    if count == "0" {
+        fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
+        return
+    }
+    drive_lock(dir.clone())
+    drive_launch(exe, dir, wt)
 }
 
 fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throws {
@@ -592,6 +686,7 @@ fn main() throws {
     let mut max: i64 = 8
     let mut dry = false
     let mut no_bump = false
+    let mut ignore_red = false
     let mut lines_file: String = ""
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
@@ -599,6 +694,8 @@ fn main() throws {
     while i < args.len() {
         if args[i] == "--dry-run" {
             dry = true
+        } else if args[i] == "--ignore-ci-red" {
+            ignore_red = true
         } else if args[i] == "--no-bump" {
             no_bump = true
         } else if args[i] == "--max" && i + 1 < args.len() {
@@ -614,7 +711,7 @@ fn main() throws {
         i += 1
     }
     if dir == "" {
-        println("usage: nikaia run scripts/drive.nika -- DIR [--max N] [--no-bump] [--dry-run] [--lines FILE]")
+        println("usage: nikaia run scripts/drive.nika -- DIR [--max N] [--no-bump] [--ignore-ci-red] [--dry-run] [--lines FILE]")
         process::exit(2)
     }
     if args.len() == 4 && args[1] == "--rewrite" {
@@ -654,6 +751,7 @@ fn main() throws {
     let own = drive_read("scripts/drive.nika")
     while runs <= max {
         if !dry && drive_read("scripts/drive.nika") != own {
+            drive_settle(exe.clone(), dir.clone())
             println("RESTART drive: scripts/drive.nika changed")
             process::exit(3)
         }
@@ -663,10 +761,19 @@ fn main() throws {
             if l.trim() != "" && !(no_bump && l.trim().starts_with("BUMP")) { lines.push(l.trim().clone()) }
         }
         if lines.len() == 0 { drive_escalate("cycle.nika printed nothing") }
-        let action = drive_action(lines.clone(), red_seen.clone(), last_stop.clone())
+        let action = drive_action(lines.clone(), red_seen.clone(), last_stop.clone(), ignore_red)
         if action.starts_with("ESCALATE ") {
-            println(f"ESCALATE {(action.strip_prefix("ESCALATE ") ?? "").clone()}")
+            drive_settle(exe.clone(), dir.clone())
+            drive_unlock()
+            println(action)
             process::exit(2)
+        }
+        // Only the architect runs beside the batch's suite: a builder of the
+        // next batch and a bump wait for it, and the cycle is read again (QA may
+        // have committed, a push moved CI).
+        if !dry && (action.starts_with("NEXT ") || action == "BUMP") && drive_testing() != "" {
+            drive_settle(exe.clone(), dir.clone())
+            continue
         }
         if action == "BUMP" {
             bumps += 1
@@ -683,11 +790,13 @@ fn main() throws {
         if runs >= max { drive_escalate(f"--max {max} agent runs reached") }
         if action.starts_with("NEXT ") {
             let brief = (action.strip_prefix("NEXT ") ?? "").clone()
+            drive_say(dry, "a batch's suite still running (target/suite.lock/testing): wait for it and handle it (drive_settle) first")
             drive_agent(exe.clone(), dry, dir.clone(), brief.clone(), "builder")
             runs += 1
             drive_commit(dry, dir.clone(), brief.clone(), [])
             drive_tidy(dry, dir.clone())
-            drive_suite(exe.clone(), dry, dir.clone(), brief.clone())
+            drive_say(dry, f"append {brief} to {dir}/unpushed.txt (no suite until the batch ends)")
+            if !dry { drive_append(f"{dir}/unpushed.txt", brief.clone()) }
             if !dry {
                 let why = drive_kept(drive_read(f"{brief}.report.md"))
                 if why != "" { println(f"CONVERT drive: {drive_stem(brief.clone())}: {why}") }
@@ -707,6 +816,8 @@ fn main() throws {
             red_seen = red_seen + f" {sha} "
             input = f"{stop}\nThe failing jobs are named in the line above; fix forward or revert.\n"
         }
+        // The batch ends: its suite starts in the background, beside the architect.
+        drive_suite(exe.clone(), dry, dir.clone())
         drive_say(dry, f"write {dir}/architect-input.txt: {stop}")
         drive_say(dry, f"rm -f {task}.report.md")
         if !dry {
@@ -719,7 +830,8 @@ fn main() throws {
         let extra: Vec[String] = []
         drive_commit(dry, dir.clone(), task.clone(), extra)
         drive_tidy(dry, dir.clone())
-        drive_suite(exe.clone(), dry, dir.clone(), task.clone())
+        drive_say(dry, f"append {task} to {dir}/unpushed.txt (tested with the next batch)")
+        if !dry { drive_append(f"{dir}/unpushed.txt", task.clone()) }
         if dry {
             println(f"DRY-RUN ARCHITECT {stop}")
             return
@@ -732,4 +844,5 @@ fn main() throws {
         if owner != "none" && owner != "" { drive_escalate(f"architect Owner: {owner}") }
         last_stop = stop
     }
+    drive_settle(exe.clone(), dir)
 }

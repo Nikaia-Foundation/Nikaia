@@ -12,8 +12,13 @@ fn root() -> String throws {
 }
 
 fn case(nikaia: String, repo: String, tmp: String, name: String, cycle: String) throws {
+    case_with(nikaia, repo, tmp, name, cycle, "--dry-run")
+}
+
+// `flag`: one more argument to the driver (`--dry-run` when none is meant).
+fn case_with(nikaia: String, repo: String, tmp: String, name: String, cycle: String, flag: String) throws {
     fs::write(f"{tmp}/lines", fs::Root::Anywhere, cycle.replace("%T", tmp.clone()) + "\n")
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines"]; dir: repo, env_remove: ["NIKAIA_SUITE_DIR"])
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines", flag]; dir: repo, env_remove: ["NIKAIA_SUITE_DIR"])
     println(f"== {name} (exit {out.code})")
     println(out.stdout.trim().replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia"))
 }
@@ -40,6 +45,7 @@ fn main() throws {
     case(nikaia.clone(), repo.clone(), tmp.clone(), "batch done", "CI aaaa1111 green\nBATCH DONE")
     case(nikaia.clone(), repo.clone(), tmp.clone(), "cut", "CI aaaa1111 running\nCUT b1: too big -> ARCHITECT")
     case(nikaia.clone(), repo.clone(), tmp.clone(), "red", "CI aaaa1111 red\nRED aaaa1111 test -> ARCHITECT\nNEXT %T/b1.md builder sonnet 80 12")
+    case_with(nikaia.clone(), repo.clone(), tmp.clone(), "red ignored", "CI aaaa1111 red\nRED aaaa1111 test -> ARCHITECT\nNEXT %T/b1.md builder sonnet 80 12", "--ignore-ci-red")
     case(nikaia.clone(), repo.clone(), tmp.clone(), "bump green", "CI aaaa1111 green\nBATCH DONE\nBUMP pending 3 changelog lines")
     case(nikaia.clone(), repo.clone(), tmp.clone(), "owner", "CI aaaa1111 green\nNEXT %T/b1.md builder sonnet 80 12\nOWNER b0: which model?")
     case(nikaia.clone(), repo.clone(), tmp.clone(), "unknown", "CI aaaa1111 green\nBATCH none (no batch.txt)")
