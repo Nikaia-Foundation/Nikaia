@@ -3048,6 +3048,14 @@ pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
 /// of its own: the package it tests is its dependency, so `use` reaches it. A
 /// refusal is the outcome (`ended_well` false, `stderr` the message with the
 /// path written `tests/NAME.nika`); a program that builds is run there.
+///
+/// **The built program is run directly**, not through a second `nikaia run`:
+/// that one would build again only to find nothing changed, and then do what
+/// is done here - start the binary in the same directory, with the same
+/// variables and no standard input, as a child of this process (its own
+/// process replaced by the program, #281). What the run wrote before the
+/// program started, the build's warnings, is the build's standard error with
+/// Cargo kept quiet as `run` keeps it (`CARGO_TERM_QUIET`).
 fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Outcome> {
     let own = Sandbox::new()?;
     let project = own.0.join("project");
@@ -3068,13 +3076,18 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
     )?;
     let exe = std::env::current_exe().context("finding this compiler")?;
     let run = |verb: &str, scratch: &Path| -> Result<std::process::Output> {
-        std::process::Command::new(&exe)
+        let mut command = std::process::Command::new(&exe);
+        command
             .args([verb, "--user-parallelism", setting, "--project"])
             .arg(&project)
             .current_dir(&own.0)
             .env(nikaia_std::fs::TEST_DIR_VAR, scratch)
             .env_remove("CARGO_TARGET_DIR")
-            .stdin(std::process::Stdio::null())
+            .stdin(std::process::Stdio::null());
+        if verb == "build" {
+            command.env("CARGO_TERM_QUIET", "true");
+        }
+        command
             .output()
             .with_context(|| format!("running {}", exe.display()))
     };
@@ -3092,12 +3105,37 @@ fn run_program_test(test: &ProgramTest, root: &Path, setting: &str) -> Result<Ou
             &relocate(&built.stderr),
         ));
     }
-    let out = run("run", &own.0)?;
+    // `project_settings_own_copy`'s place for the program, with no variant.
+    let binary = project
+        .join("target")
+        .join("nikaia")
+        .join("bin")
+        .join(format!("program_test{}", std::env::consts::EXE_SUFFIX));
+    let (out, said) = match binary.is_file() {
+        true => {
+            let out = std::process::Command::new(&binary)
+                .current_dir(&own.0)
+                .env(nikaia_std::fs::TEST_DIR_VAR, &own.0)
+                .env_remove("CARGO_TARGET_DIR")
+                .stdin(std::process::Stdio::null())
+                .output()
+                .with_context(|| format!("running {}", binary.display()))?;
+            let mut said = built.stderr;
+            said.extend_from_slice(&out.stderr);
+            (out, said)
+        }
+        // Where the program is not where it is expected, `nikaia run` finds it.
+        false => {
+            let out = run("run", &own.0)?;
+            let said = out.stderr.clone();
+            (out, said)
+        }
+    };
     Ok(project_tests::project_tests_ran_outcome(
         test,
         out.status.success(),
         out.stdout.into(),
-        relocate(&out.stderr),
+        relocate(&said),
     ))
 }
 
