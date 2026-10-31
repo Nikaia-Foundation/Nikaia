@@ -85,3 +85,6 @@ docs/briefs/**/QUESTION
 docs/briefs/**/STOP
 docs/briefs/**/architect-input.txt
 docs/briefs/**/*.session
+docs/briefs/**/qa-input.txt
+docs/briefs/**/suite.log
+docs/briefs/**/unpushed.txt
