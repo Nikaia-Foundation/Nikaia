@@ -1,0 +1,54 @@
+// #1010: a `let mut` text literal assigned another literal, in an `if`, a
+// `match` arm or plainly, and then kept in an owned field, is one binding of
+// literals: it is declared `String` and each literal is built (ADR-282 D17).
+
+enum E {
+	V(String),
+	N,
+}
+
+struct Held {
+	why: String,
+}
+
+fn shown(held: Vec[E]) {
+	for e in held {
+		match e {
+			E::V(s) => println(s),
+			E::N => println("n"),
+		}
+	}
+}
+
+fn main() {
+	let c = true
+	let mut held: Vec[E] = []
+	held.push(E::V(f"{1}"))
+	let mut why = "a"
+	if c {
+		why = "b"
+	}
+	held.push(E::V(why))
+	shown(held)
+
+	let k = 2
+	let mut arms: Vec[E] = []
+	arms.push(E::V(f"{k}"))
+	let mut said = "a"
+	match k {
+		2 => {
+			said = "c"
+		}
+		else => {}
+	}
+	arms.push(E::V(said))
+	shown(arms)
+
+	let mut plain = "a"
+	println(plain)
+	plain = "e"
+	let first = Held { why: f"{k}" }
+	let kept = Held { why: plain }
+	println(first.why)
+	println(kept.why)
+}

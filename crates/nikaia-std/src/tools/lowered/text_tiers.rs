@@ -1802,7 +1802,7 @@ pub(crate) fn tier_assign(target: &Expr, value: &Expr, compound: bool, ask: &Tie
                     flow_word(&read_from, &kinds, walk);
                 }
             }
-            if !compound { local.literal = -1; }
+            if !compound && !a_literal_text(value) { local.literal = -1; }
             set_tier_local(&name, local, walk);
         },
     }

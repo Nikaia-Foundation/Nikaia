@@ -2553,8 +2553,10 @@ fn tier_assign(target: ref Expr, value: ref Expr, compound: bool, ask: ref TierA
                 }
             }
             // Assigned again: no longer the literal it was bound to; `x += ..`
-            // changes that literal's text and keeps the binding (#961).
-            if !compound {
+            // changes that literal's text and keeps the binding (#961), and
+            // another literal keeps it one binding of literals, in an `if`
+            // or a `match` arm too (ADR-282 D17, #1010).
+            if !compound && !a_literal_text(value) {
                 local.literal = -1
             }
             set_tier_local(name, local, walk)

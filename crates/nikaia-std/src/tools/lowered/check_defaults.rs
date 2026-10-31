@@ -205,16 +205,16 @@ pub fn check_defaults_fold<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         }, || Ty::Unknown);
     }
     let promised = CheckPromises { may_pause: true, may_fail: true };
-    let mut owner = "fold";
-    if spec.merge.is_some() { owner = "par_fold"; }
-    check_defaults_fold_part(state, world, host, &spec.step, &vec![acc.clone(), item], "step", owner, &acc, &promised, span);
+    let mut owner: String = String::from("fold");
+    if spec.merge.is_some() { owner = String::from("par_fold"); }
+    check_defaults_fold_part(state, world, host, &spec.step, &vec![acc.clone(), item], "step", &owner, &acc, &promised, span);
     let merge: Option<Expr> = match spec.merge.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
     if merge.is_some() {
         let part = match merge { Some(__nikaia_value) => __nikaia_value, None => return };
-        check_defaults_fold_part(state, world, host, &part, &vec![acc.clone(), acc.clone()], "merge", owner, &acc, &promised, span);
+        check_defaults_fold_part(state, world, host, &part, &vec![acc.clone(), acc.clone()], "merge", &owner, &acc, &promised, span);
     }
     for option in spec.config.iter() {
         let found = check_core_expr(state, world, host, &option.value, span);
