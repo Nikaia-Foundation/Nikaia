@@ -27,3 +27,4 @@
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 528500 17
 /home/user/Nikaia/docs/briefs/bugs/b18-1078-filter-map-split-parts.md 88163 1
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 770351 23
+/home/user/Nikaia/docs/briefs/bugs/b20-1088-tuple-option-part-in-arms.md 199197 3
