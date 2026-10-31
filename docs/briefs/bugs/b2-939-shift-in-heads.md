@@ -1,0 +1,64 @@
+---
+agent: builder
+model: opus
+max_turns: 70
+budget_usd: 12
+---
+# Brief: #939, a `match` guard or an `if`/`while` head refuses a shift and a bit operation
+
+Score: S=3 (a wrong refusal of plain syntax; met in a converter draft, k1 `n.magnitude == 1 << 63`), O=0.3 M, C=2 M (one grammar level in `parser/mod.rs`), area bugs. Cheap and certain.
+
+## Issue #939 (copied; widened by the architect at c30b7bc0)
+
+```nika
+fn main() {
+    let m: i64 = 8
+    let s = match true {
+        true if m == 1 << 3 => "eight",
+        else => "other",
+    }
+    println(s)
+}
+```
+
+`nikaia check` refuses: *Expected `=>` here, but found `<`.* (4:24). Written `m == (1 << 3)` it parses; `let a = m == 1 << 3` outside a head parses.
+
+Architect's probes at c30b7bc0, `if <head> { println("yes") } else { println("no") }` with `let m: i64 = 8`:
+
+| Head | Today | Expected |
+| :--- | :--- | :--- |
+| `m >> 1 == 4` | parse error *Didn't expect `>` here.* | `yes` |
+| `m & 8 == 8` | parse error *Expected `{` here, but found `&`.* | `NK1197` as in a `let` |
+| `m \| 1 == 9`, `m ^ 1 == 9` | the same parse error | `NK1197` |
+| `(m << 1) == 16` | `yes` | `yes` |
+
+In a `let`, `let b = m & 8 == 8` gives `error[NK1197]: Put parentheses around a bit operation next to a comparison.`; so the head must give the same.
+
+## Cause (traced)
+
+`crates/nikaia/src/parser/mod.rs`: the full expression chain is `cmp_expr` (2853) -> `bit_or_expr` (2872) -> `bit_xor_expr` (2881) -> `bit_and_expr` (2890) -> `shift_expr` (2899) -> `add_expr` (2921). The head chain used by `match_guard` (3694, `KW_IF e:head_expr`) and by the `if`/`while` heads is `head_expr` (3335) -> ... -> `head_cmp_bare` (3442: `head:head_add tail:cmp_head_tail?`) -> `head_add` (3449): it skips the four bit/shift levels. The head chain exists to refuse a struct literal's brace (`head_primary`), so the new levels must call the head rules beneath them, never `add_expr`.
+
+## To build
+
+1. Add `head_bit_or`, `head_bit_xor`, `head_bit_and`, `head_shift` between `head_cmp` and `head_add`, mirroring `bit_or_expr`...`shift_expr` (same operators, same `not(..)` guards, `fold_binary`), so a guard, an `if` and a `while` head read shifts and bit operations, and NK1197 fires there as in a `let` (find where NK1197 is raised; it should need no change if it looks at the tree).
+2. Test `tests/compiler/tests/a_shift_in_a_guard_or_a_head.nika` with `.stdout`: the issue's probe (`eight`), a `>>` guard (`true if m == 16 >> 1 =>`), `if m >> 1 == 4`, and `while` with a shift in its head. A refusal test `tests/compiler/tests/a_bit_operation_in_a_head_wants_parentheses.nika` with its `.stderr` (NK1197 for `if m & 8 == 8 {`), taken from the real run. Run both against the unfixed compiler first.
+
+Only `crates/nikaia/src/parser/mod.rs` and the new tests are yours. Run the parser's tests that touch heads (`cargo test -p nikaia parser` style filters, and `nikaia test` filters on `match_guard`, `guard`, `if_`), never the full suite.
+
+The commit that finishes it says `Fixes #939`.
+
+## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
+* Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
+* `git add <files>` only; commit after each step; `git push origin develop` fast-forward, no rebase (rejected: report `Pushed: rejected`, go on committing).
+* Before pushing: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `scripts/pre-push-check.sh`, and the gate of `.claude/agents/builder.md` (#852).
+* No version lines, `CHANGELOG.md`, badges; no new NK code. New tests in Nikaia only; never the full suite. No foreground `sleep`, no polling; scripts in files.
+* A form Nikaia, `std` or the toolchain lacks stops the work: no code around it unless an ADR or Part I-III refuses it (name it). Else `Result: blocked`, `Found:` gap + probe, `Needs: owner decision` (CLAUDE.md, *A missing form stops the work*).
+* Disk: `NIKAIA_CACHE_LIMIT=2G`; at most two clones with `target/` in the machine; delete your own clone's `target/` and `target/release/nikaia-scratch` at the end; report GB freed.
+* Commit and push before you write the report; the report's `Pushed:` line names the pushed sha. A report without a `Pushed:` line, or with a placeholder left in (`TC`, `DISK`), is not done and cuts the batch (k3a1 2026-10-29: `Result: done`, nothing committed).
+
+## Report (at most 15 lines, to exactly `/home/user/Nikaia/docs/briefs/bugs/b2-939-shift-in-heads.md.report.md`)
+Fields of `docs/architect.md`, *Briefs and reports*: `Result: done|noop|partial|blocked` (the bare word alone on that line: `Result: done`, never a summary after it, which cuts the batch, b869a 2026-10-27; `Owner:` is a question for the owner or `none`, never a role), Files, Commit, Body (optional, one paragraph for the commit message), Fixes, Pushed, Tests, Gate (green|red), Deviation, Found, Needs, Changelog, Owner, Disk freed, and for a move `Rs2nika:` (the `kept N of M lines` of `rs2nika --score`, then the three costliest hand edits; `none` for a task that moves no Rust, `none (redesign)` for a brief with `Shape: redesign` and no `Convert:` line). `none` where nothing, and then the bare word: `Deviation: none (a note)` cuts the batch (batch.nika compares exactly); a note goes into the commit message. `Found:` is only for a defect outside your change (it cuts the batch); a process event such as another session resetting or rewriting your files is no `Found:`, it goes under `Needs:` (m3a 2026-10-28); a converter draft that came out wrong is no `Found:`, it is one of the costliest edits under `Rs2nika:`, which the converter lane reads (e12-4b 2026-10-27); how you solved your own step goes into the commit message. `Deviation:` is only a step of the brief built otherwise than written or not built (a choice the brief left to you, such as *keep what X needs and say so*, is no deviation: it goes into the commit message; nor is building two steps in one commit when every step is built, e12-3a 2026-10-27, nor a step another commit on develop already built, shown by your test failing with that commit's change reverted, b889 2026-10-27: name the commit in `Body:`, nor a test's expected `.stdout`/`.stderr` taken from what the program really prints where the brief's sketch of it was short or wrong, b934 2026-10-29: say so in `Body:`, nor a lowering that follows the ADR governing it where the brief's expected lowering contradicts that ADR, b933 2026-10-29: name the ADR in `Body:`, nor a lowering other than the brief's where rustc cannot take the brief's, b1029 2026-10-31: say why in `Body:`, nor re-keying an allow-list entry (`KNOWN`) whose hash changed for the same program and the same reason, b-fixforward-sweep2 2026-10-28: say so in `Body:`, nor an existing test's expected `.stdout`/`.stderr` updated because your change rightly changes the message it prints, b1012b 2026-10-31: name the test in `Body:`); how you verified (e.g. a test not run against the unfixed compiler) goes under `Tests:`. A `noop` says why under `Tests:` (what was probed), not under `Deviation:`. Final answer, one line: `done <sha>, report <path>` (or `BLOCKED: ...` / `PUSH REJECTED ...`).
+
+Attribution:
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
