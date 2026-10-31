@@ -109,6 +109,10 @@ impl EmitState {
                         if overlaps { crossing = " + std::marker::Send + std::marker::Sync"; }
                         return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}{}>", called.join(", "), each, crossing);
                     }
+                    let mut crossing: &'static str = "";
+                    if overlaps { crossing = " + std::marker::Send + std::marker::Sync"; }
+                    let future = emit_boxed_future_in(overlaps);
+                    return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}<'call, {}>{}>", called.join(", "), future, each, crossing);
                 }
             }
             if !runs {

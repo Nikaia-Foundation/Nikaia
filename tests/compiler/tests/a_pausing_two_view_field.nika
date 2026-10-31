@@ -1,0 +1,24 @@
+// A struct field holding pausing code handed two views that gives back one
+// hands back the call's own view (#1061): rustc refused the call with
+// *Lifetime may not live long enough*, and the struct even unused.
+fn longer(a: ref String, b: ref String) -> ref String {
+	if a.len() >= b.len() {
+		return a
+	}
+	return b
+}
+
+struct Holder {
+	f: fn(ref String, ref String) -> ref String,
+}
+
+struct Unused {
+	f: fn(ref String, ref String) -> ref String,
+}
+
+fn main() {
+	let h = Holder { f: longer }
+	println(f"{h.f("abcd", "abc").len()}")
+	let u = Unused { f: longer }
+	println("1")
+}

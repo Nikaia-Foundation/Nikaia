@@ -192,6 +192,14 @@ impl EmitState {
                         }
                         return f"nikaia_std::func::Kept<dyn for<'call> Fn({called.join(", ")}) -> {each}{crossing}>"
                     }
+                    // Kept code that may pause hands back the call's view
+                    // from a future that lives as long as the call (#1061).
+                    let mut crossing: String = ""
+                    if overlaps {
+                        crossing = " + std::marker::Send + std::marker::Sync"
+                    }
+                    let future = emit_boxed_future_in(overlaps)
+                    return f"nikaia_std::func::Kept<dyn for<'call> Fn({called.join(", ")}) -> {future}<'call, {each}>{crossing}>"
                 }
             }
             if !runs {

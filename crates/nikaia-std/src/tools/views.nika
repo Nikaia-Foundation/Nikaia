@@ -418,13 +418,13 @@ pub fn holds_view(ty: ref Type) -> bool {
     return holds_view(result)
 }
 
-/// Whether a function type's result is the call's own (#703, #730): `sync`,
-/// and handed two views or more, of which it gives back one. The lowering
-/// writes it `for<'call> Fn(&'call A, &'call B) -> &'call R`. `borrowing`
+/// Whether a function type's result is the call's own (#703, #730): handed
+/// two views or more, of which it gives back one. The lowering writes it
+/// `for<'call> Fn(&'call A, &'call B) -> &'call R`, and code that may pause
+/// hands it back from a future that lives `'call` (#1048, #1061). `borrowing`
 /// counts the parameters that name a type holding a view.
 pub fn views_the_call_s(ty: ref Type, borrowing: i64) -> bool {
-    let code = ty.code ?? return false
-    if !code.is_sync {
+    if ty.code == null {
         return false
     }
     let mut lent = borrowing

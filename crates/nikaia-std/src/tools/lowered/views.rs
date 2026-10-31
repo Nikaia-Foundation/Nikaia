@@ -272,8 +272,7 @@ pub fn holds_view(ty: &Type) -> bool {
 }
 
 pub fn views_the_call_s(ty: &Type, borrowing: i64) -> bool {
-    let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if !code.is_sync { return false; }
+    if (*ty.code).is_none() { return false; }
     let mut lent = borrowing;
     for part in ty.generics.iter() { if holds_view(part) { lent += 1; } }
     lent > 1
