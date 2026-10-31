@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1316] — 2026-10-31
+
+**Kept callbacks: a fn parameter lent to a kept position is refused with NK2101 (#1024), a parameter a kept lambda names is kept (#1025), NK1264/NK1265 (#1012); grammar labels on literals and one-element groups bind (#1027); a call in a guard is a call site (#1032)**
+- A fn parameter handed round a call cycle lowers to a `&dyn Fn`, and a `let` that shadows a fn parameter is no longer taken for the lent parameter (#1023); a kept callback that crosses threads names `std::marker::Send + Sync`.
+- A fn parameter lent to a position that keeps it is refused with `NK2101` (#1024); a parameter that a kept lambda names is kept itself (#1025).
+- `NK1264` refuses a keeper in another package's impl of a trait whose column lends; `NK1265` warns when a trait's column changes (ADR-277 D17, #1012).
+- A lambda typed `-> T?` wraps its non-null arms in `Some` (#1017); a kept lambda's integer result types its literals (#1029); a block arm's lent optional part opens its option (#1029); a kept fn read by index shares the closure (#1018).
+- A grammar label on a one-element group binds its value (#1027), a label on a literal binds its text, also when returned or stored; a field read from a struct a label binds holds what its position holds; a call inside a grammar guard is a call site for the text tiers (#1032).
+- Computing a build-time constant moves into Nikaia (K3a part 2).
+
 ## [0.0.1315] — 2026-10-31
 
 **The prover follows short loops turn by turn and a match as an if (ADR-361 D9, D12; #639, #1009, #1021); NK1241 refuses a wide integer `as scalar` (#1003); a callback through a trait borrows (ADR-277 D17 step 1, #1012); the NK2104 note no longer names `seq` (#994)**
