@@ -539,7 +539,7 @@ impl CheckState {
     pub(crate) fn expect_kept_moved(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, at: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
         let pushed = self.findings.len() as i64;
         let waiting = self.slots_waiting(span);
-        self.expect_kept(world, found, want, value, keeper, span, what, &message);
+        self.expect_kept(world, found, want, value, keeper, span, what, message);
         self.findings_moved(span, at, pushed, &waiting);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -554,7 +554,7 @@ impl CheckState {
             if found.is_unknown() { arms = self.arms_to_ask(world, whole); }
         }
         if arms.is_empty() {
-            self.expect_kept_moved(world, found, want, value, keeper, span, &at, what, &message);
+            self.expect_kept_moved(world, found, want, value, keeper, span, &at, what, message);
             return;
         }
         let mut mixed = false;
@@ -586,7 +586,7 @@ impl CheckState {
             let here = check_span_at(world, arm, span);
             if ty.is_unknown() {
                 let pushed = self.findings.len() as i64;
-                let refused = self.an_open_number_where_none_fits(world, &ty, want, arm, span, what, &message);
+                let refused = self.an_open_number_where_none_fits(world, &ty, want, arm, span, what, message);
                 let mut i = pushed;
                 while i < self.findings.len() as i64 {
                     self.findings[nikaia_std::index::at(i)].span = Span { start: here.start, end: here.end };
@@ -594,7 +594,7 @@ impl CheckState {
                 }
                 if refused { continue; }
             }
-            self.expect_kept_moved(world, &ty, want, Some(arm), keeper, span, &here, what, &message);
+            self.expect_kept_moved(world, &ty, want, Some(arm), keeper, span, &here, what, message);
         }
         if mixed && a_view {
             let whole = match value { Some(__nikaia_value) => __nikaia_value, None => return };

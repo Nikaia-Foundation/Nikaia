@@ -1,0 +1,29 @@
+// #1012, ADR-277 D17: one impl stores the callback, so the trait method keeps
+// it, and the impl that only runs it keeps it too (one column).
+trait H {
+    fn take(ref mut self, f: fn(i64) -> i64 sync) -> i64 sync
+}
+struct Keeps { held: Vec[fn(i64) -> i64 sync] }
+struct Runs { base: i64 }
+impl H for Keeps {
+    fn take(ref mut self, f: fn(i64) -> i64 sync) -> i64 sync {
+        self.held.push(f)
+        return self.held.len()
+    }
+}
+impl H for Runs {
+    fn take(ref mut self, f: fn(i64) -> i64 sync) -> i64 sync { return f(self.base) }
+}
+fn hand[T: H](mut h: T, n: i64) -> i64 {
+    return h.take(fn(x) { x + n })
+}
+fn main() {
+    let mut k = Keeps { held: [] }
+    println(hand(k, 1))
+    println(hand(k, 2))
+    for f in k.held {
+        println(f(10))
+    }
+    let mut r = Runs { base: 5 }
+    println(hand(r, 3))
+}

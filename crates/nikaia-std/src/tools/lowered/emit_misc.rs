@@ -15,8 +15,6 @@ pub fn emit_local_name(comptimes: &collections::BTreeSet<String>, name: &str) ->
 
 pub fn opaque_type_text(name: &str, release: &str) -> String { format!("#[repr(transparent)]\n#[derive(Debug)]\n// A C type keeps the name its header gives it, which is not the\n// shape Rust's own lint expects (Part III, C.1: what `rustc` would\n// say here is about a file nobody wrote).\n#[allow(non_camel_case_types)]\npub struct {}(core::ptr::NonNull<core::ffi::c_void>);\n\n#[allow(dead_code)]\nimpl {} {{\n    /// What a declaration that says `-> {}` hands back\n    /// (ADR-302 D12): the address, or an abort naming the\n    /// declaration that claimed it would be one.\n    #[track_caller]\n    fn from_c(declaration: &str, address: *mut core::ffi::c_void) -> {} {{\n        match core::ptr::NonNull::new(address) {{\n            Some(address) => {}(address),\n            None => nikaia_std::foreign::nothing_came_back(declaration),\n        }}\n    }}\n\n    /// The same, where the declaration **does** say `?` (D1).\n    fn maybe(address: *mut core::ffi::c_void) -> Option<{}> {{\n        core::ptr::NonNull::new(address).map({})\n    }}\n\n    /// The same address, without giving the handle away\n    /// (ADR-302 D7): what a C function is handed is the\n    /// pointer, and this handle stays the caller's to close.\n    fn lent(&self) -> {} {{\n        {}(self.0)\n    }}\n}}\n\nimpl Drop for {} {{\n    fn drop(&mut self) {{\n        let _released = unsafe {{ {}(self.lent()) }};\n    }}\n}}\n\n", name, name, name, name, name, name, name, name, name, name, release) }
 
-pub(crate) fn emit_lends(contract: &FnContract, at: i64, library: &Ledger, described: &Ledger) -> bool { lends_in(contract, at, &vec![library, described]) }
-
 pub(crate) fn emit_field_type(contract: Option<&FieldContract>) -> Ty {
     let held = match contract { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     held.ty.clone()
@@ -168,7 +166,7 @@ impl EmitState {
             if param.0 != name { continue; }
             let is_code = matches!(param.1, Ty::Fn { .. });
             if !is_code || nikaia_std::list::contains(&contract.keeps, &name) { continue; }
-            if !emit_lends(&contract, at, world.library, &self.described) { return true; }
+            if !emit_arg_lends_own(&contract, at, world.library, &self.described) { return true; }
         }
         false
     }

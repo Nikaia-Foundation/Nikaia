@@ -196,8 +196,8 @@ impl ProverState {
         if claim.is_some() && !tainted_claim {
             if with_history.is_some() {
                 let all = nikaia_std::index::or(copied_path(Option::as_ref(&with_history)), || vec![].into());
-                refuted = refuting_values(arena, &all, nikaia_std::index::or(claim, || 0), &ask, &model);
-            } else { refuted = refuting_values(arena, &scope.facts, nikaia_std::index::or(claim, || 0), &ask, &model); }
+                refuted = refuting_values(arena, &all, nikaia_std::index::or(claim, || 0), ask, model);
+            } else { refuted = refuting_values(arena, &scope.facts, nikaia_std::index::or(claim, || 0), ask, model); }
         }
         let mut is_refuted = refuted.is_some();
         let mut through_summaries: Vec<String> = vec![];
@@ -216,16 +216,16 @@ impl ProverState {
                     },
                     _ => { },
                 }
-                refuted = refuting_values(arena, &facts, nikaia_std::index::or(claim, || 0), &ask, &model);
+                refuted = refuting_values(arena, &facts, nikaia_std::index::or(claim, || 0), ask, model);
                 is_refuted = refuted.is_some();
-                if is_refuted && !self.collecting { through_summaries = summed_notes(arena, &scope, &read, &facts, &ask, &model); }
+                if is_refuted && !self.collecting { through_summaries = summed_notes(arena, &scope, &read, &facts, ask, model); }
             }
         }
         let mut loop_open = false;
         if claim.is_some() && !is_refuted && !tainted_claim && !scope.loops.is_empty() {
             let base = nikaia_std::index::or(loop_base, || scope.facts.to_owned().into());
             if loop_reads(&arena, &base, nikaia_std::index::or(claim, || 0), &scope.loops) {
-                let through = self.through_loops(arena, &scope, nikaia_std::index::or(claim, || 0), base, &ask);
+                let through = self.through_loops(arena, &scope, nikaia_std::index::or(claim, || 0), base, ask);
                 if through.is_some() {
                     scope.facts.push(nikaia_std::index::or(claim, || 0));
                     outcome.held = ClaimHeld::ProvedThrough(nikaia_std::index::or(through, || "".into()));
@@ -267,7 +267,7 @@ impl ProverState {
             outcome.findings.push(Finding { code: String::from("NK1207"), span, message: format!("`{}` is false every time it is reached.", written), notes, help: Some(String::from("If the claim is right, the code before it is wrong; if the code is right, the claim is.")), warning: false, labels: vec![] });
         }
         let mut sometimes: Option<collections::BTreeMap<String, i64>> = None;
-        if claim.is_some() && !is_refuted && !tainted_claim { sometimes = breaking_values(arena, &scope, nikaia_std::index::or(claim, || 0), &model); }
+        if claim.is_some() && !is_refuted && !tainted_claim { sometimes = breaking_values(arena, &scope, nikaia_std::index::or(claim, || 0), model); }
         let is_sometimes = sometimes.is_some();
         let sometimes_values = nikaia_std::index::or(sometimes, || collections::BTreeMap::new().into());
         if is_sometimes && !self.collecting { outcome.findings.push(Finding { code: String::from("NK1207"), span, message: format!("`{}` is false when {}.", written, shown(&sometimes_values)), notes: vec![String::from("That state reaches it: what is known here pins every name the claim depends on.")], help: Some(String::from("If the claim is right, the code before it is wrong; if the code is right, the claim is.")), warning: false, labels: vec![] }); }
@@ -330,7 +330,7 @@ impl ProverState {
             if self.collecting {
                 let mut carrying: Option<String> = None;
                 if at.no_precondition.is_none() { carrying = carrying_function((at.function).as_deref()); }
-                self.carry_back(arena, goal, &pre, callee, site, scope, (carrying).as_deref(), &at.params, &ask, &model);
+                self.carry_back(arena, goal, &pre, callee, site, scope, (carrying).as_deref(), &at.params, ask, model);
                 continue;
             }
             if self.carried_here((at.function).as_deref(), &site) {
@@ -339,7 +339,7 @@ impl ProverState {
             }
             let told = outcome.findings.len() as i64;
             let mut always: Option<collections::BTreeMap<String, i64>> = None;
-            if goal.is_some() { always = refuting_values(arena, &scope.facts, nikaia_std::index::or(goal, || 0), &ask, &model); }
+            if goal.is_some() { always = refuting_values(arena, &scope.facts, nikaia_std::index::or(goal, || 0), ask, model); }
             let broken_always = always.is_some();
             if broken_always {
                 let values = nikaia_std::index::or(always, || collections::BTreeMap::new().into());
@@ -355,7 +355,7 @@ impl ProverState {
                 outcome.findings.push(Finding { code: String::from("NK1207"), span, message: format!("This call breaks `{}`'s precondition `{}` every time it is reached.", callee, written), notes, help: Some(format!("Pass `{}` arguments for which `{}` holds, or check them with a guard before the call.", callee, written)), warning: false, labels: vec![] });
             }
             if !broken_always && goal.is_some() {
-                let breaking = breaking_values(arena, scope, nikaia_std::index::or(goal, || 0), &model);
+                let breaking = breaking_values(arena, scope, nikaia_std::index::or(goal, || 0), model);
                 if breaking.is_some() {
                     let values = nikaia_std::index::or(breaking, || collections::BTreeMap::new().into());
                     let given = values_given(&arena, &given_by, &read, &values);
@@ -376,9 +376,9 @@ impl ProverState {
                 let mut operands: Vec<(String, String)> = vec![];
                 for name in read.iter() {
                     let value = match *nikaia_std::index::get(&given_by, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
-                    operands.push((name.to_string(), rust_text(&arena, value, &escape)));
+                    operands.push((name.to_string(), rust_text(&arena, value, escape)));
                 }
-                let check = PreconditionCheck { rust: rust_text(&arena, nikaia_std::index::or(goal, || 0), &escape), written: pre.failure(callee), message: claim_text_of((pre.message).as_deref()), operands };
+                let check = PreconditionCheck { rust: rust_text(&arena, nikaia_std::index::or(goal, || 0), escape), written: pre.failure(callee), message: claim_text_of((pre.message).as_deref()), operands };
                 this_reach = CallReach::Checked(vec![check]);
             }
             outcome.reach = joined_reach(outcome.reach, this_reach);
@@ -390,7 +390,7 @@ impl ProverState {
         let claim = match goal { Some(__nikaia_value) => __nikaia_value, None => return };
         let owner = match carrying_function(function) { Some(__nikaia_value) => __nikaia_value, None => return };
         if self.in_test || self.reaches(callee, &owner) { return; }
-        if refuting_values(arena, &scope.facts, claim, &ask, &model).is_some() { return; }
+        if refuting_values(arena, &scope.facts, claim, ask, model).is_some() { return; }
         let term = match scope.precondition_at(arena, claim, params) { Some(__nikaia_value) => __nikaia_value, None => return };
         let carried = PreClaim { term, written: pre.written.to_string(), computed: Some(arena.text(term)), message: claim_text_of((pre.message).as_deref()), origin: Some(nikaia_std::index::or(claim_text_of((pre.origin).as_deref()), || callee.to_string().into())), site: Some(site) };
         let mut found = nikaia_std::index::or(self.preconditions.remove(&owner), || Precondition::none());

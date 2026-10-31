@@ -66,7 +66,7 @@ impl GrCursor {
                 self.at += 1;
             }
         }
-        let decoded = decoded(&written, &char_of);
+        let decoded = decoded(&written, char_of);
         if decoded.is_none() {
             self.fail(format!("`{}` contains an escape the compiler can't read", written));
             return written;

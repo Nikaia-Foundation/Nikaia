@@ -1,0 +1,37 @@
+// #1012, ADR-277 D17: a library's trait method with no impl in its package
+// runs its callback, and an impl under the package's `tests/` that only runs
+// it matches the trait (before: the trait lowered `Kept`, the impl `impl Fn`).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"traitlib\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "pub trait H {\n    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync\n}\n")
+    fs::write(f"{tmp}/tests/runs.nika", fs::Root::Anywhere, "use traitlib\nstruct Plain { base: i64 }\nimpl traitlib::H for Plain {\n    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync { return known(\"a\") }\n}\nfn main() {\n    let p = Plain { base: 1 }\n    println(p.ask(fn(n) { if n == \"a\" { 4 } else { null } }) ?? 0)\n}\n")
+    fs::write(f"{tmp}/tests/runs.stdout", fs::Root::Anywhere, "4\n")
+    let out = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone())
+    if out.stdout.contains("1 passed; 0 failed") {
+        println("passes")
+    } else {
+        println(out.stdout)
+        println(out.stderr)
+    }
+    let ledger = fs::read_to_string(f"{tmp}/nikaia.contracts", fs::Root::Anywhere)
+    let parts: Vec[String] = ledger.split("[fn.\"H::ask\"]").collect()
+    if parts.len() < 2 {
+        println("no entry for H::ask")
+    } else {
+        let own: Vec[String] = parts[1].split("\n\n").collect()
+        println(f"H::ask keeps: {own[0].contains("keeps")}")
+    }
+    process::run("rm", ["-rf", tmp])
+}

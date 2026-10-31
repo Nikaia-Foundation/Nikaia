@@ -153,7 +153,7 @@ impl CheckState {
             self.number_asked(world, given, want, span, true);
             let asked = integer_named(&value_of_a_copy(&want.unseen()));
             if asked.is_some() && shifts_literals(given) { self.a_shift_asked_as(world, given, &match asked { Some(__nikaia_value) => __nikaia_value, None => return }, span); }
-            if self.an_open_number_where_none_fits(world, found, want, given, span, what, &message) { return; }
+            if self.an_open_number_where_none_fits(world, found, want, given, span, what, message) { return; }
         }
         if self.a_name_in_text(world, want, value, span) { return; }
         let mut either = false;
@@ -176,7 +176,7 @@ impl CheckState {
         let mut target: Ty = want.clone();
         if nullable { target = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
         let before = self.findings.len() as i64;
-        self.expect_type(world, present, &target, span, what, &message);
+        self.expect_type(world, present, &target, span, what, message);
         self.said_as_declared(present, value, before);
         if (self.findings.len() as i64) > before { self.a_view_kept_beside(world, present, &target, value, keeper); }
     }

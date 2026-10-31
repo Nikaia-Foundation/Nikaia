@@ -1,0 +1,21 @@
+// #1012, ADR-277 D17: a trait method keeps what its package's impls keep.
+// The one impl only runs the callback, so a generic caller lends it a lambda
+// that borrows a local map.
+use std::collections
+trait H {
+    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync
+}
+struct Plain { base: i64 }
+impl H for Plain {
+    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync { return known("a") }
+}
+fn twice[T: H](host: ref T, names: ref collections::BTreeMap[String, i64]) -> i64 {
+    return host.ask(fn(n) { names.get(n) }) ?? 0
+}
+fn main() {
+    let mut names: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    names.insert("a", 4)
+    let p = Plain { base: 1 }
+    println(twice(p, names))
+    println(names.len())
+}

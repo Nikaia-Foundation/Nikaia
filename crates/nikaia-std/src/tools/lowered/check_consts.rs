@@ -409,7 +409,7 @@ impl CheckState {
             }
             seen.insert(key.to_string(), at);
             keys.push(key.to_string());
-            let text = match written_below(self, world, nikaia_std::index::get(&parts, 1), (some_held).as_ref(), &payloads, &float_text) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
+            let text = match written_below(self, world, nikaia_std::index::get(&parts, 1), (some_held).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
             values.push(format!("{}{}", borrow, text));
             at = at + 1;
         }

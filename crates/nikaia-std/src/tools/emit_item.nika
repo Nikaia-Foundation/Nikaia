@@ -324,7 +324,7 @@ impl EmitState {
                 for method in methods {
                     let st = out.mark()
                     out.push("    ")
-                    self.emit_trait_method(world, walk, out, host, method.node, method.node.is_sync, false)
+                    self.emit_trait_method(world, walk, out, host, emit_text(world, name), method.node, method.node.is_sync, false)
                     out.record(method.span, st)
                 }
                 out.push("}\n")
@@ -382,7 +382,7 @@ impl EmitState {
                 for declaration in declarations {
                     let st = out.mark()
                     out.push("    ")
-                    self.emit_trait_method(world, walk, out, host, declaration.node, true, true)
+                    self.emit_trait_method(world, walk, out, host, "", declaration.node, true, true)
                     out.record(declaration.span, st)
                 }
                 out.push("}\n")
@@ -536,7 +536,7 @@ impl EmitState {
                 },
                 declared => {
                     out.push("    ")
-                    self.emit_bridge(world, walk, out, host, declared, target_name, method.node)
+                    self.emit_bridge(world, walk, out, host, trait_text, declared, target_name, method.node)
                 },
             }
         }
@@ -548,18 +548,36 @@ impl EmitState {
     /// `sync` is the caller's: a trait method without the word may pause
     /// (ADR-288 D24), a C declaration never can (ADR-302 D2). A trait's
     /// methods are barriers (ADR-010 D9): the keyed map.
-    fn emit_trait_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, method: ref TraitMethod, is_sync: bool, foreign: bool) sync throws {
+    fn emit_trait_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, trait_name: ref String, method: ref TraitMethod, is_sync: bool, foreign: bool) sync throws {
         walk.floor = true
+        let key = f"{trait_name}::{emit_text(world, method.name)}"
         let mut params: Vec[String] = []
+        let mut at = 0
         if method.receiver != null {
             params.push(emit_item_receiver(method.receiver))
+            at = 1
         }
         for arg in method.args {
             // **`mut` lowers to `&mut T` here as it does in the impl** (ADR-094 D3).
-            let reference = if arg.mutable && !foreign { "&mut " } else { "" }
+            let mut reference = if arg.mutable && !foreign { "&mut " } else { "" }
             let mut written: String = ""
             if foreign {
                 written = self.emit_foreign_ty(world, walk, host, arg.ty)
+            } else if arg.ty.code != null && !arg.mutable && !arg.ty.is_view {
+                // **Run is the absence of `keeps`** (ADR-277 D11, D17), read
+                // from the trait method's own column as the impl reads its
+                // own; an absent entry keeps (fail closed).
+                let held = walk.code_parameter_runs
+                let inside = walk.in_parameter
+                walk.code_parameter_runs = self.own_contracts.functions.contains_key(key) && !self.emit_fn_keeps(key, emit_text(world, arg.name))
+                walk.in_parameter = true
+                written = self.emit_item_ty(world, walk, host, arg.ty, EmitLifetimes::Elided)
+                walk.in_parameter = inside
+                walk.code_parameter_runs = held
+                // **A run callback is lent, as the impl's is** (`lends_in_own`).
+                if self.emit_fn_lends(world, key, at) {
+                    reference = "&"
+                }
             } else {
                 written = self.emit_item_ty(world, walk, host, arg.ty, EmitLifetimes::Elided)
             }
@@ -570,6 +588,7 @@ impl EmitState {
                 written = f"&[{element}]"
             }
             params.push(f"{escaped_name(emit_text(world, arg.name))}: {reference}{written}")
+            at += 1
         }
         // Kap 5.1: an option is an ordinary parameter here too.
         for option in method.config {
@@ -643,7 +662,7 @@ impl EmitState {
     /// The trait's half of a bridged method: the declaration's signature and
     /// a body that calls the type's own method, awaited where that one pauses
     /// and wrapped in `Ok` where only the declaration fails.
-    fn emit_bridge[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, declared: ref TraitMethod, target: ref String, method: ref Item) sync throws {
+    fn emit_bridge[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, trait_name: ref String, declared: ref TraitMethod, target: ref String, method: ref Item) sync throws {
         let mut own_throws = false
         match method {
             Item::Fn { can_throw, .. } => { own_throws = can_throw },
@@ -651,7 +670,7 @@ impl EmitState {
         }
         let name = emit_text(world, declared.name)
         let mut written = EmitOut::empty()
-        self.emit_trait_method(world, walk, written, host, declared, declared.is_sync, false)
+        self.emit_trait_method(world, walk, written, host, trait_name, declared, declared.is_sync, false)
         let trimmed = written.buf.trim_end()
         let signature = (trimmed.strip_suffix(";") ?? trimmed).clone()
         let mut passed: Vec[String] = []

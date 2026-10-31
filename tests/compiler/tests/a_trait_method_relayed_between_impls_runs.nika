@@ -1,0 +1,36 @@
+// #1012, ADR-277 D17: two impls hand the callback to each other through the
+// bound and neither stores it: the least fixpoint keeps the cycle run, so a
+// borrowing lambda is lent.
+use std::collections
+trait H {
+    fn ask(ref self, n: i64, known: fn(ref String) -> i64? sync) -> i64 sync
+}
+struct A { tag: i64 }
+struct B { tag: i64 }
+fn relay[T: H](host: ref T, n: i64, known: fn(ref String) -> i64? sync) -> i64 {
+    return host.ask(n, known)
+}
+impl H for A {
+    fn ask(ref self, n: i64, known: fn(ref String) -> i64? sync) -> i64 sync {
+        if n == 0 {
+            return known("a") ?? 0
+        }
+        return relay(B { tag: 2 }, n - 1, known) + self.tag
+    }
+}
+impl H for B {
+    fn ask(ref self, n: i64, known: fn(ref String) -> i64? sync) -> i64 sync {
+        if n == 0 {
+            return known("b") ?? 0
+        }
+        return relay(A { tag: 1 }, n - 1, known) + self.tag
+    }
+}
+fn main() {
+    let mut names: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    names.insert("a", 10)
+    names.insert("b", 20)
+    let a = A { tag: 1 }
+    println(relay(a, 3, fn(s) { names.get(s) }))
+    println(names.len())
+}

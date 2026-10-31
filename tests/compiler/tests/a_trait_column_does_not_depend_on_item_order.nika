@@ -1,0 +1,44 @@
+// #1012, ADR-277 D17: a trait method's `keeps` column is computed inside the
+// fixpoint, over maps, so a program and the same with its items reversed
+// give the same `nikaia.contracts` (Part III 13.5).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn ledger_of(nikaia: String, dir: String, items: Vec[String]) -> String throws {
+    process::run("mkdir", ["-p", dir.clone()])
+    fs::write(f"{dir}/p.nika", fs::Root::Anywhere, items.join("\n"))
+    process::run(nikaia, ["lower", "p.nika"]; dir: dir.clone())
+    return fs::read_to_string(f"{dir}/nikaia.contracts", fs::Root::Anywhere)
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let items: Vec[String] = [
+        "trait H {\n    fn take(ref mut self, f: fn(i64) -> i64 sync) -> i64 sync\n    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync\n}\n",
+        "struct Keeps { held: Vec[fn(i64) -> i64 sync] }\n",
+        "struct Runs { base: i64 }\n",
+        "impl H for Keeps {\n    fn take(ref mut self, f: fn(i64) -> i64 sync) -> i64 sync {\n        self.held.push(f)\n        return self.held.len()\n    }\n    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync { return known(\"k\") }\n}\n",
+        "impl H for Runs {\n    fn take(ref mut self, f: fn(i64) -> i64 sync) -> i64 sync { return f(self.base) }\n    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync { return known(\"r\") }\n}\n",
+        "fn hand[T: H](mut h: T, n: i64) -> i64 {\n    return h.take(fn(x) { x + n })\n}\n",
+        "fn main() {\n    let mut r = Runs { base: 5 }\n    println(hand(r, 3))\n}\n",
+    ]
+    let mut reversed: Vec[String] = []
+    for at in 0..<items.len() {
+        reversed.push(items[items.len() - 1 - at].clone())
+    }
+    let forward = ledger_of(nikaia.clone(), f"{tmp}/forward", items)
+    let backward = ledger_of(nikaia, f"{tmp}/backward", reversed)
+    if forward == backward && forward.contains("[fn.\"H::take\"]") {
+        println("same")
+    } else {
+        println("differ")
+    }
+    process::run("rm", ["-rf", tmp])
+}

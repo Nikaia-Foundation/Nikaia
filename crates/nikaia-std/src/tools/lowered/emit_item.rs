@@ -243,7 +243,7 @@ impl EmitState {
                 for method in methods.iter() {
                     let st = out.mark();
                     out.push("    ");
-                    self.emit_trait_method(world, walk, out, host, &method.node, method.node.is_sync, false)?;
+                    self.emit_trait_method(world, walk, out, host, &emit_text(world, name), &method.node, method.node.is_sync, false)?;
                     out.record(&method.span, st);
                 }
                 out.push("}\n");
@@ -283,7 +283,7 @@ impl EmitState {
                 for declaration in declarations.iter() {
                     let st = out.mark();
                     out.push("    ");
-                    self.emit_trait_method(world, walk, out, host, &declaration.node, true, true)?;
+                    self.emit_trait_method(world, walk, out, host, "", &declaration.node, true, true)?;
                     out.record(&declaration.span, st);
                 }
                 out.push("}\n");
@@ -399,7 +399,7 @@ impl EmitState {
                 },
                 Some(ref declared) => {
                     out.push("    ");
-                    self.emit_bridge(world, walk, out, host, declared, &target_name, &method.node)?;
+                    self.emit_bridge(world, walk, out, host, &trait_text, declared, &target_name, &method.node)?;
                 },
             }
         }
@@ -410,20 +410,35 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_trait_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: &TraitMethod, is_sync: bool, foreign: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_trait_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, trait_name: &str, method: &TraitMethod, is_sync: bool, foreign: bool) -> Result<(), Box<dyn std::error::Error>> {
         walk.floor = true;
+        let key = format!("{}::{}", trait_name, emit_text(world, method.name));
         let mut params: Vec<String> = vec![];
-        if method.receiver.is_some() { params.push(emit_item_receiver(Option::as_ref(&method.receiver))); }
+        let mut at: i64 = 0;
+        if method.receiver.is_some() {
+            params.push(emit_item_receiver(Option::as_ref(&method.receiver)));
+            at = 1;
+        }
         for arg in method.args.iter() {
-            let reference = if arg.mutable && !foreign { "&mut " } else { "" };
+            let mut reference = if arg.mutable && !foreign { "&mut " } else { "" };
             let mut written: String = String::from("");
-            if foreign { written = self.emit_foreign_ty(world, walk, host, &arg.ty); } else { written = self.emit_item_ty(world, walk, host, &arg.ty, EmitLifetimes::Elided); }
+            if foreign { written = self.emit_foreign_ty(world, walk, host, &arg.ty); } else if (*arg.ty.code).is_some() && !arg.mutable && !arg.ty.is_view {
+                let held = walk.code_parameter_runs;
+                let inside = walk.in_parameter;
+                walk.code_parameter_runs = self.own_contracts.functions.contains_key(&key) && !self.emit_fn_keeps(&key, &emit_text(world, arg.name));
+                walk.in_parameter = true;
+                written = self.emit_item_ty(world, walk, host, &arg.ty, EmitLifetimes::Elided);
+                walk.in_parameter = inside;
+                walk.code_parameter_runs = held;
+                if self.emit_fn_lends(world, &key, at) { reference = "&"; }
+            } else { written = self.emit_item_ty(world, walk, host, &arg.ty, EmitLifetimes::Elided); }
             let plain_list = !foreign && emit_text(world, arg.ty.name) == "Vec" && arg.ty.generics.len() == 1 && !arg.ty.is_nullable && !arg.ty.is_slice;
             if plain_list && written.starts_with("&Vec<") && written.ends_with('>') {
                 let element = nikaia_std::index::or(nikaia_std::index::or(written.strip_prefix("&Vec<"), || "").strip_suffix('>'), || "");
                 written = format!("&[{}]", element);
             }
             params.push(format!("{}: {}{}", escaped_name(&emit_text(world, arg.name)), reference, written));
+            at += 1;
         }
         for option in method.config.iter() { params.push(format!("{}: {}", escaped_name(&emit_text(world, option.name)), self.emit_item_ty(world, walk, host, &option.ty, EmitLifetimes::Elided))); }
         let returned = self.emit_trait_returned(world, walk, host, (method.ret_type).as_ref(), foreign);
@@ -475,7 +490,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_bridge<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, declared: &TraitMethod, target: &str, method: &Item) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_bridge<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, trait_name: &str, declared: &TraitMethod, target: &str, method: &Item) -> Result<(), Box<dyn std::error::Error>> {
         let mut own_throws = false;
         match method {
             Item::Fn { can_throw, .. } => {
@@ -486,7 +501,7 @@ impl EmitState {
         }
         let name = emit_text(world, declared.name);
         let mut written = EmitOut::empty();
-        self.emit_trait_method(world, walk, &mut written, host, declared, declared.is_sync, false)?;
+        self.emit_trait_method(world, walk, &mut written, host, trait_name, declared, declared.is_sync, false)?;
         let trimmed = written.buf.trim_end();
         let signature = nikaia_std::index::or(trimmed.strip_suffix(';'), || std::convert::AsRef::<str>::as_ref(trimmed)).to_string();
         let mut passed: Vec<String> = vec![];

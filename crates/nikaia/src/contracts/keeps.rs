@@ -102,7 +102,12 @@ pub fn moves(ty: &super::ty::Ty) -> bool {
 /// What one function's body does with each of its parameters, declared in
 /// Nikaia (`tools/lends.nika`): kept on its own evidence, or handed to a callee
 /// whose answer the fixpoint waits for.
-use nikaia_std::tools::lends::{Uses, kept_by};
+use nikaia_std::tools::lends::{Passed, Uses, kept_by};
+
+/// A parameter taken by value: neither written `ref` nor `mut`.
+fn by_value(arg: &crate::ast::FnArg) -> bool {
+    !arg.ty.is_view && !arg.mutable
+}
 
 fn no_uses() -> Uses {
     Uses {
@@ -142,10 +147,10 @@ pub fn infer(
     let library_methods = nikaia_std::tools::ty::method_index(library);
     let indexed = (&own_methods, &library_methods);
     // **An `impl`'s method keeps what its trait's method keeps**, by position
-    // (ADR-277 D11): the trait's signature lowers its by-value `fn` parameter
-    // as kept, and an `impl` must match it, so a body that only calls the
-    // callback cannot say it keeps nothing (#1008). Read once, from every
-    // unit, before the walk: the trait may be declared after its `impl`.
+    // (ADR-277 D11). For a by-value **data** parameter the trait's column is
+    // still the seed *by value means kept* (#1012 step 3 computes it); a `fn`
+    // parameter's is computed in the fixpoint below (D17). Read once, from
+    // every unit, before the walk: the trait may be declared after its `impl`.
     let mut trait_keeps: BTreeMap<(String, String), Vec<usize>> = BTreeMap::new();
     for parsed in units.iter().copied() {
         for item in &parsed.program.items {
@@ -156,7 +161,7 @@ pub fn infer(
                         .args
                         .iter()
                         .enumerate()
-                        .filter(|(_, arg)| !arg.ty.is_view && !arg.mutable)
+                        .filter(|(_, arg)| by_value(arg) && arg.ty.code.is_none())
                         .map(|(at, _)| at)
                         .collect();
                     trait_keeps.insert(
@@ -170,6 +175,10 @@ pub fn infer(
             }
         }
     }
+    // **The impls of each trait method of this package** (ADR-277 D17), by
+    // the trait method's ledger name: the edges *the trait keeps what an impl
+    // keeps* are added once every impl has been seen.
+    let mut impls_of: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for parsed in units.iter().copied() {
         for item in &parsed.program.items {
             match &item.node {
@@ -201,34 +210,55 @@ pub fn infer(
                                 Some(owner),
                                 Item::Fn {
                                     name: Some(own),
+                                    receiver,
                                     args,
                                     ..
                                 },
                             ) = (&trait_name, &method.node)
                             {
-                                let key = (owner.clone(), parsed.text(*own).to_string());
+                                let own = parsed.text(*own).to_string();
+                                let at_trait = format!("{owner}::{own}");
+                                let key = (owner.clone(), own);
                                 for &at in trait_keeps.get(&key).into_iter().flatten() {
                                     if let Some(arg) = args.get(at) {
                                         uses.kept.insert(parsed.text(arg.name).to_string());
                                     }
                                 }
+                                // **An impl keeps what its trait method keeps**
+                                // (D17, D11): a `fn` parameter is handed to the
+                                // trait method's node, in the loop rather than
+                                // before it. A trait of another package answers
+                                // from its ledger (`keeps_its`).
+                                let first = usize::from(receiver.is_some());
+                                for (at, arg) in args.iter().enumerate() {
+                                    if by_value(arg) && arg.ty.code.is_some() {
+                                        uses.passed.push(Passed {
+                                            parameter: parsed.text(arg.name).to_string(),
+                                            callee: at_trait.clone(),
+                                            at: (at + first) as i64,
+                                        });
+                                    }
+                                }
+                                impls_of.entry(at_trait).or_default().insert(name.clone());
                             }
                             graph.insert(name, uses);
                         }
                     }
                 }
-                // **A trait's method keeps what it takes by value**: a call
-                // through a bound (`host.go(f)` under `[H: A]`) cannot see
-                // which `impl` answers, and the signature taking `f` by value
-                // is the licence for any of them to keep it. Read as keeping
-                // nothing, a caller lent its own by-value parameter on and the
-                // language below refused the `&` where a value was asked.
+                // **A trait's method keeps what its package's impls keep**
+                // (ADR-277 D17): a call through a bound (`host.go(f)` under
+                // `[H: A]`) cannot see which `impl` answers, so the column is
+                // the union of theirs, and with no impl the method runs. Its
+                // own evidence is empty (a trait method has no body); the
+                // edges to its impls are added below. A by-value **data**
+                // parameter keeps the seed *by value means kept* until #1012
+                // step 3.
                 Item::Trait { name, methods, .. } => {
                     let owner = parsed.text(*name);
                     for method in methods {
                         let mut uses = no_uses();
                         for arg in method.node.args.iter() {
-                            if !arg.ty.is_view && !arg.mutable {
+                            if by_value(arg) && arg.ty.code.is_none() {
                                 uses.kept.insert(parsed.text(arg.name).to_string());
                             }
                         }
@@ -266,6 +296,44 @@ pub fn infer(
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    // **The trait keeps what an impl keeps** (D17): each `fn` parameter of a
+    // trait method is handed to every impl of it in this package, at the same
+    // position. With the impls' edges back, a trait method and its impls are
+    // one cycle and settle on one column; the least fixpoint leaves a cycle
+    // nothing stores run.
+    for parsed in units.iter().copied() {
+        for item in &parsed.program.items {
+            let Item::Trait { name, methods, .. } = &item.node else {
+                continue;
+            };
+            let owner = parsed.text(*name);
+            for method in methods {
+                let key = format!("{owner}::{}", parsed.text(method.node.name));
+                let Some(impls) = impls_of.get(&key) else {
+                    continue;
+                };
+                let first = usize::from(method.node.receiver.is_some());
+                let edges: Vec<Passed> = method
+                    .node
+                    .args
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, arg)| by_value(arg) && arg.ty.code.is_some())
+                    .flat_map(|(at, arg)| {
+                        impls.iter().map(move |callee| Passed {
+                            parameter: parsed.text(arg.name).to_string(),
+                            callee: callee.clone(),
+                            at: (at + first) as i64,
+                        })
+                    })
+                    .collect();
+                if let Some(uses) = graph.get_mut(&key) {
+                    uses.passed.extend(edges);
+                }
             }
         }
     }

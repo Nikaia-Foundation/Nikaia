@@ -71,10 +71,6 @@ pub fn opaque_type_text(name: ref String, release: ref String) -> String {
     return f"#[repr(transparent)]\n#[derive(Debug)]\n// A C type keeps the name its header gives it, which is not the\n// shape Rust's own lint expects (Part III, C.1: what `rustc` would\n// say here is about a file nobody wrote).\n#[allow(non_camel_case_types)]\npub struct {name}(core::ptr::NonNull<core::ffi::c_void>);\n\n#[allow(dead_code)]\nimpl {name} {{\n    /// What a declaration that says `-> {name}` hands back\n    /// (ADR-302 D12): the address, or an abort naming the\n    /// declaration that claimed it would be one.\n    #[track_caller]\n    fn from_c(declaration: &str, address: *mut core::ffi::c_void) -> {name} {{\n        match core::ptr::NonNull::new(address) {{\n            Some(address) => {name}(address),\n            None => nikaia_std::foreign::nothing_came_back(declaration),\n        }}\n    }}\n\n    /// The same, where the declaration **does** say `?` (D1).\n    fn maybe(address: *mut core::ffi::c_void) -> Option<{name}> {{\n        core::ptr::NonNull::new(address).map({name})\n    }}\n\n    /// The same address, without giving the handle away\n    /// (ADR-302 D7): what a C function is handed is the\n    /// pointer, and this handle stays the caller's to close.\n    fn lent(&self) -> {name} {{\n        {name}(self.0)\n    }}\n}}\n\nimpl Drop for {name} {{\n    fn drop(&mut self) {{\n        let _released = unsafe {{ {release}(self.lent()) }};\n    }}\n}}\n\n"
 }
 
-fn emit_lends(contract: ref FnContract, at: i64, library: ref Ledger, described: ref Ledger) -> bool {
-    return lends_in(contract, at, [library, described])
-}
-
 fn emit_field_type(contract: ref FieldContract?) -> Ty {
     let held = contract ?? return Ty::Unknown
     return held.ty.clone()
@@ -329,7 +325,11 @@ impl EmitState {
             if !is_code || contract.keeps.contains(name) {
                 continue
             }
-            if !emit_lends(contract, at, world.library, self.described) {
+            // **The function is this program's own**, so its code parameter
+            // is lent as its declaration lends it (`lends_in_own`): asked as
+            // a stranger's, a method's lent callback read as taken whole and
+            // was lent again (`&known`, a type that grows each call).
+            if !emit_arg_lends_own(contract, at, world.library, self.described) {
                 return true
             }
         }

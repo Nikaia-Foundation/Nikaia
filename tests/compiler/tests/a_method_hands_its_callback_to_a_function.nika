@@ -1,0 +1,19 @@
+// A method hands its own lent callback to a free function as it is: asked
+// as a stranger's contract it read as taken whole and was lent again
+// (`&known`, a type that grew with each call, found building #1012).
+struct A { tag: i64 }
+fn relay(host: ref A, n: i64, known: fn(ref String) -> i64? sync) -> i64 {
+    return host.ask(n, known)
+}
+impl A {
+    fn ask(ref self, n: i64, known: fn(ref String) -> i64? sync) -> i64 sync {
+        if n == 0 {
+            return known("a") ?? 0
+        }
+        return relay(self, n - 1, known) + self.tag
+    }
+}
+fn main() {
+    let a = A { tag: 1 }
+    println(relay(a, 3, fn(s) { if s == "a" { 10 } else { null } }))
+}
