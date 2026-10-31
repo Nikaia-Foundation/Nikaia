@@ -58,3 +58,4 @@
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 2188592 48
 /home/user/Nikaia/docs/briefs/yaml/y28-1085-views-back-through-if-match.md 477521 7
 /home/user/Nikaia/docs/briefs/yaml/y21-events.md 372481 14
+/home/user/Nikaia/docs/briefs/yaml/y27-load.md 2198176 39
