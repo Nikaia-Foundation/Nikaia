@@ -1,0 +1,20 @@
+// A call whose argument the prover does not read reaches the entry that
+// checks the precondition (ADR-269 D20): it proves nothing, so the build
+// refuses it as not proved (NK1300, ADR-380 D1, #1076). The call with a
+// literal index in `fine` stays proved.
+
+fn at(xs: ref Vec[i64], i: i64) -> i64 sync {
+	assert(i >= 0 && i < xs.len())
+	return xs[i]
+}
+
+fn fine(xs: ref Vec[i64]) -> i64 sync {
+	return at(xs, 1)
+}
+
+fn main() {
+	let xs = [1, 2, 3]
+	let k = xs[2]
+	print(f"{at(xs, k)}")
+	print(f"{fine(xs)}")
+}

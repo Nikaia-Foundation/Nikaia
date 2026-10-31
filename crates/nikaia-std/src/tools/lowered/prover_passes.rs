@@ -124,13 +124,15 @@ pub(crate) fn ledger_term_text(arena: &TermArena, id: i64) -> String { term_ledg
 pub(crate) fn count_checked_calls(walk: &mut ProverWalk) {
     let mut checked: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for (key, reach) in walk.reaches.iter() {
-        match reach {
-            CallReach::Checked(_) => {
-                let (callee, _) = key;
-                let so_far = nikaia_std::index::or(*nikaia_std::index::get(&checked, callee), || 0);
-                checked.insert(callee.to_string(), so_far + 1);
-            },
-            _ => { },
+        let unproved = match reach {
+            CallReach::Checked(_) => true,
+            CallReach::Through => true,
+            CallReach::Proved => false,
+        };
+        if unproved {
+            let (callee, _) = key;
+            let so_far = nikaia_std::index::or(*nikaia_std::index::get(&checked, callee), || 0);
+            checked.insert(callee.to_string(), so_far + 1);
         }
     }
     let mut counted: collections::BTreeMap<(i64, i64), ClaimHeld> = collections::BTreeMap::new();

@@ -178,17 +178,22 @@ fn ledger_term_text(arena: ref TermArena, id: i64) -> String {
 }
 
 /// How many distinct calls carry each precondition's check, into the claims
-/// held as preconditions.
+/// held as preconditions. A call that reaches the checked entry
+/// (`CallReach::Through`: an argument the prover doesn't read) proves
+/// nothing either; it checks when it runs, as a `Checked` call does
+/// (ADR-269 D20, ADR-380 D1, #1076).
 fn count_checked_calls(mut walk: ProverWalk) {
     let mut checked: collections::BTreeMap[String, i64] = collections::BTreeMap()
     for (key, reach) in walk.reaches {
-        match reach {
-            CallReach::Checked(_) => {
-                let (callee, _) = key
-                let so_far = checked[callee] ?? 0
-                checked.insert(callee.clone(), so_far + 1)
-            },
-            else => {},
+        let unproved = match reach {
+            CallReach::Checked(_) => true,
+            CallReach::Through => true,
+            CallReach::Proved => false,
+        }
+        if unproved {
+            let (callee, _) = key
+            let so_far = checked[callee] ?? 0
+            checked.insert(callee.clone(), so_far + 1)
         }
     }
     let mut counted: collections::BTreeMap[(i64, i64), ClaimHeld] = collections::BTreeMap()
