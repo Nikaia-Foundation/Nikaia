@@ -1,0 +1,313 @@
+use std::collections
+use std::fs
+
+/// Why a build-time expression did not come to a value.
+pub enum BtRefusal {
+    /// This evaluator does not know the shape. **Not an error by itself**: it is
+    /// what `NK1127` reports, and what the staging above expects to keep
+    /// reporting until every stage lands.
+    Unevaluable,
+    /// **Understood, and not something this folder computes**: code that runs,
+    /// which is compiled and run where it stands in a `comptime`'s own
+    /// initialiser (ADR-321 D1), and is never interpreted.
+    NotHere { what: String, why: String, way_out: String },
+    /// A constant worked out from itself.
+    ///
+    /// `comptime A = B` beside `comptime B = A` has no base case to reach, and
+    /// the message names the ring.
+    Circular { ring: Vec[String] },
+    /// **A file this build may not read**
+    /// ([ADR-310](../../../docs/specification/adr/adr-310.md) D4 to D5).
+    ///
+    /// Understood and refused, which is why it is not `Unevaluable`: the shape
+    /// is read, the path is in hand, and the answer is no — with a reason that
+    /// differs per shape, so the sentence is the checker's to write.
+    MayNotRead { path: String, why: Denied },
+    /// **A grammar this compiler could not run**
+    /// (issue #178).
+    ///
+    /// Six reasons and one variant, because the sentence is the checker's to
+    /// write and they share nothing but the code: a parser that did not compile
+    /// is this compiler's fault, and input the parser refused is the input's.
+    GrammarWall { grammar_: String, rule_: String, why: Wall },
+    /// **A path that is not a literal** (D4).
+    ///
+    /// Its own variant because it is answered *before* the argument is
+    /// evaluated: a name that folds to `"config.json"` would otherwise be read
+    /// as one, and then *named in the code* would stop being decidable by
+    /// looking at the line, which is the whole of what the three namings buy.
+    PathIsComputed,
+    /// An index this array does not have. **Understood and wrong**, like
+    /// `NotAllowed` and unlike `Unevaluable`: the program says `xs[7]` of five
+    /// elements, and a build that answered *cannot evaluate* would send the
+    /// reader looking for a missing feature instead of at the line
+    /// ([Part III C.2](../../../docs/specification/30-nikaia-tooling.md)).
+    /// Running it would abort at run time ([ADR-285](../../../docs/specification/adr/adr-285.md)
+    /// D1); at build time there is no run to abort.
+    OutOfBounds { at: Integer, len: i64 },
+}
+
+// TODO(rs2nika): a type alias (write the type out)
+// pub type Known<'a> = &'a dyn Fn(&str) -> Option<Value>;
+
+/// The evaluator, over one unit's items. The evaluator itself is
+/// `tools/build_eval.nika` (ADR-294, #125); this holds what it asks for - the
+/// program's files, the ledger, what a build may read, and the grammar workshop.
+pub struct BtBuildTime {
+    parsed: ref Parsed,
+    /// **Every file of this program**: a variant or a grammar may be declared
+    /// in any of them.
+    beside: ref Vec[Parsed],
+    /// **What this build may read while it builds**
+    /// ([ADR-310](../../../docs/specification/adr/adr-310.md)). A caller that
+    /// passes [`Reads::none`] gets D1: the whole class is off, which is what
+    /// every test and every build that did not ask for it gets.
+    reads: ref Reads,
+    known: Known,
+}
+
+pub fn bt_new(parsed: ref Parsed, beside: ref Vec[Parsed], reads: ref Reads, known: Known) -> BtBuildTime {
+    return BtBuildTime { parsed: parsed, beside: beside, reads: reads, known: known }
+}
+
+/// What an initialiser comes to.
+pub fn bt_evaluate[H: BtHost](mut bt_build_time: BtBuildTime, expr: ref Expr, host: ref H) -> Value throws {
+    return bt_run(bt_build_time, expr, host)
+}
+
+fn bt_run[H: BtHost](bt_build_time: ref BtBuildTime, expr: ref Expr, host: ref H) -> Value throws {
+    let mut units: Vec[Parsed] = [bt_build_time.parsed]
+    units.extend(bt_build_time.beside.iter())
+    let host = Host { units: units, reads: bt_build_time.reads, known: bt_build_time.known, kept: [] }
+    return bt_evaluate(expr, host).map_err(fn(thrown) { host.refusal(thrown.split().0) })
+}
+
+/// What the evaluator asks the compiler: the files by number (0 is the one
+/// being checked), the ledger, what may be read, and the grammar workshop.
+pub struct Host {
+    pub units: Vec[Parsed],
+    pub reads: ref Reads,
+    pub known: Known,
+    /// The refusals the evaluator carries by their place here: a grammar that
+    /// would not run says why in a type of this compiler's.
+    pub kept: Vec[BtRefusal],
+}
+
+fn bt_refusal(host: ref Host, refused: BtRefusal) -> BtRefusal {
+    return match refused {
+        BtRefusal::Unevaluable => BtRefusal::Unevaluable,
+        BtRefusal::NotHere { what, why, way_out } => BtRefusal::NotHere { what, why, way_out },
+        BtRefusal::Circular { ring } => BtRefusal::Circular { ring },
+        BtRefusal::MayNotRead { path, why } => BtRefusal::MayNotRead { path, why },
+        BtRefusal::PathIsComputed => BtRefusal::PathIsComputed,
+        BtRefusal::OutOfBounds { at, len } => BtRefusal::OutOfBounds { at, len: len as i64 },
+        BtRefusal::Host(slot) => host.kept[slot as i64].clone(),
+    }
+}
+
+/// The files in the order a name is looked for: the one the body being read
+/// came from, and then every file beside the one being checked.
+fn bt_in_reach(host: ref Host, unit: i64) -> Vec[(i64, Parsed)] {
+    return once(unit as i64).chain(1..<host.units.len()).map(fn(at) { (at, host.units[at]) })
+}
+
+impl BtHost for Host {
+    fn text(ref self, unit: i64, symbol: winnow_grammar::Symbol) -> String {
+        return self.units[unit as i64].text(symbol).to_string()
+    }
+
+    fn bt_char_of(ref self, n: i64) -> scalar? {
+        return bt_char_of(n)
+    }
+
+    fn known(ref self, name: String) -> Value? {
+        return (self.known)(name)
+    }
+
+    fn constant(ref self, unit: i64, name: String) -> Expr? {
+        let parsed = self.units[unit as i64]
+        return parsed.program.items.iter().find_map(fn(item) { match item.node {
+            Item::Comptime { name: declared, value, .. } if parsed.text(declared) == name => value.clone(),
+            else => null,
+        } })
+    }
+
+    fn variant_of(ref self, unit: i64, ty: String, variant: String) -> bool {
+        return self.in_reach(unit).any(fn((_, parsed)) {
+            return parsed.program.items.iter().any(fn(item) { match item.node {
+                Item::Enum { name, variants, .. } if parsed.text(name) == ty => variants.iter().any(fn(held) { parsed.text(held.name) == variant }),
+                else => false,
+            } })
+        })
+    }
+
+    fn run_grammar(ref self, unit: i64, which: String, rule_: String, input: String) -> BtRan {
+        let (parsed, result) = self.rule_of(unit, which, rule_) ?? return BtRan { found: false, value: null, slot: -1 }
+        let beside: Vec[Parsed] = self.units[1..].clone()
+        let ask = Ask { grammar_: which, rule: rule_, input: input, result: result, units: beside }
+        let wall = fn(why) { BtRefusal::GrammarWall { grammar_: which, rule: rule_, why } }
+        let dump = self.reads.workshop().run(parsed, ask) catch { let why = error; throw wall(why) }
+        let value = decode(dump).map_err(wall) catch {
+            let refusal = error
+            let mut kept = self.kept
+            kept.push(refusal)
+            return BtRan { found: true, value: null, slot: kept.len() - 1 }
+        }
+        return BtRan { found: true, value: value, slot: -1 }
+    }
+
+    fn read(ref self, path: String) -> BtRead {
+        let text = self.reads.read(path) catch { let why = error; return BtRead { text: null, denied: why } }
+        return BtRead { text: text, denied: null }
+    }
+}
+
+/// The file a grammar was declared in, and what its `entry` rule hands back.
+fn bt_rule_of(host: ref Host, unit: i64, grammar_: String, rule_: String) -> (Parsed, Ty)? {
+    return host.in_reach(unit).find_map(fn((_, parsed)) {
+        let found = (parsed.program.items.iter().find_map(fn(item) { match item.node {
+            Item::Grammar(def) if parsed.text(def.name) == grammar_ => def.rules.iter().find(fn(r) { r.is_entry && parsed.text(r.name) == rule_ }),
+            else => null,
+        } }) ?? return null)
+        let ty = (found.ret_type ?? return null)
+        return (parsed, Ty::from_ast(parsed, ty))
+    })
+}
+
+/// The escapes this language has, as a reader of a diagnostic wants them
+/// ([Part I 2.5](../../docs/specification/10-nikaia-light.md)).
+///
+/// A list and not a sentence, because the message prints it and the page prints
+/// it, and a set written twice is a set that disagrees with itself.
+pub comptime ESCAPES: ref String = "\\n \\r \\t \\0 \\\\ \\' \\\" \\xNN \\u{…}"
+
+/// Which numbers name a character: Unicode's table, handed to the Nikaia walk.
+pub fn bt_char_of(n: i64) -> scalar? {
+    return u32::try_from(n).ok().and_then(from_u32)
+}
+
+// rs2nika: `an_escape_nothing_names` only forwards to tools/escapes.nika `an_escape_nothing_names`: its callers call `an_escape_nothing_names` (R256)
+
+// rs2nika: `decoded` only forwards to tools/escapes.nika `decoded`: its callers call `decoded` (R256)
+
+// rs2nika: `written` only forwards to tools/escapes.nika `as_a_literal`: its callers call `as_a_literal` (R256)
+
+/// **Why a function may not run while the program is built**, read off its
+/// ledger entry ([ADR-287](../../../docs/specification/adr/adr-287.md) D13,
+/// D14): it can pause, nothing says what it touches, or it touches more than
+/// the build's own parameters. Nothing where it may run.
+pub fn bt_may_not_run(contract: ref FnContract) -> String? {
+    if !contract.sync_claim.is_sync() {
+        return "It can pause, and nothing run at build time may pause."
+    }
+    if !contract.touches_known {
+        return "Nothing says what it touches outside the program."
+    }
+    if !contract.touches.iter().all(bt_is_the_builds_own) {
+        return "It touches the world outside the program."
+    }
+    return null
+}
+
+/// Whether a touch is the build's own parameters
+/// ([ADR-287](../../../docs/specification/adr/adr-287.md) D14).
+///
+/// **`cli::args` passes, deliberately**: same parameters, same code. A build's
+/// own arguments are an input like its source is, and a body that shapes a
+/// table differently for two declared parameters is doing the thing `comptime`
+/// is for.
+pub fn bt_is_the_builds_own(touch: ref Touch) -> bool {
+    return touch.text() == "args read"
+}
+
+// TODO(rs2nika): a macro at the top level
+// thread_local! {
+//     /// **Where an option's default is compiled** while a ledger is inferred
+//     /// ([ADR-318](../../../docs/specification/adr/adr-318.md) D1, ADR-321 D1): the
+//     /// workshop of the build that reads the program, for as long as it reads it.
+//     /// The inference has no `Reads` of its own; a build sets this around the read,
+//     /// and a caller that sets nothing gets the interpreter, as before.
+//     ///
+//     /// **One per thread**, because the inference runs on the thread that reads:
+//     /// two builds side by side, as the tests are, each keep their own.
+//     static DEFAULTS: std::cell::RefCell<Option<std::sync::Arc<Workshop>>> =
+//         const { std::cell::RefCell::new(None) };
+// }
+
+/// Read a program with `at` as the workshop its defaults are compiled in.
+pub fn bt_defaults_compiled_in[R](at: fs::Path?, read: fn() -> R sync) -> R {
+    let workshop = match at {
+        null => null,
+        at => Workshop::at(at),
+    }
+    let before = DEFAULTS.with(fn(held) { std::mem::replace(held, workshop) /* TODO(rs2nika): `std::mem` moves values in place */ })
+    let out = read()
+    DEFAULTS.with(fn(held) { held = before })
+    return out
+}
+
+// TODO(rs2nika): a macro at the top level
+// thread_local! {
+//     /// **The defaults the program's ledger recorded**, while a run's
+//     /// sub-program is inferred (#468): the same functions, so the same
+//     /// values, read rather than computed a second time.
+//     static KNOWN: std::cell::RefCell<Option<Ledger>> =
+//         const { std::cell::RefCell::new(None) };
+// }
+
+/// Read with `outer`'s recorded defaults as the ones the inference takes.
+pub fn bt_defaults_known_from[R](outer: Ledger?, read: fn() -> R sync) -> R {
+    let before = KNOWN.with(fn(held) { std::mem::replace(held, outer?.clone()) /* TODO(rs2nika): `std::mem` moves values in place */ })
+    let out = read()
+    KNOWN.with(fn(held) { held = before })
+    return out
+}
+
+/// What the program's ledger recorded for option `at` of `key` - qualified
+/// by the package for one that is not the program's - where a run's
+/// sub-program is being read and the ledger holds a value.
+pub fn bt_known_default(package: String?, key: String, at: i64) -> String? {
+    return KNOWN.with(fn(held) {
+        let ledger = (held ?? return null)
+        let key = match package {
+            null => key,
+            package => f"{package}::{key}",
+        }
+        let text = (((ledger.functions.get(key) ?? return null).signature ?? return null).config.get(at) ?? return null).default
+        return (if !text.is_empty() { text.clone() } else { null })
+    })
+}
+
+/// The workshop defaults are compiled in now, where a build set one.
+pub fn bt_defaults_workshop() -> Workshop? {
+    return DEFAULTS.with(fn(held) { held.clone() })
+}
+
+/// **The lowered sub-program with a `main` of its own**: the generated one
+/// starts the runtime and runs the program's body, and this one reports a stop,
+/// computes the value and writes it.
+///
+/// **A stop names the byte it came from**, where the program's own table names
+/// a `.nika` line (ADR-300 D9): the sub-program has no file of its own, and the
+/// checker turns the byte back into a place in the file it is checking. A row
+/// is the generated line, [`STOPPED_AT`], and the byte the line's outermost
+/// node starts at.
+pub fn bt_with_driver(lowered: ref Lowered, dump: String, bounds: Bounds) -> String? {
+    let rows: Vec[(i64, i64, i64)] = lowered.map.rows().map(fn((generated, byte, unit)) { (generated as i64, byte as i64, unit as i64) }).collect()
+    return cr_with_driver(lowered.rust, rows, VALUE_FN, dump, gr_dump_helpers(), STOPPED_AT, bounds.steps, bounds.bytes)
+}
+
+/// **What a build-time run may spend** ([ADR-321](../../../docs/specification/adr/adr-321.md)
+/// D7, D10): counted steps and bytes live at once. How a `comptime` raises
+/// either is not decided (D11); a workshop carries them, so that this
+/// compiler's own tests can ask for less.
+pub struct Bounds {
+    pub steps: u64,
+    pub bytes: u64,
+}
+
+// ADAPTER: bleibt in Rust (`impl Default for Bounds`: Rust's `Default`)
+
+/// What a stop's row names instead of a file: the file's place among the
+/// program's follows it, and then the byte.
+pub comptime STOPPED_AT: ref String = "@"

@@ -205,3 +205,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 2469800 49
 /home/user/Nikaia/docs/briefs/b1046-let-lambda-pausing-param.md 659596 11
 /home/user/Nikaia/docs/briefs/architect-task.md 5181536 85
+/home/user/Nikaia/docs/briefs/bt-build-time.md 6356154 84

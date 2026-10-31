@@ -1,0 +1,2 @@
+// rs2nika: `evaluate` may be in Nikaia already: tools/build_eval.nika `fn bt_evaluate` (the same name)
+// rs2nika: called but not in Nikaia yet (move them first, or name the equivalent in rs2nika.names): decode, pub, wall
