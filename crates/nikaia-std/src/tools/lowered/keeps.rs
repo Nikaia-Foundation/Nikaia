@@ -27,7 +27,7 @@ pub fn uses_in(body: &Block, interner: &winnow_grammar::InternerContext, holes_o
     keeps_block(body, interner, holes_of, context, own, library, &mut walk);
     if context.hands_back_its_last && !body.stmts.is_empty() {
         match &nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).node {
-            Stmt::Expr(value) => { hand_over(value, interner, context, own, library, &mut walk); },
+            Stmt::Expr(value) => { hand_over(value, interner, holes_of, context, own, library, &mut walk); },
             _ => { },
         }
     }
@@ -38,8 +38,8 @@ pub(crate) fn keeps_block(block: &Block, interner: &winnow_grammar::InternerCont
 
 pub(crate) fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     match stmt {
-        Stmt::Assign { value, .. } => { hand_over(value, interner, context, own, library, walk); },
-        Stmt::Return(value) => { if !context.returns_a_view { hand_over_maybe((value).as_ref(), interner, context, own, library, walk); } },
+        Stmt::Assign { value, .. } => { hand_over(value, interner, &holes_of, context, own, library, walk); },
+        Stmt::Return(value) => { if !context.returns_a_view { hand_over_maybe((value).as_ref(), interner, &holes_of, context, own, library, walk); } },
         Stmt::Let { names, value, mutable, .. } => {
             let mutable = *mutable;
             let reached = reached_of(value, interner, context, own, library, &walk, true);
@@ -108,9 +108,17 @@ pub(crate) fn alias(name: String, reached: &collections::BTreeSet<String>, into:
     into.insert(name, all);
 }
 
-pub(crate) fn hand_over_maybe(expr: Option<&Expr>, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) { hand_over(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, interner, context, own, library, walk); }
+pub(crate) fn hand_over_maybe(expr: Option<&Expr>, interner: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) { hand_over(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, interner, holes_of, context, own, library, walk); }
 
-pub(crate) fn hand_over(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) { walk.uses.kept.extend(reached_of(expr, interner, context, own, library, &walk, true)); }
+pub(crate) fn hand_over(expr: &Expr, interner: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
+    walk.uses.kept.extend(reached_of(expr, interner, context, own, library, &walk, true));
+    keep_lambda(Some(expr), interner, holes_of, context, walk);
+}
+
+pub(crate) fn keep_lambda(expr: Option<&Expr>, interner: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, walk: &mut KeepsWalk) {
+    let part = match expr { Some(__nikaia_value) => __nikaia_value, None => return };
+    for name in keeps_named_by_a_lambda(part, interner, holes_of, context, &walk) { walk.uses.kept.insert(name); }
+}
 
 pub(crate) fn reached_of(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &KeepsWalk, through_calls: bool) -> collections::BTreeSet<String> {
     let mut found: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -368,11 +376,22 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
                     let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                     let lent = parameter_named(value, interner, context);
                     if lent.is_none() || !keeps_a_lent_text(nikaia_std::index::or(lent.as_deref(), || ""), context) { keep_part(Option::as_ref(&field.value), interner, context, own, library, walk); }
+                    keep_lambda(Option::as_ref(&field.value), interner, holes_of, context, walk);
                 }
             }
         },
-        Expr::ListLit { items, .. } => { for item in items.iter() { keep_part(Some(item), interner, context, own, library, walk); } },
-        Expr::Tuple(items, _) => { for item in items.iter() { keep_part(Some(item), interner, context, own, library, walk); } },
+        Expr::ListLit { items, .. } => {
+            for item in items.iter() {
+                keep_part(Some(item), interner, context, own, library, walk);
+                keep_lambda(Some(item), interner, holes_of, context, walk);
+            }
+        },
+        Expr::Tuple(items, _) => {
+            for item in items.iter() {
+                keep_part(Some(item), interner, context, own, library, walk);
+                keep_lambda(Some(item), interner, holes_of, context, walk);
+            }
+        },
         Expr::ListRepeat { value, .. } => { let value = nikaia_std::boxed::open(value); keep_part(Some(value), interner, context, own, library, walk); },
         Expr::Coalesce { value, .. } => { let value = nikaia_std::boxed::open(value); keep_part(Some(value), interner, context, own, library, walk); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); keep_named(base, interner, context, own, library, walk); },

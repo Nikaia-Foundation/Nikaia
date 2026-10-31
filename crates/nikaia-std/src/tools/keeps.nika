@@ -66,7 +66,7 @@ pub fn uses_in(body: ref Block, interner: ref winnow_grammar::InternerContext, h
     // **The value a body ends in leaves the call**, as a `return` does.
     if context.hands_back_its_last && body.stmts.len() > 0 {
         match body.stmts[body.stmts.len() - 1].node {
-            Stmt::Expr(value) => hand_over(value, interner, context, own, library, walk),
+            Stmt::Expr(value) => hand_over(value, interner, holes_of, context, own, library, walk),
             else => {}
         }
     }
@@ -84,10 +84,10 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
         // **An assignment keeps, whatever the target is**: `self.name = x`,
         // `row.total = x` and `xs[i] = x` all put the value somewhere this call
         // does not end.
-        Stmt::Assign { value, .. } => hand_over(value, interner, context, own, library, walk),
+        Stmt::Assign { value, .. } => hand_over(value, interner, holes_of, context, own, library, walk),
         Stmt::Return(value) => {
             if !context.returns_a_view {
-                hand_over_maybe(value, interner, context, own, library, walk)
+                hand_over_maybe(value, interner, holes_of, context, own, library, walk)
             }
         }
         // **A `let` does not keep**: it binds a second name inside this body,
@@ -170,14 +170,24 @@ fn alias(name: String, reached: ref collections::BTreeSet[String], mut into: col
     into.insert(name, all)
 }
 
-fn hand_over_maybe(expr: ref Expr?, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
-    hand_over(expr ?? return, interner, context, own, library, walk)
+fn hand_over_maybe(expr: ref Expr?, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
+    hand_over(expr ?? return, interner, holes_of, context, own, library, walk)
 }
 
 // This expression's value leaves the call, so every parameter it may be is
-// kept.
-fn hand_over(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
+// kept. **So does every parameter a lambda handed out names** (Part I 5.4,
+// #1034): `return fn(x) { f(x) + 1 }` runs `f` after the call has ended.
+fn hand_over(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     walk.uses.kept.extend(reached_of(expr, interner, context, own, library, walk, true))
+    keep_lambda(expr, interner, holes_of, context, walk)
+}
+
+// The parameters a lambda that leaves the call names are kept (#1034).
+fn keep_lambda(expr: ref Expr?, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, mut walk: KeepsWalk) {
+    let part = expr ?? return
+    for name in keeps_named_by_a_lambda(part, interner, holes_of, context, walk) {
+        walk.uses.kept.insert(name)
+    }
 }
 
 // **The parameters an expression's value may be**, through every way it can
@@ -544,6 +554,7 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
                     if lent == null || !keeps_a_lent_text(lent ?? "", context) {
                         keep_part(field.value, interner, context, own, library, walk)
                     }
+                    keep_lambda(field.value, interner, holes_of, context, walk)
                 }
             }
         }
@@ -552,11 +563,13 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         Expr::ListLit { items, .. } => {
             for item in items {
                 keep_part(item, interner, context, own, library, walk)
+                keep_lambda(item, interner, holes_of, context, walk)
             }
         }
         Expr::Tuple(items, _) => {
             for item in items {
                 keep_part(item, interner, context, own, library, walk)
+                keep_lambda(item, interner, holes_of, context, walk)
             }
         }
         // `[x; n]` holds `x` as many times as it says.

@@ -1,0 +1,24 @@
+struct Box2 {
+    run: fn(i64) -> i64,
+}
+
+fn plus_one(f: fn(i64) -> i64) -> fn(i64) -> i64 {
+    return fn(x) { f(x) + 1 }
+}
+
+fn boxed(f: fn(i64) -> i64) -> Box2 {
+    return Box2 { run: fn(x) { f(x) + 1 } }
+}
+
+fn twice(f: fn(i64) -> i64) -> fn(i64) -> i64 {
+    return fn(x) { f(f(x)) }
+}
+
+fn main() {
+    let p = plus_one(fn(x) { x * 2 })
+    println(f"{p(1)}")
+    let b = boxed(fn(x) { x * 3 })
+    println(f"{b.run(2)}")
+    let t = twice(fn(x) { x + 3 })
+    println(f"{t(1)}")
+}
