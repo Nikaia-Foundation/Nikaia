@@ -211,6 +211,78 @@ fn agent_runs_insert(doc: String, row: String) -> String {
     return out.join("\n")
 }
 
+// The headings a brief names for its facts: `facts:` in its frontmatter, or a
+// line `Facts: A, B`; empty without one.
+fn agent_fact_names(body: String) -> Vec[String] {
+    let mut wanted = agent_front(body.clone(), "facts", "")
+    if wanted == "" {
+        for line in body.split("\n") {
+            let t = line.trim()
+            if t.starts_with("Facts:") {
+                wanted = (t.strip_prefix("Facts:") ?? "").trim().clone()
+                break
+            }
+        }
+    }
+    let mut out: Vec[String] = []
+    for name in wanted.split(",") { if name.trim() != "" { out.push(name.trim().clone()) } }
+    return out
+}
+
+// The level (2 or 3) of `line` as a `## ` / `### ` heading named `name`, else 0.
+// A heading ending in a parenthetical, `Moving Rust into Nikaia (self-hosting,
+// ADR-294, #125)`, is also named without it (a name holds no comma).
+fn agent_fact_level(line: String, name: String) -> i64 {
+    let mut level = 0
+    let mut t: String = ""
+    if line.starts_with("## ") {
+        level = 2
+        t = (line.strip_prefix("## ") ?? "").trim().clone()
+    } else if line.starts_with("### ") {
+        level = 3
+        t = (line.strip_prefix("### ") ?? "").trim().clone()
+    }
+    if level == 0 { return 0 }
+    if t == name || t.split(" (").collect()[0].trim() == name { return level }
+    return 0
+}
+
+// The first heading of the brief that docs/builder-facts.md (`facts`) lacks, or "".
+fn agent_facts_unknown(body: String, facts: String) -> String {
+    let lines = facts.split("\n").collect()
+    for name in agent_fact_names(body) {
+        let mut found = false
+        for line in lines { if agent_fact_level(line, name.clone()) > 0 { found = true } }
+        if !found { return name }
+    }
+    return ""
+}
+
+// The text of the sections the brief names, each down to the next heading of
+// its level or above, under one heading for the prompt; "" without Facts.
+fn agent_facts(body: String, facts: String) -> String {
+    let names = agent_fact_names(body)
+    if names.len() == 0 { return "" }
+    let lines = facts.split("\n").collect()
+    let mut out: Vec[String] = ["", "", "# Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)"]
+    for name in names {
+        let mut level = 0
+        for line in lines {
+            if level > 0 {
+                if line.starts_with("# ") || line.starts_with("## ") || (level == 3 && line.starts_with("### ")) { break }
+                out.push(line.clone())
+            } else {
+                level = agent_fact_level(line, name.clone())
+                if level > 0 {
+                    if out[out.len() - 1] != "" { out.push("") }
+                    out.push(line.clone())
+                }
+            }
+        }
+    }
+    return out.join("\n")
+}
+
 fn agent_exe() -> String throws {
     for exe in ["target/fast/nikaia", "target/release/nikaia"] {
         if fs::exists(exe, fs::Root::Anywhere) { return exe.to_string() }
@@ -253,6 +325,17 @@ fn main() throws {
     }
     let wanted = agent_read("/proc/sys/kernel/random/uuid").trim().clone()
     let mut claude_args = agent_args(abs.clone(), text.clone(), wanted.clone())
+    // The sections of docs/builder-facts.md the brief names go into its prompt.
+    let facts = agent_read("docs/builder-facts.md")
+    let unknown = agent_facts_unknown(text.clone(), facts.clone())
+    if unknown != "" {
+        if dry {
+            println(f"unknown Facts heading: {unknown}")
+            process::exit(2)
+        }
+        agent_escalate(dir.clone(), f"unknown Facts heading in {abs}: {unknown}")
+    }
+    claude_args[1] = claude_args[1].clone() + agent_facts(text.clone(), facts)
     if !dry {
         let draft = agent_draft(abs.clone(), text.clone())
         if draft != "" { claude_args[1] = claude_args[1].clone() + f". The converter's draft of its Cut: lines is {draft}, its notes {draft}.notes, the Rust it read {draft}.rs" }

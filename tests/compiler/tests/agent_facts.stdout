@@ -1,0 +1,26 @@
+
+# Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)
+
+### Grammar
+
+* a grammar trap
+
+## Moving Rust (self-hosting, #125)
+
+* a move rule
+
+--
+
+# Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)
+
+## Traps
+
+* a trap
+
+### Grammar
+
+* a grammar trap
+
+--
+plain: []
+code=2 unknown Facts heading: Lowering

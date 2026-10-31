@@ -1,0 +1,55 @@
+// A brief's `Facts:` sections of docs/builder-facts.md go into the builder's
+// prompt after the brief (scripts/agent.nika); an unknown heading is refused
+// by name. Run in a directory of its own with a small facts file.
+use std::fs
+use std::process
+
+// The checkout: the working directory, or (under `nikaia test`, which runs a
+// test in a directory of its own) the one `nikaia` was started in.
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/agent.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/agent.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+// The prompt of a dry run, without its first line (the brief's path) and
+// without the options after it.
+fn prompt(nikaia: String, repo: String, tmp: String, brief: String) -> String throws {
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/{brief}", "--dry-run"]; dir: tmp.clone())
+    if !out.ok { return f"code={out.code} {out.stdout.trim()}" }
+    let lines = out.stdout.split("\n").collect()
+    let mut kept: Vec[String] = []
+    for i in 1..<lines.len() { kept.push(lines[i].clone()) }
+    return kept.join("\n").split(" --agent ").collect()[0].clone()
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    process::run("mkdir", [f"{tmp}/docs"])
+    fs::write(f"{tmp}/docs/builder-facts.md", fs::Root::Anywhere, "# Builder facts\n\nintro\n\n## Traps\n\n* a trap\n\n### Grammar\n\n* a grammar trap\n\n## Moving Rust (self-hosting, #125)\n\n* a move rule\n")
+    fs::write(f"{tmp}/line.md", fs::Root::Anywhere, "Brief.\nFacts: Grammar, Moving Rust\n")
+    fs::write(f"{tmp}/front.md", fs::Root::Anywhere, "---\nfacts: Traps\n---\nBrief.\n")
+    fs::write(f"{tmp}/plain.md", fs::Root::Anywhere, "Brief.\n")
+    fs::write(f"{tmp}/unknown.md", fs::Root::Anywhere, "Facts: Traps, Lowering\n")
+    println(prompt(nikaia.clone(), repo.clone(), tmp.clone(), "line.md"))
+    println("--")
+    println(prompt(nikaia.clone(), repo.clone(), tmp.clone(), "front.md"))
+    println("--")
+    println(f"plain: [{prompt(nikaia.clone(), repo.clone(), tmp.clone(), "plain.md")}]")
+    println(prompt(nikaia, repo, tmp.clone(), "unknown.md"))
+    process::run("rm", ["-rf", tmp])
+}
