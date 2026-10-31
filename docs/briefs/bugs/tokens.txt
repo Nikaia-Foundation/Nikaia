@@ -1,1 +1,3 @@
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 3564154 62
+/home/user/Nikaia/docs/briefs/bugs/b1-999-mixed-tuple-views.md 254036 10
+/home/user/Nikaia/docs/briefs/bugs/b1-999-mixed-tuple-views.md 677440 12
