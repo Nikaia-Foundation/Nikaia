@@ -174,3 +174,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 757475 22
 /home/user/Nikaia/docs/briefs/b1023b-shadowing-lambda-lent.md 322505 6
 /home/user/Nikaia/docs/briefs/k3a2-comptime-compute.md 533344 6
+/home/user/Nikaia/docs/briefs/b1012b-trait-column-refusals.md 3510750 55

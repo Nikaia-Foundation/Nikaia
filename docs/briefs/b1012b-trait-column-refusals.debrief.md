@@ -1,0 +1,8 @@
+1. **Most turns:** tracing how the data would flow, before writing any code. I read `keeps.rs`, `contracts/mod.rs`, `sync.rs`, `modules.rs` (`Program`, `ProgramHost`), `project.rs` (`check_units`, `newly`, `changed_contracts`), `check/mod.rs`, `check_state.nika` and `check_core_args`/`check_core_call`/`check_takes`. Only after all that was it clear that none of the three features could be reached from the allowed files. The search for an NK12 refusal raised from `contracts/` came up empty, and that undid the brief's premise late.
+2. **What the brief could have handed me:**
+   - That the contract pass raises no refusals today, and where program-level refusals are raised instead (the `Noted` → `Program` → `diagnostics::refuse` pattern, `modules.rs` ~128).
+   - That the only caller of `changed_contracts` is `project.rs:1217`, reached through `project_lower.nika`.
+   - That method calls pass `callee: null` to `check_core_arguments_given`, so the lending note has no impl to name.
+   - The path for NK2101 on kept lambdas (`a_kept_lambda_takes_these`).
+3. **Checks:** no build, test or gate, because nothing was edited. I ran two probes: the lending caller with a `String` parameter (raw lifetime error, a defect) and with a local `let` (NK2101, correct). Both were useful. The first one confirmed the defect. The second showed the defect is specific to parameters. Nothing was wasted except maybe one extra probe edit.
+4. **The one change:** the brief's research step should check its premise against the code. It should name the call path for each new diagnostic (where it is raised, how the data gets there) and list every file on that path in the allowed edit set. A stop condition that the brief's own design trips by construction cost the whole run.
