@@ -38,3 +38,5 @@
 /home/user/Nikaia/docs/briefs/yaml/y18-1049-1050-grammar-builtins-and-guard.md 319498 6
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 396402 13
 /home/user/Nikaia/docs/briefs/yaml/y20-optional-copy-help.md 41513 1
+/home/user/Nikaia/docs/briefs/qa-task.md 1186038 40
+/home/user/Nikaia/docs/briefs/qa-task.md 209899 13
