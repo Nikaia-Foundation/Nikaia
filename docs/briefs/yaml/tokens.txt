@@ -31,3 +31,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y2c-properties.md 444764 14
 /home/user/Nikaia/docs/briefs/yaml/y14-1013-guard-inner-label.md 352418 7
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 3779431 62
+/home/user/Nikaia/docs/briefs/yaml/y17-1041-entry-takes-a-parameter.md 265774 5
