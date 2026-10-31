@@ -308,6 +308,15 @@ pub fn infer(
                         ) {
                             uses.kept.insert(INPUT.to_string());
                         }
+                        // **The values an entry takes after its input are
+                        // kept** (ADR-grammar-1 D2, #1041): the rule's parser
+                        // takes each by value and holds it for the whole
+                        // parse, so a caller hands it over as it would to an
+                        // ordinary function that keeps it. A copied type is
+                        // still copied (`lends` asks `moves` first).
+                        for arg in rule.args.iter().filter(|a| by_value(a)) {
+                            uses.kept.insert(parsed.text(arg.name).to_string());
+                        }
                         graph.insert(format!("{named}::{}", parsed.text(rule.name)), uses);
                     }
                 }

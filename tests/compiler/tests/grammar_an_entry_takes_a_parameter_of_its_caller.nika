@@ -1,0 +1,33 @@
+// A parameter of the calling function handed to an entry's value parameter
+// (ADR-grammar-1 D2, #1041): the entry keeps it as an ordinary call's owned
+// parameter does, so the caller's parameter is owned, not lent; over text and
+// over `ref Bytes` alike.
+
+pub struct Limits {
+	pub depth: i64,
+}
+
+grammar G {
+	rule WS = "" -> { }
+	entry rule doc(lim: Limits) -> i64 = "x" if(lim.depth > 0) eof -> { lim.depth }
+}
+
+fn parse(input: String, lim: Limits) -> i64 {
+	return G::doc(input, lim) catch {
+		return -1
+	}
+}
+
+fn parse_bytes(input: ref Bytes, lim: Limits) -> i64 {
+	return G::doc(input, lim) catch {
+		return -1
+	}
+}
+
+fn main() {
+	println(f"{parse("x", Limits { depth: 3 })}")
+	println(f"{parse("x", Limits { depth: 0 })}")
+	let b = Bytes("x".bytes().collect())
+	println(f"{parse_bytes(b, Limits { depth: 3 })}")
+	println(f"{parse_bytes(b, Limits { depth: 0 })}")
+}
