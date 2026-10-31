@@ -11,7 +11,7 @@ Gate: dry-run
 == a tools file and tests
 changed: crates/nikaia-std/src/tools/x.nika tests/compiler/tests/foo.nika tests/compiler/tests/foo.stdout tests/compiler/tests/bar.stderr
 build would run: cargo build --profile fast -p nikaia
-lower-std would run: target/fast/nikaia lower-std, and to the fixpoint
+lower-std would run: target/fast/nikaia lower-std (red on a lowered file that drifts from its committed .nika), and to the fixpoint
 fmt would run: cargo fmt --all -- --check
 clippy would run: cargo clippy --all-targets -- -D warnings
 pre-push would run: scripts/pre-push-check.sh
@@ -21,7 +21,7 @@ Gate: dry-run
 == the emitter
 changed: crates/nikaia-std/src/tools/x.nika tests/compiler/tests/foo.nika tests/compiler/tests/foo.stdout crates/nikaia/src/emit/mod.rs
 build would run: cargo build --profile fast -p nikaia
-lower-std would run: target/fast/nikaia lower-std, and to the fixpoint
+lower-std would run: target/fast/nikaia lower-std (red on a lowered file that drifts from its committed .nika), and to the fixpoint
 fmt would run: cargo fmt --all -- --check
 clippy would run: cargo clippy --all-targets -- -D warnings
 pre-push would run: scripts/pre-push-check.sh
@@ -31,7 +31,7 @@ Gate: dry-run
 == the complete suite
 changed: crates/nikaia-std/src/tools/x.nika tests/compiler/tests/foo.nika tests/compiler/tests/foo.stdout
 build would run: cargo build --profile fast -p nikaia
-lower-std would run: target/fast/nikaia lower-std, and to the fixpoint
+lower-std would run: target/fast/nikaia lower-std (red on a lowered file that drifts from its committed .nika), and to the fixpoint
 fmt would run: cargo fmt --all -- --check
 clippy would run: cargo clippy --all-targets -- -D warnings
 pre-push would run: scripts/pre-push-check.sh

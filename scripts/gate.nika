@@ -10,9 +10,10 @@
 //
 // A builder's whole gate in one call, in this order: `build` (cargo build
 // --profile fast -p nikaia), `lower-std` (only when a
-// `crates/nikaia-std/src/tools/*.nika` changed: lower-std, and when that
-// changes a lowered file, build and lower-std again, which must change nothing
-// more: the fixpoint), `fmt` (cargo fmt --check), `clippy` (--all-targets, -D
+// `crates/nikaia-std/src/tools/*.nika` changed: lower-std, red when it
+// rewrites a lowered file whose `.nika` is as committed, and when it changes a
+// lowered file, build and lower-std again, which must change nothing more: the
+// fixpoint), `fmt` (cargo fmt --check), `clippy` (--all-targets, -D
 // warnings), `pre-push` (scripts/pre-push-check.sh), `test` (`nikaia test
 // --both-settings` on the touched tests of tests/compiler, copied into a
 // project of their own under target/; the whole package when the checker or
@@ -130,10 +131,46 @@ fn gate_lower_std() -> String throws {
     return "green"
 }
 
-fn gate_fixpoint() -> String throws {
+// **Lowered drift** (#1060): the lowered files the first lower-std rewrote
+// although their `.nika` is as committed. The committed file is then not what
+// this compiler lowers, and CI's check of the lowered files is red, while the
+// rest of the gate, run on the rewritten file, is green. A file whose `.nika`
+// the commits under test change (`changed`), or the working tree holds
+// edited or new, is the builder's own re-lowering and allowed; so is the
+// index `lowered.rs` when any such `.nika` exists.
+fn gate_lowered_drift(changed: Vec[String]) -> String throws {
+    let mut own: Vec[String] = []
+    for path in changed { if gate_is_tools_nika(path.clone()) { gate_push_new(own, path.clone()) } }
+    let edited = process::run("git", ["diff", "--name-only", "HEAD", "--", "crates/nikaia-std/src/tools"])
+    let added = process::run("git", ["ls-files", "--others", "--exclude-standard", "--", "crates/nikaia-std/src/tools"])
+    for line in (edited.stdout + "\n" + added.stdout).split("\n") {
+        let path = line.trim().clone()
+        if gate_is_tools_nika(path.clone()) { gate_push_new(own, path) }
+    }
+    let diff = process::run("git", ["diff", "--name-only", "HEAD", "--", "crates/nikaia-std/src/tools/lowered", "crates/nikaia-std/src/tools/lowered.rs"])
+    let mut drift: Vec[String] = []
+    for line in diff.stdout.split("\n") {
+        let path = line.trim().clone()
+        if path == "" { continue }
+        if path == "crates/nikaia-std/src/tools/lowered.rs" {
+            if own.len() == 0 { drift.push(path) }
+            continue
+        }
+        let file = path.strip_prefix("crates/nikaia-std/src/tools/lowered/") ?? continue
+        let stem = file.strip_suffix(".rs") ?? continue
+        if !own.contains(f"crates/nikaia-std/src/tools/{stem}.nika") { drift.push(path) }
+    }
+    if drift.len() == 0 { return "green" }
+    let files = drift.join(" ")
+    return f"red lowered drift: {files}"
+}
+
+fn gate_fixpoint(changed: Vec[String]) -> String throws {
     let before = gate_lowered_hash()
     let first = gate_lower_std()
     if first != "green" { return first }
+    let drift = gate_lowered_drift(changed)
+    if drift != "green" { return drift }
     let after = gate_lowered_hash()
     if after == before { return "green fixpoint" }
     let built = gate_build()
@@ -265,15 +302,15 @@ fn gate_guards() -> String throws {
 }
 
 // What one step printed: `green ...`, `red <line>`, or under `--dry-run` what it would run.
-fn gate_step(step: String, dry: bool, tools: bool, whole: bool, kept: Vec[String], all: bool) -> String throws {
+fn gate_step(step: String, dry: bool, tools: bool, whole: bool, kept: Vec[String], all: bool, changed: Vec[String]) -> String throws {
     if step == "build" {
         if dry { return "would run: cargo build --profile fast -p nikaia" }
         return gate_build()
     }
     if step == "lower-std" {
         if !tools { return "green skipped: no crates/nikaia-std/src/tools/*.nika changed" }
-        if dry { return "would run: target/fast/nikaia lower-std, and to the fixpoint" }
-        return gate_fixpoint()
+        if dry { return "would run: target/fast/nikaia lower-std (red on a lowered file that drifts from its committed .nika), and to the fixpoint" }
+        return gate_fixpoint(changed)
     }
     if step == "fmt" {
         if dry { return "would run: cargo fmt --all -- --check" }
@@ -342,7 +379,7 @@ fn gate_full(args: Vec[String]) throws {
     if dry { println("changed: " + if changed.len() == 0 { "none" } else { changed.join(" ") }) }
     let mut red: Vec[String] = []
     for step in ["build", "lower-std", "fmt", "clippy", "pre-push", "test", "guards"] {
-        let result = gate_step(step.to_string(), dry, tools, whole, kept.clone(), all)
+        let result = gate_step(step.to_string(), dry, tools, whole, kept.clone(), all, changed.clone())
         println(f"{step} {result}")
         if result.starts_with("red") {
             red.push(step.to_string())
