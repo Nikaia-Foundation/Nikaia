@@ -35,3 +35,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y2b-keys-directives-limits.md 676038 6
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 2028617 46
 /home/user/Nikaia/docs/briefs/yaml/y16-1039-unbound-text-names.md 596309 7
+/home/user/Nikaia/docs/briefs/yaml/y18-1049-1050-grammar-builtins-and-guard.md 319498 6
