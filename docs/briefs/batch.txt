@@ -1,2 +1,2 @@
-b938b-nested-number-lists.md
-b1034b-returned-lambda-keeps-param.md
+b1043-let-lambda-kept.md
+b1036-tuple-result-keeps-arg.md
