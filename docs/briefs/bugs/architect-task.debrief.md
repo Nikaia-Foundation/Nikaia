@@ -1,9 +1,23 @@
-1. **Most turns and time:** sorting out the driver's state. `architect-input.txt` held only the CUT line, while `qa-input.txt`, `suite.log`, an empty `RED` marker and `qa-task.md.report.md` each showed a different moment (red at 18:07, green at 18:25). I needed about four reads to work out that the red was already fixed and pushed. The longest single step was re-running the #1060 probe in a scratch worktree, since `lower-std` takes minutes. The first attempt failed because the patch from the old brief no longer applied.
+1. **What cost the most turns:** stale files in `docs/briefs/bugs/`. `RED` (an empty marker from 18:43), `qa-input.txt` (from 17:50) and an unfinished `suite.log` all looked like a red suite. It took two reads and a timestamp check to see that the batch was only cut on b15's `Found:`. The next cost was the push. It was rejected, and when I tried a second commit I found another driver halfway through a rebase in the shared checkout. I had appended a line to my report before I checked for that, so I had to put the file back.
 
-2. **What I looked up:** whether an empty `RED` means "no red". I deleted it, then grepped `agent.nika` and put it back, which was a wasted turn. I also had to check whether b12's commit had reached `origin/develop` and why #1061 was still open (it closes only on promote). And I looked up whether 84fbfb99 had made #1060 go away; it had not, it only rewrote that one file. The input could have stated all of this: the suite result after the cut, what is pushed, and what each marker file means.
+2. **What the brief could have handed me:**
+   - whether b15's commit was already on `origin/develop`;
+   - whether its `Found:` had been filed (it had: #1081, by the previous architect);
+   - which queued briefs carry `Blocks:` lines;
+   - the status labels of the queued issues.
 
-3. **Checks I ran:**
-   - Useful: the issue labels; the other lanes' `batch.txt`; the b15 probe on today's develop, which found the stale apply line and the stale note about leftover files; `git log` against origin.
-   - Wasted: deleting and restoring `RED`; the `git apply` attempt; the push and the `pull --rebase`.
+   All of these are facts the driver already knows. Each one cost me a git or `gh` call.
 
-4. **The change that would have saved the most:** the architect task's push rule (step 8) cannot work in the shared checkout. Other agents' unstaged files always block `git pull --rebase`, so every architect push that is rejected ends as `Pushed: rejected`. Step 8 should say: commit locally, report `Pushed: local <sha>`, and let `drive_push`, which rebases with `--autostash`, push it. Second, `architect-input.txt` should also carry the latest suite verdict and its sha, and the list of unpushed commits.
+3. **Checks:**
+   - Useful: the `git branch --contains` check (is b15 pushed), the issue labels, the grep for `Blocks:`, the check that each brief has its report path.
+   - Wasted: `ps | grep -c gate.nika` (a count of 3 tells nothing), reading `qa-input.txt` (stale), `cat -A batch.txt`.
+   - Skipped, and the charter requires it: I did not re-run the probes of b17, b18 and b19 on today's binary before queueing them again. I relied on the previous architect's checks.
+
+4. **The change that would save the most:** have the driver write a short state block into `architect-input.txt`:
+   - the reason for the cut (Found, red or done);
+   - whether the last commit is pushed;
+   - the issue number if the `Found:` is already filed;
+   - the queued briefs, with their `Blocks:` targets;
+   - whether a rebase is in progress in the checkout.
+
+   The driver should also delete `RED` and `qa-input.txt` once a later suite run is green. And `architect.md` should say: check `git status` for a rebase in progress before any commit. If one is running, commit nothing and leave the push to the driver.

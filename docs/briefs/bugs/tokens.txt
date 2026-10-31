@@ -21,3 +21,4 @@
 /home/user/Nikaia/docs/briefs/qa-task.md 604683 19
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 544198 17
 /home/user/Nikaia/docs/briefs/bugs/b15-1060-trusted-map-name-collision.md 1925498 39
+/home/user/Nikaia/docs/briefs/bugs/architect-task.md 349340 13
