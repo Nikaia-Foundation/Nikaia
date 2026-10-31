@@ -14,6 +14,12 @@ sync = "inferred"
 touches = []
 signature = "()"
 
+[fn."none_of"]
+pub = true
+sync = "inferred"
+touches = []
+signature = "[T](n: i64) -> Vec[T]"
+
 [fn."places"]
 pub = true
 sync = "inferred"
@@ -21,6 +27,13 @@ returns = "a: ref(s), b: ref(s), value: ref(s)"
 touches = []
 views = ["s: borrowed", "<result>: borrowed"]
 signature = "(s: String) -> Vec[Places]"
+
+[fn."same"]
+pub = true
+sync = "inferred"
+keeps = ["x"]
+touches = []
+signature = "[T](x: T) -> T"
 
 [type."Places"]
 pub = true
