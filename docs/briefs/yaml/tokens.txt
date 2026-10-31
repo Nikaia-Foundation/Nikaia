@@ -26,3 +26,4 @@
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 4816290 74
 /home/user/Nikaia/docs/briefs/yaml/y13-1037-dependency-places.md 329590 5
 /home/user/Nikaia/docs/briefs/yaml/y2c-properties.md 1416633 33
+/home/user/Nikaia/docs/briefs/yaml/architect-task.md 1212819 32
