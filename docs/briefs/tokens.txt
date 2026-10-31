@@ -176,3 +176,4 @@
 /home/user/Nikaia/docs/briefs/k3a2-comptime-compute.md 533344 6
 /home/user/Nikaia/docs/briefs/b1012b-trait-column-refusals.md 3510750 55
 /home/user/Nikaia/docs/briefs/b1024-kept-param-lent.md 446365 6
+/home/user/Nikaia/docs/briefs/architect-task.md 1281456 31
