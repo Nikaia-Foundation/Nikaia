@@ -8,3 +8,4 @@
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 1111135 28
 /home/user/Nikaia/docs/briefs/bugs/b5-1002-hex-digit-built-in.md 439314 15
 /home/user/Nikaia/docs/briefs/bugs/b6-1010-let-mut-literal-owned-field.md 173701 3
+/home/user/Nikaia/docs/briefs/bugs/b7-1016-named-lifetime-and-typed-let-slice.md 493913 9
