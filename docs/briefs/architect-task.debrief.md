@@ -1,11 +1,10 @@
-1. **What cost the most:** pushing. My `git push` was rejected because the shared checkout was behind and had other agents' unfinished files, so I couldn't rebase. My workaround was to rebuild my files on `origin/develop` with a scratch index, and that silently overwrote another session's y21 rule in `docs/architect.md`. Finding that, merging (f96bb09a) and checking ancestry took several turns. Then I chained an edit script with `;`: its assertion failed, the push ran anyway, and an empty commit (dcc656de) went to develop. That was my error.
-2. **What I had to look up:**
-   - Open issues: `gh api search/issues` is blocked by the proxy, so I paged through `repos/.../issues`. A ready list of open `ready` issues not marked `wip` would have saved this.
-   - Which sections of `sysroot.rs` and `lib.rs` hold the preamble and the prelude.
-   - Where in `text_tiers.nika` `map` and `filter_map` are handled.
-   - The current line ranges in `contracts/mod.rs` and in P5c's file, re-checked at 4520d400.
-   - Which moves wait on which bug brief: the dependency between moves and bugs lives only in prose in State.
-3. **Checks I ran:**
-   - Useful: both #1078 probes on today's binary (`map` works, `filter_map` fails); the grep showing the preamble lacks the Duration and Instant traits; the `merge-tree` dry run; the check that local HEAD is an ancestor of origin.
-   - Wasted: the first `gh` search call; re-reading K3b's report after I had already summarised it; and the turns spent repairing my own scratch-index push.
-4. **The one change:** a push recipe in the architect brief: "the checkout is shared and dirty: push with `git merge-tree --write-tree HEAD origin/develop`, then `commit-tree -p HEAD -p origin/develop`, chained with `&&`." That rule is now in `docs/architect.md`. A close second: the driver writes the open, unheld `ready` issues and the move-to-bug `Blocks:` map into `architect-input.txt`.
+1. **Most turns:** working out the state of the checkout and of GR. The local branch was 4 ahead and 17 behind, with other agents' files changed in the tree. I had to dig up the merge-push rule from commit `7233faf8`, because my local `architect.md` didn't have it yet. Then I had to find out why GR was reverted and whether it could re-land, which meant a throwaway worktree just to test the revert. The probes took 4 runs because of my own setup mistakes: a missing `throws`, a missing `use std::process`, and a nudge against `.to_string()`.
+2. **What the brief could have handed me:**
+   - the merge-push procedure itself, written into the task brief;
+   - that GR was reverted, with the revert's sha and its reason;
+   - the scratchpad paths of the reports' probes and patches;
+   - where the `std` entries live (`std.contracts` line numbers, the runtime `map.rs`/`seq.rs`);
+   - the next free ADR number;
+   - a note that `gh` search is blocked, so listing open issues means paging through all of them.
+3. **Checks:** All three probes (#1080, #1081, #1082) were needed and confirmed each defect on today's binary. The revert dry-run was needed: it found three conflicts. `git apply --check` on the C1a patch was useful. The grep for `NK1102`/nullable `==` in the spec gave 54 KB of output and settled nothing, so it was wasted. Reading `check_arguments.nika` helped only partly: the suspected location is still marked "not sure".
+4. **The fix that would have saved the most:** have the driver write into `architect-input.txt` the ahead/behind counts, the unpushed local commits (and whether the suite tested them), and the push recipe. Without that I pushed the four unpushed local commits, b15's untested `gate.nika` change among them, as part of my merge. The recipe should push only the architect's own commit, on top of `origin/develop`, unless HEAD has passed the suite. That rule belongs in `docs/architect.md`.
