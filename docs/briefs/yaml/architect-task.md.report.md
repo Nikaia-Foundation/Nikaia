@@ -1,4 +1,6 @@
 Result: done
-Batch: y8-1026-grammar-label-struct.md y2c-properties.md y2b-keys-directives-limits.md
+Batch: y9-1027-group-label.md, y2c-properties.md, y2b-keys-directives-limits.md
 Owner: none
-Decided: y2 stopped on a compiler defect, filed as #1026 (ready): a grammar label binds its local without the struct it holds (`bind_grammar_pattern`, text_tiers.nika), so a view field read through it counts as owned text (NK1106); the function-call path (#803) works. y8 fixes it (`Fixes #1026`, crates/, Changelog owed); y2c resumes y2 step 2 from the draft on wip/y2-properties (applies cleanly on develop); y2b unchanged but for its reference. #928's To build updated. architect.md: a grammar brief probes its tree shapes across rules (the y2 lesson).
+Input: CUT at y8 on Found (not RED: the `RED` file is empty; CI green to 511e513a, 49569ede..7f6b8151 running). y8 done (555fe6e9, `Fixes #1026`; Changelog line in its report, version raise owed).
+Found: filed #1027 (`ready`, brief form): a label on a one-element group (`n:(P)`, `((P))`, `(text(..))`) reaches rustc "Cannot find value"; the backend winnow-grammar scopes a one-alternative labelled group; fix in `emit_pattern.nika` (emit the element without the parens). Probed on 7f6b8151; `n:(P | Q)` and `m:(P)?` already work. Not needed by yaml (the y2 draft labels rules directly), batched first as a small bug fix.
+Changed: y2c notes y8 done and #1027; #928 *To build* 2b and *Found* updated (labels `ready` + `wip`); builder.md: probe each shape on the old binary before the first build; architect.md: a brief marks which test shapes were traced (y8 debrief).

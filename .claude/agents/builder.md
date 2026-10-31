@@ -78,7 +78,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   release; `--release` is CI's. A build still costs, `lower-std` cold 181 G instructions (about 40 s), after a body or comment change 60 G (one file re-lowered, the ledger pass still runs), unchanged 1.3 G (under a second
   when no `.nika` changed), and the touched tests often 10 minutes more. Before the first one, write down the
   whole probe matrix: every case the step must handle (own field, getter of
-  a getter, `std` methods, the example programs the issue names). Then
+  a getter, `std` methods, the example programs the issue names), and run
+  it on the old binary as one small program per shape: shapes that fail for
+  separate causes show up before the first build (y8, 2026-10-31: the
+  `match` shape had its own cause, found only after a build). Then
   implement all of them and build once. Catch slips without a build:
   Catch Rust slips with `cargo check --release -p nikaia --message-format
   short` (under a minute). Then **the cycle, as one tool call**, exactly:
