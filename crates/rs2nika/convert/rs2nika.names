@@ -17,6 +17,8 @@ difference project_tests_difference # the same: diffs.nika has `differing_lines`
 bless project_tests_bless # every name P3b moved into project_tests.nika is prefixed: the file prefixes most of its names since (R245)
 bless_program project_tests_bless_program # the same (P3b)
 explain_output project_tests_explain_output # the same (P3b)
+build_time::may_not_run bt_may_not_run # the run check is build_eval.nika's (BT); Rust keeps a one-line forward
+is_the_builds_own bt_is_the_builds_own # the same (BT)
 foreign_empty project_members_no_foreign # P4b's `Default` of `Foreign` (R312, R313): the build with no project around it, named for what it is
 is_a_test_function prover_a_test_function # modules.rs had it without a caller; prover_walk.nika answers the same question (M2 deleted the Rust one)
 
@@ -40,6 +42,8 @@ unit.name( unit.text(
 [types]
 check::Finding = CheckFinding # check/mod.rs re-exports check_state::CheckFinding as Finding (project_check.nika, P2)
 check::Severity = CheckSeverity # the same re-export
+grammar_run::Wall = CheckWall # grammar_run.rs re-exports check_reports::CheckWall as Wall; `InsideAnother { outer }` (BT)
+build_time::Refusal = BtRefusal # build_time.rs re-exports build_eval::BtRefusal as Refusal (BT)
 PathBuf = fs::Path # std's file name, `std::path::PathBuf` lowered; its methods are `nikaia_std::fs::path` (sysroot_cache.nika, S2)
 &Path = ref fs::Path # the same, lent (S2)
 (Span,String) = Site # a pause's site, `Site { span, what }` (sync.nika, M1)

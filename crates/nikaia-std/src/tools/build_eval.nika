@@ -32,8 +32,8 @@ pub struct BtRan {
     /// Whether the grammar and its entry rule are the program's.
     pub found: bool,
     pub value: BuildValue?,
-    /// Where the compiler kept what refused it, where nothing came back.
-    pub slot: i64,
+    /// Why the grammar did not run, where nothing came back.
+    pub wall: CheckWall?,
 }
 
 /// What a file read at build time came to.
@@ -73,8 +73,9 @@ pub enum BtRefusal {
     PathIsComputed,
     /// An index this array does not have.
     OutOfBounds { at: Integer, len: i64 },
-    /// A refusal the compiler kept, by its place in what it kept.
-    Host(i64),
+    /// A grammar this compiler could not run (issue #178): the sentence is
+    /// the checker's to write.
+    GrammarWall { owner: String, rule: String, why: CheckWall },
 }
 
 impl Error for BtRefusal {
@@ -86,7 +87,7 @@ impl Error for BtRefusal {
             BtRefusal::MayNotRead { path, .. } => f"`{path}` may not be read",
             BtRefusal::PathIsComputed => "a path that is not a literal",
             BtRefusal::OutOfBounds { len, .. } => f"an index outside {len}",
-            BtRefusal::Host(slot) => f"refused by the compiler ({slot})",
+            BtRefusal::GrammarWall { owner, rule, .. } => f"the grammar `{owner}` stopped at `{rule}`",
         }
     }
 }
@@ -349,7 +350,8 @@ fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[
             }
             let value = ran.value?.clone()
             if value == null {
-                throw BtRefusal::Host(ran.slot)
+                let why = ran.wall?.clone() ?? throw BtRefusal::Unevaluable
+                throw BtRefusal::GrammarWall { owner: parser, rule: rule, why: why }
             }
             value ?? BuildValue::Bool(false)
         },
@@ -579,3 +581,30 @@ fn bt_asset[H: BtHost](args: ref Vec[Expr], host: ref H) -> BuildValue sync thro
     throw BtRefusal::MayNotRead { path: wanted, why: denied }
 }
 
+
+/// **Why a function may not run while the program is built**, read off its
+/// ledger entry (ADR-287 D13, D14): it can pause, nothing says what it
+/// touches, or it touches more than the build's own parameters. Nothing where
+/// it may run.
+pub fn bt_may_not_run(contract: ref FnContract) -> String? sync {
+    if !contract.sync_claim.is_sync() {
+        return "It can pause, and nothing run at build time may pause."
+    }
+    if !contract.touches_known {
+        return "Nothing says what it touches outside the program."
+    }
+    if !contract.touches.iter().all(bt_is_the_builds_own) {
+        return "It touches the world outside the program."
+    }
+    return null
+}
+
+/// Whether a touch is the build's own parameters (ADR-287 D14).
+///
+/// **`cli::args` passes, deliberately**: same parameters, same code. A build's
+/// own arguments are an input like its source is, and a body that shapes a
+/// table differently for two declared parameters is doing the thing `comptime`
+/// is for.
+pub fn bt_is_the_builds_own(touch: ref Touch) -> bool sync {
+    return touch.text() == "args read"
+}

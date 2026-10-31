@@ -64,7 +64,7 @@ impl Host<'_> {
             return not_run("It is not a function of this package.");
         };
         if let Some(because) = build_time::may_not_run(contract) {
-            return not_run(because);
+            return not_run(&because);
         }
         if !contract.touches.is_empty() {
             return not_run(
@@ -158,30 +158,6 @@ fn stopped_as_said(detail: &str) -> crate::prove::ClaimRun {
     ClaimRun::Stopped(said.trim().trim_end_matches('.').to_string())
 }
 
-/// What a grammar's wall is, as the report of it is given it.
-pub(super) fn a_wall(why: &crate::grammar_run::Wall) -> CheckWall {
-    use crate::grammar_run::Wall;
-    match why {
-        Wall::Refused { detail } => CheckWall::Refused {
-            detail: detail.clone(),
-        },
-        Wall::NoCrossedForm { ty, because } => CheckWall::NoCrossedForm {
-            ty: ty.clone(),
-            because: because.clone(),
-        },
-        Wall::InsideAnother { grammar } => CheckWall::InsideAnother {
-            outer: grammar.clone(),
-        },
-        Wall::NowhereToBuild => CheckWall::NowhereToBuild,
-        Wall::DidNotBuild { detail } => CheckWall::DidNotBuild {
-            detail: detail.clone(),
-        },
-        Wall::Unreadable { detail } => CheckWall::Unreadable {
-            detail: detail.clone(),
-        },
-    }
-}
-
 impl CheckHost for Host<'_> {
     fn hole(&self, site: u32, text: &str) -> Option<Expr> {
         self.parsed.hole(site, text).ok()
@@ -230,10 +206,9 @@ impl CheckHost for Host<'_> {
         match outcome {
             Ok(value) => CheckBuilt::Value(value),
             Err(build_time::Refusal::Unevaluable) => CheckBuilt::Unevaluable,
-            Err(build_time::Refusal::OutOfBounds { at, len }) => CheckBuilt::OutOfBounds {
-                at,
-                len: len as i64,
-            },
+            Err(build_time::Refusal::OutOfBounds { at, len }) => {
+                CheckBuilt::OutOfBounds { at, len }
+            }
             Err(build_time::Refusal::Circular { ring }) => CheckBuilt::Circular { ring },
             Err(build_time::Refusal::NotHere { what, why, way_out }) => {
                 CheckBuilt::NotHere { what, why, way_out }
@@ -242,12 +217,8 @@ impl CheckHost for Host<'_> {
                 CheckBuilt::MayNotRead { path, why }
             }
             Err(build_time::Refusal::PathIsComputed) => CheckBuilt::PathIsComputed,
-            Err(build_time::Refusal::GrammarWall { grammar, rule, why }) => {
-                CheckBuilt::GrammarWall {
-                    owner: grammar,
-                    rule,
-                    why: a_wall(&why),
-                }
+            Err(build_time::Refusal::GrammarWall { owner, rule, why }) => {
+                CheckBuilt::GrammarWall { owner, rule, why }
             }
         }
     }

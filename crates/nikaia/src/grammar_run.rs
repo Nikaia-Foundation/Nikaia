@@ -38,30 +38,9 @@ use crate::parser::Parsed;
 use nikaia_std::tools::dump::{FieldShape, Shapes, VariantShape};
 
 /// Why a grammar could not be run, where the reason is this compiler's rather
-/// than the input's.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Wall {
-    /// This build has nowhere to compile a parser — a bare `check` with no
-    /// project around it, which is every unit test and nothing a person runs.
-    NowhereToBuild,
-    /// A grammar run inside a grammar run. The sub-project is emitted without
-    /// the item-level `comptime`s, so this is a `comptime` inside a *body*, and
-    /// it is refused rather than allowed to nest compilers.
-    InsideAnother { grammar: String },
-    /// The rule's result has no form a `const` can hold
-    /// ([ADR-311](../../../docs/specification/adr/adr-311.md) D1).
-    NoCrossedForm { ty: String, because: String },
-    /// The sub-project did not compile, which is this compiler's fault rather
-    /// than the program's — the parser it wrote is the parser the program
-    /// links.
-    DidNotBuild { detail: String },
-    /// The parser ran and refused the input. **The input's own diagnostic**,
-    /// in the grammar's vocabulary and against the file the bytes came from.
-    Refused { detail: String },
-    /// It ran and printed something this could not read, which is the pair of
-    /// generated encoder and hand-written decoder disagreeing.
-    Unreadable { detail: String },
-}
+/// than the input's: declared in Nikaia (`tools/check_reports.nika`, ADR-294,
+/// #125), the checker's report reads it as it is.
+pub use nikaia_std::tools::check_reports::CheckWall as Wall;
 
 /// One run: which grammar, which rule, and the bytes.
 pub struct Ask<'a> {
@@ -170,7 +149,7 @@ impl Workshop {
             })?;
             if let Some(outer) = running.first() {
                 return Err(Wall::InsideAnother {
-                    grammar: outer.clone(),
+                    outer: outer.clone(),
                 });
             }
             running.push(ask.grammar.to_string());

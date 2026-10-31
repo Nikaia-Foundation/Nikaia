@@ -446,7 +446,6 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
             .functions
             .get(VALUE_FN)
             .and_then(crate::build_time::may_not_run)
-            .map(|because| because.to_string())
     }
 
     fn culprit(
@@ -497,9 +496,7 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         match self.workshop.run_comptime(program, bound) {
             Ok(text) => tree::ComptimeRan::Answer(text),
             Err(Wall::NowhereToBuild) => tree::ComptimeRan::NowhereToBuild,
-            Err(Wall::InsideAnother { grammar }) => {
-                tree::ComptimeRan::InsideAnother { name: grammar }
-            }
+            Err(Wall::InsideAnother { outer }) => tree::ComptimeRan::InsideAnother { name: outer },
             Err(Wall::NoCrossedForm { ty, because }) => {
                 tree::ComptimeRan::NoCrossedForm { ty, because }
             }

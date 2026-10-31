@@ -11,7 +11,7 @@ pub(crate) const BT_ASSET: &str = "asset";
 pub struct BtRan {
     pub found: bool,
     pub value: Option<BuildValue>,
-    pub slot: i64,
+    pub wall: Option<CheckWall>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,7 +38,7 @@ pub enum BtRefusal {
     MayNotRead { path: String, why: Denied },
     PathIsComputed,
     OutOfBounds { at: Integer, len: i64 },
-    Host(i64),
+    GrammarWall { owner: String, rule: String, why: CheckWall },
 }
 
 impl BtRefusal {
@@ -50,7 +50,7 @@ impl BtRefusal {
             BtRefusal::MayNotRead { path, .. } => format!("`{}` may not be read", path),
             BtRefusal::PathIsComputed => String::from("a path that is not a literal"),
             BtRefusal::OutOfBounds { len, .. } => { let len = *len; format!("an index outside {}", len) },
-            BtRefusal::Host(slot) => { let slot = *slot; format!("refused by the compiler ({})", slot) },
+            BtRefusal::GrammarWall { owner, rule, .. } => format!("the grammar `{}` stopped at `{}`", owner, rule),
         }
     }
 }
@@ -257,7 +257,13 @@ pub(crate) fn bt_call_expr<H: BtHost>(func: &Expr, args: &[Expr], config: &[Conf
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
-            if value.is_none() { return Err(nikaia_std::error::throwing(BtRefusal::Host(ran.slot), &"bt_call_expr")); }
+            if value.is_none() {
+                let why = match match ran.wall.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                } { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_call_expr")) };
+                return Err(nikaia_std::error::throwing(BtRefusal::GrammarWall { owner: parser, rule, why }, &"bt_call_expr"));
+            }
             nikaia_std::index::or(value, || BuildValue::Bool(false))
         },
         Expr::Variable(symbol, _) => {
@@ -416,4 +422,17 @@ pub(crate) fn bt_asset<H: BtHost>(args: &[Expr], host: &H) -> Result<BuildValue,
     }, || Denied::NoList);
     return Err(nikaia_std::error::throwing(BtRefusal::MayNotRead { path: wanted, why: denied }, &"bt_asset"))
 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn bt_may_not_run(contract: &FnContract) -> Option<String> {
+    if !contract.sync_claim.is_sync() { return Some(String::from("It can pause, and nothing run at build time may pause.")); }
+    if !contract.touches_known { return Some(String::from("Nothing says what it touches outside the program.")); }
+    if !contract.touches.iter().all(bt_is_the_builds_own) { return Some(String::from("It touches the world outside the program.")); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn bt_is_the_builds_own(touch: &Touch) -> bool { touch.text() == "args read" }
 

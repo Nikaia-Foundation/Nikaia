@@ -10,13 +10,10 @@
 //! program (`crate::comptime_run`), so the build-time answer is the run-time
 //! one, and a check with no place to compile it refuses the value (D19).
 
-use std::cell::RefCell;
+use nikaia_std::tools::build_eval::{BtHost, BtRan, BtRead, bt_evaluate};
 
-use nikaia_std::tools::build_eval::{BtHost, BtRan, BtRead, BtRefusal, bt_evaluate};
-
-use crate::assets::{Denied, Reads};
+use crate::assets::Reads;
 use crate::ast::{Expr, Item};
-use crate::contracts::touch;
 use crate::contracts::ty::TyOps;
 use crate::parser::Parsed;
 
@@ -27,65 +24,10 @@ use crate::parser::Parsed;
 /// each a kind a `const` can carry (ADR-287 D6).
 pub use nikaia_std::tools::build_values::BuildValue as Value;
 
-/// Why a build-time expression did not come to a value.
-#[derive(Debug, Clone)]
-pub enum Refusal {
-    /// This evaluator does not know the shape. **Not an error by itself**: it is
-    /// what `NK1127` reports, and what the staging above expects to keep
-    /// reporting until every stage lands.
-    Unevaluable,
-    /// **Understood, and not something this folder computes**: code that runs,
-    /// which is compiled and run where it stands in a `comptime`'s own
-    /// initialiser (ADR-321 D1), and is never interpreted.
-    NotHere {
-        what: String,
-        why: String,
-        /// **The way out belongs to the wall.** *Put the work in a function of
-        /// this file* is right for a callee in another file and is a trap for
-        /// `"a".to_uppercase()`: the method would be just as unreadable one
-        /// function further in. [Part III C.2](../../../docs/specification/30-nikaia-tooling.md)
-        /// asks for a way out, and one that cannot be taken is not one.
-        way_out: String,
-    },
-    /// A constant worked out from itself.
-    ///
-    /// `comptime A = B` beside `comptime B = A` has no base case to reach, and
-    /// the message names the ring.
-    Circular { ring: Vec<String> },
-    /// **A file this build may not read**
-    /// ([ADR-310](../../../docs/specification/adr/adr-310.md) D4 to D5).
-    ///
-    /// Understood and refused, which is why it is not `Unevaluable`: the shape
-    /// is read, the path is in hand, and the answer is no — with a reason that
-    /// differs per shape, so the sentence is the checker's to write.
-    MayNotRead { path: String, why: Denied },
-    /// **A grammar this compiler could not run**
-    /// (issue #178).
-    ///
-    /// Six reasons and one variant, because the sentence is the checker's to
-    /// write and they share nothing but the code: a parser that did not compile
-    /// is this compiler's fault, and input the parser refused is the input's.
-    GrammarWall {
-        grammar: String,
-        rule: String,
-        why: crate::grammar_run::Wall,
-    },
-    /// **A path that is not a literal** (D4).
-    ///
-    /// Its own variant because it is answered *before* the argument is
-    /// evaluated: a name that folds to `"config.json"` would otherwise be read
-    /// as one, and then *named in the code* would stop being decidable by
-    /// looking at the line, which is the whole of what the three namings buy.
-    PathIsComputed,
-    /// An index this array does not have. **Understood and wrong**, like
-    /// `NotAllowed` and unlike `Unevaluable`: the program says `xs[7]` of five
-    /// elements, and a build that answered *cannot evaluate* would send the
-    /// reader looking for a missing feature instead of at the line
-    /// ([Part III C.2](../../../docs/specification/30-nikaia-tooling.md)).
-    /// Running it would abort at run time ([ADR-285](../../../docs/specification/adr/adr-285.md)
-    /// D1); at build time there is no run to abort.
-    OutOfBounds { at: Integer, len: usize },
-}
+/// Why a build-time expression did not come to a value: declared in Nikaia
+/// (`tools/build_eval.nika`, ADR-294, #125), with a grammar's wall in the
+/// checker's own type.
+pub use nikaia_std::tools::build_eval::BtRefusal as Refusal;
 
 /// What a name outside a build-time body is worth: a `comptime` already
 /// evaluated, or a `let` whose value folded.
@@ -139,9 +81,8 @@ impl<'a> BuildTime<'a> {
             units,
             reads: self.reads,
             known: self.known,
-            kept: RefCell::new(Vec::new()),
         };
-        bt_evaluate(expr, &host).map_err(|thrown| host.refusal(thrown.split().0))
+        bt_evaluate(expr, &host).map_err(|thrown| thrown.split().0)
     }
 }
 
@@ -151,27 +92,9 @@ struct Host<'h> {
     units: Vec<&'h Parsed>,
     reads: &'h Reads,
     known: Known<'h>,
-    /// The refusals the evaluator carries by their place here: a grammar that
-    /// would not run says why in a type of this compiler's.
-    kept: RefCell<Vec<Refusal>>,
 }
 
 impl Host<'_> {
-    fn refusal(&self, refused: BtRefusal) -> Refusal {
-        match refused {
-            BtRefusal::Unevaluable => Refusal::Unevaluable,
-            BtRefusal::NotHere { what, why, way_out } => Refusal::NotHere { what, why, way_out },
-            BtRefusal::Circular { ring } => Refusal::Circular { ring },
-            BtRefusal::MayNotRead { path, why } => Refusal::MayNotRead { path, why },
-            BtRefusal::PathIsComputed => Refusal::PathIsComputed,
-            BtRefusal::OutOfBounds { at, len } => Refusal::OutOfBounds {
-                at,
-                len: len as usize,
-            },
-            BtRefusal::Host(slot) => self.kept.borrow()[slot as usize].clone(),
-        }
-    }
-
     /// The files in the order a name is looked for: the one the body being read
     /// came from, and then every file beside the one being checked.
     fn in_reach(&self, unit: i64) -> impl Iterator<Item = (usize, &Parsed)> {
@@ -226,7 +149,7 @@ impl BtHost for Host<'_> {
             return BtRan {
                 found: false,
                 value: None,
-                slot: -1,
+                wall: None,
             };
         };
         let beside: Vec<&Parsed> = self.units[1..].to_vec();
@@ -237,30 +160,22 @@ impl BtHost for Host<'_> {
             result: &result,
             units: &beside,
         };
-        let wall = |why| Refusal::GrammarWall {
-            grammar: which.to_string(),
-            rule: rule.to_string(),
-            why,
-        };
-        let outcome = match self.reads.workshop().run(parsed, &ask) {
-            Ok(dump) => crate::grammar_run::decode(&dump).map_err(wall),
-            Err(why) => Err(wall(why)),
-        };
+        let outcome = self
+            .reads
+            .workshop()
+            .run(parsed, &ask)
+            .and_then(|dump| crate::grammar_run::decode(&dump));
         match outcome {
             Ok(value) => BtRan {
                 found: true,
                 value: Some(value),
-                slot: -1,
+                wall: None,
             },
-            Err(refusal) => {
-                let mut kept = self.kept.borrow_mut();
-                kept.push(refusal);
-                BtRan {
-                    found: true,
-                    value: None,
-                    slot: kept.len() as i64 - 1,
-                }
-            }
+            Err(why) => BtRan {
+                found: true,
+                value: None,
+                wall: Some(why),
+            },
         }
     }
 
@@ -360,28 +275,7 @@ pub fn written(text: &str) -> String {
 
 /// **Why a function may not run while the program is built**, read off its
 /// ledger entry ([ADR-287](../../../docs/specification/adr/adr-287.md) D13,
-/// D14): it can pause, nothing says what it touches, or it touches more than
-/// the build's own parameters. Nothing where it may run.
-pub(crate) fn may_not_run(contract: &crate::contracts::FnContract) -> Option<&'static str> {
-    if !contract.sync_claim.is_sync() {
-        return Some("It can pause, and nothing run at build time may pause.");
-    }
-    if !contract.touches_known {
-        return Some("Nothing says what it touches outside the program.");
-    }
-    if !contract.touches.iter().all(is_the_builds_own) {
-        return Some("It touches the world outside the program.");
-    }
-    None
-}
-
-/// Whether a touch is the build's own parameters
-/// ([ADR-287](../../../docs/specification/adr/adr-287.md) D14).
-///
-/// **`cli::args` passes, deliberately**: same parameters, same code. A build's
-/// own arguments are an input like its source is, and a body that shapes a
-/// table differently for two declared parameters is doing the thing `comptime`
-/// is for.
-fn is_the_builds_own(touch: &touch::Touch) -> bool {
-    touch.text() == "args read"
+/// D14), by `tools/build_eval.nika`. Nothing where it may run.
+pub(crate) fn may_not_run(contract: &crate::contracts::FnContract) -> Option<String> {
+    nikaia_std::tools::build_eval::bt_may_not_run(contract)
 }

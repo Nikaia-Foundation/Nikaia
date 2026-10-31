@@ -41,7 +41,6 @@ use crate::parser::Parsed;
 use nikaia_std::tools::check_crossings;
 use nikaia_std::tools::check_flow::{CheckConstant, CheckFlow};
 use nikaia_std::tools::check_items;
-use nikaia_std::tools::check_reports::CheckWall;
 pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
 };
