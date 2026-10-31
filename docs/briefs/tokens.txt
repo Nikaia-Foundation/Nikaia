@@ -202,3 +202,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 3126021 56
 /home/user/Nikaia/docs/briefs/b1036-tuple-result-keeps-arg.md 168901 4
 /home/user/Nikaia/docs/briefs/b1045-let-lambda-fn-field.md 291147 7
+/home/user/Nikaia/docs/briefs/architect-task.md 2469800 49
