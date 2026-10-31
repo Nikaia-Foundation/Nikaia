@@ -84,3 +84,4 @@ docs/briefs/**/ESCALATE
 docs/briefs/**/QUESTION
 docs/briefs/**/STOP
 docs/briefs/**/architect-input.txt
+docs/briefs/**/*.session

@@ -19,6 +19,13 @@
 // first (`agent_draft`) and the draft named in the prompt. Before any escalation it resumes the run's
 // session once and writes its answer to what held it up to BRIEF.debrief.md
 // (the cost goes to DIR/cost.txt). `--dry-run` prints the command only.
+//
+// A run that was cut off (timeout, a killed driver) is resumed in its own
+// session: BRIEF.session holds `<session id> <cksum of BRIEF>`, written before
+// claude starts and removed once a report exists. The next start of the same,
+// unchanged brief without a report resumes that session once (`resumed` is
+// appended to the record), with the same model and tools, if its transcript is
+// still there; a resume that fails at once (no JSON) falls back to a fresh run.
 
 use std::cli
 use std::fs
@@ -69,6 +76,40 @@ fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
     v.push("--allowedTools")
     v.push(agent_tools(agent))
     return v
+}
+
+// The arguments of a resumed run: those of a fresh one, with `--resume` for
+// `--session-id` and a prompt that says the run was interrupted.
+fn agent_resume_args(brief: String, body: String, session: String) -> Vec[String] {
+    let mut v = agent_args(brief.clone(), body, session)
+    v[1] = f"Your run of the brief at {brief} was interrupted (a timeout or a killed driver). Check `git log` and `git status` for your own work (commits, changed files), then continue the brief to its report."
+    v[12] = "--resume"
+    return v
+}
+
+// Where claude keeps the transcript of a session started in this directory.
+fn agent_transcript(session: String) -> String throws {
+    let path = "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(pwd | sed 's/[^a-zA-Z0-9]/-/g')/" + session + ".jsonl"
+    return process::run("sh", ["-c", "echo " + path]).stdout.trim().clone()
+}
+
+// The report of BRIEF that exists (`BRIEF.report.md`, else the stem's), or the
+// first of the two.
+fn agent_report(abs: String) -> String throws {
+    let report = f"{abs}.report.md"
+    let stem = (abs.strip_suffix(".md") ?? "").clone()
+    if !fs::exists(report.clone(), fs::Root::Anywhere) && stem != "" { return f"{stem}.report.md" }
+    return report
+}
+
+// The session to resume: the record's id when the brief is unchanged (`sum`),
+// has no report, was not resumed yet and its transcript is still there; else "".
+fn agent_resumable(abs: String, record: String, sum: String) -> String throws {
+    let words = record.trim().split(" ").collect()
+    if words.len() != 2 || words[1] != sum || words[0] == "" { return "" }
+    if fs::exists(agent_report(abs), fs::Root::Anywhere) { return "" }
+    if !fs::exists(agent_transcript(words[0].clone()), fs::Root::Anywhere) { return "" }
+    return words[0].clone()
 }
 
 // The converter's draft of the brief's `Cut: PATH:A-B` lines (L2, 2026-10-28),
@@ -323,7 +364,7 @@ fn main() throws {
         println(agent_front(text.clone(), "agent", "builder") + " " + agent_front(text.clone(), "model", "sonnet") + " " + agent_front(text.clone(), "max_turns", "120") + " " + agent_front(text, "budget_usd", "20"))
         return
     }
-    let wanted = agent_read("/proc/sys/kernel/random/uuid").trim().clone()
+    let mut wanted = agent_read("/proc/sys/kernel/random/uuid").trim().clone()
     let mut claude_args = agent_args(abs.clone(), text.clone(), wanted.clone())
     // The sections of docs/builder-facts.md the brief names go into its prompt.
     let facts = agent_read("docs/builder-facts.md")
@@ -336,11 +377,11 @@ fn main() throws {
         agent_escalate(dir.clone(), f"unknown Facts heading in {abs}: {unknown}")
     }
     claude_args[1] = claude_args[1].clone() + agent_facts(text.clone(), facts)
-    if !dry {
-        let draft = agent_draft(abs.clone(), text.clone())
-        if draft != "" { claude_args[1] = claude_args[1].clone() + f". The converter's draft of its Cut: lines is {draft}, its notes {draft}.notes, the Rust it read {draft}.rs" }
-    }
+    let record = f"{abs}.session"
+    let sum = process::run("cksum", [abs.clone()]).stdout.trim().split(" ").collect()[0].clone()
+    let mut resumed = agent_resumable(abs.clone(), agent_read(record.clone()), sum.clone())
     if dry {
+        if resumed != "" { claude_args = agent_resume_args(abs.clone(), text.clone(), resumed.clone()) }
         println(claude + " " + claude_args.join(" "))
         return
     }
@@ -358,7 +399,23 @@ fn main() throws {
     }
     if spent > 1000 * 1000000 { agent_escalate(dir.clone(), f"cost today {spent / 1000000} USD above 1000") }
 
-    let out = process::run(claude, claude_args; within: 150.minutes())
+    let mut out = process::run("true", [])
+    if resumed != "" {
+        fs::write(record.clone(), fs::Root::Anywhere, f"{resumed} {sum} resumed\n")
+        out = process::run(claude.clone(), agent_resume_args(abs.clone(), text.clone(), resumed.clone()); within: 150.minutes())
+        if !out.timed_out && agent_json(out.stdout.clone(), "session_id") == "" {
+            println(f"resume of {resumed} failed at once (code {out.code}), starting fresh")
+            resumed = ""
+        } else {
+            wanted = resumed.clone()
+        }
+    }
+    if resumed == "" {
+        fs::write(record.clone(), fs::Root::Anywhere, f"{wanted} {sum}\n")
+        let draft = agent_draft(abs.clone(), text.clone())
+        if draft != "" { claude_args[1] = claude_args[1].clone() + f". The converter's draft of its Cut: lines is {draft}, its notes {draft}.notes, the Rust it read {draft}.rs" }
+        out = process::run(claude.clone(), claude_args; within: 150.minutes())
+    }
     let json = out.stdout.clone()
     fs::write(f"{abs}.run.json", fs::Root::Anywhere, json.clone())
     let cost = agent_json(json.clone(), "total_cost_usd")
@@ -367,8 +424,9 @@ fn main() throws {
     let session = agent_json(json.clone(), "session_id")
     let reason = agent_json(json.clone(), "terminal_reason")
     let stem = (abs.strip_suffix(".md") ?? "").clone()
-    let mut report = f"{abs}.report.md"
-    if !fs::exists(report.clone(), fs::Root::Anywhere) && stem != "" { report = f"{stem}.report.md" }
+    let report = agent_report(abs.clone())
+    // A report ends the run: nothing left to resume.
+    if fs::exists(report.clone(), fs::Root::Anywhere) { fs::remove(record.clone(), fs::Root::Anywhere) }
     // A run cut off by the time limit prints no JSON: no empty cost line.
     if cost != "" {
         let old_cost = agent_read(f"{dir}/cost.txt")

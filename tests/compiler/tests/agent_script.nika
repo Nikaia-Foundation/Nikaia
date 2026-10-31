@@ -65,5 +65,37 @@ fn main() throws {
     fs::write(f"{tmp}/small/cost.txt", fs::Root::Anywhere, f"{today} 0.9\n{today} 0.95\n{today} 12.5\n")
     let small = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dir", f"{tmp}/small", "--claude", fake.clone()]; dir: repo.clone())
     println(f"small: code={small.code} escalate={fs::exists(f"{tmp}/small/ESCALATE", fs::Root::Anywhere)}")
+
+    // An interrupted run (record, transcript, no report) resumes its session
+    // once; a resume that fails at once starts fresh.
+    fs::remove(f"{tmp}/b.report.md", fs::Root::Anywhere)
+    process::run("mkdir", ["-p", f"{tmp}/res"])
+    let conf = f"{tmp}/conf"
+    let mangled = process::run("sh", ["-c", "pwd | sed 's/[^a-zA-Z0-9]/-/g'"]; dir: repo.clone()).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{conf}/projects/{mangled}"])
+    fs::write(f"{conf}/projects/{mangled}/old-sid.jsonl", fs::Root::Anywhere, "")
+    let sum = process::run("cksum", [f"{tmp}/b.md"]).stdout.trim().split(" ").collect()[0].clone()
+    fs::write(f"{tmp}/b.md.session", fs::Root::Anywhere, f"old-sid {sum}\n")
+    let rdry = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dry-run"]; dir: repo.clone(), env: [("CLAUDE_CONFIG_DIR", conf.clone())])
+    println(f"resume dry: {rdry.stdout.contains("--resume old-sid")} {rdry.stdout.contains("--session-id")} {rdry.stdout.contains("--model opus --max-turns 7")} {rdry.stdout.contains("was interrupted")}")
+    let resumer = f"{tmp}/resumer"
+    fs::write(resumer.clone(), fs::Root::Anywhere, script.replace("--session-id", "--resume"))
+    process::run("chmod", ["+x", resumer.clone()])
+    let res = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dir", f"{tmp}/res", "--claude", resumer.clone()]; dir: repo.clone(), env: [("CLAUDE_CONFIG_DIR", conf.clone())])
+    println(f"resumed: code={res.code} {res.stdout.trim().split(' ').collect()[0]} record={fs::exists(f"{tmp}/b.md.session", fs::Root::Anywhere)} {fs::read_to_string(f"{tmp}/b.md.run.json", fs::Root::Anywhere).contains("old-sid")}")
+    fs::remove(f"{tmp}/b.report.md", fs::Root::Anywhere)
+    fs::write(f"{tmp}/b.md.session", fs::Root::Anywhere, f"old-sid {sum} resumed\n")
+    let once = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dry-run"]; dir: repo.clone(), env: [("CLAUDE_CONFIG_DIR", conf.clone())])
+    println(f"resumed once: {once.stdout.contains("--resume")}")
+    fs::write(f"{tmp}/b.md.session", fs::Root::Anywhere, f"old-sid 1{sum}\n")
+    let edited = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dry-run"]; dir: repo.clone(), env: [("CLAUDE_CONFIG_DIR", conf.clone())])
+    println(f"brief changed: {edited.stdout.contains("--resume")}")
+    fs::write(f"{tmp}/b.md.session", fs::Root::Anywhere, f"old-sid {sum}\n")
+    let failing = f"{tmp}/failing"
+    fs::write(failing.clone(), fs::Root::Anywhere, "#!/bin/sh\nfor a in \"$@\"; do if [ \"$a\" = --resume ]; then exit 1; fi; done\nexec " + fake + " \"$@\"\n")
+    process::run("chmod", ["+x", failing.clone()])
+    let fresh = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dir", f"{tmp}/res", "--claude", failing.clone()]; dir: repo.clone(), env: [("CLAUDE_CONFIG_DIR", conf.clone())])
+    let flines = fresh.stdout.trim().split("\n").collect()
+    println(f"fallback: code={fresh.code} {flines[0].contains("starting fresh")} {flines[flines.len() - 1].split(' ').collect()[0]} {fs::read_to_string(f"{tmp}/b.md.run.json", fs::Root::Anywhere).contains("old-sid")}")
     process::run("rm", ["-rf", tmp])
 }
