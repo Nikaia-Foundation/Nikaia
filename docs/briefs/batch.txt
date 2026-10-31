@@ -1,3 +1,2 @@
-bred2-kept-lambda-test.md
-b1034a-kept-lambda-captured-fn.md
-b1035-fn-field-from-loan.md
+b938b-nested-number-lists.md
+b1034b-returned-lambda-keeps-param.md
