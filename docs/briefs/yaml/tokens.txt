@@ -12,3 +12,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y7c-match-join.md 800708 7
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 381360 18
 /home/user/Nikaia/docs/briefs/yaml/y2-tree-properties.md 4119231 44
+/home/user/Nikaia/docs/briefs/yaml/architect-task.md 2267562 50

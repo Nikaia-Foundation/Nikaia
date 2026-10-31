@@ -1,11 +1,13 @@
-1. **Most turns: finding why CI was red.** `architect-input.txt` said `RED` but listed no failing jobs, though the brief says it should. `gh run view --log-failed` and the jobs/logs API both returned Forbidden. What finally worked was `check-runs/<job>/annotations`. After that I still had to go back through about 15 runs to find which commit turned it red (36761b04, main lane) and to rule out the yaml commits. That took about 8 of my roughly 15 tool calls.
-2. **What I looked up that the brief could have handed me:**
-   - the failing test names and the first red commit with its lane (the input should carry them);
-   - that the search API is blocked, so only `repos/...` endpoints work;
-   - where ADR-361 D9 sits and the decision-paper rules in `docs/supervisor.md` (fine to read, but one line would have pointed there);
-   - whether a `Found` should still be filed when CI is red and `batch.txt` stays unchanged. Step 3 doesn't say; I filed it anyway (#1022).
-3. **Checks I ran:**
-   - Useful: listing the runs, the failed jobs and steps, the annotations of the first red runs, the `git log` of `touch_sets.rs` (it pointed to the fix forward 0b8a3acb), and grepping #928 before the PATCH.
-   - Wasted: `--log-failed`, `actions/jobs/<id>/logs` (twice), and `search/issues`. All were Forbidden, about 4 calls.
-   - Not checked: whether 0b8a3acb actually turns `develop` green. Its run was still going, and I didn't poll.
-4. **The change that would save the most:** the driver should write into `architect-input.txt`, on every `RED`, the failing jobs, the failing test names from the annotations, and the first red commit with its title. Then step 3 is one read instead of a search. Second, `docs/architect.md` should say that CI logs are Forbidden headless: use `check-runs/<job>/annotations`, and only `repos/...` endpoints work, no search. I did not commit either change this run; one of them should be made next run.
+1. **Most turns:** getting the probes to run. Rebuilding the y2 report's probe took four tries: `('a'..'z')+` doesn't parse, a rule without an action needs `-> { }`, and `alpha` isn't a defined rule. The control probe through a function call took four more: NK1261 for `ref String`, String has no `slice`, NK1214 for cutting at a made-up number, NK2105 for a moved parameter. It only ran once I switched to literals.
+
+2. **Looked up that could have been handed to me:**
+   - The y2 report gave its probe as fragments, without the `Word` rule, so I had to rebuild it.
+   - Which grammar primitives exist (`digit`, `any`; no `alpha`, no character ranges).
+   - That the text-tier walk lives in `crates/nikaia-std/src/tools/text_tiers.nika`, not in `tools/`. Finding `bind_grammar_pattern` and `called_struct` took about five greps.
+   - That `wip/y2-properties` sits on the pre-rebase commit 9fe7210f, not on 9d92e474.
+
+3. **Checks:**
+   - Useful: the failing probe and the same probe with one alternative removed; the control probe showing the function path (#803) works; ADR-282 D12–D15; `git apply --check` of the draft onto `develop`; reading #928's *To build*.
+   - Partly wasted: the four failed control probes; reading the end of y2b's rules block; one find for a `tools/` directory that doesn't exist.
+
+4. **Biggest saving:** `builder.md` should require a `Found:` probe to be a complete file that runs as written, saved beside the report (`<brief>.probe.nika`). `docs/builder-facts.md` should also get a short list of grammar primitives and the smallest working grammar program. Together these would have saved about eight turns.
