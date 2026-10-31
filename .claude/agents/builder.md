@@ -15,8 +15,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   traps already met (dirty `nikaia.lock`, the self-hosted badge). Do not look
   up again what it or the brief's *Locations* say.
 * **Your task names one or two steps.** Build them, run the touched tests,
-  commit only your files, push fast-forward to `develop`, report, end. Do not
-  start a further step the task did not name.
+  commit only your files (locally: the driver tests and pushes, below),
+  report, end. Do not start a further step the task did not name.
 * **The report file has exactly the brief's fields** (`Result:`, `Pushed:`,
   `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, ...), one line
   each, no prose: `scripts/release.nika` parses them. A test added for a fix
@@ -49,9 +49,11 @@ You build one small slice of an issue in the Nikaia repository and end.
   `entry`, no `take(16)` for a refused slice, no index loop for `zip`) unless
   an ADR or Part I-III refuses it, and the report then names that ADR. Without
   one: commit nothing that routes around it, report `Result: blocked`,
-  `Found:` the gap with a probe, `Needs: owner decision`, and end.
+  `Found:` the gap with a probe, `Needs: architect decision`, and end. The
+  architect decides an obvious gap itself (owner, 2026-10-31) and takes only a
+  non-obvious one to the owner; either way the gap is filed, not built around.
 * **At about 120 turns, or when your context passes about 200k tokens**,
-  stop starting new work: commit and push what is verified, and report what
+  stop starting new work: commit what is verified, and report what
   is left, so a fresh agent can take it from the repository.
 * **Time box on a search** (owner, 2026-10-31). No cause found after about
   40 turns, or going in circles (the same probe, file or hypothesis again):
@@ -61,42 +63,24 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Wait in one call.** Run a build or a test in the foreground with a long
   timeout, or with `run_in_background` and let its end wake you. Never poll
   with repeated `tail`, `ps` or `sleep` calls.
-* **Cheap checks while working, the gate once at the end** (owner,
-  2026-10-28). Between steps run only the tests the brief names and the ones
-  your change touches (one program, one `it` filter). An `it` filter such as
-  `package` also matches `nikaia_test::the_compiler_test_package_passes_at_both_settings`,
-  ten minutes that repeat `nikaia test --both-settings`: add `--skip
-  nikaia_test::the_compiler_test_package` (P4a debrief, 2026-10-28). Before the run's last
-  commit, once, run the gate (#852) as one call, with `run_in_background`
-  and `timeout: 3600000` (its end wakes you; no polling):
-
-      target/fast/nikaia run scripts/gate.nika -- --full --files <your uncommitted files> [--tests NAME...]
-
-  It runs, stopping at the first red: `build` (`cargo build --profile fast
-  -p nikaia`), `lower-std` (when a `tools/*.nika` changed: `lower-std`, and
-  when that changes a lowered file a rebuild and a second `lower-std` that
-  must change nothing: the fixpoint), `fmt` (`cargo fmt --check`), `clippy`
-  (`--all-targets -D warnings`), `pre-push` (`scripts/pre-push-check.sh`),
-  `test` (`nikaia test --both-settings` on the touched tests of
-  `tests/compiler`: the changed ones and those after `--tests`; the whole
-  package when `check/`, `emit/`, `tools/check_*.nika` or `tools/emit_*.nika`
-  changed) and `guards` (`range_spelling:: shipped_ledger::
-  contracts::every_std_module dependency_ledger:: fmt::every_nika_file
-  sequences::the_corpus_has_no_more_unanswered`: repository-wide scans no NK
-  code leads to; they kept `develop` red for runs 1902-1915, the `fmt` scan
-  found P5d's formatter defect only in CI, 0f9a525, the `sequences` scan went
-  red from 75e25ed8). "Changed" is against `origin/develop` plus the files
-  after `--files` (never all of `git status`: the tree holds other agents'
-  files). It prints `<step> green|red <first error line>` and `Gate: green`
-  or `Gate: red <step>`; `--keep-going` runs every step, `--dry-run` shows
-  what would run. Report `Gate: green` or `Gate: red <step>`; on red do not
-  commit, report `Needs: fix`. A guard listed in
-  `docs/builder-facts.md`, *Red on develop now*, whose figure your change does
-  not worsen, does not make the gate red: say its figure under `Tests:`.
-* **Never run the full suite.** Only the tests your change touches; CI runs
-  the rest on every push to `develop`. Measure (callgrind, counts) only when
-  your order has a *Measure* line, and then on one file or a small program,
-  never on a whole `lower-std` or a test run.
+* **Cheap checks only; the driver runs the suite and pushes** (owner,
+  2026-10-31, replacing the gate at the end of 2026-10-28). Run only the tests
+  the brief names and the ones your change touches (one program, one `it`
+  filter; with an `it` filter such as `package` add `--skip
+  nikaia_test::the_compiler_test_package`, ten minutes of `--both-settings`).
+  Before committing: the build (`cargo build --profile fast -p nikaia`),
+  `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt`,
+  `cargo clippy --all-targets -- -D warnings` when Rust changed, and
+  `scripts/pre-push-check.sh`. No `gate.nika`, no push: after your commit the
+  driver runs the complete suite (`gate.nika --all`); green, it pushes; red,
+  a QA agent gets your brief and report and fixes forward. So your report
+  must say plainly what you changed and why: it is what QA reads. A guard
+  listed in `docs/builder-facts.md`, *Red on develop now*, whose figure your
+  change does not worsen: say its figure under `Tests:`.
+* **Never run the full suite yourself**: the driver does, once per commit.
+  Measure (callgrind, counts) only when your order has a *Measure* line, and
+  then on one file or a small program, never on a whole `lower-std` or a test
+  run.
 * **Few builds: finish first, then build once.** Build and test with
   `--profile fast` (`cargo build --profile fast -p nikaia`, `cargo test
   --profile fast -p nikaia --test it -- a:: b::`, binary `target/fast/nikaia`):
@@ -183,8 +167,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   scripts/commit.nika -- REPORT` (`--dry-run` shows the message). It refuses an
   unchanged listed file or a staged file not listed, adds exactly the listed
   files, writes the message (subject, `Changelog:`, `Fixes`, the brief's
-  `Attribution:` block), pushes fast-forward, writes `Pushed:` into the report
-  and prints `committed <sha8> pushed|rejected`. Several commits: one report
+  `Attribution:` block), commits without pushing, writes `Pushed: local <sha>`
+  into the report and prints `committed <sha8> local`. Several commits: one report
   `<brief>.step<N>.report.md` per step, only if needed.
 * **Do not delete branches.** You cannot, and need not: leave a `wip/*` branch where it is; the owner deletes it.
 * **You have no GitHub access.** What the issue says is in your task; put

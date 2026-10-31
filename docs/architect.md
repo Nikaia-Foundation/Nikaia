@@ -13,13 +13,52 @@ History is in git and the issues, not here: a rule keeps one incident tag
 | Owner | the person | Sets goals, stages and priorities; decides what is theirs |
 | Main session | the session the owner started, all tools | Talks to the owner; runs `scripts/drive.nika`; starts the architect and builders; raises versions; watches CI and cost |
 | Architect | `.claude/agents/architect.md`, Opus, `effort: medium` (`high` only when the owner asks, for one task) | Decides what is built next and how; writes ADR and specification text, briefs and issues; improves the process |
-| Builder | `.claude/agents/builder.md`, no GitHub | Builds one or two steps, commits, pushes, reports, ends |
+| Builder | `.claude/agents/builder.md`, no GitHub | Builds one or two steps, commits locally after cheap checks, reports, ends; the driver runs the suite and pushes |
+| QA | `.claude/agents/qa.md`, Sonnet, no GitHub | Started by the driver on a red suite; reads the unpushed briefs and reports, fixes forward, commits locally |
 
 The architect cannot start agents: it coordinates by briefs, and the main
 session (or `drive.nika`) runs them. A builder that hit an error does not go
 on: its report comes to the architect, whose next order is the repair (the
 compiler defect first, `CLAUDE.md`'s *Fix, do not work around*), then the
 blocked step.
+
+## Language decisions (owner, 2026-10-31)
+
+Language principles (owner, 2026-10-31), the measure for every language
+decision: complexity goes into the compiler, not to the user; whoever uses
+something pays for it, nobody else; consistency and harmony with what the
+language already says; and a look at how other languages solve it, to do it
+better.
+
+* **Obvious: the architect decides.** A gap a builder or a move met (a `std`
+  entry, a method, a form, a conversion) whose answer the principles settle -
+  the form other parts of the language already have, a `std` counterpart of a
+  Rust call, an extension nobody pays for who does not use it - is approved by
+  the architect: ADR or specification text, the build filed `ready`, the
+  blocked work re-queued behind it. The ADR names this rule.
+* **Not obvious: the owner decides.** Where the principles pull apart (a cost
+  for every user, a break with what is written, a choice between two
+  consistent designs), or the owner's goals or stages are touched: a
+  `decision` issue with a decision paper (`docs/supervisor.md`, *Decision
+  rounds*). In doubt, it is not obvious.
+
+## Reported defects are filed (owner, 2026-10-31)
+
+Every report with `Result: partial|blocked` and a `Found:` defect with a
+probe is filed by the architect at its next run: a GitHub issue in brief form
+(`ready`, the probe, *To build*) and a bug brief
+`docs/briefs/bugs/b<N>-<issue>-<topic>.md` with a `Blocks:` line, appended to
+`docs/briefs/bugs/batch.txt`, issue labelled `wip`. An open issue that already
+holds the defect gets the new probe as a comment instead.
+
+## Driver, suite and QA (owner, 2026-10-31)
+
+Builders commit locally and push nothing. After each builder or architect
+run the driver runs the complete suite (`scripts/gate.nika -- --all`, one at
+a time per checkout, lock `target/suite.lock`); green, it pushes the tested
+commit; red, it writes `qa-input.txt` and starts QA
+(`docs/briefs/qa-task.md`), at most two rounds, then `ESCALATE`. CI stays the
+final gate for what other sessions push meanwhile.
 
 ## Lanes
 
@@ -102,8 +141,9 @@ paid for the rule):
   (k3a2), and names each host method's full signature and how per-unit code
   reaches Rust-held data (m3a);
 * every Rust `std` call a move moves has a Nikaia `std` counterpart (Part III
-  17); a missing one is its own `std` brief or a `decision` issue with a
-  decision paper. A brief never prescribes a way around a missing form unless
+  17); a missing one is its own `std` brief, decided by the architect when
+  obvious (*Language decisions*), else a `decision` issue with a decision
+  paper. A brief never prescribes a way around a missing form unless
   it cites the ADR that refuses it, and a `blocked` report on a gap is
   answered with that issue (p3a; `CLAUDE.md`);
 * a move that reshapes a struct names every file that reads its fields, with a
@@ -175,7 +215,7 @@ The builder writes exactly `<full brief path>.report.md`, these fields only:
     Gate: green | red <tests>   (#852; batch.nika cuts on red, #862)
     Deviation: none | <one sentence>   (bare `none`, no note after it: batch.nika cuts on anything else)
     Found: none | <one sentence, issue number if filed>
-    Needs: none | <NK code, owner decision, help from main session>
+    Needs: none | <NK code, architect decision, owner decision, help from main session>
     Changelog: none | <one sentence for the version heading>
     Owner: none | <one question for the owner, never a role>   (batch.nika: `OWNER <brief>: <text>`; cycle.nika writes the first to DIR/QUESTION, a second while it exists prints `OWNER second: ...`)
     Cache: none | <large entries newly created, MB>

@@ -135,7 +135,8 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   2, on an escalation: an `OWNER` line, `ESCALATE` of `agent.nika`, an
   architect report with `Owner:` not `none` or `Result:` not `done`, the same
   stop line after an architect run, a RED sha already handed over, `--max`
-  reached, a push rejected after one rebase.
+  reached, a push rejected after one rebase, a suite still red after two QA
+  rounds.
 * **Act only on that final line.** `cycle.nika -- DIR --done N` clears an
   OWNER line; after the owner's answer, start `drive.nika` again. On `RESTART
   drive: ...` (exit 3: the script changed) start it again at once. A failed
@@ -153,8 +154,19 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   pending-bump line, read-only); `nikaia run scripts/release.nika --
   [--dry-run] [--loop M] DIR` raises the version once for the done reports'
   `Changelog:` lines.
-* **Gate watch (#852).** A report without `Gate: green` is not passed on: the
-  next brief is a fix-forward, and a second red in a row is escalated.
+* **Suite watch (owner, 2026-10-31; replaces the builders' gate of #852).**
+  Builders and QA commit locally; after each run the driver runs
+  `gate.nika -- --all` (lock `target/suite.lock`, so the two lanes' drivers
+  take turns), prints `SUITE <sha8> green|red <steps>`, pushes the tested
+  commit on green (`PUSHED <sha8>`), and on red starts QA
+  (`docs/briefs/qa-task.md`, input `DIR/qa-input.txt`, log `DIR/suite.log`),
+  at most two rounds, then `ESCALATE`. An escalated red leaves the commits
+  local: read `DIR/suite.log` and the QA report, and fix forward or hand it to
+  a fresh QA run before restarting the driver.
+* **Gaps and defects from reports go to the architect** (owner, 2026-10-31):
+  it files every `partial|blocked` report's defect (issue `ready` and bug
+  brief) and decides obvious language gaps itself (`docs/architect.md`,
+  *Language decisions*); only its `Owner:` line comes to the owner.
 * **Cost watch.** A builder past about 120 turns or 200k context, an architect
   past about 80 turns or 150k, is told to push what is verified and end; the
   next one starts fresh, never resumed (SendMessage) for a second slice. Its

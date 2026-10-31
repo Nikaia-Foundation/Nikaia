@@ -81,6 +81,15 @@ the background in a cloud session.
   and everything that hangs on it (the website, `promote`) stand still, and
   work on `develop` goes on. How the main session watches CI:
   `docs/supervisor.md`.
+* **Builders commit, the driver tests and pushes** (owner, 2026-10-31). A
+  builder or QA agent started by `scripts/drive.nika` commits locally after
+  cheap checks (build, touched tests, fmt, clippy, `pre-push-check.sh`) and
+  never pushes. After each commit the driver runs the complete suite
+  (`gate.nika --all`, one at a time per checkout); green, it pushes the tested
+  commit; red, a QA agent (`.claude/agents/qa.md`) gets the briefs and reports
+  of the unpushed commits and fixes forward, at most two rounds, then the
+  driver escalates. The bullets above about pushing at once hold for sessions
+  and agents outside a driver.
 * **Order of work: the architect's score (`docs/priorities.md`), delegated by
   the owner (2026-10-25).** Bugs before moving is the default: as a rule one
   builder works on compiler bugs and one on self-hosting, and self-hosting
@@ -177,9 +186,13 @@ the background in a cloud session.
   2. **Not decided yet** (it did not matter when the part was written) or
      **missing because nobody thought of it**: stop. Commit nothing that writes
      around it; the report says `Result: blocked`, `Found:` the gap with a probe
-     of a few lines, `Needs: owner decision`. The architect files it with label
-     `decision` and a decision paper, the owner decides, and the work waits for
-     the build of that decision.
+     of a few lines, `Needs: architect decision`. The architect decides it
+     (owner, 2026-10-31): an obvious language change or extension, by the
+     language principles (`docs/architect.md`, *Language decisions*), it
+     approves itself, writes the ADR or specification text and files the
+     build (`ready`); only a genuinely non-obvious question goes to the owner
+     as a `decision` issue with a decision paper. Either way the work waits
+     for the build of that decision.
   3. **A defect** (it is specified, or plainly meant, and does not work): fixed
      in the compiler, as below.
 
@@ -196,7 +209,7 @@ the background in a cloud session.
   not the move lane; the move waits (`docs/architect.md`, *Lanes*).
 * **The disk is shared and small.** Delete `target/` of a worktree you no
   longer use; keep `target/nikaia-project-tests` (the tests' cache, pruned by
-  the compiler to `NIKAIA_CACHE_LIMIT`). Never run the full suite locally
+  the compiler to `NIKAIA_CACHE_LIMIT`). Never run the full suite locally by hand (the driver runs it, above)
   (about 45 minutes): CI runs it on every push to `develop`.
 * The working rules for a move (slices, patterns, syntax gaps, lowered types,
   `lower-std`, the converter) are in `docs/builder-facts.md`.
