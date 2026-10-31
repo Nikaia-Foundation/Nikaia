@@ -224,3 +224,4 @@
 /home/user/Nikaia/docs/briefs/qa-task.md 242294 13
 /home/user/Nikaia/docs/briefs/p5c-project-drive.md 5080573 73
 /home/user/Nikaia/docs/briefs/architect-task.md 1124678 29
+/home/user/Nikaia/docs/briefs/gr2-grammar-run-reland.md 768655 19
