@@ -105,18 +105,31 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn open_element_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr, index: &Expr) -> Option<i64> {
-        match base {
-            Expr::Variable(name, _) => { let name = *name; self.open_element_named(world, name, index) },
-            _ => None,
-        }
+        if open_numbers_a_slice(index) { return None; }
+        let list = match self.open_list_of(world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if list.1 != 1 { return None; }
+        Some(list.0)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn open_element_named(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, index: &Expr) -> Option<i64> {
-        let is_a_slice = matches!(index, Expr::Range { .. });
-        if is_a_slice { return None; }
-        let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        (*nikaia_std::index::get(&self.flow.open_elements, &local.id)).copied()
+    pub fn open_list_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<(i64, i64)> {
+        match expr {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let at: i64 = match (*nikaia_std::index::get(&self.flow.open_elements, &local.id)).copied() { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return None };
+                let levels: i64 = nikaia_std::index::or(*nikaia_std::index::get(&self.flow.open_levels, &local.id), || 1);
+                return Some((at, levels));
+            },
+            Expr::Index { base, index, .. } => {
+                let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                if open_numbers_a_slice(index) { return None; }
+                let outer = match self.open_list_of(world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                if outer.1 < 2 { return None; }
+                return Some((outer.0, outer.1 - 1));
+            },
+            _ => { return None; },
+        }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -291,6 +304,23 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn open_numbers_a_slice(index: &Expr) -> bool { matches!(index, Expr::Range { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn number_list_inner(ty: &Ty, levels: i64) -> Option<Ty> {
+    if levels <= 0 { return Some(ty.clone()); }
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if (name == "Vec" || name == "Array") && !args.is_empty() { return number_list_inner(nikaia_std::index::get(&args, 0), levels - 1); }
+            return None;
+        },
+        _ => { return None; },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn number_variable_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => {
@@ -376,7 +406,9 @@ impl CheckState {
             asked = true;
         }
         let number = match *nikaia_std::index::get(&self.flow.open_elements, &local.id) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return asked };
-        let ty = match number_list_element(copy) { Some(__nikaia_value) => __nikaia_value, None => return asked };
+        let levels: i64 = nikaia_std::index::or(*nikaia_std::index::get(&self.flow.open_levels, &local.id), || 1);
+        let inner = match number_list_inner(copy, levels - 1) { Some(__nikaia_value) => __nikaia_value, None => return asked };
+        let ty = match number_list_element(&inner) { Some(__nikaia_value) => __nikaia_value, None => return asked };
         let root = self.open_root(number);
         self.add_ask(root, ty, at, beside);
         true
@@ -604,6 +636,7 @@ impl CheckState {
     pub(crate) fn open_items_named(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> Option<i64> {
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let element = match *nikaia_std::index::get(&self.flow.open_elements, &local.id) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return None };
+        if self.flow.open_levels.contains_key(&local.id) { return None; }
         Some(self.open_root(element))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

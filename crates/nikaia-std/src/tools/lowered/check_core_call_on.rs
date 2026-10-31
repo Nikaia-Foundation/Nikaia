@@ -306,7 +306,7 @@ pub(crate) fn check_core_call_on_map_part(state: &mut CheckState, world: &CheckW
     if !state.number_shaped(world, given) { return held.clone(); }
     let mut at = span.start as i64;
     if keys { at = span.end as i64; }
-    state.flow.open_numbers.insert(at, CheckOpenNumber { name: map_name.to_string(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] });
+    state.flow.open_numbers.insert(at, CheckOpenNumber { name: map_name.to_string(), element: true, levels: 1, at: span.clone(), joined: at, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] });
     state.flow.open_map_parts.insert(at, (keys, other));
     if give || keys { state.open_number_given(world, at, given, span); }
     if keys { state.flow.open_keys.insert(id, at); } else { state.flow.open_elements.insert(id, at); }
@@ -483,7 +483,7 @@ pub(crate) fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWor
         let local = match state.binding(&pushed_name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let id = local.id;
         let at = span.start as i64;
-        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.to_string(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] });
+        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.to_string(), element: true, levels: 1, at: span.clone(), joined: at, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] });
         state.open_number_given(world, at, nikaia_std::index::get(&args, 0), span);
         state.flow.open_elements.insert(id, at);
     } else if open >= 0 && one_pushed {

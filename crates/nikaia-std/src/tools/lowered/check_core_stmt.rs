@@ -243,6 +243,50 @@ pub(crate) fn check_core_stmt_an_unknown_list(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_unknown_list_levels(ty: &Ty) -> i64 {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if name != "Vec" || args.len() != 1 { return 0; }
+            if (*nikaia_std::index::get(&args, 0)).is_unknown() { return 1; }
+            let inner = check_core_stmt_unknown_list_levels(nikaia_std::index::get(&args, 0));
+            if inner > 0 { return inner + 1; }
+            return 0;
+        },
+        _ => 0,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_number_lists(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> i64 {
+    let items = match value {
+        Expr::ListLit { items, .. } => items,
+        _ => return -1,
+    };
+    let mut depth: i64 = -1;
+    for item in items.iter() {
+        let inner = match item {
+            Expr::ListLit { .. } => check_core_stmt_number_lists(state, world, item),
+            _ => if state.number_shaped(world, item) { 0 } else { -1 },
+        };
+        if inner < 0 || depth >= 0 && inner != depth { return -1; }
+        depth = inner;
+    }
+    if depth < 0 { return -1; }
+    depth + 1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_give_lists(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, at: i64, value: &Expr, span: &Span) {
+    match value {
+        Expr::ListLit { items, .. } => { for item in items.iter() { check_core_stmt_give_lists(state, world, at, item, span); } },
+        _ => { state.open_number_given(world, at, value, span); },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_unknown_parts(tys: &[Ty]) -> Vec<bool> {
     let mut out: Vec<bool> = vec![];
     for t in tys.iter() { out.push(t.is_unknown()); }
@@ -258,7 +302,7 @@ pub(crate) fn check_core_stmt_a_path(ty: &Ty) -> bool {
     }
 }
 
-pub(crate) fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckOpenNumber { CheckOpenNumber { name: name.to_string(), element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] } }
+pub(crate) fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckOpenNumber { CheckOpenNumber { name: name.to_string(), element, levels: if element { 1 } else { 0 }, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -533,6 +577,33 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     }
     let mut element_at: Option<i64> = None;
     let mut element_constants: Option<Vec<CheckConstant>> = None;
+    let mut element_levels: i64 = 1;
+    let list_levels = check_core_stmt_unknown_list_levels(&bound);
+    if ty.is_none() && list_levels > 0 {
+        match value {
+            Expr::ListLit { .. } => {
+                if list_levels >= 2 && check_core_stmt_number_lists(&state, world, value) == list_levels {
+                    let mut entry = check_core_stmt_open_number(&name, true, span);
+                    entry.levels = list_levels;
+                    state.flow.open_numbers.insert(span.start as i64, entry);
+                    check_core_stmt_give_lists(state, world, span.start as i64, value, span);
+                    element_at = Some(span.start as i64);
+                    element_levels = list_levels;
+                }
+            },
+            Expr::Index { .. } => {
+                let list = state.open_list_of(world, value);
+                if list.is_some() {
+                    let found = nikaia_std::index::or(list, || (0, 0));
+                    if found.1 == list_levels {
+                        element_at = Some(found.0);
+                        element_levels = found.1;
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
     if ty.is_none() && check_core_stmt_an_unknown_list(&bound) {
         match value {
             Expr::ListLit { items, .. } => {
@@ -644,6 +715,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if !part_opens.is_empty() { state.flow.open_parts.insert(id, part_opens); }
     if element_at.is_some() {
         state.flow.open_elements.insert(id, nikaia_std::index::or(element_at, || 0));
+        if element_levels > 1 { state.flow.open_levels.insert(id, element_levels); }
         if element_constants.is_some() { state.flow.list_constants.insert(id, nikaia_std::index::or(element_constants, || vec![].into())); }
     }
     if of_a_map {
@@ -1103,25 +1175,26 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         frame.push(local);
     }
     if bindings.len() == 1 { check_core_stmt_for_a_range(state, world, iter, &mut frame, span); }
+    let walked: Option<(i64, i64)> = match iter {
+        Expr::Variable(..) => state.open_list_of(world, iter),
+        Expr::Index { .. } => state.open_list_of(world, iter),
+        _ => None,
+    };
+    if bindings.len() == 1 && !frame.is_empty() && walked.is_some() {
+        let list = nikaia_std::index::or(walked, || (0, 0));
+        if list.1 == 1 && nikaia_std::index::get(&frame, 0).ty.is_unknown() {
+            frame[0].open_number = Some(state.open_root(list.0));
+            if lent && !mut_view && nikaia_std::index::get(&frame, 0).name != "_" {
+                state.facts.copied_loop_bindings.insert((span.start as i64, nikaia_std::index::get(&frame, 0).name.to_string()));
+                frame[0].lent = false;
+            }
+        } else if list.1 >= 2 && check_core_stmt_unknown_list_levels(&nikaia_std::index::get(&frame, 0).ty.unseen()) == list.1 - 1 {
+            state.flow.open_elements.insert(nikaia_std::index::get(&frame, 0).id, list.0);
+            if list.1 > 2 { state.flow.open_levels.insert(nikaia_std::index::get(&frame, 0).id, list.1 - 1); }
+        }
+    }
     if bindings.len() == 1 && !frame.is_empty() && nikaia_std::index::get(&frame, 0).ty.is_unknown() {
         match iter {
-            Expr::Variable(name, _) => {
-                let name = *name;
-                let named: String = format!("{}", world.words.resolve(name));
-                let list = state.binding(&named);
-                if list.is_some() {
-                    let held: CheckLocal = match list { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
-                    let element_at = state.flow.open_elements.get(&held.id);
-                    if element_at.is_some() {
-                        let element: i64 = nikaia_std::index::or(element_at, || 0);
-                        frame[0].open_number = Some(state.open_root(element));
-                        if lent && !mut_view && nikaia_std::index::get(&frame, 0).name != "_" {
-                            state.facts.copied_loop_bindings.insert((span.start as i64, nikaia_std::index::get(&frame, 0).name.to_string()));
-                            frame[0].lent = false;
-                        }
-                    }
-                }
-            },
             Expr::ListLit { items, .. } => {
                 let mut all_numbers = !items.is_empty();
                 for item in items.iter() { if all_numbers && !state.number_shaped(world, item) { all_numbers = false; } }

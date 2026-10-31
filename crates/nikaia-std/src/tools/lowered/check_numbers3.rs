@@ -139,7 +139,11 @@ impl CheckState {
                 let ty = held.to_string();
                 for member in members.iter() {
                     let mut written: String = ty.to_string();
-                    if member.1.element { written = format!("Vec<{}>", ty); }
+                    let mut level: i64 = 0;
+                    while level < member.1.levels {
+                        written = format!("Vec<{}>", written);
+                        level += 1;
+                    }
                     if !self.flow.open_map_parts.contains_key(&member.0) { self.facts.number_lets.insert(member.1.at.start as i64, written); }
                     for site in member.1.sites.iter() {
                         let site = nikaia_std::num::value(site);

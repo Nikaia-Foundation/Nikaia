@@ -29,6 +29,10 @@ pub struct CheckOpenNumber {
     /// Whether it is the elements of the list `name` binds (D34) rather than
     /// the name's own number.
     pub element: bool,
+    /// How many lists stand around its numbers in the `let`'s value: 0 for
+    /// the name's own number, 1 for `[1, 2]`, 2 for `[[1, 2], [3]]` (#938):
+    /// the type is written inside as many `Vec`s.
+    pub levels: i64,
     /// The `let`, where the type is written and where a refusal points.
     pub at: Span,
     /// The entry this one was joined into, by the `let` it names; itself where
@@ -244,6 +248,11 @@ pub struct CheckFlow {
     /// A list written in number literals: the binding and the entry of
     /// `open_numbers` it names (ADR-285 D34).
     pub open_elements: collections::BTreeMap[i64, i64],
+    /// **A list of lists written in numbers** (#938): the binding and how
+    /// many lists stand around the number in it, where more than one; its
+    /// number is in `open_elements`. An index or a walk of it hands on one
+    /// list fewer.
+    pub open_levels: collections::BTreeMap[i64, i64],
     /// **A map's keys written in number literals** (ADR-285 D43): the binding
     /// and the entry of `open_numbers` they are; its values are in
     /// `open_elements`, as a list's elements are.
@@ -394,6 +403,7 @@ impl CheckFlow {
             wide_chars: collections::BTreeMap(),
             chars_refused: collections::BTreeSet(),
             open_elements: collections::BTreeMap(),
+            open_levels: collections::BTreeMap(),
             open_keys: collections::BTreeMap(),
             open_parts: collections::BTreeMap(),
             open_map_parts: collections::BTreeMap(),

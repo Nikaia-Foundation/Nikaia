@@ -151,22 +151,41 @@ impl CheckState {
     }
 
     fn open_element_in(ref self, world: ref CheckWorld, base: ref Expr, index: ref Expr) -> i64? sync {
-        return match base {
-            Expr::Variable(name, _) => self.open_element_named(world, name, index),
-            else => null,
-        }
-    }
-
-    fn open_element_named(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol, index: ref Expr) -> i64? sync {
-        let is_a_slice = match index {
-            Expr::Range { .. } => true,
-            else => false,
-        }
-        if is_a_slice {
+        if open_numbers_a_slice(index) {
             return null
         }
-        let local = self.binding(world.words.resolve(name)) ?? return null
-        return self.flow.open_elements[local.id]
+        let list = self.open_list_of(world, base) ?? return null
+        if list.1 != 1 {
+            return null
+        }
+        return list.0
+    }
+
+    /// **The open number a list's innermost elements are, and how many lists
+    /// stand around it** (ADR-285 D34, #938): a name bound to such a list,
+    /// and an element of a list of lists, which is one list fewer.
+    pub fn open_list_of(ref self, world: ref CheckWorld, expr: ref Expr) -> (i64, i64)? sync {
+        match expr {
+            Expr::Variable(name, _) => {
+                let local = self.binding(world.words.resolve(name)) ?? return null
+                let at: i64 = self.flow.open_elements[local.id] ?? return null
+                let levels: i64 = self.flow.open_levels[local.id] ?? 1
+                return (at, levels)
+            },
+            Expr::Index { base, index, .. } => {
+                if open_numbers_a_slice(index) {
+                    return null
+                }
+                let outer = self.open_list_of(world, base) ?? return null
+                if outer.1 < 2 {
+                    return null
+                }
+                return (outer.0, outer.1 - 1)
+            },
+            else => {
+                return null
+            },
+        }
     }
 
     /// **The constant an element of an immutable list of literals is**, where the
@@ -372,6 +391,34 @@ impl CheckState {
     }
 }
 
+/// Whether an index is a range, which cuts a slice rather than reading an
+/// element.
+fn open_numbers_a_slice(index: ref Expr) -> bool sync {
+    return match index {
+        Expr::Range { .. } => true,
+        else => false,
+    }
+}
+
+/// The type a list type holds `levels` lists further in: `Vec[Vec[u8]]` one
+/// level in is `Vec[u8]` (#938).
+fn number_list_inner(ty: ref Ty, levels: i64) -> Ty? sync {
+    if levels <= 0 {
+        return ty.clone()
+    }
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if (name == "Vec" || name == "Array") && args.len() > 0 {
+                return number_list_inner(args[0], levels - 1)
+            }
+            return null
+        },
+        else => {
+            return null
+        },
+    }
+}
+
 /// The name a variable is, and nothing for any other value.
 fn number_variable_name(world: ref CheckWorld, expr: ref Expr) -> String? sync {
     match expr {
@@ -489,7 +536,9 @@ impl CheckState {
             asked = true
         }
         let number = self.flow.open_elements[local.id] ?? return asked
-        let ty = number_list_element(copy) ?? return asked
+        let levels: i64 = self.flow.open_levels[local.id] ?? 1
+        let inner = number_list_inner(copy, levels - 1) ?? return asked
+        let ty = number_list_element(inner) ?? return asked
         let root = self.open_root(number)
         self.add_ask(root, ty, at, beside)
         return true
@@ -755,6 +804,9 @@ impl CheckState {
     fn open_items_named(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol) -> i64? sync {
         let local = self.binding(world.words.resolve(name)) ?? return null
         let element = self.flow.open_elements[local.id] ?? return null
+        if self.flow.open_levels.contains_key(local.id) {
+            return null
+        }
         return self.open_root(element)
     }
 

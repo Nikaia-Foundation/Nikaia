@@ -421,7 +421,7 @@ fn check_core_call_on_map_part(mut state: CheckState, world: ref CheckWorld, map
     if keys {
         at = span.end as i64
     }
-    state.flow.open_numbers.insert(at, CheckOpenNumber { name: map_name.clone(), element: true, at: span.clone(), joined: at, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] })
+    state.flow.open_numbers.insert(at, CheckOpenNumber { name: map_name.clone(), element: true, levels: 1, at: span.clone(), joined: at, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] })
     state.flow.open_map_parts.insert(at, (keys, other))
     if give || keys {
         state.open_number_given(world, at, given, span)
@@ -629,7 +629,7 @@ fn check_core_call_on_pushed(mut state: CheckState, world: ref CheckWorld, recei
         let local = state.binding(pushed_name) ?? return
         let id = local.id
         let at = span.start as i64
-        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.clone(), element: true, at: span.clone(), joined: at, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] })
+        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.clone(), element: true, levels: 1, at: span.clone(), joined: at, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] })
         state.open_number_given(world, at, args[0], span)
         state.flow.open_elements.insert(id, at)
     } else if open >= 0 && one_pushed {

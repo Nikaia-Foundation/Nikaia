@@ -210,9 +210,12 @@ impl CheckState {
                 for member in members {
                     // A list's elements: the list is written with the type
                     // (D34), so the language below infers nothing either.
+                    // A list of lists (#938) inside as many as stand around it.
                     let mut written: String = ty.clone()
-                    if member.1.element {
-                        written = f"Vec<{ty}>"
+                    let mut level = 0
+                    while level < member.1.levels {
+                        written = f"Vec<{written}>"
+                        level += 1
                     }
                     // A map's part is written where the map's write is, and
                     // no `let` stands there.

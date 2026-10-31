@@ -314,6 +314,66 @@ fn check_core_stmt_an_unknown_list(ty: ref Ty) -> bool sync {
     }
 }
 
+/// How many lists stand around an element nothing typed: 1 for
+/// `Vec[?]`, 2 for `Vec[Vec[?]]`, and 0 where the type is no such list
+/// (#938).
+fn check_core_stmt_unknown_list_levels(ty: ref Ty) -> i64 sync {
+    return match ty {
+        Ty::Named { name, args, .. } => {
+            if name != "Vec" || args.len() != 1 {
+                return 0
+            }
+            if args[0].is_unknown() {
+                return 1
+            }
+            let inner = check_core_stmt_unknown_list_levels(args[0])
+            if inner > 0 {
+                return inner + 1
+            }
+            return 0
+        },
+        else => 0,
+    }
+}
+
+/// **How many lists stand around the numbers of a list literal** whose every
+/// item is a number at the same depth (#938): 1 for `[1, 2]`, 2 for
+/// `[[1, 2], [3]]`; -1 for anything else, an empty list among them too.
+fn check_core_stmt_number_lists(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> i64 sync {
+    let items = match value {
+        Expr::ListLit { items, .. } => items,
+        else => return -1,
+    }
+    let mut depth = -1
+    for item in items {
+        let inner = match item {
+            Expr::ListLit { .. } => check_core_stmt_number_lists(state, world, item),
+            else => if state.number_shaped(world, item) { 0 } else { -1 },
+        }
+        if inner < 0 || (depth >= 0 && inner != depth) {
+            return -1
+        }
+        depth = inner
+    }
+    if depth < 0 {
+        return -1
+    }
+    return depth + 1
+}
+
+/// Each innermost number of a list of number lists is given to its open
+/// number (#938).
+fn check_core_stmt_give_lists(mut state: CheckState, world: ref CheckWorld, at: i64, value: ref Expr, span: ref Span) sync {
+    match value {
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                check_core_stmt_give_lists(state, world, at, item, span)
+            }
+        },
+        else => state.open_number_given(world, at, value, span),
+    }
+}
+
 /// Which parts of a tuple's type nothing typed.
 fn check_core_stmt_unknown_parts(tys: ref Vec[Ty]) -> Vec[bool] sync {
     let mut out: Vec[bool] = []
@@ -333,7 +393,7 @@ fn check_core_stmt_a_path(ty: ref Ty) -> bool sync {
 
 /// A fresh open number at a `let` or a `for`.
 fn check_core_stmt_open_number(name: ref String, element: bool, span: ref Span) -> CheckOpenNumber {
-    return CheckOpenNumber { name: name.clone(), element: element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] }
+    return CheckOpenNumber { name: name.clone(), element: element, levels: if element { 1 } else { 0 }, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] }
 }
 
 /// **A `let` whose declared type is a number and whose value is a `for`
@@ -727,6 +787,36 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // (ADR-285 D34).
     let mut element_at: i64? = null
     let mut element_constants: Vec[CheckConstant]? = null
+    // **So has a list of number lists, for its innermost elements, and an
+    // element of it for its own** (#938): `grid = [[1, 2], [3]]` holds one
+    // number two lists in, `row = grid[0]` the same number one list in.
+    let mut element_levels = 1
+    let list_levels = check_core_stmt_unknown_list_levels(bound)
+    if ty == null && list_levels > 0 {
+        match value {
+            Expr::ListLit { .. } => {
+                if list_levels >= 2 && check_core_stmt_number_lists(state, world, value) == list_levels {
+                    let mut entry = check_core_stmt_open_number(name, true, span)
+                    entry.levels = list_levels
+                    state.flow.open_numbers.insert(span.start as i64, entry)
+                    check_core_stmt_give_lists(state, world, span.start as i64, value, span)
+                    element_at = span.start as i64
+                    element_levels = list_levels
+                }
+            },
+            Expr::Index { .. } => {
+                let list = state.open_list_of(world, value)
+                if list != null {
+                    let found = list ?? (0, 0)
+                    if found.1 == list_levels {
+                        element_at = found.0
+                        element_levels = found.1
+                    }
+                }
+            },
+            else => {},
+        }
+    }
     if ty == null && check_core_stmt_an_unknown_list(bound) {
         match value {
             Expr::ListLit { items, .. } => {
@@ -882,6 +972,9 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     }
     if element_at != null {
         state.flow.open_elements.insert(id, element_at ?? 0)
+        if element_levels > 1 {
+            state.flow.open_levels.insert(id, element_levels)
+        }
         if element_constants != null {
             state.flow.list_constants.insert(id, element_constants ?? [])
         }
@@ -1555,27 +1648,33 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     }
     // **A walk over a list written in numbers binds its open element**
     // (ADR-285 D34).
+    // A walk over a list of number lists binds a list one level in (#938),
+    // and an element of one is walked as a list (`for n in grid[0]`).
+    let walked: (i64, i64)? = match iter {
+        Expr::Variable(..) => state.open_list_of(world, iter),
+        Expr::Index { .. } => state.open_list_of(world, iter),
+        else => null,
+    }
+    if bindings.len() == 1 && frame.len() > 0 && walked != null {
+        let list = walked ?? (0, 0)
+        if list.1 == 1 && frame[0].ty.is_unknown() {
+            frame[0].open_number = state.open_root(list.0)
+            // **Its element is a number, whichever type it gets, so a lent
+            // walk binds the value** (#938), as one over `Vec[i64]` does
+            // above.
+            if lent && !mut_view && frame[0].name != "_" {
+                state.facts.copied_loop_bindings.insert((span.start as i64, frame[0].name.clone()))
+                frame[0].lent = false
+            }
+        } else if list.1 >= 2 && check_core_stmt_unknown_list_levels(frame[0].ty.unseen()) == list.1 - 1 {
+            state.flow.open_elements.insert(frame[0].id, list.0)
+            if list.1 > 2 {
+                state.flow.open_levels.insert(frame[0].id, list.1 - 1)
+            }
+        }
+    }
     if bindings.len() == 1 && frame.len() > 0 && frame[0].ty.is_unknown() {
         match iter {
-            Expr::Variable(name, _) => {
-                let named: String = f"{world.words.resolve(name)}"
-                let list = state.binding(named)
-                if list != null {
-                    let held: CheckLocal = list ?? return check_core_stmt_unit()
-                    let element_at = state.flow.open_elements.get(held.id)
-                    if element_at != null {
-                        let element: i64 = element_at ?? 0
-                        frame[0].open_number = state.open_root(element)
-                        // **Its element is a number, whichever type it gets,
-                        // so a lent walk binds the value** (#938), as one
-                        // over `Vec[i64]` does above.
-                        if lent && !mut_view && frame[0].name != "_" {
-                            state.facts.copied_loop_bindings.insert((span.start as i64, frame[0].name.clone()))
-                            frame[0].lent = false
-                        }
-                    }
-                }
-            },
             Expr::ListLit { items, .. } => {
                 let mut all_numbers = items.len() > 0
                 for item in items {

@@ -1,0 +1,42 @@
+// #938: a list whose items are lists written in numbers, with no declared
+// type, has one open number for its innermost elements (ADR-285 D34): its
+// type is written inside as many lists, its uses ask that number through an
+// index or a walk, and a list one level in holds the same number.
+fn twice(n: i64) -> i64 {
+	return n * 2
+}
+
+fn total(xs: Vec[Vec[u8]]) -> u8 {
+	return xs[0][0] + xs[1][0]
+}
+
+fn main() {
+	let a = [[1, 2], [3]]
+	println(f"{a[0][1] + a[1][0]}")
+	let b = [[1, 2], [3]]
+	for n in b[0] {
+		println(f"{twice(n)}")
+	}
+	let c = [[1, 2], [3]]
+	for r in c {
+		for n in r {
+			println(f"{twice(n)}")
+		}
+	}
+	let d = [[1, 2], [3]]
+	let mut s = 0
+	for r in d {
+		for n in r {
+			s = s + n
+		}
+	}
+	println(f"{s}")
+	let e = [[1, 2], [3]]
+	println(f"{total(e)}")
+	let cube = [[[1, 2]], [[3]]]
+	println(f"{cube[1][0][0] + 1}")
+	let g = [[1, 2], [3]]
+	let row = g[0]
+	let x: u8 = row[0]
+	println(f"{x}")
+}
