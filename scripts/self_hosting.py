@@ -120,6 +120,7 @@ COMPILER_NIKA = {
     "logic_horn.nika": "logic: a loop as Horn clauses, its SMT-LIB HORN text, and an invariant checked by three queries (0.0.1000)",
     "prover_loops.nika": "prove: a while loop as the logic layer's loop problem, closed forms and intervals, an invariant checked by three queries (0.0.1000)",
     "grammar_decode.nika": "grammar_run: what a grammar run at build time printed read back, and the text of the sub-program and its manifest (0.0.755)",
+    "grammar_run.nika": "grammar_run: a grammar run's sub-project written, built with Cargo and run over its input (GR)",
     "comptime_driver.nika": "comptime_run: the sub-program's main and its site table, and the bundle it links against (0.0.757)",
     "comptime_tree.nika": "comptime_run: the sub-program's tree - the file without its main and constants, the constants as literals, the value function - and the callee a refused run is blamed on (K1, K2)",
     "build_eval.nika": "build_time: the evaluator of a build-time expression - calls, loops, text, structs, variants and a grammar run (0.0.760)",
