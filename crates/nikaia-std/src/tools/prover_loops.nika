@@ -1004,10 +1004,49 @@ pub fn loop_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopF
     return facts
 }
 
+/// The name of a state name's value at the head of the turn a point in the
+/// loop's body stands in: tied to the name itself there (ADR-361 D2, D3).
+pub fn loop_turn_name(name: ref String, start: i64) -> String {
+    return f"{name}^{start}"
+}
+
+/// **What holds inside the loop's body** (ADR-361 D2, D3): what held before
+/// it, about the values it started from, and the invariant at the head of the
+/// turn the point stands in. The condition and the path from the head are the
+/// walk's own facts there.
+pub fn loop_turn_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> Vec[i64] {
+    let start = record.start
+    let mut renamed: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut ghosts: Vec[String] = []
+    for name in record.problem.state {
+        renamed.insert(name.clone(), arena.var(loop_turn_name(name, start)))
+        ghosts.push(loop_before_name(name, start))
+    }
+    let mut facts: Vec[i64] = []
+    for fact in record.problem.fixed {
+        for g in ghosts {
+            if arena.mentions(fact, g) {
+                facts.push(fact)
+                break
+            }
+        }
+    }
+    for (term, _) in found.parts {
+        facts.push(arena.substitute(term, renamed))
+    }
+    return facts
+}
+
 /// **The invariant as `--asserts` names it** (ADR-361 D7): its parts, each
 /// start the facts before the loop pin written as its value, and the
 /// strategies that found them.
 pub fn loop_found_text(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> String {
+    return loop_said(arena, record, found, "through")
+}
+
+/// The same for a claim inside the loop's body: `through` past
+/// the loop and `inside` in it (`place`).
+pub fn loop_said(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound, place: ref String) -> String {
     let mut known: collections::BTreeMap[String, i64] = collections::BTreeMap()
     for name in record.problem.state {
         let ghost = loop_before_name(name, record.start)
@@ -1039,7 +1078,7 @@ pub fn loop_found_text(mut arena: TermArena, record: ref LoopRecord, found: ref 
         }
     }
     let changes = record.problem.state.join("`, `")
-    return f"proved through the loop that changes `{changes}`, with the invariant `{parts.join(" && ")}`, found by {origins.join(" and ")} and checked by three queries"
+    return f"proved {place} the loop that changes `{changes}`, with the invariant `{parts.join(" && ")}`, found by {origins.join(" and ")} and checked by three queries"
 }
 
 /// **Why a claim past a loop stays open** (ADR-361 D7): the loop and the

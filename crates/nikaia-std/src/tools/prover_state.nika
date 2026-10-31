@@ -204,84 +204,28 @@ impl ProverState {
     }
 
 
-    /// **A claim asked through the loops before it** (ADR-361 D2, D4): each
-    /// loop's invariant, found and checked once, and what holds past it
-    /// joined to `base`. What `--asserts` says, where that proves it.
+    /// **A claim asked through the loops before it, and through those it
+    /// stands in** (ADR-361 D2, D3, D4): each loop's invariant, found and
+    /// checked once; past a loop what holds past it, inside one the invariant
+    /// at the head of the turn with what the walk knows from there, joined to
+    /// `base`. What `--asserts` says, where that proves it.
     fn through_loops(ref mut self, mut arena: TermArena, scope: ref ProverScope, claim: i64, base: Vec[i64], ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync) -> String? {
         let mut facts = base
         let mut texts: Vec[String] = []
         for record in scope.loops {
-            let key = loop_key(arena, record)
-            if self.loops_failed.contains(key) {
-                continue
-            }
-            if !self.loops_found.contains_key(key) {
-                let mut asked: Vec[i64] = []
-                // The file's invariant is checked, never believed (D4); one
-                // that fails is searched for as if it were not there.
-                let recorded: String = (self.loops_recorded[record.start] ?? "").clone()
-                let mut found: LoopFound? = null
-                let mut kept: String = ""
-                if recorded.len() > 0 {
-                    // A loop the walk states more than once may have one
-                    // invariant for each statement: the first that passes.
-                    for alternative in recorded.split("|") {
-                        found = loop_recorded(arena, record, alternative, fn(on, given, goal) {
-                            match ask(on, given, goal) {
-                                SolverAnswer::Proved => true,
-                                else => false,
-                            }
-                        }, asked)
-                        if found != null {
-                            self.loops_read += 1
-                            kept = alternative.clone()
-                            break
-                        }
-                    }
-                }
-                if found == null {
-                    found = loop_found(arena, record, fn(on, given, goal) {
-                        match ask(on, given, goal) {
-                            SolverAnswer::Proved => true,
-                            else => false,
-                        }
-                    }, asked)
-                    if found == null {
-                        self.loops_unfound += 1
-                    } else {
-                        self.loops_searched += 1
-                    }
-                }
-                for n in asked {
-                    self.loop_queries += n
-                }
-                let held = found ?? LoopFound { parts: [] }
-                if held.parts.is_empty() {
-                    self.loops_failed.insert(key.clone())
-                    continue
-                }
-                if kept.len() == 0 {
-                    kept = loop_parts_text(arena, held)
-                }
-                let used: String = (self.loops_used[record.start] ?? "").clone()
-                if used.len() == 0 {
-                    self.loops_used.insert(record.start, kept)
-                } else {
-                    let mut known = false
-                    for alternative in used.split("|") {
-                        if alternative == kept {
-                            known = true
-                        }
-                    }
-                    if !known {
-                        self.loops_used.insert(record.start, f"{used}|{kept}")
-                    }
-                }
-                self.loops_found.insert(key.clone(), held)
-            }
-            let held = self.loops_found[key] ?? continue
+            let held = self.loop_invariant(arena, record, ask) ?? continue
             facts.extend(loop_facts(arena, record, held))
             texts.push(loop_found_text(arena, record, held))
+        }
+        if !scope.around.is_empty() {
+            // The ties to the head of the turn may stand among the earlier
+            // values, once a name was assigned since (D9).
+            facts.extend(scope.history.clone())
+            for record in scope.around {
+                let held = self.loop_invariant(arena, record, ask) ?? continue
+                facts.extend(loop_turn_facts(arena, record, held))
+                texts.push(loop_said(arena, record, held, "inside"))
+            }
         }
         if texts.is_empty() {
             return null
@@ -292,6 +236,82 @@ impl ProverState {
             SolverAnswer::Proved => texts.join("; "),
             else => null,
         }
+    }
+
+    /// **A loop's invariant** (ADR-361 D4): the one found and checked before,
+    /// or the file's if it passes, or one the strategies find. Nothing where
+    /// none is found.
+    fn loop_invariant(ref mut self, mut arena: TermArena, record: ref LoopRecord, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync) -> LoopFound? {
+        let key = loop_key(arena, record)
+        if self.loops_failed.contains(key) {
+            return null
+        }
+        if !self.loops_found.contains_key(key) {
+            let mut asked: Vec[i64] = []
+            // The file's invariant is checked, never believed (D4); one
+            // that fails is searched for as if it were not there.
+            let recorded: String = (self.loops_recorded[record.start] ?? "").clone()
+            let mut found: LoopFound? = null
+            let mut kept: String = ""
+            if recorded.len() > 0 {
+                // A loop the walk states more than once may have one
+                // invariant for each statement: the first that passes.
+                for alternative in recorded.split("|") {
+                    found = loop_recorded(arena, record, alternative, fn(on, given, goal) {
+                        match ask(on, given, goal) {
+                            SolverAnswer::Proved => true,
+                            else => false,
+                        }
+                    }, asked)
+                    if found != null {
+                        self.loops_read += 1
+                        kept = alternative.clone()
+                        break
+                    }
+                }
+            }
+            if found == null {
+                found = loop_found(arena, record, fn(on, given, goal) {
+                    match ask(on, given, goal) {
+                        SolverAnswer::Proved => true,
+                        else => false,
+                    }
+                }, asked)
+                if found == null {
+                    self.loops_unfound += 1
+                } else {
+                    self.loops_searched += 1
+                }
+            }
+            for n in asked {
+                self.loop_queries += n
+            }
+            let held = found ?? LoopFound { parts: [] }
+            if held.parts.is_empty() {
+                self.loops_failed.insert(key.clone())
+                return null
+            }
+            if kept.len() == 0 {
+                kept = loop_parts_text(arena, held)
+            }
+            let used: String = (self.loops_used[record.start] ?? "").clone()
+            if used.len() == 0 {
+                self.loops_used.insert(record.start, kept)
+            } else {
+                let mut known = false
+                for alternative in used.split("|") {
+                    if alternative == kept {
+                        known = true
+                    }
+                }
+                if !known {
+                    self.loops_used.insert(record.start, f"{used}|{kept}")
+                }
+            }
+            self.loops_found.insert(key.clone(), held)
+        }
+        let held = self.loops_found[key] ?? return null
+        return held.clone()
     }
 
     /// Whether a claim was carried back from the call `site` to the entry
@@ -434,12 +454,15 @@ impl ProverState {
                 }
             }
         }
-        // **Asked once more through the loops before it** (ADR-361 D2), where
-        // it reads what one of them changes and is still open.
+        // **Asked once more through the loops before it, and those it stands
+        // in** (ADR-361 D2, D3), where it reads what one of them changes and
+        // is still open.
         let mut loop_open = false
-        if claim != null && !is_refuted && !tainted_claim && !scope.loops.is_empty() {
+        if claim != null && !is_refuted && !tainted_claim && (!scope.loops.is_empty() || !scope.around.is_empty()) {
             let base = loop_base ?? scope.facts.clone()
-            if loop_reads(arena, base, claim ?? 0, scope.loops) {
+            let mut asked_through = scope.loops.clone()
+            asked_through.extend(scope.around.clone())
+            if loop_reads(arena, base, claim ?? 0, asked_through) {
                 let through = self.through_loops(arena, scope, claim ?? 0, base, ask)
                 if through != null {
                     scope.facts.push(claim ?? 0)
@@ -538,7 +561,9 @@ impl ProverState {
         } else if is_sometimes {
             why = f"it is false when {shown(sometimes_values)}"
         } else if loop_open {
-            why = loop_open_text(scope.loops)
+            let mut asked_through = scope.loops.clone()
+            asked_through.extend(scope.around.clone())
+            why = loop_open_text(asked_through)
         } else if claim == null {
             why = "it is not a comparison of whole numbers the prover reads"
             // **The part it could not read, named** (D7): a binding the claim

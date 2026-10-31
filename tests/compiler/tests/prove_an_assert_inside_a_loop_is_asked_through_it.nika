@@ -1,0 +1,39 @@
+// #1054, ADR-361 D2, D3: an `assert` inside a loop body, reading a name the
+// loop changes, is asked through the loop it stands in: with the invariant at
+// the head of the turn, the condition, and the path from the head.
+fn f(n: i64) -> i64 sync {
+	let mut i = 0
+	let mut j = 0
+	while i < n {
+		assert(j <= i)
+		j += 1
+		i += 1
+	}
+	assert(j <= i)
+	return j
+}
+
+fn h(n: i64) -> i64 sync {
+	let mut i = 0
+	while i < n {
+		assert(i >= 0)
+		i += 1
+	}
+	return i
+}
+
+// The same after an assignment in the body, and in a `for` over a range.
+fn g(n: i64) -> i64 sync {
+	let mut s = 0
+	for k in 0..<n {
+		s += 2
+		assert(s == 2 * k + 2)
+	}
+	return s
+}
+
+fn main() {
+	println(f"{f(4)}")
+	println(f"{h(3)}")
+	println(f"{g(5)}")
+}

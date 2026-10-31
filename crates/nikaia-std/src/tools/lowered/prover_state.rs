@@ -83,48 +83,17 @@ impl ProverState {
         let mut facts = base;
         let mut texts: Vec<String> = vec![];
         for record in scope.loops.iter() {
-            let key = loop_key(&arena, record);
-            if self.loops_failed.contains(&key) { continue; }
-            if !self.loops_found.contains_key(&key) {
-                let mut asked: Vec<i64> = vec![];
-                let recorded: String = nikaia_std::index::or(*nikaia_std::index::get(&self.loops_recorded, &record.start), || "").to_string();
-                let mut found: Option<LoopFound> = None;
-                let mut kept: String = String::from("");
-                if !recorded.is_empty() {
-                    for alternative in recorded.split('|') {
-                        found = loop_recorded(arena, record, alternative, &|on, given, goal| { matches!(ask(on, given, goal), SolverAnswer::Proved) }, &mut asked);
-                        if found.is_some() {
-                            self.loops_read += 1;
-                            kept = alternative.to_string();
-                            break;
-                        }
-                    }
-                }
-                if found.is_none() {
-                    found = loop_found(arena, record, &|on, given, goal| { matches!(ask(on, given, goal), SolverAnswer::Proved) }, &mut asked);
-                    if found.is_none() { self.loops_unfound += 1; } else { self.loops_searched += 1; }
-                }
-                for n in asked.iter() {
-                    let n = nikaia_std::num::value(n);
-                    self.loop_queries += n;
-                }
-                let held = nikaia_std::index::or(found, || LoopFound { parts: vec![] });
-                if held.parts.is_empty() {
-                    self.loops_failed.insert(key.to_string());
-                    continue;
-                }
-                if kept.is_empty() { kept = loop_parts_text(&arena, &held); }
-                let used: String = nikaia_std::index::or(*nikaia_std::index::get(&self.loops_used, &record.start), || "").to_string();
-                if used.is_empty() { self.loops_used.insert(record.start, kept); } else {
-                    let mut known = false;
-                    for alternative in used.split('|') { if AsRef::<str>::as_ref(&(alternative)) == AsRef::<str>::as_ref(&(kept)) { known = true; } }
-                    if !known { self.loops_used.insert(record.start, format!("{}|{}", used, kept)); }
-                }
-                self.loops_found.insert(key.to_string(), held);
+            let held = match self.loop_invariant(arena, record, ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            facts.extend(loop_facts(arena, record, &held));
+            texts.push(loop_found_text(arena, record, &held));
+        }
+        if !scope.around.is_empty() {
+            facts.extend(scope.history.iter().cloned());
+            for record in scope.around.iter() {
+                let held = match self.loop_invariant(arena, record, ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                facts.extend(loop_turn_facts(arena, record, &held));
+                texts.push(loop_said(arena, record, &held, "inside"));
             }
-            let held = match *nikaia_std::index::get(&self.loops_found, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            facts.extend(loop_facts(arena, record, held));
-            texts.push(loop_found_text(arena, record, held));
         }
         if texts.is_empty() { return None; }
         self.loop_claims += 1;
@@ -133,6 +102,49 @@ impl ProverState {
             SolverAnswer::Proved => Some(texts.join("; ")),
             _ => None,
         }
+    }
+    pub(crate) fn loop_invariant(&mut self, arena: &mut TermArena, record: &LoopRecord, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer) -> Option<LoopFound> {
+        let key = loop_key(&arena, record);
+        if self.loops_failed.contains(&key) { return None; }
+        if !self.loops_found.contains_key(&key) {
+            let mut asked: Vec<i64> = vec![];
+            let recorded: String = nikaia_std::index::or(*nikaia_std::index::get(&self.loops_recorded, &record.start), || "").to_string();
+            let mut found: Option<LoopFound> = None;
+            let mut kept: String = String::from("");
+            if !recorded.is_empty() {
+                for alternative in recorded.split('|') {
+                    found = loop_recorded(arena, record, alternative, &|on, given, goal| { matches!(ask(on, given, goal), SolverAnswer::Proved) }, &mut asked);
+                    if found.is_some() {
+                        self.loops_read += 1;
+                        kept = alternative.to_string();
+                        break;
+                    }
+                }
+            }
+            if found.is_none() {
+                found = loop_found(arena, record, &|on, given, goal| { matches!(ask(on, given, goal), SolverAnswer::Proved) }, &mut asked);
+                if found.is_none() { self.loops_unfound += 1; } else { self.loops_searched += 1; }
+            }
+            for n in asked.iter() {
+                let n = nikaia_std::num::value(n);
+                self.loop_queries += n;
+            }
+            let held = nikaia_std::index::or(found, || LoopFound { parts: vec![] });
+            if held.parts.is_empty() {
+                self.loops_failed.insert(key.to_string());
+                return None;
+            }
+            if kept.is_empty() { kept = loop_parts_text(&arena, &held); }
+            let used: String = nikaia_std::index::or(*nikaia_std::index::get(&self.loops_used, &record.start), || "").to_string();
+            if used.is_empty() { self.loops_used.insert(record.start, kept); } else {
+                let mut known = false;
+                for alternative in used.split('|') { if AsRef::<str>::as_ref(&(alternative)) == AsRef::<str>::as_ref(&(kept)) { known = true; } }
+                if !known { self.loops_used.insert(record.start, format!("{}|{}", used, kept)); }
+            }
+            self.loops_found.insert(key.to_string(), held);
+        }
+        let held = match *nikaia_std::index::get(&self.loops_found, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(held.clone())
     }
     pub(crate) fn carried_here(&self, function: Option<&str>, site: &CarriedFrom) -> bool {
         let owner = match carrying_function(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -222,9 +234,11 @@ impl ProverState {
             }
         }
         let mut loop_open = false;
-        if claim.is_some() && !is_refuted && !tainted_claim && !scope.loops.is_empty() {
+        if claim.is_some() && !is_refuted && !tainted_claim && (!scope.loops.is_empty() || !scope.around.is_empty()) {
             let base = nikaia_std::index::or(loop_base, || scope.facts.to_owned().into());
-            if loop_reads(&arena, &base, nikaia_std::index::or(claim, || 0), &scope.loops) {
+            let mut asked_through = scope.loops.to_owned();
+            asked_through.extend(scope.around.iter().cloned());
+            if loop_reads(&arena, &base, nikaia_std::index::or(claim, || 0), &asked_through) {
                 let through = self.through_loops(arena, &scope, nikaia_std::index::or(claim, || 0), base, ask);
                 if through.is_some() {
                     scope.facts.push(nikaia_std::index::or(claim, || 0));
@@ -272,7 +286,11 @@ impl ProverState {
         let sometimes_values = nikaia_std::index::or(sometimes, || collections::BTreeMap::new().into());
         if is_sometimes && !self.collecting { outcome.findings.push(Finding { code: String::from("NK1207"), span, message: format!("`{}` is false when {}.", written, shown(&sometimes_values)), notes: vec![String::from("That state reaches it: what is known here pins every name the claim depends on.")], help: Some(String::from("If the claim is right, the code before it is wrong; if the code is right, the claim is.")), warning: false, labels: vec![] }); }
         let mut why = String::from("nothing before it shows it");
-        if rejected.is_some() { why = nikaia_std::index::or(rejected, || "".into()); } else if is_refuted { why = format!("it is false every time it is reached ({})", shown(&refuted_values)); } else if is_sometimes { why = format!("it is false when {}", shown(&sometimes_values)); } else if loop_open { why = loop_open_text(&scope.loops); } else if claim.is_none() {
+        if rejected.is_some() { why = nikaia_std::index::or(rejected, || "".into()); } else if is_refuted { why = format!("it is false every time it is reached ({})", shown(&refuted_values)); } else if is_sometimes { why = format!("it is false when {}", shown(&sometimes_values)); } else if loop_open {
+            let mut asked_through = scope.loops.to_owned();
+            asked_through.extend(scope.around.iter().cloned());
+            why = loop_open_text(&asked_through);
+        } else if claim.is_none() {
             why = String::from("it is not a comparison of whole numbers the prover reads");
             let unread = unread_name(names, &scope);
             if unread.is_some() { why = format!("`{}` is not a whole number the prover reads", nikaia_std::index::or(unread.as_deref(), || "")); }

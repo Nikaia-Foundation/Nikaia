@@ -709,7 +709,36 @@ pub fn loop_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound)
     facts
 }
 
-pub fn loop_found_text(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> String {
+pub fn loop_turn_name(name: &str, start: i64) -> String { format!("{}^{}", name, start) }
+
+pub fn loop_turn_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> Vec<i64> {
+    let start = record.start;
+    let mut renamed: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut ghosts: Vec<String> = vec![];
+    for name in record.problem.state.iter() {
+        renamed.insert(name.to_string(), arena.var(&loop_turn_name(name, start)));
+        ghosts.push(loop_before_name(name, start));
+    }
+    let mut facts: Vec<i64> = vec![];
+    for fact in record.problem.fixed.iter() {
+        let fact = nikaia_std::num::value(fact);
+        for g in ghosts.iter() {
+            if arena.mentions(fact, g) {
+                facts.push(fact);
+                break;
+            }
+        }
+    }
+    for (term, _) in found.parts.iter() {
+        let term = nikaia_std::num::value(term);
+        facts.push(arena.substitute(term, &renamed));
+    }
+    facts
+}
+
+pub fn loop_found_text(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> String { loop_said(arena, record, found, "through") }
+
+pub fn loop_said(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound, place: &str) -> String {
     let mut known: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for name in record.problem.state.iter() {
         let ghost = loop_before_name(name, record.start);
@@ -730,7 +759,7 @@ pub fn loop_found_text(arena: &mut TermArena, record: &LoopRecord, found: &LoopF
         if !nikaia_std::list::contains(&origins, &origin) { origins.push(origin.to_string()); }
     }
     let changes = record.problem.state.join("`, `");
-    format!("proved through the loop that changes `{}`, with the invariant `{}`, found by {} and checked by three queries", changes, parts.join(" && "), origins.join(" and "))
+    format!("proved {} the loop that changes `{}`, with the invariant `{}`, found by {} and checked by three queries", place, changes, parts.join(" && "), origins.join(" and "))
 }
 
 pub fn loop_open_text(records: &[LoopRecord]) -> String {
