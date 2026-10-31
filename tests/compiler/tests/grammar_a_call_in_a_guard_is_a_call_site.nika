@@ -1,0 +1,25 @@
+// #1032: a call inside a grammar guard is a call site for the text-tier pass,
+// so `fits`' parameter (and through it `ok`'s) is tiered from it too.
+grammar G {
+	rule WS = "" -> { }
+	rule Word -> i64 = x:any if(x >= 'a' && x <= 'z') -> { 1 }
+	entry rule top -> String = s:text(Word+) if(fits(s), "too short") eof -> { s }
+}
+fn ok(s: String) -> bool sync {
+	let body = s.strip_prefix("-") ?? s
+	return body.len() > 1
+}
+fn fits(s: String) -> bool sync {
+	return ok(s)
+}
+fn other(s: String) -> bool sync {
+	return ok(s)
+}
+fn main() {
+	let r = G::top("abc") catch {
+		println("error")
+		return
+	}
+	println(r)
+	println(other(r))
+}

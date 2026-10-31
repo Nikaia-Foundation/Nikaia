@@ -5260,6 +5260,11 @@ fn bind_grammar_pattern(gname: ref String, rules: ref collections::BTreeSet[Stri
         Pattern::Repeat { pat, .. } => bind_grammar_pattern(gname, rules, pat.node, ask, walk),
         Pattern::Counted { pat, .. } => bind_grammar_pattern(gname, rules, pat.node, ask, walk),
         Pattern::Group(pat) => bind_grammar_pattern(gname, rules, pat.node, ask, walk),
+        // A guard's condition is walked in pattern order, after the labels
+        // before it are bound: a call in it is a call site (#1032).
+        Pattern::Guard { cond, .. } => {
+            tier_expr(cond, ask, walk)
+        }
         else => {}
     }
 }

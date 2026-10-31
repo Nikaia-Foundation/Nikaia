@@ -3835,6 +3835,7 @@ pub(crate) fn bind_grammar_pattern(gname: &str, rules: &collections::BTreeSet<St
         Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); bind_grammar_pattern(gname, rules, &pat.node, ask, walk); },
         Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); bind_grammar_pattern(gname, rules, &pat.node, ask, walk); },
         Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); bind_grammar_pattern(gname, rules, &pat.node, ask, walk); },
+        Pattern::Guard { cond, .. } => { tier_expr(cond, ask, walk); },
         _ => { },
     }
 }
