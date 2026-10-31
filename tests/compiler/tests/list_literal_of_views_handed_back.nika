@@ -1,0 +1,22 @@
+struct N {
+	name: String,
+}
+
+struct E {
+	name: String,
+	value: String,
+}
+
+fn walk(n: ref N) -> Vec[E] sync {
+	return [E { name: n.name, value: "" }]
+}
+
+fn word_of(input: String) -> N {
+	return N { name: input.trim() }
+}
+
+fn main() {
+	let n = word_of(" hello ")
+	let es = walk(n)
+	println(f"{es.len()} {es[0].name}")
+}

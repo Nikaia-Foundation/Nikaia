@@ -1,0 +1,27 @@
+struct N {
+	name: String,
+	kids: Vec[N],
+}
+
+struct E {
+	name: String,
+}
+
+fn walk(n: ref N) -> Vec[E] sync {
+	let mut out: Vec[E] = [E { name: n.name }]
+	for x in n.kids {
+		out.extend(walk(x))
+	}
+	return out
+}
+
+fn word_of(input: String) -> N {
+	let leaf = N { name: input.trim(), kids: [] }
+	return N { name: input.trim(), kids: [leaf] }
+}
+
+fn main() {
+	let n = word_of(" hello ")
+	let es = walk(n)
+	println(f"{es.len()} {es[1].name}")
+}

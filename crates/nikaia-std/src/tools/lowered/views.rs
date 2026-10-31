@@ -535,7 +535,7 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                     here.backs.insert(back.to_string());
                     here.carriers.insert(back);
                 }
-                if views_a_local_struct(unit, asked, block, i, names, value, (here.ours).as_deref()) { descend(unit, asked, value, &span, &own_buffer, here); } else { stores(unit, asked, value, &span, &own_buffer, here); }
+                if handed == 0 { descend_items(unit, asked, value, &span, &own_buffer, here); } else if handed > 0 && here.ours_listed.is_some() { listed_back(unit, asked, value, &span, &own_buffer, here); } else if views_a_local_struct(unit, asked, block, i, names, value, (here.ours).as_deref()) { descend(unit, asked, value, &span, &own_buffer, here); } else { stores(unit, asked, value, &span, &own_buffer, here); }
             },
             Stmt::Comptime { name, value, .. } => {
                 let name = *name;
@@ -579,7 +579,7 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
 
 pub(crate) fn local_vec_handed_back(asked: &Asked<'_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr) -> i64 {
     match value {
-        Expr::ListLit { items, .. } => { if !items.is_empty() { return -1; } },
+        Expr::ListLit { .. } => { },
         _ => { return -1; },
     }
     if names.len() != 1 { return -1; }
@@ -615,7 +615,16 @@ pub(crate) fn local_vec_handed_back(asked: &Asked<'_, '_, '_>, block: &Block, at
     handed
 }
 
-pub(crate) fn a_reading_method(method: &str) -> bool { method == "push" || method == "len" || method == "is_empty" }
+pub(crate) fn a_reading_method(method: &str) -> bool { a_growing_method(method) || method == "len" || method == "is_empty" }
+
+pub(crate) fn a_growing_method(method: &str) -> bool { method == "push" || method == "extend" }
+
+pub(crate) fn descend_items(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) {
+    match value {
+        Expr::ListLit { items, .. } => { for item in items.iter() { descend(unit, asked, item, span, &own_buffer, here); } },
+        _ => { descend(unit, asked, value, span, &own_buffer, here); },
+    }
+}
 
 pub(crate) fn views_a_local_struct(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr, ours: Option<&str>) -> bool {
     let literal = match value {
@@ -704,6 +713,7 @@ pub(crate) fn handed_back(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, 
             let name = *name;
             if ours_is(asked, (here.ours).as_deref(), name) { descend(unit, asked, value, span, &own_buffer, here); } else { stores(unit, asked, value, span, &own_buffer, here); }
         },
+        Expr::ListLit { .. } => { if here.ours_listed.is_some() { listed_back(unit, asked, value, span, &own_buffer, here); } else { stores(unit, asked, value, span, &own_buffer, here); } },
         _ => { stores(unit, asked, value, span, &own_buffer, here); },
     }
 }
@@ -808,7 +818,7 @@ pub(crate) fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: 
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if a_push_into_a_local(asked, &here, receiver, method) {
-                for arg in args.iter() { descend(unit, asked, arg, span, &own_buffer, here); }
+                for arg in args.iter() { if asked.names.resolve(method) == "extend" { descend_items(unit, asked, arg, span, &own_buffer, here); } else { descend(unit, asked, arg, span, &own_buffer, here); } }
                 return;
             }
             if a_push_into_a_back(asked, &here, receiver, method) {
@@ -845,7 +855,7 @@ pub(crate) fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: 
 }
 
 pub(crate) fn a_push_into_a_local(asked: &Asked<'_, '_, '_>, here: &Here, receiver: &Expr, method: winnow_grammar::Symbol) -> bool {
-    if asked.names.resolve(method) != "push" { return false; }
+    if !a_growing_method(asked.names.resolve(method)) { return false; }
     match receiver {
         Expr::Variable(n, _) => { let n = *n; here.locals.contains(asked.names.resolve(n)) },
         _ => false,
@@ -853,7 +863,7 @@ pub(crate) fn a_push_into_a_local(asked: &Asked<'_, '_, '_>, here: &Here, receiv
 }
 
 pub(crate) fn a_push_into_a_back(asked: &Asked<'_, '_, '_>, here: &Here, receiver: &Expr, method: winnow_grammar::Symbol) -> bool {
-    if asked.names.resolve(method) != "push" { return false; }
+    if !a_growing_method(asked.names.resolve(method)) { return false; }
     match receiver {
         Expr::Variable(n, _) => { let n = *n; here.backs.contains(asked.names.resolve(n)) },
         _ => false,
@@ -862,6 +872,7 @@ pub(crate) fn a_push_into_a_back(asked: &Asked<'_, '_, '_>, here: &Here, receive
 
 pub(crate) fn listed_back(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, span: &Span, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) {
     match value {
+        Expr::ListLit { items, .. } => { for item in items.iter() { listed_back(unit, asked, item, span, own_buffer, here); } },
         Expr::StructLit { name, .. } => {
             let name = *name;
             if ours_is(asked, (here.ours_listed).as_deref(), name) { descend(unit, asked, value, span, &own_buffer, here); } else { stores(unit, asked, value, span, &own_buffer, here); }

@@ -812,7 +812,14 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
                     here.backs.insert(back.clone())
                     here.carriers.insert(back)
                 }
-                if views_a_local_struct(unit, asked, block, i, names, value, here.ours) {
+                // **The items a list starts with** are pushed into it (#1071):
+                // into a list that never leaves no store, into the list handed
+                // back each a value listed back.
+                if handed == 0 {
+                    descend_items(unit, asked, value, span, own_buffer, here)
+                } else if handed > 0 && here.ours_listed != null {
+                    listed_back(unit, asked, value, span, own_buffer, here)
+                } else if views_a_local_struct(unit, asked, block, i, names, value, here.ours) {
                     descend(unit, asked, value, span, own_buffer, here)
                 } else {
                     stores(unit, asked, value, span, own_buffer, here)
@@ -864,18 +871,15 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
     }
 }
 
-// Whether `let name = []` at statement `at` binds a `Vec` that the rest of
-// the block only pushes to, measures, indexes or loops over (#655), and how
+// Whether `let name = [..]` at statement `at` binds a `Vec` that the rest of
+// the block only pushes to, extends, measures, indexes or loops over (#655,
+// #1071), and how
 // often a `return name` of this block hands it back (#1000); -1 where the
 // name goes anywhere else. 0: it never leaves, so what is pushed into it is
 // no store past the call.
 fn local_vec_handed_back(asked: ref Asked, block: ref Block, at: i64, names: ref Vec[winnow_grammar::Symbol], value: ref Expr) -> i64 {
     match value {
-        Expr::ListLit { items, .. } => {
-            if items.len() != 0 {
-                return -1
-            }
-        },
+        Expr::ListLit { .. } => {},
         else => return -1,
     }
     if names.len() != 1 {
@@ -925,7 +929,25 @@ fn local_vec_handed_back(asked: ref Asked, block: ref Block, at: i64, names: ref
 }
 
 fn a_reading_method(method: ref String) -> bool {
-    return method == "push" || method == "len" || method == "is_empty"
+    return a_growing_method(method) || method == "len" || method == "is_empty"
+}
+
+// `push(x)` and `extend(xs)`: what `extend` brings reaches the list exactly
+// as each element pushed one by one would (#1071).
+fn a_growing_method(method: ref String) -> bool {
+    return method == "push" || method == "extend"
+}
+
+// The items of a list literal, each asked on its own parts.
+fn descend_items(unit: ref Unit, asked: ref Asked, value: ref Expr, span: ref Span, own_buffer: fn(ref Expr) -> bool sync, mut here: Here) {
+    match value {
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                descend(unit, asked, item, span, own_buffer, here)
+            }
+        }
+        else => descend(unit, asked, value, span, own_buffer, here),
+    }
 }
 
 // Whether `let name = Struct { … }` at statement `at` binds a struct the
@@ -1060,6 +1082,15 @@ fn handed_back(unit: ref Unit, asked: ref Asked, value: ref Expr, span: ref Span
                 stores(unit, asked, value, span, own_buffer, here)
             }
         }
+        // **A list literal of the result's element, handed back** (#1071):
+        // each item is listed back, as a push into the list handed back is.
+        Expr::ListLit { .. } => {
+            if here.ours_listed != null {
+                listed_back(unit, asked, value, span, own_buffer, here)
+            } else {
+                stores(unit, asked, value, span, own_buffer, here)
+            }
+        }
         else => stores(unit, asked, value, span, own_buffer, here),
     }
 }
@@ -1176,7 +1207,11 @@ fn stores(unit: ref Unit, asked: ref Asked, expr: ref Expr, span: ref Span, own_
             // its own parts.
             if a_push_into_a_local(asked, here, receiver, method) {
                 for arg in args {
-                    descend(unit, asked, arg, span, own_buffer, here)
+                    if asked.names.resolve(method) == "extend" {
+                        descend_items(unit, asked, arg, span, own_buffer, here)
+                    } else {
+                        descend(unit, asked, arg, span, own_buffer, here)
+                    }
                 }
                 return
             }
@@ -1216,7 +1251,7 @@ fn stores(unit: ref Unit, asked: ref Asked, expr: ref Expr, span: ref Span, own_
 }
 
 fn a_push_into_a_local(asked: ref Asked, here: ref Here, receiver: ref Expr, method: winnow_grammar::Symbol) -> bool {
-    if asked.names.resolve(method) != "push" {
+    if !a_growing_method(asked.names.resolve(method)) {
         return false
     }
     return match receiver {
@@ -1226,7 +1261,7 @@ fn a_push_into_a_local(asked: ref Asked, here: ref Here, receiver: ref Expr, met
 }
 
 fn a_push_into_a_back(asked: ref Asked, here: ref Here, receiver: ref Expr, method: winnow_grammar::Symbol) -> bool {
-    if asked.names.resolve(method) != "push" {
+    if !a_growing_method(asked.names.resolve(method)) {
         return false
     }
     return match receiver {
@@ -1236,9 +1271,15 @@ fn a_push_into_a_back(asked: ref Asked, here: ref Here, receiver: ref Expr, meth
 }
 
 // One value pushed into a list handed back: a literal of the struct the
-// result lists is no store, what stands inside it is still asked.
+// result lists is no store, what stands inside it is still asked. A list
+// literal (a start, an `extend`, a `return [..]`) lists each item back (#1071).
 fn listed_back(unit: ref Unit, asked: ref Asked, value: ref Expr, span: ref Span, own_buffer: fn(ref Expr) -> bool sync, mut here: Here) {
     match value {
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                listed_back(unit, asked, item, span, own_buffer, here)
+            }
+        }
         Expr::StructLit { name, .. } => {
             if ours_is(asked, here.ours_listed, name) {
                 descend(unit, asked, value, span, own_buffer, here)
