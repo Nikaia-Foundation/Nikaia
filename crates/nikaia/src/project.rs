@@ -1574,8 +1574,12 @@ pub fn write_proofs(root: &Path, book: Option<&crate::proofs::Book>, locked: boo
 /// difference is a change in a contract and never in the formatting.
 pub fn write_ledger(path: &Path, ledger: &str, locked: bool) -> Result<()> {
     if !locked {
-        std::fs::write(path, ledger)?;
-        return Ok(());
+        // **Written whole, and only where it changed**: builds side by side
+        // read a package's ledger (the programs `nikaia test` builds on its
+        // workers all depend on the one package), and a build that read it
+        // while another was rewriting it read half a ledger and refused
+        // sound code.
+        return crate::comptime_run::write_if_changed(path, ledger).map_err(|e| anyhow!(e));
     }
 
     let committed = std::fs::read_to_string(path).with_context(|| {

@@ -251,8 +251,23 @@ impl Lockfile {
         {
             std::fs::create_dir_all(parent).ok();
         }
-        std::fs::write(path, text)
-            .with_context(|| format!("failed to write lockfile {}", path.display()))
+        if std::fs::read_to_string(path).is_ok_and(|held| held == text) {
+            return Ok(());
+        }
+        // Write-then-rename, as `Store::put`: builds side by side read the
+        // lockfile of a package they all depend on, and none may read half of
+        // one.
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut name = path.file_name().unwrap_or_default().to_os_string();
+        name.push(format!(".{}.{n}.partial", std::process::id()));
+        let partial = path.with_file_name(name);
+        std::fs::write(&partial, text)
+            .with_context(|| format!("failed to write lockfile {}", partial.display()))?;
+        std::fs::rename(&partial, path).with_context(|| {
+            let _ = std::fs::remove_file(&partial);
+            format!("failed to write lockfile {}", path.display())
+        })
     }
 }
 

@@ -613,21 +613,24 @@ impl Book {
     pub fn write(&self, root: &Path) -> std::io::Result<()> {
         let (text, long) = self.render();
         let path = root.join(FILE);
-        if std::fs::read_to_string(&path).ok().as_deref() != Some(text.as_str()) {
-            std::fs::write(&path, &text)?;
-        }
+        // Whole or not at all, as the ledger beside it (`project::write_ledger`).
+        let whole = |path: &Path, text: &str| {
+            crate::comptime_run::write_if_changed(path, text).map_err(std::io::Error::other)
+        };
+        whole(&path, &text)?;
         let dir = root.join(LONG_DIR);
         if !long.is_empty() {
             std::fs::create_dir_all(&dir)?;
         }
         for (key, certificate) in &long {
-            std::fs::write(dir.join(key), certificate)?;
+            whole(&dir.join(key), certificate)?;
         }
         // A long certificate no entry points at any more goes with it.
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if !long.contains_key(&name) {
+                // Not one another build is still writing.
+                if !long.contains_key(&name) && !name.ends_with(".partial") {
                     let _ = std::fs::remove_file(entry.path());
                 }
             }
