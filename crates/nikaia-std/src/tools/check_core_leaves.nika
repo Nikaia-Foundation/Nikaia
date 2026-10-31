@@ -242,7 +242,21 @@ pub fn check_core_a_kept_lambda[H: CheckHost](mut state: CheckState, world: ref 
                     let named = world.words.resolve(name).clone()
                     if state.lookup(named) == null && world.own.functions.contains_key(named) {
                         check_core_a_kept_function(state, world, host, params, is_sync, can_throw, false, value, span)
+                        return
                     }
+                    // **A lambda an untyped `let` bound** (#1043) is kept as
+                    // that `let`'s lambda, once, as a typed `let`'s is.
+                    let local = state.binding(named) ?? return
+                    let closure: Expr = (state.facts.let_lambdas.get(local.id) ?? return).clone()
+                    if !state.facts.kept_lambdas.contains_key(node_key(closure)) {
+                        check_core_a_kept_lambda(state, world, host, want, closure, span)
+                        state.facts.let_kept_lambdas.insert(node_key(closure))
+                        if !state.facts.lambda_params_by_use.contains_key(node_key(closure)) {
+                            state.facts.lambda_params_by_use.insert(node_key(closure), params.clone())
+                        }
+                    }
+                    // A kept value now, not code run in place (#997).
+                    let was_run = state.run_code.remove(named)
                 }
                 // **A method of this program named by its path** (`P::add`,
                 // #601) is the closure that calls it, as a named function is.

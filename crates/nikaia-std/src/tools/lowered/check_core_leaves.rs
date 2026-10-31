@@ -180,7 +180,18 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                 Expr::Variable(name, _) => {
                     let name = *name;
                     let named = world.words.resolve(name).to_string();
-                    if state.lookup(&named).is_none() && world.own.functions.contains_key(&named) { check_core_a_kept_function(state, world, host, params, is_sync, can_throw, false, value, span); }
+                    if state.lookup(&named).is_none() && world.own.functions.contains_key(&named) {
+                        check_core_a_kept_function(state, world, host, params, is_sync, can_throw, false, value, span);
+                        return;
+                    }
+                    let local = match state.binding(&named) { Some(__nikaia_value) => __nikaia_value, None => return };
+                    let closure: Expr = match state.facts.let_lambdas.get(&local.id) { Some(__nikaia_value) => __nikaia_value, None => return }.clone();
+                    if !state.facts.kept_lambdas.contains_key(&node_key(&closure)) {
+                        check_core_a_kept_lambda(state, world, host, want, &closure, span);
+                        state.facts.let_kept_lambdas.insert(node_key(&closure));
+                        if !state.facts.lambda_params_by_use.contains_key(&node_key(&closure)) { state.facts.lambda_params_by_use.insert(node_key(&closure), params.to_owned()); }
+                    }
+                    let was_run = state.run_code.remove(&named);
                 },
                 Expr::Path(segments, _) => {
                     let mut names: Vec<String> = vec![];

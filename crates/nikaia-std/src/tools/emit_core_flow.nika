@@ -354,10 +354,18 @@ impl EmitState {
         // handed its arguments, so `fn(mut conn)` is a binding it may change,
         // written `mut conn`, and not the address a lock's door hands an `update`
         // block.
+        // **One an untyped `let` bound** (#1043) is cast below, so its
+        // parameters' types are written, as nothing else says them.
+        let from_a_let = self.facts.let_kept_lambdas.contains(node_key(node))
+        let mut spelled: Vec[String] = names.clone()
+        if from_a_let {
+            let by_use: Vec[Ty] = self.facts.lambda_params_by_use.get(node_key(node))?.clone() ?? []
+            spelled = emit_core_flow_typed_names(names, by_use)
+        }
         let mut bound: Vec[String] = []
         let mut k = 0
         for p in params {
-            let name = names[k].clone()
+            let name = spelled[k].clone()
             k += 1
             if mutable.contains(p) {
                 bound.push(f"mut {name}")
@@ -415,7 +423,21 @@ impl EmitState {
                 out.push(" }")
             }
         }
-        out.push("))")
+        // **One an untyped `let` bound** (#1043) names no type for the
+        // closure to be unsized to: cast to the `dyn Fn` of its arity.
+        if from_a_let {
+            let mut each: Vec[String] = []
+            for p in params {
+                each.push("_")
+            }
+            let mut crossing: String = ""
+            if host.overlaps_user_code() {
+                crossing = " + std::marker::Send + std::marker::Sync"
+            }
+            out.push(f") as std::sync::Arc<dyn Fn({each.join(", ")}) -> _{crossing}>)")
+        } else {
+            out.push("))")
+        }
         if block {
             out.push(" }")
         }

@@ -1,0 +1,19 @@
+// A lambda bound by an untyped `let`, handed where a function value is kept
+// (a parameter the callee keeps, a returned `fn`), is kept (#1043).
+
+fn keep(f: fn(i64) -> i64) -> fn(i64) -> i64 {
+	return f
+}
+
+fn mk(k: i64) -> fn(i64) -> i64 {
+	let g = fn(x) { x + k }
+	return g
+}
+
+fn main() {
+	let add = fn(x) { x + 3 }
+	let t = keep(add)
+	println(f"{t(1)}")
+	let u = mk(2)
+	println(f"{u(1)}")
+}

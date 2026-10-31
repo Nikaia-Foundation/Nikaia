@@ -225,11 +225,20 @@ impl EmitState {
                 out.push(&format!("let {} = std::sync::Arc::new({}); ", name, name));
             }
         }
+        let from_a_let = self.facts.let_kept_lambdas.contains(&node_key(node));
+        let mut spelled: Vec<String> = names.to_owned();
+        if from_a_let {
+            let by_use: Vec<Ty> = nikaia_std::index::or(match self.facts.lambda_params_by_use.get(&node_key(node)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into());
+            spelled = emit_core_flow_typed_names(names, &by_use);
+        }
         let mut bound: Vec<String> = vec![];
         let mut k: i64 = 0;
         for p in params.iter() {
             let p = *p;
-            let name = (*nikaia_std::index::get(&names, (k) as usize)).to_string();
+            let name = (*nikaia_std::index::get(&spelled, (k) as usize)).to_string();
             k += 1;
             if mutable.contains(&p) { bound.push(format!("mut {}", name)); } else { bound.push(name); }
         }
@@ -265,7 +274,16 @@ impl EmitState {
             if result != "_" { out.push("); __nikaia_future }"); } else { out.push(&format!(") as {}<'_, _>", emit_boxed_future_in(host.overlaps_user_code()))); }
             if block { out.push(" }"); }
         }
-        out.push("))");
+        if from_a_let {
+            let mut each: Vec<&'static str> = vec![];
+            for p in params.iter() {
+                let p = *p;
+                each.push("_");
+            }
+            let mut crossing: &'static str = "";
+            if host.overlaps_user_code() { crossing = " + std::marker::Send + std::marker::Sync"; }
+            out.push(&format!(") as std::sync::Arc<dyn Fn({}) -> _{}>)", each.join(", "), crossing));
+        } else { out.push("))"); }
         if block { out.push(" }"); }
         Ok(())
     }

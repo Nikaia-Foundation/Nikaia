@@ -167,7 +167,7 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
         state.facts.kept_args.insert(id_of(arg) as i64);
         if wants_pausing_fn && !found_sync { state.facts.kept_args_run_async.insert(id_of(arg) as i64, arity); }
     }
-    if wants_fn && found_fn && !runs && named { check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), arg, span); }
+    if wants_fn && found_fn && !runs { check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), arg, span); }
     found
 }
 

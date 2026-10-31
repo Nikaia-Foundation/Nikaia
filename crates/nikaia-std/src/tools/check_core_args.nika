@@ -236,8 +236,8 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     }
     // **A function of this program, named where the callee keeps the value**,
     // is the closure that calls it, as a lambda handed there is (ADR-277 D11,
-    // #601).
-    if wants_fn && found_fn && !runs && named {
+    // #601); a lambda an untyped `let` bound is kept as that `let`'s (#1043).
+    if wants_fn && found_fn && !runs {
         check_core_a_kept_lambda(state, world, host, expected[at], arg, span)
     }
     return found

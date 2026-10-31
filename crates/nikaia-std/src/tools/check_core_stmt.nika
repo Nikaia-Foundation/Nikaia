@@ -940,6 +940,12 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         state.task_bindings[tasks - 1].push((name.clone(), bound.clone(), span.start as i64))
     }
     let id = state.a_new_binding()
+    if ty == null && names.len() == 1 && shape.len() == 0 && check_core_stmt_expects_a_lambda(value) {
+        match value {
+            Expr::Closure { .. } => state.facts.let_lambdas.insert(id, value.clone()),
+            else => {},
+        }
+    }
     if bytes_view {
         state.text_bytes_lets.insert(id)
     }
@@ -1899,9 +1905,9 @@ fn check_core_stmt_code_parameter(world: ref CheckWorld, func: ref Expr, at: i64
     }
     let resolved: CheckResolved = resolve_call(world, callee) ?? return null
     let expected = expected_arguments(resolved.contract)
-    // A callee that keeps it wants it kept, and a kept lambda's type is
-    // written on the `let`.
-    if at >= expected.len() as i64 || !check_core_args_runs(resolved.contract, at) {
+    // A callee that keeps it types it too: the use makes the `let`'s lambda a
+    // kept one (#1043, `check_core_a_kept_lambda`).
+    if at >= expected.len() as i64 {
         return null
     }
     return match expected[at] {
