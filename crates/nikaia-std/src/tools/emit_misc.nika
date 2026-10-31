@@ -197,6 +197,10 @@ impl EmitState {
     /// **The type a path's head stands for**: the copy's type where the head
     /// is the parameter the copy is made on, else the head as written.
     pub fn type_named(ref self, world: ref EmitWorld, walk: ref EmitWalk, head: ref String) -> String {
+        let bound = walk.type_names.get(head)
+        if bound != null {
+            return (bound ?? "").clone()
+        }
         let pair = walk.specialising ?? return head.clone()
         if pair.first == head {
             return pair.second.clone()
@@ -209,6 +213,10 @@ impl EmitState {
     /// type `T` stands for in this copy.
     pub fn kind_named(ref self, world: ref EmitWorld, walk: ref EmitWalk, side: ref Expr) -> String {
         match side {
+            Expr::Field { base, name, .. } => {
+                let ty = self.reflected_field_type(world, walk, base, name, "ty::kind") ?? return ""
+                return (self.facts.type_kinds.get(ty)?.clone() ?? "Opaque").clone()
+            },
             Expr::Path(segments, _) => {
                 if segments.len() == 3 {
                     return emit_text(world, segments[2])
@@ -219,6 +227,19 @@ impl EmitState {
             else => {},
         }
         return ""
+    }
+
+    /// **The type of the field this unrolled turn stands at, as written**
+    /// (ADR-330 D5), where `base.member` is `wanted` on the loop's binding:
+    /// `field.ty::name` is `"i64"` at a field of type `i64`.
+    pub fn reflected_field_type(ref self, world: ref EmitWorld, walk: ref EmitWalk, base: ref Expr, member: winnow_grammar::Symbol, wanted: ref String) -> String? {
+        if walk.reflected(world, base, member, wanted) == null {
+            return null
+        }
+        return match base {
+            Expr::Variable(name, _) => walk.field_types.get(emit_text(world, name))?.clone(),
+            else => null,
+        }
     }
 
     /// The function a shape walk is inside, found by the type it is made for.
@@ -233,15 +254,31 @@ impl EmitState {
 
     /// The fields a `for` over `T::fields` or `T::variants` walks, where the
     /// walk is over the parameter `name` made for the type `on`.
-    pub fn unrolls_here(ref self, world: ref EmitWorld, name: ref String, on: ref String, iter: ref Expr) -> Vec[FieldContract]? {
+    pub fn unrolls_here(ref self, world: ref EmitWorld, walk: ref EmitWalk, name: ref String, on: ref String, iter: ref Expr) -> Vec[FieldContract]? {
         match iter {
+            // **`field.ty::fields`, the fields of a field's type** (ADR-330 D5).
+            Expr::Field { base, name: member, .. } => {
+                let ty = self.reflected_field_type(world, walk, base, member, "ty::fields") ?? return null
+                return self.facts.type_fields.get(ty)?.clone()
+            },
             Expr::Path(segments, _) => {
                 if segments.len() != 2 {
                     return null
                 }
                 let parameter = world.words.resolve(segments[0])
                 let member = world.words.resolve(segments[1])
-                if parameter != name || (member != "fields" && member != "variants") {
+                if member != "fields" && member != "variants" {
+                    return null
+                }
+                // **A name an arm of a `match` on a kind binds** (ADR-330 D4):
+                // `s::fields` in `Struct(s)`.
+                let bound = walk.type_names.get(parameter)
+                if bound != null {
+                    let ty = (bound ?? "").clone()
+                    if ty != on {
+                        return self.facts.type_fields.get(ty)?.clone()
+                    }
+                } else if parameter != name {
                     return null
                 }
                 let walk = self.enclosing_shape_walk(on) ?? return null

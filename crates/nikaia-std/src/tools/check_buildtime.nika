@@ -211,7 +211,26 @@ impl CheckState {
 
     /// `NK1180`: a member a field from `T::fields` does not have.
     pub fn a_reflected_field_has_two_members(ref mut self, member: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1180", span, f"A field from `T::fields` has no `{member}`.", ["A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, and `.attribute(X)` and `.attributes(X)`, what its attributes say."], "Use `.name`, `.of(value)`, `.default`, `.attribute(X)` or `.attributes(X)`."))
+        self.findings.push(check_refusal("NK1180", span, f"A field from `T::fields` has no `{member}`.", ["A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, `.ty`, its type, and `.attribute(X)` and `.attributes(X)`, what its attributes say."], "Use `.name`, `.of(value)`, `.default`, `.ty::kind`, `.ty::name`, `.attribute(X)` or `.attributes(X)`."))
+    }
+
+    /// **`NK1230`: a reflected field's `.ty` where a value belongs**
+    /// ([ADR-330](../../docs/specification/adr/adr-330.md) D5): it is the
+    /// field's type, asked with `::`.
+    pub fn a_field_type_as_a_value(ref mut self, span: ref Span) sync {
+        self.findings.push(check_refusal("NK1230", span, "`.ty` of a field from `T::fields` is a type, not a value.", ["A reflected field's `.ty` is the field's type, and a type is asked what it is with `::`."], "Ask it: `field.ty::kind`, `field.ty::name`, or `field.ty::fields` where it is a struct."))
+    }
+
+    /// **`NK1180`: a member a field's type does not answer** (ADR-330 D2, D5).
+    pub fn a_field_type_has_no_member(ref mut self, member: ref String, span: ref Span) sync {
+        self.findings.push(check_refusal("NK1180", span, f"A field's `.ty` has no `::{member}`.", ["A reflected field's `.ty` is its type: it answers `::kind`, `::name`, and `::fields` where it is a struct."], "Use `.ty::kind`, `.ty::name` or `.ty::fields`."))
+    }
+
+    /// **`NK1181`: a path after a value** (ADR-330 D5): `x.name::member` asks
+    /// a type, and only a reflected field's `.ty` is one.
+    pub fn a_path_after_a_value(ref mut self, written: ref String, span: ref Span) sync {
+        let head: String = written.split("::").next()?.clone() ?? written.clone()
+        self.findings.push(check_refusal("NK1181", span, f"`.{written}` is written under `.{head}`, but `.{head}` is a value, not a type.", ["A name in front of `::` has to be a type; after a `.`, only a field's `.ty` from `T::fields` is one."], f"Read the field with `.{head}`, or ask a reflected field's type with `field.ty::…`."))
     }
 
     /// **`NK1179`: a run this body owns, put where a view of one is declared**

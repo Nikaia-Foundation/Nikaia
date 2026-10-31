@@ -1,0 +1,48 @@
+// A reflected field's `.ty` is the field's type (ADR-330 D5, #859 step 1):
+// asked with `::`, `field.ty::name` is its name and `field.ty::kind` its kind,
+// both known while the program is built, and `field.ty::fields` its fields.
+
+struct Point {
+	x: f64,
+	y: f64,
+}
+
+struct User {
+	name: String,
+	age: i64,
+	tags: Vec[String],
+	home: Point,
+}
+
+fn show[T: Struct](_value: T) {
+	for field in T::fields {
+		println(f"{field.name}: {field.ty::name}")
+		if field.ty::kind == meta::Type::Text {
+			println("  text")
+		}
+		if field.ty::kind != meta::Type::Text && field.ty::kind == meta::Type::I64 {
+			println("  a number")
+		}
+	}
+}
+
+struct Line {
+	from: Point,
+	to: Point,
+}
+
+// Where every field's type is a struct, `field.ty::fields` is walked as
+// `T::fields` is.
+fn show_parts[T: Struct](_value: T) {
+	for field in T::fields {
+		for part in field.ty::fields {
+			println(f"{field.name}.{part.name}: {part.ty::name}")
+		}
+	}
+}
+
+fn main() {
+	show(User { name: "a", age: 1, tags: [], home: Point { x: 0.0, y: 1.0 } })
+	show(Point { x: 0.0, y: 1.0 })
+	show_parts(Line { from: Point { x: 0.0, y: 1.0 }, to: Point { x: 2.0, y: 3.0 } })
+}

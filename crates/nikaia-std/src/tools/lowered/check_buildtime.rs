@@ -89,7 +89,22 @@ impl CheckState {
     pub fn a_kind_kept_at_run_time(&mut self, written: &str, span: &Span) { self.findings.push(check_refusal("NK1231", span, format!("`{}` is a `meta::Type`, which exists only while the program is built.", written), vec![String::from("A `meta::Type` carries types, and the running program holds no types: it cannot be kept in a value or handed to code that runs then.")], Some(String::from("Decide it while building: compare it, `T::kind == meta::Type::I64`, or print `T::name`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_reflected_field_has_two_members(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A field from `T::fields` has no `{}`.", member), vec![String::from("A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, and `.attribute(X)` and `.attributes(X)`, what its attributes say.")], Some(String::from("Use `.name`, `.of(value)`, `.default`, `.attribute(X)` or `.attributes(X)`.")))); }
+    pub fn a_reflected_field_has_two_members(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A field from `T::fields` has no `{}`.", member), vec![String::from("A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, `.ty`, its type, and `.attribute(X)` and `.attributes(X)`, what its attributes say.")], Some(String::from("Use `.name`, `.of(value)`, `.default`, `.ty::kind`, `.ty::name`, `.attribute(X)` or `.attributes(X)`.")))); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_field_type_as_a_value(&mut self, span: &Span) { self.findings.push(check_refusal("NK1230", span, String::from("`.ty` of a field from `T::fields` is a type, not a value."), vec![String::from("A reflected field's `.ty` is the field's type, and a type is asked what it is with `::`.")], Some(String::from("Ask it: `field.ty::kind`, `field.ty::name`, or `field.ty::fields` where it is a struct.")))); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_field_type_has_no_member(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A field's `.ty` has no `::{}`.", member), vec![String::from("A reflected field's `.ty` is its type: it answers `::kind`, `::name`, and `::fields` where it is a struct.")], Some(String::from("Use `.ty::kind`, `.ty::name` or `.ty::fields`.")))); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_path_after_a_value(&mut self, written: &str, span: &Span) {
+        let head: String = nikaia_std::index::or(match written.split("::").next() {
+            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+            None => None,
+        }, || written.to_string().into());
+        self.findings.push(check_refusal("NK1181", span, format!("`.{}` is written under `.{}`, but `.{}` is a value, not a type.", written, head, head), vec![String::from("A name in front of `::` has to be a type; after a `.`, only a field's `.ty` from `T::fields` is one.")], Some(format!("Read the field with `.{}`, or ask a reflected field's type with `field.ty::…`.", head))));
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_run_this_body_owns(&mut self, owner: &str, field: &str, held: &str, span: &Span) {

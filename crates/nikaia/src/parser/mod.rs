@@ -3004,6 +3004,16 @@ grammar! {
           | "." name:SEGMENT lambda:trailing_lambda -> {
                 Postfix::Method(name, vec![lambda], Vec::new())
             }
+          // **A path after a member access, `field.ty::kind`**
+          // ([ADR-330](../../../../docs/specification/adr/adr-330.md) D5): a
+          // reflected field's `.ty` is a type, and a type is asked with `::`.
+          // One field whose name holds both words, `ty::kind`; the checker
+          // takes it where the member is a reflected field's `.ty` and refuses
+          // it everywhere else (`NK1181`), so it is never a parse error.
+          | "." name:SEGMENT "::" member:SEGMENT not("(") -> {
+                let joined = format!("{}::{}", _state.interner.resolve(name), _state.interner.resolve(member));
+                Postfix::Field(_state.intern(&joined))
+            }
           | "." name:SEGMENT args:called? -> {
                 match args {
                     // Kap 5.1's `;` reaches a method call too, and what stands

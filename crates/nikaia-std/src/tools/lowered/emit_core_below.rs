@@ -255,9 +255,13 @@ pub(crate) fn emit_ledger_takes_a_keep(ledger: &Ledger, name: &str) -> bool {
 
 impl EmitWalk {
     pub fn reflected(&self, world: &EmitWorld<'_, '_, '_, '_>, base: &Expr, member: winnow_grammar::Symbol, wanted: &str) -> Option<String> {
-        let pair = match self.at_field.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         match base {
-            Expr::Variable(name, _) => { let name = *name; if emit_text(world, name) == pair.first && emit_text(world, member) == wanted { Some(pair.second.to_string()) } else { None } },
+            Expr::Variable(name, _) => { let name = *name; if emit_text(world, member) == wanted {
+                match self.field_names.get(&emit_text(world, name)) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }
+            } else { None } },
             _ => None,
         }
     }

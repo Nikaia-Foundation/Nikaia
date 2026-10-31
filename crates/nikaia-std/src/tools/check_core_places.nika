@@ -197,6 +197,19 @@ fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld,
         if field == "default" {
             return check_core_places_unrolled_default(state.flow.unrolling)
         }
+        // **`field.ty` is the field's type** (ADR-330 D5): asked with `::`,
+        // never a value.
+        if field == "ty" {
+            state.a_field_type_as_a_value(span)
+            return Ty::Unknown
+        }
+        if field.starts_with("ty::") {
+            return check_reflect_field_type(state, expr, field.strip_prefix("ty::") ?? "", span)
+        }
+        if field.contains("::") {
+            state.a_path_after_a_value(field, span)
+            return Ty::Unknown
+        }
         state.a_reflected_field_has_two_members(field, span)
         return Ty::Unknown
     }
@@ -234,6 +247,18 @@ pub fn check_core_field[H: CheckHost](mut state: CheckState, world: ref CheckWor
 fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, base: ref Expr, name: winnow_grammar::Symbol, span: ref Span) -> Ty sync {
     let on = check_core_expr(state, world, host, base, span)
     let field: String = f"{world.words.resolve(name)}"
+    // **`x.name::member` asks a type** (ADR-330 D5): only a reflected
+    // field's `.ty` is one.
+    if field.contains("::") && !safe {
+        let reflected = match on {
+            Ty::Named { name: held, .. } => held == "$Field",
+            else => false,
+        }
+        if !reflected {
+            state.a_path_after_a_value(field, span)
+            return Ty::Unknown
+        }
+    }
     // **`x?.field`**: over a `T?` the field of what is inside, as a `T?`; over
     // a plain value the plain read, with `NK1217` (ADR-279 D13).
     if safe {

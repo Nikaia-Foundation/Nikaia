@@ -312,9 +312,8 @@ impl EmitWalk {
     /// **The field this unrolled turn stands at**, where `base.member` is a
     /// read of the loop's own binding (ADR-304 D2): `null` everywhere else.
     pub fn reflected(ref self, world: ref EmitWorld, base: ref Expr, member: winnow_grammar::Symbol, wanted: ref String) -> String? {
-        let pair = self.at_field ?? return null
         return match base {
-            Expr::Variable(name, _) => if emit_text(world, name) == pair.first && emit_text(world, member) == wanted { pair.second.clone() } else { null },
+            Expr::Variable(name, _) => if emit_text(world, member) == wanted { self.field_names.get(emit_text(world, name))?.clone() } else { null },
             else => null,
         }
     }

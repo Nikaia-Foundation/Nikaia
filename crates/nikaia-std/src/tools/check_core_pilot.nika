@@ -183,6 +183,7 @@ pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: r
         kind = "Struct"
     }
     state.facts.type_kinds.insert(on.clone(), kind)
+    check_reflect_record(state, world, check_reflect_plain(given))
     state.facts.unrolled_calls.insert(call, check_specialised(name, on))
     state.facts.unrolled.insert((name.clone(), on.clone()), fields)
 }
@@ -302,7 +303,7 @@ fn check_reflect_plain(ty: ref Ty) -> Ty {
 }
 
 /// The text of [`check_reflect_plain`], `""` where the type is not known.
-fn check_reflect_written(ty: ref Ty) -> String {
+pub fn check_reflect_written(ty: ref Ty) -> String {
     return match ty {
         Ty::Var { .. } => "",
         else => check_reflect_plain(ty).text(),
@@ -322,6 +323,9 @@ fn check_reflect_a_type(state: ref CheckState, ty: ref String) -> bool {
 /// `meta::Type::X`, `?` for a type parameter's (decided per copy), the case
 /// of a named type's `X::kind` (kept for the emitter).
 fn check_reflect_kind_of(mut state: CheckState, world: ref CheckWorld, side: ref Expr) -> String? sync {
+    if check_reflect_field_kind(state, world, side) {
+        return "?"
+    }
     let segments = match side {
         Expr::Path(segments, _) => segments,
         else => return null,
@@ -397,4 +401,100 @@ pub fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: re
     }
     state.a_kind_kept_at_run_time(f"{ty}::kind", span)
     return meta
+}
+
+/// **`field.ty::member`, a reflected field's type asked** (ADR-330 D2, D5):
+/// `::name` is text known while building, `::kind` a `meta::Type` that only a
+/// comparison or a `match` may take (D6), `::fields` the fields of a struct.
+pub fn check_reflect_field_type(mut state: CheckState, expr: ref Expr, member: ref String, span: ref Span) -> Ty sync {
+    if member == "name" {
+        state.facts.reflected_names.insert(id_of(expr) as i64)
+        return Ty::Named { name: "str", args: [], view: true }
+    }
+    if member == "kind" {
+        state.a_kind_kept_at_run_time("field.ty::kind", span)
+        return Ty::Named { name: "meta::Type", args: [], view: false }
+    }
+    // **`field.ty::fields`, where the field's type is a struct** (ADR-330
+    // D5): walked as `T::fields` is, unrolled.
+    if member == "fields" {
+        // In a turn the field's type is known, and it has to be a struct.
+        let turn: CheckUnrolling? = state.flow.unrolling?.clone()
+        if turn != null {
+            let at: CheckUnrolling = turn ?? return Ty::Unknown
+            if check_reflect_kind(state, check_reflect_plain(at.field.ty)) != "Struct" {
+                state.a_field_type_has_no_member(member, span)
+                return Ty::Unknown
+            }
+        }
+        return Ty::Named { name: "Vec", args: [Ty::Named { name: "$Field", args: [], view: false }], view: false }
+    }
+    state.a_field_type_has_no_member(member, span)
+    return Ty::Unknown
+}
+
+/// Whether `side` is `x.ty::kind` over a field from `T::fields`.
+fn check_reflect_field_kind(state: ref CheckState, world: ref CheckWorld, side: ref Expr) -> bool sync {
+    return match side {
+        Expr::Field { base, name, .. } => {
+            if world.words.resolve(name) != "ty::kind" {
+                return false
+            }
+            match base {
+                Expr::Variable(held, _) => {
+                    let ty: Ty = state.lookup(world.words.resolve(held)) ?? return false
+                    match ty {
+                        Ty::Named { name: written, .. } => written == "$Field",
+                        else => false,
+                    }
+                },
+                else => false,
+            }
+        },
+        else => false,
+    }
+}
+
+/// **The kind of a type and of each type it is made of, and its parts**
+/// (ADR-330 D3, D4), keyed by the type as written: what the emitter decides a
+/// comparison or a `match` on a kind with, per copy, for a field's type and an
+/// arm's binding as for the copy's own. A struct or an enum is its own part.
+fn check_reflect_record(mut state: CheckState, world: ref CheckWorld, ty: ref Ty) sync {
+    let written = check_reflect_written(ty)
+    if written == "" || state.facts.type_parts.contains_key(written) {
+        return
+    }
+    let kind: String = state.facts.type_kinds.get(written)?.clone() ?? check_reflect_kind(state, ty)
+    let mut parts: Vec[Ty] = []
+    match ty {
+        Ty::Nullable(inner) => parts.push(inner.clone()),
+        Ty::Tuple(each) => parts.extend(each.clone()),
+        Ty::Named { args, .. } => {
+            if kind == "List" || kind == "Map" || kind == "Array" {
+                parts.extend(args.clone())
+            }
+        },
+        else => {},
+    }
+    let mut spelled: Vec[String] = []
+    if kind == "Struct" || kind == "Enum" || kind == "Fn" || kind == "Opaque" {
+        spelled.push(written.clone())
+    }
+    for part in parts {
+        spelled.push(check_reflect_written(part))
+    }
+    if !state.facts.type_kinds.contains_key(written) {
+        state.facts.type_kinds.insert(written.clone(), kind.clone())
+    }
+    state.facts.type_parts.insert(written.clone(), spelled)
+    if kind == "Struct" {
+        let fields: Vec[FieldContract] = state.shape_of(world.here, world, written) ?? []
+        for field in fields {
+            check_reflect_record(state, world, check_reflect_plain(field.ty))
+        }
+        state.facts.type_fields.insert(written.clone(), fields)
+    }
+    for part in parts {
+        check_reflect_record(state, world, part)
+    }
 }

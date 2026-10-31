@@ -129,6 +129,7 @@ pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: 
     let mut kind = check_reflect_kind(&state, &check_reflect_plain(&given));
     if shaped && kind == "Opaque" { kind = String::from("Struct"); }
     state.facts.type_kinds.insert(on.to_string(), kind);
+    check_reflect_record(state, world, &check_reflect_plain(&given));
     state.facts.unrolled_calls.insert(call, check_specialised(name, &on));
     state.facts.unrolled.insert((name.to_string(), on.to_string()), fields);
 }
@@ -217,7 +218,7 @@ pub(crate) fn check_reflect_plain(ty: &Ty) -> Ty {
     }
 }
 
-pub(crate) fn check_reflect_written(ty: &Ty) -> String {
+pub fn check_reflect_written(ty: &Ty) -> String {
     match ty {
         Ty::Var { .. } => String::from(""),
         _ => check_reflect_plain(ty).text(),
@@ -232,6 +233,7 @@ pub(crate) fn check_reflect_a_type(state: &CheckState, ty: &str) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_reflect_kind_of(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr) -> Option<String> {
+    if check_reflect_field_kind(&state, world, side) { return Some(String::from("?")); }
     let segments = match side {
         Expr::Path(segments, _) => segments,
         _ => return None,
@@ -284,5 +286,86 @@ pub fn check_reflect_path(state: &mut CheckState, world: &CheckWorld<'_, '_, '_,
     }
     state.a_kind_kept_at_run_time(&format!("{}::kind", ty), span);
     Some(meta)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_reflect_field_type(state: &mut CheckState, expr: &Expr, member: &str, span: &Span) -> Ty {
+    if member == "name" {
+        state.facts.reflected_names.insert(id_of(expr) as i64);
+        return Ty::Named { name: String::from("str"), args: vec![], view: true };
+    }
+    if member == "kind" {
+        state.a_kind_kept_at_run_time("field.ty::kind", span);
+        return Ty::Named { name: String::from("meta::Type"), args: vec![], view: false };
+    }
+    if member == "fields" {
+        let turn: Option<CheckUnrolling> = match state.flow.unrolling.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if turn.is_some() {
+            let at: CheckUnrolling = match turn { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+            if check_reflect_kind(&state, &check_reflect_plain(&at.field.ty)) != "Struct" {
+                state.a_field_type_has_no_member(member, span);
+                return Ty::Unknown;
+            }
+        }
+        return Ty::Named { name: String::from("Vec"), args: vec![Ty::Named { name: String::from("$Field"), args: vec![], view: false }], view: false };
+    }
+    state.a_field_type_has_no_member(member, span);
+    Ty::Unknown
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_reflect_field_kind(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr) -> bool {
+    match side {
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            if world.words.resolve(name) != "ty::kind" { return false; }
+            match base {
+                Expr::Variable(held, _) => {
+                    let held = *held;
+                    let ty: Ty = match state.lookup(world.words.resolve(held)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    match ty {
+                        Ty::Named { name: ref written, .. } => written == "$Field",
+                        _ => false,
+                    }
+                },
+                _ => false,
+            }
+        },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_reflect_record(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) {
+    let written = check_reflect_written(ty);
+    if written == "" || state.facts.type_parts.contains_key(&written) { return; }
+    let kind: String = nikaia_std::index::or(match state.facts.type_kinds.get(&written) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || check_reflect_kind(&state, ty).into());
+    let mut parts: Vec<Ty> = vec![];
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); parts.push(inner.clone()); },
+        Ty::Tuple(each) => { parts.extend(each.iter().cloned()); },
+        Ty::Named { args, .. } => { if kind == "List" || kind == "Map" || kind == "Array" { parts.extend(args.iter().cloned()); } },
+        _ => { },
+    }
+    let mut spelled: Vec<String> = vec![];
+    if kind == "Struct" || kind == "Enum" || kind == "Fn" || kind == "Opaque" { spelled.push(written.to_string()); }
+    for part in parts.iter() { spelled.push(check_reflect_written(part)); }
+    if !state.facts.type_kinds.contains_key(&written) { state.facts.type_kinds.insert(written.to_string(), kind.to_string()); }
+    state.facts.type_parts.insert(written.to_string(), spelled);
+    if kind == "Struct" {
+        let fields: Vec<FieldContract> = nikaia_std::index::or(state.shape_of(&world.here, world, &written), || vec![].into());
+        for field in fields.iter() { check_reflect_record(state, world, &check_reflect_plain(&field.ty)); }
+        state.facts.type_fields.insert(written.to_string(), fields);
+    }
+    for part in parts.iter() { check_reflect_record(state, world, part); }
 }
 

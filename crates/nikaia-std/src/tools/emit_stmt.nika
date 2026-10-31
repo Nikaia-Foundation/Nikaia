@@ -893,18 +893,28 @@ impl EmitState {
         if walk.specialising != null {
             let parameter = (walk.specialising?.first ?? "").clone()
             let on = (walk.specialising?.second ?? "").clone()
-            let fields = self.unrolls_here(world, parameter, on, iter)
+            let fields = self.unrolls_here(world, walk, parameter, on, iter)
             if fields != null {
                 let mut first: String = ""
                 if bindings.len() != 0 {
                     first = emit_text(world, bindings[0])
                 }
                 let list = fields ?? return
+                let outer_name = walk.field_names.get(first)?.clone()
+                let outer_type = walk.field_types.get(first)?.clone()
                 for field in list {
                     let outer = walk.at_field?.clone()
                     walk.at_field = EmitPair { first: first.clone(), second: field.name.clone() }
+                    walk.field_names.insert(first.clone(), field.name.clone())
+                    walk.field_types.insert(first.clone(), check_reflect_written(field.ty))
                     self.emit_core_block(world, walk, out, host, body, depth, flow, scope, EmitTail::Statement)
                     walk.at_field = outer
+                }
+                walk.field_names.remove(first)
+                walk.field_types.remove(first)
+                if outer_name != null {
+                    walk.field_names.insert(first.clone(), (outer_name ?? "").clone())
+                    walk.field_types.insert(first.clone(), (outer_type ?? "").clone())
                 }
                 return
             }

@@ -655,19 +655,35 @@ impl EmitState {
         if walk.specialising.is_some() {
             let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string();
             let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string();
-            let fields = self.unrolls_here(world, &parameter, &on, iter);
+            let fields = self.unrolls_here(world, &walk, &parameter, &on, iter);
             if fields.is_some() {
                 let mut first: String = String::from("");
                 if !bindings.is_empty() { first = emit_text(world, *nikaia_std::index::get(&bindings, 0)); }
                 let list = match fields { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                let outer_name = match walk.field_names.get(&first) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+                let outer_type = match walk.field_types.get(&first) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
                 for field in list.iter() {
                     let outer = match walk.at_field.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     };
                     walk.at_field = Some(EmitPair { first: first.to_string(), second: field.name.to_string() });
+                    walk.field_names.insert(first.to_string(), field.name.to_string());
+                    walk.field_types.insert(first.to_string(), check_reflect_written(&field.ty));
                     self.emit_core_block(world, walk, out, host, body, depth, flow, scope, EmitTail::Statement)?;
                     walk.at_field = outer;
+                }
+                walk.field_names.remove(&first);
+                walk.field_types.remove(&first);
+                if outer_name.is_some() {
+                    walk.field_names.insert(first.to_string(), nikaia_std::index::or(outer_name.as_deref(), || "").to_string());
+                    walk.field_types.insert(first.to_string(), nikaia_std::index::or(outer_type.as_deref(), || "").to_string());
                 }
                 return Ok(());
             }

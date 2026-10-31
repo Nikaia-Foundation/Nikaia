@@ -86,12 +86,22 @@ impl EmitState {
         kind == "Struct" || kind == "Enum" || kind == "Opaque"
     }
     pub fn type_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, head: &str) -> String {
+        let bound = walk.type_names.get(head);
+        if bound.is_some() { return nikaia_std::index::or(bound, || "").to_string(); }
         let pair = match walk.specialising.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return head.to_string() };
         if pair.first == head { return pair.second.to_string(); }
         head.to_string()
     }
     pub fn kind_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, side: &Expr) -> String {
         match side {
+            Expr::Field { base, name, .. } => {
+                let base = nikaia_std::boxed::open(base); let name = *name;
+                let ty = match self.reflected_field_type(world, walk, base, name, "ty::kind") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+                return nikaia_std::index::or(match self.facts.type_kinds.get(&ty) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "Opaque".into()).to_string();
+            },
             Expr::Path(segments, _) => {
                 if segments.len() == 3 { return emit_text(world, *nikaia_std::index::get(&segments, 2)); }
                 let ty = self.type_named(world, walk, &emit_text(world, *nikaia_std::index::get(&segments, 0)));
@@ -104,17 +114,45 @@ impl EmitState {
         }
         String::from("")
     }
+    pub fn reflected_field_type(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, base: &Expr, member: winnow_grammar::Symbol, wanted: &str) -> Option<String> {
+        if walk.reflected(world, base, member, wanted).is_none() { return None; }
+        match base {
+            Expr::Variable(name, _) => { let name = *name; match walk.field_types.get(&emit_text(world, name)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } },
+            _ => None,
+        }
+    }
     pub fn enclosing_shape_walk(&self, on: &str) -> Option<String> {
         for key in self.facts.unrolled.keys() { if key.1 == on { return Some(key.0.to_string()); } }
         None
     }
-    pub fn unrolls_here(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str, on: &str, iter: &Expr) -> Option<Vec<FieldContract>> {
+    pub fn unrolls_here(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, on: &str, iter: &Expr) -> Option<Vec<FieldContract>> {
         match iter {
+            Expr::Field { base, name: member, .. } => {
+                let base = nikaia_std::boxed::open(base); let member = *member;
+                let ty = match self.reflected_field_type(world, walk, base, member, "ty::fields") { Some(__nikaia_value) => __nikaia_value, None => return None };
+                return match self.facts.type_fields.get(&ty) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+            },
             Expr::Path(segments, _) => {
                 if segments.len() != 2 { return None; }
                 let parameter = world.words.resolve(*nikaia_std::index::get(&segments, 0));
                 let member = world.words.resolve(*nikaia_std::index::get(&segments, 1));
-                if parameter != name || member != "fields" && member != "variants" { return None; }
+                if member != "fields" && member != "variants" { return None; }
+                let bound = walk.type_names.get(parameter);
+                if bound.is_some() {
+                    let ty = nikaia_std::index::or(bound, || "").to_string();
+                    if ty != on {
+                        return match self.facts.type_fields.get(&ty) {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        };
+                    }
+                } else if parameter != name { return None; }
                 let walk = match self.enclosing_shape_walk(on) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 let found = match self.facts.unrolled.get(&(walk, on.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 return Some(found.to_owned());

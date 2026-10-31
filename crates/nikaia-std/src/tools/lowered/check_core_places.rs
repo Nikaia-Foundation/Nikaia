@@ -127,6 +127,15 @@ pub(crate) fn check_core_places_a_named_field(state: &mut CheckState, world: &Ch
     if ty == "$Field" {
         if field == "name" { return check_core_places_str_view(); }
         if field == "default" { return check_core_places_unrolled_default((state.flow.unrolling).as_ref()); }
+        if field == "ty" {
+            state.a_field_type_as_a_value(span);
+            return Ty::Unknown;
+        }
+        if field.starts_with("ty::") { return check_reflect_field_type(state, expr, nikaia_std::index::or(field.strip_prefix("ty::"), || ""), span); }
+        if field.contains("::") {
+            state.a_path_after_a_value(field, span);
+            return Ty::Unknown;
+        }
         state.a_reflected_field_has_two_members(field, span);
         return Ty::Unknown;
     }
@@ -162,6 +171,16 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
     let on = check_core_expr(state, world, host, base, span);
     let field: String = format!("{}", world.words.resolve(name));
+    if field.contains("::") && !safe {
+        let reflected = match on {
+            Ty::Named { name: ref held, .. } => held == "$Field",
+            _ => false,
+        };
+        if !reflected {
+            state.a_path_after_a_value(&field, span);
+            return Ty::Unknown;
+        }
+    }
     if safe {
         match on {
             Ty::Nullable(ref inner) => {

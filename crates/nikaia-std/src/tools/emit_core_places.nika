@@ -302,6 +302,12 @@ impl EmitState {
             out.push("\"")
             return
         }
+        // **`field.ty::name` is the field's type as text** (ADR-330 D2, D5).
+        let typed = self.reflected_field_type(world, walk, base, name, "ty::name")
+        if typed != null {
+            out.push((typed ?? "").quoted())
+            return
+        }
         // **`field.default` is its default as a `T?`** (ADR-331 D5).
         let default_of = walk.reflected(world, base, name, "default")
         let on = walk.specialised_to()

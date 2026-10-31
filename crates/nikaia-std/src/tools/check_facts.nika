@@ -84,6 +84,13 @@ pub struct CheckFacts {
     /// **The kind of each type a copy is made for, or a path names**
     /// (ADR-330 D3): `Vec[i64]` is `List`, keyed by the type as written.
     pub type_kinds: collections::BTreeMap[String, String],
+    /// **The types each type is made of**, as written (ADR-330 D3, D4):
+    /// `Vec[i64]` is `[i64]`, a struct its own name; what an arm of a `match`
+    /// on a kind binds.
+    pub type_parts: collections::BTreeMap[String, Vec[String]],
+    /// The fields of each struct among them, for `field.ty::fields` and
+    /// `s::fields` in a `Struct(s)` arm (ADR-330 D4, D5).
+    pub type_fields: collections::BTreeMap[String, Vec[FieldContract]],
     /// The comparisons of two kinds, decided per copy (ADR-330 D6).
     pub kind_compares: collections::BTreeSet[i64],
     /// The paths that are `T::name` (ADR-330 D2).
@@ -461,6 +468,8 @@ impl CheckFacts {
             walks_fields: collections::BTreeMap(),
             unrolled_calls: collections::BTreeMap(),
             type_kinds: collections::BTreeMap(),
+            type_parts: collections::BTreeMap(),
+            type_fields: collections::BTreeMap(),
             kind_compares: collections::BTreeSet(),
             reflected_names: collections::BTreeSet(),
             fallible_loops: collections::BTreeSet(),

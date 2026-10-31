@@ -1,0 +1,12 @@
+name: String
+  text
+age: i64
+  a number
+tags: Vec[String]
+home: Point
+x: f64
+y: f64
+from.x: f64
+from.y: f64
+to.x: f64
+to.y: f64

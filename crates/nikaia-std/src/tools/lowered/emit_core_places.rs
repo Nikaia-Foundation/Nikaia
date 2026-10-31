@@ -186,6 +186,11 @@ impl EmitState {
             out.push("\"");
             return Ok(());
         }
+        let typed = self.reflected_field_type(world, &walk, base, name, "ty::name");
+        if typed.is_some() {
+            out.push(&nikaia_std::index::or(typed, || "".into()).quoted());
+            return Ok(());
+        }
         let default_of = walk.reflected(world, base, name, "default");
         let on = walk.specialised_to();
         if default_of.is_some() && on.is_some() {
