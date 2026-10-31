@@ -41,3 +41,4 @@
 /home/user/Nikaia/docs/briefs/qa-task.md 1186038 40
 /home/user/Nikaia/docs/briefs/qa-task.md 209899 13
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 1193843 33
+/home/user/Nikaia/docs/briefs/yaml/y19-1002-hex-digit.md 453939 18
