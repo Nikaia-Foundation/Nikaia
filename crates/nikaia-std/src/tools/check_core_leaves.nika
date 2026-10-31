@@ -155,6 +155,12 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
     if ty.is_unknown() || copies_plainly(ty) {
         return
     }
+    // **A function value read out of a loan is a copy** (Part I 5.4, #1035):
+    // it shares the one closure, so `return h.f` takes nothing away.
+    match ty {
+        Ty::Fn { .. } => return,
+        else => {},
+    }
     // **A part of a `let mut` view is taken out**, to be given back
     // (ADR-views-1 D1): `NK2108` asks that it is.
     if !handed_back && !element && state.a_part_taken_out(world, path, ty) != null {

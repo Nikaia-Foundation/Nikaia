@@ -117,6 +117,10 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
     if root == "self" || !state.lent_here(&root) { return; }
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_unknown() || copies_plainly(&ty) { return; }
+    match ty {
+        Ty::Fn { .. } => { return; },
+        _ => { },
+    }
     if !handed_back && !element && state.a_part_taken_out(world, &path, &ty).is_some() { return; }
     if !handed_back {
         let held: Ty = match ty {
