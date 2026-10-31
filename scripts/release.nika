@@ -65,8 +65,10 @@ fn release_git(args: Vec[String]) -> String throws {
     return out.stdout.trim().clone()
 }
 
-// The subject of the pushed commit, with the issues its message fixes.
-fn release_title(sha: String) -> String throws {
+// The subject of the pushed commit, with the issues its message fixes. A
+// driver's builder reports `Pushed: local <sha>` (the driver pushes later).
+fn release_title(pushed: String) -> String throws {
+    let sha = (pushed.strip_prefix("local ") ?? pushed).trim().clone()
     let subject = release_git(["log", "-1", "--format=%s", sha.clone()])
     let body = release_git(["log", "-1", "--format=%B", sha])
     let mut fixes: Vec[String] = []

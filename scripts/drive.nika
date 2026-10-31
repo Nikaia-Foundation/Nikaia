@@ -899,6 +899,13 @@ fn main() throws {
             drive_settle(exe.clone(), dir.clone())
             continue
         }
+        // A bump pushes HEAD: commits not yet through the suite (a restart
+        // between a batch and its suite leaves them) are tested first.
+        if !dry && action == "BUMP" && drive_read(f"{dir}/unpushed.txt").trim() != "" {
+            drive_suite(exe.clone(), dry, dir.clone())
+            drive_settle(exe.clone(), dir.clone())
+            continue
+        }
         if action == "BUMP" {
             bumps += 1
             if bumps > 3 { drive_escalate("BUMP pending persists after --apply") }
