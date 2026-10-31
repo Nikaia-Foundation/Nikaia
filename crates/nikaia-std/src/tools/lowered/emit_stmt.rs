@@ -233,7 +233,18 @@ impl EmitState {
             Stmt::Comptime { name, .. } => {
                 let name = *name;
                 let bound = emit_text(world, name);
-                let found = self.facts.comptime_values.get(&at);
+                let mut found = self.facts.comptime_values.get(&at);
+                if found.is_none() && walk.specialising.is_some() && walk.at_field.is_some() {
+                    let on = nikaia_std::index::or(match walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()) {
+                        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                        None => None,
+                    }, || "".into());
+                    let field = nikaia_std::index::or(match walk.at_field.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()) {
+                        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                        None => None,
+                    }, || "".into());
+                    found = self.facts.turn_comptime_values.get(&format!("{}:{}:{}", at, on, field));
+                }
                 if found.is_none() { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` has no value computed at build time. This is a compiler bug: the check should have reported it first.", bound), at: Some(at) }, &"emit_stmt_a_stmt")); }
                 let (below, written) = match found { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 if self.facts.folded_comptimes.contains(&bound) { out.push("#[allow(dead_code)]\n"); }

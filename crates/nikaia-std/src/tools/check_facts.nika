@@ -76,6 +76,9 @@ pub struct CheckFacts {
     /// What a task binds and still holds at a pause (ADR-055 D6): seen by the tests.
     pub held_across_a_pause: collections::BTreeSet[(i64, String)],
     pub comptime_values: collections::BTreeMap[i64, (String, String)],
+    /// A `comptime` that reads the turn's field (#1087), once per turn: by
+    /// `"<start>:<type>:<field>"`, as `comptime_values` has it.
+    pub turn_comptime_values: collections::BTreeMap[String, (String, String)],
     pub dsl_values: collections::BTreeMap[i64, (String, String)],
     pub with_types: collections::BTreeMap[i64, String],
     pub unrolled: collections::BTreeMap[(String, String), Vec[FieldContract]],
@@ -476,6 +479,7 @@ impl CheckFacts {
         return CheckFacts {
             held_across_a_pause: collections::BTreeSet(),
             comptime_values: collections::BTreeMap(),
+            turn_comptime_values: collections::BTreeMap(),
             dsl_values: collections::BTreeMap(),
             with_types: collections::BTreeMap(),
             unrolled: collections::BTreeMap(),

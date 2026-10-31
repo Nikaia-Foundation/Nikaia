@@ -1,0 +1,25 @@
+// A `comptime` reads the reflected field (Part II 10.2, 10.3): in each
+// unrolled turn it is worked out with the field that turn stands at, its name
+// read directly and handed to a function.
+
+struct Contact {
+	name: String,
+	age: i64 = 7,
+}
+
+fn shout(s: String) -> String {
+	return f"{s}!"
+}
+
+fn show[T: Struct]() {
+	for f in T::fields {
+		comptime A = f.name
+		comptime B = shout(f.name)
+		comptime N: i64 = f.name.len()
+		println(f"{A} {B} {N}")
+	}
+}
+
+fn main() {
+	show[Contact]()
+}

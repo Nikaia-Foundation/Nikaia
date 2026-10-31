@@ -155,6 +155,54 @@ pub(crate) fn check_core_comptime_other(state: &mut CheckState, world: &CheckWor
     state.expect_type(world, narrowed, want, span, "const", &|found_text, wanted_text| { format!("This value is `{}`, but the `comptime` declares `{}`.", found_text, wanted_text) });
 }
 
+pub(crate) fn check_core_comptime_a_field_local(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    match expr {
+        Expr::Variable(name, _) => { let name = *name; check_reflect_a_field(&nikaia_std::index::or(state.lookup(world.words.resolve(name)), || Ty::Unknown)) },
+        _ => false,
+    }
+}
+
+pub(crate) fn check_core_comptime_reads_a_field(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool { check_visit_preorder(value).iter().any(|read| { check_core_comptime_a_field_local(state, world, read) }) }
+
+pub(crate) fn check_core_comptime_turned(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, field: &str) -> Expr {
+    match value {
+        Expr::Field { base, name, id } => {
+            let base = nikaia_std::boxed::open(base); let id = *id; let name = *name;
+            if world.words.resolve(name) == "name" && check_core_comptime_a_field_local(state, world, base) { Expr::LitStr { text: field.to_string(), id: fresh_id() } } else { Expr::Field { base: Box::new(check_core_comptime_turned(state, world, base, field)), name, id } }
+        },
+        Expr::Call { func, args, config, id } => { let func = nikaia_std::boxed::open(func); let id = *id; Expr::Call { func: Box::new(func.clone()), args: check_core_comptime_all_turned(state, world, args, field), config: config.to_owned(), id } },
+        Expr::MethodCall { receiver, method, args, config, id } => { let receiver = nikaia_std::boxed::open(receiver); let id = *id; let method = *method; Expr::MethodCall { receiver: Box::new(check_core_comptime_turned(state, world, receiver, field)), method, args: check_core_comptime_all_turned(state, world, args, field), config: config.to_owned(), id } },
+        Expr::Binary { op, lhs, rhs, span, grouped, id } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); let grouped = *grouped; let id = *id; Expr::Binary { op: op.clone(), lhs: Box::new(check_core_comptime_turned(state, world, lhs, field)), rhs: Box::new(check_core_comptime_turned(state, world, rhs, field)), span: span.clone(), grouped, id } },
+        Expr::Unary { op, expr, id } => { let expr = nikaia_std::boxed::open(expr); let id = *id; Expr::Unary { op: op.clone(), expr: Box::new(check_core_comptime_turned(state, world, expr, field)), id } },
+        Expr::Coalesce { value: inner, fallback, id } => { let inner = nikaia_std::boxed::open(inner); let fallback = nikaia_std::boxed::open(fallback); let id = *id; Expr::Coalesce { value: Box::new(check_core_comptime_turned(state, world, inner, field)), fallback: Box::new(check_core_comptime_turned(state, world, fallback, field)), id } },
+        Expr::LitInterpolated { parts, id } => {
+            let id = *id;
+            let mut kept: Vec<FPart> = vec![];
+            for part in parts.iter() {
+                match part {
+                    FPart::Hole { expr, spec, at } => {
+                        let at = *at;
+                        let written: Option<String> = match spec {
+                            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                            None => None,
+                        };
+                        kept.push(FPart::Hole { expr: check_core_comptime_turned(state, world, expr, field), spec: written, at });
+                    },
+                    FPart::Text(text) => { kept.push(FPart::Text(text.to_string())); },
+                }
+            }
+            Expr::LitInterpolated { parts: kept, id }
+        },
+        _ => value.clone(),
+    }
+}
+
+pub(crate) fn check_core_comptime_all_turned(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, values: &[Expr], field: &str) -> Vec<Expr> {
+    let mut out: Vec<Expr> = vec![];
+    for value in values.iter() { out.push(check_core_comptime_turned(state, world, value, field)); }
+    out
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
@@ -187,11 +235,25 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         want = Some(host.declared(state, written, span));
     }
-    let folded: Option<CheckConstant> = state.constant_of(world, value);
+    let turn: Option<CheckUnrolling> = match state.flow.unrolling.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    let reads_a_field = check_core_comptime_reads_a_field(&state, world, value);
+    let waits_for_a_turn = reads_a_field && turn.is_none();
+    let mut read: Expr = value.clone();
+    let mut at_turn: Option<String> = None;
+    if reads_a_field && turn.is_some() {
+        let here = match turn { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        read = check_core_comptime_turned(&state, world, value, &here.field.name);
+        at_turn = Some(format!("{}:{}:{}", span.start, here.on, here.field.name));
+    }
+    let mut folded: Option<CheckConstant> = None;
+    if !waits_for_a_turn { folded = state.constant_of(world, &read); }
     let mut fold_type: Option<String> = None;
     let mut evaluated: Option<BuildValue> = None;
-    let mut said = false;
-    if folded.is_some() {
+    let mut said = waits_for_a_turn;
+    if waits_for_a_turn { } else if folded.is_some() {
         let one = match folded { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let pinned: Option<String> = match one.pinned.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -203,12 +265,12 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         let more = match raised { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let kept = state.flow.raised.clone();
         state.flow.raised = (more.steps, more.ram);
-        let compiled = state.compiled_build_time_value(world, host, value, &found, &bound, span);
+        let compiled = state.compiled_build_time_value(world, host, &read, &found, &bound, span);
         if compiled.answered {
             evaluated = compiled.value;
             said = compiled.said;
         } else {
-            let (built, refused) = state.build_time_value(host, value, &bound, span);
+            let (built, refused) = state.build_time_value(host, &read, &bound, span);
             evaluated = built;
             said = refused;
         }
@@ -287,7 +349,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
     if below.is_some() && written.is_some() && !said_a_part {
         let spelled = match below { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let text = match written { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        state.facts.comptime_values.insert(span.start as i64, (spelled, text));
+        if at_turn.is_some() { state.facts.turn_comptime_values.insert(nikaia_std::index::or(at_turn, || "".into()), (spelled, text)); } else { state.facts.comptime_values.insert(span.start as i64, (spelled, text)); }
     } else if !(said || said_a_type || said_a_table || said_a_part || said_a_name) {
         let notes: Vec<String> = vec![String::from("A `comptime` has to be computed while the program is built."), String::from("At build time the compiler can compute numbers, `bool`s, text, lists, structs and enum variants: literals, `f\"…\"`, arithmetic and comparisons, `if`, `for` over a range, `while`, and calls to your own functions and methods made of those.")];
         state.findings.push(check_refusal("NK1127", span, format!("`{}` can't be computed while the program is built.", bound), notes, Some(format!("Write `let {} = …` to compute it while the program runs instead.", bound))));

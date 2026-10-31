@@ -318,7 +318,13 @@ impl EmitState {
             Stmt::Let { names, shape, mutable, ty, value } => self.emit_stmt_let(world, walk, out, host, names, shape, mutable, ty, value, span, depth, here, scope),
             Stmt::Comptime { name, .. } => {
                 let bound = emit_text(world, name)
-                let found = self.facts.comptime_values.get(at)
+                // **Once per turn** where it reads the turn's field (#1087).
+                let mut found = self.facts.comptime_values.get(at)
+                if found == null && walk.specialising != null && walk.at_field != null {
+                    let on = walk.specialising?.second?.clone() ?? ""
+                    let field = walk.at_field?.second?.clone() ?? ""
+                    found = self.facts.turn_comptime_values.get(f"{at}:{on}:{field}")
+                }
                 if found == null {
                     throw EmitRefused { message: f"`{bound}` has no value computed at build time. This is a compiler bug: the check should have reported it first.", at: at }
                 }
