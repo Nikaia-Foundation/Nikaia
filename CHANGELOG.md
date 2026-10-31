@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1319] — 2026-10-31
+
+**parser, check, emit: a type as an argument, type arguments at a call (ADR-330 D1, D9, ADR-grammar-2 D11, #859 steps 2, 8)**
+- Types as arguments: `fn schema[T](T)` takes a type where the parameter list holds one, `schema(User)`; a call fills it from a named type, a type parameter, `field.ty` or a match arm's binding, recursion included. A value there, or a type where a value belongs, is NK1230 (ADR-330 D1).
+- Type arguments at a call: `pick[User](1)` fills a function's type parameters in order, for a function the file declares; `warning[NK1233]`, naming #514, only where a value argument already says the type, `id[i64](3)` (ADR-330 D9, ADR-grammar-2 D11). A method's `x.f[T]()` stays refused.
+
 ## [0.0.1318] — 2026-10-31
 
 **Grammar: `hex_digit` is one hexadecimal digit (#1002)**
