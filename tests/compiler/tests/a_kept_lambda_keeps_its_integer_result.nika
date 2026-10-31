@@ -1,0 +1,24 @@
+// A pausing lambda kept under a declared `fn` type hands back that type's
+// integer literals, not rustc's default `i32` (#1029).
+fn main() {
+    let k1: fn(i64) -> i64 = fn(x) { 5 }
+    let k2: fn(i64) -> i64 = fn(x) {
+        match x {
+            1 => 5,
+            else => 7,
+        }
+    }
+    let k3: fn(i64) -> i64 = fn(x) { if x == 1 { 5 } else { 7 } }
+    let k4: fn(i64) -> i64 = fn(x) {
+        if x > 9 { return 3 }
+        8
+    }
+    let m: fn(i64) -> i64? = fn(x) { if x > 0 { 4 } else { null } }
+    let k6: fn(i64) -> u8 = fn(x) { 5 }
+    println(k1(1))
+    println(k2(1))
+    println(k3(2))
+    println(k4(1))
+    println(m(1) ?? 0)
+    println(k6(1))
+}

@@ -244,6 +244,11 @@ pub struct CheckFacts {
     /// each item is made a `String` as it goes in.
     pub text_extends: collections::BTreeSet[i64],
     pub kept_lambdas: collections::BTreeMap[i64, (bool, bool)],
+    /// **A pausing kept lambda's integer result**, as Rust spells it (`i64`,
+    /// `Option<u8>`), by the lambda (#1029): the boxed future's cast names it,
+    /// since the unsizing to `dyn Fn` does not carry it into the closure and a
+    /// bare literal would be `i32`.
+    pub kept_results: collections::BTreeMap[i64, String],
     pub kept_hulls: collections::BTreeMap[i64, Vec[String]],
     pub kept_owned: collections::BTreeMap[i64, Vec[String]],
     pub field_calls: collections::BTreeMap[i64, bool],
@@ -515,6 +520,7 @@ impl CheckFacts {
             collection_clones: collections::BTreeSet(),
             text_extends: collections::BTreeSet(),
             kept_lambdas: collections::BTreeMap(),
+            kept_results: collections::BTreeMap(),
             kept_hulls: collections::BTreeMap(),
             kept_owned: collections::BTreeMap(),
             field_calls: collections::BTreeMap(),

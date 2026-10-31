@@ -51,7 +51,31 @@ pub(crate) fn a_hull_named(name: &str) -> bool {
     is_hull(&last)
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn kept_result_spelling(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Nullable(inner) => {
+            let inner = nikaia_std::boxed::open(inner);
+            let name = match integer_named(inner) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some(format!("Option<{}>", name))
+        },
+        _ => integer_named(ty),
+    }
+}
+
 impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_kept_lambdas_result(&mut self, id: i64, result: Option<&Ty>, pauses: bool, fails: bool) {
+        if !pauses || fails { return; }
+        let declared: Ty = nikaia_std::index::or(match result {
+            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            None => None,
+        }, || Ty::Unknown);
+        let spelled = match kept_result_spelling(&declared) { Some(__nikaia_value) => __nikaia_value, None => return };
+        self.facts.kept_results.insert(id, spelled);
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_kept_lambdas_hulls(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) {

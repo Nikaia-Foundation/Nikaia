@@ -163,10 +163,12 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                 }
             }
         },
-        Ty::Fn { ref params, is_sync, can_throw, .. } => {
+        Ty::Fn { ref params, ref result, is_sync, can_throw } => {
+            let result = nikaia_std::boxed::open(result);
             match value {
                 Expr::Closure { .. } => {
                     state.facts.kept_lambdas.insert(id_of(value) as i64, (!is_sync, can_throw));
+                    state.a_kept_lambdas_result(id_of(value) as i64, (result).as_ref(), !is_sync, can_throw);
                     state.a_lambdas_text_is_its_own(world, &inner, value);
                     state.a_kept_lambdas_hulls(world, value);
                     state.a_kept_lambda_takes_these(world, value, !is_sync, "a function kept for later", span);

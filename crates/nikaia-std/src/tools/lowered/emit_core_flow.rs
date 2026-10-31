@@ -143,6 +143,10 @@ impl EmitState {
         let pair = match self.facts.kept_lambdas.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return (false, false) };
         (pair.0, pair.1)
     }
+    pub(crate) fn emit_flow_result(&self, key: i64) -> String {
+        let found = match self.facts.kept_results.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("_") };
+        found.to_string()
+    }
     pub(crate) fn emit_flow_hulls(&self, key: i64) -> Vec<String> {
         let found = match self.facts.kept_hulls.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         found.to_owned()
@@ -209,6 +213,7 @@ impl EmitState {
         let hulls = self.emit_flow_hulls(node_key(node));
         let owned = self.emit_flow_owned(node_key(node));
         let block = !hulls.is_empty() || !owned.is_empty();
+        let result = self.emit_flow_result(node_key(node));
         if block {
             out.push("{ ");
             for hull in hulls.iter() {
@@ -248,6 +253,7 @@ impl EmitState {
                     out.push(&format!("let {} = {}.clone(); ", name, name));
                 }
             }
+            if result != "_" { out.push(&format!("{{ let __nikaia_future: {}<'_, {}> = ", emit_boxed_future_in(host.overlaps_user_code()), result)); }
             out.push("Box::pin(async move ");
         }
         if fails {
@@ -256,7 +262,7 @@ impl EmitState {
             out.push("; Ok(__nikaia_done) }");
         } else { self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?; }
         if pauses {
-            out.push(&format!(") as {}<'_, _>", emit_boxed_future_in(host.overlaps_user_code())));
+            if result != "_" { out.push("); __nikaia_future }"); } else { out.push(&format!(") as {}<'_, _>", emit_boxed_future_in(host.overlaps_user_code()))); }
             if block { out.push(" }"); }
         }
         out.push("))");

@@ -84,6 +84,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     }
                     if !runs {
                         state.facts.kept_lambdas.insert(id, (pauses, fails));
+                        state.a_kept_lambdas_result(id, (result).as_ref(), pauses, fails);
                         state.a_kept_lambdas_hulls(world, arg);
                         let who = check_core_args_keepers(&state, callee, at);
                         state.a_kept_lambda_takes_these(world, arg, pauses, &who, span);

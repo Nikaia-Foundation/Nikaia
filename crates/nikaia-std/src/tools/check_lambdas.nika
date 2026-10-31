@@ -49,7 +49,31 @@ fn a_hull_named(name: ref String) -> bool sync {
     return is_hull(last)
 }
 
+/// The Rust spelling of a kept lambda's result where it is an integer type or
+/// an optional of one, else `null` (#1029).
+fn kept_result_spelling(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Nullable(inner) => {
+            let name = integer_named(inner) ?? return null
+            f"Option<{name}>"
+        },
+        else => integer_named(ty),
+    }
+}
+
 impl CheckState {
+    /// **A pausing kept lambda's integer result is recorded** (#1029): its
+    /// boxed future is cast to `BoxedIn<'_, i64>`, not `<'_, _>`, or each bare
+    /// literal it hands back is `rustc`'s `i32`. One that may fail keeps `_`.
+    pub fn a_kept_lambdas_result(ref mut self, id: i64, result: ref Ty?, pauses: bool, fails: bool) sync {
+        if !pauses || fails {
+            return
+        }
+        let declared: Ty = result?.clone() ?? Ty::Unknown
+        let spelled = kept_result_spelling(declared) ?? return
+        self.facts.kept_results.insert(id, spelled)
+    }
+
     /// **A hull a kept lambda captures, it captures a handle of** (ADR-230 D4,
     /// ADR-312 D5): handing a hull on duplicates the count, so the name outside
     /// is still there on the next line. Asked wherever a lambda is kept - a

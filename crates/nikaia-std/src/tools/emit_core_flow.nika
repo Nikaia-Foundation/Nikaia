@@ -206,6 +206,13 @@ impl EmitState {
         return (pair.0, pair.1)
     }
 
+    /// A pausing kept lambda's result as its future's cast names it: the
+    /// integer type the checker recorded, else `_` (#1029).
+    fn emit_flow_result(ref self, key: i64) -> String {
+        let found = self.facts.kept_results.get(key) ?? return "_"
+        return found.clone()
+    }
+
     /// The hulls a kept lambda captures, each a handle of its own (ADR-230 D4).
     fn emit_flow_hulls(ref self, key: i64) -> Vec[String] {
         let found = self.facts.kept_hulls.get(key) ?? return []
@@ -328,6 +335,10 @@ impl EmitState {
         // count of it rather than a copy.
         let owned = self.emit_flow_owned(node_key(node))
         let block = hulls.len() > 0 || owned.len() > 0
+        // **An integer result is said where the future is made** (#1029): a
+        // typed `let`, since a cast does not carry the type into the `async`
+        // block and a bare literal there would be `i32`.
+        let result = self.emit_flow_result(node_key(node))
         if block {
             out.push("{ ")
             for hull in hulls {
@@ -379,6 +390,9 @@ impl EmitState {
                     out.push(f"let {name} = {name}.clone(); ")
                 }
             }
+            if result != "_" {
+                out.push(f"{{ let __nikaia_future: {emit_boxed_future_in(host.overlaps_user_code())}<'_, {result}> = ")
+            }
             out.push("Box::pin(async move ")
         }
         // A type that may fail hands back a `Result`, as a `throws` function does:
@@ -392,7 +406,11 @@ impl EmitState {
             self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
         }
         if pauses {
-            out.push(f") as {emit_boxed_future_in(host.overlaps_user_code())}<'_, _>")
+            if result != "_" {
+                out.push("); __nikaia_future }")
+            } else {
+                out.push(f") as {emit_boxed_future_in(host.overlaps_user_code())}<'_, _>")
+            }
             if block {
                 out.push(" }")
             }
