@@ -264,6 +264,9 @@ impl EmitState {
             }
         }
         let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(&node_key(arg));
+        let lent_option = lend && before == "Some(" && self.emit_arg_opening(callee, i) == "";
+        let copy_in = lent_option && emit_arg_names_a_place(arg);
+        if lent_option { out.push("&"); }
         out.push(&before);
         if either { out.push("nikaia_std::either_text::either("); }
         let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, method_callee, i);
@@ -282,6 +285,7 @@ impl EmitState {
             has_how = false;
             how = String::from("");
         }
+        if lent_option { lend = false; }
         if has_how { lend = false; }
         if !lend && !change && !self.emit_arg_calls_itself(&scope.function, callee) && self.emit_arg_code_handed_on(world, &scope.function, callee, i, arg) { lend = true; }
         if !lend && !change && walk.dyn_code && !self.emit_arg_calls_itself(&walk.keep_function, callee) && self.emit_arg_dyn_code_handed_on(world, &walk.keep_function, arg) { lend = true; }
@@ -324,6 +328,7 @@ impl EmitState {
         if kept_here { out.push(")"); }
         if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
+        if copy_in { out.push(".clone()"); }
         out.push(&after);
         let copied = copies && !lend && !change && !self.facts.kept_args.contains(&node);
         if duplicate || copied { out.push(".clone()"); }

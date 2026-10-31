@@ -1,0 +1,19 @@
+// #1080: a bare `String` handed to a `String?` the callee only reads goes
+// inside its option, at its last use and before a later one.
+fn show(target: String?, n: i64) -> i64 {
+	let k = target?.len() ?? 0
+	return k + n
+}
+
+fn main() {
+	let name = ["ab"].join("")
+	println(f"a{show(name, 1)}")
+	for each in ["ab", "c"] {
+		let target = each.clone()
+		println(f"a{show(target, 1)}")
+	}
+	let kept = ["xyz"].join("")
+	println(f"a{show(kept, 1)}")
+	println(kept)
+	println(f"a{show(["q"].join(""), 1)}")
+}

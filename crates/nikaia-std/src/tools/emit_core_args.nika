@@ -401,6 +401,14 @@ impl EmitState {
         // **Into a parameter both kinds of text flow into, each argument goes as
         // it is** (ADR-282 D2): a view borrowed, text of its own moved in.
         let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(node_key(arg))
+        // **A plain value lent to a `T?` the callee reads as `&Option<T>`**
+        // (#1080) is lent in an option made for the call: `&Some(name.clone())`,
+        // a place copied in, a value made there moved in.
+        let lent_option = lend && before == "Some(" && self.emit_arg_opening(callee, i) == ""
+        let copy_in = lent_option && emit_arg_names_a_place(arg)
+        if lent_option {
+            out.push("&")
+        }
         out.push(before)
         if either {
             out.push("nikaia_std::either_text::either(")
@@ -435,6 +443,9 @@ impl EmitState {
         if before == "Some(" {
             has_how = false
             how = ""
+        }
+        if lent_option {
+            lend = false
         }
         if has_how {
             lend = false
@@ -557,6 +568,9 @@ impl EmitState {
         }
         if either {
             out.push(")")
+        }
+        if copy_in {
+            out.push(".clone()")
         }
         out.push(after)
         // A kept function value copied from a place (#1031), where the

@@ -185,7 +185,8 @@ impl CheckState {
         if found_a_function && self.a_lent_parameter(world, given_expr) { return false; }
         if self.a_pending_coalesce_is_lent(given_expr) { return true; }
         if moves(found) && self.a_map_read_past_a_jump(world, given_expr) { return true; }
-        if want_nullable_view && !found_nullable && !found.is_unknown() { self.facts.nullable_args.insert(id_of(given_expr) as i64, FactWrap::Constructor); }
+        let lent_owned_nullable = own && check_reference_nullable(want) && !want_nullable_view;
+        if (want_nullable_view || lent_owned_nullable) && !found_nullable && !found.is_unknown() { self.facts.nullable_args.insert(id_of(given_expr) as i64, FactWrap::Constructor); }
         self.facts.lent_args.insert(id_of(given_expr) as i64);
         true
     }

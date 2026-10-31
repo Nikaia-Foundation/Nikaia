@@ -308,7 +308,11 @@ impl CheckState {
         }
         // **A plain value lent to a `ref T?` is put in the option too** (Part
         // I 2.3's wrap at an argument).
-        if want_nullable_view && !found_nullable && !found.is_unknown() {
+        // **And one lent to a `T?` of this program's own** (#1080): the
+        // callee reads an `&Option<T>`, so the value goes inside an option
+        // made for the call.
+        let lent_owned_nullable = own && check_reference_nullable(want) && !want_nullable_view
+        if (want_nullable_view || lent_owned_nullable) && !found_nullable && !found.is_unknown() {
             self.facts.nullable_args.insert(id_of(given_expr) as i64, FactWrap::Constructor)
         }
         self.facts.lent_args.insert(id_of(given_expr) as i64)
