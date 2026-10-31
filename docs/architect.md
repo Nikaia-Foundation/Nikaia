@@ -272,43 +272,45 @@ tokens and turns per finished step, steps per day; counted, not timed.
 *Current state only, rewritten (not appended) by the architect when it ends:
 open lanes, what blocks what, figures, decisions in force that no ADR or issue
 holds. What happened is in `git log` and the issues.*
-**2026-10-31 (after 3157d5b1).** Self-hosting: about 82 % of the toolchain
+**2026-10-31 (after 4520d400).** Self-hosting: about 82 % of the toolchain
 (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
 2026-11-04), rows and `Cut:` lines in `docs/selfhosting-plan.md`.
 
 * **CI**: last known red (clippy 1.99) fixed forward by 91510ca0. Main
   session: `rustup update stable` at a quiet moment (this machine's `stable`
   is 1.97; 1.99.1 is installed beside it).
-* **Main lane** (`docs/briefs/batch.txt`): s922b (`s922b-metadata-times.md`:
-  #922 step 4, decided in the brief), K3b (`k3b-comptime-bundle.md`, needs
-  s922b's `modified`), P5c (`p5c-project-drive.md`, after K3b; `report`,
-  `libraries_in`, `executable_in`, `record_resolved_dependencies` stay Rust as
-  host methods; `CARGO_TARGET_DIR` empty counts as unset). BT2 and s920 done
-  (#920 fixed). **GR was reverted** (0fbe3d6b) for #1060 and re-enters this
-  lane (#1060 step 4, `Fixes #1060`) once b15 is on develop;
-  `lowered/project_members.rs` is uncommitted drift residue in the tree,
-  nobody commits it. K3b and P5c carry a #1060 guard (any other lowered file
-  changing stops them).
-* **Next main batch**: GR re-land (after b15), P5e (the O rows), O1 once
-  #922 step 3 (`fs::lock`) is built (brief it then). C7-a/C7-b of the plan
-  are already built: refresh the C-7 table with the next C row. Fold
-  `ComptimeRan` into `CheckWall`. Owed, each its own brief: R0 (#921),
-  `scripts/plan_rows.nika`, the driver writing the failing job's clippy
-  output into `architect-input.txt`.
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b15 #1060 (steps 1-3, 5;
-  probe re-run on 524c5286, reproduces), b13 #1057 step 2, b14 #947; all
-  `wip`. b12 #1061 pushed (closes on promote, `wip` off). Next batch: b16
-  #1065 (written, `wip`), then the `ready` defects no lane holds: #1038, #958,
-  #1014, #927, #1056, #1058. The 18:07 suite red was QA's lock-line filter
-  (8debcc6e); the suite went green at 18:25. Unfiled: qa-task's note
-  (dev-profile `cargo test -p nikaia` hits the recursion limit in
-  winnow-grammar `rt.rs:902`); a two-view `fn` field written with `String`
-  instead of `ref String` is NK1106; `String?` == `String` refused (NK1102,
-  GR's report): file each when met again.
+* **Main lane** (`docs/briefs/batch.txt`): C1a (`c1a-ledger-items.md`, plan
+  row C1's first half, the `.entry` blocker gone), P5c (`p5c-project-drive.md`,
+  Cut re-grepped to 2116-2590; `write_if_changed` a host forward since K3b did
+  not land). s922b done (a9094a38, `modified`/`links`/`file_id`/`since_epoch`).
+  **K3b blocked** on #1077 (tools preamble lacks the prelude's method traits,
+  b17) and #1078 (`filter_map` over `split_once` loses text kinds, b18); its
+  draft is on local branch `wip/k3b-comptime-bundle` 9a1678a8; re-run K3b from
+  it once both are on develop (its brief: `runtime_dependencies` returns
+  `Vec[(String, String)]`, fix that line), then turn P5c's `write_if_changed`
+  forward into the Nikaia call. **GR** re-enters (#1060 step 4) once b15 is on
+  develop. **S1** is free of its converter blockers except `String.get(range)`,
+  which is refused by design (NK1214: cut text only at handed-out positions, or
+  through `text.bytes[..]`): brief it after b17, which edits the same
+  `sysroot.rs` (`lower_tools_files_cached`). P5e waits on the O rows (#923).
+* **Next main batch**: C1b (`lookup`, `candidates`, the `stored` fold), K3b
+  re-run, GR re-land, S1, as their blockers clear. Owed, each its own brief:
+  R0 (#921), `scripts/plan_rows.nika`, the driver writing the failing job's
+  clippy output into `architect-input.txt`, fold `ComptimeRan` into `CheckWall`.
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): b15 #1060, b13 #1057, b14 #947,
+  b16 #1065, b17 #1077, b18 #1078; all `wip` (b12 #1061 done). `ready` defects
+  no lane holds, next: #1075, #1074, #1066, #1038, #958, #1014, #927, #1056,
+  #1058. Unfiled: qa-task's note (dev-profile `cargo test -p nikaia` hits the
+  recursion limit in winnow-grammar `rt.rs:902`); a two-view `fn` field written
+  with `String` instead of `ref String` is NK1106 (b12's probe note); `String?`
+  == `String` refused (NK1102, GR's report): file each when met again. A suite
+  gate-error that does not reproduce: re-run the suite before suspecting a
+  commit.
 * **yaml lane**: #928, #929, #604 (`wip`).
-* **Owed to the supervisor**: version raise / Changelog lines for s920 (its
-  report), s922, b9, b10, b11, b6-b8, b1046. **Waiting on the owner**: #1047,
-  #1042.
+* **Owed to the supervisor**: version raise / Changelog lines for s922b (its
+  report: `fs::Metadata::modified()`, `links()`, `file_id()`,
+  `time::since_epoch()`, #922, ADR-319, ADR-368), s920, s922, b9, b10, b11,
+  b6-b8, b1046. **Waiting on the owner**: #1047, #1042.
 * **In force, in no other file**: `drive.nika`'s `drive_push` runs `git pull
   --rebase --autostash` in the shared checkout. Branch
   `wip/bounding-candidates-2026-10-19` is parked.

@@ -6,15 +6,15 @@ budget_usd: 25
 ---
 # Brief: P5c, `Project::drive` and `drive_to` of `project.rs` into `project_drive.nika` (Part #125)
 
-Score: self-hosting lane, plan row P5c of `docs/selfhosting-plan.md` (prerequisites P5a, P5b, P5d built; #920 built 8eb22790, so `process::run` streams). S=2, C~3-5 M (comparable: P5d). Third of the batch, after K3b: write files through K3b's `comptime_bundle_write_if_changed`; if K3b did not land (`grep -n comptime_bundle_write_if_changed crates/nikaia-std/src/tools/comptime_bundle.nika` finds nothing), a host method `write_if_changed(path, text)` forwards to the Rust one, and say so in `Body:`.
+Score: self-hosting lane, plan row P5c of `docs/selfhosting-plan.md` (prerequisites P5a, P5b, P5d built; #920 built 8eb22790, so `process::run` streams). S=2, C~3-5 M (comparable: P5d). K3b is blocked on #1077 and #1078 (bug lane b17, b18) and did not land: a host method `write_if_changed(path, text)` forwards to the Rust one in `comptime_run.rs` (unchanged); say so in `Body:`. K3b's re-run later turns it into the Nikaia call.
 
-Cut: crates/nikaia/src/project.rs:2112-2586
+Cut: crates/nikaia/src/project.rs:2116-2590
 Convert: --profile check-free --prefix project_drive_
 Shape: schematic host-calls (R295's host parameter, as `project_members.nika` and P5d's `project_check.nika`)
 
 Facts: Where things live, Traps already met, Moving Rust into Nikaia, Commands
 
-The driver converts this before you start. Ranges at 3157d5b1; if `git log -- crates/nikaia/src/project.rs` shows a later change (K3b may touch `build_for_cpu`'s call), re-grep `/// Build the project, or build and run it.` and the end of `pub fn drive_to` and cut again.
+The driver converts this before you start. Ranges re-grepped at 4520d400 (33ed1119 and its neighbours shifted them by 4); if `git log -- crates/nikaia/src/project.rs` shows a later change (K3b may touch `build_for_cpu`'s call), re-grep `/// Build the project, or build and run it.` and the end of `pub fn drive_to` and cut again.
 
 ## Facts
 * **What moves**: the order of `drive_to`'s steps and every decision between them: the entry refusal, `explain` when asked, the members in dependency order (`project_members_dependencies_first`, already Nikaia), the own-sources filter of each member, the refusals of libraries, writing the `gen/*.rs` files and the switches file (`"{build}\n{backend}\n{flags}\n{NIKAIA_COMPILER}\n"`), the toolchain checks' refusal texts, the choice between the `run_fast` path, `run_directly` and `cargo run`, the env list handed to cargo (`WRAPPER_MARKER`, `GEN_DIR_VAR`, `PROGRAM_TAG_VAR` only when `CARGO_TARGET_DIR` is unset, `LINK_VAR`, `NO_CACHE_VAR`, `SHOWN_AS_VAR`, `READS_VAR`), the c-library outputs (header, Python and Node bindings, the copy of what `libraries_in` finds), and the warning of `record_resolved_dependencies`. Texts byte for byte.
