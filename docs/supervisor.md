@@ -176,7 +176,8 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   `NIKAIA_SUITE_DIR`; its `target/` is kept, `CARGO_INCREMENTAL=0`), so the
   other lane's unfinished files never enter it. It needs 8 GB free: each run
   prints `SUITE disk <N> GB free`; below 8 it deletes the worktree's
-  incremental and debug data, still below it escalates
+  incremental and debug data, then the checkout's `target/debug` and prunes
+  the user cache to 1G and the tests' cache to 3G; still below it escalates
   (`ESCALATE drive: disk: ...`). Then free space (old
   `target/fast/incremental` entries of the shared checkout, `target/debug`)
   and restart the driver. A lane whose pushes its own suite gates runs with

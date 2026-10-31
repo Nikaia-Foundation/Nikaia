@@ -485,6 +485,15 @@ fn drive_disk(wt: String, dir: String) throws {
         process::run("rm", ["-rf", f"{wt}/target/fast/incremental", f"{wt}/target/debug"])
         free = drive_free_kib(wt.clone())
     }
+    if free >= 0 && free < need {
+        // Still below: the shared checkout's debug build (clippy rebuilds it)
+        // and the two build caches pruned by their own LRU pass.
+        process::run("rm", ["-rf", "target/debug"])
+        process::run("target/fast/nikaia", ["cache", "prune"]; env: [("NIKAIA_CACHE_LIMIT", "1G")])
+        let tests = process::run("realpath", ["target/nikaia-project-tests"]).stdout.trim().clone()
+        process::run("target/fast/nikaia", ["cache", "prune"]; env: [("NIKAIA_CACHE_DIR", tests), ("NIKAIA_CACHE_LIMIT", "3G")])
+        free = drive_free_kib(wt.clone())
+    }
     println(drive_disk_line(free))
     let why = drive_disk_short(free)
     if why != "" {
