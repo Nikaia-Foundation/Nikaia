@@ -1,0 +1,47 @@
+pub struct Node {
+	pub raw: String,
+	pub start: u32,
+}
+
+pub struct Ev {
+	pub raw: String,
+}
+
+grammar G {
+	entry rule doc -> Vec[Node] = "[" first:item rest:more* "]" eof -> {
+		let mut all = [first]
+		all.extend(rest)
+		all
+	}
+	rule more -> Node = "," n:item -> { n }
+	rule item -> Node = a:here s:Plain -> { Node { raw: s, start: a } }
+	rule Plain -> String = s:until("," | "]") -> { s }
+}
+
+fn walk(ns: ref Vec[Node]) -> Vec[Ev] {
+	let mut out: Vec[Ev] = []
+	for n in ns {
+		out.push(Ev { raw: n.raw })
+	}
+	return out
+}
+
+pub fn events(input: ref Bytes) -> Vec[Ev] throws {
+	let ns = G::doc(input)
+	return walk(ns)
+}
+
+fn bytes_of(text: String) -> Bytes {
+	let mut all: Vec[u8] = []
+	for b in text.bytes() {
+		all.push(b)
+	}
+	return Bytes(all)
+}
+
+fn main() throws {
+	let input = bytes_of("[ab,cd,ü]")
+	for e in events(input) {
+		println(e.raw)
+	}
+}

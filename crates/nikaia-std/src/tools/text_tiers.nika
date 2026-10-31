@@ -3019,10 +3019,12 @@ fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Strin
 /// **The struct a declared list's or map's element is** (#967): `v[0]` of a
 /// `Vec[P]`, a value of a `BTreeMap[K, P]`, and so what a loop over the list
 /// binds. Its fields are the struct's positions, so a change in place of
-/// `v[0].name` is a change of `P.name`.
+/// `v[0].name` is a change of `P.name`. A borrowed list (`ns: ref Vec[P]`)
+/// holds the same `P` (#1000): what is read out of its element is read out of
+/// `P`'s positions.
 fn element_struct(list: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String? {
     let found = source_of(list, ask, walk) ?? return null
-    let ty = found.ty.clone()
+    let ty = through_ref(found.ty)
     if !a_container(ask.names, ty) {
         return null
     }
@@ -3054,10 +3056,20 @@ fn walked_struct(iter: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String
         else => {}
     }
     let found = source_of(iter, ask, walk) ?? return null
-    if a_map(ask.names, found.ty) {
+    if a_map(ask.names, through_ref(found.ty)) {
         return null
     }
     return element_struct(iter, ask, walk)
+}
+
+/// A borrowed container's type as the container it borrows: `ref Vec[P]` as
+/// `Vec[P]`. Any other type as it is.
+fn through_ref(ty: ref Type) -> Type {
+    let mut out = ty.clone()
+    if out.is_view && !out.is_nullable && !out.is_slice {
+        out.is_view = false
+    }
+    return out
 }
 
 /// The struct a call's declared result names, where that is one plain name.

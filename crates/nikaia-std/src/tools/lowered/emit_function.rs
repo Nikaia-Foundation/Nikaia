@@ -303,6 +303,16 @@ impl EmitState {
                             None => { },
                         }
                     }
+                    let list = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.clone();
+                    if list.generics.len() == 1 && emit_text(world, list.name) == "Vec" && !list.is_nullable && !list.is_slice {
+                        let element = (*nikaia_std::index::get(&list.generics, 0)).clone();
+                        if self.carries_a_view(world, &element) && self.borrows(world, element.name) && element.generics.is_empty() && !element.is_view && !element.is_nullable {
+                            match ret_type {
+                                Some(each) => { source_nested = each.name != element.name && !emit_holds_a_ref_of_a_type(world, each); },
+                                None => { },
+                            }
+                        }
+                    }
                 }
                 let mut source_name: Option<winnow_grammar::Symbol> = None;
                 if source_at.is_some() { source_name = Some(nikaia_std::index::get(&args, nikaia_std::index::at(nikaia_std::index::or(source_at, || 0))).name); } else if !several_at.is_empty() { source_name = Some(nikaia_std::index::get(&args, nikaia_std::index::at(*nikaia_std::index::get(&several_at, 0))).name); } else if source_option.is_some() { source_name = Some(nikaia_std::index::get(&config, nikaia_std::index::at(nikaia_std::index::or(source_option, || 0))).name); }
@@ -734,5 +744,11 @@ pub(crate) fn emit_split_root(group: &[i64], at: i64) -> i64 {
     let mut here = at;
     while *nikaia_std::index::get(&group, nikaia_std::index::at(here)) != here { here = *nikaia_std::index::get(&group, nikaia_std::index::at(here)); }
     here
+}
+
+pub(crate) fn emit_holds_a_ref_of_a_type(world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool {
+    if ty.is_view && emit_text(world, ty.name) != "String" { return true; }
+    for inner in ty.generics.iter() { if emit_holds_a_ref_of_a_type(world, inner) { return true; } }
+    false
 }
 

@@ -1,0 +1,82 @@
+pub enum Kind {
+	SeqStart,
+	SeqEnd,
+	Scalar,
+}
+
+pub struct Event {
+	pub kind: Kind,
+	pub raw: String,
+	pub start: u32,
+	pub end: u32,
+}
+
+pub enum Value {
+	Str(String),
+	Seq(Vec[Value]),
+}
+
+grammar G {
+	entry rule doc -> Vec[Event] = a:here "[" first:item rest:more* b:here "]" eof -> {
+		let mut all = [Event { kind: Kind::SeqStart, raw: "", start: a, end: a + 1 }, first]
+		all.extend(rest)
+		all.push(Event { kind: Kind::SeqEnd, raw: "", start: b, end: b + 1 })
+		all
+	}
+	rule more -> Event = "," n:item -> { n }
+	rule item -> Event = a:here s:Plain b:here -> {
+		Event { kind: Kind::Scalar, raw: s, start: a, end: b }
+	}
+	rule Plain -> String = s:until("," | "]") -> { s }
+}
+
+pub fn events(input: ref Bytes) -> Vec[Event] throws {
+	return G::doc(input)
+}
+
+fn build(evs: ref Vec[Event], mut at: i64) -> Value {
+	let here = at
+	at += 1
+	return match evs[here].kind {
+		Kind::Scalar => Value::Str(evs[here].raw),
+		else => {
+			let mut items: Vec[Value] = []
+			while true {
+				match evs[at].kind {
+					Kind::SeqEnd => break,
+					else => items.push(build(evs, at)),
+				}
+			}
+			Value::Seq(items)
+		},
+	}
+}
+
+pub fn load(input: ref Bytes) -> Value throws {
+	let evs = events(input)
+	let mut at = 0
+	return build(evs, at)
+}
+
+fn bytes_of(text: String) -> Bytes {
+	let mut all: Vec[u8] = []
+	for b in text.bytes() {
+		all.push(b)
+	}
+	return Bytes(all)
+}
+
+fn main() throws {
+	let input = bytes_of("[ab,cd,ü]")
+	match load(input) {
+		Value::Seq(xs) => {
+			for x in xs {
+				match x {
+					Value::Str(s) => println(s),
+					else => println("?"),
+				}
+			}
+		},
+		else => println("?"),
+	}
+}

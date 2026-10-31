@@ -47,8 +47,8 @@ pub struct ProjectMembersDependency {
 
 pub fn project_members_packages_of<H: ProjectMembersHost>(manifest: &ProjectMembersManifest, root: &std::path::Path, announce: bool, host: &H) -> Result<Vec<ProjectMembersDependency>, nikaia_std::error::Thrown<ProjectMembersRefusal>> {
     let mut out: Vec<ProjectMembersDependency> = vec![];
-    let mut seen: collections::TrustedMap<fs::Path, String> = collections::TrustedMap::default();
-    let mut here: collections::TrustedMap<fs::Path, String> = collections::TrustedMap::default();
+    let mut seen: collections::HashMap<fs::Path, String> = collections::HashMap::<_, _>::default();
+    let mut here: collections::HashMap<fs::Path, String> = collections::HashMap::<_, _>::default();
     for (name, path) in manifest.paths.iter() { here.insert(project_members_canonical(&nikaia_std::fs::path::join(&(root), &path)), name.to_string()); }
     for (name, path) in manifest.paths.iter() {
         let root = project_members_canonical(&nikaia_std::fs::path::join(&(root), &path));
@@ -67,7 +67,7 @@ pub fn project_members_packages_of<H: ProjectMembersHost>(manifest: &ProjectMemb
     Ok(out)
 }
 
-pub(crate) fn project_members_renames_in<H: ProjectMembersHost>(dependency: &ProjectMembersManifest, dependency_root: &std::path::Path, here: &collections::TrustedMap<fs::Path, String>, host: &H) -> Result<collections::BTreeMap<String, String>, nikaia_std::error::Thrown<ProjectMembersRefusal>> {
+pub(crate) fn project_members_renames_in<H: ProjectMembersHost>(dependency: &ProjectMembersManifest, dependency_root: &std::path::Path, here: &collections::HashMap<fs::Path, String>, host: &H) -> Result<collections::BTreeMap<String, String>, nikaia_std::error::Thrown<ProjectMembersRefusal>> {
     let mut out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for (key, path) in dependency.paths.iter() {
         let at = project_members_canonical(&nikaia_std::fs::path::join(&(dependency_root), &path));
@@ -92,7 +92,7 @@ pub struct ProjectMembersMember {
 }
 
 pub fn project_members_dependencies_first(members: &[ProjectMembersMember]) -> Vec<i64> {
-    let at_of: collections::TrustedMap<fs::Path, i64> = (nikaia_std::range::span(0, members.len() as i64)).map(|at| { (nikaia_std::fs::path::clone(&(nikaia_std::index::get(&members, nikaia_std::index::at(at)).root)), at) }).collect();
+    let at_of: collections::HashMap<fs::Path, i64> = (nikaia_std::range::span(0, members.len() as i64)).map(|at| { (nikaia_std::fs::path::clone(&(nikaia_std::index::get(&members, nikaia_std::index::at(at)).root)), at) }).collect();
     let needs: Vec<collections::BTreeSet<i64>> = members.iter().map(|m| {
         let wanted: collections::BTreeSet<i64> = m.dependencies.iter().filter_map(|d| { at_of.get(&project_members_canonical(&d.root)).copied() }).collect();
         wanted
@@ -117,7 +117,7 @@ pub fn project_members_dependencies_first(members: &[ProjectMembersMember]) -> V
 
 pub fn project_members_members_of<H: ProjectMembersHost>(entry_manifest: &ProjectMembersManifest, entry_root: &std::path::Path, host: &H) -> Result<Vec<ProjectMembersMember>, nikaia_std::error::Thrown<ProjectMembersRefusal>> {
     let mut out: Vec<ProjectMembersMember> = vec![];
-    let mut seen: collections::TrustedMap<fs::Path, i64> = collections::TrustedMap::default();
+    let mut seen: collections::HashMap<fs::Path, i64> = collections::HashMap::<_, _>::default();
     let mut queue: Vec<(ProjectMembersManifest, fs::Path)> = vec![(entry_manifest.clone(), project_members_canonical(entry_root))];
     while !queue.is_empty() {
         let (manifest, root) = queue.remove(0);
@@ -186,7 +186,7 @@ pub struct ProjectMembersForeign {
 
 pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new() } }
 
-pub(crate) fn project_members_crates_beneath<M: ProjectMembersHost>(root: &std::path::Path, seen: &mut collections::TrustedSet<fs::Path>, out: &mut collections::BTreeSet<String>, manifests: &M) {
+pub(crate) fn project_members_crates_beneath<M: ProjectMembersHost>(root: &std::path::Path, seen: &mut collections::HashSet<fs::Path>, out: &mut collections::BTreeSet<String>, manifests: &M) {
     let manifest = match manifests.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return };
     for (_, path) in manifest.paths.iter() {
         let at = project_members_canonical(&nikaia_std::fs::path::join(&(root), &path));
@@ -219,7 +219,7 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
         descriptions = host.absorb(descriptions, ledger);
     }
     let mut beneath: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut seen: collections::TrustedSet<fs::Path> = collections::TrustedSet::default();
+    let mut seen: collections::HashSet<fs::Path> = collections::HashSet::new();
     project_members_crates_beneath(root, &mut seen, &mut beneath, manifests);
     ProjectMembersForeign { declared, described, descriptions, moved, beneath }
 }

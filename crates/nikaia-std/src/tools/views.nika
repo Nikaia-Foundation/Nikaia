@@ -202,6 +202,12 @@ struct Here {
     // Local `Vec`s that never leave the function (#655): a push into one is
     // no store; what is read back out of one carries the view.
     locals: collections::BTreeSet[String],
+    // The struct a result `Vec[S]` lists, where `S` holds a view (#1000): a
+    // literal of it pushed into a local list handed back is handed back.
+    ours_listed: String?,
+    // Local `Vec`s that are handed back whole and otherwise only pushed to,
+    // measured, indexed or walked (#1000).
+    backs: collections::BTreeSet[String],
     found: Vec[(Span, Destination)],
 }
 
@@ -578,7 +584,7 @@ fn scan(unit: ref Unit, asked: ref Asked, target: ref Type?, method: u32, item: 
                 let param_name = asked.names.resolve(param).clone()
                 let mut carriers: collections::BTreeSet[String] = collections::BTreeSet()
                 carriers.insert(param_name.clone())
-                let mut here = Here { subject: target?.clone(), subject_fields: subject_fields.clone(), declared: declared.clone(), ours: if result_holds_view { text_of(asked, ret_type) } else { null }, carriers: carriers, locals: collections::BTreeSet(), found: [] }
+                let mut here = Here { subject: target?.clone(), subject_fields: subject_fields.clone(), declared: declared.clone(), ours: if result_holds_view { text_of(asked, ret_type) } else { null }, carriers: carriers, locals: collections::BTreeSet(), ours_listed: listed_struct(unit, asked, ret_type), backs: collections::BTreeSet(), found: [] }
                 walk_block(unit, asked, body, true, own_buffer, here)
                 one_answer(asked, here, param, Scanned { param: param_name, ty: written_type(asked.names, ty), function: function.clone(), subject: subject_name?.clone(), method: method, names_a_buffer: subject_names_a_buffer }, out)
             }
@@ -679,6 +685,45 @@ fn buffered(unit: ref Unit, asked: ref Asked, ty: ref Type?) -> bool {
     return brings_buffer(unit, asked, ty ?? return false)
 }
 
+// The struct a result `Vec[S]` lists, where `S` is one plain name that holds
+// a view (#1000).
+fn listed_struct(unit: ref Unit, asked: ref Asked, ty: ref Type?) -> String? {
+    let list = ty ?? return null
+    if list.is_view || list.is_nullable || list.code != null || list.generics.len() != 1 || asked.names.resolve(list.name) != "Vec" {
+        return null
+    }
+    let element = list.generics[0].clone()
+    if element.generics.len() > 0 || element.is_view || element.is_nullable || element.is_tuple || element.code != null {
+        return null
+    }
+    if !brings_buffer(unit, asked, element) {
+        return null
+    }
+    let name = asked.names.resolve(element.name).clone()
+    // A declared `ref E` field points into the list itself, not into what
+    // its elements view: that stays a store.
+    let declared = unit.fields.get(name) ?? return null
+    for (_, ty) in declared {
+        if a_ref_of_a_type(asked, ty) {
+            return null
+        }
+    }
+    return name
+}
+
+// Whether a type is, or holds, a `ref` to something other than text.
+fn a_ref_of_a_type(asked: ref Asked, ty: ref Type) -> bool {
+    if ty.is_view && asked.names.resolve(ty.name) != "String" {
+        return true
+    }
+    for inner in ty.generics {
+        if a_ref_of_a_type(asked, inner) {
+            return true
+        }
+    }
+    return false
+}
+
 // A type no declaration of the unit and no ledger describes may be a struct
 // of views declared in another file (D13).
 fn rsrc_unknown_named(unit: ref Unit, asked: ref Asked, ty: ref Type) -> bool {
@@ -757,10 +802,15 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
                 // **A struct that never leaves keeps nothing past the call**
                 // (#585): its fields are no store where the name is read only
                 // through them; where those reads go is asked on their own.
-                if a_local_vec_that_stays(asked, block, i, names, value) {
+                let handed = local_vec_handed_back(asked, block, i, names, value)
+                if handed == 0 {
                     let kept = asked.names.resolve(names[0]).clone()
                     here.locals.insert(kept.clone())
                     here.carriers.insert(kept)
+                } else if handed > 0 && here.ours_listed != null {
+                    let back = asked.names.resolve(names[0]).clone()
+                    here.backs.insert(back.clone())
+                    here.carriers.insert(back)
                 }
                 if views_a_local_struct(unit, asked, block, i, names, value, here.ours) {
                     descend(unit, asked, value, span, own_buffer, here)
@@ -815,24 +865,30 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
 }
 
 // Whether `let name = []` at statement `at` binds a `Vec` that the rest of
-// the block only pushes to, measures, indexes or loops over (#655): it never
-// leaves, so what is pushed into it is no store past the call.
-fn a_local_vec_that_stays(asked: ref Asked, block: ref Block, at: i64, names: ref Vec[winnow_grammar::Symbol], value: ref Expr) -> bool {
+// the block only pushes to, measures, indexes or loops over (#655), and how
+// often a `return name` of this block hands it back (#1000); -1 where the
+// name goes anywhere else. 0: it never leaves, so what is pushed into it is
+// no store past the call.
+fn local_vec_handed_back(asked: ref Asked, block: ref Block, at: i64, names: ref Vec[winnow_grammar::Symbol], value: ref Expr) -> i64 {
     match value {
         Expr::ListLit { items, .. } => {
             if items.len() != 0 {
-                return false
+                return -1
             }
         },
-        else => return false,
+        else => return -1,
     }
     if names.len() != 1 {
-        return false
+        return -1
     }
     let name = asked.names.resolve(names[0])
     let mut uses = 0
     let mut allowed = 0
+    let mut handed = 0
     for j in (at + 1)..<block.stmts.len() {
+        if returns_named(asked.names, block.stmts[j].node, name) {
+            handed += 1
+        }
         match block.stmts[j].node {
             Stmt::For { iter, .. } => {
                 if a_variable_named(asked.names, iter, name) {
@@ -862,7 +918,10 @@ fn a_local_vec_that_stays(asked: ref Asked, block: ref Block, at: i64, names: re
             }
         }
     }
-    return uses == allowed
+    if uses != allowed + handed {
+        return -1
+    }
+    return handed
 }
 
 fn a_reading_method(method: ref String) -> bool {
@@ -1121,6 +1180,14 @@ fn stores(unit: ref Unit, asked: ref Asked, expr: ref Expr, span: ref Span, own_
                 }
                 return
             }
+            // **A literal of the result's element pushed into the list handed
+            // back** is handed back (#1000), as a literal in the `return` is.
+            if a_push_into_a_back(asked, here, receiver, method) {
+                for arg in args {
+                    listed_back(unit, asked, arg, span, own_buffer, here)
+                }
+                return
+            }
             handed_to(unit, asked, receiver, method, args, config, span, here)
             descend(unit, asked, expr, span, own_buffer, here)
         }
@@ -1155,6 +1222,31 @@ fn a_push_into_a_local(asked: ref Asked, here: ref Here, receiver: ref Expr, met
     return match receiver {
         Expr::Variable(n, _) => here.locals.contains(asked.names.resolve(n)),
         else => false,
+    }
+}
+
+fn a_push_into_a_back(asked: ref Asked, here: ref Here, receiver: ref Expr, method: winnow_grammar::Symbol) -> bool {
+    if asked.names.resolve(method) != "push" {
+        return false
+    }
+    return match receiver {
+        Expr::Variable(n, _) => here.backs.contains(asked.names.resolve(n)),
+        else => false,
+    }
+}
+
+// One value pushed into a list handed back: a literal of the struct the
+// result lists is no store, what stands inside it is still asked.
+fn listed_back(unit: ref Unit, asked: ref Asked, value: ref Expr, span: ref Span, own_buffer: fn(ref Expr) -> bool sync, mut here: Here) {
+    match value {
+        Expr::StructLit { name, .. } => {
+            if ours_is(asked, here.ours_listed, name) {
+                descend(unit, asked, value, span, own_buffer, here)
+            } else {
+                stores(unit, asked, value, span, own_buffer, here)
+            }
+        }
+        else => stores(unit, asked, value, span, own_buffer, here),
     }
 }
 
@@ -2805,7 +2897,7 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
                     declared_views.push(asked.names.resolve(arg.name).clone())
                 }
             }
-            let walked_here = Here { subject: subject?.clone(), subject_fields: fields_of_type(unit, asked, subject), declared: declared, ours: null, carriers: collections::BTreeSet(), locals: collections::BTreeSet(), found: [] }
+            let walked_here = Here { subject: subject?.clone(), subject_fields: fields_of_type(unit, asked, subject), declared: declared, ours: null, carriers: collections::BTreeSet(), locals: collections::BTreeSet(), ours_listed: null, backs: collections::BTreeSet(), found: [] }
             let mut flow = rsrc_flow(at)
             for source in sources {
                 let mut own = rsrc_none()
@@ -3079,7 +3171,7 @@ fn places_of(unit: ref Unit, asked: ref Asked, subject: ref Type?, at: ref Span,
             for option in config {
                 declared.push((option.name, option.ty.clone()))
             }
-            let here = Here { subject: subject?.clone(), subject_fields: fields_of_type(unit, asked, subject), declared: declared, ours: null, carriers: collections::BTreeSet(), locals: collections::BTreeSet(), found: [] }
+            let here = Here { subject: subject?.clone(), subject_fields: fields_of_type(unit, asked, subject), declared: declared, ours: null, carriers: collections::BTreeSet(), locals: collections::BTreeSet(), ours_listed: null, backs: collections::BTreeSet(), found: [] }
             let mut flow = rsrc_flow(at)
             flow.places = places
             for source in sources {

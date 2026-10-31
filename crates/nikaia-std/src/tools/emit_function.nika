@@ -479,6 +479,21 @@ impl EmitState {
                             null => {},
                         }
                     }
+                    // **A list of such structs** (#1000): `ns: ref Vec[Node]`,
+                    // where the result is no `Node` itself, points into what
+                    // the elements view, and the list is written `&[Node<'r>]`.
+                    let list = args[at].ty.clone()
+                    if list.generics.len() == 1 && emit_text(world, list.name) == "Vec" && !list.is_nullable && !list.is_slice {
+                        let element = list.generics[0].clone()
+                        if self.carries_a_view(world, element) && self.borrows(world, element.name) && element.generics.is_empty() && !element.is_view && !element.is_nullable {
+                            match ret_type {
+                                each => {
+                                    source_nested = each.name != element.name && !emit_holds_a_ref_of_a_type(world, each)
+                                },
+                                null => {},
+                            }
+                        }
+                    }
                 }
                 let mut source_name: winnow_grammar::Symbol? = null
                 if source_at != null {
@@ -1168,4 +1183,19 @@ fn emit_split_root(group: ref Vec[i64], at: i64) -> i64 {
         here = group[here]
     }
     return here
+}
+
+/// Whether a type holds a `ref` of anything but text (`ref Node`,
+/// `Vec[ref Node]`): a view of a value, which points into the list it is
+/// read out of rather than into what the value views (#1000).
+fn emit_holds_a_ref_of_a_type(world: ref EmitWorld, ty: ref Type) -> bool {
+    if ty.is_view && emit_text(world, ty.name) != "String" {
+        return true
+    }
+    for inner in ty.generics {
+        if emit_holds_a_ref_of_a_type(world, inner) {
+            return true
+        }
+    }
+    return false
 }

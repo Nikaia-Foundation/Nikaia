@@ -2148,7 +2148,7 @@ pub(crate) fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, wal
 
 pub(crate) fn element_struct(list: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
     let found = match source_of(list, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let ty = found.ty.clone();
+    let ty = through_ref(&found.ty);
     if !a_container(ask.names, &ty) { return None; }
     let mut at: i64 = 0;
     if a_map(ask.names, &ty) { at = 1; }
@@ -2169,8 +2169,14 @@ pub(crate) fn walked_struct(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk
         _ => { },
     }
     let found = match source_of(iter, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    if a_map(ask.names, &found.ty) { return None; }
+    if a_map(ask.names, &through_ref(&found.ty)) { return None; }
     element_struct(iter, ask, walk)
+}
+
+pub(crate) fn through_ref(ty: &Type) -> Type {
+    let mut out = ty.clone();
+    if out.is_view && !out.is_nullable && !out.is_slice { out.is_view = false; }
+    out
 }
 
 pub(crate) fn called_struct(func: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> Option<String> {
