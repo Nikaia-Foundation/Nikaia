@@ -211,3 +211,4 @@
 /home/user/Nikaia/docs/briefs/gr-grammar-run.md 488842 7
 /home/user/Nikaia/docs/briefs/architect-task.md 5463158 81
 /home/user/Nikaia/docs/briefs/b-fixforward-clippy199.md 211439 9
+/home/user/Nikaia/docs/briefs/bt2-known-default.md 221218 7
