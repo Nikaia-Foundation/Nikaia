@@ -1,3 +1,2 @@
-b1036-tuple-result-keeps-arg.md
-b1045-let-lambda-fn-field.md
 b1046-let-lambda-pausing-param.md
+b1044-last-view-handed-back.md
