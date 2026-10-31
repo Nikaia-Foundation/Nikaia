@@ -1,0 +1,35 @@
+seq [] plain
+  null [~] plain
+  null [null] plain
+  null [NULL] plain
+  bool(true) [true] plain
+  bool(true) [True] plain
+  bool(false) [FALSE] plain
+  int [0x1F] plain
+  float [.inf] plain
+  str [x] double
+  str [y] single
+  int [1] double
+  null [] single
+  str [a\tb] double
+  int [7] plain
+  alias [] plain
+  seq [] plain
+    map [] plain
+      str [a] plain
+      null [] plain
+  map [] plain
+    str [k] plain
+    str [v] plain
+seq [] plain
+  str [  lit
+  eral
+] literal
+  str [  fold
+  ed
+] folded
+  null [] plain
+  null [] plain
+  map [] plain
+    str [k] plain
+    str [v] plain
