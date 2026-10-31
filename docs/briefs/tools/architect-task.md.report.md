@@ -1,8 +1,4 @@
 Result: done
-Batch: j4-1019-members.md j5-1019-comptime-field.md
+Batch: j5-1019-comptime-field.md j6-1019-error-path.md
 Owner: none
-Pushed: rejected (local c3171f6; behind origin/develop, the driver rebases)
-Decided: a `T?` crosses from build time where `T` does (`null` a const; `String?` arrives as `ref String?`), architect, obvious; Part II 10.2 sentence added in c3171f6 (#1087), so the supervisor owes a version raise with j5's build.
-Filed: #1086 (a fieldless attribute struct is NK1135, `ready`, for the bug lane, no wip); #1087 (a comptime binding reads a reflected field and calls a function over it; T? crosses; `ready` + `wip`, brief j5). Commented #906 with the probe that `comptime` value parameters do not parse (j3's Deviation).
-j3: done (7fe9f88, Part #1019); its Found (check-adr-refs on ADR-384) was another lane's, already fixed on develop (396ca42). #1019 To build: 3a ticked, 3b' (#1087) added before 3c.
-Next after this batch: j6 = 3c (`name:` per field while building, NK1311, NK1312), on j4 and j5.
+Notes: j4 (20a79c9, #1019 step 3b) is done; the batch was cut only on its `Gate: none` (cheap checks were green), so common.part, j5 and j6 now say `Gate:` is `green` or `red <check>`, never `none`. j5 is unchanged and runs next (#1087). j6 is new: 3d, the value's path on the `ParseError` stack (`at $.contacts[1].mail`; decided by the architect as obvious, since Part II 10.8 already says it). It was probed on 20a79c9, and the probe's output is in the brief. #1019: 3b ticked; 3d split into 3d (path) and 3e (unescaped strings as views); 3c (`name:`, NK1311/NK1312) follows j5. j4's Found (`.get(&name)` of a kept local, E0277) is the defect #1073 already holds, now commented there with this instance. New: #1091 (NK1111's help drops a `}`), `ready`, left for the bug lane. Supervisor, changelog owed: j4's line (`members[S]`, ADR-grammar-2 D3, D5).
