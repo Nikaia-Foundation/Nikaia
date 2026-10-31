@@ -5,3 +5,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b3-1016-ref-list-result-slice.md 1090213 28
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 1217896 33
 /home/user/Nikaia/docs/briefs/bugs/b4-1016-list-view-result-slice.md 840938 13
+/home/user/Nikaia/docs/briefs/bugs/architect-task.md 1111135 28
