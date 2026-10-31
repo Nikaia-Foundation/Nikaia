@@ -1,0 +1,23 @@
+struct Box2 {
+	run: fn(i64) -> i64
+}
+
+fn inc(x: i64) -> i64 {
+	return x + 1
+}
+
+fn dbl(x: i64) -> i64 {
+	return x * 2
+}
+
+fn main() {
+	let f: fn(i64) -> i64 = inc
+	let g: fn(i64) -> i64 = dbl
+	let w: fn(i64) -> i64 = fn(x) { f(x) + g(x) }
+	println(f"{w(3)}")
+	println(f"{w(4)}")
+	let b = Box2 { run: fn(x) { f(x) * 10 } }
+	println(f"{b.run(1)}")
+	println(f"{f(1)}")
+	println(f"{g(1)}")
+}

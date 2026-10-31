@@ -87,9 +87,15 @@ impl CheckState {
         }
     }
 
+    /// A local of `fn` type counts as a hull: it holds a `Kept`, an `Arc`, so
+    /// it is a handle like one (#1034). A parameter that only runs its
+    /// function (`run_code`) is a reference, and a named function no local.
     fn a_name_of_a_hull(ref self, name: ref String) -> bool sync {
         let found = self.lookup(name) ?? return false
-        return a_hull_type(found)
+        return match found {
+            Ty::Fn { .. } => !self.run_code.contains(name),
+            else => a_hull_type(found),
+        }
     }
 
     fn hulls_of_a_lambda(ref mut self, world: ref CheckWorld, value: ref Expr, params: ref Vec[winnow_grammar::Symbol], body: ref Block) sync {

@@ -88,7 +88,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_name_of_a_hull(&self, name: &str) -> bool {
         let found = match self.lookup(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        a_hull_type(&found)
+        match found {
+            Ty::Fn { .. } => !self.run_code.contains(name),
+            _ => a_hull_type(&found),
+        }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
