@@ -183,3 +183,4 @@
 /home/user/Nikaia/docs/briefs/b1012c-trait-column-data.md 1733163 37
 /home/user/Nikaia/docs/briefs/b1017-lambda-optional-tail.md 429357 7
 /home/user/Nikaia/docs/briefs/architect-task.md 2190921 43
+/home/user/Nikaia/docs/briefs/b1018-kept-fn-index-read.md 427790 6
