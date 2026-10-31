@@ -1,2 +1,2 @@
-b1029-kept-lambda-int-result.md
 b1031-kept-fn-name-copy.md
+b938-loop-copy-inferred-list.md
