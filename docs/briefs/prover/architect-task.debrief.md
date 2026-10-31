@@ -1,17 +1,13 @@
-1. **What cost the most turns:**
-   - **Tracing the precondition defect (#1076), about 8 turns.** I worked through `prover_state.nika`, `prover_passes.nika` and `check_facts.nika` to show a false "proved" before writing p8. It was worth it, but it was unplanned.
-   - **My own mistake, about 4 turns.** I followed the charter and wrote bug brief b16 into `docs/briefs/bugs/`, appended it to that lane's `batch.txt` and labelled #1074 `wip`. The task brief explicitly forbids touching other lanes' files, so I had to undo all three.
-   - **A misread probe, 3 turns.** I thought the binary was older than p6 and rebuilt it, which did nothing. The real cause was that `0..n` is inclusive, and p6's test uses `0..<n`.
+1. **What cost the most:** tracing why p8 turned four `it` tests red took about 12 of my roughly 30 turns: reading both test sources, then six small probes to find which shapes lose a length. One probe was my own mistake. I swapped the `push` loop for a single `push`, which gives a length of 1, and read the failure as a gap. Chasing a wrong lead about calls inside f-strings then cost about 3 more turns.
 
-2. **What I had to look up that the brief could have handed me:**
-   - The `for` turn count only reaches the bounds walk. The claim prover (`prover_for`) still builds a record only for ranges.
-   - `--asserts` output format, and the default for unproved claims (refused, ADR-380).
-   - Where `check_claims_report` lives, and `lower-std`'s flags in `main.rs`.
-   - That a `for` walks text through `.scalars`, not over the `String` itself.
-   - That the attribution in `common.part` carries another session's id, so every brief needs it replaced.
+2. **What the brief could have handed me:**
+   - p8's report named the four tests but not their files or line numbers, and not the one-line cause (`Bytes(v)` loses `v`'s length). I found those with `grep`.
+   - That GitHub's search endpoint is blocked by the proxy, and that `--paginate` fails. Only the plain `repos/.../issues` list works.
+   - What `<full brief path>` in `common.part` looks like.
+   - That `common.part`'s `Attribution:` block is hard-coded to another session's ID, so every brief must replace it. I only noticed after writing p10.
 
 3. **Checks:**
-   - **Useful:** the probes of p6's rows and of the map/text rows (they killed a wrong test row and found #1075); the three precondition probes (found #1076); the scan of the other lanes' batch files for conflicts.
-   - **Wasted:** the `cargo build` (it was already up to date), the probe with `cli::args().count()`, which doesn't exist, and the grep through the brief history for `check_core_stmt`.
+   - Useful: the shape probes on today's binary (repeat, literal argument, `Bytes`, `resize`), the file-clash check against the other lanes' `batch.txt`, the `where.nika` lookups, and reading the p7 and p8 reports.
+   - Wasted: searching the specification for a `Vec.filled` constructor, the f-string detour, the blocked search call, and re-reading the whole p9 brief when only its opening check needed fixing.
 
-4. **The one change that would have saved the most:** the charter's rule "reported defects get a bug brief and go into the bug batch" should yield, in its own text, to a lane task that forbids other lanes' files. I added that sentence to `docs/architect.md`. The task brief should also hand over a fresh `proved.nika` figure and say "binary built at HEAD", so the architect doesn't re-check either.
+4. **The one change that would save the most:** in `.claude/agents/builder.md`, require that a report with `Needs: architect decision` on newly refused tests gives each test's file and line plus a probe of a few lines that shows the cause. Every architect run after a `partial` starts by redoing that trace. I should also have made `common.part`'s `Attribution:` block a placeholder that `agent.nika` fills in, at the source. That fix is still open.
