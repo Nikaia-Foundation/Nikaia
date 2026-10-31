@@ -1,0 +1,29 @@
+// #1015: `nikaia fmt` keeps a grammar guard `if(cond, "label")` whole on a
+// rule line over 100 columns (the grammar parser takes no break inside it),
+// and a rule broken by hand keeps its continuation one level deeper.
+fn f(a: i64, b: i64) -> bool sync {
+	return a < b
+}
+
+grammar G {
+	rule WS = "" -> { }
+	entry rule top -> i64 = _a:here _bcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuv:here if(f(1, 2), "a node its tag fits") eof -> {
+		1
+	}
+	entry rule two -> i64 = _a:here _bcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuv:here
+		if(f(1, 2), "a node its tag fits") eof -> { 2 }
+}
+
+fn main() {
+	let input = Bytes([])
+	let r = G::top(input) catch {
+		println("error")
+		return
+	}
+	println(r)
+	let s = G::two(input) catch {
+		println("error")
+		return
+	}
+	println(s)
+}

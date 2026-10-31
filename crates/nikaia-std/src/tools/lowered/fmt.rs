@@ -442,6 +442,17 @@ pub(crate) fn fmt_looseness(toks: &[FmtToken], k: i64) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn fmt_opens_grammar(toks: &[FmtToken]) -> bool {
+    if toks.len() > 1 && nikaia_std::index::get(&toks, 0).text == "grammar" { return true; }
+    toks.len() > 2 && nikaia_std::index::get(&toks, 0).text == "pub" && nikaia_std::index::get(&toks, 1).text == "grammar"
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn fmt_starts_rule(word: &str) -> bool { matches!(word, "rule" | "entry" | "pub" | "@" | "@frame") }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn fmt_leads(word: &str) -> bool { matches!(word, "return" | "throw" | "in" | "if" | "while" | "match" | "else" | "break" | "yield") }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -449,6 +460,7 @@ pub(crate) struct FmtFrame {
     pub(crate) open: String,
     pub(crate) inner: i64,
     pub(crate) commas: i64,
+    pub(crate) rules: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -499,6 +511,12 @@ impl FmtPrinter {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn in_grammar(&self) -> bool {
+        let n = self.frames.len() as i64;
+        n > 0 && nikaia_std::index::get(&self.frames, nikaia_std::index::at(n - 1)).rules
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn indent_of(&self, line: &FmtLine) -> i64 {
         let first = (*nikaia_std::index::get(&line.toks, 0)).clone();
         let inner = self.inner();
@@ -507,6 +525,7 @@ impl FmtPrinter {
             return 0;
         }
         if self.hanging { return inner + 1; }
+        if self.in_grammar() && !fmt_starts_rule(&first.text) { return inner + 1; }
         let after_item = self.tail == "," || self.tail == "" || self.tail == ";" || self.tail_kind == FmtKind::Open;
         if first.kind == FmtKind::Punct && fmt_operator_starts(&first.text) && !after_item { return inner + 1; }
         inner
@@ -532,7 +551,10 @@ impl FmtPrinter {
         let shape = fmt_shape(&line.toks);
         for k in 0..line.toks.len() as i64 {
             let t = (*nikaia_std::index::get(&line.toks, nikaia_std::index::at(k))).clone();
-            if t.kind == FmtKind::Open { self.frames.push(FmtFrame { open: t.text, inner: indent + 1, commas: 0 }); } else if t.kind == FmtKind::Close { self.frames.pop(); } else if t.kind == FmtKind::Punct && t.text == "," && !*nikaia_std::index::get(&shape.barred, nikaia_std::index::at(k)) && !self.frames.is_empty() {
+            if t.kind == FmtKind::Open {
+                let rules = t.text == "{" && k == fmt_last_code(&line.toks) && fmt_opens_grammar(&line.toks);
+                self.frames.push(FmtFrame { open: t.text, inner: indent + 1, commas: 0, rules });
+            } else if t.kind == FmtKind::Close { self.frames.pop(); } else if t.kind == FmtKind::Punct && t.text == "," && !*nikaia_std::index::get(&shape.barred, nikaia_std::index::at(k)) && !self.frames.is_empty() {
                 let n = self.frames.len() as i64;
                 self.frames[nikaia_std::index::at(n - 1)].commas += 1;
             }
@@ -613,13 +635,14 @@ impl FmtPrinter {
         if loosest > 0 && loosest < 7 { return fmt_cut(line, &fmt_operators(&toks, &shape, last, loosest)); }
         let mut first = nikaia_std::index::get(&toks, nikaia_std::index::at(last)).text == "{";
         for k in 0..last { if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "->" && *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 { first = true; } }
+        let rule = self.in_grammar();
         let mut group: i64 = -1;
         let mut close: i64 = -1;
         let mut k: i64 = 0;
         while k < n {
             if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Open {
                 let m = fmt_partner(&toks, k);
-                if m > k + 1 && fmt_sealed(&toks, k, m) { k = m; } else if m > k + 1 && fmt_breakable(&toks, &shape, k, m) && (group < 0 || !first) {
+                if m > k + 1 && (fmt_sealed(&toks, k, m) || rule && nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "(") { k = m; } else if m > k + 1 && fmt_breakable(&toks, &shape, k, m) && (group < 0 || !first) {
                     group = k;
                     close = m;
                     k = m;

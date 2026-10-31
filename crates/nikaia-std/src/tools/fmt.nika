@@ -559,6 +559,23 @@ fn fmt_looseness(toks: ref Vec[FmtToken], k: i64) -> i64 sync {
     }
 }
 
+// Whether a line that ends on `{` opens a grammar: `grammar G {`, `pub grammar G {`.
+fn fmt_opens_grammar(toks: ref Vec[FmtToken]) -> bool sync {
+    if toks.len() > 1 && toks[0].text == "grammar" {
+        return true
+    }
+    return toks.len() > 2 && toks[0].text == "pub" && toks[1].text == "grammar"
+}
+
+// Whether a line of a grammar's body starts a rule: `rule`, `entry rule`, the
+// refused `pub rule`, or an `@frame` before it.
+fn fmt_starts_rule(word: String) -> bool sync {
+    return match word {
+        "rule" | "entry" | "pub" | "@" | "@frame" => true
+        else => false
+    }
+}
+
 // A keyword after which an operator is a sign, not a binary one.
 fn fmt_leads(word: String) -> bool sync {
     return match word {
@@ -574,6 +591,8 @@ struct FmtFrame {
     // The commas written at its own depth so far: a list, where a broken last
     // item takes one too.
     commas: i64,
+    // Whether it is a `grammar`'s body, whose lines are rules.
+    rules: bool,
 }
 
 struct FmtPrinter {
@@ -628,6 +647,12 @@ impl FmtPrinter {
         return self.frames[n - 1].inner
     }
 
+    // Whether the lines read now are a grammar's rules.
+    fn in_grammar(ref self) -> bool sync {
+        let n = self.frames.len()
+        return n > 0 && self.frames[n - 1].rules
+    }
+
     fn indent_of(ref self, line: ref FmtLine) -> i64 sync {
         let first = line.toks[0].clone()
         let inner = self.inner()
@@ -638,6 +663,11 @@ impl FmtPrinter {
             return 0
         }
         if self.hanging {
+            return inner + 1
+        }
+        // A line of a grammar's body that starts no rule continues the one
+        // before it, one level deeper.
+        if self.in_grammar() && !fmt_starts_rule(first.text) {
             return inner + 1
         }
         let after_item = self.tail == "," || self.tail == "" || self.tail == ";" || self.tail_kind == FmtKind::Open
@@ -672,7 +702,8 @@ impl FmtPrinter {
         for k in 0..<line.toks.len() {
             let t = line.toks[k].clone()
             if t.kind == FmtKind::Open {
-                self.frames.push(FmtFrame { open: t.text, inner: indent + 1, commas: 0 })
+                let rules = t.text == "{" && k == fmt_last_code(line.toks) && fmt_opens_grammar(line.toks)
+                self.frames.push(FmtFrame { open: t.text, inner: indent + 1, commas: 0, rules })
             } else if t.kind == FmtKind::Close {
                 self.frames.pop()
             } else if t.kind == FmtKind::Punct && t.text == "," && !shape.barred[k] && self.frames.len() > 0 {
@@ -792,13 +823,16 @@ impl FmtPrinter {
                 first = true
             }
         }
+        // A rule's parentheses (a guard's `if(..)`, a `fail(..)`, a group)
+        // stay whole: the grammar parser takes no break inside them.
+        let rule = self.in_grammar()
         let mut group = -1
         let mut close = -1
         let mut k = 0
         while k < n {
             if toks[k].kind == FmtKind::Open {
                 let m = fmt_partner(toks, k)
-                if m > k + 1 && fmt_sealed(toks, k, m) {
+                if m > k + 1 && (fmt_sealed(toks, k, m) || (rule && toks[k].text == "(")) {
                     k = m
                 } else if m > k + 1 && fmt_breakable(toks, shape, k, m) && (group < 0 || !first) {
                     group = k
