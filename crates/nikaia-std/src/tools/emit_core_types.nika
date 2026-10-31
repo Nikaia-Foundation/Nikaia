@@ -156,8 +156,10 @@ impl EmitState {
             // `fn(ref String, ref String) -> ref String` is written
             // `for<'call> Fn(&'call str, &'call str) -> &'call str`. Where the
             // result is a view, the code may hand back either; the caller's
-            // result lives as long as the shorter of the two.
-            if code.is_sync && code.result != null {
+            // result lives as long as the shorter of the two. Code that may
+            // pause and is run says it the same way (#1048): `impl
+            // for<'call> AsyncFn(..) -> &'call str`.
+            if code.result != null {
                 let result = code.result ?? return ""
                 let mut lent = 0
                 for part in ty.generics {
@@ -172,19 +174,24 @@ impl EmitState {
                     for part in ty.generics {
                         called.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Call, count)))
                     }
-                    let inner = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, EmitLifetimes::Call, count)
+                    let inner = a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, result, EmitLifetimes::Call, count))
                     let mut each = inner.clone()
                     if code.can_throw {
                         each = f"Result<{inner}, Box<dyn std::error::Error>>"
                     }
                     if runs {
-                        return f"impl for<'call> Fn({called.join(", ")}) -> {each}"
+                        if code.is_sync {
+                            return f"impl for<'call> Fn({called.join(", ")}) -> {each}"
+                        }
+                        return f"impl for<'call> AsyncFn({called.join(", ")}) -> {each}"
                     }
-                    let mut crossing: String = ""
-                    if overlaps {
-                        crossing = " + std::marker::Send + std::marker::Sync"
+                    if code.is_sync {
+                        let mut crossing: String = ""
+                        if overlaps {
+                            crossing = " + std::marker::Send + std::marker::Sync"
+                        }
+                        return f"nikaia_std::func::Kept<dyn for<'call> Fn({called.join(", ")}) -> {each}{crossing}>"
                     }
-                    return f"nikaia_std::func::Kept<dyn for<'call> Fn({called.join(", ")}) -> {each}{crossing}>"
                 }
             }
             if !runs {

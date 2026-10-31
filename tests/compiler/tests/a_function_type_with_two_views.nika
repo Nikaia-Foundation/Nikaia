@@ -1,0 +1,42 @@
+// A function type with two views in and a view out names one lifetime for
+// all three, also when the code may pause (#1048). Text and lists alike;
+// a list handed back as a view is a slice (#1016).
+
+fn longer(a: ref String, b: ref String) -> ref String {
+	if a.len() >= b.len() {
+		return a
+	}
+	return b
+}
+
+fn longer_list(a: ref Vec[i64], b: ref Vec[i64]) -> ref Vec[i64] {
+	if a.len() >= b.len() {
+		return a
+	}
+	return b
+}
+
+fn apply(g: fn(ref String, ref String) -> ref String, a: ref String) -> i64 {
+	return g(a, a).len()
+}
+
+fn apply_list(g: fn(ref Vec[i64], ref Vec[i64]) -> ref Vec[i64], a: ref Vec[i64]) -> i64 {
+	return g(a, a).len()
+}
+
+fn apply_sync(g: fn(ref String, ref String) -> ref String sync, a: ref String) -> i64 {
+	return g(a, a).len()
+}
+
+fn apply_list_sync(g: fn(ref Vec[i64], ref Vec[i64]) -> ref Vec[i64] sync, a: ref Vec[i64]) -> i64 {
+	return g(a, a).len()
+}
+
+fn main() {
+	println(f"{apply(longer, "abc")}")
+	let xs = [1, 2, 3]
+	println(f"{apply_list(longer_list, xs)}")
+	println(f"{apply_sync(longer, "abcd")}")
+	let ys = [1, 2, 3, 4, 5]
+	println(f"{apply_list_sync(longer_list, ys)}")
+}
