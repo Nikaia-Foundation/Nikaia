@@ -1,3 +1,3 @@
-b4-1016-list-view-result-slice.md
 b5-1002-hex-digit-built-in.md
 b6-1010-let-mut-literal-owned-field.md
+b7-1016-named-lifetime-and-typed-let-slice.md
