@@ -1,4 +1,4 @@
 Result: done
-Batch: y2c-properties.md y2b-keys-directives-limits.md
+Batch: y11-1032-guard-call-tiers.md, y12-1033-guard-text-label.md, y2c-properties.md
 Owner: none
-Notes: y10 done (24751a95, Fixes #1030, gate green); the CUT was its Deviation only (text_tiers.nika needed the same arm as check_grammar.nika), now a fact in docs/builder-facts.md. y2c's #1030 line updated; #928 To build marks y10 done (labels ready + wip unchanged). docs/briefs/yaml/RED is an empty untracked file, not this lane's input; left alone.
+Notes: y2c run 1 blocked on two compiler defects, both reproduced on 506edc2d and filed `ready` in brief form: #1032 (a call in a grammar guard is no call site for the text tiers: `bind_grammar_pattern` drops `Pattern::Guard`, NK1185) and #1033 (a guard cannot read a `text(..)` label that binds names: `s` is bound only in the action prelude, rustc). y2c re-queued (run 1's report renamed `.run1.report.md`; pre-flight now probes both fixes and checks the draft). y2b waits for the next batch. #928's To build updated (labels ready+wip). Rules: architect.md (a draft brief applies the draft and checks it first), builder-facts (a guard is its own case for both passes).
