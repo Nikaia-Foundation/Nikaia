@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1328] — 2026-10-31
+
+**Comptime hands a turn's field to a function; a sync call with type arguments in brackets (#1087, #1095)**
+- A comptime in an unrolled turn may hand the turn's field to a function and read its attributes, and a `T?` now crosses from build time, `null` included (#1087).
+- A `sync` function or a `comptime` may call a generic function with type arguments in brackets, `id[i64](3)`; it takes that function's promise (#1095).
+
 ## [0.0.1327] — 2026-10-31
 
 **prover: loop turns and collection lengths bound counters, argument lengths, every length below 2^63, sound preconditions; claims in the figure (#1053, #1054, #1069, #1076, #1084, #1090)**
