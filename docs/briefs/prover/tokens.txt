@@ -22,3 +22,4 @@
 /home/user/Nikaia/docs/briefs/prover/architect-task.md 6051238 81
 /home/user/Nikaia/docs/briefs/prover/p12-1053-length-is-an-i64.md 490025 4
 /home/user/Nikaia/docs/briefs/prover/architect-task.md 1549744 30
+/home/user/Nikaia/docs/briefs/prover/qa/qa-task.md 664310 21
