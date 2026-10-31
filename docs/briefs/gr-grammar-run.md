@@ -53,7 +53,7 @@ The `it` filters `grammar_at_build_time dsl_grammar build_time comptime`, plus t
 3. Commit `grammar run: the parser's build and run move into Nikaia (GR)`, `Part: #125`.
 
 ## Not yours
-`crates/rs2nika/convert/nikaia.{contracts,derived,proofs}`, `crates/nikaia-std/src/tools/text_tiers.nika`, the other briefs and reports in `docs/briefs/`, and any file `git status` shows modified at your start.
+`crates/rs2nika/convert/nikaia.{contracts,derived,proofs}`, `crates/nikaia-std/src/tools/check_core_{flow,leaves,stmt}.nika`, `check_takes.nika` and their lowered twins (the bug lane's b8), the other briefs and reports in `docs/briefs/`, and any file `git status` shows modified at your start.
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.

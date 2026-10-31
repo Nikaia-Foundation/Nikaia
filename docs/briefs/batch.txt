@@ -1,3 +1,2 @@
-bt-build-time.md
 s922-sha256-env.md
 gr-grammar-run.md

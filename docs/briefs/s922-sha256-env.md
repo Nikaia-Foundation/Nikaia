@@ -33,7 +33,7 @@ The two new tests pass with `nikaia test tests/compiler --both-settings` (the ga
 A tools file cannot call a `std` function from `hash`/`env` (lower-std refuses it, or the lowered call does not resolve): `Found:` with the lowered line. Also stop if `std.contracts` refuses an entry without `touches`, or a `.stderr` of an existing test changes.
 
 ## Not yours
-`crates/rs2nika/convert/nikaia.{contracts,derived,proofs}`, `crates/nikaia-std/src/tools/text_tiers.nika`, the other briefs and reports in `docs/briefs/`, and any file `git status` shows modified at your start.
+`crates/rs2nika/convert/nikaia.{contracts,derived,proofs}`, `crates/nikaia-std/src/tools/check_core_{flow,leaves,stmt}.nika`, `check_takes.nika` and their lowered twins (the bug lane's b8), the other briefs and reports in `docs/briefs/`, and any file `git status` shows modified at your start. `docs/specification/30-nikaia-tooling.md` is modified at the time of writing (another agent's hunk near :1746): commit only your hunks, as builder-facts *Traps already met* says (`git apply --cached`).
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.

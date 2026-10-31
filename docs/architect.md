@@ -229,37 +229,33 @@ tokens and turns per finished step, steps per day; counted, not timed.
 open lanes, what blocks what, figures, decisions in force that no ADR or issue
 holds. What happened is in `git log` and the issues.*
 
-**2026-10-31 (after 042cee5d).** Self-hosting: 94,991 Nikaia lines, 82.4 % of
-the toolchain; 20,254 Rust lines left in `crates/nikaia/src`
+**2026-10-31 (after 0329f310).** Self-hosting: about 82 % of the toolchain
 (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
 2026-11-04), rows and `Cut:` lines in `docs/selfhosting-plan.md`.
 
-* **Main lane** (`docs/briefs/batch.txt`): BT (`bt-build-time.md`), s922
-  (`s922-sha256-env.md`: #922 steps 1-2, then the four host `sha256_hex` methods
-  go), GR (`gr-grammar-run.md`: compile_and_run, write_if_changed, cargo; it
-  checks for BT and s922 first). b1046 is done (8b964882). Its version raise is
-  owed: "An untyped lambda bound by `let` and handed to a function parameter
-  that may pause now lowers as an `async` closure instead of being refused by
-  rustc." b1044 has moved to the bug lane (b8).
-* **b1046's `Found:`** (3 tests "settings disagree", NK2302 on `places`) did not
-  reproduce: `a_lent_argument_from_arms_view_and_new` passed at both settings
-  on the 042cee5d binary. Nothing was filed; CI decides.
+* **Main lane** (`docs/briefs/batch.txt`): s922 (`s922-sha256-env.md`: #922
+  steps 1-2, then the four host `sha256_hex` methods go), GR
+  (`gr-grammar-run.md`; its BT pre-flight holds: `grammar_run::Wall` is
+  `CheckWall`). BT is built (f819d67d) except step 5: `known_default`
+  (`comptime_run.rs:642`) waits on #1055 (bug lane b9). Once b9 is on develop,
+  write a short BT2 brief for it (its `KNOWN` thread_local stays Rust; the
+  ledger read becomes a Nikaia function over `ref Ledger`).
+* **BT's NK2302 flips** on `tests/compiler/src/main.nika` (3 tests, setting
+  and test changing between runs) were blamed on the uncommitted
+  `check_core_*`/`check_takes` work in the tree (b8's); nothing filed. If
+  they persist after b8 commits, file them.
 * **Next main batch**: K3b (needs #920), P5c (#920), P5e (the O rows), and O1
   once #922 steps 3-4 are built. GR leaves `shared_target` and `manifest` as
-  host methods for O1. After GR, fold `ComptimeRan` (`comptime_tree.nika:615`,
-  a copy of `Wall` plus `Answer`) into `CheckWall`. Also owed, each its own
-  brief: R0 (#921), `scripts/plan_rows.nika`, the driver's CI check. #1014
-  (lowering cache key) is a defect: bug lane.
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b5 #1002, b6 #1010, b7 #1016,
-  b8 #1044 (`wip`). `ready` defects no lane holds: #1048, #1038, #958, #1014.
-* **yaml lane**: #928, #929, #604 (`wip`). `docs/briefs/b859c-type-argument.md`
-  (#859) is another session's.
-* **Waiting on the owner** (`decision`): #1047 (a fn field types an untyped
-  let lambda, #1045 row b; not urgent), #1042 (`same(inc)(1)`). #1028 is
-  decided (`ready`). b1012c has only a run1 report and #1012 is closed: check
-  before re-queuing it.
+  host methods for O1. After GR, fold `ComptimeRan` (`comptime_tree.nika`, a
+  copy of `Wall` plus `Answer`) into `CheckWall`. Also owed, each its own
+  brief: R0 (#921), `scripts/plan_rows.nika`, the driver's CI check.
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): b6 #1010, b7 #1016, b8 #1044,
+  b9 #1055 (`Blocks: bt-build-time.md`), all `wip`. `ready` defects no lane
+  holds: #1048, #1038, #958, #1014.
+* **yaml lane**: #928, #929, #604 (`wip`).
+* **Waiting on the owner** (`decision`): #1047, #1042. Owed version raise for
+  b1046 (see its report's Changelog line) if the supervisor has not done it.
 * **In force, in no other file**: `drive.nika`'s `drive_push` runs `git pull
-  --rebase --autostash` in the shared checkout (trap in builder-facts; a drive
-  that rebases without stashing is not designed yet). Branch
-  `wip/bounding-candidates-2026-10-19` is parked (a sketch, 120 versions
-  stale; redo fresh when self-hosting reaches `bounds`).
+  --rebase --autostash` in the shared checkout (trap in builder-facts). Branch
+  `wip/bounding-candidates-2026-10-19` is parked (a sketch, stale; redo fresh
+  when self-hosting reaches `bounds`).
