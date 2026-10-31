@@ -20,3 +20,4 @@
 /home/user/Nikaia/docs/briefs/prover/p11-1090-carried-precondition-count.md 1775382 40
 /home/user/Nikaia/docs/briefs/prover/p9-1053-claims-in-the-figure.md 157020 2
 /home/user/Nikaia/docs/briefs/prover/architect-task.md 6051238 81
+/home/user/Nikaia/docs/briefs/prover/p12-1053-length-is-an-i64.md 490025 4
