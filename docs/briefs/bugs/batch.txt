@@ -4,3 +4,4 @@ b14-947-get-or-return-compared.md
 b16-1065-field-call-lends.md
 b17-1077-tools-preamble-traits.md
 b18-1078-filter-map-split-parts.md
+b19-1080-lent-option-bare-arg.md

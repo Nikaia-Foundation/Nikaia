@@ -1,9 +1,6 @@
 Result: done
-Batch: c1a-ledger-items.md, p5c-project-drive.md
+Batch: p5c-project-drive.md gr2-grammar-run-reland.md s1082-or-default-cloned.md
 Owner: none
-
-- K3b blocked: filed #1077 (tools preamble lacks DurationExt/DurationIn/InstantSince) and #1078 (filter_map(split_once).map(fn((a,b))) lowers parts as &str), both `ready` + `wip`; briefs b17, b18 appended to bugs/batch.txt with `Blocks: k3b-comptime-bundle.md`. Third Found (project_members drift) already fixed by 84fbfb99.
-- New move C1a (contracts/mod.rs declare_items/attribute_values into ledger_items.nika); P5c re-cut at 4520d400, its K3b dependency forwarded to the Rust write_if_changed.
-- Held back: K3b (b17, b18), GR (b15), S1 (after b17, shares sysroot.rs), P5e (O rows).
-- Pushed 7ae15781, merge f96bb09a (restored the y21 rule a scratch-index commit dropped), 7233faf8 (push-as-merge rule in docs/architect.md). dcc656de is an empty commit from a failed edit step, harmless.
-- Supervisor owes: s922b version raise + Changelog line; `rustup update stable` before clippy.
+Filed: #1080 (C1a's Found, bug lane b19, `wip`, Blocks c1a), #1081 (b15's Found, `ready`, no lane), #1082 (std `Entry::or_default`, `Seq::cloned`; ADR-384 decided by the architect, C1a had written around both).
+C1a waits on b19 and s1082; its verified step 1 kept as docs/briefs/c1a-ledger-items.wip.patch, re-run section in its brief.
+Changelog (supervisor, with s1082): ADR-384, `Entry::or_default` and `Seq::cloned` in std.

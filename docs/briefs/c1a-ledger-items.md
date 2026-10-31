@@ -41,6 +41,9 @@ A form Nikaia lacks (`Result: blocked`, `Found:` with a probe); an edit outside 
 
 **Not yours, never stage**: every file `git status` shows modified or untracked at your start, and every `docs/briefs/*` file except your report.
 
+## Re-run (architect, 2026-10-31)
+The first run was blocked by #1080 (a bare `String` into a lent `String?` parameter, bug lane b19) and wrote around two missing entries, now decided in ADR-384 (#1082, brief `s1082-or-default-cloned.md`). Pre-flight: both are on develop (`grep -n 'Entry::or_default\|Seq::cloned' crates/nikaia-std/std.contracts`; the #1080 probe runs). Start from the first run's verified step 1, `git apply docs/briefs/c1a-ledger-items.wip.patch` (`ledger_items.nika`, `check_attributes.nika`), and replace its `or_insert_with(fn() { collections::BTreeSet() })` with `or_default()` and `.map(fn(p) { p.clone() })` with `.cloned()`.
+
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
 * `git add <files>` only (`scripts/commit.nika -- REPORT` does it); commit locally after each step and **never push**: the driver runs the complete suite and pushes (`.claude/agents/builder.md`, *Cheap checks only*; owner, 2026-10-31).
