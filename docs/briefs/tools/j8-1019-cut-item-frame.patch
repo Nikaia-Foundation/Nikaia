@@ -1,0 +1,174 @@
+From e9de602c7b3720774a21fbd0fa205dab56ff729d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 31 Oct 2026 22:58:00 +0000
+Subject: [PATCH] Repetitions: a cut leaving an element keeps its item N frame
+
+A repetition numbered an element's error with `item N` only when it
+backtracked; a cut inside the element (`"{" => digit+ "}"`) took the
+`Err(e) => return Err(e)` arm and lost the index, so a list element that
+failed after its cut could not be told from the others. The arms of
+repeat_recording_bounded, repeat_counting_bounded and fold_loop now number
+a Cut with the same index (the fold after `stopped`, as before) and return
+it as a Cut; the streamed fold numbers a Fail::Cut in its item loop and in
+the diagnosing attempt where the item index is known. record, priorities
+and the rendered form are unchanged; a parse that succeeds runs the same
+code. tests/cut_test.rs.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01UVxJDvLe1uS47UcqA9y1U2
+---
+ CHANGELOG.md      | 10 ++++++++++
+ src/rt.rs         |  7 +++++++
+ src/rt/stream.rs  | 11 +++++++++++
+ tests/cut_test.rs | 48 ++++++++++++++++++++++++++++++++++++++++++++++-
+ 4 files changed, 75 insertions(+), 1 deletion(-)
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 12e4125..d923bfc 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -398,6 +398,16 @@
+ 
+ ### Fixed
+ 
++- **A cut leaving the element of a repetition keeps its `item N` frame.**
++  Every repetition (`repeat_recording_bounded`, `repeat_counting_bounded`,
++  the folds, and the streamed fold's item loop and diagnosing attempt)
++  numbered an element's error with `item N` only when it backtracked; a cut
++  inside the element (`"{" => digit+ "}"`) left the loop unnumbered, so the
++  error could not say which element failed. A cut is now numbered with the
++  same index and stays a cut. Only the failure path changes, and a grammar
++  without a cut inside a repetition reports exactly as before.
++  `tests/cut_test.rs`.
++
+ - **A user type named `S`, `E` or `B` is no longer hidden by the generated
+   code.** The generated functions named their state and error type
+   parameters `S` and `E`, and the callback's break value of
+diff --git a/src/rt.rs b/src/rt.rs
+index b69f1e3..f5d258c 100644
+--- a/src/rt.rs
++++ b/src/rt.rs
+@@ -1010,6 +1010,7 @@ where
+                     input.reset(&cp);
+                     break;
+                 }
++                Err(ErrMode::Cut(e)) => return Err(ErrMode::Cut(e.item(items.len() + 1))),
+                 Err(e) => return Err(e),
+             }
+         }
+@@ -1087,6 +1088,7 @@ where
+                     input.reset(&cp);
+                     break;
+                 }
++                Err(ErrMode::Cut(e)) => return Err(ErrMode::Cut(e.item(seen + 1))),
+                 Err(e) => return Err(e),
+             }
+         }
+@@ -1254,6 +1256,11 @@ macro_rules! fold_loop {
+                     $input.reset(&cp);
+                     break;
+                 }
++                Err(ErrMode::Cut(e)) => {
++                    let e = e.item(base + seen + 1);
++                    stopped($input, seen, start);
++                    return Err(ErrMode::Cut(e));
++                }
+                 Err(e) => {
+                     stopped($input, seen, start);
+                     return Err(e);
+diff --git a/src/rt/stream.rs b/src/rt/stream.rs
+index b15a903..38ff68a 100644
+--- a/src/rt/stream.rs
++++ b/src/rt/stream.rs
+@@ -517,6 +517,12 @@ impl<'c, K: Kind, R: Read, S: Clone + std::fmt::Debug, const TRACK: bool>
+                         break Stop::Ended;
+                     }
+                     Err(fail) => {
++                        // A cut leaving the item is numbered as a backtrack
++                        // leaving it is: `in item 3` either way.
++                        let fail = match fail {
++                            Fail::Cut(e) => Fail::Cut(e.map(|e| e.item(*n + 1))),
++                            other => other,
++                        };
+                         input.reset(&cp);
+                         if let Some(s) = snapshot {
+                             input.state.user_state = s;
+@@ -872,6 +878,11 @@ impl<'c, K: Kind, R: Read, S: Clone + std::fmt::Debug, const TRACK: bool>
+             Err(fail) => {
+                 let cut = matches!(fail, Fail::Cut(_));
+                 let e = fail.error().map(|mut e| {
++                    // A cut leaving an item is numbered as a backtrack
++                    // leaving it is.
++                    if let (true, Some(k)) = (cut, item) {
++                        e = e.item(k);
++                    }
+                     for r in rules.iter().rev() {
+                         e.push_rule(r);
+                     }
+diff --git a/tests/cut_test.rs b/tests/cut_test.rs
+index 0724600..526cf5b 100644
+--- a/tests/cut_test.rs
++++ b/tests/cut_test.rs
+@@ -6,8 +6,10 @@
+ //! delimiters, repetitions, and between the alternatives of a rule. These
+ //! tests answer it by behaviour.
+ 
+-use winnow_grammar::grammar;
++use winnow::prelude::*;
++use winnow::stream::{LocatingSlice, Stateful};
+ use winnow_grammar::testing::WinnowTestExt;
++use winnow_grammar::{grammar, ParseContext};
+ 
+ grammar! {
+     grammar Cut {
+@@ -135,3 +137,47 @@ fn a_cut_reaches_past_the_rule_it_is_written_in() {
+     // second alternative is never tried.
+     Reach::parse_caller().parse_test("k?").assert_failure();
+ }
++
++// -----------------------------------------------------------------------------
++// A cut leaving the element of a repetition is numbered as a backtrack leaving
++// it is: the `item N` frame says which element failed either way.
++// -----------------------------------------------------------------------------
++
++grammar! {
++    grammar Numbered {
++        pub list -> () = "[" item ("," item)* "]" -> { () }
++        rule item -> () = "{" => digit+ "}" -> { () }
++
++        pub pairs -> usize = xs:("a" => "b")* "c" -> { xs.len() }
++    }
++}
++
++macro_rules! rule_stack {
++    ($parser:expr, $src:expr) => {{
++        let mut s = Stateful {
++            state: ParseContext::<()>::default(),
++            input: LocatingSlice::new($src),
++        };
++        $parser.parse_next(&mut s).unwrap_err().rule_stack.clone()
++    }};
++}
++
++#[test]
++fn a_cut_leaving_a_repetition_element_keeps_its_number() {
++    // The third `item` is the second element of `("," item)*`.
++    let stack = rule_stack!(Numbered::parse_list(), "[{1},{2},{x}]");
++    let at = stack.iter().position(|r| r == "item");
++    assert_eq!(
++        at.map(|i| stack[i + 1].as_str()),
++        Some("item 2"),
++        "{stack:?}"
++    );
++
++    // The first `item` stands outside the repetition: no frame from it
++    // between `item` and `list` (the `item 1` below `item` is `digit+`'s).
++    let stack = rule_stack!(Numbered::parse_list(), "[{x}]");
++    assert_eq!(stack, vec!["item 1", "item", "list"]);
++
++    let stack = rule_stack!(Numbered::parse_pairs(), "ababac");
++    assert!(stack.iter().any(|r| r == "item 3"), "{stack:?}");
++}
+-- 
+2.43.0
+
