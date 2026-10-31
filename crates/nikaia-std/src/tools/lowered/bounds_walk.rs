@@ -1168,6 +1168,7 @@ pub(crate) fn bounding_length(walk: &mut BoundsWalk, receiver: &Expr, name: &str
 pub(crate) fn bounding_length_named(walk: &mut BoundsWalk, name: &str, sized: bool) -> i64 {
     let length = length_of(name);
     let n = walk.arena.var(&length);
+    walk.typed.insert(length.to_string(), String::from("i64"));
     if sized {
         if !walk.axioms.contains_key(&length) {
             let zero = walk.arena.int(0);

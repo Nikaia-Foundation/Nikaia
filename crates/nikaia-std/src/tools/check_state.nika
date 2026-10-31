@@ -570,6 +570,10 @@ pub struct CheckState {
     /// beside it (`collect_copies`): what a view of a value is read as, where
     /// `Checked::copies` is what this file derives `Copy` for.
     pub copies_in_the_package: collections::BTreeSet[String],
+    /// **What each type another file of the package declares is made of**
+    /// (`CheckWorld::parts_beside`), kept for `takes_space` (#1053): a list
+    /// of another file's struct is as sized as one of this file's.
+    pub parts_beside: collections::BTreeMap[String, Vec[Ty]],
     /// Every enum declared here, with its variant names.
     pub enums: collections::BTreeMap[String, collections::BTreeSet[String]],
     /// What each declared `enum`'s variants **hold**, flattened across them.

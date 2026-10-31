@@ -303,6 +303,7 @@ pub struct CheckState {
     pub findings: Vec<CheckFinding>,
     pub structs: collections::BTreeMap<String, Vec<FieldContract>>,
     pub copies_in_the_package: collections::BTreeSet<String>,
+    pub parts_beside: collections::BTreeMap<String, Vec<Ty>>,
     pub enums: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub enum_payloads: collections::BTreeMap<String, Vec<Ty>>,
     pub variant_parts: collections::BTreeMap<String, Vec<Ty>>,

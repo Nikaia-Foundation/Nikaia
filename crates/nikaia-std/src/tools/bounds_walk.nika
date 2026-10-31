@@ -145,7 +145,8 @@ struct BoundsWalk {
     /// name read both ways - one `xs` shadowing another - gets no axiom.
     unsized_names: collections::BTreeSet[String],
     /// **`0 <= len(x)` for those** (#439): a length is never negative, however
-    /// little its elements take - only the upper bound depends on memory.
+    /// little its elements take - only the upper bound depends on memory. Its
+    /// upper bound is its type's (`typed`, ADR-385 D1).
     floors: collections::BTreeMap[String, i64],
     /// Names a lambda, a task or an `overlap` branch changes: they may change
     /// whenever one runs, so no fact is kept about them anywhere.
@@ -201,8 +202,9 @@ struct BoundsWalk {
     /// the loop is left, so nothing past the loop reads it.
     leaving: collections::BTreeSet[i64],
     /// **The whole-number parameters the body never binds again**, with
-    /// their types: a value of such a type is what a goal may be stated
-    /// against (`bounding_relative`).
+    /// their types, and every length the walk read, an `i64` (ADR-385 D1):
+    /// a value of such a type is what a goal may be stated against
+    /// (`bounding_relative`).
     typed: collections::BTreeMap[String, String],
 }
 
@@ -1723,11 +1725,16 @@ fn bounding_length(mut walk: BoundsWalk, receiver: ref Expr, name: ref String, c
     return bounding_length_named(walk, name, context.sized.contains(node_key(receiver)))
 }
 
-/// `name.len()` as a number of the walk: not negative, and below 2^60 where
-/// the elements take space (`sized`).
+/// `name.len()` as a number of the walk: not negative, an `i64` (ADR-385
+/// D1), and below 2^60 where the elements take space (`sized`).
 fn bounding_length_named(mut walk: BoundsWalk, name: ref String, sized: bool) -> i64 {
     let length = length_of(name)
     let n = walk.arena.var(length)
+    // **Every length is at most 2^63 - 1** (ADR-385 D1): `len()` hands back
+    // an `i64`, whatever its elements take, so a goal may be stated against
+    // it as against an `i64` parameter (`bounding_relatives`): `i < n`
+    // proves `i + 1 <= n`. No constant of 2^63 goes to the solver (#444).
+    walk.typed.insert(length.clone(), "i64")
     if sized {
         if !walk.axioms.contains_key(length) {
             let zero = walk.arena.int(0)

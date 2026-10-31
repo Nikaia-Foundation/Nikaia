@@ -140,6 +140,7 @@ impl CheckState {
             }
         }
         self.collect_library_enums(world);
+        self.parts_beside = world.parts_beside.to_owned();
         for item in world.here.items.iter() {
             match &item.node {
                 Item::Fn { .. } => { self.bounds_declared_by(world, &item.node, None); },

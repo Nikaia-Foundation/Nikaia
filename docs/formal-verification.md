@@ -74,20 +74,21 @@ the proofs.
   *`r` is not a whole number the prover reads*), quantifiers over lists,
   recursive definitions and induction, strings, heap shapes, termination,
   postconditions (`ensures`), lemmas.
-* On the compiler's own code, measured on a784e6d with
+* On the compiler's own code, measured on the tree of the commit that
+  builds ADR-385 D1 (#1053, on 9bdbd5a) with
   `nikaia lower-std --bounds --asserts`, which checks each of the 247
   `tools/*.nika` files with the rest of the package beside it, as
-  `lower-std` does (#1053), summed by `scripts/proved.nika`: **2,676
-  indexes, 1,543 proved (57.7 %); 1,633 arithmetic steps, 840 proved
-  (51.4 %)**, no file refused. With `--optimization prove-through-loops:on`:
-  1,575 indexes proved (58.9 %), 846 steps (51.8 %). The tools hold no
+  `lower-std` does (#1053), summed by `scripts/proved.nika`: **2,677
+  indexes, 1,544 proved (57.7 %); 1,633 arithmetic steps, 923 proved
+  (56.5 %)**, no file refused. With `--optimization prove-through-loops:on`:
+  1,576 indexes proved (58.9 %), 929 steps (56.9 %). The tools hold no
   `assert` yet (`claims: 0 asserts`) and 3 `panic(` calls in 3 files, one
   of them in text the lowering writes for a test build. So the checks left
-  at run time number 1,929, and 1,891 with loops proved through: that
+  at run time number 1,846, and 1,808 with loops proved through: that
   figure is the lane's target, and 0 would be claim (b). Most of what stays
-  checked is a value no fact bounds: of the 1,926 unproved sites, 709 read
-  a counter, a loop or a length without a fact, 476 are a counter a loop
-  changes, and 383 a parameter no precondition bounds (#432, #383, #388).
+  checked is a value no fact bounds: of the 1,843 unproved sites, 708 read
+  a counter, a loop or a length without a fact, 396 are a counter a loop
+  changes, and 382 a parameter no precondition bounds (#432, #383, #388).
   An earlier count with `nikaia check --bounds` on each file alone listed
   fewer sites, because `check` refuses a file that names another file's types
   and the code it cannot type drops out. The rest keep their checks: a defect

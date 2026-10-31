@@ -1,0 +1,4 @@
+bounds in tests/length_of_zero_size_elements.nika: 0 indexes, 0 proved; 3 operations, 2 proved
+    12  index += 1  proved
+    15  k += 1      proved
+    17  index + k   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)

@@ -98,6 +98,10 @@ impl CheckState {
             }
             return true;
         }
+        if self.parts_beside.contains_key(name) {
+            let parts = match *nikaia_std::index::get(&self.parts_beside, name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            return self.any_takes_space(parts, seen);
+        }
         false
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

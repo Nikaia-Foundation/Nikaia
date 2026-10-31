@@ -180,6 +180,7 @@ impl CheckState {
             }
         }
         self.collect_library_enums(world)
+        self.parts_beside = world.parts_beside.clone()
         for item in world.here.items {
             match item.node {
                 Item::Fn { .. } => self.bounds_declared_by(world, item.node, null),

@@ -73,6 +73,7 @@ pub(super) fn hollow() -> Box<CheckState> {
         findings: Vec::new(),
         structs: BTreeMap::new(),
         copies_in_the_package: BTreeSet::new(),
+        parts_beside: BTreeMap::new(),
         enums: BTreeMap::new(),
         enum_payloads: BTreeMap::new(),
         variant_parts: BTreeMap::new(),

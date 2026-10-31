@@ -1,0 +1,22 @@
+// #1053, ADR-385 D1: every length is at most 2^63 - 1, whatever its
+// elements take. `Z` takes no space, so `hs.len()` has no bound below 2^60;
+// `index < hs.len()` still proves `index += 1`, and `k`, which a `for` over
+// `hs` grows once a turn, stays below `hs.len()` before it grows (ADR-361
+// D13). `index + k` stays checked: two lengths together may pass 2^63 - 1.
+struct Z {}
+
+fn a(hs: ref Vec[Z]) -> i64 {
+	let mut index = 0
+	let mut k = 0
+	while index < hs.len() {
+		index += 1
+	}
+	for _h in hs {
+		k += 1
+	}
+	return index + k
+}
+
+fn main() {
+	println(f"{a([Z {}])}")
+}

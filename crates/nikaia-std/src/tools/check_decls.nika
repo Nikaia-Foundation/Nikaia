@@ -184,6 +184,13 @@ impl CheckState {
             }
             return true
         }
+        // **A type another file of the package declares** (#1053): a struct
+        // takes space where a field does, an enum where a payload does (one
+        // with two variants or more always does; not knowing it costs a check).
+        if self.parts_beside.contains_key(name) {
+            let parts = self.parts_beside[name] ?? return false
+            return self.any_takes_space(parts, seen)
+        }
         return false
     }
 
