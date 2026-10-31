@@ -1,2 +1,3 @@
-y23-scalar-written.md
-y21-events.md
+y24-1070-by-value-enum-not-a-view.md
+y25-1071-list-of-views-literal-extend.md
+y26-1072-payload-view-field.md
