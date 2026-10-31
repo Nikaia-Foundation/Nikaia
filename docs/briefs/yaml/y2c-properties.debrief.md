@@ -1,12 +1,10 @@
-1. **What cost the most:** isolating defect 1 took about 8 runs of probes and bisects.
-   - The NK1185 points at `is_float`, which the draft did not change. I first had to confirm that develop's own code checks.
-   - Removing guards one at a time in the package copy gave the same refusal every time (variants b, c and the four "keep one guard" runs). Only a standalone probe with a second caller showed the cause.
-   - Finding defect 2 meant one full package test run on a scratch copy. It was useful, but it was the longest single step.
-2. **What I looked up:** almost nothing beyond what the brief named: the #1026 probe in the y8 brief, and the y2 report and debrief. I needed no ADR, converter or file locations. My first probe also hit #1001 (a group like `("-" | digit)`). builder-facts lists that defect, but I didn't think of it while writing the probe.
-3. **Checks:**
-   - Useful: the pre-flight probe, `nikaia check` on the draft, the minimal probes p4 and p6, and `nikaia lower` to read the generated line 560.
-   - Wasted:
-     - probe p2, which ran into #1001;
-     - bisect variants b and c, which repeated what the "keep one guard" loop showed;
-     - the package test run as a whole. A single `nikaia lower` plus `nikaia run` on one test would have found defect 2 faster.
-4. **One change:** before writing a "start from the draft" brief, the architect applies the draft to develop and runs `nikaia check` once, plus one package test. That takes seconds to minutes, and it would have shown NK1185 and the `s` scope error. Both compiler fixes could then have been scheduled ahead of this brief, as the y2 debrief already asked for #1026. Second: builder-facts could say that a call inside a grammar guard is a separate case for the text-tier pass and the guard-scope lowering, so probe it alone.
+1. **Biggest cost:** I ran the fmt check only at the end. Applying the draft, writing the test, blessing it and fixing the comments all came before the `fmt::every_nika_file` scan (about 50 s), which then failed on #1015. Running `nikaia fmt` on a copy of the draft right after applying it would have shown the blocker in the first five turns. The fast build at pre-flight was needed: the binary was older than 262d5fa6, and I could only tell from the rebuild because commit times are rebase times.
+2. **What I looked up that the brief could have given:**
+   - Whether #1015 was still open. The brief listed the open defects #1038 and #1037 but not #1015, though builder-facts mentions it.
+   - What fmt does with a hand-broken rule line. It moves the continuation to one tab, which ruled out the only layout fix.
+   - The pattern of the earlier package commits: they include `nikaia.contracts`, `nikaia.derived`, `nikaia.lock` and `nikaia.proofs` along with the source.
+3. **Checks run:**
+   - Useful: the two pre-flight guard tests (via `nikaia run` copies), `nikaia check`, three package test runs, the fmt scan, `pre-push-check`, and four small fmt probes that isolated the trigger.
+   - Wasted: one package run that only printed error messages for inspection. The message edits and the final package run after comment-only changes were also moot once fmt blocked.
+   - Not needed: the #1037 test on its own, since the package tests cover it.
+4. **The change that would have saved the most:** add to the brief's pre-flight, and to builder.md's step for starting from a draft: "after applying a draft, run `nikaia fmt` on a scratch copy of every changed `.nika` before writing anything". The architect checked `check` and `test` on the applied draft but not fmt. A pre-flight that runs the whole package gate (including fmt) on the bare draft would have stopped this run, or the brief itself, at once.
