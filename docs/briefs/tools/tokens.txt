@@ -2,3 +2,4 @@
 /home/user/Nikaia/docs/briefs/tools/j2-1019-match-on-a-kind.md 655643 7
 /home/user/Nikaia/docs/briefs/tools/architect-task.md 5045324 77
 /home/user/Nikaia/docs/briefs/tools/j3-1019-meta-field.md 5211226 85
+/home/user/Nikaia/docs/briefs/tools/architect-task.md 2013198 43
