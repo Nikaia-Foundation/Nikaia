@@ -160,7 +160,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   guessing.
 * **Commit with the script.** Before committing, add to the report
   `Files: <paths, space-separated>`, `Commit: <subject>` and, where it applies,
-  `Fixes: #N[, #M]` or `Part: #N`; then run `target/fast/nikaia run
+  `Fixes: #N[, #M]` or `Part: #N` (never `Fixes: none`: the script writes
+  it into the message as `Fixes none`, y2c 2026-10-31; leave the line out or
+  write `Part: #N`); then run `target/fast/nikaia run
   scripts/commit.nika -- REPORT` (`--dry-run` shows the message). It refuses an
   unchanged listed file or a staged file not listed, adds exactly the listed
   files, writes the message (subject, `Changelog:`, `Fixes`, the brief's
