@@ -716,7 +716,7 @@ and `rule WS = "" { }` skips nothing.
 | element | matches | yields |
 | :--- | :--- | :--- |
 | `"text"` | that text, exactly | nothing; a label on it binds the text matched |
-| `x:p` | `p`, and binds what it yields to `x` for the action | — |
+| `x:p` | `p`, and binds what it yields to `x` for the action; a name below a repeat, a counted repeat, a choice or a built-in's argument other than `text(..)` and a labelled `span(..)` is not in the action's scope (`xs:(d:P ",")*` binds `xs`, not `d`) | — |
 | `p q` | `p` then `q` (whitespace between them in a syntactic rule) | each binding |
 | `p \| q` | `p`, or where `p` fails without a cut, `q` | the alternative's action |
 | `p => q` | the **cut**: after `p`, `q` must follow; a failure in `q` is an error and no enclosing alternative is retried | as `p q` |
@@ -728,7 +728,7 @@ and `rule WS = "" { }` skips nothing.
 | `not(p)` | succeeds where `p` does not match, consuming nothing | nothing |
 | `peek(p)` | `p` without consuming it | as `p` |
 | `until(p)` | everything up to `p`, not consuming `p`; an error where `p` never comes | text |
-| `text(p)` | `p`, handing back the text it covered instead of its value; a name inside `p` is bound as it is without the `text(..)` around it, in the same one pass (`s:text(ps:P*)`), and a guard after it reads it too | text |
+| `text(p)` | `p`, handing back the text it covered instead of its value; a name inside `p` is bound as it is without the `text(..)` around it, bound or not, in the same one pass (`s:text(ps:P*)`, `text(ps:P*)`), and a guard after it reads it too | text |
 | `bytes(p)` | `p`, handing back the bytes it covered, unchecked | a view of the input's bytes |
 | `span(p)` | `p`, handing back the range it covered | over text a `text::Match` of the input; over `Bytes` a `Span` (two `u32`) |
 | `here` | the position, consuming nothing | over text a `text::Pos` of the input; over `Bytes` a `u32` |

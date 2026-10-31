@@ -9,6 +9,19 @@ impl EmitState {
     /// One pattern, its span recorded in the source map.
     pub fn emit_pattern[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref Spanned[Pattern]) sync throws {
         let st = out.mark()
+        // **An unbound `text(p)` where `p` binds names** is written as the
+        // bound one with a label of the lowering's own (#1039), so that what
+        // `p` binds is the alternative's as well.
+        if emit_is_a_binding_text(world, walk, pattern.node) {
+            match pattern.node {
+                Pattern::Ref { args, .. } => {
+                    self.emit_text_parts(world, walk, out, host, emit_hidden_text(pattern), args)
+                    out.record(pattern.span, st)
+                    return
+                },
+                else => {},
+            }
+        }
         // What a sequence, a group or a binding binds is the alternative's;
         // below anything else it stays there (#1013).
         let nested = walk.grammar_nested
@@ -386,7 +399,7 @@ fn emit_is_a_binding_text(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref
 fn emit_texts_a_guard_reads(world: ref EmitWorld, walk: ref EmitWalk, mut out: EmitOut, patterns: ref Vec[Spanned[Pattern]], at: i64) {
     let mut names: Vec[String] = []
     let mut ranges: Vec[String] = []
-    emit_text_bindings(world, walk, patterns[at].node, names, ranges)
+    emit_text_bindings(world, walk, patterns[at], names, ranges)
     for (name, range) in names.iter().zip(ranges.iter()) {
         if patterns.iter().skip(at + 1).any(fn(later) { emit_guard_reads(world, later.node, name) }) {
             out.push(f" {name}:{emit_covered_rule()}(at = {range})")
@@ -411,11 +424,11 @@ fn emit_guard_reads(world: ref EmitWorld, pattern: ref Pattern, name: String) ->
 
 /// Whether a guard of an alternative reads a bound `text(..)` of it, so
 /// that the grammar needs the `__nikaia_covered` rule (#1033).
-fn emit_reads_a_text_in_a_guard(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
+fn emit_reads_a_text_in_a_guard(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Spanned[Pattern]) -> bool {
     let mut names: Vec[String] = []
     let mut ranges: Vec[String] = []
     emit_text_bindings(world, walk, pattern, names, ranges)
-    return names.iter().any(fn(name) { emit_guard_reads(world, pattern, name) })
+    return names.iter().any(fn(name) { emit_guard_reads(world, pattern.node, name) })
 }
 
 /// The rule a guard's bound `text(..)` is read by (#1033).
@@ -437,13 +450,19 @@ fn emit_binds_a_name(pattern: ref Pattern) -> bool {
     }
 }
 
-/// Whether an element of a bound `text(..)` is itself a bound `text(..)`
-/// whose pattern binds names: it writes its own ranges.
+/// Whether an element of a bound `text(..)` is itself a `text(..)`, bound
+/// or not, whose pattern binds names: it writes its own ranges.
 fn emit_text_nested(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
     return match pattern {
         Pattern::Bind { pat, .. } => emit_is_a_binding_text(world, walk, emit_ungrouped(pat).node),
-        else => false,
+        else => emit_is_a_binding_text(world, walk, pattern),
     }
+}
+
+/// **The label of an unbound `text(p)` whose `p` binds names** (#1039): the
+/// lowering's own (`__nikaia_`), one per place in the source.
+fn emit_hidden_text(pattern: ref Spanned[Pattern]) -> String {
+    return f"__nikaia_text_{pattern.span.start}"
 }
 
 /// **Where the text bound to `name` starts or ends** (`at` is `from` or
@@ -469,6 +488,11 @@ fn emit_text_edge_of(world: ref EmitWorld, walk: ref EmitWalk, name: String, par
                     Pattern::Ref { args: within, .. } => return emit_text_edge(world, walk, emit_text(world, inner), within, at),
                     else => {},
                 }
+            }
+        },
+        Pattern::Ref { args: within, .. } => {
+            if emit_is_a_binding_text(world, walk, parts[k].node) {
+                return emit_text_edge(world, walk, emit_hidden_text(parts[k]), within, at)
             }
         },
         else => {},

@@ -100,35 +100,46 @@ fn emit_span_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pat
 /// **The names bound to a `text(p)` whose `p` binds names** (#1013), each
 /// with the ranges it starts and ends in (`emit_text_edge`): the action reads
 /// the text between them.
-fn emit_text_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, mut found: Vec[String], mut ranges: Vec[String]) {
-    match pattern {
+fn emit_text_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Spanned[Pattern], mut found: Vec[String], mut ranges: Vec[String]) {
+    match pattern.node {
         Pattern::Bind { name, pat: grouped } => {
             let pat = emit_ungrouped(grouped)
             match pat.node {
                 Pattern::Ref { args, .. } => {
                     if emit_is_a_binding_text(world, walk, pat.node) {
-                        let said = emit_text(world, name)
-                        let from = emit_text_edge(world, walk, said, args, "from")
-                        let to = emit_text_edge(world, walk, said, args, "to")
-                        found.push(said)
-                        ranges.push(f"{from}.start..{to}.end")
-                        for arg in args {
-                            emit_text_bindings(world, walk, arg.node, found, ranges)
-                        }
+                        emit_text_binding(world, walk, emit_text(world, name), args, found, ranges)
                     }
                 },
                 else => {},
             }
         },
-        Pattern::Seq(parts) => {
-            for part in parts {
-                emit_text_bindings(world, walk, part.node, found, ranges)
+        // an unbound one, under the lowering's own label (#1039)
+        Pattern::Ref { args, .. } => {
+            if emit_is_a_binding_text(world, walk, pattern.node) {
+                emit_text_binding(world, walk, emit_hidden_text(pattern), args, found, ranges)
             }
         },
-        Pattern::Group(pat) => emit_text_bindings(world, walk, pat.node, found, ranges),
+        Pattern::Seq(parts) => {
+            for part in parts {
+                emit_text_bindings(world, walk, part, found, ranges)
+            }
+        },
+        Pattern::Group(pat) => emit_text_bindings(world, walk, pat, found, ranges),
         // below a repeat, a choice or a built-in a bound `text(..)` is the
         // backend's own (`grammar_nested`)
         else => {},
+    }
+}
+
+/// One `text(..)` of `emit_text_bindings` bound to `said`, and those nested
+/// in it.
+fn emit_text_binding(world: ref EmitWorld, walk: ref EmitWalk, said: String, args: ref Vec[Spanned[Pattern]], mut found: Vec[String], mut ranges: Vec[String]) {
+    let from = emit_text_edge(world, walk, said, args, "from")
+    let to = emit_text_edge(world, walk, said, args, "to")
+    found.push(said)
+    ranges.push(f"{from}.start..{to}.end")
+    for arg in args {
+        emit_text_bindings(world, walk, arg, found, ranges)
     }
 }
 
@@ -302,7 +313,7 @@ impl EmitState {
                 spans = spans || emit_writes_a_built_in(world, walk, alt.pattern.node, "span", 1)
                 heres = heres || emit_writes_a_built_in(world, walk, alt.pattern.node, "here", 0)
                 counts = counts || emit_writes_a_built_in(world, walk, alt.pattern.node, "count", 1)
-                covers = covers || emit_reads_a_text_in_a_guard(world, walk, alt.pattern.node)
+                covers = covers || emit_reads_a_text_in_a_guard(world, walk, alt.pattern)
             }
         }
         // **A guard reads a bound `text(..)` through a rule** (#1033): the
@@ -405,7 +416,7 @@ impl EmitState {
                     }
                     let mut as_texts: Vec[String] = []
                     let mut covered: Vec[String] = []
-                    emit_text_bindings(world, walk, alt.pattern.node, as_texts, covered)
+                    emit_text_bindings(world, walk, alt.pattern, as_texts, covered)
                     for (name, range) in as_texts.iter().zip(covered.iter()) {
                         if bytes {
                             prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {range})?; "

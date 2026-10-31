@@ -6,6 +6,16 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub fn emit_pattern<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), Box<dyn std::error::Error>> {
         let st = out.mark();
+        if emit_is_a_binding_text(world, &walk, &pattern.node) {
+            match &pattern.node {
+                Pattern::Ref { args, .. } => {
+                    self.emit_text_parts(world, walk, out, host, emit_hidden_text(pattern), args)?;
+                    out.record(&pattern.span, st);
+                    return Ok(());
+                },
+                _ => { },
+            }
+        }
         let nested = walk.grammar_nested;
         walk.grammar_nested = match &pattern.node {
             Pattern::Seq(_) => nested,
@@ -297,7 +307,7 @@ pub(crate) fn emit_is_a_binding_text(world: &EmitWorld<'_, '_, '_, '_>, walk: &E
 pub(crate) fn emit_texts_a_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, out: &mut EmitOut, patterns: &[Spanned<Pattern>], at: i64) {
     let mut names: Vec<String> = vec![];
     let mut ranges: Vec<String> = vec![];
-    emit_text_bindings(world, walk, &nikaia_std::index::get(&patterns, nikaia_std::index::at(at)).node, &mut names, &mut ranges);
+    emit_text_bindings(world, walk, nikaia_std::index::get(&patterns, nikaia_std::index::at(at)), &mut names, &mut ranges);
     for (name, range) in names.iter().zip(ranges.iter()) { if patterns.iter().skip(nikaia_std::count::of(at + 1)).any(|later| { emit_guard_reads(world, &later.node, name) }) { out.push(&format!(" {}:{}(at = {})", name, emit_covered_rule(), range)); } }
 }
 
@@ -315,11 +325,11 @@ pub(crate) fn emit_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Patt
     }
 }
 
-pub(crate) fn emit_reads_a_text_in_a_guard(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
+pub(crate) fn emit_reads_a_text_in_a_guard(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Spanned<Pattern>) -> bool {
     let mut names: Vec<String> = vec![];
     let mut ranges: Vec<String> = vec![];
     emit_text_bindings(world, walk, pattern, &mut names, &mut ranges);
-    names.iter().any(|name| { emit_guard_reads(world, pattern, name) })
+    names.iter().any(|name| { emit_guard_reads(world, &pattern.node, name) })
 }
 
 pub(crate) fn emit_covered_rule() -> &'static str { "__nikaia_covered" }
@@ -340,9 +350,11 @@ pub(crate) fn emit_binds_a_name(pattern: &Pattern) -> bool {
 pub(crate) fn emit_text_nested(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
     match pattern {
         Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_is_a_binding_text(world, walk, &emit_ungrouped(pat).node) },
-        _ => false,
+        _ => emit_is_a_binding_text(world, walk, pattern),
     }
 }
+
+pub(crate) fn emit_hidden_text(pattern: &Spanned<Pattern>) -> String { format!("__nikaia_text_{}", pattern.span.start) }
 
 pub(crate) fn emit_text_edge(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, args: &[Spanned<Pattern>], at: &str) -> String {
     if args.len() == 1 {
@@ -367,6 +379,7 @@ pub(crate) fn emit_text_edge_of(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWa
                 }
             }
         },
+        Pattern::Ref { args: within, .. } => { if emit_is_a_binding_text(world, walk, &nikaia_std::index::get(&parts, nikaia_std::index::at(k)).node) { return emit_text_edge(world, walk, &emit_hidden_text(nikaia_std::index::get(&parts, nikaia_std::index::at(k))), within, at); } },
         _ => { },
     }
     if parts.len() == 1 { return format!("__nikaia_{}_from", name); }

@@ -40,6 +40,28 @@ pub(crate) fn grammar_a_text_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn grammar_a_span_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> bool {
+    match pattern {
+        Pattern::Ref { name, generics, args } => { let name = *name; generics.is_empty() && args.len() == 1 && world.words.resolve(name) == "span" && !rules.contains(world.words.resolve(name)) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_ungrouped(pattern: &Pattern) -> &Pattern {
+    match pattern {
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); match &inner.node {
+            Pattern::Seq(_) => pattern,
+            Pattern::Choice(_) => pattern,
+            _ => grammar_ungrouped(&inner.node),
+        } },
+        _ => pattern,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" }
 
 impl CheckState {
@@ -129,19 +151,14 @@ impl CheckState {
                 let ty = self.pattern_type(world, &pat.node, rules);
                 self.next_binding = self.next_binding + 1;
                 out.push(CheckLocal::free(world.words.resolve(name).to_string(), ty, self.next_binding));
-                for inner in self.bindings_of(world, &pat.node, rules) { out.push(inner); }
+                let inner = grammar_ungrouped(&pat.node);
+                match inner {
+                    Pattern::Ref { args, .. } if grammar_a_span_call(world, inner, rules) => { for bound in self.bindings_of(world, &nikaia_std::index::get(&args, 0).node, rules) { out.push(bound); } },
+                    _ => { for bound in self.bindings_of(world, &pat.node, rules) { out.push(bound); } },
+                }
             },
             Pattern::Seq(parts) => { for part in parts.iter() { for inner in self.bindings_of(world, &part.node, rules) { out.push(inner); } } },
-            Pattern::Choice(parts) => { for part in parts.iter() { for inner in self.bindings_of(world, &part.node, rules) { out.push(inner); } } },
-            Pattern::Ref { args, .. } => { for arg in args.iter() { for inner in self.bindings_of(world, &arg.node, rules) { out.push(inner); } } },
-            Pattern::Repeat { pat, .. } => {
-                let pat = nikaia_std::boxed::open(pat);
-                for inner in self.bindings_of(world, &pat.node, rules) { out.push(inner); }
-            },
-            Pattern::Counted { pat, .. } => {
-                let pat = nikaia_std::boxed::open(pat);
-                for inner in self.bindings_of(world, &pat.node, rules) { out.push(inner); }
-            },
+            Pattern::Ref { args, .. } if grammar_a_text_call(world, pattern, rules) => { for arg in args.iter() { for inner in self.bindings_of(world, &arg.node, rules) { out.push(inner); } } },
             Pattern::Group(pat) => {
                 let pat = nikaia_std::boxed::open(pat);
                 for inner in self.bindings_of(world, &pat.node, rules) { out.push(inner); }
@@ -273,6 +290,11 @@ impl CheckState {
                 let pat = nikaia_std::boxed::open(pat);
                 self.grammar_values(world, host, gram, pat, rules, scope.to_owned());
                 return scope;
+            },
+            Pattern::Ref { args, .. } if grammar_a_text_call(world, &pattern.node, rules) => {
+                let mut out = scope;
+                for arg in args.iter() { out = self.grammar_values(world, host, gram, arg, rules, out); }
+                return out;
             },
             Pattern::Ref { name, args, .. } => {
                 let name = *name;

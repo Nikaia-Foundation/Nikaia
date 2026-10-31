@@ -1,0 +1,16 @@
+// A name below a repeat is not the action's (#1039, Part II 10): `p*`
+// yields a list of what `p` yields, and nothing inside it binds a name for
+// the alternative.
+grammar G {
+	rule WS = "" -> { }
+	rule Ch -> i64 = x:any if(x >= '0' && x <= '9') -> { 1 }
+	entry rule plain -> String = (d:Ch ",")* ";" -> { f"{d}" }
+}
+
+fn main() {
+	let r = G::plain("1,2,;") catch {
+		println("error")
+		return
+	}
+	println(r)
+}

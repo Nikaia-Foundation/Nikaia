@@ -1,0 +1,33 @@
+// An unbound `text(..)` binds the names inside it as a bound one does
+// (#1039, Part II 10): the action reads them, and so does a guard after it,
+// also inside a bound `text(..)` around it.
+grammar G {
+	rule WS = "" -> { }
+	rule Ch -> i64 = x:any if(x >= '0' && x <= '9') -> { 1 }
+	entry rule plain -> String = text(d:Ch+) ";" -> { f"{d.len()}" }
+	entry rule nested -> String = s:text(text(d:Ch+) "-") ";" -> { f"{s} {d.len()}" }
+	entry rule guarded -> String = text(d:Ch+) if(d.len() > 1) ";" -> { "ok" }
+}
+
+fn main() {
+	let a = G::plain("12;") catch {
+		println("error")
+		return
+	}
+	println(a)
+	let b = G::nested("12-;") catch {
+		println("error")
+		return
+	}
+	println(b)
+	let c = G::guarded("12;") catch {
+		println("error")
+		return
+	}
+	println(c)
+	let refused = G::guarded("1;") catch {
+		println("error")
+		return
+	}
+	println(refused)
+}
