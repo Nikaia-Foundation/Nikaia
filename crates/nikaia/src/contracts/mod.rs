@@ -166,13 +166,6 @@ pub trait LedgerOps: Sized {
         units: &[&Parsed],
         library: &Ledger,
     ) -> (Self, Vec<crate::check::Checked>, sync::Noted);
-    fn function(
-        &self,
-        parsed: &Parsed,
-        item: &Item,
-        target: Option<&str>,
-        outer: &BTreeSet<String>,
-    ) -> (String, FnContract);
     fn lookup(&self, name: &str) -> Option<(String, &FnContract)>;
     fn candidates(&self, method: &str) -> Vec<(&str, &FnContract)>;
     fn render(&self) -> String;
@@ -385,255 +378,28 @@ impl LedgerOps for Ledger {
             ..Ledger::blank()
         };
 
-        // **The package's types and not the file's.** `impl_parameters` asks
-        // whether a name in `impl Box[Thing]` is a type or a type *parameter*,
-        // and a `Thing` declared in the file next door is a type.
-        let declared: BTreeSet<String> = units.iter().flat_map(|u| declared_types(u)).collect();
-
-        // The options whose default is computed rather than written as a
-        // literal (ADR-318 D1), evaluated once the entries exist.
-        let mut defaults: Vec<Computed<'_>> = Vec::new();
-        // What holds a view anywhere in the package, by name (#544).
+        // **The item loop, in Nikaia** (`tools/ledger_items.nika`, ADR-294,
+        // #125): the entries every declaration makes, and the defaults it
+        // could not write as a literal (ADR-318 D1), evaluated once the
+        // entries exist. What holds a view is computed per unit here, by name
+        // (#544): a `Symbol` is interned by the parse of one file, so a set of
+        // them means nothing to another.
+        let views: Vec<nikaia_std::tools::parsed_view::ParsedView<'_, '_, '_, '_, '_, '_>> = units
+            .iter()
+            .map(|parsed| crate::check::parsed_view_of(parsed))
+            .collect();
         let package_borrowing = package_borrowing(units);
-        for parsed in units.iter().copied() {
-            // Per unit, and it has to be: a `Symbol` is interned by the parse
-            // of one file, so a set of them means nothing to another.
-            let borrowing = borrowing_structs_beside(parsed, &package_borrowing);
-            let borrowing_names: BTreeSet<String> = borrowing
-                .iter()
-                .map(|s| parsed.text(*s).to_string())
-                .collect();
-
-            for item in &parsed.program.items {
-                match &item.node {
-                    Item::Fn { .. } => {
-                        let (name, contract) =
-                            ledger.function(parsed, &item.node, None, &BTreeSet::new());
-                        computed_defaults(&mut defaults, &name, parsed, &item.node);
-                        ledger.functions.insert(name, contract);
-                    }
-                    Item::Impl {
-                        target, methods, ..
-                    } => {
-                        // `impl Stack[T]` puts `T` in scope for every method in it,
-                        // so it is a name that stands for a type there too.
-                        let outer: BTreeSet<String> = impl_parameters(parsed, target, &declared)
-                            .into_iter()
-                            .collect();
-                        let target = parsed.text(target.name).to_string();
-                        // ADR-295 D15: `impl Speaks for Dog` is the claim that a
-                        // `Dog` may stand where a `Speaks` is asked for, and it
-                        // is the only place that claim is made.
-                        if let Item::Impl {
-                            trait_name: Some(trait_name),
-                            ..
-                        } = &item.node
-                        {
-                            ledger
-                                .implementations
-                                .entry(parsed.text(*trait_name).to_string())
-                                .or_default()
-                                .insert(target.clone());
-                        }
-                        for method in methods {
-                            let (name, contract) =
-                                ledger.function(parsed, &method.node, Some(&target), &outer);
-                            computed_defaults(&mut defaults, &name, parsed, &method.node);
-                            ledger.functions.insert(name, contract);
-                        }
-                    }
-                    // Kap 4.7: a trait's methods are recorded under the trait's own
-                    // name - `Summarize::summary` - which is what lets a bound be
-                    // looked up ([ADR-295](../../../docs/specification/adr/adr-295.md)
-                    // D3). The same key shape an `impl`'s methods get, because a
-                    // bound and a receiver ask the same question: what does a value
-                    // of this thing have.
-                    // **An `extern "C"` declaration is an entry like any
-                    // other, and reads unlike a trait method**
-                    // ([ADR-302](../../../docs/specification/adr/adr-302.md)
-                    // D2). Two things are turned around, and only one of them
-                    // by this record. It is **`sync`**, asserted rather than
-                    // inferred, which is the shape `std`'s own hand-written
-                    // entries have for the same reason: the body is in another
-                    // language and this compiler does not read it. C has no
-                    // suspension point at all, and a C function that sleeps
-                    // *blocks* — `println`'s question (ADR-288 D21) and not this
-                    // one. And it carries **no `throws`**, which is what a
-                    // body-less declaration carries anyway: C has no failure
-                    // channel this language reads.
-                    //
-                    // `touches` and `locks` are absent, which is D4 and is
-                    // fail-closed: absent `touches` reads as *touches
-                    // everything* (ADR-292) and absent `locks` is that column's
-                    // third answer. A C signature says **less** than a Rust
-                    // one, not more.
-                    Item::Extern { declarations, .. } => {
-                        for declared in nikaia_std::tools::ledger_items::declared_extern(
-                            &parsed.interner,
-                            &parsed.aliases,
-                            declarations,
-                        ) {
-                            ledger.functions.insert(declared.key, declared.contract);
-                        }
-                    }
-                    Item::Trait {
-                        name,
-                        methods,
-                        is_public,
-                    } => {
-                        let own = parsed.text(*name).to_string();
-                        for method in methods {
-                            let (key, contract) =
-                                trait_method(parsed, &own, &method.node, *is_public);
-                            ledger.functions.insert(key, contract);
-                        }
-                        ledger.traits.insert(
-                            own,
-                            methods
-                                .iter()
-                                .map(|m| parsed.text(m.node.name).to_string())
-                                .collect(),
-                        );
-                    }
-                    // **An `enum` is a type a consumer has to know the cases of**
-                    // (Part I 3.4: a `match` handles every possible case), and
-                    // until this was here it had no entry at all — so a `match`
-                    // over a dependency's `enum` could not be shown total and
-                    // `NK1151` asked for an `else` that makes *a type gaining a
-                    // variant* silent forever after.
-                    Item::Enum {
-                        name,
-                        variants,
-                        is_public,
-                        ..
-                    } => {
-                        // **In Nikaia** (`tools/declared.nika`, ADR-294, #125).
-                        ledger.types.insert(
-                            parsed.text(*name).to_string(),
-                            nikaia_std::tools::declared::declared_enum(
-                                &parsed.interner,
-                                &parsed.aliases,
-                                variants,
-                                *is_public,
-                                &borrowing_names,
-                            ),
-                        );
-                    }
-                    Item::Struct {
-                        name,
-                        generics,
-                        fields,
-                        is_public,
-                        is_extern,
-                        ..
-                    } => {
-                        let tethered = nikaia_std::tools::declared::tethered_fields(
-                            &parsed.interner,
-                            fields,
-                            &borrowing_names,
-                        );
-                        let key = parsed.text(*name).to_string();
-                        let mut field_types = nikaia_std::tools::declared::declared_fields(
-                            &parsed.interner,
-                            &parsed.aliases,
-                            generics,
-                            fields,
-                            *is_extern,
-                        );
-                        for (at, f) in fields.iter().enumerate() {
-                            // A literal is its own text; anything else is
-                            // computed with the options' defaults below
-                            // (ADR-331 D5, ADR-318 D1-D3).
-                            match &f.default {
-                                Some(d) if a_literal(&d.value) => {
-                                    field_types[at].default =
-                                        nikaia_std::tools::declared::default_text(&d.value);
-                                }
-                                Some(d) => defaults.push(Computed {
-                                    key: key.clone(),
-                                    at,
-                                    parsed,
-                                    default: &d.value,
-                                    option: parsed.text(f.name).to_string(),
-                                    ty: &f.ty,
-                                    field: true,
-                                }),
-                                None => {}
-                            }
-                        }
-                        ledger.types.insert(
-                            parsed.text(*name).to_string(),
-                            TypeContract {
-                                public: *is_public,
-                                fields: field_types,
-                                variants: Vec::new(),
-                                // Never inferred: a `struct` declared here records
-                                // its fields, and `contracts::send` walks those.
-                                // The key exists for types whose parts are Rust.
-                                crosses: Crosses::Undecided,
-                                // Nothing a `.nika` file declares iterates at all
-                                // yet, let alone fallibly: the types that do are
-                                // `std`'s, and `std` writes them down (ADR-025 D6).
-                                iterates_fallibly: false,
-                                // A declared type's own parts decide whether it
-                                // compares, so nothing is written here: this
-                                // column is for a type whose parts are Rust.
-                                compares: false,
-                                orders: false,
-                                equates: false,
-                                copies: false,
-                                // Nor does a declared `struct` read anything when
-                                // it is read: a field access is memory. The types
-                                // that are not are `std`'s, whose bodies are Rust
-                                // ([ADR-281](../../../../docs/specification/adr/adr-281.md) D34).
-                                touches: Vec::new(),
-                                tethered,
-                                constant: String::new(),
-                                // **Its `@meta::Attribute(…)`, where it is an
-                                // attribute** (ADR-331 D8), so a package that
-                                // uses it reads it as this one does.
-                                mark: item
-                                    .attributes
-                                    .iter()
-                                    .find(|a| {
-                                        parsed.unaliased(parsed.text(a.name))
-                                            == crate::check::attributes::MARK
-                                    })
-                                    .map(|a| crate::check::attributes::mark_text(parsed, a))
-                                    .unwrap_or_default(),
-                                attributes: Vec::new(),
-                            },
-                        );
-                    }
-                    // **Every `entry` rule of a grammar is an entry**
-                    // ([ADR-296](../../../docs/specification/adr/adr-296.md) D25).
-                    // A grammar is entered by an ordinary call — `Json.value(input)`
-                    // — so the thing entered has to be an ordinary contract, and
-                    // the one column it must carry is `throws`: a rule past a
-                    // commit point can fail ([ADR-023](../../../docs/specification/adr/adr-023.md)
-                    // D9), and a `catch` beside the entry would meet `NK1134`
-                    // without it.
-                    //
-                    // **`["ParseError"]` since
-                    // [ADR-296](../../../docs/specification/adr/adr-296.md) D38.**
-                    // It used to be `["?"]` — *something this compiler cannot
-                    // name* — because a parse fails with a **rendered string**
-                    // and a string is not a type. It was the last `"?"` in the
-                    // tree, and seven of the corpus' eight `main`s carried it
-                    // into their own set; a type is all it ever needed.
-                    Item::Grammar(def) => {
-                        for declared in nikaia_std::tools::ledger_items::declared_grammar(
-                            &parsed.interner,
-                            &parsed.aliases,
-                            def,
-                        ) {
-                            ledger.functions.insert(declared.key, declared.contract);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
+        let borrowing: Vec<BTreeSet<String>> = units
+            .iter()
+            .map(|parsed| {
+                borrowing_structs_beside(parsed, &package_borrowing)
+                    .iter()
+                    .map(|s| parsed.text(*s).to_string())
+                    .collect()
+            })
+            .collect();
+        let defaults =
+            nikaia_std::tools::ledger_items::declare_items(&views, &borrowing, &mut ledger);
 
         // **Every unit is checked against the whole package's declarations**,
         // which is the other half of D2: a call to the file next door resolves
@@ -760,33 +526,6 @@ impl LedgerOps for Ledger {
         attribute_values(&mut ledger, units, library);
         noted.column = column;
         (ledger, checked, noted)
-    }
-
-    /// One function's entry, named as a caller would reach it.
-    ///
-    /// `doc` is the prose standing in front of the declaration
-    /// ([ADR-307](../../../../docs/specification/adr/adr-307.md) D5), and it is
-    /// kept only where the entry is `pub`: what a private item says is the
-    /// source's, and a consumer was never going to read it.
-    fn function(
-        &self,
-        parsed: &Parsed,
-        item: &Item,
-        target: Option<&str>,
-        outer: &BTreeSet<String>,
-    ) -> (String, FnContract) {
-        // **What the declaration says, in Nikaia** (`tools/declared.nika`,
-        // ADR-294, #125): every column about the body is the inferences' to
-        // answer afterwards.
-        let declared = nikaia_std::tools::declared::declared_function(
-            &parsed.interner,
-            &parsed.aliases,
-            item,
-            &target.map(str::to_string),
-            outer,
-        )
-        .expect("only a function is passed here");
-        (declared.key, declared.contract)
     }
 
     /// A function by the name a caller wrote.
@@ -949,37 +688,6 @@ pub fn std_library() -> Ledger {
 /// reads like a function type, so without `sync` it **may pause**, exactly as a
 /// function without the word may.
 ///
-/// **It used to be asserted whatever the declaration said**
-/// ([ADR-295](../../../docs/specification/adr/adr-295.md) D9), and that was a
-/// decision rather than a default: `async fn` in a trait was something the
-/// emitter had no way to ask for, so a plain `fn` was the only thing it could
-/// write, and a trait whose method genuinely pauses was **refused** rather than
-/// mis-lowered (`NK1129`). ADR-288 D26 takes the cause away: the trait declares
-/// the **return-position** form, `fn load(&self) -> impl Future<Output = …>`,
-/// and the `impl` writes `async fn`, which satisfies it. So the word can mean
-/// what it says.
-///
-/// For a function the word says `Asserted`, its absence says `No`, and
-/// `sync::infer` raises `No` to `Inferred` by reading the body. A declaration
-/// has no body, so `No` stands — and `No` means *may pause*, which is D1's
-/// sentence.
-fn trait_method(
-    parsed: &Parsed,
-    trait_name: &str,
-    method: &crate::ast::TraitMethod,
-    public: bool,
-) -> (String, FnContract) {
-    // In Nikaia (`tools/declared.nika`, ADR-294, #125).
-    let declared = nikaia_std::tools::declared::declared_trait_method(
-        &parsed.interner,
-        &parsed.aliases,
-        trait_name,
-        method,
-        public,
-    );
-    (declared.key, declared.contract)
-}
-
 /// What produced the contracts: this compiler, not the one it emits Rust for.
 ///
 /// `sync`, `throws` and the borrow contract are decided here and never by
@@ -1068,126 +776,29 @@ pub fn impl_parameters(
     nikaia_std::tools::ledger_items::impl_parameters(&parsed.interner, target, declared)
 }
 
-/// **An option's default that is not a literal** (ADR-318 D1): the function's
-/// key, the option's place in its list, the unit and the expression.
-struct Computed<'a> {
-    key: String,
-    at: usize,
-    parsed: &'a Parsed,
-    default: &'a Expr,
-    /// The option's name and declared type, which a compiled run needs.
-    option: String,
-    ty: &'a crate::ast::Type,
-    /// A struct's field rather than a function's option (ADR-331 D5): `key`
-    /// is the type and `at` the field's place.
-    field: bool,
-}
-
-/// The options of `item` whose default is an expression to evaluate.
-fn computed_defaults<'a>(
-    into: &mut Vec<Computed<'a>>,
-    key: &str,
-    parsed: &'a Parsed,
-    item: &'a Item,
-) {
-    let Item::Fn { config, .. } = item else {
-        return;
-    };
-    for at in nikaia_std::tools::ledger_defaults::computed_options(item) {
-        let option = &config[at as usize];
-        into.push(Computed {
-            key: key.to_string(),
-            at: at as usize,
-            parsed,
-            default: &option.default,
-            option: parsed.text(option.name).to_string(),
-            ty: &option.ty,
-            field: false,
-        });
-    }
-}
-
-/// **A field's attributes, as the values they come to** (ADR-331 D6, D8):
-/// each a struct literal of literals, every field of the attribute's struct
-/// given - from the argument, or from its default. An attribute whose
-/// arguments are not literals or variants is the checker's to refuse, and is
-/// left out here.
+/// **A field's attributes, as the values they come to** (ADR-331 D6, D8), in
+/// Nikaia (`tools/ledger_items.nika`, ADR-294, #125); the workshop that
+/// computes a non-literal argument stays here.
 fn attribute_values(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
-    // Where each value goes: the type itself, a field or a variant.
-    enum At {
-        Type,
-        Field(usize),
-        Variant(usize),
-    }
-    let mut found: Vec<(String, At, String)> = Vec::new();
-    let values = |parsed: &Parsed, attributes: &[crate::ast::Attribute]| -> Vec<String> {
-        attributes
-            .iter()
-            .filter_map(|attribute| {
-                let named = parsed.unaliased(parsed.text(attribute.name));
-                if named == crate::check::attributes::MARK {
-                    return None;
-                }
-                // In Nikaia (`tools/ledger_defaults.nika`, ADR-294, #125); the
-                // workshop that computes a non-literal argument stays here.
-                nikaia_std::tools::ledger_defaults::attribute_value(
-                    ledger,
-                    library,
-                    &parsed.interner,
-                    &named,
-                    attribute,
-                    &|ty: &ty::Ty, argument: &Expr| {
-                        computed_literal(
-                            units,
-                            parsed,
-                            "an attribute's argument",
-                            argument,
-                            ty,
-                            library,
-                        )
-                    },
-                )
-            })
-            .collect()
-    };
-    for parsed in units.iter().copied() {
-        for item in &parsed.program.items {
-            let owner = match &item.node {
-                Item::Struct { name, .. } | Item::Enum { name, .. } => {
-                    parsed.text(*name).to_string()
-                }
-                _ => continue,
-            };
-            for text in values(parsed, &item.attributes) {
-                found.push((owner.clone(), At::Type, text));
-            }
-            match &item.node {
-                Item::Struct { fields, .. } => {
-                    for (at, field) in fields.iter().enumerate() {
-                        for text in values(parsed, &field.attributes) {
-                            found.push((owner.clone(), At::Field(at), text));
-                        }
-                    }
-                }
-                Item::Enum { variants, .. } => {
-                    for (at, variant) in variants.iter().enumerate() {
-                        for text in values(parsed, &variant.attributes) {
-                            found.push((owner.clone(), At::Variant(at), text));
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    for (owner, at, text) in found {
-        let (kind, place) = match at {
-            At::Type => (0, 0),
-            At::Field(at) => (1, at as i64),
-            At::Variant(at) => (2, at as i64),
-        };
-        nikaia_std::tools::ledger_defaults::apply_attribute(ledger, &owner, kind, place, text);
-    }
+    let views: Vec<nikaia_std::tools::parsed_view::ParsedView<'_, '_, '_, '_, '_, '_>> = units
+        .iter()
+        .map(|parsed| crate::check::parsed_view_of(parsed))
+        .collect();
+    nikaia_std::tools::ledger_items::attribute_values(
+        ledger,
+        &views,
+        library,
+        &|unit: i64, ty: &ty::Ty, argument: &Expr| {
+            computed_literal(
+                units,
+                units[unit as usize],
+                "an attribute's argument",
+                argument,
+                ty,
+                library,
+            )
+        },
+    );
 }
 
 /// A literal, as the grammar once required a default to be: its text is the
@@ -1205,46 +816,72 @@ pub fn a_literal(expr: &Expr) -> bool {
 fn evaluate_defaults(
     ledger: &mut Ledger,
     units: &[&Parsed],
-    defaults: &[Computed<'_>],
+    defaults: &[nikaia_std::tools::ledger_items::ComputedAt],
     library: &Ledger,
 ) {
-    if defaults.is_empty() {
-        return;
-    }
     for computed in defaults {
+        let parsed = units[computed.unit as usize];
         // **Read where a run's sub-program is inferred** (#468): the program's
         // ledger has already computed it.
         if let Some(text) = crate::comptime_run::known_default(
-            computed.parsed.package.as_deref(),
+            parsed.package.as_deref(),
             &computed.key,
-            computed.at,
+            computed.at as usize,
         )
         .filter(|_| !computed.field)
         {
             set_default(ledger, computed, text);
             continue;
         }
-        let ty = crate::contracts::ty::Ty::from_ast(computed.parsed, computed.ty);
-        let Some(text) = computed_literal(
-            units,
-            computed.parsed,
-            &computed.option,
-            computed.default,
-            &ty,
-            library,
-        ) else {
+        let Some((default, declared)) = computed_default_at(parsed, computed) else {
+            continue;
+        };
+        let ty = crate::contracts::ty::Ty::from_ast(parsed, declared);
+        let Some(text) = computed_literal(units, parsed, &computed.option, default, &ty, library)
+        else {
             continue;
         };
         set_default(ledger, computed, text);
     }
 }
 
+/// The default a `ComputedAt` names and its declared type: the struct's
+/// field, or the option of the free function or of the `impl`'s method.
+fn computed_default_at<'a>(
+    parsed: &'a Parsed,
+    computed: &nikaia_std::tools::ledger_items::ComputedAt,
+) -> Option<(&'a Expr, &'a crate::ast::Type)> {
+    let item = &parsed.program.items.get(computed.item as usize)?.node;
+    let at = computed.at as usize;
+    if computed.field {
+        let Item::Struct { fields, .. } = item else {
+            return None;
+        };
+        let field = fields.get(at)?;
+        return Some((&field.default.as_ref()?.value, &field.ty));
+    }
+    let function = match (item, computed.method) {
+        (Item::Impl { methods, .. }, Some(m)) => &methods.get(m as usize)?.node,
+        (Item::Fn { .. }, None) => item,
+        _ => return None,
+    };
+    let Item::Fn { config, .. } = function else {
+        return None;
+    };
+    let option = config.get(at)?;
+    Some((&option.default, &option.ty))
+}
+
 /// Where a computed default's text goes in the ledger (`tools/ledger_defaults.nika`).
-fn set_default(ledger: &mut Ledger, computed: &Computed<'_>, text: String) {
+fn set_default(
+    ledger: &mut Ledger,
+    computed: &nikaia_std::tools::ledger_items::ComputedAt,
+    text: String,
+) {
     nikaia_std::tools::ledger_defaults::set_default(
         ledger,
         &computed.key,
-        computed.at as i64,
+        computed.at,
         computed.field,
         text,
     );

@@ -2114,7 +2114,7 @@ pub mod check_arms {
 }
 pub mod check_attributes {
     #[allow(unused_imports)]
-    pub use super::{CheckAttributesMark, check_attributes_mark_text, check_attributes_all, check_attributes_an_attribute_read, check_attributes_literal_misfit, check_attributes_inline_written};
+    pub use super::{CheckAttributesMark, check_attributes_mark_name, check_attributes_mark_text, check_attributes_all, check_attributes_an_attribute_read, check_attributes_literal_misfit, check_attributes_inline_written};
 }
 pub mod check_binds {
     #[allow(unused_imports)]
@@ -2635,7 +2635,7 @@ pub mod ledger_defaults {
 }
 pub mod ledger_items {
     #[allow(unused_imports)]
-    pub use super::{types_this_file_declares, types_declared_in, impl_parameters, a_literal, declared_extern, declared_grammar, literal_of, PublishedEnsures, expression_ensures};
+    pub use super::{types_this_file_declares, types_declared_in, impl_parameters, a_literal, declared_extern, declared_grammar, literal_of, PublishedEnsures, expression_ensures, ComputedAt, declare_items, attribute_values};
 }
 pub mod ledger_ops {
     #[allow(unused_imports)]

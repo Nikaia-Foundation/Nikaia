@@ -22,7 +22,7 @@ pub struct CheckAttributesMark {
 }
 
 /// The mark itself, which `std` declares and nothing else may be.
-fn check_attributes_mark_name() -> String {
+pub fn check_attributes_mark_name() -> String {
     return "meta::Attribute"
 }
 

@@ -191,3 +191,117 @@ pub fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, 
     Some(PublishedEnsures { key, condition })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComputedAt {
+    pub key: String,
+    pub at: i64,
+    pub unit: i64,
+    pub item: i64,
+    pub method: Option<i64>,
+    pub option: String,
+    pub field: bool,
+}
+
+pub fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], ledger: &mut Ledger) -> Vec<ComputedAt> {
+    let declared: collections::BTreeSet<String> = units.iter().flat_map(|u| { types_declared_in(u.items, u.words) }).collect();
+    let mut defaults: Vec<ComputedAt> = vec![];
+    for (u, view) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        let borrowing_names = nikaia_std::index::get(&borrowing, nikaia_std::index::at(u));
+        for (i, item) in view.items.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+            match &item.node {
+                Item::Fn { .. } => {
+                    let entry = match declared_function(view.words, view.aliases, &item.node, &None, &collections::BTreeSet::new()) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    computed_defaults(&mut defaults, &entry.key, u, i, None, view, &item.node);
+                    ledger.functions.insert(entry.key, entry.contract);
+                },
+                Item::Impl { trait_name, target, methods } => {
+                    let trait_name = *trait_name;
+                    let outer: collections::BTreeSet<String> = impl_parameters(view.words, target, &declared).iter().cloned().collect();
+                    let target = view.text(target.name);
+                    match trait_name {
+                        None => { },
+                        Some(name) => { ledger.implementations.entry(String::from(view.text(name))).or_default().insert(target.to_string()); },
+                    }
+                    for (m, method) in methods.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+                        let entry = match declared_function(view.words, view.aliases, &method.node, &Some(target.clone()), &outer) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        computed_defaults(&mut defaults, &entry.key, u, i, Some(m), view, &method.node);
+                        ledger.functions.insert(entry.key, entry.contract);
+                    }
+                },
+                Item::Extern { declarations, .. } => { for entry in declared_extern(view.words, view.aliases, declarations) { ledger.functions.insert(entry.key, entry.contract); } },
+                Item::Trait { name, methods, is_public } => {
+                    let is_public = *is_public; let name = *name;
+                    let own = view.text(name);
+                    for method in methods.iter() {
+                        let entry = declared_trait_method(view.words, view.aliases, &own, &method.node, is_public);
+                        ledger.functions.insert(entry.key, entry.contract);
+                    }
+                    let names: collections::BTreeSet<String> = methods.iter().map(|m| { view.text(m.node.name) }).collect();
+                    ledger.traits.insert(own, names);
+                },
+                Item::Enum { name, variants, is_public, .. } => {
+                    let is_public = *is_public; let name = *name;
+                    ledger.types.insert(view.text(name), declared_enum(view.words, view.aliases, variants, is_public, &borrowing_names));
+                },
+                Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
+                    let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                    let key = view.text(name);
+                    let mut contract = TypeContract::empty();
+                    contract.public = is_public;
+                    contract.tethered = tethered_fields(view.words, fields, &borrowing_names);
+                    contract.fields = declared_fields(view.words, view.aliases, generics, fields, is_extern);
+                    for (at, f) in fields.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+                        let d = match f.default.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        if a_literal(&d.value) { contract.fields[nikaia_std::index::at(at)].default = default_text(&d.value); } else { defaults.push(ComputedAt { key: key.to_string(), at, unit: u, item: i, method: None, option: view.text(f.name), field: true }); }
+                    }
+                    let mark = item.attributes.iter().find(|&a| { view.unaliased(&view.text(a.name)) == check_attributes_mark_name() });
+                    contract.mark = match mark {
+                        None => String::from(""),
+                        Some(a) => check_attributes_mark_text(view, a),
+                    };
+                    ledger.types.insert(key, contract);
+                },
+                Item::Grammar(def) => { for entry in declared_grammar(view.words, view.aliases, def) { ledger.functions.insert(entry.key, entry.contract); } },
+                _ => { },
+            }
+        }
+    }
+    defaults
+}
+
+pub(crate) fn computed_defaults(into: &mut Vec<ComputedAt>, key: &str, unit: i64, item: i64, method: Option<i64>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, function: &Item) {
+    let config = match function {
+        Item::Fn { config, .. } => config,
+        _ => return,
+    };
+    for at in computed_options(function) { into.push(ComputedAt { key: key.to_string(), at, unit, item, method, option: view.text(nikaia_std::index::get(&config, nikaia_std::index::at(at)).name), field: false }); }
+}
+
+pub fn attribute_values(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger, computed: &impl Fn(i64, &Ty, &Expr) -> Option<String>) {
+    let mut found: Vec<(String, i64, i64, String)> = vec![];
+    for (u, view) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        for item in view.items.iter() {
+            let owner = match &item.node {
+                Item::Struct { name, .. } => { let name = *name; view.text(name) },
+                Item::Enum { name, .. } => { let name = *name; view.text(name) },
+                _ => continue,
+            };
+            for text in attribute_texts(&ledger, library, view, u, &item.attributes, computed) { found.push((owner.to_string(), 0, 0, text)); }
+            match &item.node {
+                Item::Struct { fields, .. } => { for (at, field) in fields.iter().enumerate().map(|(at, item)| (at as i64, item)) { for text in attribute_texts(&ledger, library, view, u, &field.attributes, computed) { found.push((owner.to_string(), 1, at, text)); } } },
+                Item::Enum { variants, .. } => { for (at, variant) in variants.iter().enumerate().map(|(at, item)| (at as i64, item)) { for text in attribute_texts(&ledger, library, view, u, &variant.attributes, computed) { found.push((owner.to_string(), 2, at, text)); } } },
+                _ => { },
+            }
+        }
+    }
+    for (owner, kind, place, text) in found.into_iter() { apply_attribute(ledger, &owner, kind, place, text); }
+}
+
+pub(crate) fn attribute_texts(ledger: &Ledger, library: &Ledger, view: &ParsedView<'_, '_, '_, '_, '_, '_>, unit: i64, attributes: &[Attribute], computed: &impl Fn(i64, &Ty, &Expr) -> Option<String>) -> Vec<String> {
+    attributes.iter().filter_map(|attribute| {
+        let named = view.unaliased(&view.text(attribute.name));
+        if named == check_attributes_mark_name() { return None; }
+        attribute_value(ledger, library, view.words, &named, attribute, &|ty, argument| { computed(unit, ty, argument) })
+    }).collect::<Vec<_>>()
+}
+

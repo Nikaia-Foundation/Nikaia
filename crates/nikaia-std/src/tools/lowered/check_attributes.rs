@@ -7,7 +7,7 @@ pub struct CheckAttributesMark {
     pub repeatable: bool,
 }
 
-pub(crate) fn check_attributes_mark_name() -> String { String::from("meta::Attribute") }
+pub fn check_attributes_mark_name() -> String { String::from("meta::Attribute") }
 
 pub(crate) fn check_attributes_inline_name() -> &'static str { "inline" }
 

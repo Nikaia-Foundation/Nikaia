@@ -25,7 +25,6 @@
 // expression-level spans are open work in the parser, and a caret on the right
 // line is worth more than none at all.
 
-pub(crate) mod attributes;
 mod core;
 mod host;
 use crate::contracts::LedgerOps;
