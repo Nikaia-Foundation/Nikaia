@@ -1,17 +1,13 @@
-1. **Most turns:** finding where the fault lies. I started by grepping the emitter for `Some(`/wrap code, when the wrap is a checker fact (`FactWrap` in `state.facts.wrapped`). Only then did I follow `check_function_wrap_tail` to `check_widened_slot` to `check_overflow_list_into_nullables`. That was about 6 grep and sed turns, and I used `grep` instead of `scripts/where.nika`, which the charter asks for.
+1. **What cost the most turns:** tracing the GR builder's trust question back to its source. That took about 6 reads: `architect-input`, the GR report, ADR-010, `trust.rs` `join`, the emitter's `map_name`, and the `std.contracts` entry for `process::run`. The answer was in ADR-010 D9 all along, which the builder could not see from where it stood.
 
-2. **Looked up that the brief could have handed me:**
-   - the next free bug-brief number (b20);
-   - the brief template (I copied b19's layout);
-   - the `common.part` block and how to fill in the report path;
-   - whether the bug lane had run yet (to know if P5c, C1a or K3b could come back);
-   - which moves have no blocker today (none).
-
-   A short "lane status" line from the driver in `architect-input.txt` (bug briefs done since the last run, next `b<N>`) would have covered most of it.
+2. **What I looked up that the brief could have handed me:**
+   - The ADR that governs the area of a `Needs: architect decision`. Here that was ADR-010 D9, and its *Rejected* list answers per-file trust directly.
+   - Each blocker's state for each blocked move. I worked out by hand that #1080 was done (d436703a) and that #1082 waits on s1082, which sits in the same batch.
+   - The path to the builder's saved diff, which lives in another session's scratchpad.
 
 3. **Checks I ran:**
-   - Useful: the probe and 7 narrowed variants (they showed that a direct `return (..)` works and that if, match, let and tail all fail); reading `tuple_literal` and `tuple_ends`; checking that the push was fast-forward. Every row in the brief was probed, and row e was checked before the commit.
-   - Wasted: two variants that hit unrelated refusals (NK1301 `.clone()` on a literal, `_` instead of `else`), the emitter greps, and listing the qa-task report, which was already handled.
-   - Not run: `pre-push-check.sh`, since the change was docs only and added no ADR. That was acceptable, but I did not state it.
+   - Useful: `git apply --check` of the saved patch; the issue labels of #1080 and #1082; a grep of `project_members.rs` to confirm all the drifting maps are private to that file.
+   - Not run, and they should have been: lowering the re-land to see whether the keyed `project_members.rs` compiles; a probe of my suspicion that `join` fails open.
+   - Wasted: none, but the `grep` across `.ledger` files for provenance found nothing; `std.contracts` was the right file.
 
-4. **The one change that would have saved the most:** in `builder.md`, a `Found:` on a lowering defect names the checker fact the wrap or `&` should come from (`FactWrap` / `nullable_args` / `wrapped`) and the checker function that decides it, as far as the builder traced it. The P5c builder had the draft open and could have handed me that in one sentence, saving most of the trace.
+4. **One change:** the builder's report should keep a resolved draft in the repo, never in a scratchpad. `builder.md` should say: "A `blocked` report saves its resolved work as `docs/briefs/<brief>.wip.patch`, and on a decision question names the ADR it suspects." That saves the architect the copy and most of the trace. There is also an error of mine to fix: the brief's line on restoring `runtime/lowered.rs` is a conditional `git checkout` that a builder could misread. It should say "restore it by name, from HEAD".
