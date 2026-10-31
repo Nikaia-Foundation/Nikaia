@@ -1580,6 +1580,236 @@ pub fn text(s: ref Scalar) -> String sync {
 	}
 }
 
+// What an event says (D7), in the yaml-test-suite's vocabulary.
+pub enum EventKind {
+	StreamStart,
+	StreamEnd,
+	DocumentStart,
+	DocumentEnd,
+	SequenceStart,
+	SequenceEnd,
+	MappingStart,
+	MappingEnd,
+	Scalar,
+	Alias,
+}
+
+// One event of the walk of the parsed tree (D7). `start` to `end` is the
+// span: a document's, a collection's or a scalar's start event has its node's
+// span (a document its root's), an end event the empty span at the node's
+// end, the stream's start 0 and its end the last document's end. `explicit`:
+// `---` written before the document (its start), `...` after it (its end).
+// `flow`: a flow collection's start. `anchor` and `tag` as the tree keeps
+// them (views); `style` and `value` a scalar's as written (`Node.raw`, a
+// view), and `text` a `Value::Str`'s value through `text()` (null for every
+// other event); `value` is an alias's name; `""` and `Plain` elsewhere.
+pub struct Event {
+	pub kind: EventKind,
+	pub start: u32,
+	pub end: u32,
+	pub explicit: bool,
+	pub flow: bool,
+	pub anchor: String?,
+	pub tag: String?,
+	pub style: Style,
+	pub value: String,
+	pub text: String?,
+}
+
+fn bare(kind: EventKind, start: u32, end: u32) -> Event sync {
+	return marker(kind, start, end, false)
+}
+
+// A stream's, a document's or a collection's end event, or a document's
+// start, with `explicit` as given.
+fn marker(kind: EventKind, start: u32, end: u32, explicit: bool) -> Event sync {
+	return Event {
+		kind: kind,
+		start: start,
+		end: end,
+		explicit: explicit,
+		flow: false,
+		anchor: null,
+		tag: null,
+		style: Style::Plain,
+		value: "",
+		text: null,
+	}
+}
+
+// A node's start event: its span, anchor and tag.
+fn opening(kind: EventKind, n: ref Node) -> Event sync {
+	return Event {
+		kind: kind,
+		start: n.start,
+		end: n.end,
+		explicit: false,
+		flow: n.flow,
+		anchor: n.anchor,
+		tag: n.tag,
+		style: Style::Plain,
+		value: "",
+		text: null,
+	}
+}
+
+// A node's events: a collection's start, its children's events and its end;
+// a scalar's or an alias's one event.
+fn walk(n: ref Node) -> Vec[Event] sync {
+	return match n.value {
+		Value::Seq(items) => {
+			let mut out: Vec[Event] = [opening(EventKind::SequenceStart, n)]
+			for x in items {
+				out.extend(walk(x))
+			}
+			out.push(bare(EventKind::SequenceEnd, n.end, n.end))
+			out
+		}
+		Value::Map(entries) => {
+			let mut out: Vec[Event] = [opening(EventKind::MappingStart, n)]
+			for e in entries {
+				out.extend(walk(e.key))
+				out.extend(walk(e.value))
+			}
+			out.push(bare(EventKind::MappingEnd, n.end, n.end))
+			out
+		}
+		Value::Alias(a) => [
+			Event {
+				kind: EventKind::Alias,
+				start: n.start,
+				end: n.end,
+				explicit: false,
+				flow: false,
+				anchor: null,
+				tag: null,
+				style: Style::Plain,
+				value: a,
+				text: null,
+			},
+		]
+		Value::Str(s) => [
+			Event {
+				kind: EventKind::Scalar,
+				start: n.start,
+				end: n.end,
+				explicit: false,
+				flow: false,
+				anchor: n.anchor,
+				tag: n.tag,
+				style: s.style,
+				value: n.raw,
+				text: text(s),
+			},
+		]
+		else => [
+			Event {
+				kind: EventKind::Scalar,
+				start: n.start,
+				end: n.end,
+				explicit: false,
+				flow: false,
+				anchor: n.anchor,
+				tag: n.tag,
+				style: n.style,
+				value: n.raw,
+				text: null,
+			},
+		]
+	}
+}
+
+// The stream's events, a walk of `documents`' tree (D7): the stream's start,
+// each document's start, its root's events and its end, the stream's end.
+pub fn events(docs: ref Vec[Document]) -> Vec[Event] sync {
+	let mut out: Vec[Event] = [bare(EventKind::StreamStart, 0, 0)]
+	let mut last: u32 = 0
+	for d in docs {
+		out.push(marker(EventKind::DocumentStart, d.root.start, d.root.end, d.start))
+		out.extend(walk(d.root))
+		out.push(marker(EventKind::DocumentEnd, d.root.end, d.root.end, d.end))
+		last = d.root.end
+	}
+	out.push(bare(EventKind::StreamEnd, last, last))
+	return out
+}
+
+// An event's line in the yaml-test-suite's `test.event` form: `+STR`,
+// `+DOC ---`, `+MAP {} &a <tag>`, `=VAL &x :1`, `=ALI *x`. A tag is written
+// as the tree keeps it, between angle brackets (a verbatim `!<t>` as `<t>`).
+pub fn event_line(e: ref Event) -> String sync {
+	return match e.kind {
+		EventKind::StreamStart => "+STR"
+		EventKind::StreamEnd => "-STR"
+		EventKind::DocumentStart => if e.explicit { "+DOC ---" } else { "+DOC" }
+		EventKind::DocumentEnd => if e.explicit { "-DOC ..." } else { "-DOC" }
+		EventKind::SequenceStart => {
+			let f = if e.flow { " []" } else { "" }
+			f"+SEQ{f}{properties(e)}"
+		}
+		EventKind::SequenceEnd => "-SEQ"
+		EventKind::MappingStart => {
+			let f = if e.flow { " {}" } else { "" }
+			f"+MAP{f}{properties(e)}"
+		}
+		EventKind::MappingEnd => "-MAP"
+		EventKind::Scalar => {
+			let v = match e.text {
+				null => escape_event(e.value)
+				t => escape_event(t)
+			}
+			f"=VAL{properties(e)} {style_mark(e.style)}{v}"
+		}
+		EventKind::Alias => f"=ALI *{e.value}"
+	}
+}
+
+fn properties(e: ref Event) -> String sync {
+	let a = match e.anchor {
+		null => ""
+		x => f" &{x}"
+	}
+	let t = match e.tag {
+		null => ""
+		x => {
+			let inner = x.strip_prefix("!<") ?? ""
+			let verbatim = inner.strip_suffix(">")
+			match verbatim {
+				null => f" <{x}>"
+				v => f" <{v}>"
+			}
+		}
+	}
+	return f"{a}{t}"
+}
+
+fn style_mark(s: Style) -> String sync {
+	return match s {
+		Style::Plain => ":"
+		Style::Single => "'"
+		Style::Double => "\""
+		Style::Literal => "|"
+		Style::Folded => ">"
+	}
+}
+
+// A value as the suite writes it: `\`, a line break, a tab, a backspace and
+// a carriage return escaped.
+fn escape_event(v: String) -> String sync {
+	let mut out = String()
+	for c in v.chars() {
+		match c {
+			'\\' => out.push_str("\\\\")
+			'\n' => out.push_str("\\n")
+			'\t' => out.push_str("\\t")
+			'\u{8}' => out.push_str("\\b")
+			'\r' => out.push_str("\\r")
+			else => out.push(c)
+		}
+	}
+	return out
+}
+
 // The content indentation an indentation indicator `d` gives under a parent
 // at `n`; a document's top node has none (`n` is -1) and counts from 0.
 fn explicit_indent(n: i64, d: i64) -> i64 sync {

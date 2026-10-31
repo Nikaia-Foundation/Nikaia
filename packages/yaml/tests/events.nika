@@ -1,0 +1,45 @@
+// `events` and `event_line`: the parsed tree walked into the yaml-test-suite's
+// event form (ADR-yaml-1 D7), one input per block, its events one per line.
+// The last block prints each event with its span.
+use yaml
+
+fn show(text: String) {
+	println(f"# {text.replace("\n", "\\n")}")
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::documents(input) catch {
+		println(f"error {error.line}:{error.column}")
+		return
+	}
+	for e in yaml::events(docs) {
+		println(yaml::event_line(e))
+	}
+}
+
+fn spans(text: String) {
+	println(f"# spans of {text.replace("\n", "\\n")}")
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::documents(input) catch {
+		println(f"error {error.line}:{error.column}")
+		return
+	}
+	for e in yaml::events(docs) {
+		println(f"{e.start}-{e.end} {yaml::event_line(e)}")
+	}
+}
+
+fn main() {
+	show("")
+	show("a\n")
+	show("--- a\n...\n")
+	show("a\n---\nb\n")
+	show("- a\n- b\n")
+	show("k: v\nl:\n  - x\n  - y: z\n")
+	show("[a, [b, c], {d: e}]\n")
+	show("{a: 1, b: [x]}\n")
+	show("- plain\n- 'single'\n- \"double\\tq\"\n- |\n  lit\\x\n  line\n- >\n  fold\n  ed\n")
+	show("- ~\n- null\n- True\n- !!int \"1\"\n- 1.5\n- \n- \"a\\\\b\\rc\\bd\"\n")
+	show("- &a x\n- *a\n- &m !!map {k: v}\n- !local [1]\n- !<tag:yaml.org,2002:str> s\n")
+	show("? a\n: b\n? c\n")
+	show("a: {b: [c, {d: e}]}\n...\n--- !!seq\n- &s f\n")
+	spans("k: [a, b]\n--- x\n...\n")
+}

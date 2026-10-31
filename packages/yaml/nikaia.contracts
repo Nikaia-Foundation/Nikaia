@@ -43,6 +43,13 @@ touches = []
 views = ["v: borrowed"]
 signature = "(v: ref Value) -> i64"
 
+[fn."bare"]
+sync = true
+keeps = ["end", "kind", "start"]
+touches = []
+views = ["<result>: borrowed"]
+signature = "(kind: EventKind, start: u32, end: u32) -> Event"
+
 [fn."block"]
 sync = true
 keeps = ["chomp"]
@@ -115,11 +122,33 @@ touches = []
 views = ["input: borrowed", "rendered: borrowed"]
 signature = "(input: ref Bytes, rendered: String) -> Error"
 
+[fn."escape_event"]
+sync = true
+touches = []
+views = ["v: borrowed"]
+signature = "(v: String) -> String"
+
 [fn."escaped"]
 sync = true
 keeps = ["e"]
 touches = []
 signature = "(e: scalar) -> String"
+
+[fn."event_line"]
+pub = true
+sync = true
+keeps = ["e"]
+touches = []
+views = ["e: borrowed"]
+signature = "(e: ref Event) -> String"
+
+[fn."events"]
+pub = true
+sync = true
+returns = "anchor: ref(docs), style: ref(docs), tag: ref(docs), value: ref(docs)"
+touches = []
+views = ["docs: borrowed", "<result>: borrowed"]
+signature = "(docs: ref Vec[Document]) -> Vec[Event]"
 
 [fn."explicit_indent"]
 sync = true
@@ -230,6 +259,13 @@ touches = []
 views = ["t: borrowed"]
 signature = "(t: String) -> i64"
 
+[fn."marker"]
+sync = true
+keeps = ["end", "explicit", "kind", "start"]
+touches = []
+views = ["<result>: borrowed"]
+signature = "(kind: EventKind, start: u32, end: u32, explicit: bool) -> Event"
+
 [fn."more_indented"]
 sync = true
 touches = []
@@ -253,6 +289,14 @@ sync = true
 keeps = ["c"]
 touches = []
 signature = "(c: scalar) -> String"
+
+[fn."opening"]
+sync = true
+returns = "anchor: ref(n), tag: ref(n)"
+keeps = ["kind"]
+touches = []
+views = ["n: borrowed", "<result>: borrowed"]
+signature = "(kind: EventKind, n: ref Node) -> Event"
 
 [fn."pair_fits"]
 sync = true
@@ -297,6 +341,12 @@ sync = true
 touches = []
 signature = "(x: scalar, flow: bool) -> bool"
 
+[fn."properties"]
+sync = true
+touches = []
+views = ["e: borrowed"]
+signature = "(e: ref Event) -> String"
+
 [fn."radix_value"]
 sync = true
 touches = []
@@ -317,6 +367,12 @@ touches = []
 views = ["cs: borrowed"]
 signature = "(cs: ref Vec[scalar], from: i64) -> i64"
 
+[fn."style_mark"]
+sync = true
+keeps = ["s"]
+touches = []
+signature = "(s: Style) -> ref String"
+
 [fn."tag_kind"]
 sync = true
 touches = []
@@ -330,6 +386,14 @@ keeps = ["s"]
 touches = []
 views = ["s: borrowed"]
 signature = "(s: ref Scalar) -> String"
+
+[fn."walk"]
+sync = true
+returns = "anchor: ref(n), style: ref(n), tag: ref(n), value: ref(n)"
+keeps = ["n"]
+touches = []
+views = ["n: borrowed", "<result>: borrowed"]
+signature = "(n: ref Node) -> Vec[Event]"
 
 [fn."yaml_once"]
 sync = true
@@ -368,6 +432,15 @@ tethered = ["key", "value"]
 [type."Error"]
 pub = true
 fields = ["pub message: String", "pub line: i64", "pub column: i64", "pub offset: i64"]
+
+[type."Event"]
+pub = true
+fields = ["pub kind: EventKind", "pub start: u32", "pub end: u32", "pub explicit: bool", "pub flow: bool", "pub anchor: ref String?", "pub tag: ref String?", "pub style: Style", "pub value: ref String", "pub text: String?"]
+tethered = ["anchor", "tag", "value"]
+
+[type."EventKind"]
+pub = true
+variants = ["StreamStart", "StreamEnd", "DocumentStart", "DocumentEnd", "SequenceStart", "SequenceEnd", "MappingStart", "MappingEnd", "Scalar", "Alias"]
 
 [type."Head"]
 fields = ["indent: i64", "chomp: Chomp"]

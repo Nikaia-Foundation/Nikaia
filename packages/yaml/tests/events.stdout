@@ -1,0 +1,171 @@
+# 
++STR
+-STR
+# a\n
++STR
++DOC
+=VAL :a
+-DOC
+-STR
+# --- a\n...\n
++STR
++DOC ---
+=VAL :a
+-DOC ...
+-STR
+# a\n---\nb\n
++STR
++DOC
+=VAL :a
+-DOC
++DOC ---
+=VAL :b
+-DOC
+-STR
+# - a\n- b\n
++STR
++DOC
++SEQ
+=VAL :a
+=VAL :b
+-SEQ
+-DOC
+-STR
+# k: v\nl:\n  - x\n  - y: z\n
++STR
++DOC
++MAP
+=VAL :k
+=VAL :v
+=VAL :l
++SEQ
+=VAL :x
++MAP
+=VAL :y
+=VAL :z
+-MAP
+-SEQ
+-MAP
+-DOC
+-STR
+# [a, [b, c], {d: e}]\n
++STR
++DOC
++SEQ []
+=VAL :a
++SEQ []
+=VAL :b
+=VAL :c
+-SEQ
++MAP {}
+=VAL :d
+=VAL :e
+-MAP
+-SEQ
+-DOC
+-STR
+# {a: 1, b: [x]}\n
++STR
++DOC
++MAP {}
+=VAL :a
+=VAL :1
+=VAL :b
++SEQ []
+=VAL :x
+-SEQ
+-MAP
+-DOC
+-STR
+# - plain\n- 'single'\n- "double\tq"\n- |\n  lit\x\n  line\n- >\n  fold\n  ed\n
++STR
++DOC
++SEQ
+=VAL :plain
+=VAL 'single
+=VAL "double\tq
+=VAL |lit\\x\nline\n
+=VAL >fold ed\n
+-SEQ
+-DOC
+-STR
+# - ~\n- null\n- True\n- !!int "1"\n- 1.5\n- \n- "a\\b\rc\bd"\n
++STR
++DOC
++SEQ
+=VAL :~
+=VAL :null
+=VAL :True
+=VAL <!!int> "1
+=VAL :1.5
+=VAL :
+=VAL "a\\b\rc\bd
+-SEQ
+-DOC
+-STR
+# - &a x\n- *a\n- &m !!map {k: v}\n- !local [1]\n- !<tag:yaml.org,2002:str> s\n
++STR
++DOC
++SEQ
+=VAL &a :x
+=ALI *a
++MAP {} &m <!!map>
+=VAL :k
+=VAL :v
+-MAP
++SEQ [] <!local>
+=VAL :1
+-SEQ
+=VAL <tag:yaml.org,2002:str> :s
+-SEQ
+-DOC
+-STR
+# ? a\n: b\n? c\n
++STR
++DOC
++MAP
+=VAL :a
+=VAL :b
+=VAL :c
+=VAL :
+-MAP
+-DOC
+-STR
+# a: {b: [c, {d: e}]}\n...\n--- !!seq\n- &s f\n
++STR
++DOC
++MAP
+=VAL :a
++MAP {}
+=VAL :b
++SEQ []
+=VAL :c
++MAP {}
+=VAL :d
+=VAL :e
+-MAP
+-SEQ
+-MAP
+-MAP
+-DOC ...
++DOC ---
++SEQ <!!seq>
+=VAL &s :f
+-SEQ
+-DOC
+-STR
+# spans of k: [a, b]\n--- x\n...\n
+0-0 +STR
+0-9 +DOC
+0-9 +MAP
+0-1 =VAL :k
+3-9 +SEQ []
+4-5 =VAL :a
+7-8 =VAL :b
+9-9 -SEQ
+9-9 -MAP
+9-9 -DOC
+14-15 +DOC ---
+14-15 =VAL :x
+15-15 -DOC ...
+15-15 -STR
