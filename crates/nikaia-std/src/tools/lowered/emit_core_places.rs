@@ -305,12 +305,13 @@ impl EmitState {
         }
         Ok(())
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn emit_place_narrowing(&self, operand: &Expr) -> i64 {
         let found = match self.narrows(operand) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
         match found {
             FactNarrowing::Integer => 1,
             FactNarrowing::FromFloat => 2,
-            FactNarrowing::ToScalar => 3,
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -333,10 +334,6 @@ impl EmitState {
             out.push(").unwrap_or_else(|_| panic!(\"the value does not fit in an `");
             out.push(&into);
             out.push("`\"))");
-        } else if kind == 3 {
-            out.push("nikaia_std::num::to_char(");
-            self.emit_core_operand(world, walk, out, host, operand, viewed, depth, flow, scope)?;
-            out.push(")");
         } else if kind == 2 {
             out.push(&format!("nikaia_std::num::to_{}(", into));
             self.emit_core_operand(world, walk, out, host, operand, viewed, depth, flow, scope)?;

@@ -284,7 +284,8 @@ Nikaia provides basic types to represent simple values.
       not negative, not a surrogate (`0xD800` to `0xDFFF`), not above
       `0x10FFFF`. It is held as every precondition is (Part III 14.2): shown
       by the caller's facts, a literal, an `if` or an `assert`, or refused
-      (`NK1300`).
+      (`NK1300`). Only a `u8` becomes one by `as`, since every byte value is
+      one: `b as scalar`.
 * **A run of elements:**
     * `ref Array[T]`: a **view** of a run of `T`, with the promise
       `ref String` carries — *this points at elements somebody else keeps, no
@@ -466,7 +467,10 @@ is written `as` only where it is shown to fit. A constant that does not fit is
 refused with `NK1116`. A value the compiler proves within the destination's
 range converts. Any other such `as` is refused with `NK1241`, and the program
 says by name what it means: the low digits, or whether it fits. This does not
-depend on a build option.
+depend on a build option. An integer becomes a `scalar` by `as` only from a
+`u8`; from any other integer type, a variable or a literal alike, `as scalar`
+is refused with `NK1241`, and the program writes `scalar::from(n)` (2.2) or
+the character, `'\u{8}'`.
 
 **Where a program means to keep only the low digits, it says so by name**, as
 it does for wrapping. The name carries the type it converts to:

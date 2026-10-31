@@ -57,6 +57,16 @@ pub fn check_core_places_beyond_f32(value: &Expr) -> bool {
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_places_what_casts(from: &Ty, written_out: bool) -> String {
+    if written_out { return String::from("an integer literal"); }
+    match from {
+        Ty::Named { name, .. } => format!("an `{}`", name),
+        _ => String::from("a whole number"),
+    }
+}
+
 pub(crate) fn check_core_places_an_integer(name: &str) -> bool { name == "u8" || name == "u32" || name == "u64" || name == "i32" || name == "i64" }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -880,6 +890,18 @@ pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     let from = check_core_expr(state, world, host, inner, span);
     let into = host.declared(state, ty, span);
     state.a_cast_over_a_lent_binding(world, inner, span);
+    let into_a_scalar = match into {
+        Ty::Named { ref name, ref args, .. } => (name == "scalar" || name == "char") && args.is_empty(),
+        _ => false,
+    };
+    if into_a_scalar {
+        let written_out = matches!(inner, Expr::LitInt { .. });
+        let wider = match from {
+            Ty::Named { ref name, .. } => check_core_places_an_integer(name) && name != "u8",
+            _ => written_out || from.is_unknown() && !state.open_numbers_in(world, inner).is_empty(),
+        };
+        if wider { state.findings.push(check_refusal("NK1241", span, format!("An integer is a `scalar` by `as` only from a `u8`, and this is {}.", check_core_places_what_casts(&from, written_out)), vec![String::from("Every byte value is a scalar value; a wider integer may be a surrogate (`0xD800` to `0xDFFF`), negative or above `0x10FFFF`, which no character is.")], Some(String::from("Write `scalar::from(n)`, whose precondition the compiler proves where the call stands or refuses, or the character itself, as `'\\u{2028}'`.")))); }
+    }
     match into {
         Ty::Named { ref name, .. } => { if !check_core_places_offered(name) { state.cast_names_a_foreign_type(name, span); } },
         _ => { },

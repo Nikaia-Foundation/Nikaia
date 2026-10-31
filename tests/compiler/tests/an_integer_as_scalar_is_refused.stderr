@@ -1,0 +1,17 @@
+error[NK1241]: An integer is a `scalar` by `as` only from a `u8`, and this is an `i64`.
+  --> tests/an_integer_as_scalar_is_refused.nika:6:5
+   |
+ 6 |     return cp as scalar
+   |     ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Every byte value is a scalar value; a wider integer may be a surrogate (`0xD800` to `0xDFFF`), negative or above `0x10FFFF`, which no character is.
+   = help: Write `scalar::from(n)`, whose precondition the compiler proves where the call stands or refuses, or the character itself, as `'\u{2028}'`.
+error[NK1241]: An integer is a `scalar` by `as` only from a `u8`, and this is an integer literal.
+   --> tests/an_integer_as_scalar_is_refused.nika:12:5
+    |
+ 12 |     out.push(8232 as scalar)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Every byte value is a scalar value; a wider integer may be a surrogate (`0xD800` to `0xDFFF`), negative or above `0x10FFFF`, which no character is.
+    = help: Write `scalar::from(n)`, whose precondition the compiler proves where the call stands or refuses, or the character itself, as `'\u{2028}'`.
+2 type errors

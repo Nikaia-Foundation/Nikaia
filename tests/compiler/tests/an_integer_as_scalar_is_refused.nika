@@ -1,0 +1,15 @@
+// An integer becomes a `scalar` by `as` only from a `u8` (Part I 2.2,
+// #1003): an `i64` and a literal are refused (`NK1241`), and the help names
+// `scalar::from`, whose precondition the compiler proves or refuses.
+
+fn letter(cp: i64) -> scalar {
+    return cp as scalar
+}
+
+fn main() {
+    let mut out = String()
+    out.push(letter(65))
+    out.push(8232 as scalar)
+    out.push(66 as u8 as scalar)
+    println(out)
+}
