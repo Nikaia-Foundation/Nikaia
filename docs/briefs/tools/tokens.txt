@@ -9,3 +9,4 @@
 /home/user/Nikaia/docs/briefs/tools/architect-task.md 3092259 52
 /home/user/Nikaia/docs/briefs/tools/j5-1019-comptime-field.md 6960467 108
 /home/user/Nikaia/docs/briefs/tools/architect-task.md 1207083 29
+/home/user/Nikaia/docs/briefs/tools/j6-1019-error-path.md 1419604 28
