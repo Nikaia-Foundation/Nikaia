@@ -180,3 +180,4 @@
 /home/user/Nikaia/docs/briefs/b1025-kept-lambda-names.md 299025 6
 /home/user/Nikaia/docs/briefs/b1012b-trait-column-refusals.md 487086 6
 /home/user/Nikaia/docs/briefs/architect-task.md 1483935 38
+/home/user/Nikaia/docs/briefs/b1012c-trait-column-data.md 1733163 37
