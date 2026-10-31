@@ -248,9 +248,11 @@ fn an_argument_whose_type_is_not_known_is_still_lent() {
     assert!(rust.contains("fn total(entries: &[Entry])"), "{rust}");
     assert!(rust.contains("total(&entries)"), "{rust}");
 
-    // And the same program that writes its own `&` is not refused, because
-    // nothing here was checked to refuse it on.
-    assert!(!refused(
+    // The same program that writes its own `&` was not refused while nothing
+    // here was checked to refuse it on. Since the arms meet where each is
+    // known (`Vec[Entry]` beside a `Vec` of nothing typed), the `if` has a
+    // type, and the written `ref` is refused as anywhere else.
+    assert!(refused(
         &source.replace("total(entries)", "total(ref entries)")
     ));
 }
