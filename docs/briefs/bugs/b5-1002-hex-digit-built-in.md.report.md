@@ -8,6 +8,6 @@ Deviation: steps 1 and 2 not built: no file in this repository resolves grammar 
 Found: none
 Needs: owner decision: either (a) winnow-grammar gets a built-in `hex_digit` (one scalar of 0-9a-fA-F, like `digit`: name in get_builtins, codegen arm beside "digit", first_bytes.rs and frame.rs arms, the "a hex digit" expectation), then the Cargo.toml rev is raised; or (b) the Nikaia emitter rewrites `hex_digit` before handing the grammar to winnow-grammar. (a) matches how `digit` is done. Probe: the issue's program, `nikaia run` -> error: Undefined rule: 'hex_digit'. at 3:35.
 Changelog: none
-Owner: should `hex_digit` be added to winnow-grammar (and the rev bumped), or rewritten by the Nikaia emitter?
+Owner: none (filed as decision on #1002: hex_digit in winnow-grammar or rewritten by the emitter)
 Disk freed: 0 (target/nikaia-project-tests 3.3G, / 7.4G free; no cache entries created)
 Rs2nika: none
