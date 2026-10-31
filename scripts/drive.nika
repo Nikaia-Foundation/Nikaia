@@ -96,7 +96,8 @@
 // `PUSHED <sha8>` and drops the N tested lines from unpushed.txt (the
 // architect's commit made beside the suite waits for the next batch's suite;
 // after a rebased push of HEAD it empties the file). Red: DIR/qa-input.txt gets the
-// suite's step lines, the last 200 lines of suite.log, `git log
+// suite's step lines, the last 200 lines of suite.log, the failed tests and
+// last 200 lines of each target/gate-tests-*.log of the suite worktree, `git log
 // origin/develop..HEAD`, and the brief and report of each brief in
 // unpushed.txt; the QA agent runs (docs/briefs/qa-task.md, role `qa`) in the
 // shared checkout, its report is committed as the others, and the suite runs
@@ -392,8 +393,9 @@ fn drive_tail(body: String, n: i64) -> String throws {
     return out.join("\n")
 }
 
-// What the QA agent reads: the suite's step lines and log tail, the unpushed
-// commits, and the briefs and reports they came from.
+// What the QA agent reads: the suite's step lines and log tail, the failed
+// tests and the tail of each target/gate-tests-*.log in the suite worktree, the
+// unpushed commits, and the briefs and reports they came from.
 fn drive_qa_input(dir: String, out: String, steps: String) throws {
     let mut lines: Vec[String] = []
     lines.push(f"The suite (scripts/gate.nika -- --all) is red: {steps}")
@@ -407,6 +409,18 @@ fn drive_qa_input(dir: String, out: String, steps: String) throws {
     lines.push("")
     lines.push(f"Last 200 lines of {dir}/suite.log:")
     lines.push(drive_tail(out, 200))
+    for name in ["compiler", "rs2nika-facts", "rs2nika-convert"] {
+        let log = f"{drive_suite_dir()}/target/gate-tests-{name}.log"
+        if !fs::exists(log.clone(), fs::Root::Anywhere) { continue }
+        let body = drive_read(log.clone())
+        lines.push("")
+        lines.push(f"Failed tests in {log}:")
+        for l in body.split("\n") {
+            if l.contains(" ... FAILED") { lines.push(l.clone()) }
+        }
+        lines.push(f"Last 200 lines of {log}:")
+        lines.push(drive_tail(body, 200))
+    }
     lines.push("")
     lines.push("Unpushed commits (origin/develop..HEAD):")
     lines.push(process::run("git", ["log", "--format=%h %s", "origin/develop..HEAD"]).stdout.trim().clone())
