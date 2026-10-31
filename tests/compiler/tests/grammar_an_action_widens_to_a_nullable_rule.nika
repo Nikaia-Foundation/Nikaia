@@ -1,0 +1,22 @@
+// Part II 10.8, ADR-279: an action ends in its rule's value as a function's
+// body does, so a plain `i64` there is the value of an `i64?` rule, as
+// `return v` would be in a function returning `i64?`.
+grammar M {
+	rule WS = "" -> { }
+	entry rule read -> i64? = v:Value eof -> { v }
+	rule Value -> i64? = "null" -> { null } | v:Num -> { v }
+	rule Num -> i64 = d:dec[i64](digit+) -> { d }
+}
+
+fn main() {
+	let n: i64? = M::read(Bytes("42".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{n ?? -1}")
+	let none: i64? = M::read(Bytes("null".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{none ?? -1}")
+}

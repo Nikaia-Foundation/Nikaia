@@ -295,6 +295,10 @@ pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world:
         }, || Ty::Unknown);
         let at = nikaia_std::index::get(&action.stmts, nikaia_std::index::at(count - 1)).span;
         state.expect_type(world, &tail, &wanted, &Span { start: at.start, end: at.end }, "returns", &|found, want| { format!("This action builds `{}`, but its rule returns `{}`.", found, want) });
+        match &nikaia_std::index::get(&action.stmts, nikaia_std::index::at(count - 1)).node {
+            Stmt::Expr(value) => { check_function_wrap_tail(state, world, host, &tail, &wanted, value, &Span { start: at.start, end: at.end }); },
+            _ => { },
+        }
     }
     state.expected = outer;
 }
