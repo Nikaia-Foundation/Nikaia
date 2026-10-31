@@ -226,20 +226,29 @@ tokens and turns per finished step, steps per day; counted, not timed.
 open lanes, what blocks what, figures, decisions in force that no ADR or issue
 holds. What happened is in `git log` and the issues.*
 
-**2026-10-31 (after 5fb336ef).** Self-hosting: 94,991 Nikaia lines, 82.4 % of
+**2026-10-31 (after 042cee5d).** Self-hosting: 94,991 Nikaia lines, 82.4 % of
 the toolchain; 20,254 Rust lines left in `crates/nikaia/src`
 (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
 2026-11-04), rows and `Cut:` lines in `docs/selfhosting-plan.md`.
 
-* **Main lane** (`docs/briefs/batch.txt`): b1046 (#1046), b1044 (#1044), the
-  last bug batch from before the lane rule; left as it is. Version raises owed
-  for the done reports' `Changelog:` lines (BUMP pending).
-* **Next main batch**, by the lane rule (at least two moves): BT, GR, then
-  K3b, P5c, P5e in the plan's order. Also owed, each its own brief: R0 (#921,
-  the tools move to `crates/nikaia-compiler`), `scripts/plan_rows.nika`, the
-  driver's CI check. #1014 (lowering cache key) is a defect: bug lane.
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b5 #1002, b6 #1010, b7 #1016
-  (`wip`). `ready` defects no lane holds: #1048, #1038, #958, #1014.
+* **Main lane** (`docs/briefs/batch.txt`): BT (`bt-build-time.md`), s922
+  (`s922-sha256-env.md`: #922 steps 1-2, then the four host `sha256_hex` methods
+  go), GR (`gr-grammar-run.md`: compile_and_run, write_if_changed, cargo; it
+  checks for BT and s922 first). b1046 is done (8b964882). Its version raise is
+  owed: "An untyped lambda bound by `let` and handed to a function parameter
+  that may pause now lowers as an `async` closure instead of being refused by
+  rustc." b1044 has moved to the bug lane (b8).
+* **b1046's `Found:`** (3 tests "settings disagree", NK2302 on `places`) did not
+  reproduce: `a_lent_argument_from_arms_view_and_new` passed at both settings
+  on the 042cee5d binary. Nothing was filed; CI decides.
+* **Next main batch**: K3b (needs #920), P5c (#920), P5e (the O rows), and O1
+  once #922 steps 3-4 are built. GR leaves `shared_target` and `manifest` as
+  host methods for O1. After GR, fold `ComptimeRan` (`comptime_tree.nika:615`,
+  a copy of `Wall` plus `Answer`) into `CheckWall`. Also owed, each its own
+  brief: R0 (#921), `scripts/plan_rows.nika`, the driver's CI check. #1014
+  (lowering cache key) is a defect: bug lane.
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): b5 #1002, b6 #1010, b7 #1016,
+  b8 #1044 (`wip`). `ready` defects no lane holds: #1048, #1038, #958, #1014.
 * **yaml lane**: #928, #929, #604 (`wip`). `docs/briefs/b859c-type-argument.md`
   (#859) is another session's.
 * **Waiting on the owner** (`decision`): #1047 (a fn field types an untyped
