@@ -10,3 +10,4 @@
 /home/user/Nikaia/docs/briefs/prover/architect-task.md 4090424 63
 /home/user/Nikaia/docs/briefs/prover/p5-1069-bounds-expectation.md 388170 4
 /home/user/Nikaia/docs/briefs/prover/p6-1053-for-counters.md 7747141 75
+/home/user/Nikaia/docs/briefs/prover/architect-task.md 5904048 74
