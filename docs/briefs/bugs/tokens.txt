@@ -13,3 +13,4 @@
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 1262133 27
 /home/user/Nikaia/docs/briefs/qa-task.md 366704 19
 /home/user/Nikaia/docs/briefs/bugs/b9-1055-field-of-a-coalesce.md 129642 3
+/home/user/Nikaia/docs/briefs/bugs/b10-1057-field-of-an-element-read.md 139584 3
