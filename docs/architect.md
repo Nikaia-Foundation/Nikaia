@@ -56,6 +56,12 @@ at <path>`. It opens with this frontmatter (defaults `builder`, `sonnet`, 120,
     budget_usd: 20
     ---
 
+A line `Facts: <heading>, <heading>` (or `facts:` in the frontmatter) names
+the `## ` / `### ` sections of `docs/builder-facts.md` the builder needs;
+`agent.nika` puts their text into its prompt under *Facts for this brief*, so
+it does not read the file whole. A heading ending in a parenthetical is named
+without it (`Moving Rust into Nikaia`); an unknown one stops the run.
+
 **Issues are written in brief form** (owner, 2026-10-25): frontmatter, facts,
 *Locations*, *To build* steps with tests, rules, report form, so a builder can
 start on one without the architect. Builders have no GitHub access: a brief

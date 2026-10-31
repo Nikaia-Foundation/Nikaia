@@ -1,0 +1,17 @@
+a.rs: ok=true
+1-1 struct Pair
+2-4 struct Settings
+5-14 impl Show for Wrap<'a, T>
+6-10 fn show
+11-13 fn sign
+15-15 fn table
+16-16 type Map
+18-23 mod tests
+19-22 fn text
+b.nika: ok=true
+1-3 struct Item
+4-4 type Names
+5-7 trait Shown
+6-6 fn shown
+8-12 fn greet
+13-13 fn count

@@ -1,0 +1,80 @@
+// `scripts/where.nika -- --outline FILE`: one line per item of a `.rs` or
+// `.nika` file, `<start>-<end> <kind> <name>`, the end the line of the item's
+// closing brace; braces in strings, characters, comments and `f"…"` holes do
+// not count.
+use std::fs
+use std::process
+
+// The checkout: the working directory, or (under `nikaia test`, which runs a
+// test in a directory of its own) the one `nikaia` was started in.
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/where.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/where.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let rust = [
+        "pub struct Pair(u8, u8);",
+        "pub(crate) struct Settings {",
+        "    name: String,",
+        "}",
+        "impl<'a, T: Fn() -> u8> Show for Wrap<'a, T> where T: Copy {",
+        "    fn show(&self) -> char {",
+        "        let s = r#\"fn fake() { \"#;",
+        "        /* } { */ let c = '{';",
+        "        if s.is_empty() { '}' } else { c }",
+        "    }",
+        "    fn sign(",
+        "        &self,",
+        "    ) -> u8;",
+        "}",
+        "const fn table() -> [u8; 2] { [1; 2] }",
+        "type Map = std::collections::BTreeMap<String, u8>;",
+        "#[cfg(test)]",
+        "mod tests {",
+        "    fn text() -> &'static str {",
+        "        \"} fn broken() {",
+        "        \"",
+        "    }",
+        "}",
+    ]
+    let nika = [
+        "struct Item {",
+        "    name: String,",
+        "}",
+        "type Names = Vec[String]",
+        "trait Shown {",
+        "    fn shown(ref self) -> String",
+        "}",
+        "fn greet(name: String,",
+        "         loud: bool) -> String {",
+        "    let brace = '}'",
+        "    return f\"{" + "{ {name.replace(\"}\", \"{\")} }" + "}\"  // }",
+        "}",
+        "sync fn count(xs: ref Vec[i64]) -> i64 { return xs.len() }",
+    ]
+    fs::write(f"{tmp}/a.rs", fs::Root::Anywhere, rust.join("\n") + "\n")
+    fs::write(f"{tmp}/b.nika", fs::Root::Anywhere, nika.join("\n") + "\n")
+    for file in ["a.rs", "b.nika"] {
+        let out = process::run(nikaia.clone(), ["run", f"{repo}/scripts/where.nika", "--", "--outline", f"{tmp}/{file}"]; dir: repo.clone())
+        println(f"{file}: ok={out.ok}")
+        print(out.stdout)
+    }
+    process::run("rm", ["-rf", tmp])
+}

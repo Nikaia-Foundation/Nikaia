@@ -1,6 +1,7 @@
 // Where a name lives, in one call.
 //
 //     nikaia run scripts/where.nika -- NAME...
+//     nikaia run scripts/where.nika -- --outline FILE...
 //
 //     def <file>:<line> <the line, trimmed>     (at most 12 lines a name)
 //     calls <n> in <k> files: f1 f2 f3          (at most five files named)
@@ -9,6 +10,10 @@
 // `crates/nikaia-std/src/tools/*.nika` (not `tools/lowered/`). For an `NK1234`
 // NAME instead `tests <file>` (crates/nikaia/tests/it/, tests/compiler/tests/)
 // and `spec <file>:<line>` (docs/specification/30-nikaia-tooling.md).
+// `--outline FILE` (a `.rs` or `.nika`) prints one line per `fn`, `struct`,
+// `enum`, `type`, `trait`, `impl` and inline `mod`, nested ones included:
+// `<start>-<end> <kind> <name>`, the end the line of its closing brace, so a
+// builder reads exactly that range instead of the whole file.
 // Each line is at most 160 characters.
 
 use std::cli
@@ -155,12 +160,223 @@ fn where_code(name: String) -> Vec[String] throws {
     return out
 }
 
+
+// --outline FILE: one line per item, `<start>-<end> <kind> <name>`, the end
+// the line of the item's closing brace (or of its `;`, or for a body-less
+// `.nika` item its own line), so that exactly that range can be read.
+
+fn where_word(c: scalar) -> bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+}
+
+fn where_at(s: String, i: i64) -> scalar {
+    if i < 0 || i >= s.len() { return ' ' }
+    return s.bytes[i] as scalar
+}
+
+// The index of the `'` closing a character literal opened at `i`, or `i`
+// (a Rust lifetime, or a lone quote).
+fn where_quote_end(line: String, i: i64) -> i64 {
+    if where_at(line, i + 1) == '\\' {
+        let close = line.find("'"; from: i + 3) ?? -1
+        if close > 0 { return close }
+        return i
+    }
+    if where_at(line, i + 2) == '\'' { return i + 2 }
+    if i + 1 < line.len() && line.bytes[i + 1] >= 128 {
+        for k in i + 2..<i + 6 { if where_at(line, k) == '\'' { return k } }
+    }
+    return i
+}
+
+// Per line: the braces, parentheses, brackets and semicolons that stand in
+// code (outside strings, comments and `f"…"` holes), and whether the line
+// starts in code.
+struct WhereShape {
+    events: Vec[String],
+    code: Vec[bool],
+}
+
+// The lexer's stack: 0 code, 1 string, 2 `f"…"`, 3 raw string, 4 block
+// comment, 6 a hole of an `f"…"`, 7 a brace inside a hole.
+fn where_shape(lines: ref Vec[ref String], nika: bool) -> WhereShape throws {
+    let mut events: Vec[String] = []
+    let mut code: Vec[bool] = []
+    let mut stack: Vec[i64] = [0]
+    let mut hashes = 0
+    for line in lines {
+        code.push(stack.len() == 1)
+        let mut ev: String = ""
+        let n = line.len()
+        let mut i = 0
+        while i < n {
+            let c = where_at(line, i)
+            let next = where_at(line, i + 1)
+            let top = stack[stack.len() - 1]
+            if top == 1 || top == 2 {
+                if c == '\\' {
+                    i += 1
+                } else if c == '"' {
+                    stack.pop()
+                } else if top == 2 && c == '{' {
+                    if next == '{' { i += 1 } else { stack.push(6) }
+                } else if top == 2 && c == '}' && next == '}' {
+                    i += 1
+                }
+            } else if top == 3 {
+                if c == '"' {
+                    let mut k = 0
+                    while k < hashes && where_at(line, i + 1 + k) == '#' { k += 1 }
+                    if k == hashes {
+                        stack.pop()
+                        i += hashes
+                    }
+                }
+            } else if top == 4 {
+                if c == '*' && next == '/' {
+                    stack.pop()
+                    i += 1
+                } else if c == '/' && next == '*' {
+                    stack.push(4)
+                    i += 1
+                }
+            } else if c == '/' && next == '/' {
+                break
+            } else if c == '/' && next == '*' {
+                stack.push(4)
+                i += 1
+            } else if c == '"' {
+                if nika && where_at(line, i - 1) == 'f' && !where_word(where_at(line, i - 2)) { stack.push(2) } else { stack.push(1) }
+            } else if !nika && c == 'r' && (!where_word(where_at(line, i - 1)) || (where_at(line, i - 1) == 'b' && !where_word(where_at(line, i - 2)))) {
+                let mut k = i + 1
+                while where_at(line, k) == '#' { k += 1 }
+                if where_at(line, k) == '"' {
+                    hashes = k - i - 1
+                    stack.push(3)
+                    i = k
+                }
+            } else if c == '\'' {
+                i = where_quote_end(line, i)
+            } else if c == '{' {
+                if top == 0 { ev = ev + "{" } else { stack.push(7) }
+            } else if c == '}' {
+                if top == 0 { ev = ev + "}" } else { stack.pop() }
+            } else if top == 0 && (c == '(' || c == ')' || c == '[' || c == ']' || c == ';') {
+                ev = ev + line.bytes[i..<i + 1].text()
+            }
+            i += 1
+        }
+        events.push(ev)
+    }
+    return WhereShape { events: events, code: code }
+}
+
+// The identifier at the start of `s`.
+fn where_ident_at(s: String) -> String throws {
+    let mut k = 0
+    while k < s.len() && where_word(where_at(s, k)) { k += 1 }
+    return s.bytes[0..<k].text()
+}
+
+// What an `impl` header names: its generics dropped, up to `{` or `where`.
+fn where_impl_name(after: String) -> String throws {
+    let mut s = after.trim().clone()
+    if s.starts_with("<") {
+        let mut depth = 0
+        let mut k = 0
+        while k < s.len() {
+            let c = where_at(s, k)
+            if c == '<' { depth += 1 } else if c == '>' && where_at(s, k - 1) != '-' { depth -= 1 }
+            k += 1
+            if depth == 0 { break }
+        }
+        s = s.bytes[k..<s.len()].text().trim().clone()
+    }
+    s = s.split("{").collect()[0].split(" where").collect()[0].trim().clone()
+    return s
+}
+
+// `<kind> <name>` when `line` opens an item, else "".
+fn where_item(line: String) -> String throws {
+    let s = where_rest(line)
+    for kw in ["fn", "struct", "enum", "type", "trait", "impl", "mod"] {
+        if !s.starts_with(kw) { continue }
+        let after = (s.strip_prefix(kw) ?? "").clone()
+        let mut name: String = ""
+        if kw == "impl" {
+            if after.starts_with("<") || after.starts_with(" ") { name = where_impl_name(after) }
+        } else if after.starts_with(" ") {
+            name = where_ident_at(after.trim().clone())
+        }
+        if name == "" || (kw == "mod" && !s.contains("{")) { continue }
+        return f"{kw} {name}"
+    }
+    return ""
+}
+
+// Does a `.nika` header line go on to the next one?
+fn where_goes_on(line: String) -> bool {
+    let t = line.trim()
+    for end in [",", "(", "=", "->", "|", "+", "&&"] { if t.ends_with(end) { return true } }
+    return false
+}
+
+// The line (from 1) where the item opened at `start` (from 0) ends.
+fn where_end(shape: ref WhereShape, lines: ref Vec[ref String], start: i64, nika: bool) -> i64 throws {
+    let mut depth = 0
+    let mut paren = 0
+    let mut opened = false
+    for i in start..<lines.len() {
+        let ev = shape.events[i].clone()
+        for k in 0..<ev.len() {
+            let c = where_at(ev, k)
+            if c == '(' || c == '[' {
+                paren += 1
+            } else if c == ')' || c == ']' {
+                paren -= 1
+            } else if c == '{' {
+                if opened {
+                    depth += 1
+                } else if paren == 0 {
+                    opened = true
+                    depth = 1
+                }
+            } else if c == '}' && opened {
+                depth -= 1
+                if depth == 0 { return i + 1 }
+            } else if c == ';' && !opened && paren == 0 {
+                return i + 1
+            }
+        }
+        if nika && !opened && paren == 0 && !where_goes_on(lines[i].clone()) { return i + 1 }
+    }
+    return lines.len()
+}
+
+fn where_outline(path: String) -> Vec[String] throws {
+    let lines = fs::read_to_string(path.clone(), fs::Root::Anywhere).split("\n").collect()
+    let nika = path.ends_with(".nika")
+    let shape = where_shape(lines, nika)
+    let mut out: Vec[String] = []
+    for i in 0..<lines.len() {
+        if !shape.code[i] { continue }
+        let item = where_item(lines[i].clone())
+        if item == "" { continue }
+        out.push(where_cap(f"{i + 1}-{where_end(shape, lines, i, nika)} {item}"))
+    }
+    return out
+}
+
 fn main() throws {
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
     if args.len() < 2 {
-        println("usage: nikaia run scripts/where.nika -- NAME...")
+        println("usage: nikaia run scripts/where.nika -- NAME... | --outline FILE...")
         process::exit(2)
+    }
+    if args[1] == "--outline" {
+        for k in 2..<args.len() { for l in where_outline(args[k].clone()) { println(l) } }
+        return
     }
     let files = where_load("crates", where_rust_or_tool)
     for k in 1..<args.len() {

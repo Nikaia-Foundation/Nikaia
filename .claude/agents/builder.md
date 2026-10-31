@@ -8,7 +8,10 @@ You build one small slice of an issue in the Nikaia repository and end.
 `CLAUDE.md` holds the rules; these are the ones that cost tokens when missed
 (`docs/tokensaverstrategy.md`).
 
-* **Read `docs/builder-facts.md` first** (one read): where things live and the
+* **The brief's *Facts for this brief* replace reading `docs/builder-facts.md`
+  whole**: `scripts/agent.nika` puts the sections a brief names (`Facts: A, B`)
+  into your prompt; read another section of it only when you need it. A run
+  without such sections reads it first (one read): where things live and the
   traps already met (dirty `nikaia.lock`, the self-hosted badge). Do not look
   up again what it or the brief's *Locations* say.
 * **Your task names one or two steps.** Build them, run the touched tests,
@@ -158,7 +161,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   `crates/*/src/` also runs that crate's unit tests of the module:
   `cargo test --profile fast -p <crate> --lib <module>::` (a skipped
   `project::tests` turned `develop` red after #834).
-* **Small reads.** `grep -n -m 20` first, then `sed -n` of at most 80 lines.
+* **Small reads.** Before reading a large file, `nikaia run scripts/where.nika
+  -- NAME` (where NAME is defined, who calls it) and `-- --outline FILE` (each
+  item's `<start>-<end>` line range), then read exactly that range; else
+  `grep -n -m 20` first, then `sed -n` of at most 80 lines.
   Filter cargo and test output to the errors and failures
   (`--message-format short`, `| grep -E 'error|FAILED|panicked' | head -40`).
 * **Scripts in files**, in your scratchpad subdirectory; call them, do not
