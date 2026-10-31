@@ -22,3 +22,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y2c-properties.md 1529841 32
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 1353210 27
 /home/user/Nikaia/docs/briefs/yaml/y11-1032-guard-call-tiers.md 190234 5
+/home/user/Nikaia/docs/briefs/yaml/y12-1033-guard-text-label.md 620163 5
