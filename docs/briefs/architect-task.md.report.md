@@ -1,3 +1,3 @@
 Result: done
-Batch: b1023b-shadowing-lambda-lent.md, k3a2-comptime-compute.md, b1012b-trait-column-refusals.md
+Batch: b1025-kept-lambda-names.md, b1012b-trait-column-refusals.md, b1012c-trait-column-data.md
 Owner: none

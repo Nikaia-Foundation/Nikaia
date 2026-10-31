@@ -1,2 +1,3 @@
-b1024-kept-param-lent.md
+b1025-kept-lambda-names.md
 b1012b-trait-column-refusals.md
+b1012c-trait-column-data.md
