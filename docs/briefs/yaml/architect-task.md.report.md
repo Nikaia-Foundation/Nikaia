@@ -1,10 +1,5 @@
-Result: done
-Batch: y4c-1003-finish.md, y7c-match-join.md, y2-tree-properties.md
+Result: blocked
+Batch: unchanged (red not from yaml: arm64, bootstrap_compiler - touch_sets::the_two_console_handles_keep_their_order, red since 36761b04 (#994, b994-overlap-note-seq, main lane); its fix forward 0b8a3acb is in CI run 41150991393)
 Owner: none
-Stop: CUT on y7b's Found (y7b itself done, gate green, 65d86e57, Fixes #1009). The `RED` file in this dir is an empty driver marker (gitignored), not a red CI.
-Found filed: #1021 (label ready): a `match` arm's assignment to a `let mut` is not joined as after an `if`. A defect: ADR-361 D9 says "a branch". Its fix is y7c (Fixes #1021). It touches only prover files, so it runs after y4c.
-y2: cut to steps 1-2 (block scalars, properties, aliases), 100 turns. Steps 3-4 (explicit keys, directives, Limits) moved to y2b-keys-directives-limits.md, for the next batch. Both now carry the stop-15-turns rule.
-#928: To build updated (y7b struck, y4c/y7c/y2/y2b listed, #1021 under Found); labels stay ready,wip.
-Pushed: 35f48c51
-Not mine, left alone: packages/yaml/nikaia.lock is modified in the tree (compiler hash), and the old report was deleted by the driver.
-Process: y7b's debrief asks builder.md for `cp target/fast/nikaia $S/nikaia.before` before the first build, and for clippy grep -A3. I put both into y7c. builder.md belongs to the main session: worth adopting there.
+Done: y4c (Fixes #1003) and y7c (Fixes #1021) are on develop and ticked in #928's To build. y7c's Found (a match guard gives its arm no fact; ADR-361 D9 silent) filed as #1022, label `decision`, with a paper: nothing needs it now, recommendation is to keep today's behaviour until a program needs it. Next batch once develop is green: y2-tree-properties.md (already the last entry of batch.txt), then y2b.
+Files: none committed (only this report).

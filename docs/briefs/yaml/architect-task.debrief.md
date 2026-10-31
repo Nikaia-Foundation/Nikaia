@@ -1,14 +1,11 @@
-1. **Most turns:** working out what the stop actually was. `architect-input.txt` held only a `CUT` line, but `ls` also showed an empty `RED` file, so I read the driver code (`drive_action`, its input writing) and ran `git check-ignore` before I could rule out a red CI. After that, the failed `git pull --rebase` (refused because of another agent's uncommitted `nikaia.lock`) cost one more round before I pushed fast-forward instead.
-
-2. **Looked up, could have been handed over:**
-   - That `RED` in a lane dir is the driver's gitignored marker, not a CI state.
-   - ADR-361 D9's exact wording ("a branch"), which decides whether #1021 is a defect or needs the owner.
-   - Where the prover handles `Expr::If` and `Expr::Match` in `prover_walk.nika`.
-   - That y2 had no stop-15-turns rule and was too big for one run.
-
-3. **Checks:**
-   - Useful: reading y7b's report and debrief, #928's *To build*, ADR-361 D9, a grep for the `If`/`Match` arms, and a grep of the new briefs for report paths and the stop rule.
-   - Wasted: the 64 KB grep of Part III for `match` (spilled to a file, never read), and the `architect.md` State grep (nothing for this lane).
-   - Gap: I didn't re-check y4c's facts (json's line 196, that dfe7bac6 is still on its branch) before putting it in the batch again.
-
-4. **One change:** in `drive.nika`, write `architect-input.txt` with an explicit first line `STOP: CUT|RED|BATCH DONE`, plus the stopping report's `Found:` line in full instead of cut off. A note in the architect task saying `RED` files are markers would have done the same. Second: the architect brief should say how to push when someone else's unstaged files block `git pull --rebase` (fetch, then push fast-forward).
+1. **Most turns: finding why CI was red.** `architect-input.txt` said `RED` but listed no failing jobs, though the brief says it should. `gh run view --log-failed` and the jobs/logs API both returned Forbidden. What finally worked was `check-runs/<job>/annotations`. After that I still had to go back through about 15 runs to find which commit turned it red (36761b04, main lane) and to rule out the yaml commits. That took about 8 of my roughly 15 tool calls.
+2. **What I looked up that the brief could have handed me:**
+   - the failing test names and the first red commit with its lane (the input should carry them);
+   - that the search API is blocked, so only `repos/...` endpoints work;
+   - where ADR-361 D9 sits and the decision-paper rules in `docs/supervisor.md` (fine to read, but one line would have pointed there);
+   - whether a `Found` should still be filed when CI is red and `batch.txt` stays unchanged. Step 3 doesn't say; I filed it anyway (#1022).
+3. **Checks I ran:**
+   - Useful: listing the runs, the failed jobs and steps, the annotations of the first red runs, the `git log` of `touch_sets.rs` (it pointed to the fix forward 0b8a3acb), and grepping #928 before the PATCH.
+   - Wasted: `--log-failed`, `actions/jobs/<id>/logs` (twice), and `search/issues`. All were Forbidden, about 4 calls.
+   - Not checked: whether 0b8a3acb actually turns `develop` green. Its run was still going, and I didn't poll.
+4. **The change that would save the most:** the driver should write into `architect-input.txt`, on every `RED`, the failing jobs, the failing test names from the annotations, and the first red commit with its title. Then step 3 is one read instead of a search. Second, `docs/architect.md` should say that CI logs are Forbidden headless: use `check-runs/<job>/annotations`, and only `repos/...` endpoints work, no search. I did not commit either change this run; one of them should be made next run.
