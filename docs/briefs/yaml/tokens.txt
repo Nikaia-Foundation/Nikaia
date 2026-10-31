@@ -19,3 +19,4 @@
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 1732077 37
 /home/user/Nikaia/docs/briefs/yaml/y10-1030-literal-label.md 238261 5
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 344824 13
+/home/user/Nikaia/docs/briefs/yaml/y2c-properties.md 1529841 32
