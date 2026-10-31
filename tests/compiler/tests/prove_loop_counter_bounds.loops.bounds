@@ -1,9 +1,9 @@
-bounds in tests/prove_loop_counter_bounds.nika: 0 indexes, 0 proved; 8 operations, 4 proved
+bounds in tests/prove_loop_counter_bounds.nika: 0 indexes, 0 proved; 8 operations, 5 proved
      9  s += 1                          proved
     18  i += 1                          proved
     27  j += 1                          proved
     28  i += 1                          proved
-    37  n += 1                          checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    37  n += 1                          proved
     44  k() + g(3) + f(3) + c([1, -1])  checked: a call's result, which the walk knows nothing of (#382)
     44  k() + g(3) + f(3)               checked: a call's result, which the walk knows nothing of (#382)
     44  k() + g(3)                      checked: a call's result, which the walk knows nothing of (#382)

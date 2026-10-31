@@ -1559,6 +1559,14 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates")
     let over = check_core_expr(state, world, host, iter, span)
     state.a_loop_over_a_nullable(world, over, iter, span)
+    // **A `for` walks what it counts, one turn per element or entry**
+    // (ADR-361 D13): its length is recorded as `.len()`'s is.
+    if check_core_method_counted(over) {
+        state.facts.std_lengths.insert(id_of(iter) as i64)
+        if state.elements_take_space(over) {
+            state.facts.sized_lengths.insert(id_of(iter) as i64)
+        }
+    }
     // **A nested head walks its top-level width** (ADR-356).
     let mut width = bindings.len() as i64
     if shape.len() > 0 && shape[0] > 0 {

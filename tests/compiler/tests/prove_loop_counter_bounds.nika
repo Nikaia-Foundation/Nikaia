@@ -1,7 +1,7 @@
 // #1069, guarding #1054 (p4): the loop counters the prover proves through
 // the loop. `k`'s `s += 1`, `g`'s `i += 1` and `f`'s two steps are proved at
-// both settings (`s` and `j` by `i`'s turns, ADR-361 D13); `c`'s `n += 1`, a
-// counter bounded only by the turns of a `for`, stays checked here.
+// both settings (`s` and `j` by `i`'s turns, ADR-361 D13); `c`'s `n += 1` by
+// the turns of a `for` over `xs`, whose length the checker records (#1053).
 fn k() -> i64 sync {
 	let mut i = 0
 	let mut s = 0

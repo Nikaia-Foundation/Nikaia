@@ -184,7 +184,7 @@ fn check_core_method_literal(mut state: CheckState, receiver: ref Expr, on: Ty) 
 }
 
 /// **A length `std` counts**: of a list, a run, text, a `Bytes` or a map.
-fn check_core_method_counted(on: ref Ty) -> bool {
+pub fn check_core_method_counted(on: ref Ty) -> bool {
     return match on {
         Ty::Named { name, .. } => {
             let b = check_core_method_base(name)

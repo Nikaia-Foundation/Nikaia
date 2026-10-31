@@ -1,10 +1,14 @@
 // #1053 step 4 (ADR-361 D13): a `for` counts its turns, and a counter is
 // bounded by them. `ranged`'s `k += 1` is proved at both settings (`k == t`,
-// `t < n`); `every`, `some` and `same` need the length of the collection
-// walked, which the checker does not yet hand the walk, and stay checked
-// here. The soundness rows stay checked: a start the walk does not bound,
-// a `u8` that 2 a turn takes past 255, a reset, a counter grown in an inner
-// loop, a doubling, and a `u8` counted over a range of unknown length.
+// `t < n`); `every`, `some`, `same` and `entries` walk a collection whose
+// length the checker records, so their counters are proved too (`t <
+// xs.len()`). `walked_chars` walks a produced sequence, which has no
+// recorded length, and stays checked. The soundness rows stay checked: a
+// start the walk does not bound, a `u8` that 2 a turn takes past 255, a
+// reset, a counter grown in an inner loop, a doubling, and a `u8` counted
+// over a range of unknown length.
+use std::collections
+
 fn every(xs: ref Vec[i64]) -> i64 sync {
 	let mut at = 0
 	for _x in xs {
@@ -99,8 +103,28 @@ fn small_ranged(n: i64) -> u8 sync {
 	return s
 }
 
+fn entries(m: ref collections::HashMap[String, i64]) -> i64 sync {
+	let mut n = 0
+	for (_k, _v) in m {
+		n += 1
+	}
+	return n
+}
+
+fn walked_chars(text: String) -> i64 sync {
+	let mut n = 0
+	for _c in text.chars() {
+		n += 1
+	}
+	return n
+}
+
 fn main() {
 	let xs = [1, 5, -2]
 	println(f"{every(xs)} {some(xs)} {same(xs)} {ranged(5)}")
 	println(f"{unbounded_start(xs, 1)} {small(xs)} {reset(xs)} {inner(xs)} {doubled(xs)} {small_ranged(3)}")
+	let mut m: collections::HashMap[String, i64] = collections::HashMap()
+	m.insert("a", 1)
+	m.insert("b", 2)
+	println(f"{entries(m)} {walked_chars("héllo")}")
 }

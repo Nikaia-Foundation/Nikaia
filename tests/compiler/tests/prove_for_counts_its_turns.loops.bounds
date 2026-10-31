@@ -1,12 +1,14 @@
-bounds in tests/prove_for_counts_its_turns.nika: 1 indexes, 0 proved; 10 operations, 1 proved
-    11  at += 1  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
-    20  n += 1   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
-    30  xs[at]   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
-    33  at += 1  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
-    44  k += 1   proved
-    52  at += 1  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
-    60  n += 2   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
-    71  n += 1   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
-    80  n += 1   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
-    89  n * 2    checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
-    97  s += 1   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+bounds in tests/prove_for_counts_its_turns.nika: 1 indexes, 1 proved; 12 operations, 5 proved
+    15  at += 1  proved
+    24  n += 1   proved
+    34  xs[at]   proved
+    37  at += 1  proved
+    48  k += 1   proved
+    56  at += 1  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    64  n += 2   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    75  n += 1   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    84  n += 1   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    93  n * 2    checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+   101  s += 1   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+   109  n += 1   proved
+   117  n += 1   checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)

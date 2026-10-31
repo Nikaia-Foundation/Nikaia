@@ -2166,7 +2166,7 @@ pub mod check_core_leaves {
 }
 pub mod check_core_method {
     #[allow(unused_imports)]
-    pub use super::{check_core_method, check_core_method_code_lent};
+    pub use super::{check_core_method_counted, check_core_method, check_core_method_code_lent};
 }
 pub mod check_core_ops {
     #[allow(unused_imports)]

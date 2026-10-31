@@ -126,7 +126,7 @@ pub(crate) fn check_core_method_literal(state: &mut CheckState, receiver: &Expr,
     on
 }
 
-pub(crate) fn check_core_method_counted(on: &Ty) -> bool {
+pub fn check_core_method_counted(on: &Ty) -> bool {
     match on {
         Ty::Named { name, .. } => {
             let b = check_core_method_base(name);
