@@ -1408,6 +1408,18 @@ pub(crate) fn rsrc_scalar(asked: &Asked<'_, '_, '_>, ty: &Type) -> bool {
     name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" || name == "bool" || name == "char"
 }
 
+pub(crate) fn rsrc_textless(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: &Type, open: &[String]) -> bool {
+    if rsrc_scalar(asked, ty) { return true; }
+    if ty.is_view || ty.is_tuple || !ty.generics.is_empty() { return false; }
+    let name = asked.names.resolve(ty.name).to_string();
+    if nikaia_std::list::contains(&open, &name) { return false; }
+    let fields = match *nikaia_std::index::get(&unit.fields, &name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let mut deeper = open.to_owned();
+    deeper.push(name);
+    for (_, field) in fields.iter() { if !rsrc_textless(unit, asked, field, &deeper) { return false; } }
+    true
+}
+
 pub(crate) fn rsrc_ty_holds_view(asked: &Asked<'_, '_, '_>, ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, view } => {
@@ -2155,7 +2167,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             }
             for arg in args.iter() {
                 let owned = asked.names.resolve(arg.name).to_string();
-                if (*arg.ty.code).is_none() && !arg.mutable && !nikaia_std::list::contains(&sources, &owned) && !rsrc_scalar(asked, &arg.ty) {
+                if (*arg.ty.code).is_none() && !arg.mutable && !nikaia_std::list::contains(&sources, &owned) && !rsrc_textless(unit, asked, &arg.ty, &vec![]) {
                     let mut marked = rsrc_none();
                     if rsrc_either_text(asked, (ret_type).as_ref()) && rsrc_plain_text(asked, &arg.ty) { marked.insert(format!("={}", owned)); } else { marked.insert(format!("!{}", owned)); }
                     flow.env.insert(owned, marked);

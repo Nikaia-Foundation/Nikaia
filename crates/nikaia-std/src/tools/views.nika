@@ -1983,6 +1983,33 @@ fn rsrc_scalar(asked: ref Asked, ty: ref Type) -> bool {
     return name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" || name == "bool" || name == "char"
 }
 
+// **A type nothing can be read out of that points into it** (#1070): a
+// scalar, or a struct or enum this unit declares whose fields are all such
+// types (a field-less enum is the first case). No text, no view, no list:
+// a by-value parameter of it is copied or moved whole, never a view source.
+// `open` holds the types already being asked, so a recursive type is not.
+fn rsrc_textless(unit: ref Unit, asked: ref Asked, ty: ref Type, open: Vec[String]) -> bool {
+    if rsrc_scalar(asked, ty) {
+        return true
+    }
+    if ty.is_view || ty.is_tuple || ty.generics.len() > 0 {
+        return false
+    }
+    let name = asked.names.resolve(ty.name).clone()
+    if open.contains(name) {
+        return false
+    }
+    let fields = unit.fields[name] ?? return false
+    let mut deeper = open.clone()
+    deeper.push(name)
+    for (_, field) in fields {
+        if !rsrc_textless(unit, asked, field, deeper) {
+            return false
+        }
+    }
+    return true
+}
+
 // Whether a type a ledger writes may hold a view. What it does not say, it
 // may: a type no ledger describes is taken to hold one, except the text and
 // number types and the lists and maps of them (D13).
@@ -2912,7 +2939,7 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
             // which becomes a `!` once anything is read out of it.
             for arg in args {
                 let owned = asked.names.resolve(arg.name).clone()
-                if arg.ty.code == null && !arg.mutable && !sources.contains(owned) && !rsrc_scalar(asked, arg.ty) {
+                if arg.ty.code == null && !arg.mutable && !sources.contains(owned) && !rsrc_textless(unit, asked, arg.ty, []) {
                     let mut marked = rsrc_none()
                     if rsrc_either_text(asked, ret_type) && rsrc_plain_text(asked, arg.ty) {
                         marked.insert(f"={owned}")

@@ -1,0 +1,49 @@
+// A by-value parameter whose type holds no text (a field-less enum, a struct
+// of such fields and scalars) is no view source (#1070).
+enum K {
+	A,
+	B,
+}
+
+struct P {
+	kind: K,
+	at: i64,
+}
+
+struct N {
+	name: String,
+}
+
+struct E {
+	kind: K,
+	name: String,
+}
+
+struct F {
+	p: P,
+	name: String,
+}
+
+fn bare(kind: K) -> E sync {
+	return E { kind: kind, name: "" }
+}
+
+fn opening(kind: K, n: ref N) -> E sync {
+	return E { kind: kind, name: n.name }
+}
+
+fn placed(p: P, n: ref N) -> F sync {
+	return F { p: p, name: n.name }
+}
+
+fn word_of(input: String) -> N {
+	return N { name: input.trim() }
+}
+
+fn main() {
+	let n = word_of(" hello ")
+	let e = opening(K::A, n)
+	let b = bare(K::B)
+	let f = placed(P { kind: K::B, at: 2 }, n)
+	println(f"{e.name}{b.name} {f.name} {f.p.at}")
+}
