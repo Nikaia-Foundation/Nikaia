@@ -426,9 +426,20 @@ impl CheckState {
 
     /// A bound or a guard: a value whose type the grammar fixes, so the help
     /// says what to write rather than which declaration to change.
+    ///
+    /// **It reads the labels, it does not take them** (#1050): the engine
+    /// runs it as a closure below the alternative, whose action reads the
+    /// labels after it, so a label handed to a parameter that keeps it is
+    /// `NK2105`, as it is inside a lambda.
     fn grammar_fixed[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, value: ref Expr, want: Ty, scope: ref Vec[CheckLocal], span: ref Span, what: ref String, help: String) sync {
         self.scope.push(scope.clone())
+        let mut word: String = "bound"
+        if what == "A guard" {
+            word = "guard"
+        }
+        self.repeats.push(CheckRepeats { frame: self.scope.len() as i64, what: word, revived: collections::BTreeSet(), leaves: false })
         let found = check_core_expr(self, world, host, value, span)
+        self.repeats.pop()
         self.scope.pop()
         if found.is_unknown() || found.text() == want.text() {
             return

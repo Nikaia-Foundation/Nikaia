@@ -331,7 +331,11 @@ impl CheckState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn grammar_fixed<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: Ty, scope: &[CheckLocal], span: &Span, what: &str, help: String) {
         self.scope.push(scope.to_owned());
+        let mut word: String = String::from("bound");
+        if what == "A guard" { word = String::from("guard"); }
+        self.repeats.push(CheckRepeats { frame: self.scope.len() as i64, what: word, revived: collections::BTreeSet::new(), leaves: false });
         let found = check_core_expr(&mut *self, world, host, value, span);
+        self.repeats.pop();
         self.scope.pop();
         if found.is_unknown() || found.text() == want.text() { return; }
         self.findings.push(check_refusal("NK1102", span, format!("{} here is `{}`, but it has to be `{}`.", what, found.text(), want.text()), vec![], Some(help)));
