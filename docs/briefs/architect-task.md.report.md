@@ -1,4 +1,5 @@
 Result: done
-Batch: b-fixforward-corpus-unanswered.md, b994-overlap-note-seq.md
+Batch: b1023-fn-param-cycle.md, k3a2-comptime-compute.md, b1012b-trait-column-refusals.md
 Owner: none
-Notes: RED since the push ending 75e25ed8 (last green a5663bf6), arm64 and bootstrap_compiler: sequences::the_corpus_has_no_more_unanswered_method_calls_than_it_had (ceiling 16). Suspect 43312d30 (prover_walk.nika grammar actions); 7cde2178 touches packages/yaml only. Fix-forward is first (Opus); #994 (Sonnet) follows on disjoint files. The scan joined builder.md's guard set. #1007 and #996 are done, version raises owed from their Changelog lines. k3a2 still waits on the owner's #1012 answer (docs/briefs/QUESTION). Pushed 0497d535.
+Notes: k3a2 run 4 blocked on three lowering defects, probed and filed ready as #1023 (Sync clash in a crossing Kept; shadowing let lambda handed on unlent; fn parameter on a call cycle lowered &dyn Fn, ADR-277 D11 sentence with the build). k3a2 restarts from the tracked run4.patch after b1023; b1012b follows (precondition b1012a met). CI red at 28a0c1a2/cdfeff18 (touch_sets console-handles text after #994) is already fixed forward by 0b8a3acb, run in progress. Version raises owed: fix-forward corpus, #994, #1012 step 1 (Changelog lines in their reports). Next after this batch: b1012c.
+Pushed: rejected (the local commit "briefs: #1023 ..."; origin/develop moved by the yaml lane, 5f9daf80 and 73facdf2, docs/briefs/yaml and tokenspeed.md only, no overlap; the tree holds other agents unstaged files, so no rebase here)
