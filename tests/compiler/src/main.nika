@@ -1,2 +1,17 @@
+pub struct Places {
+	pub a: String?,
+	pub b: String?,
+	pub value: PlacesValue,
+}
+
+pub enum PlacesValue {
+	Bool(bool),
+	Str(String),
+}
+
+pub fn places(s: String) -> Vec[Places] {
+	return [Places { a: s.strip_prefix("l"), b: null, value: PlacesValue::Bool(true) }, Places { a: null, b: s.trim(), value: PlacesValue::Str(s.trim()) }]
+}
+
 fn main() {
 }

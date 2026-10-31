@@ -13,3 +13,21 @@ version = 4
 sync = "inferred"
 touches = []
 signature = "()"
+
+[fn."places"]
+pub = true
+sync = "inferred"
+returns = "a: ref(s), b: ref(s), value: ref(s)"
+touches = []
+views = ["s: borrowed", "<result>: borrowed"]
+signature = "(s: String) -> Vec[Places]"
+
+[type."Places"]
+pub = true
+fields = ["pub a: ref String?", "pub b: ref String?", "pub value: PlacesValue"]
+tethered = ["a", "b", "value"]
+
+[type."PlacesValue"]
+pub = true
+variants = ["Bool(bool)", "Str(ref String)"]
+tethered = ["Str"]

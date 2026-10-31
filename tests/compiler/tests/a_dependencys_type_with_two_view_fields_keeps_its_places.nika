@@ -1,0 +1,14 @@
+use compiler_tests
+
+fn show(n: ref compiler_tests::Places) -> String {
+	return match n.value {
+		compiler_tests::PlacesValue::Bool(b) => f"bool({b})"
+		compiler_tests::PlacesValue::Str(s) => f"str({s})"
+	}
+}
+
+fn main() {
+	for n in compiler_tests::places(" left ") {
+		println(show(n))
+	}
+}

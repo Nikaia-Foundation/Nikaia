@@ -856,8 +856,15 @@ impl<'p> Emitter<'p> {
             .collect();
         let state = EmitState {
             described: described.clone(),
-            view_slots: view_slots(&units, &package_wide)
+            // **A dependency's type keeps its places where it is written**
+            // (ADR-353 D7, #1037): the program's own ledger holds the types
+            // of the packages it reads under their written path
+            // (`two::Node`), with that package's `tethered`; a bare key is
+            // this package's own, read from the units above.
+            view_slots: nikaia_std::tools::emit_tables::emit_tables_read_view_slots(&own_contracts)
                 .into_iter()
+                .filter(|(name, _)| name.contains("::"))
+                .chain(view_slots(&units, &package_wide))
                 .chain(nikaia_std::tools::emit_tables::emit_tables_read_view_slots(
                     described,
                 ))
