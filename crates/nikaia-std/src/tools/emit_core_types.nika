@@ -180,7 +180,7 @@ impl EmitState {
                     }
                     let mut crossing: String = ""
                     if overlaps {
-                        crossing = " + Send + Sync"
+                        crossing = " + std::marker::Send + std::marker::Sync"
                     }
                     return f"nikaia_std::func::Kept<dyn for<'call> Fn({called.join(", ")}) -> {each}{crossing}>"
                 }
@@ -188,7 +188,7 @@ impl EmitState {
             if !runs {
                 let mut crossing: String = ""
                 if overlaps {
-                    crossing = " + Send + Sync"
+                    crossing = " + std::marker::Send + std::marker::Sync"
                 }
                 // What a kept function is handed is borrowed for the call
                 // alone: its parameters' references are elided.

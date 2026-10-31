@@ -102,13 +102,13 @@ impl EmitState {
                     if code.can_throw { each = format!("Result<{}, Box<dyn std::error::Error>>", inner); }
                     if runs { return format!("impl for<'call> Fn({}) -> {}", called.join(", "), each); }
                     let mut crossing: &'static str = "";
-                    if overlaps { crossing = " + Send + Sync"; }
+                    if overlaps { crossing = " + std::marker::Send + std::marker::Sync"; }
                     return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}{}>", called.join(", "), each, crossing);
                 }
             }
             if !runs {
                 let mut crossing: &'static str = "";
-                if overlaps { crossing = " + Send + Sync"; }
+                if overlaps { crossing = " + std::marker::Send + std::marker::Sync"; }
                 let mut elided: Vec<String> = vec![];
                 let mut lent = false;
                 for part in ty.generics.iter() {
