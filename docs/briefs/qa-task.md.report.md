@@ -1,7 +1,9 @@
 Result: done
-Cause: none found. The red input was the bug lane's (docs/briefs/bugs/qa-input.txt); docs/briefs/qa-input.txt does not exist and the main lane's suite.log is green. The only unpushed commit (217d451a) changes briefs only, so no code commit can be the cause.
-Fixed: nothing changed, nothing committed. The red did not reproduce, and I judge it transient: a second suite run was using the shared suite worktree and machine at about 15:04-15:08.
-Tests: `scripts/badges.py --check` rc=0 (also in /home/user/nikaia-suite at 28bfacae); `scripts/pre-push-check.sh` green; `cargo test --profile fast -p nikaia --test it -- both_settings_run_again_build_nothing_again the_build_time_package_passes_its_own_tests a_program_another_compiler_lowered_is`: 3 passed, 0 failed (227 s, with the other suite still running).
-Found: two things, both outside this task. (1) `cargo build -p nikaia` (debug profile) fails in this checkout with "reached the recursion limit while instantiating ... parse_next" (winnow-grammar rt.rs:902). The fast profile builds, and the gate uses fast. I did not check whether `origin/develop` does the same. (2) The checkout holds uncommitted changes from other agents: lowered/project_members.rs (TrustedMap to HashMap, probably a lower-std output that differs from the committed file), and rs2nika `.contracts`/`.lock`/`.proofs` files. I touched none of them.
-Files: none
-Commit: none
+Cause: 33ed1119 (on origin/develop, not in the tested HEAD) - test red tests/compiler: a_trait_column_change_warns printed Cargo's "Blocking waiting for file lock" line under parallel builds; the suite ran on a base without 33ed1119's filter line.
+Fixed: the same one-line filter of "Blocking waiting for file lock" in a_trait_column_change_warns.nika (identical hunk to 33ed1119, rebases cleanly).
+Tests: nikaia test --both-settings --project tests/compiler: 473 passed, 0 failed (was 472/1).
+Found: none (the test is timing-sensitive to lock contention; the filter covers it).
+Files: tests/compiler/tests/a_trait_column_change_warns.nika
+Commit: tests: a_trait_column_change_warns filters Cargo's file-lock line (as 33ed1119 on origin/develop)
+Changelog: none
+Pushed: local 8debcc6e896320376bb18436695be63dd024d7ce

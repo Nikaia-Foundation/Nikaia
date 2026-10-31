@@ -18,3 +18,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b11-1048-two-view-function-type.md 286853 4
 /home/user/Nikaia/docs/briefs/bugs/b12-1061-pausing-two-view-field.md 175733 4
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 1254452 32
+/home/user/Nikaia/docs/briefs/qa-task.md 604683 19

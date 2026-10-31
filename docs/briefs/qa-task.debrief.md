@@ -1,14 +1,20 @@
-1. **Time and turns.** Two things cost the most. The first was working out which lane the red belonged to. `docs/briefs/qa-input.txt` didn't exist, and the one I needed was under `bugs/`. The second was the test run: the debug build failed, the fast build took 3m44s, and the three tests took 227s. All the investigation before that came to only about 15 turns.
+1. **Most time:** `suite.log` named only the red step (`test red tests/compiler`), not the failing test. I had to rerun the whole `tests/compiler` package (about 10 minutes) to find the one failure. I also spent several calls on three wrong leads:
+   - `target/it-fail.txt` was stale (Oct 26).
+   - The `docs/briefs/` listing was huge.
+   - The first `qa-input.txt` lookup was in the wrong directory.
 
-2. **What I had to look up and the brief could have given me.**
-   - Which lane's `qa-input.txt` applied. `qa-task.md` doesn't say which lane started it.
-   - Which commit and worktree the suite had actually tested. `qa-input.txt` lists unpushed commits, but local `develop` had diverged from `origin/develop`, so that list didn't match the tested tree.
-   - That the gate uses `--profile fast`, so debug builds are not representative.
-   - Where the driver's logs and locks live.
+   After that I had to work out that 33ed1119 was already on `origin/develop` and missing from the tested HEAD.
 
-3. **Checks.**
-   - Useful: `badges.py --check`, `pre-push-check.sh`, and the three tests rerun under the fast profile. These showed the red didn't reproduce.
-   - Wasted: the first `cargo test` in the debug profile. It spent a build on a recursion-limit failure that has nothing to do with the gate.
-   - Largely wasted: running `badges.py` in the old `nikaia-fix` and `nikaia-lane2` worktrees. They are stale and told me nothing.
+2. **What the brief could have handed me:**
+   - Which lane's directory holds `qa-input.txt`. The brief gave two paths and I guessed wrong first.
+   - The exact command for the red step (`nikaia test --both-settings --project tests/compiler`). I read it out of `gate.nika`.
+   - The fact that HEAD was behind `origin/develop`.
+   - The failed-test names. The newest unpushed commit, 0a550483, adds exactly that logging to `gate.nika`, but the suite that failed ran before it.
 
-4. **One change.** Have the driver write the tested commit sha, the lane, and the suite worktree path into `qa-input.txt`. Also have it write the exact failing command, with its profile, and the failing test output to a file. Add a sentence to `qa.md`: "if the failure does not reproduce on the tested commit, report `done` with no commit and stop". A "known transient: concurrent gates" note would also help. With any of these I would have gone straight to the rerun and the report.
+3. **Checks:**
+   - I ran the failing package twice: once to find the failure, once to confirm the fix. Both were needed.
+   - The first call, a grep of `suite.log` for failures, found nothing because the log was only 13 lines.
+   - I did not run clippy or `pre-push-check.sh`, because the change was one `.nika` test line. I said so in the report.
+   - Nothing was wasted beyond the stale-file reads.
+
+4. **Change that would have saved the most:** have the driver write the failing test names, and the first diff lines of each failure, into `qa-input.txt` when a suite step goes red. Add one line to `qa.md`: "if the cause is a test already fixed on `origin/develop`, compare with `git merge-base` and `git log HEAD..origin/develop` first."
