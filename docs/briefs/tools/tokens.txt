@@ -3,3 +3,5 @@
 /home/user/Nikaia/docs/briefs/tools/architect-task.md 5045324 77
 /home/user/Nikaia/docs/briefs/tools/j3-1019-meta-field.md 5211226 85
 /home/user/Nikaia/docs/briefs/tools/architect-task.md 2013198 43
+/home/user/Nikaia/docs/briefs/qa-task.md 368341 14
+/home/user/Nikaia/docs/briefs/qa-task.md 394740 14
