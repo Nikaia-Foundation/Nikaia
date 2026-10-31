@@ -1,16 +1,13 @@
-1. **Most cost:** tracing the red CI. The red signal was in `architect-input.txt`, not in `RED`, which was empty, and I misread that at first. From there it took three `gh api` calls to find the first red run (a99ce32), check that no prover commits were in it, and get the names of the failing tests. The job logs can't be fetched here, but the check-run annotations had the test names.
-
-2. **Looked up, could have been handed over:**
-   - Which file carries the red: `architect-input.txt` or `RED`.
-   - The last green sha.
-   - Whether the lane's commits are in the first red run.
-   - That check-run annotations, unlike the job logs, list the failing tests.
-   - That the uncommitted `lowered/project_members.rs` is already known from the GR and p3 reports.
-   - That 84aa402 is on no branch.
-
+1. **What cost the most:** checking the supervisor's six defect reports one at a time, which took about 15 turns. Several first probes were wrong: `Duration::from_millis` and `Duration::new` don't exist, and the right form is `time::Duration(30, 0)`. Two of the reports didn't reproduce. Repo-wide GitHub search is blocked, so I had to page through the open issues to check for duplicates.
+2. **Looked up that the brief could have handed me:**
+   - Where ADR-361 lives (`docs/specification/adr/`). I tried `docs/adr` first.
+   - The headings of D5, D10, D11 and D12.
+   - How `nikaia test` is tested: the temp-project pattern in `a_library_trait_with_no_impl_runs.nika`.
+   - That `nikaia.toml` has no optimization key.
+   - Which file each line of the `lower-std --bounds` report belongs to: file headers start in column 0, site lines are indented.
+   - The probe paths from the old scratchpad, and that `async e` is #984's planned build, not a defect.
 3. **Checks:**
-   - Useful: the list of runs to find the first red; `merge-base --is-ancestor` for the prover commits; the annotations; `git diff --stat` of the shared tree.
-   - Wasted: `git log -S TrustedMap`, which found nothing, and most of the 84aa402 search.
-   - Not run: a fresh count of the figure (I quoted p3's), and a check that the uncommitted file is exactly what `lower-std` writes at HEAD.
-
-4. **One change:** when CI is red, the driver should write into `architect-input.txt` the first red sha, the last green sha, the failing tests (from the check-run annotations), and whether any of the lane's commits are in the first red run. The task template should say that `RED` is the driver's file and that rule 7 can then be settled with no tool calls.
+   - Useful: one `lower-std --bounds` run at `on` (about 41 s), the counter probe at both settings, the NK2305 probe (a `for` cannot change what it walks), the Part I hole rule, and P5c's `Cut:` range against `project.rs`.
+   - Wasted: the first Duration probes, the async probe that ran `.await` before the plain one, the search API calls, and greps for an optimization key in the toml.
+   - Not run: the count at the `off` setting. I took those figures from p4's report.
+4. **The change that would have saved most:** a supervisor note handing over a defect should already hold the probe text and a "checked on <sha>" line, and say whether it is a planned build (an issue number). The architect then files it without re-probing. I would add this rule to `docs/supervisor.md` and to the task template, and also put an *ADR paths and report format* line into the lane facts in `state.md`.
