@@ -185,3 +185,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 2190921 43
 /home/user/Nikaia/docs/briefs/b1018-kept-fn-index-read.md 427790 6
 /home/user/Nikaia/docs/briefs/architect-task.md 1015594 23
+/home/user/Nikaia/docs/briefs/b1029-kept-lambda-int-result.md 3766157 66
