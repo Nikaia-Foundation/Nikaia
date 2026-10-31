@@ -6,4 +6,4 @@ Checked: with `walk` rewritten in scratch to push into a local, the draft 1c1199
 Briefs: y28 new (fix, `crates/`, version raise for the supervisor); y21 re-queued (run-3 report and debrief renamed `.run3.`, a *Run 4* paragraph with an inline pre-flight); y27's pre-flight names y21 run 4 and #1085.
 Process: `docs/architect.md` (a view-checker probe must make the field really a view; check the whole draft before re-queueing), `docs/builder-facts.md` (narrow a view refusal with `return x` / `let r = x; return r`).
 Issues: #1085 filed (`ready`); #928 *To build* step 4 updated (keeps `ready`, `wip`).
-Pushed: see commit
+Pushed: 0888d170, 182703b2 (develop, fast-forward)
