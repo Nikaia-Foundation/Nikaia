@@ -3440,11 +3440,50 @@ grammar! {
             e:head_cmp_bare -> { ast::spanned(e, _state.user().cut(_span)) }
 
         rule head_cmp_bare -> Expr =
-            head:head_add tail:cmp_head_tail? -> {
+            head:head_bit_or tail:cmp_head_tail? -> {
                 fold_binary(head, tail.into_iter().collect::<Vec<_>>())
             }
 
-        rule cmp_head_tail -> (BinaryOp, Expr, Span) @= op:cmp_op e:head_add -> { (op, e, Span::from(_span)) }
+        rule cmp_head_tail -> (BinaryOp, Expr, Span) @= op:cmp_op e:head_bit_or -> { (op, e, Span::from(_span)) }
+
+        // The head's copy of the bit and shift levels, `bit_or_expr` down to
+        // `shift_expr`, with the same operators and guards (#939): without
+        // them a guard or an `if`/`while` head stopped at `<<` or `&`, and
+        // NK1197 could not fire there as it does in a `let`.
+        rule head_bit_or -> Expr @=
+            e:head_bit_or_bare -> { ast::spanned(e, _state.user().cut(_span)) }
+
+        rule head_bit_or_bare -> Expr =
+            head:head_bit_xor tail:head_bit_or_tail* -> { fold_binary(head, tail) }
+
+        rule head_bit_or_tail -> (BinaryOp, Expr, Span) @=
+            "|" not("|") not("=") e:head_bit_xor -> { (BinaryOp::BitOr, e, Span::from(_span)) }
+
+        rule head_bit_xor -> Expr @=
+            e:head_bit_xor_bare -> { ast::spanned(e, _state.user().cut(_span)) }
+
+        rule head_bit_xor_bare -> Expr =
+            head:head_bit_and tail:head_bit_xor_tail* -> { fold_binary(head, tail) }
+
+        rule head_bit_xor_tail -> (BinaryOp, Expr, Span) @=
+            "^" not("=") e:head_bit_and -> { (BinaryOp::BitXor, e, Span::from(_span)) }
+
+        rule head_bit_and -> Expr @=
+            e:head_bit_and_bare -> { ast::spanned(e, _state.user().cut(_span)) }
+
+        rule head_bit_and_bare -> Expr =
+            head:head_shift tail:head_bit_and_tail* -> { fold_binary(head, tail) }
+
+        rule head_bit_and_tail -> (BinaryOp, Expr, Span) @=
+            "&" not("&") not("=") e:head_shift -> { (BinaryOp::BitAnd, e, Span::from(_span)) }
+
+        rule head_shift -> Expr @=
+            e:head_shift_bare -> { ast::spanned(e, _state.user().cut(_span)) }
+
+        rule head_shift_bare -> Expr =
+            head:head_add tail:head_shift_tail* -> { fold_binary(head, tail) }
+
+        rule head_shift_tail -> (BinaryOp, Expr, Span) @= op:shift_op e:head_add -> { (op, e, Span::from(_span)) }
 
         rule head_add -> Expr @=
             e:head_add_bare -> { ast::spanned(e, _state.user().cut(_span)) }

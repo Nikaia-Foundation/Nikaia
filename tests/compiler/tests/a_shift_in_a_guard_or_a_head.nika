@@ -1,0 +1,29 @@
+// #939: a head reads the shift and bit operators as a body does; a `match`
+// head stopped at `>>` or `|`, and so did a guard and an `if` or `while` head.
+// Beside a comparison they want parentheses there, as in a `let` (NK1197,
+// `a_bit_operation_in_a_head_wants_parentheses`).
+fn main() {
+	let m: i64 = 8
+	let s = match m >> 1 | 1 {
+		5 => "five",
+		else => "other",
+	}
+	println(s)
+	let t = match m & 12 ^ 1 << 2 {
+		12 => "twelve",
+		else => "other",
+	}
+	println(t)
+	let u = match true {
+		true if m == (16 >> 1) => "eight",
+		else => "other",
+	}
+	println(u)
+	let mut n: i64 = 1
+	let mut steps: i64 = 0
+	while (n << 1) <= 64 {
+		n = n << 1
+		steps += 1
+	}
+	println(f"{n} after {steps}")
+}
