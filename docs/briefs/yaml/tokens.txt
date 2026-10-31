@@ -16,3 +16,4 @@
 /home/user/Nikaia/docs/briefs/yaml/y8-1026-grammar-label-struct.md 262634 4
 /home/user/Nikaia/docs/briefs/yaml/architect-task.md 2401227 53
 /home/user/Nikaia/docs/briefs/yaml/y9-1027-group-label.md 1288635 32
+/home/user/Nikaia/docs/briefs/yaml/architect-task.md 1732077 37
