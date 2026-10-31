@@ -7,3 +7,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b4-1016-list-view-result-slice.md 840938 13
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 1111135 28
 /home/user/Nikaia/docs/briefs/bugs/b5-1002-hex-digit-built-in.md 439314 15
+/home/user/Nikaia/docs/briefs/bugs/b6-1010-let-mut-literal-owned-field.md 173701 3
