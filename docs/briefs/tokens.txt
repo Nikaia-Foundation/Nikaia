@@ -215,3 +215,4 @@
 /home/user/Nikaia/docs/briefs/bt2-known-default.md 43231 1
 /home/user/Nikaia/docs/briefs/s920-process-streams.md 1471633 32
 /home/user/Nikaia/docs/briefs/architect-task.md 3435727 57
+/home/user/Nikaia/docs/briefs/s922b-metadata-times.md 146495 3
