@@ -1,0 +1,43 @@
+// scripts/commit.nika without --push commits locally: `Pushed: local <sha>` in
+// the report and `committed <sha8> local` (owner, 2026-10-31: the driver pushes
+// once the suite is green). The scratch repository has no remote.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/commit.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/commit.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn git(dir: String, args: Vec[String]) -> String throws {
+    let mut all: Vec[String] = ["-c", "user.name=T", "-c", "user.email=t@example.com"]
+    for a in args { all.push(a.clone()) }
+    return process::run("git", all; dir: dir).stdout.trim().clone()
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    git(tmp.clone(), ["init", "-q", "-b", "develop"])
+    fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "x\n")
+    fs::write(f"{tmp}/X.md", fs::Root::Anywhere, "# Brief\n\nAttribution:\nCo-Authored-By: Test <t@example.com>\n")
+    fs::write(f"{tmp}/X.md.report.md", fs::Root::Anywhere, "Result: done\nFiles: a.txt\nCommit: a subject\nChangelog: none\nPushed: none\n")
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/commit.nika", "--", f"{tmp}/X.md.report.md"]; dir: tmp.clone(), env: [("GIT_AUTHOR_NAME", "T"), ("GIT_AUTHOR_EMAIL", "t@example.com"), ("GIT_COMMITTER_NAME", "T"), ("GIT_COMMITTER_EMAIL", "t@example.com")])
+    let sha = git(tmp.clone(), ["rev-parse", "HEAD"])
+    let short = git(tmp.clone(), ["rev-parse", "--short=8", "HEAD"])
+    println(out.stdout.trim().replace(short, "SHA8"))
+    let report = fs::read_to_string(f"{tmp}/X.md.report.md", fs::Root::Anywhere)
+    println(report.trim().replace(sha, "SHA"))
+    println(git(tmp.clone(), ["log", "--format=%s"]))
+    process::run("rm", ["-rf", tmp])
+}

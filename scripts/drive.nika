@@ -5,7 +5,8 @@
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time:
 //
 //     NEXT <brief> ...            agent.nika -- <brief> --dir DIR, then the
-//                                 run's files are committed and pushed
+//                                 run's files are committed (locally) and
+//                                 the suite runs
 //     BUMP pending, CI green      cycle.nika -- DIR --apply
 //     CUT, RED, BATCH DONE        the architect: agent.nika -- DIR/architect-task.md,
 //                                 the stop line (and failing jobs) in
@@ -16,14 +17,38 @@
 // agent.nika, an architect report whose `Owner:` is not `none` or whose
 // `Result:` is not `done`, the same stop line after an architect run, a RED sha
 // seen before with no builder to run, `--max` agent runs (default 8), a push
-// rejected after one rebase.
+// rejected after one rebase, a suite still red after 2 QA rounds.
+//
+// **Builders commit, the driver tests and pushes** (owner, 2026-10-31). After
+// each builder or architect run and its report commit, the run's brief is
+// appended to DIR/unpushed.txt (one brief path a line) and the suite runs
+// (`drive_suite`): when `git rev-list --count origin/develop..HEAD` is 0 after a
+// fetch, there is nothing to test (unpushed.txt is emptied). Else the driver
+// takes the checkout's suite lock, `mkdir target/suite.lock` with
+// `<pid> <DIR>` in target/suite.lock/owner: two drivers (the main lane and the
+// bug lane) share this checkout, so one waits in 60 s steps while the owner's
+// pid lives; a dead owner's lock is taken over. The lock is held through the
+// whole red -> QA -> suite loop (both lanes' QA writes
+// docs/briefs/qa-task.md.report.md) and released on every path, an escalation
+// too. It notes the tested sha, runs `gate.nika -- --all` (its output in
+// DIR/suite.log, overwritten) and prints `SUITE <sha8> green|red <steps>`.
+// Green: `git push origin <sha>:develop`, exactly the tested commit; when
+// rejected (other sessions push too), `git pull --rebase` and push HEAD: the
+// rebased commits are CI's to judge. Still rejected: escalate. Then it prints
+// `PUSHED <sha8>` and empties unpushed.txt. Red: DIR/qa-input.txt gets the
+// suite's step lines, the last 200 lines of suite.log, `git log
+// origin/develop..HEAD`, and the brief and report of each brief in
+// unpushed.txt; the QA agent runs (docs/briefs/qa-task.md, role `qa`), its
+// report is committed as the others, and the suite runs again. At most 2 QA
+// rounds: a third red prints `ESCALATE drive: suite red after 2 QA rounds:
+// <steps>` and leaves the commits local. Nothing else pushes.
 // `--no-bump` leaves the version raise to another driver: a second lane in the
 // same session (`docs/briefs/bugs`) runs with it, so only the main lane's
 // driver raises the version and two raises never meet in `CHANGELOG.md`.
 // `--dry-run` runs one step of the loop and prints the commands it would run
 // and the final line `DRY-RUN <action>`; `--lines FILE` takes the cycle's
 // output from FILE instead of running `cycle.nika` (for tests).
-// A builder's `Pushed: rejected` is rewritten when this driver pushed its commit.
+// A builder's `Pushed: rejected` (or `none`) is rewritten when its commit is found in the log.
 // `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
 // **A move that kept under 60% of the converter's draft calls for a converter
 // repair** (owner, 2026-10-27): a builder report whose `Rs2nika:` reads `kept N
@@ -52,8 +77,60 @@ fn drive_exe() -> String throws {
 }
 
 fn drive_escalate(why: String) throws {
+    drive_unlock()
     println(f"ESCALATE drive: {why}")
     process::exit(2)
+}
+
+// The suite lock of this checkout (drive_suite).
+fn drive_lock_dir() -> String {
+    return "target/suite.lock"
+}
+
+// This driver's pid: the parent of the shell it starts.
+fn drive_pid() -> String throws {
+    return process::run("sh", ["-c", "echo $PPID"]).stdout.trim().clone()
+}
+
+// Releases the suite lock if this driver holds it; every exit path calls it.
+fn drive_unlock() throws {
+    let owner = drive_read(drive_lock_dir() + "/owner")
+    if owner == "" { return }
+    if owner.split(" ").collect()[0].trim() == drive_pid() { process::run("rm", ["-rf", drive_lock_dir()]) }
+}
+
+// Takes the suite lock: waits in 60 s steps while another live driver holds
+// it, takes over a dead one's. An owner file not yet written counts as live
+// for two steps.
+fn drive_lock(dir: String) throws {
+    let me = drive_pid()
+    let mut blank: i64 = 0
+    let mut said = false
+    while true {
+        process::run("mkdir", ["-p", "target"])
+        if process::run("mkdir", [drive_lock_dir()]).ok {
+            fs::write(drive_lock_dir() + "/owner", fs::Root::Anywhere, f"{me} {dir}\n")
+            return
+        }
+        let owner = drive_read(drive_lock_dir() + "/owner").trim().clone()
+        let pid = owner.split(" ").collect()[0].clone()
+        let mut live = false
+        if pid == "" {
+            blank += 1
+            live = blank <= 2
+        } else {
+            live = process::run("kill", ["-0", pid.clone()]).ok
+        }
+        if !live {
+            process::run("rm", ["-rf", drive_lock_dir()])
+            continue
+        }
+        if !said {
+            println(f"SUITE waiting for target/suite.lock: {owner}")
+            said = true
+        }
+        process::run("sleep", ["60"])
+    }
 }
 
 // The brief's name: the last path component without `.md`.
@@ -181,17 +258,130 @@ fn drive_say(dry: bool, line: String) {
     if dry { println(f"would run: {line}") }
 }
 
-fn drive_push(dry: bool) throws {
-    drive_say(dry, "git push origin develop")
+// Pushes the tested commit; rejected, rebases once and pushes HEAD (the
+// rebased commits are CI's to judge). Prints `PUSHED <sha8>`.
+fn drive_push(sha: String) throws {
+    let first = process::run("git", ["push", "origin", f"{sha}:develop"])
+    let mut pushed = sha.clone()
+    if !first.ok {
+        // The shared checkout holds other agents' unfinished files and build locks:
+        // they are stashed around the rebase, not a reason to stop (2026-10-28).
+        let pulled = process::run("git", ["pull", "--rebase", "--autostash", "origin", "develop"])
+        if !pulled.ok { drive_escalate("push rejected, and git pull --rebase failed") }
+        let second = process::run("git", ["push", "origin", "HEAD:develop"])
+        if !second.ok { drive_escalate("push rejected after one rebase") }
+        pushed = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+    }
+    println(f"PUSHED {drive_short(pushed)}")
+}
+
+fn drive_short(sha: String) -> String throws {
+    if sha.len() <= 8 { return sha }
+    return sha.bytes[0..<8].text().clone()
+}
+
+fn drive_append(path: String, line: String) throws {
+    let old = drive_read(path.clone())
+    let mut text = old.clone()
+    if text != "" && !text.ends_with("\n") { text = text + "\n" }
+    fs::write(path, fs::Root::Anywhere, text + line + "\n")
+}
+
+// The last `n` lines of a text.
+fn drive_tail(body: String, n: i64) -> String throws {
+    let lines = body.trim_end().split("\n").collect()
+    let mut from: i64 = 0
+    if lines.len() > n { from = lines.len() - n }
+    let mut out: Vec[String] = []
+    for i in from..<lines.len() { out.push(lines[i].clone()) }
+    return out.join("\n")
+}
+
+// What the QA agent reads: the suite's step lines and log tail, the unpushed
+// commits, and the briefs and reports they came from.
+fn drive_qa_input(dir: String, out: String, steps: String) throws {
+    let mut lines: Vec[String] = []
+    lines.push(f"The suite (scripts/gate.nika -- --all) is red: {steps}")
+    lines.push("")
+    lines.push("Step lines:")
+    for l in out.split("\n") {
+        for step in ["build ", "lower-std ", "fmt ", "clippy ", "pre-push ", "test ", "guards ", "Gate: "] {
+            if l.starts_with(step) { lines.push(l.clone()) }
+        }
+    }
+    lines.push("")
+    lines.push(f"Last 200 lines of {dir}/suite.log:")
+    lines.push(drive_tail(out, 200))
+    lines.push("")
+    lines.push("Unpushed commits (origin/develop..HEAD):")
+    lines.push(process::run("git", ["log", "--format=%h %s", "origin/develop..HEAD"]).stdout.trim().clone())
+    lines.push("")
+    lines.push("Briefs and reports of the unpushed commits:")
+    for b in drive_read(f"{dir}/unpushed.txt").split("\n") {
+        let brief = b.trim().clone()
+        if brief == "" { continue }
+        lines.push(brief.clone())
+        let stem = (brief.strip_suffix(".md") ?? "").clone()
+        for r in [f"{brief}.report.md", f"{stem}.report.md"] {
+            if r != ".report.md" && fs::exists(r.clone(), fs::Root::Anywhere) { lines.push(r.clone()) }
+        }
+    }
+    fs::write(f"{dir}/qa-input.txt", fs::Root::Anywhere, lines.join("\n") + "\n")
+}
+
+// The red steps of a gate run, "" when green.
+fn drive_red_steps(out: String) -> String throws {
+    for l in out.split("\n") {
+        if l.starts_with("Gate: green") { return "" }
+        if l.starts_with("Gate: red") { return (l.strip_prefix("Gate: red") ?? "").trim().clone() }
+    }
+    return "gate-error"
+}
+
+// After a run's commit: test the unpushed commits with the complete suite, push
+// them when green, else let the QA agent fix forward (header comment).
+fn drive_suite(exe: String, dry: bool, dir: String, brief: String) throws {
+    let qa = "docs/briefs/qa-task.md"
+    drive_say(dry, f"append {brief} to {dir}/unpushed.txt")
+    drive_say(dry, "git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)")
+    drive_say(dry, "mkdir target/suite.lock (wait while its owner's pid lives)")
+    drive_say(dry, f"{exe} run scripts/gate.nika -- --all > {dir}/suite.log")
+    drive_say(dry, f"green: git push origin <sha>:develop, empty {dir}/unpushed.txt")
+    drive_say(dry, f"red: write {dir}/qa-input.txt, rm -f {qa}.report.md, {exe} run scripts/agent.nika -- {qa} --dir {dir}, commit its report, the suite again (at most 2 QA rounds)")
+    drive_say(dry, "rm -rf target/suite.lock")
     if dry { return }
-    let first = process::run("git", ["push", "origin", "develop"])
-    if first.ok { return }
-    // The shared checkout holds other agents' unfinished files and build locks:
-    // they are stashed around the rebase, not a reason to stop (2026-10-28).
-    let pulled = process::run("git", ["pull", "--rebase", "--autostash", "origin", "develop"])
-    if !pulled.ok { drive_escalate("push rejected, and git pull --rebase failed") }
-    let second = process::run("git", ["push", "origin", "develop"])
-    if !second.ok { drive_escalate("push rejected after one rebase") }
+    drive_append(f"{dir}/unpushed.txt", brief.clone())
+    process::run("git", ["fetch", "--quiet", "origin", "develop"])
+    let count = process::run("git", ["rev-list", "--count", "origin/develop..HEAD"]).stdout.trim().clone()
+    if count == "0" {
+        fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
+        return
+    }
+    drive_lock(dir.clone())
+    let mut rounds: i64 = 0
+    while true {
+        let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+        let run = process::run(exe.clone(), ["run", "scripts/gate.nika", "--", "--all"])
+        let out = run.stdout + run.stderr
+        fs::write(f"{dir}/suite.log", fs::Root::Anywhere, out.clone())
+        let steps = drive_red_steps(out.clone())
+        if steps == "" {
+            println(f"SUITE {drive_short(sha.clone())} green")
+            drive_push(sha)
+            fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
+            drive_unlock()
+            return
+        }
+        println(f"SUITE {drive_short(sha)} red {steps}")
+        if rounds >= 2 { drive_escalate(f"suite red after 2 QA rounds: {steps}") }
+        drive_qa_input(dir.clone(), out, steps)
+        process::run("rm", ["-f", f"{qa}.report.md"])
+        drive_agent(exe.clone(), false, dir.clone(), qa.to_string(), "qa")
+        rounds += 1
+        drive_commit(false, dir.clone(), qa.to_string(), [])
+        drive_tidy(false, dir.clone())
+        drive_append(f"{dir}/unpushed.txt", qa.to_string())
+    }
 }
 
 fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throws {
@@ -216,10 +406,7 @@ fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throw
     let trailer = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01UVxJDveRM5qKZKyCqq6Y24"
     drive_say(dry, "git add " + paths.join(" "))
     drive_say(dry, f"git commit -m '{msg}' -m <Attribution> -- " + paths.join(" "))
-    if dry {
-        drive_push(true)
-        return
-    }
+    if dry { return }
     let mut add: Vec[String] = ["add"]
     for i in 0..<paths.len() { add.push(paths[i].clone()) }
     process::run("git", add)
@@ -234,7 +421,6 @@ fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throw
         let why = (made.stderr + made.stdout).trim().split("\n").collect()[0].clone()
         drive_escalate(f"git commit failed for {name}: {why}")
     }
-    drive_push(false)
 }
 
 // What a run leaves behind that no commit takes: the converter's lock file a
@@ -376,6 +562,7 @@ fn main() throws {
             runs += 1
             drive_commit(dry, dir.clone(), brief.clone(), [])
             drive_tidy(dry, dir.clone())
+            drive_suite(exe.clone(), dry, dir.clone(), brief.clone())
             if !dry {
                 let why = drive_kept(drive_read(f"{brief}.report.md"))
                 if why != "" { println(f"CONVERT drive: {drive_stem(brief.clone())}: {why}") }
@@ -407,6 +594,7 @@ fn main() throws {
         let extra: Vec[String] = []
         drive_commit(dry, dir.clone(), task.clone(), extra)
         drive_tidy(dry, dir.clone())
+        drive_suite(exe.clone(), dry, dir.clone(), task.clone())
         if dry {
             println(f"DRY-RUN ARCHITECT {stop}")
             return

@@ -1,6 +1,6 @@
 // The commit from the report: one message form for every builder.
 //
-//     nikaia run scripts/commit.nika -- [--dry-run] REPORT
+//     nikaia run scripts/commit.nika -- [--dry-run] [--push] REPORT
 //
 // REPORT is `<brief>.report.md` with `Files:` (paths, space-separated) and
 // `Commit:` (subject), plus `Changelog:`, and optionally `Body:` (one paragraph after the subject), `Fixes: #N[, #M]` or
@@ -11,9 +11,13 @@
 // brief itself when that ends in `.md`, else `<brief>.md`;
 // without them `Co-Authored-By: Claude <Model: field, default Sonnet 5.5>` and the
 // last `Claude-Session:` trailer on develop),
-// pushes `origin develop` fast-forward only (no rebase), writes `Pushed: <sha>`
-// into the report and prints `committed <sha8> pushed|rejected`. A rejected
-// push prints `PUSH REJECTED <sha>` first. `--dry-run` prints the message only.
+// and leaves the commit local: it writes `Pushed: local <sha>` into the report
+// and prints `committed <sha8> local` (owner, 2026-10-31: the driver runs the
+// whole suite on builders' commits and pushes them when it is green).
+// `--push` also pushes `origin develop` fast-forward only (no rebase), writes
+// `Pushed: <sha>` (or `rejected`) and prints `committed <sha8> pushed|rejected`;
+// a rejected push prints `PUSH REJECTED <sha>` first. `--dry-run` prints the
+// message only.
 
 use std::cli
 use std::fs
@@ -112,12 +116,19 @@ fn main() throws {
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
     let mut dry = false
+    let mut push = false
     let mut path: String = ""
     for i in 1..<args.len() {
-        if args[i] == "--dry-run" { dry = true } else { path = args[i].clone() }
+        if args[i] == "--dry-run" {
+            dry = true
+        } else if args[i] == "--push" {
+            push = true
+        } else {
+            path = args[i].clone()
+        }
     }
     if path == "" {
-        println("usage: nikaia run scripts/commit.nika -- [--dry-run] REPORT")
+        println("usage: nikaia run scripts/commit.nika -- [--dry-run] [--push] REPORT")
         process::exit(2)
     }
     let report = fs::read_to_string(path.clone(), fs::Root::Anywhere)
@@ -158,9 +169,14 @@ fn main() throws {
         process::exit(1)
     }
     let sha = commit_git(["rev-parse", "HEAD"])
+    let short = commit_git(["rev-parse", "--short=8", "HEAD"])
+    if !push {
+        commit_put_pushed(path, report, f"local {sha}")
+        println(f"committed {short} local")
+        return
+    }
     let pushed = process::run("git", ["push", "origin", "develop"]).ok
     commit_put_pushed(path, report, if pushed { sha.clone() } else { "rejected" })
-    let short = commit_git(["rev-parse", "--short=8", "HEAD"])
     if !pushed { println(f"PUSH REJECTED {sha}") }
     println(f"committed {short} {if pushed { "pushed" } else { "rejected" }}")
 }

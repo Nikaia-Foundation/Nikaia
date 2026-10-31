@@ -1,5 +1,6 @@
 // scripts/gate.nika --full --dry-run: which steps run, from the files changed
-// against the base, the files named after --files and the tests after --tests.
+// against the base, the files named after --files and the tests after --tests;
+// with --all, the complete suite.
 use std::fs
 use std::process
 
@@ -53,5 +54,6 @@ fn main() throws {
     }
     case(nikaia.clone(), gate.clone(), tmp.clone(), "a tools file and tests", ["--files", "tests/compiler/tests/bar.stderr", "--tests", "baz", "qux"])
     case(nikaia.clone(), gate.clone(), tmp.clone(), "the emitter", ["--files", "crates/nikaia/src/emit/mod.rs"])
+    case(nikaia.clone(), gate.clone(), tmp.clone(), "the complete suite", ["--all"])
     process::run("rm", ["-rf", tmp])
 }

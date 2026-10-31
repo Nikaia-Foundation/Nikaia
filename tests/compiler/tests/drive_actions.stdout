@@ -2,8 +2,14 @@
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
 would run: git add T/b1.md.report.md T/b1.md.run.json T/cost.txt docs/tokenspeed.md
 would run: git commit -m 'briefs: b1 report' -m <Attribution> -- T/b1.md.report.md T/b1.md.run.json T/cost.txt docs/tokenspeed.md
-would run: git push origin develop
 would run: git checkout -- crates/rs2nika/convert/nikaia.lock
+would run: append T/b1.md to T/unpushed.txt
+would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
+would run: mkdir target/suite.lock (wait while its owner's pid lives)
+would run: target/fast/nikaia run scripts/gate.nika -- --all > T/suite.log
+would run: green: git push origin <sha>:develop, empty T/unpushed.txt
+would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again (at most 2 QA rounds)
+would run: rm -rf target/suite.lock
 DRY-RUN NEXT b1
 == batch done (exit 0)
 would run: write T/architect-input.txt: BATCH DONE
@@ -11,8 +17,14 @@ would run: rm -f T/architect-task.md.report.md
 would run: target/fast/nikaia run scripts/agent.nika -- T/architect-task.md --dir T
 would run: git add T/cost.txt docs/tokenspeed.md
 would run: git commit -m 'briefs: architect-task report' -m <Attribution> -- T/cost.txt docs/tokenspeed.md
-would run: git push origin develop
 would run: git checkout -- crates/rs2nika/convert/nikaia.lock
+would run: append T/architect-task.md to T/unpushed.txt
+would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
+would run: mkdir target/suite.lock (wait while its owner's pid lives)
+would run: target/fast/nikaia run scripts/gate.nika -- --all > T/suite.log
+would run: green: git push origin <sha>:develop, empty T/unpushed.txt
+would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again (at most 2 QA rounds)
+would run: rm -rf target/suite.lock
 DRY-RUN ARCHITECT BATCH DONE
 == cut (exit 0)
 would run: write T/architect-input.txt: CUT b1: too big -> ARCHITECT
@@ -20,8 +32,14 @@ would run: rm -f T/architect-task.md.report.md
 would run: target/fast/nikaia run scripts/agent.nika -- T/architect-task.md --dir T
 would run: git add T/cost.txt docs/tokenspeed.md
 would run: git commit -m 'briefs: architect-task report' -m <Attribution> -- T/cost.txt docs/tokenspeed.md
-would run: git push origin develop
 would run: git checkout -- crates/rs2nika/convert/nikaia.lock
+would run: append T/architect-task.md to T/unpushed.txt
+would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
+would run: mkdir target/suite.lock (wait while its owner's pid lives)
+would run: target/fast/nikaia run scripts/gate.nika -- --all > T/suite.log
+would run: green: git push origin <sha>:develop, empty T/unpushed.txt
+would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again (at most 2 QA rounds)
+would run: rm -rf target/suite.lock
 DRY-RUN ARCHITECT CUT b1: too big -> ARCHITECT
 == red (exit 0)
 would run: write T/architect-input.txt: RED aaaa1111 test -> ARCHITECT
@@ -29,8 +47,14 @@ would run: rm -f T/architect-task.md.report.md
 would run: target/fast/nikaia run scripts/agent.nika -- T/architect-task.md --dir T
 would run: git add T/cost.txt docs/tokenspeed.md
 would run: git commit -m 'briefs: architect-task report' -m <Attribution> -- T/cost.txt docs/tokenspeed.md
-would run: git push origin develop
 would run: git checkout -- crates/rs2nika/convert/nikaia.lock
+would run: append T/architect-task.md to T/unpushed.txt
+would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
+would run: mkdir target/suite.lock (wait while its owner's pid lives)
+would run: target/fast/nikaia run scripts/gate.nika -- --all > T/suite.log
+would run: green: git push origin <sha>:develop, empty T/unpushed.txt
+would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again (at most 2 QA rounds)
+would run: rm -rf target/suite.lock
 DRY-RUN ARCHITECT RED aaaa1111 test -> ARCHITECT
 == bump green (exit 0)
 would run: target/fast/nikaia run scripts/cycle.nika -- T --apply
