@@ -1,0 +1,15 @@
+use std::collections
+/// What the program's ledger recorded for option `at` of `key` - qualified
+/// by the package for one that is not the program's - where a run's
+/// sub-program is being read and the ledger holds a value.
+pub fn bt_known_default(package: String?, key: String, at: i64) -> String? {
+    return KNOWN.with(fn(held) {
+        let ledger = (held ?? return null)
+        let key = match package {
+            null => key,
+            package => f"{package}::{key}",
+        }
+        let text = (((ledger.functions.get(key) ?? return null).signature ?? return null).config.get(at) ?? return null).default
+        return (if !text.is_empty() { text.clone() } else { null })
+    })
+}
