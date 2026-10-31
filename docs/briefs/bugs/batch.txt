@@ -1,4 +1,3 @@
-b19-1080-lent-option-bare-arg.md
-b17-1077-tools-preamble-traits.md
 b18-1078-filter-map-split-parts.md
 b20-1088-tuple-option-part-in-arms.md
+b13-1057-field-of-a-coalesce-and-let.md

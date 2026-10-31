@@ -321,21 +321,23 @@ holds. What happened is in `git log` and the issues.*
   brief: R0 (#921), `scripts/plan_rows.nika`, the driver writing the failing
   job's clippy output into `architect-input.txt`, fold `ComptimeRan` into
   `CheckWall`.
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): b19 #1080 done (d436703a), b17 #1077, b18
-  #1078, b20 #1088 (the `Blocks:` briefs, for C1a, K3b, P5c). Queued after them, briefs
-  written and issues `wip`: b13 #1057, b14 #947, b16 #1065. b15 done
-  (1d88667d, Part #1060: the gate catches lowered drift; step 2 not
-  reproduced, #1060 stays open for it). `ready` defects no lane holds, next:
-  #1081 (`let a = call().field` borrows the temporary, b15's Found; gate.nika
-  writes `x.stdout + ..` over the kept result meanwhile), #1075, #1074,
-  #1066, #1038, #958, #1014, #927, #1056, #1058. Unfiled: qa-task's note
-  (dev-profile `cargo test -p nikaia` hits the recursion limit in
-  winnow-grammar `rt.rs:902`); a two-view `fn` field written with `String`
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): b17 #1077 done (cf98a769,
+  `wip` off; its Found, no Nikaia test reaching the tools preamble, is a
+  coverage note on #1077, not filed), b19 #1080 done. Batch: b18 #1078 (Blocks
+  K3b), b20 #1088 (Blocks P5c), b13 #1057; probes of b18/b20 re-run at da12a9ca,
+  both still fail. Queued after, briefs written and `wip`: b14 #947, b16 #1065.
+  #1060 stays open for step 2 (not reproduced). `ready` defects no lane holds,
+  next: #1081 (`let a = call().field` borrows the temporary), #1075, #1074,
+  #1083, #1086, #1066, #1038, #958, #1014, #927, #1056, #1058. Unfiled:
+  qa-task's note (dev-profile `cargo test -p nikaia` hits the recursion limit
+  in winnow-grammar `rt.rs:902`); a two-view `fn` field written with `String`
   instead of `ref String` is NK1106; `String?` == `String` refused (NK1102;
-  GR keeps `sysroot_holds` for it): decide whether that is by design when
-  next met. A suite gate-error that does not reproduce: re-run the suite
-  before suspecting a commit. `docs/briefs/bugs/RED` is an empty stale
-  marker (18:43).
+  GR keeps `sysroot_holds` for it): decide whether by design when next met.
+  A suite gate-error that does not reproduce: re-run the suite before
+  suspecting a commit. A bare `RED` line in `architect-input.txt` (no sha, no
+  "failing jobs" sentence) is not the driver's: check the newest develop runs
+  (`gh api .../actions/runs?branch=develop`) before treating it as red; at
+  da12a9ca it was stale, CI green.
 * **yaml lane**: #928, #929, #604 (`wip`).
 * **Owed to the supervisor**: version raise / Changelog lines for s922b
   (`fs::Metadata::modified()`, `links()`, `file_id()`, `time::since_epoch()`,

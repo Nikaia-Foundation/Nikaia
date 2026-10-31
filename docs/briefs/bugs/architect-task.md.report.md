@@ -1,4 +1,7 @@
 Result: done
-Batch: b19-1080-lent-option-bare-arg.md b17-1077-tools-preamble-traits.md b18-1078-filter-map-split-parts.md
+Batch: b18-1078-filter-map-split-parts.md, b20-1088-tuple-option-part-in-arms.md, b13-1057-field-of-a-coalesce-and-let.md
 Owner: none
-Notes: b15 done (1d88667d on origin/develop, Part #1060); its Found is #1081 (filed earlier, ready, no brief yet). The cut was on Found, not a red suite. The Blocks: briefs go first (C1a waits on b19, K3b on b17 and b18); b13, b14, b16 stay written and wip for the next batch. Changelog owed for b15: none (gate script only).
+Red: the `RED` line in architect-input.txt was stale (no sha, no jobs); develop's newest completed CI run is green, every bug-lane commit is pushed.
+Probes: b18 and b20 re-run on target/fast at da12a9ca, both still fail in rustc as their issues say.
+Labels: #1077 `wip` off (built by cf98a769, promote closes it); b17's Found (no Nikaia test reaches the tools preamble) is a coverage note, commented on #1077, not a defect. #1078, #1088, #1057 keep `ready,wip`.
+Next after this batch: b14 #947, b16 #1065 (briefs written), then #1081.
