@@ -389,6 +389,7 @@ pub struct GrammarRule {
     pub span: Span,
     pub args: Vec<FnArg>,
     pub config: Vec<ConfigParam>,
+    pub generics: Vec<GenericParam>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

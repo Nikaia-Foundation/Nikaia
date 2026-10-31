@@ -1323,6 +1323,11 @@ pub struct GrammarRule {
     pub args: Vec[FnArg],
     /// ... and `c`, an option with its default.
     pub config: Vec[ConfigParam],
+    /// `rule Value[T] -> T`: the types the rule takes, in brackets before its
+    /// values ([ADR-grammar-2](../../../docs/specification/adr/adr-grammar-2.md)
+    /// D1). Empty after parsing for every rule the program reaches: such a
+    /// rule is copied once per list of type arguments (`grammar_types.nika`).
+    pub generics: Vec[GenericParam],
 }
 
 /// The keyed attribute of ADR-296 D9: `@frame`, `@frame(boundary: "\n")`,

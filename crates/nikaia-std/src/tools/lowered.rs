@@ -1365,6 +1365,14 @@ mod grammar_decode_lowered {
 #[allow(unused_imports)]
 pub use grammar_decode_lowered::*;
 
+mod grammar_types_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/grammar_types.rs");
+}
+#[allow(unused_imports)]
+pub use grammar_types_lowered::*;
+
 mod integers_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2570,6 +2578,10 @@ pub mod foreign {
 pub mod grammar_decode {
     #[allow(unused_imports)]
     pub use super::{GrDecoded, gr_decode, gr_manifest, gr_dump_helpers, gr_main};
+}
+pub mod grammar_types {
+    #[allow(unused_imports)]
+    pub use super::{GrammarTypesCall, grammar_types_copy_name, grammar_types_expand};
 }
 pub mod integers {
     #[allow(unused_imports)]

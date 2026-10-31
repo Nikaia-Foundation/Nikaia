@@ -1,0 +1,223 @@
+// **A rule that takes types is copied once per list of type arguments**
+// ([ADR-grammar-2](../../../docs/specification/adr/adr-grammar-2.md) D1,
+// Part II 10.8, *A rule may take types*). Right after parsing, the parser's
+// host (`crates/nikaia/src/parser/mod.rs`, `expand_grammar_types`) rewrites
+// each call `G::read[i64](input)` to the copy's name, `G::read__i64(input)`,
+// and hands the calls here: every rule the copies reach with types,
+// `Value[A]`, is copied too, under the same spelling of its types
+// (`check_specialised`, ADR-330 D2), and shared between the calls that reach
+// it with the same list. The generic rule itself is not kept (ADR-304 D6), so
+// the checker, the analyses and the emitter only ever see single-type rules.
+
+use std::collections
+
+/// **One copy a call of an entry asks for**: the grammar, the rule as written
+/// and the types the brackets wrote, under the symbols the program's
+/// interner gives the names.
+pub struct GrammarTypesCall {
+    pub owner: winnow_grammar::Symbol,
+    pub rule: winnow_grammar::Symbol,
+    pub types: Vec[Type],
+}
+
+/// **The name of a rule's copy** for the list of types `types`: `read__i64`,
+/// spelled as a function's copy is (`check_specialised`).
+pub fn grammar_types_copy_name(words: ref winnow_grammar::InternerContext, rule: ref String, types: ref Vec[Type]) -> String {
+    let mut spelled: Vec[String] = []
+    for ty in types {
+        spelled.push(grammar_types_spelled(words, ty))
+    }
+    return check_specialised(rule, spelled.join(", "))
+}
+
+/// A type as the program writes it: `Vec[i64]`, `(A, B)`, `T?`.
+fn grammar_types_spelled(words: ref winnow_grammar::InternerContext, ty: ref Type) -> String {
+    let mut parts: Vec[String] = []
+    for arg in ty.generics {
+        parts.push(grammar_types_spelled(words, arg))
+    }
+    let mut text: String = ""
+    if ty.is_tuple {
+        text = f"({parts.join(", ")})"
+    } else if parts.len() == 0 {
+        text = f"{words.resolve(ty.name)}"
+    } else {
+        text = f"{words.resolve(ty.name)}[{parts.join(", ")}]"
+    }
+    if ty.is_nullable {
+        text = f"{text}?"
+    }
+    return text
+}
+
+/// **The items with each grammar's rules that take types replaced by the
+/// copies `calls` reach.** A grammar with no such rule is returned as it was.
+pub fn grammar_types_expand(mut items: Vec[Spanned[Item]], calls: ref Vec[GrammarTypesCall], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Vec[Spanned[Item]] {
+    let mut out: Vec[Spanned[Item]] = []
+    for item in items.drain() {
+        let mut kept = item.clone()
+        match item.node {
+            Item::Grammar(def) => {
+                kept.node = Item::Grammar(grammar_types_def(def, calls, words, intern))
+            },
+            else => {},
+        }
+        out.push(kept)
+    }
+    return out
+}
+
+fn grammar_types_def(def: ref GrammarDef, calls: ref Vec[GrammarTypesCall], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarDef {
+    let mut generic: collections::BTreeMap[String, GrammarRule] = collections::BTreeMap()
+    for rule in def.rules {
+        if rule.generics.len() > 0 {
+            generic.insert(f"{words.resolve(rule.name)}", rule.clone())
+        }
+    }
+    if generic.len() == 0 {
+        return def.clone()
+    }
+    let owner = def.name
+    let mut queue: Vec[GrammarTypesCall] = []
+    for call in calls {
+        if call.owner == owner {
+            queue.push(call.clone())
+        }
+    }
+    // The rules without types stay, and a rule of theirs that hands types
+    // to a generic one asks for its copy too.
+    let mut rules: Vec[GrammarRule] = []
+    let none: collections::BTreeMap[String, Type] = collections::BTreeMap()
+    for rule in def.rules {
+        if rule.generics.len() == 0 {
+            rules.push(grammar_types_rule(rule, none, rule.name, generic, queue, owner, words, intern))
+        }
+    }
+    let mut done: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut at: i64 = 0
+    while at < queue.len() as i64 {
+        let call = queue[at].clone()
+        at += 1
+        let copy = grammar_types_copy_name(words, words.resolve(call.rule), call.types)
+        if done.contains(copy) {
+            continue
+        }
+        done.insert(copy.clone())
+        let rule: GrammarRule = generic.get(words.resolve(call.rule))?.clone() ?? continue
+        let mut bound: collections::BTreeMap[String, Type] = collections::BTreeMap()
+        let mut index: i64 = 0
+        for parameter in rule.generics {
+            if index < call.types.len() as i64 {
+                bound.insert(f"{words.resolve(parameter.name)}", call.types[index].clone())
+            }
+            index += 1
+        }
+        rules.push(grammar_types_rule(rule, bound, intern(copy), generic, queue, owner, words, intern))
+    }
+    let mut expanded = def.clone()
+    expanded.rules = rules
+    return expanded
+}
+
+/// One rule with the types `bound` says put in, under the name `name`.
+fn grammar_types_rule(rule: ref GrammarRule, bound: ref collections::BTreeMap[String, Type], name: winnow_grammar::Symbol, generic: ref collections::BTreeMap[String, GrammarRule], mut queue: Vec[GrammarTypesCall], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarRule {
+    let mut copy = rule.clone()
+    copy.name = name
+    copy.generics = []
+    if rule.ret_type != null {
+        let written: Type = rule.ret_type?.clone() ?? return copy
+        copy.ret_type = grammar_types_put(written, bound, words)
+    }
+    let mut args: Vec[FnArg] = []
+    for arg in rule.args {
+        let mut a = arg.clone()
+        a.ty = grammar_types_put(arg.ty, bound, words)
+        args.push(a)
+    }
+    copy.args = args
+    let mut config: Vec[ConfigParam] = []
+    for param in rule.config {
+        let mut c = param.clone()
+        c.ty = grammar_types_put(param.ty, bound, words)
+        config.push(c)
+    }
+    copy.config = config
+    let mut alts: Vec[GrammarAlt] = []
+    for alt in rule.alts {
+        let mut a = alt.clone()
+        a.pattern = grammar_types_pattern(alt.pattern, bound, generic, queue, owner, words, intern)
+        alts.push(a)
+    }
+    copy.alts = alts
+    return copy
+}
+
+/// A type with each type parameter `bound` names put in.
+fn grammar_types_put(ty: ref Type, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext) -> Type {
+    if ty.generics.len() == 0 && !ty.is_tuple {
+        let given: Type? = bound.get(words.resolve(ty.name))?.clone()
+        if given != null {
+            let mut put: Type = given ?? ty.clone()
+            put.is_nullable = put.is_nullable || ty.is_nullable
+            return put
+        }
+    }
+    let mut copy = ty.clone()
+    let mut generics: Vec[Type] = []
+    for arg in ty.generics {
+        generics.push(grammar_types_put(arg, bound, words))
+    }
+    copy.generics = generics
+    return copy
+}
+
+fn grammar_types_patterns(parts: ref Vec[Spanned[Pattern]], bound: ref collections::BTreeMap[String, Type], generic: ref collections::BTreeMap[String, GrammarRule], mut queue: Vec[GrammarTypesCall], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Vec[Spanned[Pattern]] {
+    let mut out: Vec[Spanned[Pattern]] = []
+    for part in parts {
+        out.push(grammar_types_pattern(part, bound, generic, queue, owner, words, intern))
+    }
+    return out
+}
+
+/// A pattern with the types put in, and each rule it hands types to,
+/// `Value[A]`, called by its copy's name, which is queued.
+fn grammar_types_pattern(pattern: ref Spanned[Pattern], bound: ref collections::BTreeMap[String, Type], generic: ref collections::BTreeMap[String, GrammarRule], mut queue: Vec[GrammarTypesCall], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Spanned[Pattern] {
+    let mut copy = pattern.clone()
+    match pattern.node {
+        Pattern::Seq(parts) => {
+            copy.node = Pattern::Seq(grammar_types_patterns(parts, bound, generic, queue, owner, words, intern))
+        },
+        Pattern::Choice(parts) => {
+            copy.node = Pattern::Choice(grammar_types_patterns(parts, bound, generic, queue, owner, words, intern))
+        },
+        Pattern::Bind { name, pat } => {
+            copy.node = Pattern::Bind { name: name, pat: grammar_types_pattern(pat, bound, generic, queue, owner, words, intern) }
+        },
+        Pattern::Repeat { pat, rep } => {
+            copy.node = Pattern::Repeat { pat: grammar_types_pattern(pat, bound, generic, queue, owner, words, intern), rep: rep.clone() }
+        },
+        Pattern::Group(inner) => {
+            copy.node = Pattern::Group(grammar_types_pattern(inner, bound, generic, queue, owner, words, intern))
+        },
+        Pattern::Counted { pat, low, high, comma } => {
+            copy.node = Pattern::Counted { pat: grammar_types_pattern(pat, bound, generic, queue, owner, words, intern), low: low.clone(), high: high?.clone(), comma: comma }
+        },
+        Pattern::Ref { name, generics, args } => {
+            let mut types: Vec[Type] = []
+            for ty in generics {
+                types.push(grammar_types_put(ty, bound, words))
+            }
+            let parts = grammar_types_patterns(args, bound, generic, queue, owner, words, intern)
+            let called = words.resolve(name)
+            if generic.contains_key(called) && types.len() > 0 {
+                let copied = grammar_types_copy_name(words, called, types)
+                queue.push(GrammarTypesCall { owner: owner, rule: name, types: types })
+                copy.node = Pattern::Ref { name: intern(copied), generics: [], args: parts }
+            } else {
+                copy.node = Pattern::Ref { name: name, generics: types, args: parts }
+            }
+        },
+        else => {},
+    }
+    return copy
+}

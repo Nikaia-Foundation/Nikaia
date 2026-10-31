@@ -1,0 +1,8 @@
+error[NK1230]: `Num::read` takes a type here, not a value.
+  --> tests/grammar_a_value_where_a_rule_takes_a_type_is_refused.nika:9:25
+   |
+ 9 | 	let n: i64 = Num::read[42](Bytes("7".bytes().collect())) catch {
+   |                         ^^
+   |
+   = note: `Num::read` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-2 D1).
+   = help: Write the type: `Num::read[i64](…)`, not a value of it.

@@ -1,0 +1,14 @@
+// ADR-grammar-2 D1: an entry that takes types takes them in its brackets;
+// a value there is NK1230, as a value where a type belongs is.
+grammar Num {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = d:dec[T](digit+) eof -> { d }
+}
+
+fn main() {
+	let n: i64 = Num::read[42](Bytes("7".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{n}")
+}

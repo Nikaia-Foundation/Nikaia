@@ -1,0 +1,26 @@
+// ADR-grammar-2 D1, Part II 10.8: a rule and an entry take types. One entry
+// read with two types: each list of types gets its own copy of the entry and
+// of the rule it hands the type to, and two calls with `i64` share one.
+grammar Num {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Digits[T] eof -> { v }
+	rule Digits[T] -> T = d:dec[T](digit+) -> { d }
+}
+
+fn main() {
+	let n: i64 = Num::read[i64](Bytes("4200000000".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{n}")
+	let m: u8 = Num::read[u8](Bytes("7".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{m}")
+	let k: i64 = Num::read[i64](Bytes("12".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{k + n}")
+}

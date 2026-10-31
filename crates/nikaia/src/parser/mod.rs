@@ -872,6 +872,9 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
         comments,
         dumped_source: crate::check::accepted_dump_dir().map(|_| input.to_string()),
     };
+    // ADR-grammar-2 D1: a rule that takes types becomes one rule per list of
+    // type arguments, and each call of it the call of its copy.
+    expand_grammar_types(&mut parsed)?;
     // ADR-347: a one-variant enum written by its type's name becomes the long
     // form here, before any reader sees the tree.
     crate::one_variant::expand(&mut parsed)?;
@@ -880,6 +883,167 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
     // each entry that reads one.
     crate::type_rules::expand(&mut parsed)?;
     Ok(parsed)
+}
+
+/// **A rule may take types** ([ADR-grammar-2](../../../../docs/specification/adr/adr-grammar-2.md)
+/// D1, Part II 10.8): each call `G::read[i64](input)` of an entry that takes
+/// types becomes the call of its copy, `G::read__i64(input)`, and the rules
+/// are copied once per list of type arguments (`grammar_types.nika`), so no
+/// later reader sees a rule that takes types. A value in the brackets is
+/// `NK1230`, as a value where a type belongs is.
+fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
+    use std::collections::BTreeSet;
+    let mut generic: BTreeSet<(Symbol, Symbol)> = BTreeSet::new();
+    for item in &parsed.program.items {
+        if let ast::Item::Grammar(def) = &item.node {
+            for rule in def.rules.iter().filter(|r| !r.generics.is_empty()) {
+                generic.insert((def.name, rule.name));
+            }
+        }
+    }
+    if generic.is_empty() {
+        return Ok(());
+    }
+    let interner = parsed.interner.clone();
+    let mut calls: Vec<nikaia_std::tools::grammar_types::GrammarTypesCall> = Vec::new();
+    let mut refused: Option<(u32, String)> = None;
+    let mut items = std::mem::take(&mut parsed.program.items);
+    for item in &mut items {
+        crate::text_tiers::each_block(&mut item.node, &mut |block| {
+            crate::text_tiers::visit_block_mut(
+                block,
+                &mut |expr| {
+                    let ast::Expr::Call { func, .. } = expr else {
+                        return;
+                    };
+                    let ast::Expr::Index { base, index, .. } = &**func else {
+                        return;
+                    };
+                    let ast::Expr::Path(segments, _) = &**base else {
+                        return;
+                    };
+                    let [owner, rule] = segments.as_slice() else {
+                        return;
+                    };
+                    if !generic.contains(&(*owner, *rule)) {
+                        return;
+                    }
+                    let written = match &**index {
+                        ast::Expr::Tuple(parts, _) => parts.iter().collect::<Vec<_>>(),
+                        one => vec![one],
+                    };
+                    let mut types = Vec::new();
+                    for part in written {
+                        match type_written(&interner, part) {
+                            Some(ty) => types.push(ty),
+                            None => {
+                                if refused.is_none() {
+                                    let callee = format!(
+                                        "{}::{}",
+                                        interner.resolve(*owner),
+                                        interner.resolve(*rule)
+                                    );
+                                    refused = Some((ast::id_of(part), callee));
+                                }
+                                return;
+                            }
+                        }
+                    }
+                    let copy = nikaia_std::tools::grammar_types::grammar_types_copy_name(
+                        &interner,
+                        interner.resolve(*rule),
+                        &types,
+                    );
+                    calls.push(nikaia_std::tools::grammar_types::GrammarTypesCall {
+                        owner: *owner,
+                        rule: *rule,
+                        types,
+                    });
+                    let path = vec![*owner, interner.intern_string(&copy)];
+                    **func = ast::Expr::Path(path, ast::NodeId::fresh());
+                },
+                &mut |_, _| {},
+            )
+        });
+    }
+    if let Some((id, callee)) = refused {
+        parsed.program.items = items;
+        let span = parsed
+            .expr_spans
+            .get(&id)
+            .copied()
+            .unwrap_or_else(|| ast::Span::new(0, 0));
+        let message = format!("`{callee}` takes a type here, not a value.");
+        let finding = crate::check::Finding {
+            severity: crate::check::Severity::Error,
+            span,
+            code: "NK1230".to_string(),
+            message: message.clone(),
+            notes: vec![format!(
+                "`{callee}` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-2 D1)."
+            )],
+            help: Some(format!(
+                "Write the type: `{callee}[i64](…)`, not a value of it."
+            )),
+            labels: vec![crate::check::Label {
+                span,
+                word: String::new(),
+                text: String::new(),
+                main: true,
+            }],
+        };
+        return Err(crate::diagnostics::refuse_finding(
+            finding,
+            format!("NK1230: {message}"),
+        ));
+    }
+    let intern = |text: &str| interner.intern_string(text);
+    parsed.program.items = nikaia_std::tools::grammar_types::grammar_types_expand(
+        &mut items, &calls, &interner, &intern,
+    );
+    Ok(())
+}
+
+/// The type a call's brackets write where an expression stands for it:
+/// `i64`, `json::Value`, `Vec[i64]`; nothing for a value.
+fn type_written(interner: &winnow_grammar::InternerContext, expr: &ast::Expr) -> Option<ast::Type> {
+    let named = |name: Symbol, generics: Vec<ast::Type>| ast::Type {
+        name,
+        generics,
+        is_view: false,
+        is_tuple: false,
+        is_nullable: false,
+        code: Box::new(None),
+        count: None,
+        is_mut: false,
+        is_slice: false,
+        either: false,
+        lasting: false,
+    };
+    match expr {
+        ast::Expr::Variable(name, _) => Some(named(*name, Vec::new())),
+        ast::Expr::Path(segments, _) => {
+            let joined = segments
+                .iter()
+                .map(|s| interner.resolve(*s).to_string())
+                .collect::<Vec<_>>()
+                .join("::");
+            Some(named(interner.intern_string(&joined), Vec::new()))
+        }
+        ast::Expr::Index { base, index, .. } => {
+            let outer = type_written(interner, base)?;
+            let parts = match &**index {
+                ast::Expr::Tuple(parts, _) => parts.iter().collect::<Vec<_>>(),
+                one => vec![one],
+            };
+            let generics = parts
+                .into_iter()
+                .map(|p| type_written(interner, p))
+                .collect::<Option<Vec<_>>>()?;
+            Some(named(outer.name, generics))
+        }
+        _ => None,
+    }
 }
 
 fn a_parse_finding(
@@ -2015,12 +2179,14 @@ grammar! {
                     span: Span::from(_span),
                     args: Vec::new(),
                     config: Vec::new(),
+                    generics: Vec::new(),
                 }
             }
           | frame:frame_attr?
             entry:kw_entry?
             KW_RULE
             name:NAME
+            generics:generic_list?
             values:fn_params?
             ret:return_type_arrow?
             label:rule_label?
@@ -2040,6 +2206,9 @@ grammar! {
                     span: Span::from(_span),
                     args: values.args,
                     config: values.config,
+                    // **A rule may take types** (ADR-grammar-2 D1), in
+                    // brackets before its values: `rule Value[T] -> T`.
+                    generics: generics.unwrap_or_default(),
                 }
             }
 
