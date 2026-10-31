@@ -41,3 +41,10 @@ Report to exactly `docs/briefs/prover/architect-task.md.report.md` (the driver d
 * `Owner:` a question for the owner, or `none`
 
 The architect does not count as a batch brief.
+
+## Supervisor notes for the next run (2026-10-31, delete when handled)
+
+* p4 (#1054 step 2) moved little: 729/1612 operations under `off`, 736 under `prove-through-loops:on`; it helps `while` only, and the compiler's code loops mostly with `for` (its range record is #432). Weigh #432 next, and whether `prove-through-loops` should be on by default for the count that is published.
+* The owner asked for `assert`s in the compiler's code: the 379 "parameter no precondition bounds" sites (p3) are that work; plan it once the files are clear of the self-hosting lane.
+* Defects found by the supervisor's script builders, not this lane's (file for the bug lane, `ready`, unless already filed): #1062 (filed: NK1104 on `s.to_string()`, workaround `exe.clone()` in `scripts/drive.nika`); `parts = f().split(" ").collect()` reassigned passes check, rustc refuses (temporary dropped while borrowed); a `Duration` in an f-string passes check, rustc refuses; `async e` (Part I 8.1.2) refused as a reserved word, `spawn fn {}` used in `scripts/gate.nika`; a bogus `Unused import: ProbePlain` warning with `spawn fn { f(s) }` where `f` throws and calls `process::run` (probe: `/tmp/claude-0/-home-user-Nikaia/e0e27fde-472b-560f-914b-b1002dd38405/scratchpad/gate-speed/spawn2.nika`, may be gone); NK1102 on a `fn limit() -> String { return "5G" }` result passed to an owning `String` parameter (Part I 2.2; probe `.../scratchpad/gate-speed/probe.nika`). Write a probe of a few lines into each issue; the scratchpad does not survive the session.
+* p4's report wrote `Changelog: none` for a prover change; a prover change raises the version: give each builder brief a `Changelog:` reminder.
