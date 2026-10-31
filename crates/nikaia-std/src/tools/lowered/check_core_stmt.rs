@@ -1115,6 +1115,10 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
                     if element_at.is_some() {
                         let element: i64 = nikaia_std::index::or(element_at, || 0);
                         frame[0].open_number = Some(state.open_root(element));
+                        if lent && !mut_view && nikaia_std::index::get(&frame, 0).name != "_" {
+                            state.facts.copied_loop_bindings.insert((span.start as i64, nikaia_std::index::get(&frame, 0).name.to_string()));
+                            frame[0].lent = false;
+                        }
                     }
                 }
             },

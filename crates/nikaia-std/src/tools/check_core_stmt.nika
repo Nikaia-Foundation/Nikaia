@@ -1566,6 +1566,13 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
                     if element_at != null {
                         let element: i64 = element_at ?? 0
                         frame[0].open_number = state.open_root(element)
+                        // **Its element is a number, whichever type it gets,
+                        // so a lent walk binds the value** (#938), as one
+                        // over `Vec[i64]` does above.
+                        if lent && !mut_view && frame[0].name != "_" {
+                            state.facts.copied_loop_bindings.insert((span.start as i64, frame[0].name.clone()))
+                            frame[0].lent = false
+                        }
                     }
                 }
             },

@@ -1,0 +1,14 @@
+// #938: a lent walk over a list written in numbers with no declared type
+// binds each number by value, as one over `Vec[i64]` does.
+fn twice(n: i64) -> i64 {
+    return n * 2
+}
+
+fn main() {
+    let row = [1, 2]
+    let mut total = 0
+    for n in row {
+        total += twice(n)
+    }
+    println(f"{total}")
+}
