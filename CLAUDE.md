@@ -64,7 +64,9 @@ the background in a cloud session.
 * **The commit that finishes an issue says `Fixes #N`.** `promote` closes an
   issue only when a commit it brings to `main` names it with `Fixes`, `Closes`
   or `Resolves` (`scripts/fixed-issues.py`); `(#N)` and `Part of #N` close
-  nothing. So the commit that builds the last step of a *To build* list
+  nothing. Any tense counts, in prose too: never write `fix #N`, `fixed #N`
+  or `closes #N` for an issue the commit does not finish (5d7be91e's "the
+  compiler fix #1000" closed #1000 unbuilt); write `the fix for #N`. So the commit that builds the last step of a *To build* list
   writes `Fixes #N`, and also names every issue that list absorbed
   (`Fixes #439, #482`). An issue left open on purpose gets a comment saying
   exactly what is still missing. One that no commit can finish - a process

@@ -183,7 +183,10 @@ The builder writes exactly `<full brief path>.report.md`, these fields only:
     Measure: <builds=.. clippy_with_tests=.. ...>   (never under Found)
 
 Every brief ends with an `Attribution:` block (the commit's trailer lines);
-`scripts/commit.nika` copies it into the message. The builder's final answer
+`scripts/commit.nika` copies it into the message, with everything after it:
+nothing follows the `Attribution:` block, and a paragraph added on a re-run
+goes above `## Rules` (y2b 2026-10-31: an "Earlier attempt" section after it
+would have landed in the commit message). The builder's final answer
 is one line: `done <sha>, report <path>`, `BLOCKED: <reason>, report <path>`
 or `PUSH REJECTED <sha>, report <path>`, plus `NEEDS: <short>` when `Needs`
 is not `none`.
