@@ -199,12 +199,19 @@ impl EmitState {
         let mut spans = false;
         let mut heres = false;
         let mut counts = false;
+        let mut covers = false;
         for rule in def.rules.iter() {
             for alt in rule.alts.iter() {
                 spans = spans || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "span", 1);
                 heres = heres || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "here", 0);
                 counts = counts || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "count", 1);
+                covers = covers || emit_reads_a_text_in_a_guard(world, &walk, &alt.pattern.node);
             }
+        }
+        if covers {
+            out.push(&format!("\n        rule {}(at: ::core::ops::Range<usize>) -> &'a str =\n", emit_covered_rule()));
+            out.push("          empty\n");
+            if bytes { out.push("            -> { ::nikaia_std::grammar::covered_bytes::<_, E>(input, at.clone())? }\n"); } else { out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()) }\n"); }
         }
         if counts {
             out.push(&format!("\n        rule {}<T>(p: Rule<T>) -> i64 =\n", emit_count_rule()));

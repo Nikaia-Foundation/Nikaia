@@ -1,0 +1,21 @@
+// A guard reads a `text(..)` label whose pattern binds names (#1033): the
+// label is the text it covered there too, as it is in the action, though the
+// action's prelude has not run yet when the guard is tried.
+grammar G {
+    rule WS = "" -> { }
+    rule Ch -> i64 = x:any if(x >= '0' && x <= '9') -> { 1 }
+    entry rule top -> String = s:text(d:Ch+) if(s.len() > 1, "two digits") eof -> { s }
+}
+
+fn main() {
+    let r = G::top("12") catch {
+        println("error")
+        return
+    }
+    println(r)
+    let e = G::top("1") catch {
+        println("error")
+        return
+    }
+    println(e)
+}

@@ -29,6 +29,9 @@ impl EmitState {
                 out.push(separator)
             }
             self.emit_pattern(world, walk, out, host, patterns[i])
+            if separator == " " {
+                emit_texts_a_guard_reads(world, walk, out, patterns, i)
+            }
         }
     }
 
@@ -372,6 +375,52 @@ fn emit_is_a_binding_text(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref
         Pattern::Ref { name, generics, args } => emit_text(world, name) == "text" && generics.len() == 0 && args.len() >= 1 && !walk.grammar_nested && !walk.grammar_rules.contains("text") && args.iter().any(fn(arg) { emit_binds_a_name(arg.node) }),
         else => false,
     }
+}
+
+/// **A bound `text(..)` a later guard reads is bound before it** (#1033):
+/// the backend writes a guard as a closure of its own, before the action and
+/// its prelude (`emit_text_bindings`), where `input` is out of reach, so each
+/// such name is bound right after the element of `patterns` at `at` by the
+/// grammar's `__nikaia_covered` rule (`emit_grammar_body`), whose action
+/// reads the text its range covered from its own input.
+fn emit_texts_a_guard_reads(world: ref EmitWorld, walk: ref EmitWalk, mut out: EmitOut, patterns: ref Vec[Spanned[Pattern]], at: i64) {
+    let mut names: Vec[String] = []
+    let mut ranges: Vec[String] = []
+    emit_text_bindings(world, walk, patterns[at].node, names, ranges)
+    for (name, range) in names.iter().zip(ranges.iter()) {
+        if patterns.iter().skip(at + 1).any(fn(later) { emit_guard_reads(world, later.node, name) }) {
+            out.push(f" {name}:{emit_covered_rule()}(at = {range})")
+        }
+    }
+}
+
+/// Whether a guard anywhere in a pattern names `name`.
+fn emit_guard_reads(world: ref EmitWorld, pattern: ref Pattern, name: String) -> bool {
+    return match pattern {
+        Pattern::Guard { cond, .. } => emit_mentions(world, cond, name),
+        Pattern::Seq(parts) => parts.iter().any(fn(part) { emit_guard_reads(world, part.node, name) }),
+        Pattern::Choice(parts) => parts.iter().any(fn(part) { emit_guard_reads(world, part.node, name) }),
+        Pattern::Bind { pat, .. } => emit_guard_reads(world, pat.node, name),
+        Pattern::Ref { args, .. } => args.iter().any(fn(arg) { emit_guard_reads(world, arg.node, name) }),
+        Pattern::Repeat { pat, .. } => emit_guard_reads(world, pat.node, name),
+        Pattern::Counted { pat, .. } => emit_guard_reads(world, pat.node, name),
+        Pattern::Group(pat) => emit_guard_reads(world, pat.node, name),
+        else => false,
+    }
+}
+
+/// Whether a guard of an alternative reads a bound `text(..)` of it, so
+/// that the grammar needs the `__nikaia_covered` rule (#1033).
+fn emit_reads_a_text_in_a_guard(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
+    let mut names: Vec[String] = []
+    let mut ranges: Vec[String] = []
+    emit_text_bindings(world, walk, pattern, names, ranges)
+    return names.iter().any(fn(name) { emit_guard_reads(world, pattern, name) })
+}
+
+/// The rule a guard's bound `text(..)` is read by (#1033).
+fn emit_covered_rule() -> String {
+    return "__nikaia_covered"
 }
 
 /// Whether a pattern binds a name anywhere in it.

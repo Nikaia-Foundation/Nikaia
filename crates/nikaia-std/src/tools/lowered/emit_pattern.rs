@@ -23,7 +23,8 @@ impl EmitState {
     pub(crate) fn emit_patterns<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, patterns: &[Spanned<Pattern>], separator: String) -> Result<(), Box<dyn std::error::Error>> {
         for i in 0..patterns.len() as i64 {
             if i > 0 { out.push(&separator); }
-            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&patterns, (i) as usize))?;
+            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&patterns, nikaia_std::index::at(i)))?;
+            if separator == " " { emit_texts_a_guard_reads(world, &walk, out, patterns, i); }
         }
         Ok(())
     }
@@ -292,6 +293,36 @@ pub(crate) fn emit_is_a_binding_text(world: &EmitWorld<'_, '_, '_, '_>, walk: &E
         _ => false,
     }
 }
+
+pub(crate) fn emit_texts_a_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, out: &mut EmitOut, patterns: &[Spanned<Pattern>], at: i64) {
+    let mut names: Vec<String> = vec![];
+    let mut ranges: Vec<String> = vec![];
+    emit_text_bindings(world, walk, &nikaia_std::index::get(&patterns, nikaia_std::index::at(at)).node, &mut names, &mut ranges);
+    for (name, range) in names.iter().zip(ranges.iter()) { if patterns.iter().skip(nikaia_std::count::of(at + 1)).any(|later| { emit_guard_reads(world, &later.node, name) }) { out.push(&format!(" {}:{}(at = {})", name, emit_covered_rule(), range)); } }
+}
+
+pub(crate) fn emit_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Pattern, name: &str) -> bool {
+    match pattern {
+        Pattern::Guard { cond, .. } => emit_mentions(world, cond, name),
+        Pattern::Seq(parts) => parts.iter().any(|part| { emit_guard_reads(world, &part.node, name) }),
+        Pattern::Choice(parts) => parts.iter().any(|part| { emit_guard_reads(world, &part.node, name) }),
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_guard_reads(world, &pat.node, name) },
+        Pattern::Ref { args, .. } => args.iter().any(|arg| { emit_guard_reads(world, &arg.node, name) }),
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_guard_reads(world, &pat.node, name) },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_guard_reads(world, &pat.node, name) },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); emit_guard_reads(world, &pat.node, name) },
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_reads_a_text_in_a_guard(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
+    let mut names: Vec<String> = vec![];
+    let mut ranges: Vec<String> = vec![];
+    emit_text_bindings(world, walk, pattern, &mut names, &mut ranges);
+    names.iter().any(|name| { emit_guard_reads(world, pattern, name) })
+}
+
+pub(crate) fn emit_covered_rule() -> &'static str { "__nikaia_covered" }
 
 pub(crate) fn emit_binds_a_name(pattern: &Pattern) -> bool {
     match pattern {
