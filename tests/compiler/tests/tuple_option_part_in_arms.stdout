@@ -1,0 +1,20 @@
+a 2 x
+a 1 none
+b 2 y
+b 1 none
+c 2 z
+c 1 none
+d 2 w
+d 1 none
+e 2 v
+e 1 none
+early 2 u
+early 1 none
+q
+none
+literal 1 none
+literal 2 lit
+nested 1 none
+nested 2 a
+nested 3 none
+nested 4 a

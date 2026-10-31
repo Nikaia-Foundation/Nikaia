@@ -510,7 +510,7 @@ impl CheckState {
 }
 
 /// Whether an expression's value is a tuple literal at every end.
-fn ends_in_tuple(expr: ref Expr) -> bool sync {
+pub fn ends_in_tuple(expr: ref Expr) -> bool sync {
     let ends = tuple_ends(expr)
     if ends.len() == 0 {
         return false
@@ -528,7 +528,7 @@ fn ends_in_tuple(expr: ref Expr) -> bool sync {
 
 /// The ends of an `if` with an `else`, a `match` or a block, down to what is
 /// none of them; an expression that is none of them is its own end.
-fn tuple_ends(expr: ref Expr) -> Vec[ref Expr] sync {
+pub fn tuple_ends(expr: ref Expr) -> Vec[ref Expr] sync {
     let mut out: Vec[ref Expr] = []
     match expr {
         Expr::If { then_branch, else_branch, .. } => {

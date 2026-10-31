@@ -392,7 +392,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn ends_in_tuple(expr: &Expr) -> bool {
+pub fn ends_in_tuple(expr: &Expr) -> bool {
     let ends = tuple_ends(expr);
     if ends.is_empty() { return false; }
     let mut tuples = 0;
@@ -409,7 +409,7 @@ pub(crate) fn ends_in_tuple(expr: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn tuple_ends(expr: &Expr) -> Vec<&Expr> {
+pub fn tuple_ends(expr: &Expr) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     match expr {
         Expr::If { then_branch, else_branch, .. } => {

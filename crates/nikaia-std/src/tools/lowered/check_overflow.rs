@@ -177,6 +177,9 @@ pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, 
     let items = match given {
         Expr::ListLit { items, .. } => items,
         Expr::Tuple(_, _) => return check_overflow_tuple_into_nullables(state, given, found, want),
+        Expr::If { .. } => return check_overflow_ends_into_nullables(state, given, found, want),
+        Expr::Match { .. } => return check_overflow_ends_into_nullables(state, given, found, want),
+        Expr::Block(_, _) => return check_overflow_ends_into_nullables(state, given, found, want),
         _ => return false,
     };
     let wants_nullable = match want {
@@ -241,6 +244,21 @@ pub fn check_overflow_tuple_into_nullables(state: &mut CheckState, given: &Expr,
             state.facts.wrapped.insert(id_of(&item) as i64, FactWrap::Constructor);
             any = true;
         } else if check_overflow_list_into_nullables(state, &item, &had, &part) { any = true; }
+    }
+    any
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_overflow_ends_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
+    if !ends_in_tuple(given) { return false; }
+    let mut any = false;
+    for end in tuple_ends(given) {
+        let own: Ty = nikaia_std::index::or(match state.arm_types.get(&(id_of(end) as i64)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || found.clone().into());
+        if check_overflow_tuple_into_nullables(state, end, &own, want) { any = true; }
     }
     any
 }

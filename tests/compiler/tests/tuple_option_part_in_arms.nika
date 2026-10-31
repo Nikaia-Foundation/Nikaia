@@ -1,0 +1,85 @@
+// #1088: a tuple with a `T?` part at a `match` or `if` end wraps that part, as the
+// same tuple written directly does: a return, an if, a match with else, a typed
+// let, a tail, a text literal and nested ends; the early return and a bare `T?`
+// arm keep working.
+fn row_a(x: String?) -> (i32, String?) {
+    return match x {
+        null => (1, null),
+        s => (2, s.clone()),
+    }
+}
+fn row_b(x: bool, t: String) -> (i32, String?) {
+    return if x { (2, t.clone()) } else { (1, null) }
+}
+fn row_c(x: i32, t: String) -> (i32, String?) {
+    return match x {
+        0 => (1, null),
+        else => (2, t.clone()),
+    }
+}
+fn row_d(x: i32, t: String) -> (i32, String?) {
+    let r: (i32, String?) = match x {
+        0 => (1, null),
+        else => (2, t.clone()),
+    }
+    return r
+}
+fn row_e(x: i32, t: String) -> (i32, String?) {
+    match x {
+        0 => (1, null),
+        else => (2, t.clone()),
+    }
+}
+fn early(x: bool, t: String) -> (i32, String?) {
+    if x {
+        return (2, t.clone())
+    }
+    return (1, null)
+}
+fn bare(x: String?) -> String? {
+    return match x {
+        null => null,
+        s => s.clone(),
+    }
+}
+fn literal(x: i32) -> (i32, String?) {
+    return match x {
+        0 => (1, null),
+        else => (2, "lit"),
+    }
+}
+fn nested(x: i32, t: String, o: String?) -> (i32, String?) {
+    return match x {
+        0 => (1, null),
+        1 => if t == "a" { (2, t.clone()) } else { (3, o) },
+        else => { (4, t.clone()) },
+    }
+}
+fn show(label: String, r: (i32, String?)) {
+    let (a, b) = r
+    println(f"{label} {a} {b ?? "none"}")
+}
+fn main() {
+    show("a", row_a("x"))
+    show("a", row_a(null))
+    show("b", row_b(true, "y"))
+    show("b", row_b(false, "y"))
+    show("c", row_c(1, "z"))
+    show("c", row_c(0, "z"))
+    show("d", row_d(1, "w"))
+    show("d", row_d(0, "w"))
+    show("e", row_e(1, "v"))
+    show("e", row_e(0, "v"))
+    show("early", early(true, "u"))
+    show("early", early(false, "u"))
+    println(bare("q") ?? "none")
+    println(bare(null) ?? "none")
+    for i in 0..<2 {
+        let (a, b) = literal(i)
+        println(f"literal {a} {b ?? "none"}")
+    }
+    show("nested", nested(0, "a", "o"))
+    show("nested", nested(1, "a", "o"))
+    show("nested", nested(1, "b", null))
+    show("nested", nested(2, "a", "o"))
+}

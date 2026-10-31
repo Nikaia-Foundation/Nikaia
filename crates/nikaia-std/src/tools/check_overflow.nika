@@ -255,6 +255,9 @@ pub fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr
     let items = match given {
         Expr::ListLit { items, .. } => items,
         Expr::Tuple(_, _) => return check_overflow_tuple_into_nullables(state, given, found, want),
+        Expr::If { .. } => return check_overflow_ends_into_nullables(state, given, found, want),
+        Expr::Match { .. } => return check_overflow_ends_into_nullables(state, given, found, want),
+        Expr::Block(_, _) => return check_overflow_ends_into_nullables(state, given, found, want),
         else => return false,
     }
     let wants_nullable = match want {
@@ -337,6 +340,27 @@ pub fn check_overflow_tuple_into_nullables(mut state: CheckState, given: ref Exp
             state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Constructor)
             any = true
         } else if check_overflow_list_into_nullables(state, item, had, part) {
+            any = true
+        }
+    }
+    return any
+}
+
+/// **A tuple at each end of an `if`, a `match` or a block is wrapped as the
+/// same tuple written directly** (#1088): `match x { null => (1, null), s =>
+/// (2, s.clone()) }` for `(i32, String?)` holds `Some(s.clone())`. Each end is
+/// compared with the type it came to itself (`arm_types`, #596), not with the
+/// join of the ends, where its part already looks like a `T?`. Only where
+/// every end is a tuple literal or `null`, as `tuple_literal` asks
+/// (`check_texts.nika`). True where a part was wrapped.
+pub fn check_overflow_ends_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
+    if !ends_in_tuple(given) {
+        return false
+    }
+    let mut any = false
+    for end in tuple_ends(given) {
+        let own: Ty = state.arm_types.get(id_of(end) as i64)?.clone() ?? found.clone()
+        if check_overflow_tuple_into_nullables(state, end, own, want) {
             any = true
         }
     }

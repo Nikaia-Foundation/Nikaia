@@ -2305,7 +2305,7 @@ pub mod check_numbers5 {
 }
 pub mod check_overflow {
     #[allow(unused_imports)]
-    pub use super::{check_wrap_for, check_widened_slot, check_overflow_list_into_nullables, check_overflow_tuple_into_nullables, check_overflow_a_nullable, check_unsigned_slot_refused};
+    pub use super::{check_wrap_for, check_widened_slot, check_overflow_list_into_nullables, check_overflow_tuple_into_nullables, check_overflow_ends_into_nullables, check_overflow_a_nullable, check_unsigned_slot_refused};
 }
 pub mod check_parts {}
 pub mod check_patterns {
@@ -2364,7 +2364,7 @@ pub mod check_takes {
 pub mod check_task_pauses {}
 pub mod check_texts {
     #[allow(unused_imports)]
-    pub use super::{literal_is_a_byte, check_byte_literal, ends_in_text, ends_in_null, a_text_literal_expr};
+    pub use super::{literal_is_a_byte, check_byte_literal, ends_in_text, ends_in_null, a_text_literal_expr, ends_in_tuple, tuple_ends};
 }
 pub mod check_types {
     #[allow(unused_imports)]
