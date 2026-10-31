@@ -28,7 +28,7 @@ Read `docs/architect.md` lines 1-260 (roles, briefs, batches; its *State* is the
 4. A gap that is not decided (kind 2, CLAUDE.md *A missing form stops the work*), such as a new syntax for postconditions or quantifiers: a `decision` issue with a decision paper (where from, alternatives with doing nothing, for and against, other languages and tools such as Dafny, SPARK, Verus, Liquid Haskell, recommendation) and `Owner:` in your report; meanwhile go on with what needs no decision.
 5. A defect found on the way is fixed in this lane when it is the prover's; otherwise filed (`ready`) for the bug lane.
 6. New `NK` codes only from this lane's block: `NK1320`-`NK1329`, `NK2720`-`NK2729`. A changelog sentence goes into each builder report's `Changelog:` line; the driver raises the version.
-7. A red CI: fix it forward only when a commit of this lane broke it; otherwise leave `batch.txt` and report `Result: blocked`, `Owner: none`, `Batch: unchanged (red not from prover: <jobs>)`.
+7. A red CI: fix it forward only when a commit of this lane broke it; otherwise it does not stop this lane (its pushes are gated by the driver's local suite): plan the batch as usual and report `Result: done`, noting the red in `state.md`.
 8. Keep labels current (exactly one status label; the issues this lane builds carry `wip`).
 9. Commit and push your own files (`git add <files>`, `git push origin develop` fast-forward). No `git pull --rebase`, `--autostash` or `git stash` in the shared checkout; a rejected push is reported, the driver rebases.
 10. GitHub only through `gh api repos/nikaia-foundation/nikaia/...` (REST).
