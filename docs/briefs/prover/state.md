@@ -45,6 +45,10 @@
 * Open decisions this lane may need: #386 (products), #388 (equal lengths), #385 (lists of lists, `decision`), #798 (element rules), and postconditions (`ensures`, no issue yet).
 * NK codes: `NK1320`-`NK1329`, `NK2720`-`NK2729`.
 
+## CI (2026-10-31, d332b0c)
+
+`develop` red since a99ce32 (yaml, #1049), not from this lane. At 28bfacae `arm64` and `bootstrap_compiler` fail three `sysroot::` fixpoint tests (`the_committed_rust_is_what_this_compiler_lowers`, `the_tools_lower_the_same_on_one_thread_as_on_every_core`, `stds_nikaia_half_lowers_the_same_at_both_switches`). One known cause: `lowered/project_members.rs` re-lowers (TrustedMap -> HashMap) and the fresh output sits uncommitted in the shared checkout (GR's and p3's reports). The batch waits for the supervisor's fix-forward. 84aa402 (QA, a #1049 fixture) is on no branch; f2292c4 is on develop.
+
 ## Batch
 
-p3 → p4 (`batch.txt`). Files: `bounds_reasons.nika`, `bounds_report.rs`, `scripts/proved.nika`; `bounds_walk.nika`, `prover_loops.nika`. None of them is in `docs/briefs/batch.txt` (s922, GR) or in the bug lane's batch (b9-b11). Next: item 5 (#432), written once p4's figure is in.
+p3 done (41ea2c3); p4 next (`batch.txt`, unchanged while CI is red). Files: `bounds_reasons.nika`, `bounds_report.rs`, `scripts/proved.nika`; `bounds_walk.nika`, `prover_loops.nika`. None of them is in `docs/briefs/batch.txt` (s922, GR) or in the bug lane's batch (b9-b11). Next: item 5 (#432), written once p4's figure is in.
