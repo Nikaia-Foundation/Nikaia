@@ -5,3 +5,4 @@
 /home/user/Nikaia/docs/briefs/qa-task.md 1513838 42
 /home/user/Nikaia/docs/briefs/qa-task.md 467198 16
 /home/user/Nikaia/docs/briefs/prover/p3-1053-reasons.md 1649294 32
+/home/user/Nikaia/docs/briefs/prover/architect-task.md 420724 14

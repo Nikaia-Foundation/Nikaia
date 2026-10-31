@@ -1,7 +1,6 @@
-Result: done
-Batch: p3-1053-reasons.md, p4-1054-loop-checks.md
-Figure: off 1,493/2,583 indexes (57.8 %), 712/1,594 operations (44.7 %); prove-through-loops:on 1,525 (59.0 %), 719 (45.1 %); on 1ebd8fc's binary, 4 files refused because the binary predates 578fd67
+Result: blocked
+Batch: unchanged (red not from prover: arm64, bootstrap_compiler) - p4-1054-loop-checks.md next; p3 done (41ea2c3)
+Figure: 1,514 / 2,620 indexes (57.8 %), 718 / 1,605 arithmetic steps (44.7 %), `off`, p3's count on 41ea2c3
 Owner: none
-Decided: p2's `Needs` (#1054 step 2). D10 takes its candidates from prover_loops' portfolio. `bounding_fits` may prove a one-way step by the goal `t <= y`, where `y` is a name whose type's range lies inside the operation's type (comment on #1054). The headline figure is counted at prove-through-loops:on (state.md).
-Changed: p3 refreshed (figures, current common.part, proved.nika steps); p4 new; state.md rewritten with a *Lane facts* block (the architect debrief's request); comments on #1053 and #1054.
-Changelog (owed from earlier reports): p1 lower-std --bounds (#1053); p2 in-loop asserts proved through their loop (ADR-361 D2, D3).
+Found: CI red since a99ce32 (#1049, yaml lane); every run to 28bfacae fails the same three tests in `arm64` and `bootstrap_compiler`: sysroot::the_committed_rust_is_what_this_compiler_lowers, sysroot::the_tools_lower_the_same_on_one_thread_as_on_every_core, sysroot::stds_nikaia_half_lowers_the_same_at_both_switches (check-run annotations). Known cause: the fresh lowering of `crates/nikaia-std/src/tools/lowered/project_members.rs` (TrustedMap -> HashMap, 14 lines) sits uncommitted in the shared checkout (GR's and p3's reports); the third test may have a second cause in std's Nikaia half. Needs the supervisor: commit that file's `lower-std` output, check std's half (`lower-std` fixpoint at both switches), push. 84aa402 (QA's #1049 fixture fix) is on no branch.
+Needs: help from main session (fix-forward of the lower-std fixpoint above)
