@@ -1,10 +1,17 @@
-1. **Most turns:** working out the state of the checkout and of GR. The local branch was 4 ahead and 17 behind, with other agents' files changed in the tree. I had to dig up the merge-push rule from commit `7233faf8`, because my local `architect.md` didn't have it yet. Then I had to find out why GR was reverted and whether it could re-land, which meant a throwaway worktree just to test the revert. The probes took 4 runs because of my own setup mistakes: a missing `throws`, a missing `use std::process`, and a nudge against `.to_string()`.
-2. **What the brief could have handed me:**
-   - the merge-push procedure itself, written into the task brief;
-   - that GR was reverted, with the revert's sha and its reason;
-   - the scratchpad paths of the reports' probes and patches;
-   - where the `std` entries live (`std.contracts` line numbers, the runtime `map.rs`/`seq.rs`);
-   - the next free ADR number;
-   - a note that `gh` search is blocked, so listing open issues means paging through all of them.
-3. **Checks:** All three probes (#1080, #1081, #1082) were needed and confirmed each defect on today's binary. The revert dry-run was needed: it found three conflicts. `git apply --check` on the C1a patch was useful. The grep for `NK1102`/nullable `==` in the spec gave 54 KB of output and settled nothing, so it was wasted. Reading `check_arguments.nika` helped only partly: the suspected location is still marked "not sure".
-4. **The fix that would have saved the most:** have the driver write into `architect-input.txt` the ahead/behind counts, the unpushed local commits (and whether the suite tested them), and the push recipe. Without that I pushed the four unpushed local commits, b15's untested `gate.nika` change among them, as part of my merge. The recipe should push only the architect's own commit, on top of `origin/develop`, unless HEAD has passed the suite. That rule belongs in `docs/architect.md`.
+1. **Most turns:** finding where the fault lies. I started by grepping the emitter for `Some(`/wrap code, when the wrap is a checker fact (`FactWrap` in `state.facts.wrapped`). Only then did I follow `check_function_wrap_tail` to `check_widened_slot` to `check_overflow_list_into_nullables`. That was about 6 grep and sed turns, and I used `grep` instead of `scripts/where.nika`, which the charter asks for.
+
+2. **Looked up that the brief could have handed me:**
+   - the next free bug-brief number (b20);
+   - the brief template (I copied b19's layout);
+   - the `common.part` block and how to fill in the report path;
+   - whether the bug lane had run yet (to know if P5c, C1a or K3b could come back);
+   - which moves have no blocker today (none).
+
+   A short "lane status" line from the driver in `architect-input.txt` (bug briefs done since the last run, next `b<N>`) would have covered most of it.
+
+3. **Checks I ran:**
+   - Useful: the probe and 7 narrowed variants (they showed that a direct `return (..)` works and that if, match, let and tail all fail); reading `tuple_literal` and `tuple_ends`; checking that the push was fast-forward. Every row in the brief was probed, and row e was checked before the commit.
+   - Wasted: two variants that hit unrelated refusals (NK1301 `.clone()` on a literal, `_` instead of `else`), the emitter greps, and listing the qa-task report, which was already handled.
+   - Not run: `pre-push-check.sh`, since the change was docs only and added no ADR. That was acceptable, but I did not state it.
+
+4. **The one change that would have saved the most:** in `builder.md`, a `Found:` on a lowering defect names the checker fact the wrap or `&` should come from (`FactWrap` / `nullable_args` / `wrapped`) and the checker function that decides it, as far as the builder traced it. The P5c builder had the draft open and could have handed me that in one sentence, saving most of the trace.
