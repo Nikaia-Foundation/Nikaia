@@ -11,3 +11,4 @@
 /home/user/Nikaia/docs/briefs/tools/architect-task.md 1207083 29
 /home/user/Nikaia/docs/briefs/tools/j6-1019-error-path.md 1419604 28
 /home/user/Nikaia/docs/briefs/tools/architect-task.md 1107399 28
+/home/user/Nikaia/docs/briefs/tools/j7-1095-sync-bracket-call.md 1224358 33
