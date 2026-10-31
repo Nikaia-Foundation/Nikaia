@@ -180,9 +180,12 @@ fn every_example_package_passes_its_own_tests() {
             let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
                 .args(["test", "--both-settings", "--locked", "--project"])
                 .arg(&package)
+                // A cache of its own: in the shared one the tests running
+                // beside it (gate.nika sets NIKAIA_CACHE_LIMIT=2G) evicted
+                // these entries between the two runs, and the second lowered.
                 .env(
                     "NIKAIA_CACHE_DIR",
-                    repo_root().join("target").join("nikaia-project-tests"),
+                    repo_root().join("target").join("nikaia-example-tests"),
                 )
                 .env("NIKAIA_WRAPPER_TRACE", &trace)
                 .env_remove("CARGO_TARGET_DIR")
