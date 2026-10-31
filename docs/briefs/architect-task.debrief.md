@@ -1,8 +1,15 @@
-1. **What cost the most:** the state of the shared checkout. HEAD was detached in the middle of a stopped rebase, with a conflict in `lowered/check_facts.rs`. Working out what had happened, and checking that no driver process held it, took about 6 turns. Then someone else finished the rebase. The second cost was a wasted K3b probe. I wrote it with `fs::Path(text)`, which plain `nikaia run` refuses, and needed three tries before it tested #1078 at all.
-2. **What I looked up that the brief could have handed me:**
-   - That the drafts on `wip/*` branches sit on commits from before a rebase. A plain merge-tree check shows conflicts in `docs/`, and only a single-commit cherry-pick check shows the real answer.
-   - The naming pattern for renamed reports (`X.md.run1.report.md` against `X.run1-report.md`). Both exist in the folder.
-   - That this run must not push while the suite holds unpushed builder commits. The task says "push", and that clashes with how the driver works.
-   - Where hole-less f-strings and copied walks are emitted. `where.nika` would have found them; I used grep.
-3. **Checks:** useful were the two Found probes, a narrowing probe (the bug needs a list literal; a local works), `git apply --check` on the C1a patch, the cherry-pick check on K3b, and looking up the K3b fix commits. Wasted were the plain merge-tree check on the K3b branch and two of the three versions of the K3b probe. I should also have run `where.nika -- walk_open` before naming #1100's cause as "suspected", to make it surer.
-4. **One change that would save the most:** the task file should tell the architect what state to expect and what to do with it. That means: when `develop` is ahead of `origin` and the suite lock is held, commit locally and let the driver push. And `drive.nika` itself should never leave a stopped rebase in the shared checkout. On a conflict in `lowered/*.rs` it should re-lower, and on any other conflict abort and escalate, so no agent starts on a detached HEAD.
+1. **What cost the most turns:** probing C1b. I wrote my probes as plain programs and kept running into problems that came from my probe, not from the compiler. Plain programs need `use std::collections`, `ref String` is refused outside `extern`, and I left out `mut`. That took about 8 iterations before the real defect (#1107) showed up. A second cost was the K3b probe: run as a plain program, the builder's shape gives NK1102. I had to find a shape that reaches `EitherText` (ADR-282 D13's mixed-arms local) before the rustc error appeared.
+
+2. **What the brief could have handed me:**
+   - That the remaining plan rows (S1, P5e, K3b, C1b) all had a blocker or a prerequisite. I had to rediscover that from `selfhosting-plan.md`.
+   - How plain programs write views: `ref T` locals, `Vec[ref T]` results, map `m[k]` against `.get(k)`.
+   - That ADR-222 is archived; `check-adr-refs` caught that only after I had written the brief.
+   - That `LedgerOps::candidates` is dead code.
+
+3. **Checks:**
+   - Useful: the #1088 pre-flight probe, the conflict check of the P5c branch against develop, the `EitherText` probe, the rows for #1107, and `check-adr-refs`.
+   - Partly wasted: the early C1b probes (my own mistakes), and the first K3b probe run as a plain program, which could not reach the defect.
+   - Not done: no S1 brief, so that research only went into *State*.
+   - The push: I pushed C1a (5bd603f3), which had only been committed locally, before the driver's suite had run on it. The task told me to push, but it conflicts with the rule that the driver runs the suite and pushes.
+
+4. **One change:** a fixed probe header in `docs/builder-facts.md`, *Traps already met*, with the plain-program idioms (`use std::collections`; `ref T` only on non-text types; result views written without `ref` for text; how to reach `EitherText` in a plain program). Next to it, a one-line rule for `architect-task.md`: "push only your own commits; if HEAD carries unpushed builder commits, leave pushing to the driver." The first would have saved about 10 turns. The second removes the conflict over pushing untested commits.
