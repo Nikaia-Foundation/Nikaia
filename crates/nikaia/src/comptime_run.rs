@@ -641,21 +641,14 @@ fn defaults_known_from<R>(outer: Option<&crate::contracts::Ledger>, read: impl F
 /// sub-program is being read and the ledger holds a value.
 pub(crate) fn known_default(package: Option<&str>, key: &str, at: usize) -> Option<String> {
     KNOWN.with(|held| {
-        let held = held.borrow();
-        let ledger = held.as_ref()?;
-        let key = match package {
-            Some(package) => format!("{package}::{key}"),
-            None => key.to_string(),
-        };
-        let text = &ledger
-            .functions
-            .get(&key)?
-            .signature
-            .as_ref()?
-            .config
-            .get(at)?
-            .default;
-        (!text.is_empty()).then(|| text.clone())
+        held.borrow().as_ref().and_then(|ledger| {
+            nikaia_std::tools::build_eval::bt_known_default(
+                ledger,
+                package.map(str::to_string),
+                key,
+                at as i64,
+            )
+        })
     })
 }
 

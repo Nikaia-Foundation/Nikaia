@@ -599,6 +599,18 @@ pub fn bt_may_not_run(contract: ref FnContract) -> String? sync {
     return null
 }
 
+/// What the program's ledger recorded for option `at` of `key` - qualified
+/// by the package for one that is not the program's - where a run's
+/// sub-program is being read and the ledger holds a value.
+pub fn bt_known_default(ledger: ref Ledger, package: String?, key: ref String, at: i64) -> String? sync {
+    let k = match package {
+        null => key.clone(),
+        package => f"{package}::{key}",
+    }
+    let text = (((ledger.functions.get(k) ?? return null).signature ?? return null).config.get(at) ?? return null).default
+    return (if !text.is_empty() { text.clone() } else { null })
+}
+
 /// Whether a touch is the build's own parameters (ADR-287 D14).
 ///
 /// **`cli::args` passes, deliberately**: same parameters, same code. A build's

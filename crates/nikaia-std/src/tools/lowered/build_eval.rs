@@ -434,5 +434,16 @@ pub fn bt_may_not_run(contract: &FnContract) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn bt_known_default(ledger: &Ledger, package: Option<String>, key: &str, at: i64) -> Option<String> {
+    let k = match package {
+        None => key.to_string(),
+        Some(ref package) => format!("{}::{}", package, key),
+    };
+    let text = &match match match ledger.functions.get(&k) { Some(__nikaia_value) => __nikaia_value, None => return None }.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None }.config.get(nikaia_std::count::of(at)) { Some(__nikaia_value) => __nikaia_value, None => return None }.default;
+    if !text.is_empty() { Some(text.to_string()) } else { None }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn bt_is_the_builds_own(touch: &Touch) -> bool { touch.text() == "args read" }
 
