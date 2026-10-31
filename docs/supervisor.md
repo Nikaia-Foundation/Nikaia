@@ -163,7 +163,9 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   `target/suite.lock`, so the two lanes' drivers
   take turns), prints `SUITE <sha8> green|red <steps>`, pushes the tested
   commit on green (`PUSHED <sha8>`), and on red starts QA
-  (`docs/briefs/qa-task.md`, input `DIR/qa-input.txt`, log `DIR/suite.log`),
+  (on `DIR/qa/qa-task.md`, the lane's own copy of the template
+  `docs/briefs/qa-task.md`, so its report and run files land in `DIR/qa/`;
+  input `DIR/qa-input.txt`, log `DIR/suite.log`),
   at most two rounds, then `ESCALATE`. The suite stops at the first red cheap
   step (build, lower-std, fmt, clippy, pre-push) without running the tests,
   and runs tests/compiler beside `cargo test --workspace` with a 4G package

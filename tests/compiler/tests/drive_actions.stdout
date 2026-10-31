@@ -17,7 +17,7 @@ would run: not yet a worktree: git worktree add --detach /home/user/nikaia-suite
 would run: rm -f /home/user/nikaia-suite/target/suite-nikaia; in the background, in /home/user/nikaia-suite, CARGO_INCREMENTAL=0: cargo build --profile fast -p nikaia > T/suite.log (failed: Gate: red build)
 would run: then, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=4G: /home/user/nikaia-suite/target/fast/nikaia run scripts/gate.nika -- --all >> T/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once
 would run: before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
-would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again and waited for (at most 2 QA rounds)
+would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/briefs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, commit T/qa/qa-task.md with its report and run files, the suite again and waited for (at most 2 QA rounds)
 would run: write T/architect-input.txt: BATCH DONE
 would run: rm -f T/architect-task.md.report.md
 would run: target/fast/nikaia run scripts/agent.nika -- T/architect-task.md --dir T
@@ -37,7 +37,7 @@ would run: not yet a worktree: git worktree add --detach /home/user/nikaia-suite
 would run: rm -f /home/user/nikaia-suite/target/suite-nikaia; in the background, in /home/user/nikaia-suite, CARGO_INCREMENTAL=0: cargo build --profile fast -p nikaia > T/suite.log (failed: Gate: red build)
 would run: then, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=4G: /home/user/nikaia-suite/target/fast/nikaia run scripts/gate.nika -- --all >> T/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once
 would run: before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
-would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again and waited for (at most 2 QA rounds)
+would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/briefs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, commit T/qa/qa-task.md with its report and run files, the suite again and waited for (at most 2 QA rounds)
 would run: write T/architect-input.txt: CUT b1: too big -> ARCHITECT
 would run: rm -f T/architect-task.md.report.md
 would run: target/fast/nikaia run scripts/agent.nika -- T/architect-task.md --dir T
@@ -57,7 +57,7 @@ would run: not yet a worktree: git worktree add --detach /home/user/nikaia-suite
 would run: rm -f /home/user/nikaia-suite/target/suite-nikaia; in the background, in /home/user/nikaia-suite, CARGO_INCREMENTAL=0: cargo build --profile fast -p nikaia > T/suite.log (failed: Gate: red build)
 would run: then, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=4G: /home/user/nikaia-suite/target/fast/nikaia run scripts/gate.nika -- --all >> T/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once
 would run: before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
-would run: red: write T/qa-input.txt, rm -f docs/briefs/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- docs/briefs/qa-task.md --dir T, commit its report, the suite again and waited for (at most 2 QA rounds)
+would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/briefs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, commit T/qa/qa-task.md with its report and run files, the suite again and waited for (at most 2 QA rounds)
 would run: write T/architect-input.txt: RED aaaa1111 test -> ARCHITECT
 would run: rm -f T/architect-task.md.report.md
 would run: target/fast/nikaia run scripts/agent.nika -- T/architect-task.md --dir T
