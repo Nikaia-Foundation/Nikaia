@@ -1,4 +1,4 @@
 Result: done
-Batch: s922-sha256-env.md gr-grammar-run.md
+Batch: b-fixforward-clippy199.md bt2-known-default.md s920-process-streams.md
 Owner: none
-Notes: BT partial (f819d67d on develop, step 5 `known_default` blocked); its defect filed as #1055 (ready, wip), bug brief docs/briefs/bugs/b9-1055-field-of-a-coalesce.md appended to bugs/batch.txt with `Blocks: bt-build-time.md`. CI not red (runs in progress, last finished green). builder-facts: trap for committing only your hunks of a file another agent modified.
+Notes: RED f0ed954a (bootstrap_compiler, clippy): CI's stable 1.99.1 has `chunks_exact_to_as_chunks`, this machine 1.97; three lines in crates/nikaia-std/src/hash.rs, fix-forward brief first. #920 wip. Toolchain trap in CLAUDE.md and builder-facts. Run ended at max turns before committing; report written by the main session from its debrief.

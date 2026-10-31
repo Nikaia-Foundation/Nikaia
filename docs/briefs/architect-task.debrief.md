@@ -1,14 +1,17 @@
-1. **What cost the most turns:** rebuilding the defect probe. BT's report pointed to `bt/probe.nika` in its own scratchpad, which no longer exists. I rewrote the probe from memory and failed four times on Nikaia syntax: how to build a `BTreeMap`, `usize` instead of `int`, a redundant `ref String`, and `.to_string()` on a text literal. Getting a correct, minimal probe took about 6 turns.
+Note first: the run ended before I committed or pushed anything. I also did not write `docs/briefs/architect-task.md.report.md` or rewrite the *State* section. The three briefs, the new `batch.txt`, and my edits to `CLAUDE.md` and `docs/builder-facts.md` are all still uncommitted in the shared checkout.
 
+1. **Most turns:** finding why CI was red. I could not download the job logs (the proxy blocked them), so I worked through check-run annotations. Then I installed clippy 1.99.1 and reproduced the failure in a scratch worktree. It came down to three `chunks_exact` lines in `crates/nikaia-std/src/hash.rs`, caught by a lint that clippy 1.97 on this machine does not have. After that, picking a third brief cost more turns: I checked plan rows one by one, and C7-a and C7-b turned out to be built already.
 2. **What the brief could have handed me:**
-   - The probe text itself, not a path to it.
-   - Where `known_default` lives: I first grepped `build_time.rs`, but it is in `comptime_run.rs:642`.
-   - How to see the generated Rust (`nikaia lower FILE` writes `FILE.rs`). I scanned `--help` to find that.
-   - That CI's state was not red: the input file said `RED`, but that meant BT's gate, not CI.
-   - The current list of other agents' uncommitted files. `git status` gave it, but only after a long listing.
-
+   - The red job's error text. Better: the driver saves the clippy output, plus a note that CI uses the newest stable and this machine has 1.97.
+   - Which plan rows are actually still open. `docs/selfhosting-plan.md` lists rows as waiting on nothing that are already built.
+   - The issue labels in one list.
+   - That `nikaia` is not on PATH (it is `target/fast/nikaia`) and that `nikaia test` has no name filter.
 3. **Checks:**
-   - Useful: CI runs through `gh api`, the probe rows a–e on today's binary, lowering the probe to see the moving `match`, tracing `lent_coalesces` into `check_core_ops_coalesce` / `check_core_ops_behind_a_view`, a duplicate-issue search, GR's pre-flight on `Wall`, and `git diff` on `30-nikaia-tooling.md`.
-   - Partly wasted: the full `ls docs/briefs` (very long), printing the whole b8 brief when only its layout mattered, the `--help` grep, and a `git diff` whose output was too large to show.
+   - Useful: the clippy 1.99.1 run on the scratch worktree, the reads of `known_default` and its caller, and reading #920.
+   - Wasted: the first CLAUDE.md edit (wrong anchor), a log download that could never work, a too-broad grep of the spec (52 KB), and the C7 lookups.
+4. **The one change that would have saved the most:** `drive.nika` should write the failing job's annotations and clippy output into `architect-input.txt`, and `docs/briefs/batch.txt` should come with a generated list of open plan rows. I already wrote the toolchain rule into `CLAUDE.md` and `docs/builder-facts.md`, but it only takes effect once committed.
 
-4. **The one change:** a report's `Found:` must paste the probe inline (at most 15 lines), or commit it under `docs/briefs/probes/`, never cite a scratchpad path. That rule belongs in `docs/architect.md` (*The report*) and `.claude/agents/builder.md`. Second best: a "probe skeleton" entry in builder-facts showing a map or list of structs, a `T?` field and `nikaia lower`. That would have saved most of the syntax round-trips.
+**Still needed from the main session:**
+- Commit and push my files: the three briefs (`b-fixforward-clippy199.md`, `bt2-known-default.md`, `s920-process-streams.md`), `docs/briefs/batch.txt`, `CLAUDE.md`, `docs/builder-facts.md`. Then add the State section and the report.
+- Batch order: fix-forward, BT2, s920. I put `wip` on #920 and commented the decision there.
+- Run `rustup update stable` at a quiet moment, because every target rebuilds afterwards.

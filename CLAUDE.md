@@ -22,7 +22,10 @@ the background in a cloud session.
   0.0.773, so `main` did not move). Lints about code the lowering writes are
   allowed on the `tools` module in `crates/nikaia-std/src/lib.rs`, not fixed in
   the generated files (`crates/nikaia-std/src/tools/lowered/*.rs`, index `lowered.rs`; a change to one `.nika`
-  changes one file).
+  changes one file). CI takes the newest stable; when `rustup check` shows this
+  machine's `stable` behind it, run clippy with that version too
+  (`docs/builder-facts.md`, *Traps already met*; c80e63ac kept `develop` red on
+  a lint 1.97 did not have).
 * **Before pushing, run `scripts/pre-push-check.sh`** (fmt, badges and version check, seconds): CI fails on these first.
 * **Before pushing, rebase onto the latest `origin/develop`**
   (`git pull --rebase origin develop`). Other sessions push all the time.
