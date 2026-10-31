@@ -168,3 +168,4 @@
 /home/user/Nikaia/docs/briefs/b-fixforward-corpus-unanswered.md 323498 6
 /home/user/Nikaia/docs/briefs/b994-overlap-note-seq.md 353638 13
 /home/user/Nikaia/docs/briefs/b1012a-trait-column-fn.md 71258 1
+/home/user/Nikaia/docs/briefs/k3a2-comptime-compute.md 1614685 31
