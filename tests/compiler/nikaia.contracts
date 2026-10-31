@@ -9,6 +9,13 @@
 # something this compiler cannot name.
 version = 4
 
+[fn."copy_places"]
+sync = "inferred"
+returns = "a: ref(p), b: ref(p), value: ref(p)"
+touches = []
+views = ["p: borrowed", "<result>: borrowed"]
+signature = "(p: ref Places) -> Places"
+
 [fn."main"]
 sync = "inferred"
 touches = []
@@ -21,6 +28,14 @@ touches = []
 signature = "[T](_n: i64) -> Vec[T]"
 
 [fn."places"]
+pub = true
+sync = "inferred"
+returns = "a: ref(s), b: ref(s), value: ref(s)"
+touches = []
+views = ["s: borrowed", "<result>: borrowed"]
+signature = "(s: String) -> Vec[Places]"
+
+[fn."places_copied"]
 pub = true
 sync = "inferred"
 returns = "a: ref(s), b: ref(s), value: ref(s)"

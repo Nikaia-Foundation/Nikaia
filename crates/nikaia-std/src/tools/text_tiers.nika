@@ -1312,11 +1312,15 @@ fn element_word(iter: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String?
     return seen(found.owner, [0], walk)
 }
 
-/// Whether a value is a name, and nothing else.
+/// Whether a value is a name or a field read, and nothing else: a field read
+/// out of a struct and put into the same field of another (`w.text` into
+/// `Word { text: w.text }`) is that field's text again, a view where the field
+/// is one (#1063).
 fn tier_a_name(value: ref Expr?) -> bool {
     let given = value ?? return false
     return match given {
         Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
         else => false,
     }
 }
@@ -5631,6 +5635,32 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
     for (word, count) in flows.arm_uses {
         if (flows.uses[word] ?? 0) == count && !flows.changed.contains(word) && !a_published_parameter(word, flows, declared) {
             out.insert(word.clone(), Tier::View)
+        }
+    }
+    // **A text field no text goes into holds none** (#1063): where only
+    // `null` and reads of the field itself go into it, in a struct that
+    // holds views already, it is a view too, so that a copy of a lent struct
+    // (`Word { tag: w.tag, .. }`) takes nothing out of it.
+    let mut viewing: collections::BTreeSet[String] = collections::BTreeSet()
+    for (word, tier) in out {
+        let at = flows.known[word] ?? continue
+        match at.owner {
+            TextOwner::Field(of, _) => if !owned_tier(tier) && !lasting_tier(tier) {
+                viewing.insert(of.clone())
+            },
+            else => {}
+        }
+    }
+    for (word, kinds) in positions {
+        let at = flows.known[word] ?? continue
+        if !no_text(kinds) || at.path.len() > 0 || out.contains_key(word) || fixed.contains(word) {
+            continue
+        }
+        match at.owner {
+            TextOwner::Field(of, _) => if viewing.contains(of) {
+                out.insert(word.clone(), Tier::View)
+            },
+            else => {}
         }
     }
     // A parameter lent where what it went into did not end a view is kept

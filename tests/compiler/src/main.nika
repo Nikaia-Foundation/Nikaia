@@ -13,6 +13,25 @@ pub fn places(s: String) -> Vec[Places] {
 	return [Places { a: s.strip_prefix("l"), b: null, value: PlacesValue::Bool(true) }, Places { a: null, b: s.trim(), value: PlacesValue::Str(s.trim()) }]
 }
 
+/// Each of `places` copied from a lent `Places`, its view fields handed on,
+/// out of a list that ends here (`view_fields_of_a_lent_package_struct_handed_on`, #1063).
+pub fn places_copied(s: String) -> Vec[Places] {
+	let found = places(s)
+	let mut out: Vec[Places] = []
+	for p in found {
+		out.push(copy_places(p))
+	}
+	return out
+}
+
+fn copy_places(p: ref Places) -> Places {
+	let value = match p.value {
+		PlacesValue::Bool(b) => PlacesValue::Bool(!b)
+		other => other.clone()
+	}
+	return Places { a: p.a, b: p.b, value: value }
+}
+
 /// A generic function whose type only brackets can say, reached by a path
 /// (`type_arguments_on_a_path`, ADR-grammar-2 D11).
 pub fn none_of[T](_n: i64) -> Vec[T] {

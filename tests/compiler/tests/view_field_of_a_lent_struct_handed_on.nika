@@ -1,0 +1,18 @@
+// A view field read from a lent struct and stored in a new one is a view of the
+// same buffer, not a part taken out of the loan (#1063).
+struct Word { start: i64, text: String }
+
+fn word_of(input: String) -> Word {
+	return Word { start: 0, text: input.trim() }
+}
+
+fn again(w: ref Word) -> Word {
+	return Word { start: w.start + 1, text: w.text }
+}
+
+fn main() {
+	let s = " hello "
+	let w = word_of(s)
+	let v = again(w)
+	print(f"{v.start} {v.text}")
+}

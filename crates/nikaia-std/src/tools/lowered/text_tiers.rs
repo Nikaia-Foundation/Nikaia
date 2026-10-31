@@ -872,7 +872,7 @@ pub(crate) fn element_word(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk:
 
 pub(crate) fn tier_a_name(value: Option<&Expr>) -> bool {
     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
-    matches!(given, Expr::Variable(_, _))
+    matches!(given, Expr::Variable(_, _) | Expr::Field { .. })
 }
 
 pub(crate) fn map_walked(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<Declaring> {
@@ -4117,6 +4117,24 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
     for (word, count) in flows.arm_uses.iter() {
         let count = nikaia_std::num::value(count);
         if nikaia_std::index::or(*nikaia_std::index::get(&flows.uses, word), || 0) == count && !flows.changed.contains(word) && !a_published_parameter(word, flows, declared) { out.insert(word.to_string(), Tier::View); }
+    }
+    let mut viewing: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (word, tier) in out.iter() {
+        let tier = *tier;
+        let at = match *nikaia_std::index::get(&flows.known, word) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        match &at.owner {
+            TextOwner::Field(of, _) => { if !owned_tier(tier) && !lasting_tier(tier) { viewing.insert(of.to_string()); } },
+            _ => { },
+        }
+    }
+    for (word, kinds) in positions.iter() {
+        let kinds = *kinds;
+        let at = match *nikaia_std::index::get(&flows.known, word) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !no_text(&kinds) || !at.path.is_empty() || out.contains_key(word) || fixed.contains(word) { continue; }
+        match &at.owner {
+            TextOwner::Field(of, _) => { if viewing.contains(of) { out.insert(word.to_string(), Tier::View); } },
+            _ => { },
+        }
     }
     for (from, to) in flows.lent_into.iter() {
         if lent.contains(from) && !same_tier(nikaia_std::index::or(match *nikaia_std::index::get(&out, to) {

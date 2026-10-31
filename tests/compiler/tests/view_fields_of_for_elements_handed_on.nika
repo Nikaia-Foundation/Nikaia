@@ -1,0 +1,22 @@
+// The view fields of a `for` element handed on into a new struct are views of
+// the same buffer; a nullable one only `null` fills is a view too (#1063).
+struct Word { start: i64, text: String, tag: String? }
+
+fn word_of(input: String) -> Word {
+	return Word { start: 0, text: input.trim(), tag: null }
+}
+
+fn again_each(ws: ref Vec[Word]) -> Vec[Word] {
+	let mut out: Vec[Word] = []
+	for w in ws {
+		out.push(Word { start: w.start + 1, text: w.text, tag: w.tag })
+	}
+	return out
+}
+
+fn main() {
+	let s = " hello "
+	let ws = [word_of(s), word_of(s)]
+	let vs = again_each(ws)
+	print(f"{vs[1].start} {vs[1].text}")
+}

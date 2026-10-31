@@ -467,14 +467,17 @@ impl EmitState {
                         }
                     }
                 }
-                // **What the parameter's views point into, not the parameter.**
+                // **What the parameter's views point into, not the parameter**:
+                // also a struct of its own type built from it (#1063), whose
+                // view fields are copies of the parameter's, as `w.clone()`
+                // is: `fn again<'r>(w: &Word<'r>) -> Word<'r>`.
                 let mut source_nested = false
                 if source_at != null {
                     let at = source_at ?? 0
                     if self.carries_a_view(world, args[at].ty) && self.borrows(world, args[at].ty.name) && args[at].ty.generics.is_empty() {
                         match ret_type {
                             each => {
-                                source_nested = each.name != args[at].ty.name
+                                source_nested = each.name != args[at].ty.name || !emit_holds_a_ref_of_a_type(world, each)
                             },
                             null => {},
                         }

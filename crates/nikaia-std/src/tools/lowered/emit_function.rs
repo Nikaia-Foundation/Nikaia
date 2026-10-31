@@ -299,7 +299,7 @@ impl EmitState {
                     let at = nikaia_std::index::or(source_at, || 0);
                     if self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) && nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.is_empty() {
                         match ret_type {
-                            Some(each) => { source_nested = each.name != nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name; },
+                            Some(each) => { source_nested = each.name != nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name || !emit_holds_a_ref_of_a_type(world, each); },
                             None => { },
                         }
                     }

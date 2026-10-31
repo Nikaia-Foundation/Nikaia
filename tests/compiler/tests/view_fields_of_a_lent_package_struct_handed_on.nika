@@ -1,0 +1,16 @@
+// A dependency's struct copied from a lent value, its view fields handed on,
+// out of a list that ends inside the copying function: the copies view what
+// the list's elements viewed, not the list (#1063).
+use compiler_tests
+
+fn main() {
+	for n in compiler_tests::places_copied(" left ") {
+		let a = n.a ?? "-"
+		let b = n.b ?? "-"
+		let v = match n.value {
+			compiler_tests::PlacesValue::Bool(x) => f"bool({x})"
+			compiler_tests::PlacesValue::Str(x) => f"str({x})"
+		}
+		println(f"{a} {b} {v}")
+	}
+}
