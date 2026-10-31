@@ -1,4 +1,5 @@
 Result: done
-Batch: b1031-kept-fn-name-copy.md, b938-loop-copy-inferred-list.md
+Batch: b938-loop-copy-inferred-list.md, b1034a-kept-lambda-captured-fn.md, b1035-fn-field-from-loan.md
 Owner: none
-Notes: #1029 done (b0ba2293, c129f145, Fixes #1029; version raise owed, Changelog line in its report). Its Deviation was sound (rustc carries no type through the `as` cast) and is now a non-deviation in common.part. #938 re-probed at 4fa242a6 and commented; new brief. CI 818f6cdf green, later runs in progress. Commit 1e5d00f8.
+Pushed: 7c4f1cc2
+Notes: #1031 done (637bec45, version raise owed). b1031's Found probed and filed ready: #1034 (kept lambda calling a captured kept fn; step 2 fn parameter captured by a returned lambda), #1035 (return h.f out of a loan refused NK1131). Commented #1031.

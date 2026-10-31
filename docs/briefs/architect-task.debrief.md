@@ -1,15 +1,14 @@
-1. **What cost the most.** Reading `docs/architect.md`. Its *State* section is about 59 KB of dated entries, and one `sed` printed so much that the output was saved to a file. Running my own probes also took several turns: four probe programs for #938, then the lowered Rust. I also lost a turn on an empty `docs/briefs/RED` file that I first took for the CI status.
-
-2. **What the brief could have handed me.**
-   - The CI state of `develop` (I fetched it with `gh api`).
-   - That b1029's push had already been rebased and landed.
-   - The list of open `ready` bugs, with the yaml lane's issues marked as not mine.
-   - Which files b1031 touches, so I could pick a second bug in other files.
-   - Where the `for` lowering and `copied_loop_bindings` live (`emit_stmt.nika:960-987`, `check_core_stmt.nika:1502`). I found them with grep instead of `where.nika`.
-
-3. **Checks.**
-   - Useful: the #938 probe matrix, including the typed `Vec[i64]` row that showed which forms the bug hits; the brief's full test program (three errors); the lowered Rust; reading `a_copy_by_value`.
-   - Wasted: running #1016's probe (I did not pick that bug); a grep for `Ty` variants and integer-literal names that found nothing; reading the `Ty` enum.
-   - Not done: I did not confirm the exact type an untyped `[1, 2]` element gets, so the brief marks the cause as unverified.
-
-4. **The change that would save most.** `drive.nika` should write a short status into `architect-input.txt`: the CI run states, whether the last brief's commits are on `origin/develop`, the `ready` issues per lane, and the files the unrun briefs touch. Separately, the dated history in *State* should move out of `architect.md` into `docs/architect-state.md`, keeping only the latest entry inline. Together these would have saved about 6 turns and most of the context I spent.
+1. **Most cost:** reading `docs/architect.md`. At about 36k tokens it was over the read limit, mostly because of the long *State* log, so I had to read it in three pieces. After that, narrowing b1031's two findings to their causes took about 12 probe-and-read rounds: the lowered Rust, `kept_hulls`/`kept_owned`, `run_code` and the NK1131 path.
+2. **Looked up, though it could have been handed to me:**
+   - How to see the lowered Rust (`nikaia lower` writes `F.rs`), found in `builder-facts.md`.
+   - Which Part I section has "a copy shares the one closure". I first cited 5.3 when it is 5.4, and had to fix both issues afterwards.
+   - Where the capture handling lives (`emit_flow_kept`, `hulls_of_a_lambda`) and where #1031's `kept_fn_copies` is.
+   - That `target/fast/nikaia` was older than 637bec45, so I rebuilt it before probing.
+3. **Checks:**
+   - Useful: the reduced probes a2, a3 and a4 (the defect needs no use after the lambda), the list-capture probe that showed the existing Arc/clone model, g (the parameter case has a separate cause), h (i64 return and `let g = h.f` pass), and running both test programs as they will be committed.
+   - Wasted:
+     - c.nika: `"abc".to_string()` hit NK1301, and the retried text capture lowered to `&str`, so it said nothing.
+     - e.nika mixed four shapes and needed a follow-up probe to separate them.
+     - The rebuild was needed, but one check of the binary's date against the head commit would have shown that before I probed.
+   - Not possible: checking the proposed fixes themselves, since I don't build.
+4. **One change:** split *State* out of `architect.md` into its own file, keeping only the last 3 entries in the charter. Also have `drive.nika` write the commit the binary was built from into `architect-input.txt`. That saves the oversized read and the doubt about a stale compiler on every architect run.
