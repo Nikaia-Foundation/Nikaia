@@ -1,0 +1,15 @@
+Result: done
+Files: crates/nikaia-std/src/tools/bounds_walk.nika crates/nikaia-std/src/tools/prover_loops.nika crates/nikaia-std/src/tools/lowered/bounds_walk.rs crates/nikaia-std/src/tools/lowered/prover_loops.rs crates/nikaia-std/src/tools/lowered.rs
+Commit: bounds walk: a loop's checks asked with the prover's candidates (#1054 step 2)
+Body: ADR-361 D10 now takes D5's portfolio: for a `while` that left a check open, `bounding_while_proposals` states the prover's loop problem over the walk's own arena (`loop_record`, the first of the brief's two ways: no claims, no throw test, since every candidate is still checked by the walk) and takes `loop_candidates` (now `pub`), an equality as its two halves, ahead of the walk's own guesses, which stay. The values the loop is reached with are the prover's ghosts `x@S`: `x == x@S` is added to the entry, and the entry facts restated over the ghosts are carried as candidates that hold at every turn. D4 is unchanged: each candidate is asked where the loop is reached and at each end of a turn (`bounding_turn_end`); `nikaia.proofs` names each part's strategy (`closed forms`, `intervals`, `guess and check`). A goal left open with relative goals (step 1) is recorded as their disjunction, so `bounding_could_pay` sees a goal an invariant proves only against `n`; the relative goals now also take, after the names sharing a fact with `t`, the other typed names the point's facts read (`f`'s `j + 1 <= n` needs `j == i`, `i < n`). A `for` keeps the walk's guesses only: its record (`loop_record_range`) needs the range's terms, left for #432. Figures on the tools package (`lower-std --bounds`, `scripts/proved.nika`): under `off` proved: 1518/2628 indexes (57.8 %), 729/1612 operations (45.2 %); under `prove-through-loops:on` proved: 1550/2628 indexes (59.0 %), 736/1612 operations (45.7 %) (the brief's 712/1594 and 719/1594 were taken on an older tree).
+Fixes: #1054
+Tests: check --bounds on the brief's probe: `11 operations, 3 proved` under off, `11 operations, 6 proved` under on (every loop operation of k, g, f and w proved; the other 4 are main's call results; c's `n += 1` checked); soundness probes unchanged by step 2: sound1 (`5 operations, 2 proved`, off and on), sound2 (`u8` sum `s += 3` under `i < 100`, `s = s * 2`: both checked, off and on), sound3 (a `continue` path that leaves `i`, a reset `s`: checked); proved lines off `proved: 1518/2628 indexes (57.8 %), 729/1612 operations (45.2 %)`, on `proved: 1550/2628 indexes (59.0 %), 736/1612 operations (45.7 %)`; it: bounds_checks bounds_report prove prove_loops prove_mutables prove_through_loops shape_bounds std_bounds value_bounds unproved_claims, 143 passed; tests/compiler --both-settings 467 passed, 1 failed: drive_actions, which prints the live driver state (`target/suite.lock` of a running suite), not this change; clippy, fmt, pre-push-check clean
+Gate: green
+Deviation: none
+Found: none
+Needs: none
+Changelog: none
+Owner: none
+Disk freed: 0
+Rs2nika: none
+Pushed: local 71b024e32a66cb3eb178cc25ceda94d1e9e13146
