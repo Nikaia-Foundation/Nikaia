@@ -21,7 +21,7 @@ fn build(nikaia: String, tmp: String, label: String) throws {
         } else if !line.starts_with(" ") {
             inside = false
         }
-        if inside && !line.trim().starts_with("|") && !line.trim().starts_with("^") && !line.contains("Compiling") && !line.contains("Finished") {
+        if inside && !line.trim().starts_with("|") && !line.trim().starts_with("^") && !line.contains("Compiling") && !line.contains("Finished") && !line.contains("Blocking waiting for file lock") {
             println(line.replace(tmp, "TMP"))
         }
     }

@@ -2993,20 +2993,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
             failed.push((label, outcomes, Some(output)));
         }
     }
-    // One place per setting, kept from one program to the next.
-    let places = suite
-        .settings
-        .iter()
-        .map(|_| Sandbox::new())
-        .collect::<Result<Vec<_>>>()?;
-    for program in suite.programs_of_their_own {
-        let mut outcomes = Vec::new();
-        for (setting, place) in suite.settings.iter().zip(&places) {
-            outcomes.push((
-                setting.clone(),
-                run_program_test(program, suite.root, setting, &place.0)?,
-            ));
-        }
+    run_program_tests(suite, |program, outcomes| {
         let label = project_tests::project_tests_program_label(program);
         if suite.bless {
             let blessed = block_on(project_tests::project_tests_bless_program(
@@ -3016,12 +3003,13 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
             if !project_tests::project_tests_blessed_line(&label, &blessed) {
                 failed.push((label, outcomes, None));
             }
-            continue;
+            return Ok(());
         }
         if !project_tests::project_tests_verdict(&label, &outcomes) {
             failed.push((label, outcomes, None));
         }
-    }
+        Ok(())
+    })?;
     if !failed.is_empty() {
         println!("\nfailures:");
         for (label, outcomes, output) in &failed {
@@ -3047,6 +3035,75 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
         total as i64,
         failed.len() as i64,
     ))
+}
+
+/// The variable that sets how many test programs build and run at once; `1`
+/// runs them one after another.
+const TEST_JOBS_VAR: &str = "NIKAIA_TEST_JOBS";
+
+/// **The test programs, on workers of their own** (as many as
+/// [`TEST_JOBS_VAR`] says, else as the machine has cores), each worker with a
+/// place per setting that it keeps from one program to the next
+/// ([`run_program_test`]). `done` is called on this thread with each
+/// program's outcomes at every setting, **in the order of the programs**,
+/// whichever finished first: what is printed is the same as one after
+/// another. An error stops the workers from taking more and is returned once
+/// the programs before it are done.
+fn run_program_tests<'a>(
+    suite: &Suite<'a>,
+    mut done: impl FnMut(&'a ProgramTest, Vec<(String, Outcome)>) -> Result<()>,
+) -> Result<()> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let (programs, root, settings) = (suite.programs_of_their_own, suite.root, suite.settings);
+    let jobs = std::env::var(TEST_JOBS_VAR)
+        .ok()
+        .and_then(|jobs| jobs.trim().parse::<usize>().ok())
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+        .clamp(1, programs.len().max(1));
+    let places = (0..jobs)
+        .map(|_| settings.iter().map(|_| Sandbox::new()).collect())
+        .collect::<Result<Vec<Vec<_>>>>()?;
+    let next = AtomicUsize::new(0);
+    let (send, receive) = std::sync::mpsc::channel();
+    std::thread::scope(|scope| {
+        for place in &places {
+            let (send, next) = (send.clone(), &next);
+            scope.spawn(move || {
+                loop {
+                    let k = next.fetch_add(1, Ordering::SeqCst);
+                    let Some(program) = programs.get(k) else {
+                        break;
+                    };
+                    let outcomes = settings
+                        .iter()
+                        .zip(place)
+                        .map(|(setting, place)| {
+                            run_program_test(program, root, setting, &place.0)
+                                .map(|outcome| (setting.clone(), outcome))
+                        })
+                        .collect::<Result<Vec<_>>>();
+                    if send.send((k, outcomes)).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(send);
+        let mut finished = BTreeMap::new();
+        let mut shown = 0;
+        for (k, outcomes) in receive {
+            finished.insert(k, outcomes);
+            while let Some(outcomes) = finished.remove(&shown) {
+                let reported = outcomes.and_then(|outcomes| done(&programs[shown], outcomes));
+                if reported.is_err() {
+                    next.store(programs.len(), Ordering::SeqCst);
+                    return reported;
+                }
+                shown += 1;
+            }
+        }
+        Ok(())
+    })
 }
 
 /// The package's test programs, by name (`tools/project_tests.nika`).
