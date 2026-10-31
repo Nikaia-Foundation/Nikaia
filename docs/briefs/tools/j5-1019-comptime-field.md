@@ -76,9 +76,16 @@ One commit per step or one for all; the last says `Fixes #1087`, `Part: #1019`.
 The new tests pass through `nikaia test` (one program alone: `docs/builder-facts.md`, *Traps already met*), each failed once on the compiler without your change (say so under `Tests:`); `a_function_takes_a_reflected_field`, `reflected_field_ty`, every `comptime_*` test and the `grammar_*` tests still pass; `lower-std` fixpoint clean; the cheap checks of Rules. Changelog: one line.
 
 ## Stop and report if
-the turn's field cannot reach the build-time run without a change to the run's host interface in Rust (`crates/nikaia/src/`; say which function and what it must carry, `Needs: architect decision`); an edit outside `check_*.nika`, `comptime_*.nika`, `build_values.nika`, `dump.nika`, `emit_*.nika`, `crates/nikaia/src/comptime_run.rs`, their lowered files and the new tests; a form beyond Part II 10.2/10.3; an error in another agent's file. Stop about 15 turns before `max_turns`, commit what is finished and report `partial`.
+the turn's field cannot reach the build-time run without a change to the run's host interface in Rust (`crates/nikaia/src/`; say which function and what it must carry, `Needs: architect decision`); an edit outside `check_*.nika`, `comptime_*.nika`, `build_values.nika`, `dump.nika`, `grammar_decode.nika`, `emit_*.nika`, `crates/nikaia/src/comptime_run.rs`, their lowered files and the new tests; a form beyond Part II 10.2/10.3; an error in another agent's file. Stop about 15 turns before `max_turns`, commit what is finished and report `partial`.
 
 **Not yours, never stage**: every file `git status` shows modified or untracked at your start, and every `docs/briefs/*` file except your report.
+
+## Run 2 (architect, 2026-10-31): steps 2 and 3 only
+Run 1 (report `j5-1019-comptime-field.md.run1.report.md`, commit 417abcf) built step 1 for `f.name` and `shout(f.name)` (`CheckFacts.turn_comptime_values`, keyed `"<start>:<type>:<field>"`; the emitter reads it by `walk.specialising`/`at_field`), and stopped on two things outside its files. What changed:
+* **Step 2's route is decided**: the build-time sub-program (`comptime_sub_program`) gets a generic value function over `T::fields` that unrolls to the turn's field and calls j3's field copy (`wire__Contact__name`), so build time and run time run the same code. Not a second, field-specialising rewriter in `comptime_tree.nika`. Its blocker, a bracket call `turn[Contact]()` opaque to the `sync` walk (NK2202 / NK1152), is #1095, fixed by j7 just before you: pre-flight, run j7's test `a_sync_function_calls_a_generic_by_brackets` first; if it fails, stop and report `blocked`.
+* **Step 3 may edit `crates/nikaia-std/src/tools/grammar_decode.nika`** (`gr_decode`, 121; the `null` form the decoder needs beside `dump.nika` / `build_values.nika`) and its lowered file.
+* Left from step 1, also yours: `f.attribute(X)?.value` in a turn (with a field attribute, as in `a_function_takes_a_reflected_field.nika`), and an interpolation over the field, `comptime d = f"<{f.name}>"` (run 1: its holes are not reached by the rewrite). Add both to `a_comptime_reads_the_reflected_field.nika` / `.stdout`.
+* Not yours: `comptime T = shout("x")` inside a non-generic function (NK1127, #1096, bug lane).
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.

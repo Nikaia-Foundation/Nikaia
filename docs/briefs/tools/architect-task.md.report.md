@@ -1,5 +1,6 @@
 Result: done
-Batch: j5-1019-comptime-field.md j6-1019-error-path.md
+Batch: j6-1019-error-path.md, j7-1095-sync-bracket-call.md, j5-1019-comptime-field.md (run 2)
 Owner: none
-Pushed: rejected (local 877f57b; develop behind origin, j4 unpushed: the driver rebases)
-Notes: j4 (20a79c9, #1019 step 3b) is done; the batch was cut only on its `Gate: none` (cheap checks were green), so common.part, j5 and j6 now say `Gate:` is `green` or `red <check>`, never `none`. j5 is unchanged and runs next (#1087). j6 is new: 3d, the value's path on the `ParseError` stack (`at $.contacts[1].mail`; decided by the architect as obvious, since Part II 10.8 already says it). It was probed on 20a79c9, and the probe's output is in the brief. #1019: 3b ticked; 3d split into 3d (path) and 3e (unescaped strings as views); 3c (`name:`, NK1311/NK1312) follows j5. j4's Found (`.get(&name)` of a kept local, E0277) is the defect #1073 already holds, now commented there with this instance. New: #1091 (NK1111's help drops a `}`), `ready`, left for the bug lane. Supervisor, changelog owed: j4's line (`members[S]`, ADR-grammar-2 D3, D5).
+Decided: j5's Needs: step 2 goes through a generic value function in the build-time sub-program calling j3's field copy (no second rewriter); step 3 may edit grammar_decode.nika. j5's Found (1) filed #1095 (ready, wip: tools lane, brief j7); Found (3) filed #1096 (ready, bug lane). #1019 and #1087 updated.
+Changelog: j5 run 1 (417abcf): A `comptime` in an unrolled turn over `T::fields` can read the turn's field name, `f.name`, directly or through a function (#1087).
+Pushed: rejected (local is behind origin/develop and holds the untested 417abcf; the driver rebases and pushes)
