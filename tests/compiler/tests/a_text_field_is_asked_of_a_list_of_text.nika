@@ -1,0 +1,15 @@
+struct Opt {
+    name: String,
+    value: i64,
+}
+
+fn hits(config: ref Vec[Opt], names: ref Vec[String]) -> bool {
+    return config.iter().any(fn(o) { names.contains(o.name) })
+}
+
+fn main() {
+    let names: Vec[String] = ["given"]
+    let config = [Opt { name: "given", value: 1 }]
+    let other = [Opt { name: "else", value: 2 }]
+    println(f"{hits(config, names)} {hits(other, names)}")
+}

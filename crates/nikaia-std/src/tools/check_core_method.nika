@@ -53,6 +53,20 @@ fn check_core_method_string(ty: ref Ty) -> bool {
     }
 }
 
+/// Whether a list, an array or a slice holds text.
+fn check_core_method_text_items(on: ref Ty) -> bool {
+    let item: Ty = match on {
+        Ty::Named { name, args, .. } => {
+            if (name == "Vec" || name == ARRAY) && args.len() == 1 { args[0].clone() } else { return false }
+        },
+        Ty::Pointed { item, slice, .. } => {
+            if slice { item.clone() } else { return check_core_method_text_items(item) }
+        },
+        else => return false,
+    }
+    return check_core_method_str_view(item) || check_core_method_string(item)
+}
+
 /// The receiver's name, where it is a name; `null` where it is a temporary.
 fn check_core_method_receiver_name(world: ref CheckWorld, receiver: ref Expr) -> String? sync {
     match receiver {
@@ -369,7 +383,7 @@ fn check_core_method_changes(mut state: CheckState, world: ref CheckWorld, recei
 }
 
 /// What `std` resolved the call to: copies, lists of text, counts.
-fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, receiver: ref Expr, args: ref Vec[Expr]) sync {
+fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, on: ref Ty, receiver: ref Expr, args: ref Vec[Expr]) sync {
     let last: String? = state.flow.last_resolved?.clone()
     state.flow.last_resolved = null
     let key: String = last ?? return
@@ -387,6 +401,9 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, rece
         let text = match args[0] {
             Expr::Variable(_, _) => check_core_method_text_local(state, world, args[0]),
             Expr::LitStr { .. } => true,
+            // A field of text may be text of its own (ADR-282 D4): asked
+            // as text where the list holds text.
+            Expr::Field { .. } => check_core_method_text_items(on),
             else => false,
         }
         if text {
@@ -610,7 +627,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     state.flow.walk_lent = false
     state.flow.receiver_from_text = false
     let resolved: String? = state.flow.last_resolved?.clone()
-    check_core_method_resolved(state, world, receiver, args)
+    check_core_method_resolved(state, world, on, receiver, args)
     state.flow.receiver_name = outer_named
     state.flow.at_a_write_door = outer_door
     state.inside_a_door = outer_inside

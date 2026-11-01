@@ -31,6 +31,18 @@ pub(crate) fn check_core_method_string(ty: &Ty) -> bool {
     }
 }
 
+pub(crate) fn check_core_method_text_items(on: &Ty) -> bool {
+    let item: Ty = match on {
+        Ty::Named { name, args, .. } => { if (name == "Vec" || name == ARRAY) && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { return false; } },
+        Ty::Pointed { item, slice, .. } => {
+            let item = nikaia_std::boxed::open(item); let slice = *slice;
+            if slice { item.clone() } else { return check_core_method_text_items(item); }
+        },
+        _ => return false,
+    };
+    check_core_method_str_view(&item) || check_core_method_string(&item)
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_method_receiver_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> Option<String> {
@@ -264,7 +276,7 @@ pub(crate) fn check_core_method_changes(state: &mut CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, args: &[Expr]) {
+pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, args: &[Expr]) {
     let last: Option<String> = match state.flow.last_resolved.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -280,6 +292,7 @@ pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWo
         let text = match nikaia_std::index::get(&args, 0) {
             Expr::Variable(_, _) => check_core_method_text_local(&state, world, nikaia_std::index::get(&args, 0)),
             Expr::LitStr { .. } => true,
+            Expr::Field { .. } => check_core_method_text_items(on),
             _ => false,
         };
         if text { state.facts.text_in_lists.insert(id_of(receiver) as i64); }
@@ -440,7 +453,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
-    check_core_method_resolved(state, world, receiver, args);
+    check_core_method_resolved(state, world, &on, receiver, args);
     state.flow.receiver_name = outer_named;
     state.flow.at_a_write_door = outer_door;
     state.inside_a_door = outer_inside;
