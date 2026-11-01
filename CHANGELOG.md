@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1335] — 2026-11-01
+
+**Optional code narrows to a callable function; a match arm keeps a moved part of a by-value parameter (#1117, #1092, #125)**
+- (T) is T in every type position; narrowing a (fn..)? with match, != null or ?? gives a callable function, and optional code the callee only runs is borrowed for the call.
+- A by-value parameter whose field a match arm moves out is owned; arms meet at null where each part is known; a map read an arm or a branch hands back is copied out.
+- Internal: the prover's model_of moves to prove_run::prove_model; prove_rounds takes an optional runner instead of a round count.
+
 ## [0.0.1334] — 2026-11-01
 
 **self-hosting: project.rs's ledger and proofs writing moves into project_write.nika; rs2nika R334 (#125)**
