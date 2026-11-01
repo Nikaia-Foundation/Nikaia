@@ -434,6 +434,9 @@ fn check_core_call_variant_parts[H: CheckHost](mut state: CheckState, world: ref
         if state.text_literal(world, parts[i], arg, true) == null {
             state.hands_over(world, arg, found[i], "put into a variant", span)
         }
+        // **A part that holds code keeps it** (Part I 5.3), as a struct's
+        // field does: a lambda or a named function is the shared closure.
+        check_core_a_kept_lambda(state, world, host, parts[i], arg, span)
         // **A part that holds a `T?` takes a plain value as `Some`.**
         let how = check_widened_slot(state, world, host, found[i], parts[i], arg, span)
         if how != null {

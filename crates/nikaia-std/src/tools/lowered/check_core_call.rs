@@ -314,6 +314,7 @@ pub(crate) fn check_core_call_variant_parts<H: CheckHost>(state: &mut CheckState
         i += 1;
         if i >= parts.len() as i64 || i >= found.len() as i64 { break; }
         if state.text_literal(world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), arg, true).is_none() { state.hands_over(world, arg, nikaia_std::index::get(&found, nikaia_std::index::at(i)), "put into a variant", span); }
+        check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), arg, span);
         let how = check_widened_slot(state, world, host, nikaia_std::index::get(&found, nikaia_std::index::at(i)), nikaia_std::index::get(&parts, nikaia_std::index::at(i)), Some(arg), span);
         if how.is_some() { state.facts.wrapped.insert(id_of(arg) as i64, match how { Some(__nikaia_value) => __nikaia_value, None => continue }); }
     }

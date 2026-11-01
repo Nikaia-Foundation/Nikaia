@@ -1,0 +1,21 @@
+enum St {
+    Ex(String, fn(i64) -> i64),
+    No,
+}
+
+fn dbl(x: i64) -> i64 {
+    return x * 2
+}
+
+fn main() {
+    let s = St::Ex("a", fn(x) { x + 1 })
+    let t = St::Ex("b", dbl)
+    match s {
+        St::Ex(n, f) => println(f"{n} {f(1)}"),
+        else => {},
+    }
+    match t {
+        St::Ex(n, f) => println(f"{n} {f(1)}"),
+        else => {},
+    }
+}
