@@ -3,3 +3,4 @@
 /home/user/Nikaia/docs/briefs/converter/cv1-impl-outside-type.md 191594 10
 /home/user/Nikaia/docs/briefs/converter/architect-task.md 330433 13
 /home/user/Nikaia/docs/briefs/converter/cv2-text-cuts.md 6398369 92
+/home/user/Nikaia/docs/briefs/converter/architect-task.md 649725 20
