@@ -34,3 +34,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b29-1126-let-mut-tuple.md 1185188 34
 /home/user/Nikaia/docs/briefs/bugs/b30-1127-narrowed-field-or-pattern.md 1452238 33
 /home/user/Nikaia/docs/briefs/bugs/b31-1129-code-cycle-across-files.md 465377 14
+/home/user/Nikaia/docs/briefs/bugs/b32-1130-drain-every-map.md 762886 21
