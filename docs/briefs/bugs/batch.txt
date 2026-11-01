@@ -1,10 +1,3 @@
 b22-1099-fstring-no-hole-braces.md
-b21-1097-flat-map-seq-result.md
-b13-1057-field-of-a-coalesce-and-let.md
-b25-1106-either-text-into-path.md
-b26-1107-unwrapped-map-view.md
-b29-1126-let-mut-tuple.md
-b30-1127-narrowed-field-or-pattern.md
-b31-1129-code-cycle-across-files.md
-b32-1130-drain-every-map.md
 b33-1107-copy-view-copied.md
+b21-1097-flat-map-seq-result.md

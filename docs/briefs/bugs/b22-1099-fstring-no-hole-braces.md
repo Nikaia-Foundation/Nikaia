@@ -12,6 +12,9 @@ Score: compiler bug, a wrong output with no error, so it ranks above a refusal. 
 
 Facts: Where things live, Traps already met, Commands
 
+## Run 2 (architect, 2026-11-01)
+Run 1 stopped `partial` on K3b's then-untracked `comptime_bundle.nika`, which broke the build; K3b is committed (79e5571b) and `develop` builds. Run 1 left its edit **uncommitted in the tree**: `crates/nikaia-std/src/tools/emit_core_leaves.nika` (hole-less branch: `format_of(parts).replace("{{", "{").replace("}}", "}")`) and its twin `lowered/emit_core_leaves.rs`. These two files are yours: take the edit over, check it against step 2 (escaping as the `LitString` arm does it, not a second escaper), rebuild, test, commit. Old report: `b22-1099-fstring-no-hole-braces.md.report.run1.md`. Committing them moves the self-hosting share (83.2 to 83.3 %): the badge trap in *Traps already met* applies.
+
 ## Issue #1099 (probe checked by the architect on `target/fast/nikaia` at 0d8deb1f)
 ```nika
 fn main() {
@@ -37,7 +40,7 @@ The new test fails on the unfixed compiler and passes through `nikaia test --pro
 ## Stop and report if
 An edit is needed outside `emit_core_leaves.nika`, the file that defines `format_of` (read only unless the fix must go there; then say why in `Body:`), their lowered twins and the new test. Or you hit an error in another agent's file.
 
-**Not yours, never stage**: every file `git status` shows modified or untracked at your start, and every `docs/briefs/*` file except your report.
+**Not yours, never stage**: every file `git status` shows modified or untracked at your start except the two run-1 files above, and every `docs/briefs/*` file except your report.
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.

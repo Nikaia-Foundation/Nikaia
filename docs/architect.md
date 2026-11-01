@@ -342,30 +342,21 @@ committed (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
 * **Decided 2026-11-01**: ADR-386 (`drain()` on every map and set, #1130,
   bug brief b32, also repays C1b's clone in `ledger_items_stored`), ADR-387 (a
   view of a copy type is copied where the value is wanted, #1107's rest, b33).
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): appended b32 #1130 and b33
-  #1107 (both `ready,wip`, block nothing). b25 #1106 done; b26 #1107 partial
-  (rest is b33). b22 #1099 stopped
-  `partial` on K3b's untracked files (since restored); its edit sits
-  uncommitted in `emit_core_leaves.nika`. b17 #1077, b19 #1080 done;
-  b18 #1078, b20 #1088 done (906a5be7; `wip` stays until promote closes
-  them); b20's Found filed as #1101 (tuple `null` end + text-literal end,
-  NK1104 when the parameter also takes owned text; brief b24, `ready,wip`).
-  #1097 decided on the issue (a `Seq`/`Vec`/`Array` result binds `U`).
-  Batch: b22 #1099 (wrong value), b21 #1097, b13 #1057 (probes re-checked at
-  aa1ca981). Queued after, briefs written and `wip`: b23 #1100, b24 #1101,
-  b14 #947, b16 #1065. #1060 stays open for step 2 (not reproduced). `ready`
-  defects no lane holds, next: #1098, #1081 (`let a = call().field` borrows
-  the temporary), #1075, #1074,
-  #1083, #1086, #1066, #1038, #958, #1014, #927, #1056, #1058. Unfiled:
-  qa-task's note (dev-profile `cargo test -p nikaia` hits the recursion limit
-  in winnow-grammar `rt.rs:902`); a two-view `fn` field written with `String`
-  instead of `ref String` is NK1106; `String?` == `String` refused (NK1102;
-  GR keeps `sysroot_holds` for it): decide whether by design when next met.
-  A suite gate-error that does not reproduce: re-run the suite before
-  suspecting a commit. A bare `RED` line in `architect-input.txt` (no sha, no
-  "failing jobs" sentence) is not the driver's: check the newest develop runs
-  (`gh api .../actions/runs?branch=develop`) before treating it as red; at
-  da12a9ca it was stale, CI green.
+* **Bug lane** (`docs/briefs/bugs/batch.txt`, 2026-11-01 18:10): b29 #1126,
+  b30 #1127, b31 #1129, b32 #1130 done locally (wip until promote). b30's
+  Found filed as #1132 (`ready`, no brief yet; suspected `bind_static_payloads`
+  lacks an `Or` arm). Batch: b22 #1099 run 2 (takes over run 1's uncommitted
+  edit in `emit_core_leaves.nika`; old report `.run1`), b33 #1107 (ADR-387),
+  b21 #1097; probes re-checked at f41c3f4a. Queued after, briefs written and
+  `wip`: b13 #1057, b23 #1100, b24 #1101, b14 #947, b16 #1065. #1060 open for
+  step 2 (not reproduced). `ready` defects no lane holds, next: #1132, #1131,
+  #1125, #1124, #1113, #1114, #1109, #1119, #1118, #1081, #1075, #1074, #1083,
+  #1086, #1066, #1038, #958, #1014, #927, #1056, #1058. Unfiled: dev-profile
+  `cargo test -p nikaia` hits the recursion limit in winnow-grammar
+  `rt.rs:902`; a two-view `fn` field written with `String` instead of `ref
+  String` is NK1106; `String?` == `String` refused (NK1102): decide whether by
+  design when next met. A bare `RED` line in `architect-input.txt` (no sha) is
+  not the driver's: check the newest develop runs before treating it as red.
 * **Converter lane** (2026-11-01, `docs/briefs/converter/batch.txt`): cv1
   done (9d974eb3; its Display impl stays the converter's ADAPTER comment:
   accepted), cv2 done (db8d8364, text cuts via bytes, ADR-374; its emitter fix
