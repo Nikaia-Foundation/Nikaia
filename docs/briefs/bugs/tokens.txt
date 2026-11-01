@@ -29,3 +29,4 @@
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 770351 23
 /home/user/Nikaia/docs/briefs/bugs/b20-1088-tuple-option-part-in-arms.md 199197 3
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 1148459 27
+/home/user/Nikaia/docs/briefs/bugs/b25-1106-either-text-into-path.md 156093 6
