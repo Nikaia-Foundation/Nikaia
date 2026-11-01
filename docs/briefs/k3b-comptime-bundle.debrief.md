@@ -1,13 +1,14 @@
-1. **What cost the most.** The run was short, about 20 turns. The biggest cost was one wasted cycle. The cycle line's first `lower-std` hid the rustc errors, and only `cargo check -p nikaia-std --features compiler` showed the two clashes. One clash was the CheckWall duplicate: GR re-landed between the brief and my run, and the brief still told me to write my own copy. The other was the EitherText→PathBuf error. A second smaller cost was working out that `emit_core_leaves.rs` drifted because of another agent's uncommitted `.nika`, not because of anything I changed.
-
-2. **What the brief could have handed me.**
-   - That GR had re-landed (`grammar_run.nika` :28 already has `impl Error for CheckWall`).
-   - Which Rust callers of `rustc`/`toolchain`/`target_libdir` remain, which settles whether they are forwards or stay as they are. The brief's "Still to build: forwards `rustc`, `toolchain`, `target_libdir`" contradicted its own *Stays Rust* list.
-   - The fact that 13177b7c was rebased to 03c31a6a, so its pre-flight hash check fails.
-
-3. **Checks I ran.**
-   - Useful: the pre-flight greps, `lower-std`, `cargo check` on both crates, and a plain `nikaia run` probe that reproduced the defect.
-   - Wasted: the `cargo build` in the cycle. It could only fail once `nikaia-std` failed to compile, and running `cargo check --features compiler` first would have skipped it.
-   - I also built the wip commit through a separate index. That kept the shared staging area clean, but neither the brief nor builder.md covers it, so the supervisor should confirm it is acceptable.
-
-4. **The one change that would have saved the most.** Re-run briefs should require a step right after the cherry-pick: run `lower-std`, then `cargo check -p nikaia-std --features compiler` on the current HEAD. Add an explicit line saying whether the builder may fix a std or compiler defect of a few lines as its own commit. Here the fix was six verified lines, and stopping costs a whole extra round.
+1. **Most time:** the brief's test run, about 6 min of `it` plus the 7 `comptime_*` programs. The one rework was clippy's `while_let_loop` on the lowered `run_fingerprint` loop, which cost a second clippy run. The run took about 25 turns in all.
+2. **Looked up, could have been handed:**
+   - Run 2's commit adds no row to `scripts/self_hosting.py`. I had to grep for that, then find the right spot.
+   - The format of the plan row's "built" cell. I copied K3a's.
+   - The tools module's allow list in `lib.rs`.
+   - Whether 1a5fdf6d is on HEAD. `--grep='#1106'` found the architect's batch commit, not the fix, so I checked the hash.
+3. **Checks run:**
+   - The two `lower-std` runs and the build, plus a third pass for the fixpoint (it changed nothing).
+   - The `it` filters and `comptime_*` in a scratch project.
+   - `--lib comptime_run::`: wasted, the module has 0 tests.
+   - The `run_*` tests: there are none in `tests/compiler`.
+   - clippy on 1.97, then on 1.99.1 in a separate target dir, about 10 min. That one only confirmed green, but the rules require it.
+   - fmt and pre-push.
+4. **One change:** a run-N brief that cherry-picks a wip commit should say which bookkeeping that commit lacks (the `self_hosting.py` row, the plan row, a lint the lowered file is known to trip). It should also drop test names that match nothing (`run_*`, `--lib comptime_run::`).
