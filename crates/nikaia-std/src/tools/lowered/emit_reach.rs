@@ -197,7 +197,7 @@ pub(crate) fn reach_runs_code(contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     signature.params.iter().any(|param| {
         match &param.1 {
-            Ty::Fn { is_sync, .. } => { let is_sync = *is_sync; is_sync && !contract.keeps.contains(&param.0) },
+            Ty::Fn { is_sync, .. } => { let is_sync = *is_sync; is_sync && !nikaia_std::list::contains(&contract.keeps, &param.0) },
             _ => false,
         }
     })

@@ -263,7 +263,7 @@ impl CheckState {
                 }
                 if rest || declared.is_empty() { return; }
                 let mut missing: Vec<String> = vec![];
-                for field in declared.iter() { if !named.contains(&field.name) { missing.push(format!("`{}`", field.name)); } }
+                for field in declared.iter() { if !nikaia_std::list::contains(&named, &field.name) { missing.push(format!("`{}`", field.name)); } }
                 if missing.is_empty() { return; }
                 let shown = written.join("::");
                 let mut one: &'static str = "field";

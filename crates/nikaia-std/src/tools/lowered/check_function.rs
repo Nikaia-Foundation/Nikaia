@@ -639,7 +639,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     let mut run_code: collections::BTreeSet<String> = collections::BTreeSet::new();
     for local in frame.iter() {
         match &local.ty {
-            Ty::Fn { .. } => { if !keeps.contains(&local.name) { run_code.insert(local.name.to_string()); } },
+            Ty::Fn { .. } => { if !nikaia_std::list::contains(&keeps, &local.name) { run_code.insert(local.name.to_string()); } },
             _ => { },
         }
     }

@@ -306,7 +306,7 @@ pub fn check_core_fold_form(state: &mut CheckState, world: &CheckWorld<'_, '_, '
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut changes = false;
-        if signature.takes_a_receiver() { changes = contract.mutates; } else if !signature.params.is_empty() { changes = signature.mutable.contains(&nikaia_std::index::get(&signature.params, 0).0); }
+        if signature.takes_a_receiver() { changes = contract.mutates; } else if !signature.params.is_empty() { changes = nikaia_std::list::contains(&signature.mutable, &nikaia_std::index::get(&signature.params, 0).0); }
         if !changes {
             state.findings.push(check_refusal("NK1102", &at, format!("`{}` expects `{}` to hand back `{}`, or to change its first argument in place, but `{}` does neither.", owner, role, wanted, key), vec![String::from("A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9).")], Some(format!("Hand back the `{}`, or take the first parameter as `mut`.", wanted).to_string())));
             return;

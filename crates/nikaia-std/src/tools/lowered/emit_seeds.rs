@@ -101,7 +101,7 @@ impl EmitSeedsTables {
     pub fn self_handers(&self, impls: &[EmitSeedsBody]) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         for i in impls.iter() {
-            if self.arity(&i.name) == 0 || out.contains(&i.name) { continue; }
+            if self.arity(&i.name) == 0 || nikaia_std::list::contains(&out, &i.name) { continue; }
             if self.hands(&i.calls, &i.held) { out.push(i.name.to_string()); }
         }
         out
