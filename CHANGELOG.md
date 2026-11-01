@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1336] — 2026-11-01
+
+**A function type may take a function parameter (#1120)**
+- fn(i64, fn() -> i64) as a parameter: the inner function is kept code, so the outer parameter keeps its impl Fn; a lambda or named function handed to a call of code is kept.
+
 ## [0.0.1335] — 2026-11-01
 
 **Optional code narrows to a callable function; a match arm keeps a moved part of a by-value parameter (#1117, #1092, #125)**
