@@ -290,6 +290,14 @@ impl From<EitherText<'_>> for String {
     }
 }
 
+/// A path of its own from either: an owned answer moves in, a view is copied
+/// (`let p: fs::Path = x` where `x` holds both kinds, #1106).
+impl From<EitherText<'_>> for std::path::PathBuf {
+    fn from(text: EitherText<'_>) -> std::path::PathBuf {
+        std::path::PathBuf::from(text.0.into_owned())
+    }
+}
+
 impl std::fmt::Display for EitherText<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&*self.0, f)

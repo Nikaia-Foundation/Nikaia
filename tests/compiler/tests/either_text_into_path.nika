@@ -1,0 +1,15 @@
+struct Holder { name: String }
+
+fn to_path(h: ref Holder, c: bool) -> fs::Path {
+    let mut x = "none"
+    x = if c { h.name } else { f"a{c}" }
+    let p: fs::Path = x
+    return p
+}
+
+fn main() {
+    let h = Holder { name: f"abc{1}" }
+    let a = to_path(h, true)
+    let b = to_path(h, false)
+    println(f"{a.file_name() ?? "-"} {b.file_name() ?? "-"}")
+}
