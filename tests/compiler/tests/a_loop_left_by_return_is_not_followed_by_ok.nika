@@ -1,0 +1,45 @@
+// A `throws` function whose body ends in a `while true` that only a `return`
+// leaves: the loop is emitted as `loop`, and no `Ok(())` follows it, so
+// `rustc` has no *unreachable expression* to warn about. One with a `break`
+// still ends in its `Ok(())`.
+fn wait(n: i64) throws {
+    let mut i = 0
+    while true {
+        i += 1
+        if i > n {
+            println(f"waited {i}")
+            return
+        }
+    }
+}
+
+fn until(n: i64) throws {
+    let mut i = 0
+    while true {
+        i += 1
+        if i > n {
+            break
+        }
+    }
+    println(f"left at {i}")
+}
+
+fn inner(n: i64) throws {
+    let mut i = 0
+    while true {
+        while true {
+            break
+        }
+        i += 1
+        if i > n {
+            println(f"inner {i}")
+            return
+        }
+    }
+}
+
+fn main() throws {
+    wait(3)
+    until(2)
+    inner(1)
+}

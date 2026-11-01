@@ -15,6 +15,14 @@ pub(crate) fn emit_ends_in_a_jump(world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt
     match stmt {
         Stmt::Return(..) => true,
         Stmt::Expr(expr) => jumps(expr) || emit_never_returns(world, expr),
+        Stmt::While { cond, body } => emit_is_literal_true(cond) && !breaks(body, world.words),
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_is_literal_true(cond: &Expr) -> bool {
+    match cond {
+        Expr::LitBool(truth, _) => { let truth = *truth; truth },
         _ => false,
     }
 }

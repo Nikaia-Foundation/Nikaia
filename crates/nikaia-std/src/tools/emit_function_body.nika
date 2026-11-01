@@ -19,11 +19,23 @@ fn emit_never_returns(world: ref EmitWorld, expr: ref Expr) -> bool {
 }
 
 /// Whether a body ending in this statement has left before its `Ok(())`
-/// (0.0.240): `panic(..)`, `throw` or `return`.
+/// (0.0.240): `panic(..)`, `throw` or `return`, or a `while true` no `break`
+/// leaves: it is emitted as `loop` (ADR-276 D1), which only a `return` ends,
+/// and `rustc` said *unreachable expression* about the `Ok(())` after it.
 fn emit_ends_in_a_jump(world: ref EmitWorld, stmt: ref Stmt) -> bool {
     return match stmt {
         Stmt::Return(..) => true,
         Stmt::Expr(expr) => jumps(expr) || emit_never_returns(world, expr),
+        Stmt::While { cond, body } => emit_is_literal_true(cond) && !breaks(body, world.words),
+        else => false,
+    }
+}
+
+/// Whether `cond` is the literal `true`, the one condition the lowering
+/// writes as `loop` (ADR-276 D1): never a name that happens to be true.
+fn emit_is_literal_true(cond: ref Expr) -> bool {
+    return match cond {
+        Expr::LitBool(truth, _) => truth,
         else => false,
     }
 }
