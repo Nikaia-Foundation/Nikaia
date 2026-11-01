@@ -219,6 +219,12 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   green, the next area. An area with an empty queue gets its architect with
   `QUEUE EMPTY <area>`, and is skipped when it stays empty; every area empty
   escalates. The final lines are those of the cycle below.
+  The focus driver always runs (owner, 2026-11-01): when it ends, on
+  `--max N agent runs reached` or a block's end, the main session starts it
+  again at once; it stops only for an escalation that needs the architect or
+  the owner, and starts again once that is handled. A watcher in the
+  background wakes the main session when the driver ends, and the hourly
+  check-in restarts a driver it finds stopped.
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
   next step; the bug lane with `--no-bump`). It loops on `cycle.nika`: runs
