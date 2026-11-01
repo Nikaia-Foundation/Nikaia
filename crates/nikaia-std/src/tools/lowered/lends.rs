@@ -158,7 +158,7 @@ pub fn option_at(contract: &FnContract, name: &str) -> Option<i64> {
 
 pub fn lends_option(contract: &FnContract, option: &ConfigContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if signature.takes_a_receiver() || contract.keeps.contains(&option.name) { return false; }
+    if signature.takes_a_receiver() || nikaia_std::list::contains(&contract.keeps, &option.name) { return false; }
     match &option.ty {
         Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
         _ => false,

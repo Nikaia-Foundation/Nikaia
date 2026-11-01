@@ -451,7 +451,7 @@ pub(crate) fn ledger_borrows_in_order(entry: &mut FnContract) {
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut ordered: Vec<String> = vec![];
-    for param in signature.params.iter() { if entry.borrows.contains(&param.0) { ordered.push(param.0.to_string()); } }
+    for param in signature.params.iter() { if nikaia_std::list::contains(&entry.borrows, &param.0) { ordered.push(param.0.to_string()); } }
     if (ordered.len() as i64) == entry.borrows.len() as i64 { entry.borrows = ordered; }
 }
 

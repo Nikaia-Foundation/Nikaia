@@ -350,7 +350,7 @@ pub(crate) fn vc_changes_argument(callee: Option<&str>, index: i64, ask: &VcAsk<
     let contract = match *nikaia_std::index::get(&ask.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return true } };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
     if index >= signature.params.len() as i64 { return true; }
-    signature.mutable.contains(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(index)).0)
+    nikaia_std::list::contains(&signature.mutable, &nikaia_std::index::get(&signature.params, nikaia_std::index::at(index)).0)
 }
 
 pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {

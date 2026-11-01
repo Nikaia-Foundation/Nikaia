@@ -983,7 +983,7 @@ pub(crate) fn kept_by_callee(unit: &Unit, asked: &Asked<'_, '_, '_>, callee: &st
     } { Some(__nikaia_value) => __nikaia_value, None => return true };
     let position = if signature.takes_a_receiver() { at + 1 } else { at };
     if position >= signature.params.len() as i64 { return true; }
-    contract.keeps.contains(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(position)).0)
+    nikaia_std::list::contains(&contract.keeps, &nikaia_std::index::get(&signature.params, nikaia_std::index::at(position)).0)
 }
 
 pub(crate) fn a_field_built(unit: &Unit, asked: &Asked<'_, '_, '_>, owner: &str, declared: &[(String, Type)], init: &FieldInit, span: &Span, here: &mut Here) {
@@ -1991,7 +1991,7 @@ pub(crate) fn rsrc_call(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kno
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return rsrc_callee(asked, known, &key, &positional, &everything) };
         for i in 0..args.len() as i64 {
-            if ((i) as usize) < signature.params.len() && signature.mutable.contains(&nikaia_std::index::get(&signature.params, (i) as usize).0) {
+            if ((i) as usize) < signature.params.len() && nikaia_std::list::contains(&signature.mutable, &nikaia_std::index::get(&signature.params, (i) as usize).0) {
                 let root = rsrc_root_local(asked, here, &flow, nikaia_std::index::get(&args, (i) as usize));
                 let kept_views = rsrc_ty_holds_view(asked, &nikaia_std::index::get(&signature.params, (i) as usize).1);
                 if root.is_some() && kept_views && rsrc_may_hold(unit, asked, &flow, &nikaia_std::index::or(root.as_deref(), || "").to_string()) { rsrc_bind(flow, &nikaia_std::index::or(root.as_deref(), || "").to_string(), &everything); }
