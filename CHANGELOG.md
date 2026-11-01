@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1333] — 2026-11-01
+
+**self-hosting: a project's drive and drive_to move into project_drive.nika (#125)**
+- The order of a project build's steps (drive_to) is Nikaia, project_drive.nika over a ProjectDriveHost; Project::drive and drive_to forward to it. The refusal when no std is built for a target is written in Nikaia; an empty CARGO_TARGET_DIR counts as unset.
+
 ## [0.0.1332] — 2026-11-01
 
 **self-hosting: the prover's run moves into prove_run.nika (#125)**
