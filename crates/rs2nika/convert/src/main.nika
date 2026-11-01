@@ -375,6 +375,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R329 `f(&b)` (`b` a file's bytes, `f` a tools trait method taking `p: ref Vec[u8]`) -> the buffer `p` filled from `b` before it, `f(&p)`",
         "R330 `for b in n` with `n` bound by `fs::read` -> `for b in n.iter()`: `Bytes` is walked by `iter`",
         "R331 `[forms]`: `{x}` may stand on the right side again, and `F({a}, {b})` takes two arguments",
+        "R334 C1's shapes: under a `-free` profile with a prefix a failure that is no statement about the program (`anyhow!`, `bail!`, `.context(..)`) is the file refusal's `Failed(..)`, a refusal (`refuse!`, `diagnostics::refuse`) its `Refused(..)`, the enum declaring the ones used; `anyhow!(text)` of a non-literal text is that text; a constant inside a function takes the prefix as a top-level one; under `--only` the file's forwarders to tools (R256) are called as their targets; a table rename `module::name new` (R47) holds in the tree's draft",
         "R333 `for x in xs.iter_mut() {` and `for x in &mut xs {` (a list or an array) -> `for mut x in xs {` (ADR-views-2 D2); Rust's owned `for mut x in xs` -> `for mut x in xs.drain()` (D3); a map's `iter_mut()` / `values_mut()` and an adapter over `iter_mut()` get a TODO (section 6)",
         "R227 a local closure with arguments only ever called (`let count = |family: &str| ..;`) -> a function of the module after the file's functions, the locals it captures its first parameters, each call `count(a)` -> `prefix_count(findings, a)`, f-strings too; types from annotations, `--facts`, a `.count()`/`.len()` or text tail; one unknown, the closure stays (R82)",
         "R224 the project's own rs2nika.names (in the working directory, or `--names FILE`): what was decided converting the files before, read before the converter's table: `old new` renames (R47), `[types]` `Rust type = Nikaia type` (`&'static str = ref String`), a reason after ` #`",
@@ -7760,6 +7761,15 @@ fn rs2nika_tool_paths(mut ctx: Rs2nikaCtx, src: String) -> String {
             continue
         }
         let mut s: String = l.clone()
+        // R334: a rename of the table (R47) `module::name new`, before the
+        // module is dropped (`crate::proofs::FILE` -> `PROOFS_FILE`)
+        for k in 0..<ctx.equiv_from.len() {
+            let from: String = ctx.equiv_from[k].clone()
+            let to: String = ctx.equiv_to[k].clone()
+            if from.contains("::") && !from.contains("(") && rs2nika_all_word(to) && s.contains(from) {
+                s = rs2nika_replace_name(s.replace(f"crate::{from}", to), from, to)
+            }
+        }
         // `nikaia_std::tools::check_copies::f` -> `f`, `nikaia_std::tools::f` -> `f`
         // and `crate::dsl::drivers` -> `drivers`
         for lead in ["nikaia_std::tools::", "crate::"] {
@@ -13180,23 +13190,22 @@ fn rs2nika_forwards(mut ctx: Rs2nikaCtx, src: String) -> String {
     let mut i = 0
     while i < lines.len() {
         let l: String = lines[i].clone()
-        let name = rs2nika_fn_name(l)
-        if name != "" && rs2nika_indent(l) == "" && l.trim_end().ends_with("{") && i + 2 < lines.len() && lines[i + 2].trim() == "}" {
+        let fwd = rs2nika_forwarder_at(lines, i)
+        if fwd != "" {
+            let (name, how) = fwd.split_once("\u{1}") ?? ("", "")
             let body: String = lines[i + 1].trim().clone()
-            if body.starts_with("nikaia_std::tools::") && body.ends_with(")") {
-                let (call, _) = body.split_once("(") ?? ("", "")
-                let (path, target) = call.rsplit_once("::") ?? ("", "")
-                let (_, module) = path.rsplit_once("::") ?? ("", "")
-                while out.len() > 0 && (out[out.len() - 1].trim().starts_with("///") || out[out.len() - 1].trim().starts_with("#[")) {
-                    out.remove(out.len() - 1)
-                }
-                out.push(f"// rs2nika: `{name}` only forwards to tools/{module}.nika `{target}`: its callers call `{target}` (R256)")
-                from.push(name.clone())
-                to.push(f"{target}\u{1}{rs2nika_params_of(l)}\u{1}{rs2nika_params_of(body)}")
-                rs2nika_hit(ctx, "R256")
-                i = i + 3
-                continue
+            let (call, _) = body.split_once("(") ?? ("", "")
+            let (path, target) = call.rsplit_once("::") ?? ("", "")
+            let (_, module) = path.rsplit_once("::") ?? ("", "")
+            while out.len() > 0 && (out[out.len() - 1].trim().starts_with("///") || out[out.len() - 1].trim().starts_with("#[")) {
+                out.remove(out.len() - 1)
             }
+            out.push(f"// rs2nika: `{name}` only forwards to tools/{module}.nika `{target}`: its callers call `{target}` (R256)")
+            from.push(name.clone())
+            to.push(how.clone())
+            rs2nika_hit(ctx, "R256")
+            i = i + 3
+            continue
         }
         out.push(l)
         i = i + 1
@@ -13208,6 +13217,24 @@ fn rs2nika_forwards(mut ctx: Rs2nikaCtx, src: String) -> String {
         k = k + 1
     }
     return text
+}
+
+/// R256: the forwarder to tools whose `fn` line is `lines[i]` (its body one
+/// call `nikaia_std::tools::m::g(..)`), as its name, `g`, its parameters and
+/// the forwarded arguments, split by `\u{1}`; "" where it is none.
+fn rs2nika_forwarder_at(lines: ref Vec[String], i: i64) -> String {
+    let l: String = lines[i].clone()
+    let name = rs2nika_fn_name(l)
+    if name == "" || rs2nika_indent(l) != "" || !l.trim_end().ends_with("{") || i + 2 >= lines.len() || lines[i + 2].trim() != "}" {
+        return ""
+    }
+    let body: String = lines[i + 1].trim().clone()
+    if !body.starts_with("nikaia_std::tools::") || !body.ends_with(")") {
+        return ""
+    }
+    let (call, _) = body.split_once("(") ?? ("", "")
+    let (_, target) = call.rsplit_once("::") ?? ("", "")
+    return f"{name}\u{1}{target}\u{1}{rs2nika_params_of(l)}\u{1}{rs2nika_params_of(body)}"
 }
 
 /// R256: each call `name(a, b)` -> the call the forwarder makes, its
@@ -14706,10 +14733,20 @@ fn rs2nika_own_types(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]
     let consts_too = true
     let mut names: Vec[String] = []
     let mut consts: Vec[String] = []
+    // R334: a constant inside a function goes to the top level with it
+    // (R258), so it takes the prefix too; one of an `impl` does not
+    let mut in_impl = false
     for l in given {
+        if l.starts_with("impl ") || l.starts_with("impl<") || l.starts_with("pub trait ") || l.starts_with("trait ") {
+            in_impl = true
+        } else if l.starts_with("}") {
+            in_impl = false
+        }
+        let nested: String = l.trim_start().clone()
+        let inner = !in_impl && l.starts_with(" ") && (nested.starts_with("const ") || nested.starts_with("static "))
         // a constant of the file's own (a `pub` one is the file's surface)
-        if consts_too && (l.starts_with("const ") || l.starts_with("static ")) {
-            let hc: Vec[scalar] = (l.split_once(" ") ?? ("", "")).1.chars().collect()
+        if consts_too && (l.starts_with("const ") || l.starts_with("static ") || inner) {
+            let hc: Vec[scalar] = (nested.split_once(" ") ?? ("", "")).1.chars().collect()
             let mut e = 0
             while e < hc.len() && rs2nika_word(hc[e]) {
                 e = e + 1
@@ -19653,14 +19690,35 @@ fn rs2nika_only(text: String, name: String) -> String {
             head = -1
         }
     }
-    let mut out: String = ""
+    // R334: the file's forwarders to tools (R256) are called as their
+    // targets, though `--only` blanks them
+    let mut kept: Vec[String] = []
+    let mut forwards: Vec[String] = []
     let mut k = 0
     while k < lines.len() {
-        if k == head || (k >= first && k <= last) {
-            out.push_str(lines[k])
+        let fwd = rs2nika_forwarder_at(lines, k)
+        if fwd != "" && (k < first || k > last) {
+            forwards.push(fwd)
         }
-        out.push_str("\n")
         k = k + 1
+    }
+    k = 0
+    while k < lines.len() {
+        let mut l: String = ""
+        if k == head || (k >= first && k <= last) {
+            l = lines[k].clone()
+            for fwd in forwards {
+                let (name, how) = fwd.split_once("\u{1}") ?? ("", "")
+                l = rs2nika_forwarded_calls(l, name, how)
+            }
+        }
+        kept.push(l)
+        k = k + 1
+    }
+    let mut out: String = ""
+    for l in kept {
+        out.push_str(l)
+        out.push_str("\n")
     }
     if head >= 0 {
         out.push_str(f"}}\n{rs2nika_struct_fields(lines, ty)}\n")
@@ -19678,12 +19736,14 @@ fn rs2nika_only(text: String, name: String) -> String {
 fn rs2nika_file_marks(lines: ref Vec[String], head: i64) -> String {
     let mut fns: Vec[String] = []
     let mut consts: Vec[String] = []
-    for l in lines {
+    for i in 0..<lines.len() {
+        let l = lines[i].clone()
         if l.starts_with(" ") || l.starts_with("}") {
             continue
         }
         let st: String = l.trim_start_matches("pub(crate) ").trim_start_matches("pub ").clone()
-        if st.starts_with("fn ") {
+        // a forwarder to tools is called as its target (R334)
+        if st.starts_with("fn ") && rs2nika_forwarder_at(lines, i) == "" {
             let n = rs2nika_fn_name(l)
             if n != "" && !fns.contains(n) {
                 fns.push(n)

@@ -1,15 +1,19 @@
 use std::collections
 use std::fs
 
-/// A refusal, in the words the compiler reports.
+/// Why the work stops.
 pub enum ManifestRefusal {
+    /// A statement about the build, in the words the compiler reports.
     Refused(String),
+    /// A failure that is no statement about the program.
+    Failed(String),
 }
 
 impl Error for ManifestRefusal {
     fn message(ref self) -> String {
         return match self {
             ManifestRefusal::Refused(why) => why.clone(),
+            ManifestRefusal::Failed(why) => why.clone(),
         }
     }
 }
@@ -55,7 +59,7 @@ pub fn manifest_fresh() -> Manifest {
     return manifest_new()
 }
 pub fn manifest_load_checked(path: ref fs::Path) -> String throws {
-    let other = load(path) catch { throw ManifestRefusal::Refused(f"cannot load: {error}") }
+    let other = load(path) catch { throw ManifestRefusal::Failed(f"cannot load: {error}") }
     if source.is_empty() {
         throw ManifestRefusal::Refused(f"{path.display()} is empty")
     }

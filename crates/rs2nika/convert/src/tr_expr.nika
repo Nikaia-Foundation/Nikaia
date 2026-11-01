@@ -152,6 +152,17 @@ impl TrEm {
         return f"Refused::Because({said})"
     }
 
+    /// A failure that is no statement about the program (`anyhow!`,
+    /// `bail!`, `.context(..)`): under a `-free` profile with a prefix the
+    /// file refusal's `Failed` (R334), elsewhere a refusal.
+    fn failure(ref mut self, said: String) -> String {
+        if self.profile != "none" && self.profile != "" && self.frees_impls() {
+            self.failed_by = true
+            return f"{self.prefix_camel()}Refusal::Failed({said})"
+        }
+        return self.refusal(said)
+    }
+
     fn flow_value(ref mut self, n: i64) -> String {
         let ind = self.ind.clone()
         let lines = self.flow(n, ind.clone(), "value")
@@ -755,7 +766,7 @@ impl TrEm {
                     }
                     said = body
                 }
-                return f"({r} ?? throw {self.refusal(said)})"
+                return f"({r} ?? throw {self.failure(said)})"
             }
         }
         // `.context(m)` / `.with_context(|| m)` on a call that fails, under
@@ -775,7 +786,7 @@ impl TrEm {
             } else if said.starts_with("\"") && said.ends_with("\"") {
                 text = f"f{said.strip_suffix("\"") ?? ""}: {{error}}\""
             }
-            return f"{r} catch {{ throw {self.refusal(text)} }}"
+            return f"{r} catch {{ throw {self.failure(text)} }}"
         }
         // a path's text: `p.to_string_lossy()` -> `p.display()`
         if m == "to_string_lossy" && a.len() == 0 {
@@ -1298,11 +1309,21 @@ impl TrEm {
         }
         // R181, R292: the emitters' refusals; R263: `bail!` / `anyhow!`
         if (name == "refused" || name == "refuse" || name == "bail" || name == "anyhow" || name == "format_err") && args.len() > 0 {
-            let mut said = self.fstring(args)
-            if (name == "refused" || name == "refuse") && !self.frees_impls() {
-                said = f"Refused::Because({said})"
+            let refuses = name == "refused" || name == "refuse"
+            // R334: `anyhow!(text)` of a text that is no format string
+            // fails with that text
+            let mut said: String = ""
+            if !refuses && args.len() == 1 && !self.t.is(args[0], "LITERAL") {
+                said = self.expr(args[0])
             } else {
+                said = self.fstring(args)
+            }
+            if refuses && !self.frees_impls() {
+                said = f"Refused::Because({said})"
+            } else if refuses {
                 said = self.refusal(said)
+            } else {
+                said = self.failure(said)
             }
             if name == "refuse" || name == "bail" {
                 return f"throw {said}"

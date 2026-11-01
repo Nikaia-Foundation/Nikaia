@@ -1,15 +1,16 @@
 use std::collections
 use std::fs
 
-/// A refusal, in the words the compiler reports.
+/// Why the work stops.
 pub enum FsFormsRefusal {
-    Refused(String),
+    /// A failure that is no statement about the program.
+    Failed(String),
 }
 
 impl Error for FsFormsRefusal {
     fn message(ref self) -> String {
         return match self {
-            FsFormsRefusal::Refused(why) => why.clone(),
+            FsFormsRefusal::Failed(why) => why.clone(),
         }
     }
 }
@@ -31,11 +32,11 @@ fn fs_forms_tag(own: ref Own) -> String {
 fn fs_forms_copy(root: ref fs::Path, built: ref fs::Path) -> fs::Path throws {
     let dir = root.join("bin")
     fs::create_dir(dir, fs::Root::Anywhere; recursive: true)
-    let name = (built.file_name() ?? throw FsFormsRefusal::Refused("a program has a file name"))
+    let name = (built.file_name() ?? throw FsFormsRefusal::Failed("a program has a file name"))
     let own = dir.join(name)
     fs::remove(own, fs::Root::Anywhere) catch {}
     if fs::exists(own, fs::Root::Anywhere) {
-        throw FsFormsRefusal::Refused(f"still there: {own.display()}")
+        throw FsFormsRefusal::Failed(f"still there: {own.display()}")
     }
     return own
 }

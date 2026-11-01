@@ -20,7 +20,9 @@ explain_output project_tests_explain_output # the same (P3b)
 build_time::may_not_run bt_may_not_run # the run check is build_eval.nika's (BT); Rust keeps a one-line forward
 is_the_builds_own bt_is_the_builds_own # the same (BT)
 foreign_empty project_members_no_foreign # P4b's `Default` of `Foreign` (R312, R313): the build with no project around it, named for what it is
-is_a_test_function prover_a_test_function # modules.rs had it without a caller; prover_walk.nika answers the same question (M2 deleted the Rust one)
+is_a_test_function prover_a_test_function
+proofs::FILE PROOFS_FILE # proofs.rs's file name is proofs_answers.nika's (C1)
+proofs::shown proofs_shown # the same, a place shown (C1) # modules.rs had it without a caller; prover_walk.nika answers the same question (M2 deleted the Rust one)
 
 # [view]: what `--view` (R177) renames, in this order. The parsed files are
 # `ParsedView`s named `unit`. A bare word is renamed as a word (not after a
@@ -142,6 +144,9 @@ needs.preamble() = host.preamble() # `Needs` stays Rust (emit): the host joins e
 emit_module_body_at(unit, beside, build, provenance, contracts, Ledger::blank(), at == entry, Reads::none(), null).ok() = host.emit_unit(at, beside, contracts, at == entry, rust.len()) # the emitter stays Rust (lane 2): the host drops the unit's foreign parts, emits it and keeps its lines in the source map at the byte given (K3a)
 emit_module_body_at(unit, theirs, build, provenance, own, Ledger::blank(), false, Reads::none(), null).ok() = host.emit_unit(at, theirs, own, false, null) # the same, a dependency's unit: no source map lines (K3a)
 body.rust = body # the host hands back the emitted text only (K3a)
+
+[forms project_write_]
+{x}.as_recorded( = proofs_book_as_recorded({x}, # `Book::as_recorded` is proofs_answers.nika's free function (C1)
 
 [hosts comptime_]
 host = H: ComptimeLowerHost # K3a: the units, the emitter, the build's trust and the source map stay Rust behind comptime_run.rs's LowerHost

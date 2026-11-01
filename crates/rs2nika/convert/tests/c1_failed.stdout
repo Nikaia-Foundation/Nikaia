@@ -1,0 +1,36 @@
+use std::collections
+use std::fs
+
+/// Why the work stops.
+pub enum C1Refusal {
+    /// A statement about the build, in the words the compiler reports.
+    Refused(String),
+    /// A failure that is no statement about the program.
+    Failed(String),
+}
+
+impl Error for C1Refusal {
+    fn message(ref self) -> String {
+        return match self {
+            C1Refusal::Refused(why) => why.clone(),
+            C1Refusal::Failed(why) => why.clone(),
+        }
+    }
+}
+
+pub fn c1_loaded_text(path: ref fs::Path) -> String throws {
+    let text = load(path) catch { throw C1Refusal::Failed(f"cannot load: {error}") }
+    if text.is_empty() {
+        throw C1Refusal::Refused(f"{path.display()} is empty")
+    }
+    return text
+}
+
+pub fn c1_short_said(why: String) throws {
+    if why.len() > C1_MOST {
+        throw C1Refusal::Failed(why)
+    }
+    throw C1Refusal::Failed(f"too short: {why}")
+}
+
+comptime C1_MOST: i64 = 3

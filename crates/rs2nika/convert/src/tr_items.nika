@@ -11,12 +11,33 @@ impl TrEm {
     /// The whole file.
     pub fn file(ref mut self, root: i64) -> String {
         let lines = self.items_of(root, "")
-        if !self.refused_by {
+        if !self.refused_by && !self.failed_by {
             return lines.join("\n")
         }
-        // the file's refusal, as the moved files write it (`modules.nika`)
+        // the file's refusal, as the moved files write it (`modules.nika`):
+        // a statement about the build, and a failure that is none (R334)
         let ty = f"{self.prefix_camel()}Refusal"
-        let mut out: Vec[String] = [f"/// A refusal, in the words the compiler reports.", f"pub enum {ty} {{", "    Refused(String),", "}", "", f"impl Error for {ty} {{", "    fn message(ref self) -> String {", "        return match self {", f"            {ty}::Refused(why) => why.clone(),", "        }", "    }", "}", ""]
+        let mut out: Vec[String] = [f"/// Why the work stops.", f"pub enum {ty} {{"]
+        let mut arms: Vec[String] = []
+        if self.refused_by {
+            out.push("    /// A statement about the build, in the words the compiler reports.")
+            out.push("    Refused(String),")
+            arms.push(f"            {ty}::Refused(why) => why.clone(),")
+        }
+        if self.failed_by {
+            out.push("    /// A failure that is no statement about the program.")
+            out.push("    Failed(String),")
+            arms.push(f"            {ty}::Failed(why) => why.clone(),")
+        }
+        for l in ["}", "", f"impl Error for {ty} {{", "    fn message(ref self) -> String {", "        return match self {"] {
+            out.push(l.clone())
+        }
+        for a in arms {
+            out.push(a.clone())
+        }
+        for l in ["        }", "    }", "}", ""] {
+            out.push(l.clone())
+        }
         for l in lines {
             out.push(l.clone())
         }

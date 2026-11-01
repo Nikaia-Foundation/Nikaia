@@ -62,6 +62,10 @@ pub struct TrEm {
     /// a refusal was written as `{Prefix}Refusal::Refused(..)`: the file
     /// declares that enum
     pub refused_by: bool,
+    /// a failure that is no statement about the program (`anyhow!`,
+    /// `bail!`, `.context(..)`) was written as `{Prefix}Refusal::Failed(..)`
+    /// (R334)
+    pub failed_by: bool,
     /// the loops around the code being written, innermost last: a label's
     /// name, or "" for a loop without one
     pub loops: Vec[String],
@@ -111,6 +115,7 @@ pub fn tr_convert(t: RtTree, profile: String, prefix: String, world: String, hos
         self_var: "",
         impl_fns: collections::BTreeSet(),
         refused_by: false,
+        failed_by: false,
         loops: [],
         jumps: [],
         ret_ty: "",
