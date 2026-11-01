@@ -305,14 +305,14 @@ pub(crate) fn attribute_texts(ledger: &Ledger, library: &Ledger, view: &ParsedVi
     }).collect::<Vec<_>>()
 }
 
-pub fn ledger_items_stored(codes: &[collections::BTreeMap<String, CheckStoredCode>]) -> collections::BTreeMap<String, CheckStoredCode> {
+pub fn ledger_items_stored(codes: &mut Vec<collections::BTreeMap<String, CheckStoredCode>>) -> collections::BTreeMap<String, CheckStoredCode> {
     let mut all: collections::BTreeMap<String, CheckStoredCode> = collections::BTreeMap::new();
-    for unit in codes.iter() {
-        for (key, code) in unit.iter() {
+    for unit in codes.drain(..) {
+        for (key, code) in unit.into_iter() {
             let entry = all.entry(key.to_string()).or_insert_with(CheckStoredCode::empty);
-            entry.resolved.extend(code.resolved.iter().cloned());
+            entry.resolved.extend(code.resolved);
             entry.unresolved |= code.unresolved;
-            entry.free.extend(code.free.iter().cloned());
+            entry.free.extend(code.free);
         }
     }
     all

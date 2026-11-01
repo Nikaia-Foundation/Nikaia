@@ -442,7 +442,7 @@ impl LedgerOps for Ledger {
         // answer to what `a.add(v)` goes to and both walks read it.
         let stored: BTreeMap<String, crate::check::StoredCode> =
             nikaia_std::tools::ledger_items::ledger_items_stored(
-                &checked
+                &mut checked
                     .iter()
                     .map(|c| c.stored_code.clone())
                     .collect::<Vec<_>>(),

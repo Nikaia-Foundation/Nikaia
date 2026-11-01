@@ -759,12 +759,14 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         }, || "".into());
         state.hands_over_name(world, &closed, "closed by `close`", span);
     }
-    if key == "Vec::drain" || key == "collections::HashMap::drain" {
-        if key == "collections::HashMap::drain" { state.facts.map_drains.insert(id_of(receiver) as i64); }
+    let is_btree_drain = key == "collections::BTreeMap::drain" || key == "collections::BTreeSet::drain";
+    if key == "Vec::drain" || key == "collections::HashMap::drain" || key == "collections::HashSet::drain" || is_btree_drain {
+        if key == "collections::HashMap::drain" || key == "collections::HashSet::drain" { state.facts.map_drains.insert(id_of(receiver) as i64); }
+        if is_btree_drain { state.facts.take_drains.insert(id_of(receiver) as i64); }
         let drained: String = nikaia_std::index::or(dotted_path(world, receiver), || "".into());
         if !drained.is_empty() {
             let root = a_root_segment(&drained);
-            let callers = root == "self" && state.borrowing_self || nikaia_std::index::or(state.binding(&root).as_ref().map(|__nikaia_it| __nikaia_it.changing), || false);
+            let callers = root == "self" && state.borrowing_self || nikaia_std::index::or(state.binding(&root).as_ref().map(|__nikaia_it| __nikaia_it.changing), || false) || root != drained && key != "Vec::drain";
             if callers { state.facts.kept_drains.insert(id_of(receiver) as i64); } else {
                 let last = state.changed.len() as i64 - 1;
                 if root == drained && last >= 0 && *nikaia_std::index::get(&state.changed, nikaia_std::index::at(last)) == drained { state.drained.insert(last); }

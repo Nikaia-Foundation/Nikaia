@@ -981,14 +981,20 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // go with what keeps them, and the list or map with them. One that stays
     // the caller's - a `mut` parameter, a field under `ref mut self` - is
     // emptied instead (#564), and the emitter is told so.
-    if key == "Vec::drain" || key == "collections::HashMap::drain" {
-        if key == "collections::HashMap::drain" {
+    let is_btree_drain = key == "collections::BTreeMap::drain" || key == "collections::BTreeSet::drain"
+    if key == "Vec::drain" || key == "collections::HashMap::drain" || key == "collections::HashSet::drain" || is_btree_drain {
+        if key == "collections::HashMap::drain" || key == "collections::HashSet::drain" {
             state.facts.map_drains.insert(id_of(receiver) as i64)
+        }
+        if is_btree_drain {
+            // No stable `drain` on a B-tree: a kept one is `mem::take` (ADR-386 D2).
+            state.facts.take_drains.insert(id_of(receiver) as i64)
         }
         let drained: String = dotted_path(world, receiver) ?? ""
         if drained.len() > 0 {
             let root = a_root_segment(drained)
-            let callers = (root == "self" && state.borrowing_self) || (state.binding(root)?.changing ?? false)
+            // A field path of a local stays in place too: it is emptied, not moved.
+            let callers = (root == "self" && state.borrowing_self) || (state.binding(root)?.changing ?? false) || (root != drained && key != "Vec::drain")
             if callers {
                 state.facts.kept_drains.insert(id_of(receiver) as i64)
             } else {

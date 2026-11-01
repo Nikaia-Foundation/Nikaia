@@ -457,6 +457,7 @@ pub struct CheckFacts {
     /// The receivers of a map's `drain()`: where the map stays the caller's,
     /// it is emptied by Rust's `drain()`, which takes no range (#707).
     pub map_drains: collections::BTreeSet[i64],
+    pub take_drains: collections::BTreeSet[i64],
     /// The receivers of a `Par`'s `fold(init, step, merge)` (ADR-372 D2):
     /// `fold_merged` below, which a list's `iter()` at `no` has as well as a
     /// walk on every core, beside the language below's own two-argument `fold`.
@@ -674,6 +675,7 @@ impl CheckFacts {
             kept_text_bytes: collections::BTreeSet(),
             byte_copies: collections::BTreeSet(),
             map_drains: collections::BTreeSet(),
+            take_drains: collections::BTreeSet(),
             par_folds: collections::BTreeSet(),
             in_place_folds: collections::BTreeMap(),
             kept_drains: collections::BTreeSet(),

@@ -2985,6 +2985,27 @@ sync = true
 touches = []
 signature = "[K, V](self: collections::HashMap[K, V]) -> Seq[(K, V)] sync sized"
 
+# The same for a `BTreeMap`, in key order (ADR-386).
+[fn."collections::BTreeMap::drain"]
+pub = true
+sync = true
+touches = []
+signature = "[K, V](self: collections::BTreeMap[K, V]) -> Seq[(K, V)] sync ends sized"
+
+# The elements, one at a time, **taken out** of the set (ADR-386).
+[fn."collections::HashSet::drain"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: collections::HashSet[T]) -> Seq[T] sync sized"
+
+# The same for a `BTreeSet`, in order (ADR-386).
+[fn."collections::BTreeSet::drain"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: collections::BTreeSet[T]) -> Seq[T] sync ends sized"
+
 # --- What is produced step by step, and what walks it ------------------------
 #
 # [ADR-105](../../docs/specification/adr/adr-105.md) D1. `Seq[T]` is the

@@ -1,0 +1,40 @@
+use std::collections
+
+struct Bag {
+    items: collections::BTreeMap[String, Vec[i64]],
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+    m.insert("b", [3])
+    m.insert("a", [1, 2])
+    let mut kept: Vec[Vec[i64]] = []
+    for (k, v) in m.drain() {
+        print(f"{k} {v.len()}\n")
+        kept.push(v)
+    }
+    println(f"{kept.len()}")
+
+    let mut h: collections::HashSet[i64] = collections::HashSet()
+    h.insert(4)
+    h.insert(5)
+    let mut sum = 0
+    for x in h.drain() {
+        sum += x
+    }
+    println(f"{sum}")
+
+    let mut s: collections::BTreeSet[i64] = collections::BTreeSet()
+    s.insert(9)
+    s.insert(7)
+    for x in s.drain() {
+        println(f"{x}")
+    }
+
+    let mut bag = Bag { items: collections::BTreeMap() }
+    bag.items.insert("z", [1])
+    for (k, v) in bag.items.drain() {
+        println(f"{k} {v.len()}")
+    }
+    println(f"{bag.items.len()}")
+}

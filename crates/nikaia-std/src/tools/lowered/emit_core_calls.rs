@@ -669,6 +669,12 @@ impl EmitState {
         if name == "drain" && args.is_empty() && receiver.is_some() {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.stays_the_callers(world, &scope.function, on) || self.facts.kept_drains.contains(&node_key(on)) {
+                if self.facts.take_drains.contains(&node_key(on)) {
+                    out.push("std::mem::take(&mut ");
+                    self.emit_core_postfix_base(world, walk, out, host, on, depth, flow, scope)?;
+                    out.push(").into_iter()");
+                    return Ok(());
+                }
                 self.emit_core_postfix_base(world, walk, out, host, on, depth, flow, scope)?;
                 if self.facts.map_drains.contains(&node_key(on)) { out.push(".drain()"); } else { out.push(".drain(..)"); }
                 return Ok(());
