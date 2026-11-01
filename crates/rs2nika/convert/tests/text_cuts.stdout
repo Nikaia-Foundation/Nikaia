@@ -1,0 +1,58 @@
+use std::collections
+pub struct Doc {
+    pub body: String,
+    pub marks: Bytes,
+}
+
+pub fn tail_of(text: String, at: i64) -> String throws {
+    let rest = text.bytes[at..].text()
+    return rest.to_string()
+}
+
+pub fn head_of(text: String, at: i64) -> String {
+    return (text.bytes[..<at].text() catch { panic("cut inside a scalar") }).to_string()
+}
+
+pub fn middle(text: String, a: i64, b: i64) -> String {
+    let cut = text.bytes[a..<b].text() catch { panic("cut inside a scalar") }
+    return cut.to_string()
+}
+
+pub fn opens(text: String, at: i64) -> bool {
+    return text.bytes[at..].starts_with("impl".bytes) || text.bytes[..<at].ends_with("}".bytes)
+}
+
+pub fn rest_from(text: String, at: i64) -> String {
+    let rest = ((if at <= text.bytes.len() { text.bytes[at..].text() catch { null } } else { null }) ?? "")
+    return rest.to_string()
+}
+
+pub fn first_word(text: String) -> String {
+    return (text.split(" ").next() ?? "").to_string()
+}
+
+pub fn whole(text: String) -> String {
+    return text
+}
+
+pub fn field_cut(doc: ref Doc, at: i64) -> String {
+    return (doc.body.bytes[at..].text() catch { panic("cut inside a scalar") }).to_string()
+}
+
+pub fn of_bytes(text: String, at: i64) -> i64 {
+    let bytes = text.bytes
+    return bytes[at..].len() + doc_marks(bytes[..<at])
+}
+
+pub fn unknown(xs: Thing, at: i64) -> i64 {
+    return xs[at..].len()
+}
+
+pub fn found(text: String, at: i64) -> i64? {
+    let end = (text[at + 1..].find("\"") /* TODO(rs2nika): a position, ADR-374 */ ?? return null)
+    return end
+}
+
+pub fn copy_cut(text: String, from: i64, to: i64, mut out: String) {
+    out.push_str(text.bytes[from..<to].text() catch { panic("cut inside a scalar") })
+}

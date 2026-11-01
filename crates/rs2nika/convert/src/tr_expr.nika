@@ -15,6 +15,12 @@ fn tr_iter_method(m: String) -> bool {
     return m == "iter" || m == "into_iter" || m == "chars" || m == "bytes" || m == "keys" || m == "values" || m == "lines" || m == "split" || m == "split_whitespace" || m == "map" || m == "filter" || m == "rev" || m == "zip" || m == "skip" || m == "take" || m == "chain" || m == "enumerate" || m == "windows" || m == "chunks" || m == "filter_map" || m == "flat_map" || m == "step_by" || m == "take_while" || m == "skip_while" || m == "char_indices" || m == "drain" || m == "peekable" || m == "cloned" || m == "copied" || m == "scalars" || m == "splitn" || m == "rsplit" || m == "split_terminator" || m == "inspect"
 }
 
+/// Whether a Rust type is a text: `&str`, `String`, `&String`, `&mut String`.
+fn tr_text_type(ty: String) -> bool {
+    let t = ty.replace("&'static ", "&").replace("&mut ", "").replace("&", "").trim().clone()
+    return t == "str" || t == "String"
+}
+
 /// The methods whose answer is an option.
 fn tr_option_method(m: String) -> bool {
     return m == "get" || m == "pop" || m == "first" || m == "last" || m == "next" || m == "find" || m == "position" || m == "max" || m == "min" || m == "max_by_key" || m == "min_by_key" || m == "max_by" || m == "min_by" || m == "strip_prefix" || m == "strip_suffix" || m == "checked_add" || m == "checked_sub" || m == "checked_mul" || m == "checked_div" || m == "rfind" || m == "find_map" || m == "nth" || m == "get_mut" || m == "remove_entry" || m == "split_once" || m == "rsplit_once" || m == "to_digit" || m == "last_mut" || m == "first_mut" || m == "pop_front" || m == "pop_back" || m == "front" || m == "back" || m == "peek" || m == "rposition" || m == "char_indices_next"
@@ -62,6 +68,9 @@ impl TrEm {
             let base = self.expr(parts[0])
             if self.t.is(parts[1], "RANGE_EXPR") && self.nodes(parts[1]).len() == 0 {
                 return base
+            }
+            if self.t.is(parts[1], "RANGE_EXPR") && self.text_expr(parts[0]) {
+                return self.text_cut(n, base, self.range(parts[1]))
             }
             return f"{base}[{self.expr(parts[1])}]"
         } else if kind == "RANGE_EXPR" {
@@ -212,6 +221,137 @@ impl TrEm {
             return f"{name} {{ {parts.join(", ")} }}"
         }
         return ""
+    }
+
+    /// Whether `n` is a text (ADR-374): a parameter or local typed `&str`,
+    /// `String` or `&String`, a local bound to a text, a field typed so in
+    /// this file, a cut of a text, or a text option's value with `""` where
+    /// it is absent. A receiver of unknown type is no text.
+    fn text_expr(ref mut self, n: i64) -> bool {
+        if n < 0 {
+            return false
+        }
+        if self.t.is(n, "REF_EXPR") || self.t.is(n, "PAREN_EXPR") {
+            return self.text_expr(self.t.nth(n, 0))
+        }
+        if self.t.is(n, "PATH_EXPR") {
+            let name = self.src(n)
+            if self.texts.contains(name) || self.shared_texts.contains(name) {
+                return true
+            }
+            let f = self.t.up(n, "FN")
+            let b = self.binding_of(f, name, self.t.nodes[n].start)
+            if b < 0 {
+                return false
+            }
+            let ns = self.nodes(b)
+            if ns.len() >= 2 && self.t.kind(ns[1]).ends_with("_TYPE") {
+                return tr_text_type(self.src(ns[1]))
+            }
+            if self.t.is(b, "LET_STMT") && ns.len() == 2 {
+                return self.text_expr(ns[1])
+            }
+            return false
+        }
+        if self.t.is(n, "FIELD_EXPR") {
+            return self.field_ty("", self.src(self.t.kid(n, "NAME_REF"))) == "String"
+        }
+        if self.t.is(n, "INDEX_EXPR") {
+            let parts = self.nodes(n)
+            return parts.len() == 2 && self.t.is(parts[1], "RANGE_EXPR") && self.text_expr(parts[0])
+        }
+        if self.t.is(n, "METHOD_CALL_EXPR") {
+            let m = self.src(self.t.kid(n, "NAME_REF"))
+            if m == "unwrap_or_default" {
+                return self.text_option(self.t.nth(n, 0))
+            }
+            return (m == "trim" || m == "trim_start" || m == "trim_end" || m == "as_str" || m == "to_string" || m == "to_owned" || m == "clone") && self.text_expr(self.t.nth(n, 0))
+        }
+        return false
+    }
+
+    /// Whether `n` is an option of a text: `t.get(a..)`, `t.strip_prefix(x)`,
+    /// `t.strip_suffix(x)`, or the `next()` of a text's `split`, `lines`,
+    /// `split_whitespace`.
+    fn text_option(ref mut self, n: i64) -> bool {
+        if !self.t.is(n, "METHOD_CALL_EXPR") {
+            return false
+        }
+        let m = self.src(self.t.kid(n, "NAME_REF"))
+        let recv_n = self.t.nth(n, 0)
+        if m == "get" || m == "strip_prefix" || m == "strip_suffix" {
+            return self.text_expr(recv_n)
+        }
+        if (m == "next" || m == "last") && self.t.is(recv_n, "METHOD_CALL_EXPR") {
+            let s = self.src(self.t.kid(recv_n, "NAME_REF"))
+            return (s == "split" || s == "lines" || s == "split_whitespace" || s == "rsplit" || s == "splitn") && self.text_expr(self.t.nth(recv_n, 0))
+        }
+        return false
+    }
+
+    /// Whether `n` is a text cut at numbers (`t[a..]`), through `&` and `( )`.
+    fn text_cut_of(ref mut self, n: i64) -> bool {
+        let mut at = n
+        while self.t.is(at, "REF_EXPR") || self.t.is(at, "PAREN_EXPR") {
+            at = self.t.nth(at, 0)
+        }
+        return self.t.is(at, "INDEX_EXPR") && self.text_expr(at)
+    }
+
+    /// The parameter or `let` in `f` that binds `name` last before `at`, or -1.
+    fn binding_of(ref self, f: i64, name: ref String, at: i64) -> i64 {
+        let mut found = -1
+        if f < 0 {
+            return found
+        }
+        let mut todo: Vec[i64] = [f]
+        while todo.len() > 0 {
+            let k = todo.pop() ?? -1
+            if (self.t.is(k, "PARAM") || self.t.is(k, "LET_STMT")) && self.t.nodes[k].start < at {
+                let ns = self.nodes(k)
+                if ns.len() >= 2 && self.t.is(ns[0], "IDENT_PAT") && self.t.name_of(ns[0]) == name && (found < 0 || self.t.nodes[k].start > self.t.nodes[found].start) {
+                    found = k
+                }
+            }
+            for c in self.nodes(k) {
+                todo.push(c)
+            }
+        }
+        return found
+    }
+
+    /// A text `base` cut at the numbers of `range` (Rust `&t[a..b]`): the
+    /// cut goes through its bytes and is made text again (ADR-374 D1); in a
+    /// function that does not throw, a cut inside a scalar panics as in
+    /// Rust. Read by `starts_with`/`ends_with` the bytes are compared, read
+    /// by `find`/`rfind` the number is a position: marked, left as written.
+    fn text_cut(ref mut self, n: i64, base: String, range: String) -> String {
+        let bytes = f"{base}.bytes[{range}]"
+        let mut child = n
+        let mut up = self.t.nodes[n].parent
+        while up >= 0 && (self.t.is(up, "REF_EXPR") || self.t.is(up, "PAREN_EXPR")) {
+            child = up
+            up = self.t.nodes[up].parent
+        }
+        let recv = up >= 0 && self.t.is(up, "METHOD_CALL_EXPR") && self.t.nth(up, 0) == child
+        if recv {
+            let m = self.src(self.t.kid(up, "NAME_REF"))
+            if (m == "starts_with" || m == "ends_with") && self.nodes(self.t.kid(up, "ARG_LIST")).len() == 1 {
+                return bytes
+            }
+            if m == "find" || m == "rfind" {
+                return f"{base}[{range}]"
+            }
+        }
+        let made = f"{bytes}.text()"
+        if self.fails {
+            return made
+        }
+        let caught = f"{made} catch {{ panic(\"cut inside a scalar\") }}"
+        if up >= 0 && (recv || self.t.is(up, "FIELD_EXPR") || self.t.is(up, "BIN_EXPR") || self.t.is(up, "INDEX_EXPR") || self.t.is(up, "PREFIX_EXPR") || self.t.is(up, "CAST_EXPR") || self.t.is(up, "TRY_EXPR")) {
+            return f"({caught})"
+        }
+        return caught
     }
 
     /// The type a value at `n` is written into, as Nikaia writes it: the
@@ -881,6 +1021,18 @@ impl TrEm {
             let empty = if r.starts_with("fs::read(") { "[]" } else { "\"\"" }
             return f"({r} catch {{ {empty} }})"
         }
+        if m == "unwrap_or_default" && a.len() == 0 && self.text_option(recv_n) {
+            return f"({r} ?? \"\")"
+        }
+        // `t.get(a..)` of a text: its bytes from `a` on, made text again
+        if m == "get" && a.len() == 1 && self.t.is(arg_nodes[0], "RANGE_EXPR") && self.text_expr(recv_n) {
+            let ks = self.nodes(arg_nodes[0])
+            let range = self.range(arg_nodes[0])
+            if ks.len() == 1 && range.ends_with("..") && !range.starts_with("..") {
+                let from = self.expr(ks[0])
+                return f"(if {from} <= {r}.bytes.len() {{ {r}.bytes[{range}].text() catch {{ null }} }} else {{ null }})"
+            }
+        }
         if m == "unwrap_or_default" && a.len() == 0 {
             let empty = self.default_of_optional(recv_n)
             if empty != "" {
@@ -983,6 +1135,15 @@ impl TrEm {
                 } else {
                     fixed.push(s)
                 }
+            }
+            // a text cut at a number (ADR-374): `starts_with` compares its
+            // bytes; a `find` on it gives a number Nikaia does not cut at
+            if self.text_cut_of(recv_n) && (m == "starts_with" || m == "ends_with") && fixed.len() == 1 {
+                return f"{r}.{m}({fixed[0]}.bytes)"
+            }
+            if self.text_cut_of(recv_n) && (m == "find" || m == "rfind") {
+                self.todos += 1
+                return f"{r}.{m}({fixed.join(", ")}) /* TODO(rs2nika): a position, ADR-374 */"
             }
             return f"{r}.{m}({fixed.join(", ")})"
         }
