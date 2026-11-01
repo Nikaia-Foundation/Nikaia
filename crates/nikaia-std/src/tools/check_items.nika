@@ -378,7 +378,7 @@ fn item_held(index: ref collections::BTreeMap[String, Vec[Ty]], base: ref String
 /// `Default::default()`.
 fn item_has_a_default(ty: ref Ty) -> bool {
     return match ty {
-        Ty::Named { name, view, .. } => !view && (a_number_name(name) || item_plain_default(item_last_segment(name))),
+        Ty::Named { name, view, .. } => !view && (a_number_name(name) || item_plain_default(item_last_segment(name)) || name == "node_id::NodeId"),
         Ty::Nullable(_) => true,
         Ty::Tuple(parts) => parts.len() <= 12 && item_all_default(parts),
         else => false,
@@ -496,6 +496,58 @@ fn item_placeholder_of_enum(view: ref ParsedView, name: ref String, variants: re
     return best
 }
 
+/// **An enum's placeholder where `view` declares it**, or `null` where it
+/// does not or no variant has one. The toolchain's `node_id::NodeId` counts
+/// as having an empty value (`NodeId::default`, unnumbered).
+fn item_enum_placeholder_in(view: ref ParsedView, name: ref String) -> String? {
+    for item in view.items {
+        let found: String? = match item.node {
+            Item::Enum { name: declared, variants, .. } => if view.text(declared) == name { item_placeholder_of_enum(view, name, variants) } else { null },
+            else => null,
+        }
+        if found != null {
+            return found
+        }
+    }
+    return null
+}
+
+/// An enum's placeholder read from its contract, for an enum another file or
+/// `std` declares: its variant that holds the fewest parts, all with an empty
+/// value.
+fn item_placeholder_of_contract(name: ref String, contract: ref TypeContract) -> String? {
+    let mut best: String? = null
+    let mut best_size = -1
+    for variant in contract.variants {
+        let vname = variant.name.clone()
+        let written = f"{name}::{vname}"
+        let mut tys: Vec[Ty] = []
+        let mut holes: Vec[String] = []
+        for f in variant.holds {
+            tys.push(f.ty.clone())
+            let fname = f.name.clone()
+            if variant.positional {
+                holes.push("Default::default()")
+            } else {
+                holes.push(f"{fname}: Default::default()")
+            }
+        }
+        if !item_all_default(tys) {
+            continue
+        }
+        let joined = holes.join(", ")
+        let mut text: String = written.clone()
+        if holes.len() > 0 {
+            text = if variant.positional { f"{written}({joined})" } else { f"{written} {{ {joined} }}" }
+        }
+        if best_size < 0 || holes.len() < best_size {
+            best = text
+            best_size = holes.len()
+        }
+    }
+    return best
+}
+
 /// The enum's variants in the order the declaration wrote them, or nothing
 /// where the file does not declare it.
 fn item_declared_variants(view: ref ParsedView, on: ref String) -> Vec[String]? {
@@ -522,23 +574,28 @@ fn item_variant_names(view: ref ParsedView, variants: ref Vec[EnumVariant]) -> V
 impl CheckState {
     /// The text that stands for a value of `subject` where one is needed and
     /// none was written: an enum's simplest variant, or a struct's fields.
-    pub fn a_placeholder(ref self, view: ref ParsedView, subject: ref Ty) -> String? {
+    pub fn a_placeholder(ref self, world: ref CheckWorld, subject: ref Ty) -> String? {
         let name = item_plain_name(subject) ?? return null
-        for item in view.items {
-            let found: String? = match item.node {
-                Item::Enum { name: declared, variants, .. } => if view.text(declared) == name { item_placeholder_of_enum(view, name, variants) } else { null },
-                else => null,
-            }
+        let declared = item_enum_placeholder_in(world.here, name)
+        if declared != null {
+            return declared ?? return null
+        }
+        for other in world.beside {
+            let found = item_enum_placeholder_in(other, name)
             if found != null {
-                return found
+                return found ?? return null
             }
-            let declared_here = match item.node {
-                Item::Enum { name: declared, .. } => view.text(declared) == name,
-                else => false,
+        }
+        if self.enums.contains_key(name) {
+            let own = world.own.types.get(name)
+            if own != null {
+                return item_placeholder_of_contract(name, own ?? return null)
             }
-            if declared_here {
-                return null
+            let library = world.library.types.get(name)
+            if library != null {
+                return item_placeholder_of_contract(name, library ?? return null)
             }
+            return null
         }
         let fields = self.structs.get(name) ?? return null
         let parameters = self.struct_parameters.get(name)
@@ -561,11 +618,11 @@ impl CheckState {
     /// D3): empty where the type has an empty value, which `std::mem::take`
     /// leaves; the stand-in a `match` arm leaves otherwise; `null` where there
     /// is neither.
-    pub fn a_stand_in(ref self, view: ref ParsedView, ty: ref Ty) -> String? {
+    pub fn a_stand_in(ref self, world: ref CheckWorld, ty: ref Ty) -> String? {
         if item_has_a_default(ty) {
             return ""
         }
-        return self.a_placeholder(view, ty)
+        return self.a_placeholder(world, ty)
     }
 
     /// The fields of a type, or an enum's variants as fields, in the order the

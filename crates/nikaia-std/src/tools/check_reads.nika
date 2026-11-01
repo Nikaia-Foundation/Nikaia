@@ -434,12 +434,21 @@ impl CheckState {
         let node = id_of(body) as i64
         // The guard and a pattern that looks inside a box keep the arm as it
         // was: both are read before the arm opens anything.
-        let placeholder = self.a_placeholder(world.here, subject) ?? return
+        let placeholder = self.a_placeholder(world, subject) ?? return
         self.facts.taking_arms.insert(node, placeholder)
         // The parts are values here, not references: nothing to copy out.
+        // So are the parts of a `match` over one of them, nested in the arm.
+        let mut nested: collections::BTreeSet[i64] = collections::BTreeSet()
+        for (part_binding, arm) in self.narrowing.in_place_arms {
+            for (_, binding) in found {
+                if binding == part_binding {
+                    let added = nested.insert(arm)
+                }
+            }
+        }
         let mut kept: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
         for one in self.facts.copied_bindings {
-            if one.0 != node {
+            if one.0 != node && !nested.contains(one.0) {
                 let added = kept.insert(one.clone())
             }
         }

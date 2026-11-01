@@ -95,7 +95,7 @@ impl CheckState {
         if root == "self" { return None; }
         let local = match self.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if !local.changing && !self.a_changing_view(&root) { return None; }
-        self.a_stand_in(&world.here, ty)
+        self.a_stand_in(world, ty)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

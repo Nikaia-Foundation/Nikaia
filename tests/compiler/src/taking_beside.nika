@@ -1,0 +1,16 @@
+/// A tree declared in its own file, whose taking arms are written in
+/// `tests/a_taking_arm_over_an_enum_declared_beside.nika`.
+pub enum Branching {
+	Leaf(i64),
+	Fork { left: Branching, right: Branching, id: i64 },
+}
+
+/// A taking arm in a file beside the one that declares the enum.
+pub fn mirrored(mut b: Branching) {
+	match b {
+		Branching::Fork { left, right, id } => {
+			b = Branching::Fork { left: right, right: left, id: id }
+		},
+		else => {},
+	}
+}

@@ -1,0 +1,51 @@
+/// A number bound by a `match` over a part an outer arm bound in place out of
+/// a `mut` parameter is copied out, as one bound over the parameter itself
+/// is (#125): `t == want` compares two numbers, not a reference with one.
+enum Shape {
+	Dot(i64),
+	Pair { left: Shape, right: Shape, id: i64 },
+}
+
+fn left_is(mut s: Shape, want: i64) -> bool {
+	return match s {
+		Shape::Pair { left, .. } => match left {
+			Shape::Dot(t) => t == want,
+			else => false,
+		},
+		else => false,
+	}
+}
+
+/// The same under an arm that then takes the parts out.
+fn swapped_if(mut s: Shape, want: i64) {
+	match s {
+		Shape::Pair { left, right, id } => {
+			let hit = match left {
+				Shape::Dot(t) => t == want,
+				else => false,
+			}
+			if hit {
+				s = Shape::Pair { left: right, right: left, id: id }
+			} else {
+				s = Shape::Pair { left: left, right: right, id: id + 1 }
+			}
+		},
+		else => {},
+	}
+}
+
+fn main() {
+	let mut s = Shape::Pair { left: Shape::Dot(1), right: Shape::Dot(2), id: 3 }
+	println(f"{left_is(s, 1)} {left_is(s, 2)}")
+	swapped_if(s, 1)
+	println(f"{left_is(s, 2)}")
+	swapped_if(s, 1)
+	println(f"{left_is(s, 2)} {shown(s)}")
+}
+
+fn shown(s: ref Shape) -> String {
+	return match s {
+		Shape::Dot(n) => f"{n}",
+		Shape::Pair { left, right, id } => f"({shown(left)} {shown(right)} {id})",
+	}
+}

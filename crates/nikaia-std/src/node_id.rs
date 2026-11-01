@@ -49,6 +49,15 @@ pub struct NodeId {
     end: u32,
 }
 
+/// The placeholder a taking `match` arm leaves in a node's place while it
+/// takes the parts out: an unnumbered id ([`NodeId::parsed`]), which no table
+/// is keyed on.
+impl Default for NodeId {
+    fn default() -> NodeId {
+        NodeId::parsed()
+    }
+}
+
 impl NodeId {
     /// The id with this number, and no span: what the parser gives, in the
     /// order it makes its nodes.

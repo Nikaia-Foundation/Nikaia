@@ -24,10 +24,38 @@ touches = []
 views = ["p: borrowed", "<result>: borrowed"]
 signature = "(p: ref Places) -> Places"
 
+[fn."cycle_alt"]
+pub = true
+sync = true
+touches = []
+views = ["name: borrowed"]
+inferred = ["result == name.len()"]
+signature = "(name: String) -> i64?"
+
+[fn."cycle_ping"]
+pub = true
+sync = true
+locks = "?"
+views = ["known: borrowed"]
+signature = "(n: i64, known: fn(ref String) -> i64? sync) -> i64"
+
+[fn."cycle_pong"]
+pub = true
+sync = true
+locks = "?"
+views = ["known: borrowed"]
+signature = "(n: i64, known: fn(ref String) -> i64? sync) -> i64"
+
 [fn."main"]
 sync = "inferred"
 touches = []
 signature = "()"
+
+[fn."mirrored"]
+pub = true
+sync = "inferred"
+touches = []
+signature = "(mut b: Branching)"
 
 [fn."none_of"]
 pub = true
@@ -57,6 +85,10 @@ sync = "inferred"
 keeps = ["x"]
 touches = []
 signature = "[T](x: T) -> T"
+
+[type."Branching"]
+pub = true
+variants = ["Leaf(i64)", "Fork { left: Branching, right: Branching, id: i64 }"]
 
 [type."Nest"]
 pub = true

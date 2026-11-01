@@ -1283,6 +1283,14 @@ fn check_core_flow_changed_copies(mut state: CheckState, body: ref Expr, changed
     }
 }
 
+/// The binding's id where `value` names one an outer arm bound in place out
+/// of a `mut` parameter, else -1.
+fn check_core_flow_bound_in_place(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> i64 sync {
+    let name = check_core_flow_variable(world, value)
+    let local = state.binding(name) ?? return -1
+    return if state.narrowing.in_place_refs.contains(local.id) { local.id } else { -1 }
+}
+
 /// **One arm of a `match`**: its type, or `null` where it jumps (ADR-276 D1).
 fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, on: ref Ty, arm: ref MatchArm, typed: ref Ty, lendable: bool, through_the_reference: bool, mut_subject: ref String?, choice: i64, taken: i64, span: ref Span) -> Ty? sync {
     // **Every alternative of an or-pattern binds the same names** (ADR-291 D1).
@@ -1324,6 +1332,9 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     for local in frame {
         if !state.copied(world, local.ty) {
             in_place.insert(local.id)
+            if mut_subject != null {
+                state.narrowing.in_place_refs.insert(local.id)
+            }
         }
     }
     state.scope.push(frame)
@@ -1407,7 +1418,11 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
         Expr::Variable(_, _) => true,
         else => false,
     }
-    let through_the_reference = mut_subject != null && a_variable
+    // A name an outer arm bound in place out of a `mut` parameter is a `&mut`
+    // of the part: its own arms bind through it as well.
+    let in_place_binding = if a_variable { check_core_flow_bound_in_place(state, world, value) } else { -1 }
+    let in_place_name = in_place_binding >= 0
+    let through_the_reference = (mut_subject != null && a_variable) || in_place_name
     let through_a_view = check_core_flow_through_a_view(state, world, value)
     // **An owned `String` matched against a text literal is matched as a
     // view** (#704): the language below compares a literal with a `&str`,
@@ -1474,6 +1489,9 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
         check_core_flow_set_fields(state, world, arms, taken, arm_typed)
         check_core_flow_set_variant(state, world, arms, taken, arm_typed)
         check_core_flow_set_alternatives(state, world, arms, taken, arm_typed)
+        if in_place_name {
+            state.narrowing.in_place_arms.push((in_place_binding, id_of(arm.body) as i64))
+        }
         let got = check_core_flow_arm(state, world, host, value, on, arm, arm_typed, lendable, through_the_reference, mut_subject, choice, taken, span)
         taken += 1
         if got != null {

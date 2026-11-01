@@ -426,7 +426,7 @@ pub(crate) fn check_core_flow_guard<H: CheckHost>(state: &mut CheckState, world:
     if last >= 0 {
         saved = (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(last))).to_owned();
         for at in 0..saved.len() as i64 {
-            if boxed.contains(&nikaia_std::index::get(&saved, nikaia_std::index::at(at)).name) {
+            if nikaia_std::list::contains(&boxed, &nikaia_std::index::get(&saved, nikaia_std::index::at(at)).name) {
                 state.scope[nikaia_std::index::at(last)][nikaia_std::index::at(at)].ty = view_of_type(&nikaia_std::index::get(&saved, nikaia_std::index::at(at)).ty);
                 state.scope[nikaia_std::index::at(last)][nikaia_std::index::at(at)].lent = true;
             }
@@ -435,7 +435,7 @@ pub(crate) fn check_core_flow_guard<H: CheckHost>(state: &mut CheckState, world:
     let found = check_core_expr(state, world, host, guard, span);
     if last >= 0 {
         for at in 0..saved.len() as i64 {
-            if at < (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(last))).len() as i64 && boxed.contains(&nikaia_std::index::get(&saved, nikaia_std::index::at(at)).name) {
+            if at < (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(last))).len() as i64 && nikaia_std::list::contains(&boxed, &nikaia_std::index::get(&saved, nikaia_std::index::at(at)).name) {
                 state.scope[nikaia_std::index::at(last)][nikaia_std::index::at(at)].ty = nikaia_std::index::get(&saved, nikaia_std::index::at(at)).ty.clone();
                 state.scope[nikaia_std::index::at(last)][nikaia_std::index::at(at)].lent = nikaia_std::index::get(&saved, nikaia_std::index::at(at)).lent;
             }
@@ -1013,6 +1013,14 @@ pub(crate) fn check_core_flow_changed_copies(state: &mut CheckState, body: &Expr
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_bound_in_place(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> i64 {
+    let name = check_core_flow_variable(world, value);
+    let local = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+    if state.narrowing.in_place_refs.contains(&local.id) { local.id } else { -1 }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, on: &Ty, arm: &MatchArm, typed: &Ty, lendable: bool, through_the_reference: bool, mut_subject: Option<&str>, choice: i64, taken: i64, span: &Span) -> Option<Ty> {
     state.an_or_pattern_that_binds_unevenly(world, &arm.pattern, span);
@@ -1035,7 +1043,12 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
         }
     }
     let mut in_place: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for local in frame.iter() { if !state.copied(world, &local.ty) { in_place.insert(local.id); } }
+    for local in frame.iter() {
+        if !state.copied(world, &local.ty) {
+            in_place.insert(local.id);
+            if mut_subject.is_some() { state.narrowing.in_place_refs.insert(local.id); }
+        }
+    }
     state.scope.push(frame);
     state.branch.push((choice, taken));
     let from = state.taken_so_far();
@@ -1097,7 +1110,9 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     let lendable = state.an_owned_place(world, value, &typed);
     let mut_subject: Option<String> = state.a_mut_parameter_place(world, value);
     let a_variable = matches!(value, Expr::Variable(_, _));
-    let through_the_reference = mut_subject.is_some() && a_variable;
+    let in_place_binding = if a_variable { check_core_flow_bound_in_place(&state, world, value) } else { -1 };
+    let in_place_name = in_place_binding >= 0;
+    let through_the_reference = mut_subject.is_some() && a_variable || in_place_name;
     let through_a_view = check_core_flow_through_a_view(&state, world, value);
     let text = !typed.is_a_view() && check_core_flow_owned_text(&typed) && !shapes_has_a_null_arm(arms) && check_core_flow_text_arms(arms);
     let a_lent_copy = null_arm && !state.takes_away(world, &typed) && check_core_flow_a_struct(&state, world, &typed);
@@ -1137,6 +1152,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
         check_core_flow_set_fields(state, world, arms, taken, &arm_typed);
         check_core_flow_set_variant(state, world, arms, taken, &arm_typed);
         check_core_flow_set_alternatives(state, world, arms, taken, &arm_typed);
+        if in_place_name { state.narrowing.in_place_arms.push((in_place_binding, id_of(&arm.body) as i64)); }
         let got = check_core_flow_arm(state, world, host, value, &on, arm, &arm_typed, lendable, through_the_reference, (mut_subject).as_deref(), choice, taken, span);
         taken += 1;
         if got.is_some() {

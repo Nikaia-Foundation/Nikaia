@@ -177,7 +177,7 @@ impl CheckState {
         if !local.changing && !self.a_changing_view(root) {
             return null
         }
-        return self.a_stand_in(world.here, ty)
+        return self.a_stand_in(world, ty)
     }
 
     /// **A `let mut` view of a place, or the element of a `for mut`**

@@ -86,6 +86,14 @@ pub struct CheckNarrowing {
     /// `T?` is a reference to the option below (`&Option<T>`, #898), not an
     /// option of a view (`Option<&T>`), which a `ref T?` parameter is.
     pub option_refs: collections::BTreeSet[i64],
+    /// **The names an arm bound in place out of a `mut` parameter**, by the
+    /// binding's id: each a `&mut` of the part, so a `match` over one binds
+    /// through the reference as one over the parameter does.
+    pub in_place_refs: collections::BTreeSet[i64],
+    /// **The arms of a `match` over such a name**: the binding's id and the
+    /// arm body's. Where the outer arm then takes its parts out, the name is a
+    /// value and these arms copy nothing out of it.
+    pub in_place_arms: Vec[(i64, i64)],
 }
 
 impl CheckNarrowing {
@@ -103,6 +111,8 @@ impl CheckNarrowing {
             walls: [],
             target: -1,
             option_refs: collections::BTreeSet(),
+            in_place_refs: collections::BTreeSet(),
+            in_place_arms: [],
         }
     }
 }

@@ -253,7 +253,7 @@ pub(crate) fn item_held(index: &collections::BTreeMap<String, Vec<Ty>>, base: &s
 
 pub(crate) fn item_has_a_default(ty: &Ty) -> bool {
     match ty {
-        Ty::Named { name, view, .. } => { let view = *view; !view && (a_number_name(name) || item_plain_default(&item_last_segment(name))) },
+        Ty::Named { name, view, .. } => { let view = *view; !view && (a_number_name(name) || item_plain_default(&item_last_segment(name)) || name == "node_id::NodeId") },
         Ty::Nullable(_) => true,
         Ty::Tuple(parts) => parts.len() <= 12 && item_all_default(parts),
         _ => false,
@@ -347,6 +347,42 @@ pub(crate) fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_>
     best
 }
 
+pub(crate) fn item_enum_placeholder_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> Option<String> {
+    for item in view.items.iter() {
+        let found: Option<String> = match &item.node {
+            Item::Enum { name: declared, variants, .. } => { let declared = *declared; if view.text(declared) == name { item_placeholder_of_enum(view, name, variants) } else { None } },
+            _ => None,
+        };
+        if found.is_some() { return std::convert::identity(found); }
+    }
+    None
+}
+
+pub(crate) fn item_placeholder_of_contract(name: &str, contract: &TypeContract) -> Option<String> {
+    let mut best: Option<String> = None;
+    let mut best_size: i64 = -1;
+    for variant in contract.variants.iter() {
+        let vname = variant.name.to_string();
+        let written = format!("{}::{}", name, vname);
+        let mut tys: Vec<Ty> = vec![];
+        let mut holes: Vec<String> = vec![];
+        for f in variant.holds.iter() {
+            tys.push(f.ty.clone());
+            let fname = f.name.to_string();
+            if variant.positional { holes.push(String::from("Default::default()")); } else { holes.push(format!("{}: Default::default()", fname)); }
+        }
+        if !item_all_default(&tys) { continue; }
+        let joined = holes.join(", ");
+        let mut text: String = written.to_string();
+        if !holes.is_empty() { text = if variant.positional { format!("{}({})", written, joined) } else { format!("{} {{ {} }}", written, joined) }; }
+        if best_size < 0 || (holes.len() as i64) < best_size {
+            best = Some(text);
+            best_size = holes.len() as i64;
+        }
+    }
+    best
+}
+
 pub(crate) fn item_declared_variants(view: &ParsedView<'_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<String>> {
     for item in view.items.iter() {
         let found: Option<Vec<String>> = match &item.node {
@@ -365,19 +401,20 @@ pub(crate) fn item_variant_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, vari
 }
 
 impl CheckState {
-    pub fn a_placeholder(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, subject: &Ty) -> Option<String> {
+    pub fn a_placeholder(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, subject: &Ty) -> Option<String> {
         let name = match item_plain_name(subject) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        for item in view.items.iter() {
-            let found: Option<String> = match &item.node {
-                Item::Enum { name: declared, variants, .. } => { let declared = *declared; if view.text(declared) == name { item_placeholder_of_enum(view, &name, variants) } else { None } },
-                _ => None,
-            };
-            if found.is_some() { return std::convert::identity(found); }
-            let declared_here = match &item.node {
-                Item::Enum { name: declared, .. } => { let declared = *declared; view.text(declared) == name },
-                _ => false,
-            };
-            if declared_here { return None; }
+        let declared = item_enum_placeholder_in(&world.here, &name);
+        if declared.is_some() { return Some(match declared { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+        for other in world.beside.iter() {
+            let found = item_enum_placeholder_in(other, &name);
+            if found.is_some() { return Some(match found { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+        }
+        if self.enums.contains_key(&name) {
+            let own = world.own.types.get(&name);
+            if own.is_some() { return item_placeholder_of_contract(&name, match own { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+            let library = world.library.types.get(&name);
+            if library.is_some() { return item_placeholder_of_contract(&name, match library { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+            return None;
         }
         let fields = match self.structs.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let parameters = self.struct_parameters.get(&name);
@@ -391,9 +428,9 @@ impl CheckState {
         let joined = holes.join(", ");
         Some(format!("{} {{ {} }}", name, joined))
     }
-    pub fn a_stand_in(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
+    pub fn a_stand_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
         if item_has_a_default(ty) { return Some(String::from("")); }
-        self.a_placeholder(view, ty)
+        self.a_placeholder(world, ty)
     }
     pub fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
         if !self.enums.contains_key(on) { return self.fields_of(world, on); }

@@ -39,10 +39,12 @@ pub struct CheckNarrowing {
     pub walls: Vec<i64>,
     pub target: i64,
     pub option_refs: collections::BTreeSet<i64>,
+    pub in_place_refs: collections::BTreeSet<i64>,
+    pub in_place_arms: Vec<(i64, i64)>,
 }
 
 impl CheckNarrowing {
-    pub fn nothing() -> CheckNarrowing { CheckNarrowing { narrows: collections::BTreeMap::new(), lost_reads: collections::BTreeMap::new(), not_paths: collections::BTreeMap::new(), maybe_reads: collections::BTreeSet::new(), operand_reads: collections::BTreeSet::new(), handed_at: vec![], path_reads: vec![], turns: vec![], walls: vec![], target: -1, option_refs: collections::BTreeSet::new() } }
+    pub fn nothing() -> CheckNarrowing { CheckNarrowing { narrows: collections::BTreeMap::new(), lost_reads: collections::BTreeMap::new(), not_paths: collections::BTreeMap::new(), maybe_reads: collections::BTreeSet::new(), operand_reads: collections::BTreeSet::new(), handed_at: vec![], path_reads: vec![], turns: vec![], walls: vec![], target: -1, option_refs: collections::BTreeSet::new(), in_place_refs: collections::BTreeSet::new(), in_place_arms: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

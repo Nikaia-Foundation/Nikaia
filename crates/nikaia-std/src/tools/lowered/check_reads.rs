@@ -280,10 +280,18 @@ impl CheckState {
         }
         if !any { return; }
         let node = id_of(body) as i64;
-        let placeholder = match self.a_placeholder(&world.here, subject) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let placeholder = match self.a_placeholder(world, subject) { Some(__nikaia_value) => __nikaia_value, None => return };
         self.facts.taking_arms.insert(node, placeholder);
+        let mut nested: collections::BTreeSet<i64> = collections::BTreeSet::new();
+        for (part_binding, arm) in self.narrowing.in_place_arms.iter() {
+            let part_binding = nikaia_std::num::value(part_binding);let arm = nikaia_std::num::value(arm);
+            for (_, binding) in found.iter() {
+                let binding = nikaia_std::num::value(binding);
+                if binding == part_binding { let added = nested.insert(arm); }
+            }
+        }
         let mut kept: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
-        for one in self.facts.copied_bindings.iter() { if one.0 != node { let added = kept.insert(one.clone()); } }
+        for one in self.facts.copied_bindings.iter() { if one.0 != node && !nested.contains(&one.0) { let added = kept.insert(one.clone()); } }
         self.facts.copied_bindings = kept;
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

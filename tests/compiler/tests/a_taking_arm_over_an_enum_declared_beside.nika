@@ -1,0 +1,32 @@
+use compiler_tests
+
+/// A `match` arm that takes the parts out of a `mut` parameter whose enum
+/// another file declares leaves that enum's placeholder in its place (#125),
+/// as one over an enum of its own file does.
+fn turned(mut b: compiler_tests::Branching) {
+	match b {
+		compiler_tests::Branching::Fork { left, right, id } => {
+			b = compiler_tests::Branching::Fork { left: right, right: left, id: id + 1 }
+		},
+		else => {},
+	}
+}
+
+fn shown(b: ref compiler_tests::Branching) -> String {
+	return match b {
+		compiler_tests::Branching::Leaf(n) => f"{n}",
+		compiler_tests::Branching::Fork { left, right, id } => f"({shown(left)} {shown(right)} {id})",
+	}
+}
+
+fn main() {
+	let mut b = compiler_tests::Branching::Fork {
+		left: compiler_tests::Branching::Leaf(1),
+		right: compiler_tests::Branching::Leaf(2),
+		id: 3,
+	}
+	turned(b)
+	println(shown(b))
+	compiler_tests::mirrored(b)
+	println(shown(b))
+}
