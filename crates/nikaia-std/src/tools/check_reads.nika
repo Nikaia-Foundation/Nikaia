@@ -89,6 +89,33 @@ impl CheckState {
     /// read is a view of what the map keeps, so a value that copies is copied out
     /// and one that does not is refused with the copy to write.
     pub fn a_map_read_kept(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) sync {
+        // **Each branch of an `if` or a `match` hands the value over** (#1117's
+        // round): a read an arm ends in is kept as the whole would be.
+        match value {
+            Expr::Match { arms, .. } => {
+                for arm in arms {
+                    self.a_map_read_kept(world, found, want, arm.body, span)
+                }
+                return
+            }
+            Expr::If { then_branch, else_branch, .. } => {
+                for tail in block_tail(then_branch) {
+                    self.a_map_read_kept(world, found, want, tail, span)
+                }
+                let other = else_branch ?? return
+                for tail in block_tail(other) {
+                    self.a_map_read_kept(world, found, want, tail, span)
+                }
+                return
+            }
+            Expr::Block(block, _) => {
+                for tail in block_tail(block) {
+                    self.a_map_read_kept(world, found, want, tail, span)
+                }
+                return
+            }
+            else => {}
+        }
         let node = id_of(value) as i64
         if !self.flow.map_read_sites.contains(node) {
             return

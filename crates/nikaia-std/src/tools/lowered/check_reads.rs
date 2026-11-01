@@ -54,6 +54,23 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_map_read_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
+        match value {
+            Expr::Match { arms, .. } => {
+                for arm in arms.iter() { self.a_map_read_kept(world, found, want, &arm.body, span); }
+                return;
+            },
+            Expr::If { then_branch, else_branch, .. } => {
+                for tail in block_tail(then_branch) { self.a_map_read_kept(world, found, want, tail, span); }
+                let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
+                for tail in block_tail(other) { self.a_map_read_kept(world, found, want, tail, span); }
+                return;
+            },
+            Expr::Block(block, _) => {
+                for tail in block_tail(block) { self.a_map_read_kept(world, found, want, tail, span); }
+                return;
+            },
+            _ => { },
+        }
         let node = id_of(value) as i64;
         if !self.flow.map_read_sites.contains(&node) { return; }
         let inner = match want {

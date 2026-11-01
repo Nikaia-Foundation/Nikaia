@@ -1,0 +1,26 @@
+// A map's read an arm of a `match` or a branch of an `if` ends in is
+// handed back as the whole would be: a copy value is copied out (#1117's
+// round).
+use std::collections
+
+enum Key { Named(String), Nested(Key), Nothing }
+
+fn look(key: ref Key, m: ref collections::BTreeMap[String, bool]) -> bool? {
+    return match key {
+        Key::Named(name) => m.get(name),
+        Key::Nested(inner) => look(inner, m),
+        else => null,
+    }
+}
+
+fn first(wanted: bool, m: ref collections::BTreeMap[String, bool]) -> bool? {
+    return if wanted { m.get("a") } else { null }
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    m.insert("a", true)
+    m.insert("b", false)
+    println(f"{look(Key::Named("a"), m) ?? false} {look(Key::Nested(Key::Named("b")), m) ?? true} {look(Key::Nothing, m) ?? true}")
+    println(f"{first(true, m) ?? false} {first(false, m) ?? false}")
+}
