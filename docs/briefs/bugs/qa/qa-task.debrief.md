@@ -1,15 +1,20 @@
-1. **Time sink.** The two `it` and `nikaia_test` runs took about 6 minutes each and cost the most time. The first `it` run had no error text, so I had to reproduce a failure by hand. The `nikaia_test` package was run twice, once through cargo and once directly. The second run was partly wasted, because the same two programs failed and the cause was the machine's low disk.
+1. **Time sink:** Finding the right input file and getting a working `nikaia` binary.
+   - My first `ls` of `docs/briefs` dumped hundreds of lines, and the first read of `qa-input.txt` was mostly CI log preamble.
+   - `nikaia` was not on PATH. A dev-profile `cargo build -p nikaia` hit a winnow recursion limit before I found that `--profile fast` works.
+   - The cause itself was quick: a missing field, visible in the compile error and the working-tree diff.
 
-2. **Lookups the brief could have handed me.**
-   - Two input files existed (`docs/briefs/qa-input.txt` and `docs/briefs/bugs/qa-input.txt`). I had to compare timestamps to see that the bug lane's was the live one.
-   - The log's "failed:" lines were junk from an awk filter. It never showed the real compiler error, which only appeared after I reran one test.
-   - I had to work out how a `let mut` local appears in the checker (`immutable == null`).
-   - I had to find the `lower-std` step in `docs/builder-facts.md`.
-   - `nikaia test` has no `--filter`, and `nikaia run` refuses a file inside a test project. That cost two failed commands.
+2. **Lookups the brief could have handed me:**
+   - Which lane's `qa-input.txt` applies. The brief names two, and I had to infer the bug lane from my own path.
+   - How to run `nikaia`: `cargo build --profile fast -p nikaia`, then `target/fast/nikaia`.
+   - The `Attribution:` trailer and the report fields `scripts/commit.nika` needs. I copied them from another report.
+   - That uncommitted files in the working tree may be the builder's own forgotten files, not another agent's.
 
-3. **Checks.**
-   - Useful: the one-test cargo reproduction, the 21 targeted tests, `accepted_compiles`, `examples`, fmt, clippy and pre-push.
-   - Wasted: the `nikaia test --filter` attempts, which failed on an unknown flag. The second whole-package run and the agent_script investigation added little, since low disk explains both failures.
-   - I did not identify the single program that was red on CI in `nikaia_test`.
+3. **Checks:**
+   - Useful: `cargo build -p nikaia-std`, which showed the error gone, and `scripts/pre-push.nika`.
+   - Wasted: the dev-profile `cargo build -p nikaia` and the bare `nikaia` calls.
+   - Not done: a fresh build of the commit alone. I built with the whole working tree, so I did not show that HEAD plus my commit compiles without the other agents' edits. I never reran #1140's two new tests, and clippy and `cargo fmt` were not meaningfully run.
 
-4. **One change.** Make the driver's `qa-input.txt` carry the first compiler error for each failed test. That means the panic text, or the `error[E…]` block plus the test's name. It should also name the unpushed commit that touched the failing area. That would have saved about half the investigation. Failing that, put in the brief or builder.md one line saying the log's `failed:` lines are noise, and that the fast way is `cargo test --release -p nikaia --test it -- <module>::<test>` and reading the `error[` lines.
+4. **One change:** Add a "Quick start" to `qa.md` with three lines:
+   - Which `qa-input.txt` to read (the one beside the brief's lane), and to `grep` it for `error` first.
+   - The binary path (`target/fast/nikaia`) and the build command.
+   - To check `git status` for uncommitted files that the failing symbol needs, since a missed `Files:` entry is a common cause.
