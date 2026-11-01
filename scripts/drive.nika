@@ -65,39 +65,24 @@
 // after the lock`, empties unpushed.txt and releases the lock. The lock is held
 // through the whole red -> QA -> suite loop (one QA at a time in the
 // checkout) and released on every path, an escalation
-// too. It notes the tested sha and runs the suite in a worktree of its own
-// (owner, 2026-10-31): the shared checkout holds the other lane's and other
-// sessions' unfinished files, which a suite run there would test although they
-// are not in the tested commit (a false red, or a green owed to a file never
-// pushed). The suite worktree is /home/user/nikaia-suite, or $NIKAIA_SUITE_DIR;
-// it is only the driver's. Not yet a worktree of this repository: `git worktree
-// add --detach <path> <sha>`; else `git -C <path> checkout --detach --force
-// <sha>` and `git -C <path> clean -fdx -e target` (force and clean there only,
-// never in the shared checkout; it never checks out `develop`). Its target/ is
-// kept between runs: it is the suite's build cache. Before that, the disk
-// guard: `df -Pk` of the path (or its parent), one line `SUITE disk <N> GB
-// free`; under 8 GB it deletes the worktree's target/fast/incremental and
-// target/debug and reads again; still under, it prints (and writes into
-// DIR/suite.log) `ESCALATE drive: disk: <N> GB free, the suite needs 8`, the
-// lock released and the commits left local. Then, detached from the driver
-// (`sh -c '( ... ) &'`) with the worktree as working directory, the suite
-// builds its own interpreter from the tested sha, `cargo build --profile fast
-// -p nikaia` (never the shared target/fast/nikaia, which builders rebuild from a
-// dirty tree: on 2026-10-31 it held half of #920 and turned the suite at
-// 444d6d31 falsely red); a failed build is a red suite with the step `build`
-// (`Gate: red build`, QA gets it like any red). That <path>/target/fast/nikaia
-// runs the tested sha's `scripts/gate.nika -- --all`, so its crates/ and tests/
-// are the worktree's (gate's own `build` step then finds the binary up to
-// date). A stale target/suite-nikaia of older drivers is deleted. The driver's
-// own binary still runs cycle.nika, agent.nika and the rest. Both run with
-// CARGO_INCREMENTAL=0 (incremental data costs about 10 GB a tree and a suite
-// build gains nothing from it) and NIKAIA_CACHE_LIMIT=4G. Its output goes to
-// DIR/suite.log of the shared checkout (overwritten), its exit status to
-// target/suite.lock/exit-<sha>, and target/suite.lock/testing notes `<sha> <N>`,
-// N the lines of unpushed.txt the tested sha covers; the driver prints
-// `SUITE <sha8> started in the background`, and when it has waited,
-// `SUITE <sha8> green|red <steps>`. `--df FILE` reads a `df -Pk` output from
-// FILE and prints the disk line and `ok` or the escalation (for tests).
+// too. It notes the tested sha and has CI run the suite (owner, 2026-11-01):
+// `git push --force origin <sha>:refs/heads/ci/<lane>`, the last part of the
+// lane's DIR (ci/briefs for docs/briefs/), runs the whole workflow nikaia.yml
+// on exactly the tested commit, never the shared checkout's unfinished files,
+// and nothing of it on this machine's small disk. A rejected push escalates,
+// the lock released and the commits left local. Then, detached from the driver
+// (`sh -c '( ... ) &'`), `<exe> run scripts/drive.nika -- --ci-wait <sha>
+// DIR/suite.log target/suite.lock/exit-<sha>` waits for that run: `gh api
+// repos/.../actions/runs?head_sha=<sha>` every 30 s, the workflow Nikaia on a
+// ci/ branch; success writes `Gate: green`, any other conclusion `Gate: red
+// <failed jobs>` (spaces as `_`) and each failed job's last 200 log lines; no
+// run after 15 minutes is `Gate: red ci-no-run`, none finished after 3 hours
+// `Gate: red ci-timeout`. Its output goes to DIR/suite.log of the shared
+// checkout (overwritten), its exit status to target/suite.lock/exit-<sha>, and
+// target/suite.lock/testing notes `<sha> <N>`, N the lines of unpushed.txt the
+// tested sha covers; the driver prints `SUITE <sha8> started on CI (<branch>)`,
+// and when it has waited, `SUITE <sha8> green|red <steps>`. A develop push of a
+// sha CI already passed on a ci/ branch skips the heavy jobs (nikaia.yml).
 // Green: `git push origin <sha>:develop`, exactly the tested commit; when
 // rejected (other sessions push too), `git pull --rebase --autostash` and push
 // HEAD: the rebased commits are CI's to judge. Still rejected: escalate. A
@@ -110,14 +95,13 @@
 // `PUSHED <sha8>` and drops the N tested lines from unpushed.txt (the
 // architect's commit made beside the suite waits for the next batch's suite;
 // after a rebased push of HEAD it empties the file). Red: DIR/qa-input.txt gets the
-// suite's step lines, the last 200 lines of suite.log, the failed tests and
-// last 200 lines of each target/gate-tests-*.log of the suite worktree, `git log
+// suite's step lines, the whole suite.log (the failed jobs' log tails), `git log
 // origin/develop..HEAD`, and the brief and report of each brief in
 // unpushed.txt; the QA agent runs (role `qa`) on DIR/qa/qa-task.md, a copy of
 // the template docs/briefs/qa-task.md made before each run (its report path
 // made the copy's), in the shared checkout; the copy, its report and run files
 // are committed by name, as the others, and the suite runs
-// again on the new HEAD, in the worktree the same way, and is waited for at
+// again on the new HEAD, on CI the same way, and is waited for at
 // once (the next batch starts only on green). At most 2 QA
 // rounds: a third red prints `ESCALATE drive: suite red after 2 QA rounds:
 // <steps>` and leaves the commits local. Nothing else pushes.
@@ -409,34 +393,21 @@ fn drive_tail(body: String, n: i64) -> String throws {
     return out.join("\n")
 }
 
-// What the QA agent reads: the suite's step lines and log tail, the failed
-// tests and the tail of each target/gate-tests-*.log in the suite worktree, the
-// unpushed commits, and the briefs and reports they came from.
+// What the QA agent reads: the CI run's step lines and suite.log (the failed
+// jobs' log tails), the unpushed commits, and the briefs and reports they came from.
 fn drive_qa_input(dir: String, out: String, steps: String) throws {
     let mut lines: Vec[String] = []
-    lines.push(f"The suite (scripts/gate.nika -- --all) is red: {steps}")
+    lines.push(f"The suite (the CI run on {drive_ci_branch(dir.clone())}, the whole workflow) is red: {steps}")
     lines.push("")
     lines.push("Step lines:")
     for l in out.split("\n") {
-        for step in ["build ", "lower-std ", "fmt ", "clippy ", "pre-push ", "test ", "guards ", "Gate: "] {
+        for step in ["CI run ", "no CI run ", "the CI run ", "Gate: "] {
             if l.starts_with(step) { lines.push(l.clone()) }
         }
     }
     lines.push("")
-    lines.push(f"Last 200 lines of {dir}/suite.log:")
-    lines.push(drive_tail(out, 200))
-    for name in ["compiler", "rs2nika-facts", "rs2nika-convert"] {
-        let log = f"{drive_suite_dir()}/target/gate-tests-{name}.log"
-        if !fs::exists(log.clone(), fs::Root::Anywhere) { continue }
-        let body = drive_read(log.clone())
-        lines.push("")
-        lines.push(f"Failed tests in {log}:")
-        for l in body.split("\n") {
-            if l.contains(" ... FAILED") { lines.push(l.clone()) }
-        }
-        lines.push(f"Last 200 lines of {log}:")
-        lines.push(drive_tail(body, 200))
-    }
+    lines.push(f"{dir}/suite.log (the last 200 lines of each failed job):")
+    lines.push(out.trim().clone())
     lines.push("")
     lines.push("Unpushed commits (origin/develop..HEAD):")
     lines.push(process::run("git", ["log", "--format=%h %s", "origin/develop..HEAD"]).stdout.trim().clone())
@@ -463,103 +434,29 @@ fn drive_red_steps(out: String) -> String throws {
     return "gate-error"
 }
 
-// The suite's own worktree (header comment): NIKAIA_SUITE_DIR, else
-// /home/user/nikaia-suite.
-fn drive_suite_dir() -> String {
-    let set = env::var("NIKAIA_SUITE_DIR") ?? ""
-    if set != "" { return set.clone() }
-    return "/home/user/nikaia-suite"
+// The repository CI runs on (the `gh api` paths of drive_ci_wait).
+fn drive_repo() -> String {
+    return "Nikaia-Foundation/Nikaia"
 }
 
-// The free KiB in the 4th field of `df -Pk`'s second line, -1 when unread.
-fn drive_df_kib(out: String) -> i64 throws {
-    let lines = out.trim().split("\n").collect()
-    if lines.len() < 2 { return -1 }
-    let mut fields: Vec[String] = []
-    for f in lines[1].split(" ") {
-        if f.trim() != "" { fields.push(f.trim().clone()) }
-    }
-    if fields.len() < 4 { return -1 }
-    return text::parse_i64(fields[3].clone()) ?? -1
+// The branch lane DIR's suite runs on: `ci/` and the last part of DIR
+// (docs/briefs -> ci/briefs), so the two lanes never cancel each other's run.
+fn drive_ci_branch(dir: String) -> String {
+    let parts = dir.trim_end_matches("/").split("/").collect()
+    return "ci/" + parts[parts.len() - 1].clone()
 }
 
-// The free KiB of the filesystem holding `path` (its parent while it does not exist).
-fn drive_free_kib(path: String) -> i64 throws {
-    let mut at = path.clone()
-    if !fs::exists(at.clone(), fs::Root::Anywhere) { at = process::run("dirname", [path]).stdout.trim().clone() }
-    return drive_df_kib(process::run("df", ["-Pk", at]).stdout)
-}
-
-// The suite needs 8 GB: below, the worktree's incremental data and debug build
-// go first; still below, the driver escalates (header comment).
-fn drive_disk(wt: String, dir: String) throws {
-    let need: i64 = 8 * 1048576
-    let mut free = drive_free_kib(wt.clone())
-    if free >= 0 && free < need {
-        process::run("rm", ["-rf", f"{wt}/target/fast/incremental", f"{wt}/target/debug"])
-        free = drive_free_kib(wt.clone())
-    }
-    if free >= 0 && free < need {
-        // Still below: the shared checkout's debug build (clippy rebuilds it)
-        // and the two build caches pruned by their own LRU pass.
-        process::run("rm", ["-rf", "target/debug"])
-        process::run("target/fast/nikaia", ["cache", "prune"]; env: [("NIKAIA_CACHE_LIMIT", "1G")])
-        let tests = process::run("realpath", ["target/nikaia-project-tests"]).stdout.trim().clone()
-        process::run("target/fast/nikaia", ["cache", "prune"]; env: [("NIKAIA_CACHE_DIR", tests), ("NIKAIA_CACHE_LIMIT", "3G")])
-        free = drive_free_kib(wt.clone())
-    }
-    println(drive_disk_line(free))
-    let why = drive_disk_short(free)
-    if why != "" {
-        fs::write(f"{dir}/suite.log", fs::Root::Anywhere, f"ESCALATE drive: {why}\n")
-        drive_escalate(why)
-    }
-}
-
-// The run's disk line; a `df` that could not be read does not stop the suite.
-fn drive_disk_line(free: i64) -> String {
-    if free < 0 { return "SUITE disk unread (df -Pk printed no free space)" }
-    return f"SUITE disk {free / 1048576} GB free"
-}
-
-// Why `free` KiB are too few for the suite, "" when enough (or unread).
-fn drive_disk_short(free: i64) -> String {
-    if free < 0 || free >= 8 * 1048576 { return "" }
-    return f"disk: {free / 1048576} GB free, the suite needs 8"
-}
-
-// Puts the suite worktree at `sha`, detached: added the first time, else
-// checked out with force and cleaned of everything but its target/ (the build
-// cache). Force and clean happen only there, never in the shared checkout.
-fn drive_worktree(wt: String, sha: String) throws {
-    let listed = process::run("git", ["worktree", "list", "--porcelain"]).stdout
-    let mut known = false
-    for l in listed.split("\n") {
-        if l.trim() == f"worktree {wt}" { known = true }
-    }
-    if !known {
-        process::run("git", ["worktree", "prune"])
-        let added = process::run("git", ["worktree", "add", "--detach", wt.clone(), sha.clone()])
-        if !added.ok { drive_escalate(f"git worktree add {wt} failed: {added.stderr.trim()}") }
-        return
-    }
-    let moved = process::run("git", ["-C", wt.clone(), "checkout", "--detach", "--force", sha.clone()])
-    if !moved.ok { drive_escalate(f"git -C {wt} checkout {drive_short(sha)} failed: {moved.stderr.trim()}") }
-    process::run("git", ["-C", wt.clone(), "clean", "-fdx", "-e", "target"])
-}
-
-// Starts one suite run in the worktree, in the background: the tested sha's own
-// interpreter is built there first (the shared target/fast/nikaia is rebuilt by
-// builders from a dirty tree), a failed build being a red suite with the step
-// `build`; then that binary runs the tested sha's scripts/gate.nika, with the
-// worktree as working directory. The output goes to DIR/suite.log, its exit status to
-// target/suite.lock/exit-<sha>, and target/suite.lock/testing notes
-// `<sha> <lines of unpushed.txt it covers>` (drive_settle reads both).
-fn drive_launch(dir: String, wt: String) throws {
+// Starts one suite run on CI (owner, 2026-11-01): the tested sha is pushed with
+// force to the lane's branch `ci/<lane>` (drive_ci_branch), whose push runs the
+// whole workflow .github/workflows/nikaia.yml; a waiter detached from the driver
+// (`--ci-wait`) follows that run and writes `Gate: green` or `Gate: red <jobs>`
+// with the failed jobs' log tails to DIR/suite.log, then the exit status to
+// target/suite.lock/exit-<sha>; target/suite.lock/testing notes `<sha> <lines
+// of unpushed.txt it covers>` (drive_settle reads both). Nothing builds or tests
+// in this checkout.
+fn drive_launch(dir: String) throws {
     let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
-    drive_disk(wt.clone(), dir.clone())
-    drive_worktree(wt.clone(), sha.clone())
-    process::run("rm", ["-f", f"{wt}/target/suite-nikaia"])
+    let branch = drive_ci_branch(dir.clone())
     let log = process::run("realpath", [dir.clone()]).stdout.trim().clone() + "/suite.log"
     let exit = process::run("realpath", [drive_lock_dir()]).stdout.trim().clone() + f"/exit-{sha}"
     process::run("rm", ["-f", exit.clone(), log.clone()])
@@ -567,14 +464,74 @@ fn drive_launch(dir: String, wt: String) throws {
     for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
         if l.trim() != "" { covered += 1 }
     }
-    let build = f"echo 'suite build: cargo build --profile fast -p nikaia' > '{log}' && CARGO_INCREMENTAL=0 cargo build --profile fast -p nikaia --message-format short >> '{log}' 2>&1"
-    let run = f"CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=4G '{wt}/target/fast/nikaia' run scripts/gate.nika -- --all >> '{log}' 2>&1"
-    let red = f"{{ echo 'build red'; echo 'Gate: red build'; }} >> '{log}'; false"
-    let gate = f"cd '{wt}' && if {build}; then {run}; else {red}; fi; echo $? > '{exit}.tmp'; mv '{exit}.tmp' '{exit}'"
-    let started = process::run("sh", ["-c", f"( {gate} ) < /dev/null > /dev/null 2>&1 &"])
-    if !started.ok { drive_escalate(f"the suite did not start in {wt}: {started.stderr.trim()}") }
+    let pushed = process::run("git", ["push", "--force", "--quiet", "origin", f"{sha}:refs/heads/{branch}"])
+    if !pushed.ok { drive_escalate(f"git push origin {drive_short(sha.clone())}:{branch} failed: {pushed.stderr.trim()}") }
+    let bin = drive_exe()
+    let exe = process::run("realpath", [bin.clone()]).stdout.trim().clone()
+    let script = process::run("realpath", ["scripts/drive.nika"]).stdout.trim().clone()
+    let wait = f"'{exe}' run '{script}' -- --ci-wait {sha} '{log}' '{exit}'"
+    let started = process::run("sh", ["-c", f"( {wait} ) < /dev/null > /dev/null 2>&1 &"])
+    if !started.ok { drive_escalate(f"the CI waiter did not start: {started.stderr.trim()}") }
     fs::write(drive_lock_dir() + "/testing", fs::Root::Anywhere, f"{sha} {covered}\n")
-    println(f"SUITE {drive_short(sha)} started in the background")
+    println(f"SUITE {drive_short(sha)} started on CI ({branch})")
+}
+
+// `--ci-wait SHA LOG EXIT`: follows the CI run of the push of SHA to a `ci/`
+// branch, polling `gh api` every 30 s. Green writes `Gate: green` to LOG; red
+// (failure, cancelled, timed out) writes `Gate: red <job names>` and the last
+// 200 lines of each failed job's log; no run after 15 minutes is `Gate: red
+// ci-no-run`, none finished after 3 hours `Gate: red ci-timeout`. Then the exit
+// status (0 green, 1 red) to EXIT, through EXIT.tmp.
+fn drive_ci_wait(sha: String, log: String, exit: String) throws {
+    let repo = drive_repo()
+    let query = ".workflow_runs[] | select(.name == \"Nikaia\" and (.head_branch | startswith(\"ci/\"))) | \"\\(.id) \\(.status) \\(.conclusion)\""
+    let mut polls: i64 = 0
+    let mut body: String = ""
+    let mut green = false
+    while true {
+        let runs = process::run("gh", ["api", f"repos/{repo}/actions/runs?head_sha={sha}&event=push&per_page=20", "--jq", query.clone()])
+        let first = runs.stdout.trim().split("\n").collect()[0].trim().clone()
+        let words = first.split(" ").collect()
+        if runs.ok && words.len() >= 3 && words[1] == "completed" {
+            let id = words[0].clone()
+            let url = f"https://github.com/{repo}/actions/runs/{id}"
+            if words[2] == "success" {
+                body = f"CI run {url}: success\nGate: green\n"
+                green = true
+            } else {
+                let jobs = process::run("gh", ["api", f"repos/{repo}/actions/runs/{id}/jobs?per_page=100", "--jq", ".jobs[] | select(.conclusion == \"failure\" or .conclusion == \"cancelled\" or .conclusion == \"timed_out\") | \"\\(.id) \\(.name)\""])
+                let mut names: Vec[String] = []
+                let mut tails: String = ""
+                for j in jobs.stdout.trim().split("\n") {
+                    let line = j.trim().clone()
+                    if line == "" { continue }
+                    let jid = line.split(" ").collect()[0].clone()
+                    let name = (line.strip_prefix(jid.clone()) ?? "").trim().clone()
+                    names.push(name.replace(" ", "_"))
+                    let text = process::run("gh", ["api", f"repos/{repo}/actions/jobs/{jid}/logs"]).stdout
+                    tails = tails + f"\nLast 200 lines of the job {name} ({url}/job/{jid}):\n" + drive_tail(text, 200) + "\n"
+                }
+                if names.len() == 0 { names.push(words[2].clone()) }
+                body = f"CI run {url}: {words[2]}\n{tails}\nGate: red " + names.join(" ") + "\n"
+            }
+            break
+        }
+        if polls >= 30 && first == "" {
+            body = f"no CI run for {sha} after 15 minutes\nGate: red ci-no-run\n"
+            break
+        }
+        if polls >= 360 {
+            body = f"the CI run for {sha} did not finish in 3 hours: {first}\nGate: red ci-timeout\n"
+            break
+        }
+        polls += 1
+        process::run("sleep", ["30"])
+    }
+    fs::write(log.clone(), fs::Root::Anywhere, body)
+    let mut code = "1"
+    if green { code = "0" }
+    fs::write(exit.clone() + ".tmp", fs::Root::Anywhere, code + "\n")
+    process::run("mv", [exit.clone() + ".tmp", exit])
 }
 
 // The suite this driver started and has not handled yet: `<sha> <covered>`
@@ -622,7 +579,6 @@ fn drive_qa_copy(dir: String) throws {
 // line, polls every 10 s.
 fn drive_settle(exe: String, dir: String) throws {
     let qa = drive_qa_brief(dir.clone())
-    let wt = drive_suite_dir()
     let mut rounds: i64 = 0
     while true {
         let testing = drive_testing()
@@ -666,7 +622,7 @@ fn drive_settle(exe: String, dir: String) throws {
         drive_tidy(false, dir.clone())
         drive_append(f"{dir}/unpushed.txt", qa.clone())
         if drive_nothing_new(dir.clone()) { return }
-        drive_launch(dir.clone(), wt.clone())
+        drive_launch(dir.clone())
     }
 }
 
@@ -725,16 +681,12 @@ fn drive_nothing_new(dir: String) -> bool throws {
 // architect runs beside it (header comment).
 fn drive_suite(exe: String, dry: bool, dir: String) throws {
     let qa = drive_qa_brief(dir.clone())
-    let wt = drive_suite_dir()
     drive_say(dry, "a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)")
     drive_say(dry, "git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)")
     drive_say(dry, "git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty " + f"{dir}/unpushed.txt")
     drive_say(dry, "mkdir target/suite.lock (wait while its owner's pid lives)")
     drive_say(dry, "after the lock and before each suite: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: SUITE nothing new after the lock, " + f"empty {dir}/unpushed.txt, rm -rf target/suite.lock)")
-    drive_say(dry, f"df -Pk {wt} (or its parent): under 8 GB free, rm -rf {wt}/target/fast/incremental {wt}/target/debug; still under, ESCALATE drive: disk")
-    drive_say(dry, f"not yet a worktree: git worktree add --detach {wt} <sha>; else git -C {wt} checkout --detach --force <sha>; git -C {wt} clean -fdx -e target")
-    drive_say(dry, f"rm -f {wt}/target/suite-nikaia; in the background, in {wt}, CARGO_INCREMENTAL=0: cargo build --profile fast -p nikaia > {dir}/suite.log (failed: Gate: red build)")
-    drive_say(dry, f"then, CARGO_INCREMENTAL=0 NIKAIA_CACHE_LIMIT=4G: {wt}/target/fast/nikaia run scripts/gate.nika -- --all >> {dir}/suite.log; exit status to target/suite.lock/exit-<sha>; the architect starts at once")
+    drive_say(dry, f"git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: {exe} run scripts/drive.nika -- --ci-wait <sha> {dir}/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails); the architect starts at once")
     drive_say(dry, f"before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock")
     drive_say(dry, f"red: write {dir}/qa-input.txt, mkdir -p {dir}/qa, copy {drive_qa_template()} to {qa} (its report path made {qa}.report.md), rm -f {qa}.report.md, {exe} run scripts/agent.nika -- {qa} --dir {dir}, commit {qa} with its report and run files, the suite again and waited for (at most 2 QA rounds)")
     if dry { return }
@@ -754,7 +706,7 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
     }
     drive_lock(dir.clone())
     if drive_nothing_new(dir.clone()) { return }
-    drive_launch(dir, wt)
+    drive_launch(dir)
 }
 
 fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throws {
@@ -1377,11 +1329,8 @@ fn main() throws {
         if why == "" { println("ok") } else { println(f"CONVERT drive: {why}") }
         return
     }
-    if args.len() == 3 && args[1] == "--df" {
-        let free = drive_df_kib(drive_read(args[2].clone()))
-        println(drive_disk_line(free))
-        let why = drive_disk_short(free)
-        if why == "" { println("ok") } else { println(f"ESCALATE drive: {why}") }
+    if args.len() == 5 && args[1] == "--ci-wait" {
+        drive_ci_wait(args[2].clone(), args[3].clone(), args[4].clone())
         return
     }
     if args.len() == 3 && args[1] == "--docs-only" {

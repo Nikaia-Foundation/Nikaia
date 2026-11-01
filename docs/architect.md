@@ -64,9 +64,9 @@ architect claims it (prover run after p6, 2026-10-31).
 ## Driver, suite and QA (owner, 2026-10-31)
 
 Builders commit locally and push nothing. After each builder or architect
-run the driver runs the complete suite (`scripts/gate.nika -- --all`, one at
-a time per checkout, lock `target/suite.lock`, in its own detached worktree
-at the tested sha, `/home/user/nikaia-suite`); green, it pushes the tested
+run the driver has CI run the complete suite (one at a time per checkout,
+lock `target/suite.lock`: it pushes the tested sha to `ci/<lane>`, and the
+whole workflow runs on exactly that commit); green, it pushes the tested
 commit; red, it writes `qa-input.txt` and starts QA
 (`docs/briefs/qa-task.md`), at most two rounds, then `ESCALATE`. CI stays the
 final gate for what other sessions push meanwhile.

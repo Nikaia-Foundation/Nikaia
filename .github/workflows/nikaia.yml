@@ -10,9 +10,16 @@ name: Nikaia
 # `promote` moves `main` forward to that commit. Runs on `develop` queue rather
 # than cancel, so `main` moves on with every finished run however often
 # `develop` is pushed.
+#
+# **The driver's suite runs here, on a `ci/<lane>` branch** (owner,
+# 2026-11-01): `scripts/drive.nika` force-pushes the commit it would push to
+# `develop` to `ci/<lane>` and waits for this workflow's answer instead of
+# running the full suite on the shared machine. Green, it pushes the same commit
+# to `develop`, whose run finds that run (`changes`, *Tested on a ci/ branch*)
+# and goes straight to `promote` instead of testing the commit a second time.
 on:
   push:
-    branches: [develop]
+    branches: [develop, "ci/**"]
   pull_request:
   schedule:
     - cron: "17 3 * * 1"
@@ -24,10 +31,11 @@ on:
 # cancel-in-progress off (GitHub keeps one running and one pending run per
 # group), so most develop commits never got an answer. `promote` only moves
 # main forward (it skips a commit main already contains), so runs finishing
-# out of order are safe.
+# out of order are safe. A `ci/` branch is one driver lane's: its newer push
+# makes the older run moot, as on a pull request.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.run_id) || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && !startsWith(github.ref, 'refs/heads/ci/') && github.run_id) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/ci/') }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -37,12 +45,15 @@ jobs:
   # why for each). The compiler's own job always runs.
   changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
-      unsafe: ${{ steps.decide.outputs.unsafe }}
-      rs2nika: ${{ steps.decide.outputs.rs2nika }}
-      floor: ${{ steps.decide.outputs.floor }}
-      arm64: ${{ steps.decide.outputs.arm64 }}
-      docs: ${{ steps.decide.outputs.docs }}
+      unsafe: ${{ steps.tested.outputs.unsafe || steps.decide.outputs.unsafe }}
+      rs2nika: ${{ steps.tested.outputs.rs2nika || steps.decide.outputs.rs2nika }}
+      floor: ${{ steps.tested.outputs.floor || steps.decide.outputs.floor }}
+      arm64: ${{ steps.tested.outputs.arm64 || steps.decide.outputs.arm64 }}
+      docs: ${{ steps.tested.outputs.docs || steps.decide.outputs.docs }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -53,8 +64,27 @@ jobs:
       - name: Runner CPU
         run: echo "runner-cpu $(rustc --print target-cpus | grep native) nproc=$(nproc)"
 
+      # A develop commit the driver's suite already ran green on a `ci/` branch
+      # (header) is not tested again: every build and test job is off and
+      # `promote` moves main onto it.
+      - name: Tested on a ci/ branch
+        id: tested
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&status=success&per_page=50" \
+            --jq '[.workflow_runs[] | select(.name == "Nikaia" and (.head_branch | startswith("ci/")))] | length' || echo 0)
+          if [ "${n:-0}" -gt 0 ]; then
+            echo "$GITHUB_SHA ran green on a ci/ branch: not tested again"
+            for k in unsafe rs2nika floor arm64; do echo "$k=false" >>"$GITHUB_OUTPUT"; done
+            echo "docs=true" >>"$GITHUB_OUTPUT"
+            echo "done=true" >>"$GITHUB_OUTPUT"
+          fi
+
       - name: Decide
         id: decide
+        if: steps.tested.outputs.done != 'true'
         run: sh scripts/ci-changes.sh
         env:
           EVENT: ${{ github.event_name }}

@@ -86,9 +86,9 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   cheap checks (build, touched tests, fmt, clippy, `pre-push-check.sh`) and
   never pushes. The driver runs the complete suite once per batch: when the
   batch ends it starts it on HEAD in the background beside the architect and
-  waits for it before the next batch's first builder (`gate.nika --all`, one at
-  a time per checkout, in its own detached worktree at the tested commit,
-  `/home/user/nikaia-suite`, with an 8 GB disk guard); green, it pushes the
+  waits for it before the next batch's first builder (one at a time per
+  checkout, on CI: the tested commit pushed to `ci/<lane>` runs the whole
+  workflow, `drive.nika --ci-wait` follows it with `gh api`); green, it pushes the
   tested commit; red, a QA agent (`.claude/agents/qa.md`) gets the briefs and
   reports of the unpushed commits and fixes forward, at most two rounds, then
   the driver escalates.
@@ -275,16 +275,14 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
   a fresh QA run before restarting the driver. An empty `DIR/RED` means the
   last report's gate was green (`agent.nika`), and `DIR/qa-input.txt` stays
   from the last red round: neither says the suite is red now; `DIR/suite.log`
-  and `DIR/unpushed.txt` do (prover lane, 2026-10-31). The suite runs in its own
-  detached worktree at the tested sha (`/home/user/nikaia-suite`, or
-  `NIKAIA_SUITE_DIR`; its `target/` is kept, `CARGO_INCREMENTAL=0`), so the
-  other lane's unfinished files never enter it. It needs 8 GB free: each run
-  prints `SUITE disk <N> GB free`; below 8 it deletes the worktree's
-  incremental and debug data, then the checkout's `target/debug` and prunes
-  the user cache to 1G and the tests' cache to 3G; still below it escalates
-  (`ESCALATE drive: disk: ...`). Then free space (old
-  `target/fast/incremental` entries of the shared checkout, `target/debug`)
-  and restart the driver. A lane whose pushes its own suite gates runs with
+  and `DIR/unpushed.txt` do (prover lane, 2026-10-31). The suite runs on CI
+  (owner, 2026-11-01): the tested sha is force-pushed to `ci/<lane>` (the last
+  part of DIR, `ci/briefs`), so the other lane's unfinished files never enter
+  it and nothing of it lands on this disk; `suite.log` holds the run's link and
+  each failed job's last 200 log lines. `ci-no-run` (no run after 15 minutes)
+  or `ci-timeout` (3 hours) means look at the Actions page, then restart the
+  driver. A develop push of a sha already green on a `ci/` branch skips the
+  heavy jobs. A lane whose pushes its own suite gates runs with
   `--ignore-ci-red`: a red CI line on `develop` (another lane's) no longer goes
   to its architect, and only its bump waits for green; the main lane runs
   without it.

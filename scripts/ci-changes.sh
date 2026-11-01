@@ -28,6 +28,7 @@
 #   since the last tested commit counts (#861); pull requests and main use $BASE.
 #
 # Everything is on for a manual run, a scheduled one, a first push of a branch
+# (but a `ci/` branch: it is compared with main like develop)
 # (nothing to compare against), and when the workflow itself changed.
 set -e
 out=${GITHUB_OUTPUT:-/dev/stdout}
@@ -42,17 +43,23 @@ all() {
 case "$EVENT" in
 workflow_dispatch | schedule) all ;;
 esac
-case "$BASE" in
-"" | 0000000000000000000000000000000000000000) all ;;
-esac
 # A push to develop is compared with what main already holds (the last tested
 # commit), not with the previous push: a docs-only push on top of an untested
 # code commit must run everything, or `promote` would move main onto it.
-if [ "$EVENT" = "push" ] && [ "$REF" = "refs/heads/develop" ]; then
+# A driver's `ci/<lane>` branch (nikaia.yml) is the commit it would push to
+# develop, compared the same way.
+trunk=false
+if [ "$EVENT" = "push" ]; then
+    case "$REF" in refs/heads/develop | refs/heads/ci/*) trunk=true ;; esac
+fi
+if [ "$trunk" = true ]; then
     if mb=$(git merge-base origin/main HEAD 2>/dev/null) && [ -n "$mb" ]; then
         BASE=$mb
     fi
 fi
+case "$BASE" in
+"" | 0000000000000000000000000000000000000000) all ;;
+esac
 changed=$(git diff --name-only "$BASE" HEAD) || all
 echo "changed since $BASE:"
 echo "$changed" | sed 's/^/  /'
@@ -80,7 +87,7 @@ if echo "$changed" | grep -q '^crates/rs2nika/'; then
 else
     echo "rs2nika=false" >>"$out"
 fi
-if [ "$EVENT" = "push" ] && { [ "$REF" = "refs/heads/main" ] || [ "$REF" = "refs/heads/develop" ]; }; then
+if [ "$trunk" = true ] || { [ "$EVENT" = "push" ] && [ "$REF" = "refs/heads/main" ]; }; then
     echo "floor=true" >>"$out"
 elif echo "$changed" | grep -q 'Cargo\.toml$\|^Cargo\.lock$\|^rust-toolchain\.toml$\|^scripts/check-floor\.sh$'; then
     echo "floor=true" >>"$out"
@@ -89,7 +96,7 @@ elif git diff "$BASE" HEAD -- crates/nikaia/src/emit/mod.rs | grep -q '^[+-]pub 
 else
     echo "floor=false" >>"$out"
 fi
-if [ "$EVENT" = "push" ] && { [ "$REF" = "refs/heads/main" ] || [ "$REF" = "refs/heads/develop" ]; }; then
+if [ "$trunk" = true ] || { [ "$EVENT" = "push" ] && [ "$REF" = "refs/heads/main" ]; }; then
     echo "arm64=true" >>"$out"
 elif echo "$changed" | grep -q '^crates/nikaia-std/\|^crates/unsafe/\|Cargo\.toml$\|^Cargo\.lock$\|^rust-toolchain\.toml$'; then
     echo "arm64=true" >>"$out"
