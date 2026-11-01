@@ -1,0 +1,121 @@
+use std::collections
+
+impl LedgerOps for Ledger {
+    fn infer_package_noted(units: ref Vec[Parsed], library: ref Ledger) -> (Ledger, Vec[Checked], sync::Noted) {
+        let mut ledger = Ledger::blank() with {
+            version: VERSION,
+            toolchain: toolchain(),
+            inference: INFERENCE.to_string(),
+        }
+
+        // **The item loop, in Nikaia** (`tools/ledger_items.nika`, ADR-294,
+        // #125): the entries every declaration makes, and the defaults it
+        // could not write as a literal (ADR-318 D1), evaluated once the
+        // entries exist. What holds a view is computed per unit here, by name
+        // (#544): a `Symbol` is interned by the parse of one file, so a set of
+        // them means nothing to another.
+        let views: Vec[ParsedView] = units.iter().map(fn(parsed) { parsed_view_of(parsed) }).collect()
+        let package_borrowing = package_borrowing(units)
+        let borrowing: Vec[collections::BTreeSet[String]] = units.iter().map(fn(parsed) {
+            return borrowing_structs_beside(parsed, package_borrowing).iter().map(fn(s) { parsed.text(s).to_string() }).collect()
+        }).collect()
+        let defaults = declare_items(views, borrowing, ledger)
+
+        // **Every unit is checked against the whole package's declarations**,
+        // which is the other half of D2: a call to the file next door resolves
+        // here too, so the method calls the walks below read are the package's.
+        // With the other files **beside** it, so a type another file
+        // declares has its fields and variants here as there (#125).
+        let checked: Vec[Checked] = units.iter().enumerate().map(fn((at, parsed)) {
+            let beside: Vec[Parsed] = units.iter().enumerate().filter(fn((other, _)) { other != at }).map(fn((_, other)) { other }).collect()
+            return in_unit(at, fn() {
+                return check_for_the_ledger(parsed, beside, ledger, library, Reads::none())
+            })
+        }).collect()
+        let resolved: collections::BTreeMap[String, MethodCalls] = checked.iter().flat_map(fn(c) { c.methods.iter().map(fn(method) { (method.0.clone(), method.1.clone()) }) }).collect()
+
+        let mut noted = sync_::infer(ledger, units, library, resolved)
+        // **An expression function's `ensures`** (ADR-314 D3): after `sync`,
+        // which it is only given for.
+        expression_ensures(ledger, units)
+        // Kap 7.1: `throws` in the source says *that* it fails; this says with
+        // what (ADR-023 D1). After `sync`, because both read bodies and only
+        // this one needs nothing from the other - and both are handed the same
+        // `resolved`, because ADR-288's whole point is that there is one
+        // answer to what `a.add(v)` goes to and both walks read it.
+        let stored: collections::BTreeMap[String, StoredCode] = checked.iter().flat_map(fn(c) { c.stored_code.iter().map(fn(pair) { (pair.0.clone(), pair.1.clone()) }) }).fold(collections::BTreeMap(), fn(all, (key, code)) {
+            let entry: StoredCode = all.entry(key).or_insert_with(StoredCode::empty)
+            entry.resolved.extend(code.resolved)
+            entry.unresolved |= code.unresolved
+            entry.free.extend(code.free)
+            return all
+        })
+        throws_::infer(ledger, units, library, resolved, stored)
+        // **The fourth derived column** ([ADR-288](../../../docs/specification/adr/adr-288.md)
+        // D2), and the one that was specified without an inference. After
+        // `throws` for no reason but tidiness: it reads the same bodies through
+        // the same walk and needs nothing either of the two produced.
+        touch::infer(ledger, units, library, resolved)
+        // **The fifth derived column** ([ADR-094](../../../docs/specification/adr/adr-094.md)
+        // D2). After the item loop, because its fixpoint reads a callee's
+        // `signature` — which the item loop wrote — and a callee's own
+        // `keeps`, which is itself;
+        // nothing above produces anything it needs, and nothing above reads
+        // what it writes. **What each result points into is written first**
+        // (#697): a call whose result points into an argument keeps it only
+        // where the result leaves, and the walk asks the callee's `ref(..)`.
+        write_result_sources(ledger, units, library)
+        let mut column = keeps::infer(ledger, units, library, resolved)
+        // **And again, until `keeps` settles** (#720): a parameter `keeps`
+        // says is kept is moved in, not viewed, so the result no longer points
+        // into it, and a caller that hands its own parameter there keeps that
+        // too. The first pass knew no keeps and read every plain parameter as
+        // a view; `keeps` itself cannot tell a result that views a kept
+        // parameter (`tag(s) -> Tag`) from one that owns it beside a literal.
+        for _ in 0..<8 {
+            let before: Vec[Vec[String]] = ledger.functions.values().map(fn(c) { c.keeps.clone() }).collect()
+            write_result_sources(ledger, units, library)
+            column = keeps::infer(ledger, units, library, resolved)
+            if ledger.functions.values().map(fn(c) { c.keeps }).eq(before.iter()) {
+                break
+            }
+        }
+        // ADR-037 D7: which count each `Shared` class gets. After `keeps`,
+        // because a lambda handed to a parameter the callee keeps is a kept one
+        // (#532); and it resolves a callee's parameters against the
+        // `signature` step 1 wrote and a type's parts against its `fields`.
+        //
+        // **A unit at a time, against the package's ledger.** It summarises the
+        // `Shared` values a body holds rather than folding a call graph, so
+        // there is no fixpoint to run across units - what it needed from its
+        // neighbours is the callee's `signature`, and that is in the ledger the
+        // loop above built.
+        for parsed in units.iter() {
+            sharing::infer(ledger, parsed, library)
+        }
+        // **The `maps` key** (ADR-010 D9, #581 step 6): read from the bodies
+        // of the package's `pub` functions, and written as a permission.
+        maps::infer(ledger, units)
+        // Beside `keeps`, and for the same reason it runs here: it reads the
+        // checker's method answers and the entries the item loop wrote.
+        locks::infer(ledger, units, library, resolved, stored)
+        // **Last, and it reads none of the columns above**
+        // ([ADR-283](../../../docs/specification/adr/adr-283.md) D5): what it
+        // asks is about a signature's shape and about which buffer a returned
+        // view came from, and no inference above answers either. It is also the
+        // one that changes no lowering — the state it writes is a
+        // representation and only one of the three is built.
+        tether::infer(ledger, units, library)
+        // **What a result points into, written** (ADR-283 D25, #580): the
+        // declaration listed every view, the body knows which one. After
+        // `keeps`, which says which plain parameters are lowered as views, and
+        // twice, so that a callee of another unit is read as written once its
+        // unit has been (the first pass reads the declaration's list, which
+        // only ever says more).
+        write_result_sources(ledger, units, library)
+        evaluate_defaults(ledger, units, defaults, library)
+        attribute_values(ledger, units, library)
+        noted.column = column
+        return (ledger, checked, noted)
+    }
+}
