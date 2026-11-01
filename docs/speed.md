@@ -20,7 +20,7 @@ and add the printed line to the table.
 * **Tokens per moved line**: the last row of the *Agents* table in
   `docs/tokenspeed.md` (target below 50 k).
 * **Self-hosting share**: `scripts/self_hosting.py`, "Nikaia in all".
-* **`lower-std` instructions** (cold / warm): callgrind counts per CLAUDE.md
+* **`lower-std` instructions** (cold / warm): callgrind counts per `docs/measuring.md`
   (cold about 181 G, warm about 1.3 G as stated there). Not collected by the
   script by default: under valgrind it ran over 10 minutes on a shared
   machine, so the columns stay empty until someone runs it on a quiet one. Not

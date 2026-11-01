@@ -17,7 +17,7 @@ these questions and shows how the language answers them.
 Simplicity is not something we can prove, so we do not argue it with claims.
 Readers find it out for themselves, and the documentation supports that by
 showing clear examples. Where something can be measured, such as how much less
-a program has to write (in tokens, `CLAUDE.md`, *Measuring performance*), the
+a program has to write (in tokens, `docs/measuring.md`), the
 measurement may be quoted. Not having to colour functions is a real advantage
 and can be said plainly: the compiler finds where a function pauses, so nobody
 has to rework the callers of a function that starts to wait.

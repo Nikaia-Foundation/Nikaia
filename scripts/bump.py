@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Raise the version, and repair it after a rebase (CLAUDE.md, "A change to the
+"""Raise the version, and repair it after a rebase (docs/supervisor.md, "A change to the
 language raises the version by one").
 
 What one version raise touches, and what this writes:

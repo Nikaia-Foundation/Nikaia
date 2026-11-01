@@ -20,6 +20,88 @@ below, under *Running the lanes*.
   come from `gh api .../check-runs/<job id>/annotations`. A red run goes to
   the architect, whose next brief is the fix-forward (or a revert).
 
+## Trunk, CI and issues
+
+Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
+
+* **Session hooks are the sessions' to maintain** (owner, 2026-10-26): a session
+  may create and change the project's hooks in `.claude/settings.json` and
+  `.claude/hooks/`, and delete one that gets in the way of the work, without
+  asking first. `.claude/hooks/session-start.sh` builds `target/fast/nikaia` in
+  the background in a cloud session.
+* **Clippy is CI's first gate after the build**, and a warning there turns every
+  later job off (it kept `develop` red from the first self-hosting move until
+  0.0.773, so `main` did not move). Lints about code the lowering writes are
+  allowed on the `tools` module in `crates/nikaia-std/src/lib.rs`, not fixed in
+  the generated files (`crates/nikaia-std/src/tools/lowered/*.rs`, index
+  `lowered.rs`; a change to one `.nika` changes one file). CI takes the newest
+  stable; when `rustup check` shows this machine's `stable` behind it, run
+  clippy with that version too (`docs/builder-facts.md`, *Traps already met*;
+  c80e63ac kept `develop` red on a lint 1.97 did not have).
+* **A change to the language raises the version by one**: the `**Version:**`
+  line of the three specification parts and a `CHANGELOG.md` heading, then
+  `python3 scripts/badges.py` redraws the README's badges from that line
+  (`scripts/pre-commit.sh` does it where it is installed; `scripts/bump.py new`
+  does all of it, below). Never edit an SVG by hand; CI checks the badges with
+  `--check`. The version is the specification's: it moves when what a program
+  means, or what the toolchain does with it, moves.
+
+  | Changed | Raises the version |
+  | :--- | :--- |
+  | `crates/` (compiler, parser, `std`) | yes |
+  | Part I-III of `docs/specification/` | yes |
+  | an ADR | only with the specification text it decides |
+  | tests | no, unless they belong to a change above, in its package |
+  | `guide/`, the notes in `docs/`, `README.md`, the website | no |
+  | `examples/`, `benches/`, `scripts/`, CI, `editors/` | no |
+  | `crates/rs2nika/` (the converter, a development tool not shipped with the toolchain) | no |
+  | `packages/<name>/` (an official package, ADR-344 D1) | no: only that package's own version |
+
+  A change that does not raise the version gets no `CHANGELOG.md` heading or
+  entry either: its commit message is its record. It touches neither the
+  version lines nor the badges, so it does not collide with other sessions.
+* **`main` moves only by `promote`** (owner, 2026-10-26): a `main` that moved
+  onto an untested commit is fixed forward on `develop`, and the process that
+  let it move is repaired (#861). CI runs everything on each push to
+  `develop`; when every job passes, the `promote` job fast-forwards `main` to
+  that commit (`.github/workflows/nikaia.yml`) - that commit, not `develop`'s
+  tip, which may have moved on during the run.
+* **Every push to `develop` gets its own CI run.** The concurrency group of a
+  push contains the run id, so runs overlap and none replaces another. (With one
+  shared group GitHub keeps one running and one pending run and cancels every
+  older pending one, so most commits never got an answer.) `promote` skips a
+  commit `main` already contains, so runs finishing out of order are safe. A
+  docs-only push skips the build and test jobs (`scripts/ci-changes.sh`).
+* **How issues close.** `promote` closes an issue only when a commit it brings
+  to `main` names it with `Fixes`, `Closes` or `Resolves`
+  (`scripts/fixed-issues.py`); `(#N)` and `Part of #N` close nothing. Any tense
+  counts, in prose too (5d7be91e's "the compiler fix #1000" closed #1000
+  unbuilt). The commit that builds the last step of a *To build* list writes
+  `Fixes #N`, and also names every issue that list absorbed (`Fixes #439,
+  #482`). An issue left open on purpose gets a comment saying exactly what is
+  still missing. One that no commit can finish - a process note, a duplicate,
+  an answered question - is closed by hand, with the reason.
+* **Builders commit, the driver tests and pushes** (owner, 2026-10-31). A
+  builder or QA agent started by `scripts/drive.nika` commits locally after
+  cheap checks (build, touched tests, fmt, clippy, `pre-push-check.sh`) and
+  never pushes. The driver runs the complete suite once per batch: when the
+  batch ends it starts it on HEAD in the background beside the architect and
+  waits for it before the next batch's first builder (`gate.nika --all`, one at
+  a time per checkout, in its own detached worktree at the tested commit,
+  `/home/user/nikaia-suite`, with an 8 GB disk guard); green, it pushes the
+  tested commit; red, a QA agent (`.claude/agents/qa.md`) gets the briefs and
+  reports of the unpushed commits and fixes forward, at most two rounds, then
+  the driver escalates.
+* **Order of work: the architect's score (`docs/priorities.md`), delegated by
+  the owner (2026-10-25).** Bugs before moving is the default: as a rule one
+  builder works on compiler bugs and one on self-hosting, and self-hosting
+  pauses while we find more bugs than we fix. The score overrides this
+  default when its figures say so, and the brief states them.
+* **No separate worktrees with `develop` checked out**: a commit in one moves
+  the branch under the others, and their index then shows the reverse of that
+  commit as staged changes. (m3a, 2026-10-28: a `git reset` in the shared
+  checkout at 22:41 cost a builder a test round.)
+
 ## Versions and error codes
 
 * **Version raises and new error codes are the supervisor's.** An agent

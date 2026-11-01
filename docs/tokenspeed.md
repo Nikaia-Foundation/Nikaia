@@ -94,7 +94,7 @@ Since `03dec80` (0.0.786). Share at the end: 49.8 % (`scripts/self_hosting.py`).
 
 Context tokens per moved Rust line below 70k on the short-agent slices while
 the share keeps rising by 0.2-0.5 points per commit. If a snapshot is worse,
-find out why before changing the rules (CLAUDE.md, "Measuring performance":
+find out why before changing the rules (`docs/measuring.md`:
 understand a result before quoting it).
 
 ## 2026-10-11, later (0.0.787-0.0.823)

@@ -154,7 +154,7 @@ the small patterns that are most of them).
    knows: no parsing, no compiling, no check of a table, as far as the stage
    allows no allocation (D7).
 4. **At least as fast as the crate**, faster where knowing the pattern while
-   building pays, measured as `CLAUDE.md` *Measuring performance* says.
+   building pays, measured as `docs/measuring.md` says.
 5. **The pattern decides what is built.** A pattern without a capturing group
    gets no group machinery; group 0, the match's start and end, is always
    there. Which calls a program makes on a `Regex` is not read.

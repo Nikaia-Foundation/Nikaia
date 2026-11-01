@@ -1,159 +1,73 @@
 # Working in this repository
 
-**Session hooks are the sessions' to maintain** (owner, 2026-10-26): a session
-may create and change the project's hooks in `.claude/settings.json` and
-`.claude/hooks/`, and delete one that gets in the way of the work, without
-asking first. `.claude/hooks/session-start.sh` builds `target/fast/nikaia` in
-the background in a cloud session.
+The rules every session and agent needs. What only the main session does
+(versions, CI, `promote`, issues, the driver, hooks) is in
+`docs/supervisor.md`.
 
-## Trunk-based: everyone pushes to `develop`, `main` only gets what was tested (#437)
+## Trunk-based: everyone works on `develop` (#437)
 
-* **`main` is the default branch, and what the outside sees: the last tested
-  state.** A session starts on `main` or on a branch made from it, so the first
-  thing to do is to switch to `develop`:
-  `git fetch origin develop && git checkout -B develop origin/develop`.
-* **`develop` is the trunk. Every session pushes to it directly, at once.**
-  No pull requests, no waiting for CI, no full suite first: build,
-  `cargo fmt`, and the tests the change touches are enough. Small commits,
-  often.
-* **Before pushing, `cargo clippy --all-targets -- -D warnings` must pass**: CI
-  runs it as its first gate after the build, and a warning there turns every
-  later job off (it kept `develop` red from the first self-hosting move until
-  0.0.773, so `main` did not move). Lints about code the lowering writes are
-  allowed on the `tools` module in `crates/nikaia-std/src/lib.rs`, not fixed in
-  the generated files (`crates/nikaia-std/src/tools/lowered/*.rs`, index `lowered.rs`; a change to one `.nika`
-  changes one file). CI takes the newest stable; when `rustup check` shows this
-  machine's `stable` behind it, run clippy with that version too
-  (`docs/builder-facts.md`, *Traps already met*; c80e63ac kept `develop` red on
-  a lint 1.97 did not have).
-* **Before pushing, run `scripts/pre-push-check.sh`** (fmt, badges and version check, seconds): CI fails on these first.
-* **Before pushing, rebase onto the latest `origin/develop`**
-  (`git pull --rebase origin develop`). Other sessions push all the time.
-  If the push is rejected, rebase again and push again.
-* **A change to the language raises the version by one**: the `**Version:**`
-  line of the three specification parts and a `CHANGELOG.md` heading, then
-  `python3 scripts/badges.py` redraws the README's badges from that line
-  (`scripts/pre-commit.sh` does it where it is installed). Never edit an SVG by
-  hand; CI checks the badges with `--check`.
-* **What raises it, and what does not.** The version is the specification's: it
-  moves when what a program means, or what the toolchain does with it, moves.
-
-  | Changed | Raises the version |
-  | :--- | :--- |
-  | `crates/` (compiler, parser, `std`) | yes |
-  | Part I-III of `docs/specification/` | yes |
-  | an ADR | only with the specification text it decides |
-  | tests | no, unless they belong to a change above, in its package |
-  | `guide/`, the notes in `docs/`, `README.md`, the website | no |
-  | `examples/`, `benches/`, `scripts/`, CI, `editors/` | no |
-  | `crates/rs2nika/` (the converter, a development tool not shipped with the toolchain) | no |
-  | `packages/<name>/` (an official package, ADR-344 D1) | no: only that package's own version |
-
-  A change that does not raise the version gets no `CHANGELOG.md` heading or
-  entry either: its commit message is its record. It touches neither the
-  version lines nor the badges, so it does not collide with other sessions.
-* **Nobody pushes to `main`, and nobody resets or force-pushes it** (owner,
-  2026-10-26): a `main` that moved onto an untested commit is fixed forward on
-  `develop`, and the process that let it move is repaired (#861). CI runs everything on each push to `develop`.
-  When every job passes, the `promote` job fast-forwards `main` to that commit
-  (`.github/workflows/nikaia.yml`) - that commit, not `develop`'s tip, which
-  may have moved on during the run. `main` is always a commit that passed.
-* **Every push to `develop` gets its own CI run.** The concurrency group of a
-  push contains the run id, so runs overlap and none replaces another. (With one
-  shared group GitHub keeps one running and one pending run and cancels every
-  older pending one, so most commits never got an answer.) `promote` skips a
-  commit `main` already contains, so runs finishing out of order are safe. A
-  docs-only push skips the build and test jobs (`scripts/ci-changes.sh`).
-* **The commit that finishes an issue says `Fixes #N`.** `promote` closes an
-  issue only when a commit it brings to `main` names it with `Fixes`, `Closes`
-  or `Resolves` (`scripts/fixed-issues.py`); `(#N)` and `Part of #N` close
-  nothing. Any tense counts, in prose too: never write `fix #N`, `fixed #N`
-  or `closes #N` for an issue the commit does not finish (5d7be91e's "the
-  compiler fix #1000" closed #1000 unbuilt); write `the fix for #N`. So the commit that builds the last step of a *To build* list
-  writes `Fixes #N`, and also names every issue that list absorbed
-  (`Fixes #439, #482`). An issue left open on purpose gets a comment saying
-  exactly what is still missing. One that no commit can finish - a process
-  note, a duplicate, an answered question - is closed by hand, with the reason.
-* **Every open issue carries exactly one status label**: `ready`, `decision`,
-  `blocked` or `note` (`docs/README.md`). Whoever changes an issue's state
-  changes the label: a decision taken makes it `ready`, a step that turns out
-  to need the owner makes it `decision`, a blocker built frees what it blocked.
-  A new issue gets its label when it is filed.
-* **A red `develop` is fixed forward.** Whoever finds it red fixes it with the
-  next commit, or reverts the commit that broke it, at once: until then `main`
-  and everything that hangs on it (the website, `promote`) stand still, and
-  work on `develop` goes on. How the main session watches CI:
-  `docs/supervisor.md`.
-* **Builders commit, the driver tests and pushes** (owner, 2026-10-31). A
-  builder or QA agent started by `scripts/drive.nika` commits locally after
-  cheap checks (build, touched tests, fmt, clippy, `pre-push-check.sh`) and
-  never pushes. The driver runs the complete suite once per batch (owner,
-  2026-10-31: once per batch): when the batch ends it starts it on HEAD in
-  the background beside the architect and waits for it before the next
-  batch's first builder (`gate.nika --all`, one at a time per checkout, in its own detached worktree
-  at the tested commit, `/home/user/nikaia-suite`, with an 8 GB disk guard); green, it pushes the tested
-  commit; red, a QA agent (`.claude/agents/qa.md`) gets the briefs and reports
-  of the unpushed commits and fixes forward, at most two rounds, then the
-  driver escalates. The bullets above about pushing at once hold for sessions
-  and agents outside a driver.
-* **Order of work: the architect's score (`docs/priorities.md`), delegated by
-  the owner (2026-10-25).** Bugs before moving is the default: as a rule one
-  builder works on compiler bugs and one on self-hosting, and self-hosting
-  pauses while we find more bugs than we fix. The score overrides this
-  default when its figures say so, and the brief states them.
-* **Parallel agents in one session work together on `develop`, in one shared
-  checkout.** Each agent commits after every finished step, so the others see
-  the work at once. A commit adds exactly the files that agent changed
-  (`git add <files>`), never `git commit -a` or `git add -A`: the working tree
-  also holds the other agents' unfinished files. After each commit the agent
-  pushes fast-forward only (`git push origin develop`). It does not rebase:
-  if the push is rejected, the supervisor rebases when needed, and the
-  agent goes on committing. No separate worktrees with
-  `develop` checked out: a commit in one moves the branch under the others,
-  and their index then shows the reverse of that commit as staged changes.
-  Nobody - main session, lane or builder - runs `git reset`, `git stash`,
-  `git checkout .` or `git restore .` in the shared checkout: it throws away
-  the other agents' unfinished files (m3a, 2026-10-28: a reset at 22:41 cost a
-  builder a test round). Restore only your own files, by name.
+* **`main` is the default branch and the last tested state; `develop` is the
+  trunk.** A session starts on `main` or a branch made from it, so it switches
+  first: `git fetch origin develop && git checkout -B develop origin/develop`.
+  Nobody pushes to `main`, resets it or force-pushes it: `promote` moves it to
+  a commit whose CI passed.
+* **Push to `develop` at once, small commits, often.** No pull requests, no
+  waiting for CI, no full suite: build, `cargo fmt` and the tests the change
+  touches are enough. Before pushing: `cargo clippy --all-targets -- -D
+  warnings` (CI's first gate; a lint in a lowered file is allowed on the
+  `tools` module in `crates/nikaia-std/src/lib.rs`, not fixed in the file),
+  `scripts/pre-push-check.sh` (fmt, badges, version), and, for a session
+  alone in its checkout, `git pull --rebase origin develop`. An agent started
+  by `scripts/drive.nika` commits and never pushes: the driver tests and
+  pushes.
+* **A red `develop` is fixed forward**: whoever finds it red fixes it with the
+  next commit or reverts the commit that broke it, at once.
 * **Version raises and new error codes are the supervisor's.** An agent
   commits without touching the version lines, `CHANGELOG.md` or the badges,
   names in its report what the change decided, and takes a new `NK` code only
   from the block the supervisor reserved for it.
-* **An error in another agent's file is not touched, it is escalated.** A
-  failing build, test or lint that comes from a file another agent changed is
-  reported to the supervisor (the session that started the agents), not
-  fixed. The supervisor resolves it if the agent that caused it does not
-  notice and repair it itself.
-* **New features are written in Nikaia only; no new Rust** (owner,
-  2026-10-31). A new feature of the compiler, `std` or the tools is written
-  as `.nika` (`crates/nikaia-std/src/tools/*.nika`, a package, a `tools/*.nika`);
-  nobody writes new Rust by hand from now on. The `.rs` files the lowering
-  writes from a `.nika` (`crates/nikaia-std/src/tools/lowered/`) are output,
-  not Rust written by hand. A step that cannot be done without writing Rust
-  stops before the first line: the report says `Result: blocked`,
-  `Found:` what is missing in Nikaia (the gap that makes Rust necessary), and
-  `Needs: architect decision`; the architect makes closing that gap the
-  next brief, never a brief that writes the Rust. Briefs and agent files
-  that still order Rust are read with this rule over them. A defect in
-  existing Rust may be fixed in Rust only where that code cannot be
-  converted to Nikaia directly (owner, 2026-10-31); where it can, the fix is
-  made by moving it into Nikaia.
-* **Helper tools are written in Nikaia, not in Python or shell.** A new tool
-  (a migration aid, a checker, a generator) is a `tools/*.nika` behind a
-  `nikaia` subcommand or a program run with `nikaia run`; the existing Python
-  in `scripts/` moves to Nikaia when it is next reworked. This is a principle,
-  not a convenience: writing our own tools in the language shows where it has
-  to be sharpened. What blocks or chafes on the way (a missing `std` entry, a
-  syntax gap, a lowering defect) is a finding: fix it in the compiler - do not
-  route around it, in the tool or in another language.
-* **New tests are written in Nikaia only** (owner's rule, 2026-10-25, #821). A
-  new test is a `.nika` program with its `.stdout` / `.stderr` beside it in
-  `tests/compiler/` (or a package's own tests), run by `nikaia test`; no new
-  `#[test]` and no new Rust test file. An existing Rust test is changed only
-  to keep it passing, or moved to Nikaia (#821 steps 4-5). What cannot yet be
-  said in Nikaia (a check on the Rust side, the C library) is a finding: fix
-  or file it, and wait for the fix; do not write the Rust test as the way
-  around.
+* **The commit that finishes an issue says `Fixes #N`**; that word closes it
+  when `promote` brings it to `main`. Never write `fix #N`, `fixed #N` or
+  `closes #N` (any tense, in prose too) for an issue the commit does not
+  finish; write `the fix for #N`. `(#N)` and `Part of #N` close nothing.
+* **Every open issue carries exactly one status label**: `ready`, `decision`,
+  `blocked` or `note` (`docs/README.md`). Whoever files an issue or changes its
+  state sets the label.
+
+## Parallel agents share one checkout
+
+* **Commit after every finished step, only your own files**: `git add
+  <files>`, never `git commit -a` or `git add -A`; the tree also holds the
+  other agents' unfinished files. Push fast-forward only (`git push origin
+  develop`); if it is rejected, do not rebase: the supervisor does, and you
+  go on committing. No separate worktree with `develop` checked out.
+* **Nobody runs `git reset`, `git stash`, `git checkout .` or `git restore .`**
+  in the shared checkout: it throws away the others' work. Restore only your
+  own files, by name.
+* **An error in another agent's file is not touched, it is escalated** to the
+  supervisor (the session that started the agents).
+
+## Written in Nikaia only (owner, 2026-10-25 and 2026-10-31)
+
+* **New features: no new Rust.** A feature of the compiler, `std` or the tools
+  is written as `.nika` (`crates/nikaia-std/src/tools/*.nika`, a package, a
+  `tools/*.nika`); the `.rs` the lowering writes from it
+  (`crates/nikaia-std/src/tools/lowered/`) is output. A step that cannot be
+  done without writing Rust stops before the first line: `Result: blocked`,
+  `Found:` the gap in Nikaia, `Needs: architect decision`. Briefs that still
+  order Rust are read with this rule over them. A defect in existing Rust is
+  fixed in Rust only where that code cannot be converted to Nikaia directly;
+  where it can, the fix moves it into Nikaia.
+* **Helper tools** (a migration aid, a checker, a generator) are a
+  `tools/*.nika` behind a `nikaia` subcommand or run with `nikaia run`, not
+  Python or shell; the Python in `scripts/` moves when it is next reworked.
+  What blocks on the way is a finding: fix it in the compiler, do not route
+  around it.
+* **New tests** are a `.nika` program with its `.stdout` / `.stderr` beside it
+  in `tests/compiler/` (or a package's tests), run by `nikaia test` (#821); no
+  new `#[test]`, no new Rust test file. An existing Rust test is changed only
+  to keep it passing, or moved to Nikaia. What cannot yet be said in Nikaia is
+  a finding: fix or file it.
 
 ## Who reads what else
 
@@ -163,35 +77,13 @@ the background in a cloud session.
 * **Builders**: `.claude/agents/builder.md` (the cycle and the gate) and
   `docs/builder-facts.md` (where things live, traps, and the self-hosting
   rules: slices, syntax gaps of `tools/*.nika`, lowering).
+* **Whoever measures performance or quotes a figure**: `docs/measuring.md`
+  (count with callgrind, never time; against tuned Rust; tokens, not lines).
 * **Whoever writes for the website, `README.md` or `guide/`**:
   `docs/writing-guide.md` (lead with safety, no absolute claims, natural prose
   without bold lead-ins, nothing shown as runnable before it is built). Its
   last section is for whoever writes the specification: compact for models
   that read it whole, one rule in one place, one meaning per word.
-
-## Measuring performance
-
-* **Count, never time.** Instructions and mispredicted branches, from callgrind
-  (`valgrind --tool=callgrind --branch-sim=yes`). On these shared machines the
-  same binary moves by 1.4-1.9x from one day to the next; a count does not. No
-  figure in seconds goes into a document.
-* **Against tuned Rust**, `unsafe` allowed, never against a loop this project
-  wrote to lose. Each Rust program is a binary of its own: two programs in one
-  binary change what LLVM inlines (it cost `tuned` 40 instructions a row).
-* **Release builds on both sides, the same settings**: `opt-level = 3`, link-time
-  optimisation on both or on neither, and say which. Nikaia keeps its overflow
-  checks; measure them off as a second row (`RUSTFLAGS="-C overflow-checks=off"`)
-  rather than leaving them out.
-* **The same output first**, byte for byte, or the counts mean nothing.
-* **Length in tokens, not lines**: `nikaia run scripts/tokens.nika -- F...`, the
-  same rule for both languages, whole files, `use` lines included.
-* **A benchmark's README holds the current table and the method, not a diary.**
-  Re-measuring replaces the table; how a number got there is the commit's and
-  the issue's. Quote only that table, and before recommending a change from an
-  attribution, check it was taken on today's code.
-* **Understand a result before publishing it**: if a number moves, find out why
-  (callgrind_annotate) before anything quotes it. `benches/brc/brc.sh` is the
-  pattern: it builds, compares the outputs, counts and prints the table.
 
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
 
@@ -229,7 +121,7 @@ the background in a cloud session.
   not the move lane; the move waits (`docs/architect.md`, *Lanes*).
 * **The disk is shared and small.** Delete `target/` of a worktree you no
   longer use; keep `target/nikaia-project-tests` (the tests' cache, pruned by
-  the compiler to `NIKAIA_CACHE_LIMIT`). Never run the full suite locally by hand (the driver runs it, above)
-  (about 45 minutes): CI runs it on every push to `develop`.
+  the compiler to `NIKAIA_CACHE_LIMIT`). Never run the full suite locally by hand
+  (about 45 minutes; a driver runs it per batch): CI runs it on every push to `develop`.
 * The working rules for a move (slices, patterns, syntax gaps, lowered types,
   `lower-std`, the converter) are in `docs/builder-facts.md`.
