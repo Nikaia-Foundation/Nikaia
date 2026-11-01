@@ -31,3 +31,4 @@
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 1148459 27
 /home/user/Nikaia/docs/briefs/bugs/b25-1106-either-text-into-path.md 156093 6
 /home/user/Nikaia/docs/briefs/bugs/b26-1107-unwrapped-map-view.md 4764151 65
+/home/user/Nikaia/docs/briefs/bugs/b29-1126-let-mut-tuple.md 1185188 34
