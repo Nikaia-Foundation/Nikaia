@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1340] — 2026-11-01
+
+**a taking arm over an enum of another file; a number bound under a match on a part held in place (#125)**
+- Fixed: a taking `match` arm over an enum another file declares leaves that enum's placeholder (it lowered to a type mismatch).
+- Fixed: a number bound under a `match` over a part held in place out of a `mut` parameter is copied out (it lowered to a comparison of `&mut i64` with `i64`).
+- Open: a `match` over a place inside a `mut` parameter whose arm changes a part in place moves the part out; a taking arm that gives the value back on only one branch is accepted.
+
 ## [0.0.1339] — 2026-11-01
 
 **a variant part of code keeps its lambda; a text field asked of a list of text compares as text (#125)**
