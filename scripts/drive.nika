@@ -179,13 +179,8 @@ fn drive_lock(dir: String) throws {
         }
         let owner = drive_read(drive_lock_dir() + "/owner").trim().clone()
         let pid = owner.split(" ").collect()[0].clone()
-        let mut live = false
-        if pid == "" {
-            blank += 1
-            live = blank <= 2
-        } else {
-            live = process::run("kill", ["-0", pid.clone()]).ok
-        }
+        if pid == "" { blank += 1 }
+        let live = if pid == "" { blank <= 2 } else { process::run("kill", ["-0", pid.clone()]).ok }
         if !live {
             process::run("rm", ["-rf", drive_lock_dir()])
             continue
@@ -456,11 +451,18 @@ fn drive_launch(dir: String) throws {
 // ci-no-run`, none finished after 3 hours `Gate: red ci-timeout`. Then the exit
 // status (0 green, 1 red) to EXIT, through EXIT.tmp.
 fn drive_ci_wait(sha: String, log: String, exit: String) throws {
+    let (body, green) = drive_ci_poll(sha)
+    fs::write(log.clone(), fs::Root::Anywhere, body)
+    let code = if green { "0" } else { "1" }
+    fs::write(exit.clone() + ".tmp", fs::Root::Anywhere, code + "\n")
+    process::run("mv", [exit.clone() + ".tmp", exit])
+}
+
+// One CI verdict for SHA: the log text and whether it is green.
+fn drive_ci_poll(sha: String) -> (String, bool) throws {
     let repo = drive_repo()
     let query = ".workflow_runs[] | select(.name == \"Nikaia\" and (.head_branch | startswith(\"ci/\"))) | \"\\(.id) \\(.status) \\(.conclusion)\""
     let mut polls: i64 = 0
-    let mut body: String = ""
-    let mut green = false
     while true {
         let runs = process::run("gh", ["api", f"repos/{repo}/actions/runs?head_sha={sha}&event=push&per_page=20", "--jq", query.clone()])
         let first = runs.stdout.trim().split("\n").collect()[0].trim().clone()
@@ -469,8 +471,7 @@ fn drive_ci_wait(sha: String, log: String, exit: String) throws {
             let id = words[0].clone()
             let url = f"https://github.com/{repo}/actions/runs/{id}"
             if words[2] == "success" {
-                body = f"CI run {url}: success\nGate: green\n"
-                green = true
+                return (f"CI run {url}: success\nGate: green\n", true)
             } else {
                 let jobs = process::run("gh", ["api", f"repos/{repo}/actions/runs/{id}/jobs?per_page=100", "--jq", ".jobs[] | select(.conclusion == \"failure\" or .conclusion == \"cancelled\" or .conclusion == \"timed_out\") | \"\\(.id) \\(.name)\""])
                 let mut names: Vec[String] = []
@@ -485,26 +486,18 @@ fn drive_ci_wait(sha: String, log: String, exit: String) throws {
                     tails = tails + f"\nLast 200 lines of the job {name} ({url}/job/{jid}):\n" + drive_tail(text, 200) + "\n"
                 }
                 if names.len() == 0 { names.push(words[2].clone()) }
-                body = f"CI run {url}: {words[2]}\n{tails}\nGate: red " + names.join(" ") + "\n"
+                return (f"CI run {url}: {words[2]}\n{tails}\nGate: red " + names.join(" ") + "\n", false)
             }
-            break
         }
         if polls >= 30 && first == "" {
-            body = f"no CI run for {sha} after 15 minutes\nGate: red ci-no-run\n"
-            break
+            return (f"no CI run for {sha} after 15 minutes\nGate: red ci-no-run\n", false)
         }
         if polls >= 360 {
-            body = f"the CI run for {sha} did not finish in 3 hours: {first}\nGate: red ci-timeout\n"
-            break
+            return (f"the CI run for {sha} did not finish in 3 hours: {first}\nGate: red ci-timeout\n", false)
         }
         polls += 1
         process::run("sleep", ["30"])
     }
-    fs::write(log.clone(), fs::Root::Anywhere, body)
-    let mut code = "1"
-    if green { code = "0" }
-    fs::write(exit.clone() + ".tmp", fs::Root::Anywhere, code + "\n")
-    process::run("mv", [exit.clone() + ".tmp", exit])
 }
 
 // The suite this driver started and has not handled yet: `<sha> <covered>`
