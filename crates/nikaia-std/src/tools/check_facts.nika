@@ -215,6 +215,10 @@ pub struct CheckFacts {
     pub owned_patterns: collections::BTreeSet[i64],
     pub counted: collections::BTreeSet[i64],
     pub lent_bindings: collections::BTreeMap[i64, collections::BTreeSet[String]],
+    /// **The parts an arm keeps in place out of a field of a `mut`
+    /// parameter**, by the arm's body (#1139): `match h.node` binds them
+    /// `ref mut`, so the arm changes the part where it is.
+    pub in_place_bindings: collections::BTreeMap[i64, collections::BTreeSet[String]],
     pub taking_arms: collections::BTreeMap[i64, String],
     /// **A part taken out of a `mut` parameter or a `let mut` view** to be
     /// given back (ADR-views-1 D3), by the field's node: what stands in its
@@ -558,6 +562,7 @@ impl CheckFacts {
             owned_patterns: collections::BTreeSet(),
             counted: collections::BTreeSet(),
             lent_bindings: collections::BTreeMap(),
+            in_place_bindings: collections::BTreeMap(),
             taking_arms: collections::BTreeMap(),
             taken_parts: collections::BTreeMap(),
             views_handed_on: collections::BTreeSet(),
