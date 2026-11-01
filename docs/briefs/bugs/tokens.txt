@@ -36,3 +36,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b31-1129-code-cycle-across-files.md 465377 14
 /home/user/Nikaia/docs/briefs/bugs/b32-1130-drain-every-map.md 762886 21
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 825813 24
+/home/user/Nikaia/docs/briefs/bugs/qa/qa-task.md 1228744 32
