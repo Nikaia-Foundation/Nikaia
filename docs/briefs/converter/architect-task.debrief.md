@@ -1,12 +1,15 @@
-1. **What cost the most:** hunting for where the `let mut (a, b)` parse error is raised. I spent about six greps, including one in the cargo registry and one that timed out into the background, and one of them dumped a 100 KB file into my context (`probe.in/out.lsif`). I never found the source; I gave up and wrote "not traced" in b29. Second: I probed the converter by hand to learn which patterns it already handles, and several of them (if-let, let-else, `matches!`, the `?? continue` rule) turned out to work already.
-2. **What the brief could have handed me:**
-   - That the converter binary sits at `crates/rs2nika/convert/target/nikaia/bin/rs2nika` and the compiler at `target/fast/nikaia` (the compiler is not on PATH).
-   - That `docs/rs2nika-score.md` is out of date and the useful costs are the moves' `Rs2nika:` lines.
-   - That `if let` is refused by design (Part I 2.3), so the converter's `match` form for it is correct.
-   - The forms ADR-374 allows for cutting a text at a number (`bytes[..].text()`, `selfhosting-gaps` row).
-   - The #886 rule, and the fact that a53f456's freeing of methods only applies when the input declares the struct.
-   - The open S1 plan row, which named exactly this lane's work.
+1. **Most turns:** working out which signal was current. The converter directory held an empty `RED` file, a `qa-input.txt` from 12:06 saying the suite was red, and a `suite.log` still compiling, while `architect-input.txt` said `CUT`. Comparing timestamps, checking `unpushed.txt` and running `git fetch` took about 3 of my roughly 13 tool calls. The other cost was deciding about the push: the task says push, the charter says don't, and local `develop` held untested commits.
+2. **What I looked up that the task could have handed me:**
+   - the Deviation line itself, which the cut line already quoted in full;
+   - the converter's existing rule for standard trait impls (`tr_items.nika:567`, std trait impls become ADAPTER comments), needed to judge the deviation;
+   - whether b29 and b30 were built, which I found by reading `git log`.
+
+   One line in `architect-input.txt` would have saved most of this: the shas of commits on top of `origin/develop` that are still unpushed, and each one's brief.
 3. **Checks:**
-   - **Useful:** converter probes on small Rust inputs and on the real S1 cut; compiler runs of every form the briefs prescribe. These found both defects and the cv1 rule.
-   - **Wasted:** the message-text searches (about 6 calls); `where.nika` on the converter's names (it found 0 calls there); the generic `a.rs` and `c.rs` converter probes of already-working forms; the duplicate-issue search for NK1307.
-4. **The change that would save the most:** the converter lane's `architect-task.md` (or `architect-input.txt`) should carry a short "converter state" block: the binary paths, the five costliest open patterns from the latest `Rs2nika:` lines with one probe each, and the plan rows waiting on the converter (S1, C1). The architect would then confirm and write briefs, not rediscover. Also add a line to `builder-facts.md`: `where.nika` does not index `crates/rs2nika/convert`, and parser error text is not greppable in the sources (find the rule by its outline).
+   - Useful: the cv1 report, its test files, a search for Display in the converter, the Deviation rule in `common.part`, cv1's own brief (it had promised "stays an impl"), and the heads of cv2 and cv3 for staleness.
+   - Wasted: the `fetch` and `merge-base` call, which failed with exit 1; tailing `suite.log`; a separate search for b29/b30 lines before the edit; and the builder.md Deviation search, since that rule already exists.
+4. **Change that would have saved the most:** in `architect-task.md`, have the driver write two things into `architect-input.txt`:
+   - the suite state (running, red or green) and the unpushed commits;
+   - for a deviation-only cut where the report says `Result: done` and `Gate: green`, a note that the queued briefs are unchanged.
+
+   Separately, step 2 should say "commit; push only when local `develop` holds nothing beyond your commit", so it agrees with the charter's rule against pushing. Also, cv1's brief set the expected output (an impl that stays an impl) without running it first. That is the existing "probe every test row" check (`docs/architect.md`), which was not followed; no new rule is needed.
