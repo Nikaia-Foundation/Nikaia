@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1331] — 2026-11-01
+
+**self-hosting: proofs.rs's answers move into proofs_answers.nika (#125)**
+- The prover's book, the asking, the place of a question, the loops' invariants by place and nikaia.proofs read, rendered and written are `proofs_answers.nika`; `proofs.rs` keeps the thread-local state and the scope combinators.
+
 ## [0.0.1330] — 2026-11-01
 
 **check: a list or map element past a jump compares with a value (#1112)**
