@@ -79,8 +79,10 @@ own driver run and its own architect task (`DIR/architect-task.md`):
 
 * **Main lane, `docs/briefs/`: self-hosting moves only** (owner, 2026-10-31).
   A batch holds at least two moves; the one exception is a fix-forward for a
-  red `develop`. A compiler defect a move finds is not fixed in this lane:
-  the architect files it (`ready`, brief form), writes its brief into
+  red `develop`. A compiler defect that blocks a move is fixed by the move's
+  builder at once, as its own commit (owner, 2026-11-01: who finds it fixes
+  it). Only one that does not fit the builder's time box, or needs a
+  decision, comes back `blocked`: the architect files it (`ready`, brief form), writes its brief into
   `docs/briefs/bugs/` with a `Blocks: <move brief>` line, adds it to
   `docs/briefs/bugs/batch.txt` after the briefs listed there, and sets `wip`
   on the issue. The move waits: it re-enters the main batch once the fix is on

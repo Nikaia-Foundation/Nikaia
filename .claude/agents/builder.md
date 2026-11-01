@@ -40,9 +40,13 @@ You build one small slice of an issue in the Nikaia repository and end.
   was written): right after applying it, `nikaia fmt` every changed `.nika`
   (on a scratch copy where `fmt` is not allowed), then `check` and the tests,
   before writing a line. A refusal there stops the run at once.
-* **A compiler defect stops the slice.** Do not work around it in the moved
-  code: fix it in the compiler as its own commit if the task allows, else stop
-  and report it with a probe of a few lines.
+* **Who finds a blocking defect fixes it** (owner, 2026-11-01). A compiler,
+  lowering or `std` defect that blocks your step is fixed by you, at once,
+  whatever lane the brief is from: in the compiler, with a `tests/compiler/`
+  test, as its own commit, then the step goes on. Never work around it in the
+  moved code. Only when the fix does not fit the time box below, or needs an
+  architect decision, stop: commit nothing that routes around it, report
+  `Result: blocked` with the defect and a probe of a few lines.
 * **A missing form stops the slice too** (owner, 2026-10-29; CLAUDE.md, *A
   missing form stops the work*). A `std` entry, a method, a syntax or a
   conversion Nikaia lacks is not written around (no get-clone-insert for

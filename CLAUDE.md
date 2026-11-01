@@ -116,8 +116,9 @@ The rules every session and agent needs. What only the main session does
   (owner's direction: no technical debt). A defect that cannot be fixed in
   this round is filed as a GitHub issue with a probe and a *To build* list
   (status label `ready`), never in a file in the repository, and the work that
-  needs it waits for the fix. A defect a move finds is fixed by the bug lane,
-  not the move lane; the move waits (`docs/architect.md`, *Lanes*).
+  needs it waits for the fix. Who finds a defect that blocks the work fixes
+  it at once, in any lane (owner, 2026-11-01); only what does not fit the
+  round goes to the bug lane (`docs/architect.md`, *Lanes*).
 * **The disk is shared and small.** Delete `target/` of a worktree you no
   longer use; keep `target/nikaia-project-tests` (the tests' cache, pruned by
   the compiler to `NIKAIA_CACHE_LIMIT`). Never run the full suite locally by hand
