@@ -237,3 +237,4 @@
 /home/user/Nikaia/docs/briefs/qa/qa-task.md 335141 16
 /home/user/Nikaia/docs/briefs/architect-task.md 355164 15
 /home/user/Nikaia/docs/briefs/k3b-comptime-bundle.md 496613 10
+/home/user/Nikaia/docs/briefs/c1c-ledger-lookup.md 442454 13
