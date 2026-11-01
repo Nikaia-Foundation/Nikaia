@@ -312,36 +312,33 @@ tokens and turns per finished step, steps per day; counted, not timed.
 *Current state only, rewritten (not appended) by the architect when it ends:
 open lanes, what blocks what, figures, decisions in force that no ADR or issue
 holds. What happened is in `git log` and the issues.*
-**2026-10-31 (after 7ad2ea08).** Self-hosting: about 82.6 % of the toolchain
+**2026-11-01 (after e1a88e49).** Self-hosting: about 83.3 % of the toolchain
 (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
 2026-11-04), rows and `Cut:` lines in `docs/selfhosting-plan.md`.
 
-* **CI**: last known red (clippy 1.99) fixed forward by 91510ca0. Main
-  session: `rustup update stable` at a quiet moment (this machine's `stable`
-  is 1.97; 1.99.1 is installed beside it).
-* **Main lane** (`docs/briefs/batch.txt`): P5c re-run (`p5c-project-drive.md`,
-  #1088 built f4f138bc, its branch `wip/p5c-project-drive` cc40334f touches
-  no file develop changed since but `lowered.rs`; old report `.run1`), C1b
-  (`c1b-ledger-stored.md`: the `stored` fold, dead `LedgerOps::candidates`
-  deleted). C1a done (5bd603f3). **K3b blocked** on #1106 (bug lane b25,
-  `EitherText` into `fs::Path`); its run 2 is on `wip/k3b-comptime-bundle-run2`
-  707d5e53: cherry-pick `--no-commit`, `git restore --staged`, re-lower; on
-  re-queue rename its report `.run2.report.md`. **C1c** (`lookup` to
-  `(String, ref FnContract)?`) waits on #1107 (b26); brief not written yet.
-  **S1** needs converter commits first (plan row: `.get(range)` on a `String`
-  is NK1214 by design, ADR-374 positions/`forward`; `else if let`; #886's
-  or-pattern): write a converter brief before the move. P5e waits on the O
-  rows (#923). To check when next near `trust.rs`: `join` makes a package that
-  reads no untrusted source all-fast even where keys come through a trait
-  barrier (ADR-010 D9 point 5); file it if a probe shows a keyed position
-  written fast.
-* **Next main batch**: K3b run 3 (after b25), C1c (after b26), S1 once its
-  converter brief is built. Owed, each its own brief: R0 (#921),
+* **CI**: main session: `rustup update stable` at a quiet moment (this
+  machine's `stable` is 1.97; 1.99.1 is installed beside it).
+* **Main lane** (`docs/briefs/batch.txt`): P5c done (655b51b6), C1b done
+  (547e6462). Batch: K3b run 3 (`k3b-comptime-bundle.md`, cherry-picks
+  `wip/k3b-comptime-bundle-run2` 707d5e53, applies clean at e1a88e49; #1106
+  fixed 1a5fdf6d; old report `.run2`), C1c (`c1c-ledger-lookup.md`, closes
+  row C1; shape probed). **S1** needs converter commits first (`.get(range)`
+  on a `String` is NK1214 by design, ADR-374; `else if let`; facade's
+  or-pattern; cv3 built the `Some(x)` field pattern): a converter brief before
+  the move. P5e waits on the O rows (#923). To check when next near
+  `trust.rs`: `join` makes a package that reads no untrusted source all-fast
+  even where keys come through a trait barrier (ADR-010 D9 point 5).
+* **Next main batch**: S1 once its converter brief is built; the next plan
+  rows after K3b. Owed, each its own brief: R0 (#921),
   `scripts/plan_rows.nika`, the driver writing the failing job's clippy output
   into `architect-input.txt`, fold `ComptimeRan` into `CheckWall`, #1102
   (driver re-lowers on a rebase conflict in `lowered/*.rs`).
-* **Bug lane** (`docs/briefs/bugs/batch.txt`): appended b25 #1106 (blocks
-  K3b) and b26 #1107 (blocks C1c), both `ready,wip`. b22 #1099 stopped
+* **Decided 2026-11-01**: ADR-386 (`drain()` on every map and set, #1130,
+  bug brief b32, also repays C1b's clone in `ledger_items_stored`), ADR-387 (a
+  view of a copy type is copied where the value is wanted, #1107's rest, b33).
+* **Bug lane** (`docs/briefs/bugs/batch.txt`): appended b32 #1130 and b33
+  #1107 (both `ready,wip`, block nothing). b25 #1106 done; b26 #1107 partial
+  (rest is b33). b22 #1099 stopped
   `partial` on K3b's untracked files (since restored); its edit sits
   uncommitted in `emit_core_leaves.nika`. b17 #1077, b19 #1080 done;
   b18 #1078, b20 #1088 done (906a5be7; `wip` stays until promote closes
