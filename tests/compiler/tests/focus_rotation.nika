@@ -1,0 +1,88 @@
+// scripts/drive.nika `--focus` (owner, 2026-11-01): the focus file's advance
+// (wrap, an empty area skipped, every area empty), the focus log line of a
+// block from three sample reports, and the bug brief with a `Blocks:` line
+// that runs before a block. Each through one of the driver's test flags.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+// The driver with `args`, its output with the scratch directory as `T`.
+fn drive(nikaia: String, repo: String, tmp: String, args: Vec[String]) -> String throws {
+    let mut all: Vec[String] = ["run", "scripts/drive.nika", "--"]
+    for a in args { all.push(a.clone()) }
+    let out = process::run(nikaia, all; dir: repo)
+    return out.stdout.trim().replace(tmp, "T")
+}
+
+// The `current` line of a focus text.
+fn current(text: String) -> String {
+    for line in text.split("\n") { if line.starts_with("current") { return line.clone() } }
+    return text.clone()
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let focus = f"{tmp}/focus.txt"
+    fs::write(focus.clone(), fs::Root::Anywhere, "block 3\narea converter docs/briefs/converter\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent converter 2\n")
+    println(f"next: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone()]))}")
+    println(f"skip selfhosting: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone(), "selfhosting"]))}")
+    fs::write(focus.clone(), fs::Root::Anywhere, "block 2\narea converter docs/briefs/converter\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent bugs 1\n")
+    let wrapped = drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone()])
+    println(f"wrap: {current(wrapped.clone())} (block line kept: {wrapped.starts_with("block 2\n")})")
+    println(f"only the current one left: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone(), "converter", "selfhosting"]))}")
+    println(f"all empty: {drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone(), "converter", "selfhosting", "bugs"])}")
+    fs::write(focus.clone(), fs::Root::Anywhere, "block 3\narea converter docs/briefs/converter\narea bugs docs/briefs/bugs\n")
+    println(f"no current line: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone()]))}")
+
+    // The log line of a block of three briefs; a fourth brief is left unrun.
+    let d = f"{tmp}/area"
+    process::run("mkdir", ["-p", d.clone()])
+    fs::write(f"{d}/a.md", fs::Root::Anywhere, "a\n")
+    fs::write(f"{d}/b.md", fs::Root::Anywhere, "b\n")
+    fs::write(f"{d}/c.md", fs::Root::Anywhere, "c\n")
+    fs::write(f"{d}/left.md", fs::Root::Anywhere, "left\n")
+    fs::write(f"{d}/batch.txt", fs::Root::Anywhere, "a.md\nb.md\nc.md\nleft.md\ngone.md\n")
+    fs::write(f"{d}/a.md.report.md", fs::Root::Anywhere, "Result: done\nRs2nika: kept 80 of 100 lines; the rest renamed\n")
+    fs::write(f"{d}/b.report.md", fs::Root::Anywhere, "Result: partial (two steps left)\nRs2nika: none\n")
+    fs::write(f"{d}/c.md.report.md", fs::Root::Anywhere, "Result: blocked\nRs2nika: kept 5 of 20 lines\n")
+    fs::write(f"{d}/tokens.txt", fs::Root::Anywhere, f"{d}/old.md 999 9\n{d}/a.md 1000 10\n{d}/b.md 200 4\n{d}/c.md 30 2\n")
+    fs::write(f"{d}/cost.txt", fs::Root::Anywhere, "2026-11-01 1.5\n2026-11-01 0.255\n")
+    let briefs = [f"{d}/a.md", f"{d}/b.md", f"{d}/c.md"]
+    let mut args: Vec[String] = ["--focus-log", d.clone(), "converter"]
+    for b in briefs { args.push(b.clone()) }
+    println(f"log: {drive(nikaia.clone(), repo.clone(), tmp.clone(), args.clone())}")
+    args[2] = "bugs"
+    println(f"log, bugs: {drive(nikaia.clone(), repo.clone(), tmp.clone(), args)}")
+
+    // The first unrun brief with a `Blocks:` line runs before a block.
+    let bugs = f"{tmp}/bugs"
+    process::run("mkdir", ["-p", bugs.clone()])
+    fs::write(f"{bugs}/b1.md", fs::Root::Anywhere, "# b1\nBlocks: y1.md\n")
+    fs::write(f"{bugs}/b1.md.report.md", fs::Root::Anywhere, "Result: done\n")
+    fs::write(f"{bugs}/b2.md", fs::Root::Anywhere, "# b2, no blocking line\n")
+    fs::write(f"{bugs}/b3.md", fs::Root::Anywhere, "# b3\n  Blocks: y2.md\n")
+    fs::write(f"{bugs}/batch.txt", fs::Root::Anywhere, "b1.md\nb2.md\nb3.md\n")
+    println(f"blocks: {drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--blocks", bugs.clone()])}")
+    fs::write(f"{bugs}/b3.md.report.md", fs::Root::Anywhere, "Result: done\n")
+    println(f"blocks, all run: {drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--blocks", bugs.clone()])}")
+    process::run("rm", ["-rf", tmp])
+}

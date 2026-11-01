@@ -1,0 +1,10 @@
+next: current selfhosting 0
+skip selfhosting: current bugs 0
+wrap: current converter 0 (block line kept: true)
+only the current one left: current bugs 0
+all empty: ESCALATE focus: every area empty
+no current line: current bugs 0
+log: 2026-11-01 12:00 converter briefs 3 done 1 partial 1 blocked 1 noop 0 tokens 1230 cost 1.76 queue 1 kept 85/120
+log, bugs: 2026-11-01 12:00 bugs briefs 3 done 1 partial 1 blocked 1 noop 0 tokens 1230 cost 1.76 queue 1
+blocks: b3
+blocks, all run: none
