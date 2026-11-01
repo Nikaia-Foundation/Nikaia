@@ -235,3 +235,4 @@
 /home/user/Nikaia/docs/briefs/c1b-ledger-stored.md 757586 18
 /home/user/Nikaia/docs/briefs/architect-task.md 3872367 64
 /home/user/Nikaia/docs/briefs/qa/qa-task.md 335141 16
+/home/user/Nikaia/docs/briefs/architect-task.md 355164 15

@@ -1,14 +1,11 @@
-1. **What cost the most:** probing the language from scratch. I lost about six turns to syntax I guessed wrong: `var` instead of `let mut`, a bare `Map`, `use std::collections`, `.to_string()` on a literal (NK1301), `ref String` (NK1261), and `print` adding no newline. Separately, a `grep -r` over `crates/` timed out after 120 s and was moved to the background.
-
-2. **What the brief could have handed me:**
-   - **A probe template:** a ten-line `.nika` with the right `collections` and `print` forms.
-   - **ADR pointers for `ref T` to `T`:** ADR-233 D4, ADR-279 D8/D9 and ADR-283 D3. I had to find them by reading, one at a time.
-   - **Where `std` method signatures live:** `crates/nikaia-std/std.contracts`.
-   - **The ADR index order:** that new rows go after 385 in the README.
-   - **That `common.part` is the current rules block:** I first copied the longer, older block from the K3b brief and had to swap it.
-
-3. **Checks run:**
-   - **Useful:** the probes for map `drain`, the copy view and the C1c shape; `git merge-tree` for the K3b cherry-pick; `check-adr-refs.py`; `pre-push-check.sh`; the search of recent issues for b28's defect.
-   - **Wasted:** the broad `grep -r` (it timed out), my first probe written in wrong syntax, and the `print` newline test.
-
-4. **The one change that would save the most:** a *Probing* section in `docs/builder-facts.md`, also read by the architect. It would hold a correct probe skeleton, the binary path (`target/fast/nikaia`, which is not on PATH), and where `std` signatures and the ADR index live. That alone would have saved about eight turns.
+1. **Most turns:** working out whether the RED in `architect-input.txt` was still live. The input named only 05fffc84 and the job. I had to compare the CI runs for `develop` and `ci/briefs`, list their jobs, and find out whether QA had already fixed it. QA had, and `ci/briefs` was green at fb4c04b6. That took about 4 of my roughly 12 calls.
+2. **What I looked up that the brief could have handed me:**
+   - The right QA report. I first read the old `docs/briefs/qa-task.md.report.md`, which talks about ADR-384. The current one is `docs/briefs/qa/qa-task.md.report.md`.
+   - Whether the batch had run. It had not: there was no K3b run 3 report and no C1c report.
+   - Whether b28's Found was already filed. It was, as #1124, which I found by searching the open issues.
+   - Whether 707d5e53 still applied cleanly on the new HEAD.
+   - I needed no ADRs, language rules or converter facts.
+3. **Checks:**
+   - Useful: the CI runs and jobs; `git log --since` over the reports; the `Found`/`Result` lines of the new reports; the #1124 body; the `merge-tree` check of 707d5e53; checking where `origin/develop` stood after the push.
+   - Wasted: reading the old QA report; listing the bug-brief numbers, since I wrote no bug brief; grepping the K3b brief for its turn limit; checking which branches held 4001fe0b.
+4. **The change that would have saved the most:** when QA has fixed the red, the driver should say so in `architect-input.txt`. That means the QA commit, the green CI run's sha, the batch briefs still unrun, and the paths of the new reports, the QA report included. The task should then say: "red already fixed and batch unrun → keep `batch.txt`, file new Founds, report." The run would then take 3–4 calls.
