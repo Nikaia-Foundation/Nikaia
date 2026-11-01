@@ -20,10 +20,10 @@ row stops the move until its issue is decided and built.
 
 | Rust form | Today (probe 2026-10-29) | Class | Written instead |
 | :--- | :--- | :--- | :--- |
-| `map.entry(k).or_insert(..)` | works on `HashMap`; NK1171 on `BTreeMap` | decided, ADR-collections-1 (#950 `ready`) | nothing until #950 is built; `HashMap::entry` as it is |
+| `map.entry(k).or_insert(..)` | works on `HashMap` and `BTreeMap` (#950 built) | not a gap | `entry`; get-clone-insert is debt (#953) |
 | `opt.as_mut()` on a `T?` | NK1125 | design, ADR-382: narrow, then write (`if o != null { o.n = 2 }`, lowered as `as_mut().unwrap()`) | the narrowed write; the old `?.clone()`, change, write back is debt (#953) |
 | `map.get_mut(k)` | NK1171 | design, ADR-282 D7 (#816): `let mut c = m[k] ?? continue` is a mutable view; `m.get(k)` there is defect #952 | the mutable view; P5b's get-clone-insert is debt (#953) |
-| `std::mem::take(&mut place)` | NK1181; NK1131 for a part of a `let mut` view | decided, ADR-views-1 (#949 `ready`) | nothing until #949 is built |
+| `std::mem::take(&mut place)` | works as ADR-views-1 says (#949 built): a part of a `mut` parameter or `let mut` view is taken by what keeps it and given back before the block is left; `std::mem` itself stays NK1181 | design, ADR-views-1 | hand the part over, assign it again |
 | `a.into_iter().zip(b)` | works (`Seq::zip`, ADR-293 D20) | not a gap | `zip`; P5b's index loop is debt (#953) |
 | `s[..16]` on text | NK1214 | design, Part I 2.6 | `s.scalars.take(16).collect()` or `s.bytes[0..<16].text()` |
 | `m.values_mut()`, `m.iter_mut()` on a map; `let (a, mut b) = …` | `NK1307` | not decided yet: refused now, possible later (ADR-views-2 section 6) | a map's value changed by key, `m[k]`, over keys taken before the loop; `let mut (a, b) = …`. A move that needs more stops (`Result: blocked`) |
