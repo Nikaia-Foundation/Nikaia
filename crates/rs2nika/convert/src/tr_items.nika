@@ -506,21 +506,22 @@ impl TrEm {
         return self.world != "" && self.prefix != ""
     }
 
-    /// Whether this file declares the struct `ty` (an enum keeps its
-    /// methods, as tools/*.nika do).
-    fn struct_here(ref self, ty: ref String) -> bool {
+    /// Whether the methods of `ty` are freed: every type but an enum this
+    /// file declares (an enum keeps its methods, as tools/*.nika do). The
+    /// struct may stay Rust, outside the cut.
+    fn frees_type(ref self, ty: ref String) -> bool {
         for i in 0..<self.t.nodes.len() {
-            if self.t.nodes[i].kind == "STRUCT" && self.t.name_of(i) == ty {
-                return true
+            if self.t.nodes[i].kind == "ENUM" && self.t.name_of(i) == ty {
+                return false
             }
         }
-        return false
+        return true
     }
 
-    /// Whether this file's `impl ty` (not of a trait) of a struct it
-    /// declares has a function `name`.
+    /// Whether this file's `impl ty` (not of a trait) of a type
+    /// whose methods are freed has a function `name`.
     fn impl_has(ref mut self, ty: ref String, name: ref String) -> bool {
-        if !self.struct_here(ty) {
+        if !self.frees_type(ty) {
             return false
         }
         for i in 0..<self.t.nodes.len() {
@@ -579,7 +580,7 @@ impl TrEm {
         self.state_impl = state
         // a `-free` profile with a prefix: every method is a free function
         // over the value (`manifest_notes(manifest: ref Manifest)`)
-        let free = !state && self.frees_impls() && !self.t.has_tok(n, "FOR_KW") && self.struct_here(self.self_ty)
+        let free = !state && self.frees_impls() && !self.t.has_tok(n, "FOR_KW") && self.frees_type(self.self_ty)
         let saved_free = self.free_impl
         let saved_var = self.self_var.clone()
         let saved_fns = self.impl_fns.clone()
