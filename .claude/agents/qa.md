@@ -25,7 +25,7 @@ you too where this file says nothing else.
   says so.
 * **Cheap checks, as a builder's**: rerun exactly the failing tests and the
   ones your fix touches, `cargo fmt`, clippy when Rust changed,
-  `scripts/pre-push-check.sh`. Do not run the full suite: the driver runs it
+  `nikaia run scripts/pre-push.nika`. Do not run the full suite: the driver runs it
   again after you.
 * **Commit locally with the script, no push**, as a builder (`Files:`,
   `Commit:` in your report, `scripts/commit.nika -- REPORT`). Several

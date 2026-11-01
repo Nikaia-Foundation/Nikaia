@@ -83,7 +83,7 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   an answered question - is closed by hand, with the reason.
 * **Builders commit, the driver tests and pushes** (owner, 2026-10-31). A
   builder or QA agent started by `scripts/drive.nika` commits locally after
-  cheap checks (build, touched tests, fmt, clippy, `pre-push-check.sh`) and
+  cheap checks (build, touched tests, fmt, clippy, `scripts/pre-push.nika`) and
   never pushes. The driver runs the complete suite once per batch: when the
   batch ends it starts it on HEAD in the background beside the architect and
   waits for it before the next batch's first builder (one at a time per

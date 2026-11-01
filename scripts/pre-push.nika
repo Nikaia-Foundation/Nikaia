@@ -1,0 +1,45 @@
+// The fast gates CI runs first; seconds, no build. Run before each commit and
+// before a push.
+//
+//     nikaia run scripts/pre-push.nika
+//
+// `cargo fmt --check`, the ADR citations (`check-adr-refs.py`; ca6ae08 cited a
+// decision not yet written and kept develop red an hour), the README's badges
+// (`badges.py --check`) and the version lines (`bump.py check`). Prints one
+// line per check, `<check> green` or `<check> red` with its output, and exits 1
+// when one is red (`index` red: the copy could not be written).
+//
+// The first three run on a copy of the index (`git checkout-index` into
+// target/pre-push-*), not on the working tree: the shared tree holds other
+// agents' unfinished files, and the self-hosted badge counted them, so the
+// check was green here and red on CI for the same commit (2026-11-01). What is
+// staged is what the next commit holds; with nothing staged it is HEAD.
+// `bump.py check` reads git itself and runs in the checkout.
+
+use std::process
+
+fn check(name: String, cmd: String, args: Vec[String], dir: String) -> bool throws {
+    let out = process::run(cmd, args; dir: dir)
+    if out.code == 0 {
+        println(f"{name} green")
+        return true
+    }
+    println(f"{name} red")
+    println(out.stdout.trim_end())
+    println(out.stderr.trim_end())
+    return false
+}
+
+fn main() throws {
+    process::run("mkdir", ["-p", "target"])
+    let copy = process::run("mktemp", ["-d", "target/pre-push-XXXXXX"]).stdout.trim().clone()
+    let mut ok = check("index", "git", ["checkout-index", "-a", f"--prefix={copy}/"], ".")
+    if ok {
+        ok = check("fmt", "cargo", ["fmt", "--all", "--", "--check"], copy.clone())
+        ok = check("adr-refs", "python3", ["scripts/check-adr-refs.py"], copy.clone()) && ok
+        ok = check("badges", "python3", ["scripts/badges.py", "--check"], copy.clone()) && ok
+    }
+    process::run("rm", ["-rf", copy])
+    ok = check("version", "python3", ["scripts/bump.py", "check"], ".") && ok
+    if !ok { process::exit(1) }
+}

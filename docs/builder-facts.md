@@ -2,7 +2,7 @@
 
 Fixed facts a builder otherwise looks up itself (counted over 48 builder runs,
 2026-10-25: median 2, up to 19 `grep -r` calls per run to find where a name is
-defined; four `pre-push-check` failures on the same badge; seven runs puzzled by
+defined; four `pre-push` failures on the same badge; seven runs puzzled by
 the same dirty lock file). Read once; the brief adds only what is specific.
 
 ## Red on develop now
@@ -70,9 +70,12 @@ not make your gate red: report `Gate: green` and the figure under `Tests:`.
 * `nikaia test` has no name filter: write its whole output to a file (`> out.txt 2>&1`) and grep that, never `| tail` (b933 ran `tests/compiler` a second time, 10 minutes, to find one test's line).
 * `tests/compiler/nikaia.lock` is git-ignored, like the other test
   packages' locks (it changes with every compiler build). Never commit it.
-* `scripts/pre-push-check.sh` fails with *out of date: self-hosted.svg* when a
-  `.nika` changed the self-hosting share: run `python3 scripts/badges.py` and
-  add `assets/badges/self-hosted.svg` to `Files:` (the only badge you touch).
+* `scripts/pre-push.nika` fails with *out of date: self-hosted.svg* when a
+  `.nika` changed the self-hosting share: regenerate it from what you commit,
+  not from the shared tree (other agents' files count there): `git
+  checkout-index -a --prefix=target/badge/`, `python3 scripts/badges.py` in
+  that copy, copy its `assets/badges/self-hosted.svg` back and add it to
+  `Files:` (the only badge you touch).
 * `cargo test ... --test it -- a:: b::`: the `--` before the filters is needed.
 * `export A=1 && S=x cmd &` sends the whole chain to the background, and the
   output is lost (P4b ran clippy and its tests twice): put the `&` on `cmd` alone.

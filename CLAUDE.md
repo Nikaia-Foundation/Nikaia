@@ -14,7 +14,8 @@ The rules every session and agent needs. What only the main session does
   change touches, `cargo clippy --all-targets -- -D warnings` (a lint in a
   lowered file is allowed on the `tools` module in
   `crates/nikaia-std/src/lib.rs`, not fixed in the file) and
-  `scripts/pre-push-check.sh` (fmt, badges, version). Never the full suite.
+  `nikaia run scripts/pre-push.nika` (fmt, ADR citations, badges, version, on
+  what is staged, not the working tree). Never the full suite.
   Small commits, often.
 * **Agents commit, the supervisor pushes.** A builder, QA agent or architect
   commits locally; the driver or the main session tests and pushes

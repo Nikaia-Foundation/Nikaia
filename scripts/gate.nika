@@ -14,7 +14,7 @@
 // rewrites a lowered file whose `.nika` is as committed, and when it changes a
 // lowered file, build and lower-std again, which must change nothing more: the
 // fixpoint), `fmt` (cargo fmt --check), `clippy` (--all-targets, -D
-// warnings), `pre-push` (scripts/pre-push-check.sh), `test` (`nikaia test
+// warnings), `pre-push` (scripts/pre-push.nika), `test` (`nikaia test
 // --both-settings` on the touched tests of tests/compiler, copied into a
 // project of their own under target/; the whole package when the checker or
 // the emitter changed) and `guards` (the repository-wide scans of `it`).
@@ -321,8 +321,8 @@ fn gate_step(step: String, dry: bool, tools: bool, whole: bool, kept: Vec[String
         return gate_run("cargo", ["clippy", "--all-targets", "--message-format", "short", "--", "-D", "warnings"])
     }
     if step == "pre-push" {
-        if dry { return "would run: scripts/pre-push-check.sh" }
-        return gate_run("scripts/pre-push-check.sh", [])
+        if dry { return "would run: nikaia run scripts/pre-push.nika" }
+        return gate_run("target/fast/nikaia", ["run", "scripts/pre-push.nika"])
     }
     if step == "test" {
         if all { return gate_test_all(dry) }

@@ -75,7 +75,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   Before committing: the build (`cargo build --profile fast -p nikaia`),
   `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt`,
   `cargo clippy --all-targets -- -D warnings` when Rust changed, and
-  `scripts/pre-push-check.sh`. No `gate.nika`, no push: after your commit the
+  `nikaia run scripts/pre-push.nika`. No `gate.nika`, no push: after your commit the
   driver runs the complete suite (`gate.nika --all`); green, it pushes; red,
   a QA agent gets your brief and report and fixes forward. So your report
   must say plainly what you changed and why: it is what QA reads. A guard
