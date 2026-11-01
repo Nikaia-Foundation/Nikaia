@@ -200,12 +200,11 @@ impl CheckState {
             if inner.is_unknown() {
                 continue
             }
-            if !the_plain_type_agrees(plain, inner) {
-                return null
-            }
-            if plain == null {
-                plain = inner
-            }
+            // **Arms meet where each is known** (`the_types_meet_with_holes`):
+            // `if found { [] } else { null }` beside a `Vec[String]` is a
+            // `Vec[String]?`, its `[]` of no known element yet.
+            let seen: Ty = plain ?? Ty::Unknown
+            plain = the_types_meet_with_holes(seen, inner) ?? return null
         }
         if literals {
             if !the_plain_type_agrees(plain, text) {

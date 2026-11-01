@@ -1,0 +1,16 @@
+// An arm of type `Vec[?]?` beside an arm of type `Vec[i64]`: the arms meet
+// where each is known, a `Vec[i64]?`, and the plain arm is wrapped.
+fn path_to(n: i64) -> Vec[i64]? sync {
+    return match n {
+        0 => if n == 0 { [] } else { null },
+        else => {
+            let mut path = path_to(n - 1) ?? return null
+            path.push(n)
+            path
+        },
+    }
+}
+
+fn main() {
+    println(f"{path_to(3)?.len() ?? 0}")
+}

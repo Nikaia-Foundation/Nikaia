@@ -124,8 +124,8 @@ impl CheckState {
             let inner = the_type_inside(&arm.ty);
             if arm.tail.is_none() { return None; }
             if inner.is_unknown() { continue; }
-            if !the_plain_type_agrees((plain).as_ref(), &inner) { return None; }
-            if plain.is_none() { plain = Some(inner); }
+            let seen: Ty = nikaia_std::index::or(plain, || Ty::Unknown);
+            plain = Some(match the_types_meet_with_holes(&seen, &inner) { Some(__nikaia_value) => __nikaia_value, None => return None });
         }
         if literals {
             if !the_plain_type_agrees((plain).as_ref(), &text) { return None; }
