@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1332] — 2026-11-01
+
+**self-hosting: the prover's run moves into prove_run.nika (#125)**
+- Part of `prove.rs` (535 to 326 lines) is `prove_run.nika`; `model_of` stays in Rust until #1092.
+
 ## [0.0.1331] — 2026-11-01
 
 **self-hosting: proofs.rs's answers move into proofs_answers.nika (#125)**
