@@ -253,7 +253,8 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn parts_taken_out_of_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, body: &Expr, subject: &Ty, parts: &collections::BTreeMap<String, Ty>, handed_from: i64) {
+    #[allow(clippy::too_many_arguments)]
+    pub fn parts_taken_out_of_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, body: &Expr, subject: &Ty, parts: &collections::BTreeMap<String, Ty>, handed_from: i64, from: i64) {
         for repeat in self.repeats.iter() { if repeat.what == "lambda" { return; } }
         if self.scope.is_empty() { return; }
         let frame = (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(self.scope.len() as i64 - 1))).to_owned();
@@ -276,7 +277,7 @@ impl CheckState {
             }
             if at >= self.handed.len() as i64 { continue; }
             any = true;
-            self.parts_out.push(CheckPartOut { subject: path.to_string(), part: part.to_string(), binding, handed: at, view: String::from(""), frame: -1, ends: -1 });
+            self.parts_out.push(CheckPartOut { subject: path.to_string(), part: part.to_string(), binding, handed: at, view: String::from(""), frame: -1, ends: -1, from, choices: self.branch.to_owned() });
         }
         if !any { return; }
         let node = id_of(body) as i64;

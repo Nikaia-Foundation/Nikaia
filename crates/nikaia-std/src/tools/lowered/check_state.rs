@@ -98,6 +98,8 @@ pub struct CheckPartOut {
     pub view: String,
     pub frame: i64,
     pub ends: i64,
+    pub from: i64,
+    pub choices: Vec<(i64, i64)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

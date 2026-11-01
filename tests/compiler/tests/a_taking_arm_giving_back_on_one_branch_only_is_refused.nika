@@ -1,0 +1,27 @@
+// #1140: a taking arm that gives the parts back on one branch only leaves
+// the stand-in in the parameter on the other: refused.
+
+enum Shape {
+	Dot(i64),
+	Pair { left: String, right: String, id: i64 },
+}
+
+fn swap(mut s: Shape, hit: bool) {
+	match s {
+		Shape::Pair { left, right, id } => {
+			if hit {
+				s = Shape::Pair { left: right, right: left, id: id }
+			}
+		},
+		else => {},
+	}
+}
+
+fn main() {
+	let mut s = Shape::Pair { left: "a", right: "b", id: 1 }
+	swap(s, false)
+	match s {
+		Shape::Pair { left, right, .. } => println(f"{left} {right}"),
+		Shape::Dot(n) => println(f"dot {n}"),
+	}
+}

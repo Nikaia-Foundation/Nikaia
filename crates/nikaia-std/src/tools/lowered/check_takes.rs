@@ -235,7 +235,7 @@ impl CheckState {
             view = self.a_view_described(root);
             frame = self.frame_of(root);
         }
-        self.parts_out.push(CheckPartOut { subject: root.to_string(), part: path.to_string(), binding: local.id, handed, view, frame, ends: -1 });
+        self.parts_out.push(CheckPartOut { subject: root.to_string(), part: path.to_string(), binding: local.id, handed, view, frame, ends: -1, from: -1, choices: vec![] });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -328,24 +328,35 @@ impl CheckState {
             if out.handed < 0 || out.handed >= self.handed.len() as i64 { continue; }
             let taken = (*nikaia_std::index::get(&self.handed, nikaia_std::index::at(out.handed))).clone();
             if nikaia_std::index::or(taken.binding, || -1) != out.binding { continue; }
+            let mut from = taken.from;
+            let mut seq = taken.seq;
+            let mut taking_choices = taken.choices.to_owned();
+            if out.from >= 0 {
+                from = out.from;
+                seq = 0;
+                taking_choices = out.choices.to_owned();
+            }
             let mut ends: i64 = 9223372036854775807i64;
             if out.ends >= 0 { ends = out.ends; }
             let mut ahead: Vec<(i64, i64, i64)> = vec![];
             for at in 0..ways.len() as i64 {
                 let way = (*nikaia_std::index::get(&ways, (at) as usize)).clone();
-                let after = way.at > taken.from || way.at == taken.from && way.seq >= taken.seq;
+                let after = way.at > from || way.at == from && way.seq >= seq;
                 let before_the_end = (taken.until.is_none() || way.at < nikaia_std::index::or(taken.until, || 0)) && way.at < ends;
                 let a_jump = way.how == "break" || way.how == "continue";
                 let leaves = !a_jump || out.frame >= 0 && way.loop_frame >= 0 && way.loop_frame <= out.frame;
-                if after && leaves && !choices_apart(&taken.choices, &way.choices) && before_the_end { ahead.push((way.at, way.seq, at)); }
+                if after && leaves && !choices_apart(&taking_choices, &way.choices) && before_the_end { ahead.push((way.at, way.seq, at)); }
             }
             if taken.until.is_none() { ahead.push((ends, 0, -1)); }
             let places = by_position(&ahead);
             for position in places.iter() {
                 let mut choices: Vec<(i64, i64)> = vec![];
                 if position.2 >= 0 { choices = nikaia_std::index::get(&ways, nikaia_std::index::at(position.2)).choices.to_owned(); }
-                let mut given_back = false;
-                for give in gives.iter() { if give.at >= taken.from && give.at < position.0 && (a_path_revives(&give.path, &out.subject) || give.path == out.part) && every_choice_held(&give.choices, &taken.choices, &choices) { given_back = true; } }
+                let mut held: Vec<Vec<(i64, i64)>> = vec![];
+                for give in gives.iter() { if give.at >= from && give.at < position.0 && (a_path_revives(&give.path, &out.subject) || give.path == out.part) { held.push(give.choices.to_owned()); } }
+                let mut base = taking_choices.to_owned();
+                base.extend(choices);
+                let given_back = gives_cover(&held, &base, &self.flow.choice_arms);
                 if given_back { continue; }
                 let mut found: i64 = -1;
                 for r in 0..reports.len() as i64 { if found < 0 && nikaia_std::index::get(&reports, (r) as usize).subject == out.subject && nikaia_std::index::get(&reports, (r) as usize).at == position.0 && nikaia_std::index::get(&reports, (r) as usize).seq == position.1 { found = r; } }
@@ -456,6 +467,29 @@ pub(crate) fn by_position(ahead: &[(i64, i64, i64)]) -> Vec<(i64, i64, i64)> {
         out.insert(nikaia_std::count::of(spot), item.clone());
     }
     out
+}
+
+pub(crate) fn gives_cover(gives: &[Vec<(i64, i64)>], base: &[(i64, i64)], arms: &collections::BTreeMap<i64, i64>) -> bool {
+    for give in gives.iter() { if every_choice_held(give, base, &vec![]) { return true; } }
+    let mut tried: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    for give in gives.iter() {
+        for one in give.iter() {
+            if base.iter().any(|b| { b.0 == one.0 }) || tried.contains(&one.0) { continue; }
+            tried.insert(one.0);
+            let count = match arms.get(&one.0) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
+            let mut every = true;
+            for k in 0..count {
+                let mut deeper = base.to_owned();
+                deeper.push((one.0, k));
+                if !gives_cover(gives, &deeper, arms) {
+                    every = false;
+                    break;
+                }
+            }
+            if every { return true; }
+        }
+    }
+    false
 }
 
 pub(crate) fn every_choice_held(given: &[(i64, i64)], taking: &[(i64, i64)], way: &[(i64, i64)]) -> bool {

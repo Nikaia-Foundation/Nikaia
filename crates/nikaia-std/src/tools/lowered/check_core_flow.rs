@@ -305,6 +305,7 @@ pub fn check_core_flow_select<H: CheckHost>(state: &mut CheckState, world: &Chec
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_flow_else<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, cond: &Expr, then_branch: &Block, then: &Ty, otherwise: &Block, choice: i64, span: &Span) -> Ty {
     state.branch.push((choice, 1));
+    state.flow.choice_arms.insert(choice, 2);
     let from = state.taken_so_far();
     let other = check_core_flow_proved_block(state, world, host, cond, false, otherwise);
     let leaves = check_core_flow_leaves(&state, world, otherwise);
@@ -987,6 +988,24 @@ pub(crate) fn check_core_flow_parts_handed_on_in_place(state: &mut CheckState, b
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_kept_in_place(state: &mut CheckState, body: &Expr, in_place: &collections::BTreeSet<i64>) {
+    let at = id_of(body) as i64;
+    if state.facts.taking_arms.contains_key(&at) { return; }
+    let frame = match match state.scope.last() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let lent: collections::BTreeSet<String> = nikaia_std::index::or(match state.facts.lent_bindings.get(&at) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeSet::new().into());
+    let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for local in frame.iter() { if in_place.contains(&local.id) && !local.lent && !lent.contains(&local.name) && !state.facts.copied_bindings.contains(&(at, local.name.to_string())) { kept.insert(local.name.to_string()); } }
+    if !kept.is_empty() { state.facts.in_place_bindings.insert(at, kept); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_changed_copies(state: &mut CheckState, body: &Expr, changed_from: i64, in_place: &collections::BTreeSet<i64>, over_a_mut_parameter: bool) {
     let at = id_of(body) as i64;
     let frame = match match state.scope.last() {
@@ -1064,10 +1083,11 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     let leaves = state.exits(world, &arm.body);
     state.a_branch_that_leaves(from, leaves, span);
     if mut_subject.is_some() {
-        state.parts_taken_out_of_a_mut_parameter(world, nikaia_std::index::or(mut_subject, || ""), &arm.body, typed, &parts, handed_from);
+        state.parts_taken_out_of_a_mut_parameter(world, nikaia_std::index::or(mut_subject, || ""), &arm.body, typed, &parts, handed_from, span.start as i64);
         check_core_flow_parts_handed_on_in_place(state, &arm.body, &in_place);
     }
     check_core_flow_changed_copies(state, &arm.body, changed_from, &in_place, mut_subject.is_some());
+    if mut_subject.is_some() && !through_the_reference { check_core_flow_kept_in_place(state, &arm.body, &in_place); }
     state.branch.pop();
     state.scope.pop();
     if state.leaves(world, &arm.body) { return None; }
@@ -1142,6 +1162,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     let mut answered: Vec<CheckArm<'_>> = vec![];
     let choice = state.flow.next_choice;
     state.flow.next_choice += 1;
+    state.flow.choice_arms.insert(choice, arms.len() as i64);
     let mut taken: i64 = 0;
     if state.discarded.contains(&(id_of(expr) as i64)) { for arm in arms.iter() { check_core_flow_arm_discarded(state, &arm.body); } }
     for arm in arms.iter() {

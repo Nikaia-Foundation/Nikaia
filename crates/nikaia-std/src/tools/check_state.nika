@@ -207,6 +207,11 @@ pub struct CheckPartOut {
     /// Where the view's block ends, -1 until it has (and for a parameter,
     /// whose block is the function's).
     pub ends: i64,
+    /// **Where an arm took the part out** (#1140): an arm that takes the
+    /// parts takes them all where it opens, under its own choices, wherever
+    /// it hands one on; -1 where the hand-over took it.
+    pub from: i64,
+    pub choices: Vec[(i64, i64)],
 }
 
 /// **An assignment**, where it stands: what gives a part back.

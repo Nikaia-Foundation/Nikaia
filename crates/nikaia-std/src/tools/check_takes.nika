@@ -389,7 +389,7 @@ impl CheckState {
             view = self.a_view_described(root)
             frame = self.frame_of(root)
         }
-        self.parts_out.push(CheckPartOut { subject: root.clone(), part: path.clone(), binding: local.id, handed: handed, view: view, frame: frame, ends: -1 })
+        self.parts_out.push(CheckPartOut { subject: root.clone(), part: path.clone(), binding: local.id, handed: handed, view: view, frame: frame, ends: -1, from: -1, choices: [] })
     }
 
     /// Every taking whose name is read again: `NK2105`, said once per site.
@@ -548,6 +548,16 @@ impl CheckState {
             if (taken.binding ?? -1) != out.binding {
                 continue
             }
+            // **An arm's parts are out from where the arm opens** (#1140), so
+            // a give-back under a choice of its own holds on that branch only.
+            let mut from = taken.from
+            let mut seq = taken.seq
+            let mut taking_choices = taken.choices.clone()
+            if out.from >= 0 {
+                from = out.from
+                seq = 0
+                taking_choices = out.choices.clone()
+            }
             // The ways out after the taking, as (at, seq, index in `ways`), and
             // the end of the function (-1) unless the arm left. **A view's
             // ways out are its block's** (ADR-views-1 D2): its end, and a
@@ -559,11 +569,11 @@ impl CheckState {
             let mut ahead: Vec[(i64, i64, i64)] = []
             for at in 0..<ways.len() {
                 let way = ways[at].clone()
-                let after = way.at > taken.from || (way.at == taken.from && way.seq >= taken.seq)
+                let after = way.at > from || (way.at == from && way.seq >= seq)
                 let before_the_end = (taken.until == null || way.at < (taken.until ?? 0)) && way.at < ends
                 let a_jump = way.how == "break" || way.how == "continue"
                 let leaves = !a_jump || (out.frame >= 0 && way.loop_frame >= 0 && way.loop_frame <= out.frame)
-                if after && leaves && !choices_apart(taken.choices, way.choices) && before_the_end {
+                if after && leaves && !choices_apart(taking_choices, way.choices) && before_the_end {
                     ahead.push((way.at, way.seq, at))
                 }
             }
@@ -576,12 +586,17 @@ impl CheckState {
                 if position.2 >= 0 {
                     choices = ways[position.2].choices.clone()
                 }
-                let mut given_back = false
+                // **The gives on every branch of a choice give it back
+                // together** (#1140): `if c { e = A } else { e = B }`.
+                let mut held: Vec[Vec[(i64, i64)]] = []
                 for give in gives {
-                    if give.at >= taken.from && give.at < position.0 && (a_path_revives(give.path, out.subject) || give.path == out.part) && every_choice_held(give.choices, taken.choices, choices) {
-                        given_back = true
+                    if give.at >= from && give.at < position.0 && (a_path_revives(give.path, out.subject) || give.path == out.part) {
+                        held.push(give.choices.clone())
                     }
                 }
+                let mut base = taking_choices.clone()
+                base.extend(choices)
+                let given_back = gives_cover(held, base, self.flow.choice_arms)
                 if given_back {
                     continue
                 }
@@ -733,6 +748,41 @@ fn by_position(ahead: ref Vec[(i64, i64, i64)]) -> Vec[(i64, i64, i64)] {
         out.insert(spot, item.clone())
     }
     return out
+}
+
+// Whether the assignments, by the choices each stands under, give a part back
+// on every run that stands under `base`: one stands under no choice outside it,
+// or every branch of one choice they name is covered so in its turn (#1140).
+// Only a choice every run takes a branch of counts (`choice_arms`).
+fn gives_cover(gives: ref Vec[Vec[(i64, i64)]], base: ref Vec[(i64, i64)], arms: ref collections::BTreeMap[i64, i64]) -> bool {
+    for give in gives {
+        if every_choice_held(give, base, []) {
+            return true
+        }
+    }
+    let mut tried: collections::BTreeSet[i64] = collections::BTreeSet()
+    for give in gives {
+        for one in give {
+            if base.iter().any(fn(b) { b.0 == one.0 }) || tried.contains(one.0) {
+                continue
+            }
+            tried.insert(one.0)
+            let count = arms.get(one.0) ?? continue
+            let mut every = true
+            for k in 0..<count {
+                let mut deeper = base.clone()
+                deeper.push((one.0, k))
+                if !gives_cover(gives, deeper, arms) {
+                    every = false
+                    break
+                }
+            }
+            if every {
+                return true
+            }
+        }
+    }
+    return false
 }
 
 // Whether every choice an assignment stands under is one the taking stood under

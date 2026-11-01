@@ -394,7 +394,7 @@ impl CheckState {
     /// handed it to something that keeps it. **And the arm that does is told to
     /// the emitter** (#576): it works on the value taken out of the place, and
     /// writes the whole back.
-    pub fn parts_taken_out_of_a_mut_parameter(ref mut self, world: ref CheckWorld, path: ref String, body: ref Expr, subject: ref Ty, parts: ref collections::BTreeMap[String, Ty], handed_from: i64) sync {
+    pub fn parts_taken_out_of_a_mut_parameter(ref mut self, world: ref CheckWorld, path: ref String, body: ref Expr, subject: ref Ty, parts: ref collections::BTreeMap[String, Ty], handed_from: i64, from: i64) sync {
         for repeat in self.repeats {
             if repeat.what == "lambda" {
                 return
@@ -426,7 +426,7 @@ impl CheckState {
                 continue
             }
             any = true
-            self.parts_out.push(CheckPartOut { subject: path.clone(), part: part.clone(), binding: binding, handed: at, view: "", frame: -1, ends: -1 })
+            self.parts_out.push(CheckPartOut { subject: path.clone(), part: part.clone(), binding: binding, handed: at, view: "", frame: -1, ends: -1, from: from, choices: self.branch.clone() })
         }
         if !any {
             return

@@ -1,0 +1,9 @@
+error[NK2108]: `s` is left without `left` and `right`: it was taken out and never given back.
+   --> tests/a_taking_arm_giving_back_on_one_branch_only_is_refused.nika:13:23
+    |
+ 13 | 				s = Shape::Pair { left: right, right: left, id: id }
+    |                       ^^^^ taken out here and not given back
+    |
+    = note: `s` is a `mut` parameter, so it is the caller's and is whole whenever the caller can see it. `left` was stored in `Shape::Pair.right`, and nothing has put it back.
+    = help: Assign `s` (or the part) before the function is left, or build the value by value with `fn f(s: T) -> T`.
+

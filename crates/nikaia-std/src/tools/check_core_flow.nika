@@ -364,6 +364,7 @@ pub fn check_core_flow_select[H: CheckHost](mut state: CheckState, world: ref Ch
 /// The `else` of an `if`, and what the two branches come to.
 fn check_core_flow_else[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, cond: ref Expr, then_branch: ref Block, then: ref Ty, otherwise: ref Block, choice: i64, span: ref Span) -> Ty sync {
     state.branch.push((choice, 1))
+    state.flow.choice_arms.insert(choice, 2)
     let from = state.taken_so_far()
     let other = check_core_flow_proved_block(state, world, host, cond, false, otherwise)
     let leaves = check_core_flow_leaves(state, world, otherwise)
@@ -1243,6 +1244,28 @@ fn check_core_flow_parts_handed_on_in_place(mut state: CheckState, body: ref Exp
     state.facts.reborrowed_args.extend(handed)
 }
 
+/// **A part an arm keeps in place out of a field of a `mut` parameter**
+/// (#1139): `match h.node` is a place, not a reference as `match h` is, so a
+/// part neither copied nor lent nor taken out is bound `ref mut`, the `&mut`
+/// of the part the arm changes in place.
+fn check_core_flow_kept_in_place(mut state: CheckState, body: ref Expr, in_place: ref collections::BTreeSet[i64]) sync {
+    let at = id_of(body) as i64
+    if state.facts.taking_arms.contains_key(at) {
+        return
+    }
+    let frame = state.scope.last()?.clone() ?? return
+    let lent: collections::BTreeSet[String] = state.facts.lent_bindings.get(at)?.clone() ?? collections::BTreeSet()
+    let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
+    for local in frame {
+        if in_place.contains(local.id) && !local.lent && !lent.contains(local.name) && !state.facts.copied_bindings.contains((at, local.name.clone())) {
+            kept.insert(local.name.clone())
+        }
+    }
+    if kept.len() > 0 {
+        state.facts.in_place_bindings.insert(at, kept)
+    }
+}
+
 /// **A part copied out that the arm changes** (#730, Part I 3.4): a number
 /// the arm changes, or hands to a `mut` parameter, changes the arm's copy, so
 /// the copy is opened `mut`.
@@ -1355,12 +1378,15 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let leaves = state.exits(world, arm.body)
     state.a_branch_that_leaves(from, leaves, span)
     if mut_subject != null {
-        state.parts_taken_out_of_a_mut_parameter(world, mut_subject ?? "", arm.body, typed, parts, handed_from)
+        state.parts_taken_out_of_a_mut_parameter(world, mut_subject ?? "", arm.body, typed, parts, handed_from, span.start as i64)
         check_core_flow_parts_handed_on_in_place(state, arm.body, in_place)
     }
     // After the taking is known: an arm that takes the parts out binds them by
     // value, so one it changes is opened `mut` (#734).
     check_core_flow_changed_copies(state, arm.body, changed_from, in_place, mut_subject != null)
+    if mut_subject != null && !through_the_reference {
+        check_core_flow_kept_in_place(state, arm.body, in_place)
+    }
     state.branch.pop()
     state.scope.pop()
     if state.leaves(world, arm.body) {
@@ -1470,6 +1496,7 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     let mut answered: Vec[CheckArm] = []
     let choice = state.flow.next_choice
     state.flow.next_choice += 1
+    state.flow.choice_arms.insert(choice, arms.len() as i64)
     let mut taken = 0
     if state.discarded.contains(id_of(expr) as i64) {
         for arm in arms {

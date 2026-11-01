@@ -180,6 +180,10 @@ pub struct CheckFlow {
     pub last_lambda_returns: Vec[CheckLambdaReturn],
     /// The next number to give a choice: one per `if` and per `match`.
     pub next_choice: i64,
+    /// **The choices one of whose branches every run takes**, by number:
+    /// how many branches (#1140). A `match`, and an `if` with an `else`; an
+    /// `if` without one is not here, its other way is to go past it.
+    pub choice_arms: collections::BTreeMap[i64, i64],
     /// Which read an expression is, by the expression's id (ADR-293 D1).
     pub read_index: collections::BTreeMap[(i64, i64), i64],
     /// `??`s that may lend their left side (ADR-279 D5).
@@ -378,6 +382,7 @@ impl CheckFlow {
             lambda_returns: Vec(),
             last_lambda_returns: Vec(),
             next_choice: 0,
+            choice_arms: collections::BTreeMap(),
             read_index: collections::BTreeMap(),
             pending_coalesces: Vec(),
             writing_index: false,

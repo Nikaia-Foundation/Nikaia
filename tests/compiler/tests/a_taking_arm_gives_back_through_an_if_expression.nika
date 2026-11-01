@@ -1,0 +1,32 @@
+// #1140: an `if` expression assigned back gives the parts back on both
+// branches.
+
+enum Shape {
+	Dot(i64),
+	Pair { left: String, right: String, id: i64 },
+}
+
+fn swap(mut s: Shape, hit: bool) {
+	match s {
+		Shape::Pair { left, right, id } => {
+			s = if hit { Shape::Pair { left: right, right: left, id: id } } else {
+				Shape::Pair { left: left, right: right, id: id }
+			}
+		},
+		else => {},
+	}
+}
+
+fn main() {
+	let mut s = Shape::Pair { left: "a", right: "b", id: 1 }
+	swap(s, true)
+	match s {
+		Shape::Pair { left, right, .. } => println(f"{left} {right}"),
+		Shape::Dot(n) => println(f"dot {n}"),
+	}
+	swap(s, false)
+	match s {
+		Shape::Pair { left, right, .. } => println(f"{left} {right}"),
+		Shape::Dot(n) => println(f"dot {n}"),
+	}
+}
