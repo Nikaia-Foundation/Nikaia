@@ -172,7 +172,7 @@ read. `events` walks `documents`; an event's line form is the package's own
 function, not the caller's.
 
 A scalar keeps how it was written whatever it resolves to (architect,
-2026-10-31, y21's report; *Language decisions* of `docs/architect.md`: D6
+2026-10-31, y21's report; *Language decisions* of `docs/supervisor.md`: D6
 already says the tree is the text as written, and D7's `flow` set the form).
 `~`, `NULL` and `null` are one `Value::Null`, `True` and `true` one
 `Value::Bool(true)`, and `!!int "1"` an `Value::Int` with no quotes; the

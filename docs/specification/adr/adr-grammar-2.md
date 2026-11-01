@@ -153,7 +153,7 @@ fn wire_name(f: meta::Field) -> String? {
 
 The package writes it once; its grammar and its `write` use it (ADR-331 D6).
 
-*Amended by the architect on 2026-10-31 (`docs/architect.md`, Language
+*Amended by the architect on 2026-10-31 (`docs/supervisor.md`, Language
 decisions: obvious): the parameter's type, left out above until then, is
 `meta::Field`, the reflected field's type, which ADR-329 already names. A
 parameter of that type is `comptime` by its type, copied per field as
