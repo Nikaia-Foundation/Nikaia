@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1339] — 2026-11-01
+
+**a variant part of code keeps its lambda; a text field asked of a list of text compares as text (#125)**
+- Fixed: a variant part of code built from a lambda or a named function is kept as code (`St::Ex("a", fn(x) { x + 1 })` lowered to a bare closure where kept code was expected).
+- Fixed: a text field passed to `contains` on a list, array or slice of text compares as text (it lowered to a mismatch of `&String` and `&'static str`).
+- Open: a lambda parameter cannot be `mut`; a typed lambda parameter (`fn(k: ref String) -> bool { … }`) does not parse.
+
 ## [0.0.1338] — 2026-11-01
 
 **a part handed to a mut parameter is lent; parts a taking arm takes out of a mut parameter change in place (#125)**
