@@ -1,0 +1,30 @@
+// A part of a `for mut` element handed to a `mut` parameter is lent to it,
+// even where its type has no stand-in (a generic struct; an enum another
+// file declares): the walk changes it in place.
+struct Wrap[T] {
+	inner: T,
+}
+
+struct Spot {
+	node: Wrap[Vec[i64]],
+	at: i64,
+}
+
+fn grow(mut w: Wrap[Vec[i64]]) sync {
+	w.inner.push(7)
+}
+
+fn walk(mut spots: Vec[Spot]) sync {
+	for mut s in spots {
+		grow(s.node)
+	}
+}
+
+fn main() {
+	let mut spots = [
+		Spot { node: Wrap { inner: [1] }, at: 0 },
+		Spot { node: Wrap { inner: [] }, at: 1 },
+	]
+	walk(spots)
+	println(f"{spots[0].node.inner.len()} {spots[1].node.inner.len()}")
+}

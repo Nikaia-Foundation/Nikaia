@@ -44,6 +44,21 @@ fn check_core_args_keepers(state: ref CheckState, callee: ref FnContract?, at: i
     return general
 }
 
+/// Whether the callee is known and its parameter at `at` is `mut`: the
+/// argument is lent to it to change in place, not given away (ADR-094 D1).
+fn check_core_args_changes(callee: ref FnContract?, at: i64) -> bool {
+    let contract = callee ?? return false
+    let signature = contract.signature ?? return false
+    let mut i = 0
+    for (name, _) in call_arguments(signature) {
+        if i == at {
+            return signature.mutable.contains(name)
+        }
+        i += 1
+    }
+    return false
+}
+
 /// Whether the callee is known and keeps nothing of the argument at `at`
 /// (ADR-094 D2): it only reads it.
 fn check_core_args_reads(callee: ref FnContract?, at: i64) -> bool {
@@ -201,7 +216,10 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     }
     if !lends {
         check_core_a_field_of_a_borrowed_subject_given(state, world, host, arg, span, "passed", check_core_args_reads(callee, at))
-        if at < expected.len() as i64 && !wants_fn && !expected[at].is_unknown() {
+        // **A part handed to a `mut` parameter is lent to it**, not given
+        // away: `walk(s.node)` over `for mut s in …`, whatever file declares
+        // the part's type.
+        if at < expected.len() as i64 && !wants_fn && !expected[at].is_unknown() && !check_core_args_changes(callee, at) {
             check_core_a_lent_place_passed(state, world, host, arg, !check_core_args_runs(callee, at), span)
         }
     }
