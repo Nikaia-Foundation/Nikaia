@@ -3,6 +3,7 @@ agent: architect
 model: opus
 max_turns: 80
 budget_usd: 25
+effort: medium
 ---
 # Task: decide the next batch (started by `scripts/drive.nika`)
 

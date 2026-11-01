@@ -1,0 +1,4 @@
+low: exit 0 low | info builder sonnet 120 20 low
+plain: exit 0 medium | info builder sonnet 120 20 medium
+huge: exit 2 ESCALATE effort huge is not low, medium or high | info builder sonnet 120 20 huge
+no ESCALATE file: true

@@ -1,0 +1,51 @@
+// scripts/agent.nika: a brief's `effort:` (low|medium|high, default medium)
+// goes to claude as `--effort` and to `--info` as its fifth word; another
+// value is refused with an ESCALATE line (owner, 2026-11-01).
+use std::fs
+use std::process
+
+// The checkout: the working directory, or (under `nikaia test`, which runs a
+// test in a directory of its own) the one `nikaia` was started in.
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/agent.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/agent.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+// The word after `--effort` in a dry run's command, or the whole output.
+fn effort_of(out: String) -> String {
+    let words = out.trim().split(" ").collect()
+    for i in 0..<words.len() {
+        if words[i] == "--effort" && i + 1 < words.len() { return words[i + 1].clone() }
+    }
+    return out.trim().clone()
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    fs::write(f"{tmp}/low.md", fs::Root::Anywhere, "---\nagent: builder\neffort: low\n---\nbody\n")
+    fs::write(f"{tmp}/plain.md", fs::Root::Anywhere, "---\nagent: builder\n---\nbody\n")
+    fs::write(f"{tmp}/huge.md", fs::Root::Anywhere, "---\nagent: builder\neffort: huge\n---\nbody\n")
+    for name in ["low", "plain", "huge"] {
+        let brief = f"{tmp}/{name}.md"
+        let dry = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", brief.clone(), "--dry-run"]; dir: repo.clone())
+        let info = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", "--info", brief.clone()]; dir: repo.clone())
+        println(f"{name}: exit {dry.code} {effort_of(dry.stdout.clone()).replace(tmp.clone(), "T")} | info {info.stdout.trim()}")
+    }
+    println(f"no ESCALATE file: {!fs::exists(f"{tmp}/ESCALATE", fs::Root::Anywhere)}")
+    process::run("rm", ["-rf", tmp])
+}

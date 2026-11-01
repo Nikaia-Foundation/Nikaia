@@ -3,6 +3,7 @@ agent: qa
 model: sonnet
 max_turns: 80
 budget_usd: 15
+effort: medium
 ---
 # Task: fix forward a red suite (started by `scripts/drive.nika`)
 

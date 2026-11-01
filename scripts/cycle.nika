@@ -3,7 +3,7 @@
 //     nikaia run scripts/cycle.nika -- DIR [--apply] [--done N]
 //
 //     CI <sha8> green|red|running|unknown
-//     NEXT <abs brief> <agent> <model> <turns> <budget> | CUT <brief>: <line> -> ARCHITECT | BATCH DONE
+//     NEXT <abs brief> <agent> <model> <turns> <budget> <effort> | CUT <brief>: <line> -> ARCHITECT | BATCH DONE
 //     RED <sha8> <jobs> -> ARCHITECT          (only when the tip is red)
 //     BUMP pending <n> changelog lines | BUMP <version> pushed | NO BUMP: <why>
 //     OWNER <n> open: <first line>            (DIR/owner.txt, one per line)

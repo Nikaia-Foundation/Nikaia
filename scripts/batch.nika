@@ -6,7 +6,7 @@
 //
 // `DIR/batch.txt` names the briefs in order, one per line. For each brief in
 // order: no report (`BRIEF.report.md` or `BRIEF` without `.md` + `.report.md`)
-// prints `NEXT <abs path of brief> <agent> <model> <turns> <budget>` (the
+// prints `NEXT <abs path of brief> <agent> <model> <turns> <budget> <effort>` (the
 // brief's frontmatter through `agent.nika --info`, defaults for a brief
 // without); a brief that does not exist prints `CUT <brief>: brief missing`;
 // no `DIR/batch.txt` prints `BATCH none (no DIR/batch.txt)`; a report whose
@@ -32,17 +32,17 @@ fn batch_field(text: String, key: String) -> String {
     return ""
 }
 
-// `agent model turns budget` of a brief, from `agent.nika --info`.
+// `agent model turns budget effort` of a brief, from `agent.nika --info`.
 fn batch_info(abs: String) -> String throws {
     for exe in ["target/fast/nikaia", "target/release/nikaia"] {
         if fs::exists(exe, fs::Root::Anywhere) {
             let out = process::run(exe, ["run", "scripts/agent.nika", "--", "--info", abs.clone()])
             let line = out.stdout.trim().clone()
-            if out.ok && line.split(" ").collect().len() == 4 { return line }
-            return "builder sonnet 120 20"
+            if out.ok && line.split(" ").collect().len() == 5 { return line }
+            return "builder sonnet 120 20 medium"
         }
     }
-    return "builder sonnet 120 20"
+    return "builder sonnet 120 20 medium"
 }
 
 fn batch_report_path(dir: String, brief: String) -> String throws {

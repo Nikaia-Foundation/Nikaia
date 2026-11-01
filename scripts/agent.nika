@@ -3,10 +3,10 @@
 //     nikaia run scripts/agent.nika -- BRIEF [--dir DIR] [--dry-run] [--claude CMD]
 //     nikaia run scripts/agent.nika -- --info BRIEF
 //
-// `--info` prints `agent model turns budget` (the frontmatter, defaults filled
-// in) on one line; `batch.nika` reads it for its `NEXT` line.
+// `--info` prints `agent model turns budget effort` (the frontmatter, defaults
+// filled in) on one line; `batch.nika` reads it for its `NEXT` line.
 //
-// Reads BRIEF's frontmatter (agent, model, max_turns, budget_usd), runs
+// Reads BRIEF's frontmatter (agent, model, max_turns, budget_usd, effort), runs
 // `claude -p` within 150 minutes (larger steps, owner 2026-10-28), writes BRIEF.run.json, appends the cost to
 // DIR/tokens.txt (through `batch.nika --tokens`) and DIR/cost.txt, and prints
 // `done <sha8> report <path> cost <usd> turns <n>`. A failed run writes
@@ -26,6 +26,11 @@
 // unchanged brief without a report resumes that session once (`resumed` is
 // appended to the record), with the same model and tools, if its transcript is
 // still there; a resume that fails at once (no JSON) falls back to a fresh run.
+//
+// `effort: low|medium|high` (owner, 2026-11-01; missing: `medium`) goes to
+// claude as `--effort`, the debrief too; `low` for an easy step (one step of a
+// *To build* list, a known pattern, a bug with a probe and a known place),
+// `medium` for a hard one. Another value escalates (`--info` prints it as is).
 
 use std::cli
 use std::fs
@@ -48,6 +53,16 @@ fn agent_front(body: String, key: String, default: String) -> String {
     return found
 }
 
+// The brief's `effort:` (default `medium`).
+fn agent_effort(body: String) -> String {
+    return agent_front(body, "effort", "medium")
+}
+
+// True for an effort claude is started with here (`low`, `medium`, `high`).
+fn agent_effort_ok(effort: String) -> bool {
+    return effort == "low" || effort == "medium" || effort == "high"
+}
+
 fn agent_tools(agent: String) -> String {
     if agent == "architect" {
         return "Read Grep Glob Bash Edit Write mcp__github__issue_read mcp__github__issue_write mcp__github__add_issue_comment mcp__github__list_issues mcp__github__search_issues mcp__github__sub_issue_write mcp__github__get_label"
@@ -68,7 +83,9 @@ fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
     v.push("--max-turns")
     v.push(agent_front(body.clone(), "max_turns", "120"))
     v.push("--max-budget-usd")
-    v.push(agent_front(body, "budget_usd", "20"))
+    v.push(agent_front(body.clone(), "budget_usd", "20"))
+    v.push("--effort")
+    v.push(agent_effort(body))
     v.push("--output-format")
     v.push("json")
     v.push("--session-id")
@@ -83,7 +100,7 @@ fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
 fn agent_resume_args(brief: String, body: String, session: String) -> Vec[String] {
     let mut v = agent_args(brief.clone(), body, session)
     v[1] = f"Your run of the brief at {brief} was interrupted (a timeout or a killed driver). Check `git log` and `git status` for your own work (commits, changed files), then continue the brief to its report."
-    v[12] = "--resume"
+    for i in 0..<v.len() { if v[i] == "--session-id" { v[i] = "--resume" } }
     return v
 }
 
@@ -154,7 +171,7 @@ fn agent_draft(abs: String, body: String) -> String throws {
 }
 
 // The debrief's question, asked in the run's own session without tools.
-fn agent_debrief_args(session: String, model: String) -> Vec[String] {
+fn agent_debrief_args(session: String, model: String, effort: String) -> Vec[String] {
     let mut v: Vec[String] = []
     v.push("-p")
     v.push("Your run is over. Without using any tool, answer in at most 15 lines of Markdown: (1) what cost you the most turns or time; (2) what you had to look up (ADRs, the language, file locations, the converter) that the brief could have handed you; (3) which checks you ran and which were wasted; (4) one change to the brief or builder.md that would have saved the most.")
@@ -164,6 +181,8 @@ fn agent_debrief_args(session: String, model: String) -> Vec[String] {
     v.push("2")
     v.push("--model")
     v.push(model)
+    v.push("--effort")
+    v.push(effort)
     v.push("--output-format")
     v.push("json")
     return v
@@ -361,8 +380,16 @@ fn main() throws {
     if dir == "" { dir = process::run("dirname", [abs.clone()]).stdout.trim().clone() }
     let text = fs::read_to_string(abs.clone(), fs::Root::Anywhere)
     if info {
-        println(agent_front(text.clone(), "agent", "builder") + " " + agent_front(text.clone(), "model", "sonnet") + " " + agent_front(text.clone(), "max_turns", "120") + " " + agent_front(text, "budget_usd", "20"))
+        println(agent_front(text.clone(), "agent", "builder") + " " + agent_front(text.clone(), "model", "sonnet") + " " + agent_front(text.clone(), "max_turns", "120") + " " + agent_front(text.clone(), "budget_usd", "20") + " " + agent_effort(text))
         return
+    }
+    let effort = agent_effort(text.clone())
+    if !agent_effort_ok(effort.clone()) {
+        if dry {
+            println(f"ESCALATE effort {effort} is not low, medium or high")
+            process::exit(2)
+        }
+        agent_escalate(dir.clone(), f"effort {effort} in {abs} is not low, medium or high")
     }
     let mut wanted = agent_read("/proc/sys/kernel/random/uuid").trim().clone()
     let mut claude_args = agent_args(abs.clone(), text.clone(), wanted.clone())
@@ -439,7 +466,7 @@ fn main() throws {
     // The debrief: the same session, resumed while its cache is warm, answers
     // what held it up, before any escalation stops this script.
     if !out.timed_out && session == wanted {
-        let asked = process::run(claude.clone(), agent_debrief_args(session.clone(), agent_front(text.clone(), "model", "sonnet")); within: 10.minutes())
+        let asked = process::run(claude.clone(), agent_debrief_args(session.clone(), agent_front(text.clone(), "model", "sonnet"), effort.clone()); within: 10.minutes())
         let mut debrief = f"{abs}.debrief.md"
         if stem != "" { debrief = f"{stem}.debrief.md" }
         fs::write(debrief, fs::Root::Anywhere, agent_result(asked.stdout.clone()) + "\n")
