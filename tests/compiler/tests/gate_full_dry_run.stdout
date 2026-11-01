@@ -4,7 +4,7 @@ build would run: cargo build --profile fast -p nikaia
 lower-std green skipped: no crates/nikaia-std/src/tools/*.nika changed
 fmt would run: cargo fmt --all -- --check
 clippy would run: cargo clippy --all-targets -- -D warnings
-pre-push would run: scripts/pre-push-check.sh
+pre-push would run: nikaia run scripts/pre-push.nika
 test green no touched tests
 guards would run: cargo test --profile fast -p nikaia --test it -- (the guard set)
 Gate: dry-run
@@ -14,7 +14,7 @@ build would run: cargo build --profile fast -p nikaia
 lower-std would run: target/fast/nikaia lower-std (red on a lowered file that drifts from its committed .nika), and to the fixpoint
 fmt would run: cargo fmt --all -- --check
 clippy would run: cargo clippy --all-targets -- -D warnings
-pre-push would run: scripts/pre-push-check.sh
+pre-push would run: nikaia run scripts/pre-push.nika
 test would run: target/fast/nikaia test --both-settings on foo bar baz
 guards would run: cargo test --profile fast -p nikaia --test it -- (the guard set)
 Gate: dry-run
@@ -24,7 +24,7 @@ build would run: cargo build --profile fast -p nikaia
 lower-std would run: target/fast/nikaia lower-std (red on a lowered file that drifts from its committed .nika), and to the fixpoint
 fmt would run: cargo fmt --all -- --check
 clippy would run: cargo clippy --all-targets -- -D warnings
-pre-push would run: scripts/pre-push-check.sh
+pre-push would run: nikaia run scripts/pre-push.nika
 test would run: target/fast/nikaia test --both-settings --project tests/compiler (the checker or the emitter changed)
 guards would run: cargo test --profile fast -p nikaia --test it -- (the guard set)
 Gate: dry-run
@@ -34,7 +34,7 @@ build would run: cargo build --profile fast -p nikaia
 lower-std would run: target/fast/nikaia lower-std (red on a lowered file that drifts from its committed .nika), and to the fixpoint
 fmt would run: cargo fmt --all -- --check
 clippy would run: cargo clippy --all-targets -- -D warnings
-pre-push would run: scripts/pre-push-check.sh
+pre-push would run: nikaia run scripts/pre-push.nika
 test would run: cargo test --workspace --profile fast --no-fail-fast -- --skip nikaia_test::the_compiler_test_package_passes_at_both_settings, and beside it target/fast/nikaia test --both-settings --project tests/compiler; then target/fast/nikaia test in crates/rs2nika/facts and crates/rs2nika/convert
 guards green part of the test step (--all)
 Gate: dry-run
