@@ -3,3 +3,5 @@ b21-1097-flat-map-seq-result.md
 b13-1057-field-of-a-coalesce-and-let.md
 b25-1106-either-text-into-path.md
 b26-1107-unwrapped-map-view.md
+b29-1126-let-mut-tuple.md
+b30-1127-narrowed-field-or-pattern.md

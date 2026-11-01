@@ -1,0 +1,3 @@
+cv1-impl-outside-type.md
+cv2-text-cuts.md
+cv3-loop-tail-and-field-patterns.md
