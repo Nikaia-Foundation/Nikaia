@@ -123,8 +123,11 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   (`stop-hook-git-check.sh`) complains about uncommitted changes. Those files
   are the agents' to commit. The supervisor answers the hook with a single `.`
   and neither commits nor pushes them.
-* If an agent's push is rejected, the supervisor rebases when needed; the
-  agent goes on committing. An error one agent causes in another's file is the
+* **The supervisor pushes the agents' commits** (outside a driver, which
+  pushes its own after the suite): after an agent's report it checks the
+  commits, lands them on the latest `origin/develop` (cherry-pick in a
+  detached worktree when `develop` moved), raises the version when the change
+  needs one, and pushes; the agents go on committing. An error one agent causes in another's file is the
   supervisor's to resolve if the agent that caused it does not repair it.
 * **Agents: few, one per large module, none on a file another one edits.**
   Splitting one file into slices costs more in conflicts and repeated context

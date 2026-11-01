@@ -9,17 +9,17 @@ The rules every session and agent needs. What only the main session does
 * **`main` is the default branch and the last tested state; `develop` is the
   trunk.** A session starts on `main` or a branch made from it, so it switches
   first: `git fetch origin develop && git checkout -B develop origin/develop`.
-  Nobody pushes to `main`, resets it or force-pushes it: `promote` moves it to
-  a commit whose CI passed.
-* **Push to `develop` at once, small commits, often.** No pull requests, no
-  waiting for CI, no full suite: build, `cargo fmt` and the tests the change
-  touches are enough. Before pushing: `cargo clippy --all-targets -- -D
-  warnings` (CI's first gate; a lint in a lowered file is allowed on the
-  `tools` module in `crates/nikaia-std/src/lib.rs`, not fixed in the file),
-  `scripts/pre-push-check.sh` (fmt, badges, version), and, for a session
-  alone in its checkout, `git pull --rebase origin develop`. An agent started
-  by `scripts/drive.nika` commits and never pushes: the driver tests and
-  pushes.
+  Nobody pushes to `main`.
+* **Before each commit, the cheap checks**: build, `cargo fmt`, the tests the
+  change touches, `cargo clippy --all-targets -- -D warnings` (a lint in a
+  lowered file is allowed on the `tools` module in
+  `crates/nikaia-std/src/lib.rs`, not fixed in the file) and
+  `scripts/pre-push-check.sh` (fmt, badges, version). Never the full suite.
+  Small commits, often.
+* **Agents commit, the supervisor pushes.** A builder, QA agent or architect
+  commits locally; the driver or the main session tests and pushes
+  (`docs/supervisor.md`). A session working alone pushes its own commits to
+  `develop` after `git pull --rebase origin develop`; no pull requests.
 * **A red `develop` is fixed forward**: whoever finds it red fixes it with the
   next commit or reverts the commit that broke it, at once.
 * **Version raises and new error codes are the supervisor's.** An agent
@@ -38,9 +38,8 @@ The rules every session and agent needs. What only the main session does
 
 * **Commit after every finished step, only your own files**: `git add
   <files>`, never `git commit -a` or `git add -A`; the tree also holds the
-  other agents' unfinished files. Push fast-forward only (`git push origin
-  develop`); if it is rejected, do not rebase: the supervisor does, and you
-  go on committing. No separate worktree with `develop` checked out.
+  other agents' unfinished files. No rebase and no separate worktree with
+  `develop` checked out.
 * **Nobody runs `git reset`, `git stash`, `git checkout .` or `git restore .`**
   in the shared checkout: it throws away the others' work. Restore only your
   own files, by name.

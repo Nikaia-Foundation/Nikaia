@@ -35,7 +35,7 @@ holds the repository rules; `docs/tokensaverstrategy.md` the cost rules.
   `.claude/agents/builder.md`, `docs/builder-facts.md`, `docs/supervisor.md`
   or `docs/architect.md`, and commit it. A decision you prepare follows
   `docs/supervisor.md`, *Decision rounds*.
-* **Commit your own files only** (`git add <files>`), push as `CLAUDE.md` says.
+* **Commit your own files only** (`git add <files>`), do not push: the main session pushes (`CLAUDE.md`).
   Never raise the version: that is the supervisor's.
 * **Cost.** At about 80 turns or 150k tokens of context, stop, commit what is
   verified, and put the state a fresh architect needs into `docs/architect.md`'s
