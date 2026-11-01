@@ -96,6 +96,10 @@ struct Rs2nikaCtx {
     // R314: rs2nika.names' `[hosts X_]`, each host parameter and its bound
     // (`manifests`, `M: ProjectMembersHost`), in the order a signature takes them
     hosts: Vec[(String, String)],
+    // R335: rs2nika.names' `[accessors]` / `[accessors X_]`, each thread-local
+    // accessor (`proofs::ask`, a static `WARNED`), the parameter it becomes
+    // and that parameter's function type
+    accessors: Vec[(String, String, String)],
     // R322: the fields of the structs tools/*.nika define: struct, field, type
     tool_fields: Vec[(String, String, String)],
     // R329: the methods of the traits tools/*.nika define: name, parameters after `self`
@@ -375,6 +379,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R329 `f(&b)` (`b` a file's bytes, `f` a tools trait method taking `p: ref Vec[u8]`) -> the buffer `p` filled from `b` before it, `f(&p)`",
         "R330 `for b in n` with `n` bound by `fs::read` -> `for b in n.iter()`: `Bytes` is walked by `iter`",
         "R331 `[forms]`: `{x}` may stand on the right side again, and `F({a}, {b})` takes two arguments",
+        "R335 rs2nika.names' `[accessors]` (and `[accessors X_]`): `proofs::ask = ask: fn(..) -> T sync` makes a call of the thread-local accessor (or a static's read `WARNED.with(fn(w) { w.get() })`) a call of the parameter `ask`, which every function calling it, and every caller of such a function in the draft, takes last (ADR-281 D32: no thread-local state; it is passed)",
         "R334 C1's shapes: under a `-free` profile with a prefix a failure that is no statement about the program (`anyhow!`, `bail!`, `.context(..)`) is the file refusal's `Failed(..)`, a refusal (`refuse!`, `diagnostics::refuse`) its `Refused(..)`, the enum declaring the ones used; `anyhow!(text)` of a non-literal text is that text; a constant inside a function takes the prefix as a top-level one; under `--only` the file's forwarders to tools (R256) are called as their targets; a table rename `module::name new` (R47) holds in the tree's draft",
         "R333 `for x in xs.iter_mut() {` and `for x in &mut xs {` (a list or an array) -> `for mut x in xs {` (ADR-views-2 D2); Rust's owned `for mut x in xs` -> `for mut x in xs.drain()` (D3); a map's `iter_mut()` / `values_mut()` and an adapter over `iter_mut()` get a TODO (section 6)",
         "R227 a local closure with arguments only ever called (`let count = |family: &str| ..;`) -> a function of the module after the file's functions, the locals it captures its first parameters, each call `count(a)` -> `prefix_count(findings, a)`, f-strings too; types from annotations, `--facts`, a `.count()`/`.len()` or text tail; one unknown, the closure stays (R82)",
@@ -12186,7 +12191,7 @@ pub fn rs2nika_convert(src: String, profile_given: String, prefix: String, repo:
 /// converts: the names `tools/*.nika` declares (R66), rs2nika.names and its
 /// `[view]` table. Each file starts from a copy, so files convert side by side.
 pub fn rs2nika_loaded(repo: String, view: bool, names: String) -> Rs2nikaCtx {
-    let mut ctx = Rs2nikaCtx { profile: "", free: false, world: "", prefix: "", hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], type_from: [], type_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: [], parsed_names: [], impl_other: false, field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [], tool_types: collections::BTreeSet(), only_fns: [], only_consts: [], only_methods: [], field_from: [], field_to: [], form_from: [], form_to: [], prefix_all: true, prefix_file: "", prefixed: [], scoped: [], rust_fields: [], hosts: [], tool_fields: [], tool_methods: [], skips: [] }
+    let mut ctx = Rs2nikaCtx { profile: "", free: false, world: "", prefix: "", hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], type_from: [], type_to: [], todo_extra: [], arity: [], host_fns: [], opt_names: [], parsed_names: [], impl_other: false, field_opts: collections::BTreeSet(), tuple_line: [], tuple_why: [], view: view, view_names: [], seq_fns: [], tool_types: collections::BTreeSet(), only_fns: [], only_consts: [], only_methods: [], field_from: [], field_to: [], form_from: [], form_to: [], prefix_all: true, prefix_file: "", prefixed: [], scoped: [], rust_fields: [], hosts: [], accessors: [], tool_fields: [], tool_methods: [], skips: [] }
     // the project's decisions first: they win over the converter's own table
     rs2nika_project_names(ctx, names, repo.clone(), true)
     if repo != "" {
@@ -12243,7 +12248,7 @@ fn rs2nika_project_names(mut ctx: Rs2nikaCtx, path: String, repo: String, rename
         // R309: a section scoped to a prefix, `[forms project_members_]`
         let scope: String = (section.strip_prefix("[") ?? "").trim_end_matches("]").clone()
         let (kind, scope_prefix) = scope.split_once(" ") ?? ("", "")
-        if (kind == "types" || kind == "forms" || kind == "hosts") && scope_prefix != "" {
+        if (kind == "types" || kind == "forms" || kind == "hosts" || kind == "accessors") && scope_prefix != "" {
             let (from, to) = body.split_once(" = ") ?? ("", "")
             if from != "" && to != "" {
                 let flat: String = if kind == "types" { from.replace(" ", "") } else { from.trim().clone() }
@@ -12260,6 +12265,13 @@ fn rs2nika_project_names(mut ctx: Rs2nikaCtx, path: String, repo: String, rename
             if eq < body.len() {
                 ctx.type_from.push(body[0..<eq].replace(" ", ""))
                 ctx.type_to.push(body[eq + " = ".len()..<body.len()].trim().clone())
+            }
+        } else if section == "[accessors]" {
+            // R335: `proofs::ask = ask: fn(..) -> T sync`
+            let (from, to) = body.split_once(" = ") ?? ("", "")
+            let (param, ty) = to.split_once(":") ?? ("", "")
+            if from != "" && param.trim() != "" && ty.trim() != "" {
+                ctx.accessors.push((from.trim().clone(), param.trim().clone(), ty.trim().clone()))
             }
         } else if section == "[fields]" || section == "[forms]" {
             let (from, to) = body.split_once(" = ") ?? ("", "")
@@ -15529,7 +15541,7 @@ fn rs2nika_p4a_post(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] 
         }
         out.push(s)
     }
-    return rs2nika_free_hosts(ctx, rs2nika_lent_elements(ctx, rs2nika_chained_fields(ctx, rs2nika_thrown_arms(ctx, rs2nika_inner_collects(ctx, out)))))
+    return rs2nika_accessor_params(ctx, rs2nika_free_hosts(ctx, rs2nika_lent_elements(ctx, rs2nika_chained_fields(ctx, rs2nika_thrown_arms(ctx, rs2nika_inner_collects(ctx, out))))))
 }
 
 /// R304: `let v: Vec[T] = xs.map(fn(m) { e.collect() }).collect()` -> the
@@ -15811,8 +15823,122 @@ fn rs2nika_camel(prefix: String) -> String {
     return out
 }
 
+/// R335: each `[accessors]` entry: its calls in the draft call the parameter,
+/// and the functions that call it (and their callers) take the parameter.
+fn rs2nika_accessor_params(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    if ctx.accessors.len() == 0 {
+        return given.clone()
+    }
+    let mut out: Vec[String] = given.clone()
+    for (from, p, ty) in ctx.accessors.clone() {
+        let segments: Vec[String] = from.split("::").map(fn(x) { x.clone() }).collect()
+        let last: String = segments[segments.len() - 1].clone()
+        let mut called = false
+        let mut lines: Vec[String] = []
+        for l in out {
+            let s: String = rs2nika_accessor_calls(l, from, last, p)
+            if rs2nika_calls_word(s, p) {
+                called = true
+            }
+            lines.push(s)
+        }
+        if called {
+            out = rs2nika_threaded(ctx, lines, p, "", ty)
+            rs2nika_hit(ctx, "R335")
+        }
+    }
+    return out
+}
+
+/// R335 on one line: the accessor `from` (its last segment `last`) called,
+/// or the static `from` read (`X.with(fn(v) { v.get() })`), as a call of `p`.
+fn rs2nika_accessor_calls(line: String, from: String, last: String, p: String) -> String {
+    let mut s: String = line.clone()
+    if !from.contains("::") {
+        // a static's read: `X.with(fn(v) { v.get() })`, `{ v.clone() }`
+        let lead: String = f"{from}.with(fn("
+        let mut guard = 0
+        while guard < 6 && s.contains(lead) {
+            guard = guard + 1
+            let c: Vec[scalar] = s.chars().collect()
+            let k = rs2nika_find_from(c, lead, 0)
+            let open = k + f"{from}.with".chars().count()
+            let close = rs2nika_close_quoted(c, open)
+            if close < 0 {
+                break
+            }
+            let inner: String = rs2nika_text(c, open + "(fn(".chars().count(), close)
+            let (v, rest) = inner.split_once(")") ?? ("", "")
+            let b: String = rest.trim().clone()
+            let v1: String = v.trim().clone()
+            let read = b == f"{{ {v1}.get() }}" || b == f"{{ {v1}.clone() }}" || b == f"{{ {v1}.borrow().clone() }}"
+            if !read {
+                break
+            }
+            s = f"{rs2nika_text(c, 0, k)}{p}(){rs2nika_text(c, close + 1, c.len())}"
+        }
+        return s
+    }
+    for whole in [f"crate::{from}(", f"{from}("] {
+        s = s.replace(whole, f"{p}(")
+    }
+    if last != p {
+        s = rs2nika_replace_call(s, last, p)
+    }
+    return s
+}
+
+/// `name(` called as a function (not a method, not a longer word) somewhere
+/// in `line`.
+fn rs2nika_calls_word(line: String, name: String) -> bool {
+    let c: Vec[scalar] = line.chars().collect()
+    let lead: String = f"{name}("
+    let mut from = 0
+    while true {
+        let k = rs2nika_find_from(c, lead, from)
+        if k < 0 {
+            return false
+        }
+        if k == 0 || !(rs2nika_word(c[k - 1]) || c[k - 1] == '.' || c[k - 1] == ':') {
+            return true
+        }
+        from = k + 1
+    }
+    return false
+}
+
+/// Every call `name(` (not a method, not a longer word) renamed `to(`.
+fn rs2nika_replace_call(line: String, name: String, to: String) -> String {
+    let c: Vec[scalar] = line.chars().collect()
+    let lead: String = f"{name}("
+    let mut out: String = ""
+    let mut at = 0
+    while at < c.len() {
+        let k = rs2nika_find_from(c, lead, at)
+        if k < 0 {
+            break
+        }
+        out.push_str(rs2nika_text(c, at, k))
+        if k == 0 || !(rs2nika_word(c[k - 1]) || c[k - 1] == '.' || c[k - 1] == ':') {
+            out.push_str(f"{to}(")
+        } else {
+            out.push_str(lead)
+        }
+        at = k + lead.chars().count()
+    }
+    out.push_str(rs2nika_text(c, at, c.len()))
+    return out
+}
+
 /// R295 for one host: the parameter `p` (`host`) and its bound (`H: SysrootHost`).
 fn rs2nika_free_host(mut ctx: Rs2nikaCtx, given: ref Vec[String], p: String, bound: String) -> Vec[String] {
+    return rs2nika_threaded(ctx, given, p, bound, "")
+}
+
+/// R295 / R335: the parameter `p` threaded through the draft's functions:
+/// a host (`bound` `H: SysrootHost`, called `p.f(..)`), or a function
+/// (`fn_type`, called `p(..)`).
+fn rs2nika_threaded(mut ctx: Rs2nikaCtx, given: ref Vec[String], p: String, bound: String, fn_type: String) -> Vec[String] {
     let (tp0, _) = bound.split_once(":") ?? ("H", "")
     let tp: String = tp0.trim().clone()
     // the functions, their first line and their last
@@ -15834,7 +15960,10 @@ fn rs2nika_free_host(mut ctx: Rs2nikaCtx, given: ref Vec[String], p: String, bou
         let mut named = given[starts[f]].contains(f"{p}:")
         let mut j = starts[f] + 1
         while j < end && !named {
-            if given[j].contains(f"{p}.") && !given[j].contains(f".{p}.") && rs2nika_count_word(given[j], p) > 0 {
+            if fn_type == "" && given[j].contains(f"{p}.") && !given[j].contains(f".{p}.") && rs2nika_count_word(given[j], p) > 0 {
+                named = true
+            }
+            if fn_type != "" && rs2nika_calls_word(given[j], p) {
                 named = true
             }
             j = j + 1
@@ -15885,8 +16014,11 @@ fn rs2nika_free_host(mut ctx: Rs2nikaCtx, given: ref Vec[String], p: String, bou
             let c: Vec[scalar] = s.chars().collect()
             let nat = rs2nika_find_from(c, f"fn {n}", 0) + "fn ".chars().count() + n.chars().count()
             let mut open = nat
-            let mut generic: String = f"[{bound}]"
-            if open < c.len() && c[open] == '[' {
+            let mut generic: String = if fn_type == "" { f"[{bound}]" } else { "" }
+            if fn_type != "" && open < c.len() && c[open] == '[' {
+                open = rs2nika_close_quoted(c, open) + 1
+                generic = rs2nika_text(c, nat, open)
+            } else if open < c.len() && c[open] == '[' {
                 let gclose = rs2nika_close_quoted(c, open)
                 generic = f"{rs2nika_text(c, open, gclose)}, {bound}]"
                 open = gclose + 1
@@ -15895,8 +16027,11 @@ fn rs2nika_free_host(mut ctx: Rs2nikaCtx, given: ref Vec[String], p: String, bou
             if pclose > open {
                 let params: String = rs2nika_text(c, open + 1, pclose)
                 let sep: String = if params.trim() == "" { "" } else { ", " }
-                s = f"{rs2nika_text(c, 0, nat)}{generic}({params}{sep}{p}: ref {tp}){rs2nika_text(c, pclose + 1, c.len())}"
-                rs2nika_hit(ctx, "R295")
+                let typed: String = if fn_type == "" { f"ref {tp}" } else { fn_type.clone() }
+                s = f"{rs2nika_text(c, 0, nat)}{generic}({params}{sep}{p}: {typed}){rs2nika_text(c, pclose + 1, c.len())}"
+                if fn_type == "" {
+                    rs2nika_hit(ctx, "R295")
+                }
             }
         } else if at < 0 {
             let mut g = 0
@@ -15927,7 +16062,9 @@ fn rs2nika_free_host(mut ctx: Rs2nikaCtx, given: ref Vec[String], p: String, bou
                         }
                         let sep: String = if args.trim() == "" { "" } else { ", " }
                         s = f"{rs2nika_text(c, 0, close)}{sep}{p}{rs2nika_text(c, close, c.len())}"
-                        rs2nika_hit(ctx, "R295")
+                        if fn_type == "" {
+                            rs2nika_hit(ctx, "R295")
+                        }
                     }
                 }
                 g = g + 1
@@ -16859,6 +16996,11 @@ fn rs2nika_front(mut ctx: Rs2nikaCtx, given_src: String, profile_given: ref Stri
             ctx.type_to.push(to.clone())
         } else if scope == prefix && kind == "hosts" {
             ctx.hosts.push((from.clone(), to.clone()))
+        } else if scope == prefix && kind == "accessors" {
+            let (param, ty) = to.split_once(":") ?? ("", "")
+            if param.trim() != "" && ty.trim() != "" {
+                ctx.accessors.push((from.clone(), param.trim().clone(), ty.trim().clone()))
+            }
         } else if scope == prefix {
             ctx.form_from.push(from.clone())
             ctx.form_to.push(to.clone())
@@ -19419,6 +19561,10 @@ fn rs2nika_missing(ctx: ref Rs2nikaCtx, draft: String) -> Vec[String] {
             }
         }
     }
+    // R335: an accessor's parameter is called, not missing
+    for (_, p, _) in ctx.accessors {
+        own.insert(p.clone())
+    }
     for k in ["fn", "if", "match", "while", "for", "return", "panic", "println", "print", "eprintln", "eprint", "sync", "f", "in", "and", "or", "not"] {
         own.insert(k.clone())
     }
@@ -20712,6 +20858,7 @@ fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, pref
     // R295 and R314 as in the line engine: a `[forms X_]` entry's `host.`
     // threads the host through the file's functions
     if stages.contains("forms") { lines = rs2nika_free_hosts(ctx, rs2nika_forms(ctx, lines)) }
+    lines = rs2nika_accessor_params(ctx, lines)
     if stages.contains("p3b") { lines = rs2nika_p3b_shapes(ctx, lines) }
     if stages.contains("p4b") { lines = rs2nika_p4b_post(ctx, lines) }
     if stages.contains("p4a") { lines = rs2nika_p4a_post(ctx, lines) }

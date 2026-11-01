@@ -1,0 +1,14 @@
+use std::collections
+
+/// The counters of each rule, each walked in its function.
+pub fn sc_counted(parsed: ref Parsed, names: ref Vec[String], record_bound_invariants: fn(ref collections::BTreeMap[i64, String]) sync, in_function: fn(ref String, i64, fn() -> Walked sync) -> Walked sync) -> collections::BTreeSet[i64] {
+    let mut out = collections::BTreeSet()
+    for at in 0..<names.len() {
+        let walked = in_function(names[at], at, fn() { walk(parsed, at as i64) })
+        record_bound_invariants(walked.loops)
+        for x in walked.counters.iter() {
+            out.insert(x.clone())
+        }
+    }
+    return out
+}

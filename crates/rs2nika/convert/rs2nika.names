@@ -75,6 +75,19 @@ Package.files = files: Vec[(String, String)] # sysroot.rs's packed package, one 
 {x}.span.stop() = ({x}.span.end as i64) # the same, its end (M2)
 {x}.windows(2).all(fn(pair) { pair[0].1 == pair[1].1 }) = project_tests_agree({x}) # whether all settings agree is P3a's `project_tests_agree` (project_tests.nika, P3b)
 
+# [accessors]: `Rust accessor = parameter: function type` (R335), a
+# function that only reaches a `thread_local!` (or such a static, read as
+# `X.with(fn(v) { v.get() })`): the draft calls the parameter, and every
+# function calling it, and their callers, take it. Nikaia has no thread-local
+# state (ADR-281 D32, ADR-289); it is passed. Extend in the commit of the move.
+[accessors]
+proofs::ask = ask: fn(ref TermArena, ref Vec[i64], i64) -> ProofsAsked sync # proofs.rs's book on this thread answers; the Rust forward passes `&crate::proofs::ask` (c2)
+proofs::record_bound_invariants = record_bound_invariants: fn(ref collections::BTreeMap[i64, String]) sync # the same book keeps a bounds walk's invariants (c2)
+proofs::record_invariants = record: fn(ref collections::BTreeMap[i64, String]) sync # the same, the prover's; `record` as prove_rounds names it (prove_run.nika)
+proofs::invariants_here = invariants_here: fn() -> collections::BTreeMap[i64, String] sync # the same book's invariants of the file (prove_run.nika)
+proofs::asked_so_far = asked_so_far: fn() -> ProofsSoFar sync # the same (prove_run.nika)
+proofs::ask_again_from = ask_again_from: fn(ref ProofsSoFar) sync # the same (prove_run.nika)
+
 # [prefixed]: a prefix the move gave every name of its file (R294), so a
 # draft under it prefixes every name even before the file exists.
 [prefixed]
@@ -150,3 +163,11 @@ body.rust = body # the host hands back the emitted text only (K3a)
 
 [hosts comptime_]
 host = H: ComptimeLowerHost # K3a: the units, the emitter, the build's trust and the source map stay Rust behind comptime_run.rs's LowerHost
+
+# [accessors X_]: a generic accessor's type for one file (R335): `in_function`
+# hands back what its closure does.
+[accessors fold_bound_]
+proofs::in_function = in_function: fn(ref String, i64, fn() -> Vec[i64] sync) -> Vec[i64] sync # a fold's questions placed in its rule; `fb_fold_counters` gives the counters (c2)
+
+[accessors bounds_]
+proofs::in_function = in_function: fn(ref String, i64, fn() -> BoundsProven sync) -> BoundsProven sync # a body's questions placed in its function; `bounds_aggressive` gives the walk (c2)

@@ -1,0 +1,7 @@
+--profile
+check-free
+--prefix
+sc_
+--names
+names
+f.rs

@@ -1,0 +1,5 @@
+[accessors]
+proofs::record_bound_invariants = record_bound_invariants: fn(ref collections::BTreeMap[i64, String]) sync # proofs.rs's thread-local book, passed in (ADR-281 D32)
+
+[accessors sc_]
+proofs::in_function = in_function: fn(ref String, i64, fn() -> Walked sync) -> Walked sync # the function a walk's questions are placed in; its result type is this file's
