@@ -12,3 +12,4 @@ Found: new defect, a narrowed optional function cannot be called: `fn go(n: i64,
 Needs: architect decision on the optional-fn call defect (file it); #1092 frees model_of
 Changelog: none (self-hosting move, no language change)
 Rs2nika: not scored (moved by hand, as the owner's experiment asked)
+Pushed: b3472b1b (move); this report in the commit after it
