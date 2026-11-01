@@ -62,7 +62,8 @@ fn agent_effort_ok(effort: String) -> bool {
     return effort == "low" || effort == "medium" || effort == "high"
 }
 
-fn agent_tools(agent: String) -> String {
+// The tools every agent gets, whatever its kind.
+fn agent_tools() -> String {
     return "Bash Read Edit Write Grep Glob"
 }
 
@@ -87,7 +88,7 @@ fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
     v.push("--session-id")
     v.push(session.clone())
     v.push("--allowedTools")
-    v.push(agent_tools(agent))
+    v.push(agent_tools())
     return v
 }
 
