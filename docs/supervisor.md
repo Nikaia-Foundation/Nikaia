@@ -120,6 +120,12 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
 
 ## Agents in the shared checkout
 
+* **Disk:** a cloud session has about 40 GB, and the nikaia cache's default
+  bound (8 GiB, #724) is more than is free. Set `NIKAIA_CACHE_LIMIT=2G` in the
+  environment's variables; until then, prune by hand:
+  `NIKAIA_CACHE_DIR=$PWD/target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G
+  target/fast/nikaia cache prune`, and the same without `NIKAIA_CACHE_DIR` for
+  `~/.cache/nikaia`.
 * **Stop hook:** while agents run, the tree is dirty and the stop hook
   (`stop-hook-git-check.sh`) complains about uncommitted changes. Those files
   are the agents' to commit. The supervisor answers the hook with a single `.`
