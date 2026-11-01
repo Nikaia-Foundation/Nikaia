@@ -91,22 +91,37 @@ own driver run and its own architect task (`DIR/architect-task.md`):
 * **Bug lane, `docs/briefs/bugs/`**: `ready` defects (kind 3 of `CLAUDE.md`,
   *A missing form stops the work*). A brief with a `Blocks:` line goes before
   the lane's own picks. Its own `NK` block, no version raise (`--no-bump`).
+* **Converter lane, `docs/briefs/converter/`**: the converter `rs2nika`
+  (`crates/rs2nika/convert`, its `rs2nika.names`), the patterns that cost the
+  moves the most kept lines first (`docs/rs2nika-score.md`).
 * **Other lanes** claim their issues with `wip` (the `yaml` lane,
   `docs/briefs/yaml/`, #928). An issue labelled `wip` is another lane's.
+
+**The focus rotation** (owner, 2026-11-01): `drive.nika -- --focus` runs the
+converter, main and bug lanes in turn from `docs/briefs/focus.txt`, a block of
+up to `block` briefs each, a `Blocks:` bug brief before any block. The
+architect runs only on demand, on three triggers: `CUT`, `RED`, and `QUEUE
+EMPTY <area>` when the rotation reaches an area with no unrun brief (then at
+most 3 briefs). `docs/briefs/focus-log.md` holds one line per block.
 
 ## Briefs and reports
 
 A brief is one file `DIR/<topic>.md`, tracked (never a scratchpad: a fresh
 session has none). `scripts/agent.nika` starts the agent with `Read your brief
 at <path>`. It opens with this frontmatter (defaults `builder`, `sonnet`, 120,
-20):
+20, `medium`):
 
     ---
     agent: builder
     model: sonnet
     max_turns: 100
     budget_usd: 20
+    effort: low
     ---
+
+`effort` (passed to `claude --effort`) is `low` where the pattern is known (a
+form done before, a named test, a mechanical edit) and `medium` otherwise;
+`high` is accepted but not written into briefs; any other value stops the run.
 
 A line `Facts: <heading>, <heading>` (or `facts:` in the frontmatter) names
 the `## ` / `### ` sections of `docs/builder-facts.md` the builder needs;

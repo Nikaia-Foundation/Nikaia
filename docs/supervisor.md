@@ -209,7 +209,17 @@ Moved from `docs/architect.md` (2026-10-31). `nikaia` here means
 * **Fresh container.** There is no binary: the first command is `cargo build
   --profile fast -p nikaia` with `run_in_background` (about 3 minutes),
   started while the architect works; `cycle.nika` cannot run before.
-* **The cycle.** `nikaia run scripts/drive.nika -- DIR` with
+* **The focus rotation** (owner, 2026-11-01). The main session starts
+  `nikaia run scripts/drive.nika -- --focus` with `run_in_background`
+  (`--max N`, `--dry-run` as below). It takes the areas of
+  `docs/briefs/focus.txt` (converter, selfhosting, bugs) in turn, up to
+  `block` builder briefs each, a bug brief with a `Blocks:` line first; at
+  each block's end the suite, a line in `docs/briefs/focus-log.md` (briefs,
+  results, tokens, cost, queue, `kept k/m`), the pending bumps while CI is
+  green, the next area. An area with an empty queue gets its architect with
+  `QUEUE EMPTY <area>`, and is skipped when it stays empty; every area empty
+  escalates. The final lines are those of the cycle below.
+* **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
   next step; the bug lane with `--no-bump`). It loops on `cycle.nika`: runs
   each `NEXT` brief through `agent.nika` and commits the run's files (report,
