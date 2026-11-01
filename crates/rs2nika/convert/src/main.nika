@@ -13668,6 +13668,11 @@ fn rs2nika_or_arms(mut ctx: Rs2nikaCtx, src: String) -> String {
         let (pat, rest) = t.split_once(" => ") ?? ("", "")
         let alts = rs2nika_alternatives(pat)
         let mut split = pat != "" && !t.starts_with("let ") && !t.starts_with("if ") && alts.len() > 1
+        // the tree engine keeps an or-pattern of `f: Some(x)` fields whole (#1127):
+        // its writer adds the `null` arms
+        if ctx.skips.contains("or_arms") && pat.contains(": Some(") {
+            split = false
+        }
         for a in alts {
             if !rs2nika_binds(a) {
                 split = false
@@ -20777,6 +20782,7 @@ fn rs2nika_corpus(dir: String, engine: String, skips: ref Vec[String]) -> i64 {
 /// written node by node (`tr_convert`).
 fn rs2nika_tree(loaded: ref Rs2nikaCtx, given_src: String, profile: String, prefix: String, facts: ref Vec[String]) -> String {
     let mut ctx: Rs2nikaCtx = loaded.clone()
+    ctx.skips.push("or_arms")
     let (src, viewed) = rs2nika_front(ctx, given_src, profile, prefix, facts)
     let scanned = rs2nika_scan(ctx, rs2nika_unbail(viewed), prefix)
     // The line engine's passes on the Rust text first: the tree parses what

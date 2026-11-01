@@ -1210,6 +1210,25 @@ impl TrEm {
                 ordered.push(a)
             }
         }
+        // an arm with a `f: Some(x)` field: the `f: null` arms come first,
+        // with the body of the `_` arm (the #886 form)
+        let mut nulls: Vec[String] = []
+        for a in arms {
+            for t in self.some_field_nulls(self.t.nth(a, 0)) {
+                if !nulls.contains(t.clone()) {
+                    nulls.push(t)
+                }
+            }
+        }
+        let mut null_at = 0
+        if nulls.len() > 0 && wild < 0 {
+            for t in nulls.clone() {
+                out.push(f"{inner}{t} => {{")
+                out.push(f"{inner}    // TODO(rs2nika): the null arm of a Some(..) field")
+                out.push(f"{inner}}}")
+                null_at += 3
+            }
+        }
         for a in ordered {
             let ns = self.nodes(a)
             let p = ns[0]
@@ -1236,6 +1255,14 @@ impl TrEm {
                 pat_text = f"{pat_text} if {self.expr(self.t.nth(guard, 0))}"
             }
             let mut lines = self.arm(body, inner.clone(), arm_mode.clone())
+            if a == wild && nulls.len() > 0 {
+                for t in nulls.clone() {
+                    for l in self.arm_lines(t, lines, inner.clone()) {
+                        out.insert(1 + null_at, l)
+                        null_at += 1
+                    }
+                }
+            }
             if bound != "" {
                 if lines.len() == 1 && !lines[0].starts_with(f"{inner}    ") {
                     lines = [bound, f"{inner}    {lines[0].trim()}"]
@@ -1271,6 +1298,32 @@ impl TrEm {
             }
         }
         out.push(f"{ind}}}")
+        return out
+    }
+
+    /// For each `Path { f: Some(x), .. }` alternative of a pattern, the same
+    /// pattern with `f: null`, as `Path { f: null, .. }`.
+    fn some_field_nulls(ref mut self, p: i64) -> Vec[String] {
+        let mut out: Vec[String] = []
+        if self.t.is(p, "OR_PAT") {
+            for k in self.nodes(p) {
+                for t in self.some_field_nulls(k) {
+                    out.push(t)
+                }
+            }
+            return out
+        }
+        if !self.t.is(p, "RECORD_PAT") {
+            return out
+        }
+        let path = self.path_text(self.t.kid(p, "PATH"))
+        for f in self.nodes(self.t.kid(p, "RECORD_PAT_FIELD_LIST")) {
+            let nr = self.t.kid(f, "NAME_REF")
+            let fp = self.nodes(f)
+            if nr >= 0 && fp.len() > 1 && self.is_some_pat(fp[fp.len() - 1]) && !self.refutable(self.t.nth(fp[fp.len() - 1], 1)) {
+                out.push(f"{path} {{ {self.src(nr)}: null, .. }}")
+            }
+        }
         return out
     }
 
