@@ -1,1 +1,2 @@
 /home/user/Nikaia/docs/briefs/converter/architect-task.md 4008128 66
+/home/user/Nikaia/docs/briefs/converter/qa/qa-task.md 1555377 45
