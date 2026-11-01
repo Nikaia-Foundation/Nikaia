@@ -1,0 +1,238 @@
+// crates/nikaia-std/src/tools/prove_run.nika
+//
+// **Every `assert` outside a `test` block, proved while the program is built**
+// ([ADR-269](../../../../docs/specification/adr/adr-269.md)). Moved from
+// `crates/nikaia/src/prove.rs`, which keeps the thread's counters, the
+// parser's reading of a condition and the compiler's answers as an adapter.
+//
+// **What it reads** (D9): comparisons of whole numbers built from names,
+// literals, `+`, `-` and a `*` by a constant, joined with `&&`, `||` and `!`.
+// A name is a variable of the proof only where it is an immutable binding of a
+// whole-number type; anything else makes the claim one this prover cannot
+// read, and that is never a guess: the claim is checked when the program
+// runs (D4).
+//
+// **What it knows** (D9): the branch an `if` is in, what a branch that always
+// leaves has ruled out — `return … if c` is exactly that
+// ([ADR-276](../../../../docs/specification/adr/adr-276.md)) — a `for` over a
+// range, a `let`'s value, the function's preconditions (D5) and every claim
+// proved before.
+//
+// **How** (D10) is not decided here: each claim is a query to the logic
+// layer ([ADR-270](../../../../docs/specification/adr/adr-270.md)) - its
+// facts and its goal as terms - and the reference solver there answers it,
+// through the book of `nikaia.proofs` (`proofs_answers.nika`). The walk and
+// its passes are `prover_walk.nika` and `prover_passes.nika`; this file
+// repeats them until what they wanted is known.
+//
+// **Soundness around bindings.** A fact names variables by their name, so a
+// name bound again drops every fact that mentions it, and a block whose
+// bindings this walk cannot see — a lambda's body, a `match` arm — starts with
+// no facts and no variables. Losing facts only costs proofs.
+
+use std::collections
+use std::text
+
+/// How many times the walk is repeated with what the calls it wanted came to:
+/// a run's value can make another call's arguments known (`f(g(2))`).
+pub comptime PROVE_RUN_ROUNDS: i64 = 4
+
+/// **What running a call for a claim came to** (ADR-359 D11, D12).
+pub enum ProveClaimRun {
+    /// The value it handed back.
+    Value(i64),
+    /// Why it was not run: the claim stays a check, and `--asserts` says this.
+    NotRun(String),
+    /// It ran and stopped, in the words the program would print.
+    Stopped(String),
+}
+
+/// **What the build computed for each integer `comptime`** (ADR-359 D7): an
+/// item's by its name, one inside a body by its statement's start.
+pub struct ProveComptimes {
+    pub by_name: collections::BTreeMap[String, i64],
+    pub at: collections::BTreeMap[i64, i64],
+}
+
+/// What the walk and its passes made.
+pub struct ProveWalked {
+    pub walk: ProverWalk,
+    pub answers: ProverAnswers,
+}
+
+/// Read off the checker's `comptime_values` (the type below and the literal,
+/// by the start of the item or statement): each one whose type is a whole
+/// number and whose literal an `i64` holds.
+pub fn prove_comptimes_of(program: ref Program, words: ref winnow_grammar::InternerContext, values: ref collections::BTreeMap[i64, (String, String)]) -> ProveComptimes {
+    let mut found = ProveComptimes { by_name: collections::BTreeMap(), at: collections::BTreeMap() }
+    for (at, (below, written)) in values {
+        if !prove_whole(below) {
+            continue
+        }
+        let value = text::parse_i64(written.trim().replace("_", "")) ?? continue
+        found.at.insert(at, value)
+    }
+    for item in program.items {
+        match item.node {
+            Item::Comptime { name, .. } => {
+                let value = found.at.remove(item.span.start as i64) ?? continue
+                found.by_name.insert(words.resolve(name).clone(), value)
+            }
+            else => {}
+        }
+    }
+    return found
+}
+
+/// Whether a type below is a whole number.
+fn prove_whole(below: String) -> bool {
+    return ["i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize"].contains(below)
+}
+
+/// **Prove every `assert` of the program.** `claims` are the checker's: a
+/// call is an `assert` exactly where the checker recognised the prelude's.
+/// `run` runs a call an open claim reads (ADR-359 D11-D13), at most `rounds`
+/// times over: the walk is repeated with its value. A build that cannot
+/// compile and run code gives no rounds.
+///
+/// **The invariants in `nikaia.proofs`** (ADR-361 D4) are checked and used
+/// without a search. A walk that searched one is repeated with what it found,
+/// so that what the file keeps is what the next build, reading it, asks: the
+/// book is the thread's, so the adapter asks it (`asked_so_far`,
+/// `invariants_here`, `ask_again_from`, `record`). `searched` counts each
+/// walk's invariants, `counted` each round's extra queries.
+pub fn prove_rounds(program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, claims: ref collections::BTreeSet[(i64, i64)], comptimes: ref ProveComptimes, rounds: i64, run: fn(ref Expr, ref String, ref Vec[i64]) -> ProveClaimRun sync, asked_so_far: fn() -> ProofsSoFar sync, invariants_here: fn() -> collections::BTreeMap[i64, String] sync, ask_again_from: fn(ref ProofsSoFar) sync, record: fn(ref collections::BTreeMap[i64, String]) sync, searched: fn(ref ProverState) sync, counted: fn(ref ProverState) sync, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> ProveWalked sync {
+    let mut pinned = comptimes.by_name.clone()
+    let mut not_run: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let mut stopped: collections::BTreeMap[String, String] = collections::BTreeMap()
+    // **Once per call and its arguments** (D13): two calls of `f(2)` are one
+    // run.
+    let mut answered: collections::BTreeMap[(String, Vec[i64]), ProveClaimRun] = collections::BTreeMap()
+    let mut round = 0
+    while true {
+        let before = asked_so_far()
+        let mut recorded = invariants_here()
+        let mut walked = prove_walked(program, words, own, library, claims, prove_state(pinned, comptimes, not_run, stopped, recorded), ask, model, escape, holes_of, unaliased, written_of, condition)
+        searched(walked.walk.state)
+        for _ in 0..<2 {
+            if walked.walk.state.loops_used == recorded {
+                break
+            }
+            ask_again_from(before)
+            recorded = walked.walk.state.loops_used.clone()
+            walked = prove_walked(program, words, own, library, claims, prove_state(pinned, comptimes, not_run, stopped, recorded), ask, model, escape, holes_of, unaliased, written_of, condition)
+            searched(walked.walk.state)
+        }
+        record(walked.walk.state.loops_used)
+        counted(walked.walk.state)
+        round += 1
+        let wanted: Vec[String] = walked.walk.state.wanted.iter().filter(fn(call) { !pinned.contains_key(call) && !not_run.contains_key(call) && !stopped.contains_key(call) }).map(fn(call) { call.clone() }).collect()
+        if wanted.is_empty() || round > rounds {
+            return walked
+        }
+        for call in wanted {
+            let site = walked.walk.state.call_sites.get(call) ?? continue
+            let called = walked.walk.state.call_args.get(call) ?? continue
+            let (callee, args) = called
+            let key = (callee.clone(), args.clone())
+            let came = match answered.get(key) {
+                null => {
+                    let fresh = run(site, callee, args)
+                    answered.insert(key, fresh.clone())
+                    fresh
+                }
+                known => known.clone(),
+            }
+            match came {
+                ProveClaimRun::Value(value) => pinned.insert(call.clone(), value),
+                ProveClaimRun::NotRun(why) => not_run.insert(call.clone(), why),
+                ProveClaimRun::Stopped(said) => stopped.insert(call.clone(), said),
+            }
+        }
+    }
+}
+
+/// The state a walk starts from: what the runs came to, and the invariants
+/// to check without a search.
+fn prove_state(pinned: ref collections::BTreeMap[String, i64], comptimes: ref ProveComptimes, not_run: ref collections::BTreeMap[String, String], stopped: ref collections::BTreeMap[String, String], recorded: ref collections::BTreeMap[i64, String]) -> ProverState {
+    let mut state = ProverState::fresh()
+    state.pinned = pinned.clone()
+    state.comptime_at = comptimes.at.clone()
+    state.not_run = not_run.clone()
+    state.stopped = stopped.clone()
+    state.loops_recorded = recorded.clone()
+    return state
+}
+
+/// **The passes, and what they make** (`prover_passes.nika`): the walk
+/// repeated until the preconditions, then the postconditions, stop changing
+/// (ADR-269 D15, D17); the checked entries (D20), what the ledger publishes
+/// (D18), and how a claim no walk reached is held.
+fn prove_walked(program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, claims: ref collections::BTreeSet[(i64, i64)], state: ProverState, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> ProveWalked sync {
+    let mut walk = ProverWalk { state: state, arena: TermArena::empty(), held: collections::BTreeMap(), reaches: collections::BTreeMap(), findings: [], claims: claims.clone(), std_claims: collections::BTreeMap() }
+    let answers = prover_passes(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+    return ProveWalked { walk: walk, answers: answers }
+}
+
+/// What the book says to a question, as `prover_solver` reads it.
+pub fn prove_answer(asked: ProofsAsked) -> SolverAnswer {
+    return match asked {
+        ProofsAsked::Proved => SolverAnswer::Proved,
+        ProofsAsked::Rejected(why) => SolverAnswer::Rejected(why),
+        else => SolverAnswer::NotProved,
+    }
+}
+
+/// Whether the conditions `from` imply every one of `to`, by the reference
+/// solver with a checked certificate; `false` where it cannot show it, or a
+/// condition does not read back (`condition` gives no nodes).
+pub fn prove_implies(from: ref Vec[String], to: ref Vec[String], names: ref collections::BTreeSet[String], ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool {
+    if to.iter().all(fn(c) { from.contains(c) }) {
+        return true
+    }
+    let mut arena = TermArena::empty()
+    let mut facts: Vec[i64] = []
+    for c in from {
+        let nodes = condition(c, names)
+        if nodes.is_empty() {
+            return false
+        }
+        facts.push(arena.adopt(nodes))
+    }
+    let mut goals: Vec[i64] = []
+    for c in to {
+        let nodes = condition(c, names)
+        if nodes.is_empty() {
+            return false
+        }
+        goals.push(arena.adopt(nodes))
+    }
+    let goal = arena.and(goals)
+    return match ask(arena, facts, goal) {
+        SolverAnswer::Proved => true,
+        else => false,
+    }
+}
+
+/// **The ledger with what the prover published of each function** (ADR-269
+/// D17, #776): its postconditions are facts about a call's result for the
+/// bounds walk, as a described callee's are (ADR-314 D3), and its
+/// preconditions goals at a call. The ledger file gets them only after the
+/// program is lowered.
+pub fn prove_with_published(own: ref Ledger, published: ref collections::BTreeMap[String, Published]) -> Ledger {
+    let mut ledger = own.clone()
+    for (key, found) in published {
+        let mut contract = ledger.functions.get(key) ?? continue
+        for ensured in found.ensures {
+            contract.ensures.push(ensured.clone())
+        }
+        // Its preconditions, which the bounds walk proves at a method's call
+        // that the prover does not see prove them (ADR-269 D20).
+        for required in found.requires {
+            if !contract.requires.contains(required) {
+                contract.requires.push(required.clone())
+            }
+        }
+    }
+    return ledger
+}

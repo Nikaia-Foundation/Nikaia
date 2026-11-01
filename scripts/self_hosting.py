@@ -126,6 +126,7 @@ COMPILER_NIKA = {
     "comptime_tree.nika": "comptime_run: the sub-program's tree - the file without its main and constants, the constants as literals, the value function - and the callee a refused run is blamed on (K1, K2)",
     "build_eval.nika": "build_time: the evaluator of a build-time expression - calls, loops, text, structs, variants and a grammar run (0.0.760)",
     "bounds_matched.nika": "bounds: what a grammar alternative's bindings matched, and what a callee's ledger entry ensures (0.0.763)",
+    "prove_run.nika": "prove: the rounds of walks and runs for claims, the integer comptimes, whether one contract implies another, the ledger with what was published (owner experiment)",
     "proofs_answers.nika": "proofs: a question asked through the book, its key, the entry read back where it checks or searched and recorded, the loops' invariants by place, the file written and compared (owner experiment)",
     "proofs_book.nika": "proofs: nikaia.proofs as text, read back and rendered (0.0.763)",
     "check_flow.nika": "check: what the checker keeps while it walks one body - the flags of the walk, the method sets, the read index, the open numbers and the unsigned slots (0.0.814)",

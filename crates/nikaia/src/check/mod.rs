@@ -435,7 +435,7 @@ fn walked<'a>(
             .keys()
             .map(|(a, b)| (*a as usize, *b as usize))
             .collect();
-        let comptimes = crate::prove::Comptimes::of(parsed, &checker.s.facts.comptime_values);
+        let comptimes = crate::prove::comptimes_of(parsed, &checker.s.facts.comptime_values);
         // **A call an open claim reads is run as a `comptime` is**
         // ([ADR-359](../../docs/specification/adr/adr-359.md) D11-D13), where this
         // build has a place to compile it.

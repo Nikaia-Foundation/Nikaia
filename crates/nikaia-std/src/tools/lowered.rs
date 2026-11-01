@@ -1703,6 +1703,14 @@ mod proofs_book_lowered {
 #[allow(unused_imports)]
 pub use proofs_book_lowered::*;
 
+mod prove_run_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/prove_run.rs");
+}
+#[allow(unused_imports)]
+pub use prove_run_lowered::*;
+
 mod prove_terms_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2768,6 +2776,10 @@ pub mod proofs_answers {
 pub mod proofs_book {
     #[allow(unused_imports)]
     pub use super::{PbLine, pb_read, PbRendered, pb_render};
+}
+pub mod prove_run {
+    #[allow(unused_imports)]
+    pub use super::{PROVE_RUN_ROUNDS, ProveClaimRun, ProveComptimes, ProveWalked, prove_comptimes_of, prove_rounds, prove_answer, prove_implies, prove_with_published};
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
