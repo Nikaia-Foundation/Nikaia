@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1337] — 2026-11-01
+
+**rs2nika: a type the cut does not declare has its methods freed too; rs2nika: a text cut at a number goes through its bytes (ADR-374); rs2nika: let with every name mut is let mut (..)**
+- rs2nika frees the methods of a type the cut does not declare
+- rs2nika: a Rust text cut at byte numbers becomes a cut of the text's bytes (`t.bytes[a..<b].text()`, `get(a..)`, `starts_with` on bytes, `unwrap_or_default` -> `?? ""`), ADR-374.
+- rs2nika writes let (mut a, mut b) as let mut (a, b)
+
 ## [0.0.1336] — 2026-11-01
 
 **A function type may take a function parameter (#1120)**
