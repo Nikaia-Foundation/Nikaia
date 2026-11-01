@@ -1,6 +1,0 @@
-pub fn last_name(segments: ref Vec[String], mut names: Vec[String]) sync {
-    if segments.len() > 0 {
-        names.push(segments[segments.len() - 1].clone())
-    }
-}
-

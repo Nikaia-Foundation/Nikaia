@@ -35,6 +35,6 @@ lower-std would run: target/fast/nikaia lower-std (red on a lowered file that dr
 fmt would run: cargo fmt --all -- --check
 clippy would run: cargo clippy --all-targets -- -D warnings
 pre-push would run: nikaia run scripts/pre-push.nika
-test would run: cargo test --workspace --profile fast --no-fail-fast -- --skip nikaia_test::the_compiler_test_package_passes_at_both_settings, and beside it target/fast/nikaia test --both-settings --project tests/compiler; then target/fast/nikaia test in crates/rs2nika/facts and crates/rs2nika/convert
+test would run: cargo test --workspace --profile fast --no-fail-fast -- --skip nikaia_test::the_compiler_test_package_passes_at_both_settings, and beside it target/fast/nikaia test --both-settings --project tests/compiler
 guards green part of the test step (--all)
 Gate: dry-run

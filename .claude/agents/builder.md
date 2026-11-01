@@ -26,15 +26,11 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **If the task names a brief file, read it first**; it replaces reading the
   plan, the call graph and the issue yourself. A research task (no edits, no
   commit) writes such a brief, at most 80 lines, and reports its path.
-* **A move starts from the rs2nika draft** (`crates/rs2nika/convert`, see
-  `docs/builder-facts.md`), not from an empty file: convert each moved function
-  (`--only NAME`), keep what the draft got right, and at the end score it,
-  `rs2nika --score DRAFT FINAL` over the draft and the function as committed.
-  Its `kept N of M lines` goes into the report's `Rs2nika:` field (owner,
-  2026-10-27), with the three edits that cost most; a report of a move without
-  it is incomplete. Under 60% kept, the driver stops the pipeline and the
-  converter is repaired first (owner, 2026-10-27). The draft's iterator chains stay chains: one that does not
-  compile is a gap, and stops the slice as below, it is not rewritten as a loop.
+* **A move is translated by hand, directly from the Rust** (owner, 2026-11-01:
+  the converter is gone): read the Rust function, write its Nikaia by the rules
+  of `docs/builder-facts.md` (slices, patterns, syntax gaps, lowering). Iterator
+  chains stay chains: one that does not compile is a gap, and stops the slice
+  as below, it is not rewritten as a loop.
 * **A run that starts from a draft or a `wip/*` branch checks it whole first**
   (y2c run 2, 2026-10-31: the fmt scan, run last, found #1015 after the test
   was written): right after applying it, `nikaia fmt` every changed `.nika`

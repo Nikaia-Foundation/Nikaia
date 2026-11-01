@@ -1,8 +1,0 @@
-pub fn lets() -> i64 {
-    let mut (at, depth, start) = (0, (0 as i64), true)
-    let (mut a, b) = (1, 2)
-    let (c, d) = (3, 4)
-    at += 1
-    a += b + c + d
-    return at
-}

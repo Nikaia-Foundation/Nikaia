@@ -54,7 +54,6 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   | tests | no, unless they belong to a change above, in its package |
   | `guide/`, the notes in `docs/`, `README.md`, the website | no |
   | `examples/`, `benches/`, `scripts/`, CI, `editors/` | no |
-  | `crates/rs2nika/` (the converter, a development tool not shipped with the toolchain) | no |
   | `packages/<name>/` (an official package, ADR-344 D1) | no: only that package's own version |
 
   A change that does not raise the version gets no `CHANGELOG.md` heading or
@@ -138,12 +137,9 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   Build agents are started as the `builder` type (`.claude/agents/builder.md`).
   The measure is tokens per moved line (target below 50 k); turns are the guard
   (about 120). A slice runs as a chain: a research agent writes a brief of at
-  most 80 lines to a file, the builder gets its path and the steps. The rs2nika
-  draft is the default start (report `rs2nika: kept N of M lines`); a compiler
-  defect is fixed first. **Under 60% kept, the pipeline stops** (owner,
-  2026-10-27): `scripts/drive.nika` escalates on such a report, and the main
-  session repairs or improves the converter itself, with a corpus case for
-  the moved code, before it starts the driver again. After each agent, `nikaia run scripts/tokenspeed.nika
+  most 80 lines to a file, the builder gets its path and the steps. The builder
+  translates the Rust by hand (owner, 2026-11-01: the converter is deleted); a
+  compiler defect is fixed first. After each agent, `nikaia run scripts/tokenspeed.nika
   -- --short AGENTS_DIR` prints one row for the *Runs* table of
   `docs/tokenspeed.md`. The figures and the reasons are in
   `docs/tokensaverstrategy.md`; the ordered steps for the core of `emit` and

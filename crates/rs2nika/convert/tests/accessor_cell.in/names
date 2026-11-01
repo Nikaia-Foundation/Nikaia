@@ -1,3 +1,0 @@
-[accessors]
-WARNED = warned: fn() -> bool sync # project.rs's thread-local cell, read through a parameter (ADR-281 D32)
-SHOWN_AS = shown_as: fn() -> String? sync # the same, a `RefCell` (ADR-281 D32)

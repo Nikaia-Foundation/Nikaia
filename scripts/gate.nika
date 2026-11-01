@@ -37,17 +37,14 @@
 // --workspace --profile fast --no-fail-fast` (so `it` and the packages) and,
 // beside it, `target/fast/nikaia test --both-settings --project
 // tests/compiler`, the package `it` would run serially as its slowest test
-// (`it`'s copy is skipped); then `nikaia test` in crates/rs2nika/facts and in
-// crates/rs2nika/convert with target/fast/nikaia. `guards` is part of that
-// `test` step. It stops at the first red cheap step (build, lower-std, fmt,
+// (`it`'s copy is skipped). `guards` is part of that `test` step. It stops at the first red cheap step (build, lower-std, fmt,
 // clippy, pre-push), so the tests run only on a tree that builds and lints
 // (`--keep-going` runs them anyway); a red `test` line names the failed tests
-// (`test X ... FAILED` of cargo, then `tests/compiler: A B`, `rs2nika/facts:
-// A` or `rs2nika/convert: A`, the `program "A" ... FAILED` lines of `nikaia
-// test`), capped at 160 chars as the other lines are. The whole output of
-// those three `nikaia test` runs is written to target/gate-tests-compiler.log,
-// target/gate-tests-rs2nika-facts.log and target/gate-tests-rs2nika-convert.log
-// of the tree the gate runs in (the driver's QA input quotes them). The test
+// (`test X ... FAILED` of cargo, then `tests/compiler: A B`, the `program
+// "A" ... FAILED` lines of `nikaia test`), capped at 160 chars as the other
+// lines are. The whole output of the `nikaia test` run is written to
+// target/gate-tests-compiler.log of the tree the gate runs in (the driver's QA
+// input quotes it). The test
 // runs get `NIKAIA_CACHE_LIMIT=4G` (`--full`'s keep 2G): the package tests'
 // cache, target/nikaia-project-tests, holds about 3.6 GB after a suite, and a
 // smaller limit evicts trees the next run builds again; 5G would leave the
@@ -272,10 +269,10 @@ fn gate_package_suite(exe: String, cache: String) -> String throws {
 
 // The complete suite (`--all`): the workspace's tests with tests/compiler run
 // beside them (one serial test of 16-19 minutes, which libtest starts only
-// halfway through), then the converter's two Nikaia packages.
+// halfway through).
 fn gate_test_all(dry: bool) -> String throws {
     let skip = gate_package_test()
-    if dry { return f"would run: cargo test --workspace --profile fast --no-fail-fast -- --skip {skip}, and beside it target/fast/nikaia test --both-settings --project tests/compiler; then target/fast/nikaia test in crates/rs2nika/facts and crates/rs2nika/convert" }
+    if dry { return f"would run: cargo test --workspace --profile fast --no-fail-fast -- --skip {skip}, and beside it target/fast/nikaia test --both-settings --project tests/compiler" }
     let mut red: Vec[String] = []
     let exe = process::run("realpath", ["target/fast/nikaia"]).stdout.trim().clone()
     process::run("mkdir", ["-p", "target/nikaia-project-tests"])
@@ -286,11 +283,6 @@ fn gate_test_all(dry: bool) -> String throws {
     if cargo != "" { red.push(cargo) }
     let compiler = package.join()
     if compiler != "" { red.push(f"tests/compiler: {compiler}") }
-    for pkg in ["facts", "convert"] {
-        let out = process::run(exe.clone(), ["test"]; dir: f"crates/rs2nika/{pkg}", env: [("NIKAIA_CACHE_LIMIT", "4G")])
-        let failed = gate_nikaia_failed(out.code == 0, out.stdout + "\n" + out.stderr, f"target/gate-tests-rs2nika-{pkg}.log")
-        if failed != "" { red.push(f"rs2nika/{pkg}: {failed}") }
-    }
     if red.len() == 0 { return "green" }
     return "red " + gate_cap(red.join(" "))
 }

@@ -1,5 +1,0 @@
-pub fn c1_w(a: String, b: String) -> Vec[String] {
-    let mut lines = changed_lines(a, b)
-    lines.push(PROOFS_FILE.to_string())
-    return lines
-}

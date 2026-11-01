@@ -1,9 +1,0 @@
-/// Whether to stay quiet: inside the wrapper, or warned already.
-pub fn ce_quiet(marker: bool, warned: fn() -> bool sync) -> bool {
-    return marker || warned()
-}
-
-/// The name the entry is shown as.
-pub fn ce_shown(mut program: Program, shown_as: fn() -> String? sync) {
-    program.entry_shown_as = shown_as()
-}

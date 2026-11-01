@@ -113,12 +113,6 @@
 // output from FILE instead of running `cycle.nika` (for tests).
 // A builder's `Pushed: rejected` (or `none`) is rewritten when its commit is found in the log.
 // `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
-// **A move that kept under 60% of the converter's draft calls for a converter
-// repair** (owner, 2026-10-27): a builder report whose `Rs2nika:` reads `kept N
-// of M lines` with N < 0.6 M prints `CONVERT drive: ...`, and the main session
-// repairs the converter beside the next move, which the driver starts at once
-// (owner, 2026-10-28: the pipeline no longer waits for the repair).
-// `--kept REPORT` prints `ok` or that line (for tests).
 // `nikaia run` compiles this script once, so a commit to it does nothing until a
 // restart: at the top of each round of a real run the driver reads
 // scripts/drive.nika again, and if it changed since the start it prints the one
@@ -224,20 +218,6 @@ fn drive_field(body: String, key: String) -> String {
 
 fn drive_word(value: String) -> String {
     return value.split(" ").collect()[0].replace(".", "").clone()
-}
-
-// The stop line for a report whose `Rs2nika:` kept under 60% of the draft,
-// "" for any other report.
-fn drive_kept(report: String) -> String {
-    let field = drive_field(report, "Rs2nika")
-    let at = field.find("kept ") ?? return ""
-    let rest = field[at + "kept ".len()..<field.len()].clone()
-    let words = rest.split(" ").collect()
-    if words.len() < 3 || words[1] != "of" { return "" }
-    let kept = text::parse_i64(words[0].clone()) ?? return ""
-    let all = text::parse_i64(words[2].clone()) ?? return ""
-    if all <= 0 || kept * 100 >= all * 60 { return "" }
-    return f"rs2nika kept {kept} of {all} lines, under 60%: repair the converter beside the next move"
 }
 
 // Which action a cycle's output leads to, as one line:
@@ -747,11 +727,9 @@ fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throw
     }
 }
 
-// What a run leaves behind that no commit takes: the converter's lock file a
-// build rewrote, and untracked step reports (`*.step<N>.report.md`) beside the
-// briefs. Runs after the run's own commit, so nothing it commits is lost.
+// What a run leaves behind that no commit takes: untracked step reports
+// (`*.step<N>.report.md`) beside the briefs. Runs after the run's own commit, so nothing it commits is lost.
 fn drive_tidy(dry: bool, dir: String) throws {
-    drive_say(dry, "git checkout -- crates/rs2nika/convert/nikaia.lock")
     let left = process::run("git", ["ls-files", "--others", "--exclude-standard", "--", dir])
     let mut stray: Vec[String] = []
     for l in left.stdout.trim().split("\n") {
@@ -759,7 +737,6 @@ fn drive_tidy(dry: bool, dir: String) throws {
     }
     if stray.len() > 0 { drive_say(dry, "rm -f " + stray.join(" ")) }
     if dry { return }
-    process::run("git", ["checkout", "--", "crates/rs2nika/convert/nikaia.lock"])
     for i in 0..<stray.len() { process::run("rm", ["-f", stray[i].clone()]) }
 }
 
@@ -794,7 +771,7 @@ fn drive_cycle(exe: String, dir: String, lines_file: String) -> String throws {
 }
 
 // One builder run of DIR's brief: the agent, its commit, the tidy, the brief
-// appended to DIR/unpushed.txt, the converter check of its report.
+// appended to DIR/unpushed.txt.
 fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
     drive_say(dry, "a batch's suite still running (target/suite.lock/testing): wait for it and handle it (drive_settle) first")
     drive_agent(exe.clone(), dry, dir.clone(), brief.clone(), "builder")
@@ -803,8 +780,6 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
     drive_say(dry, f"append {brief} to {dir}/unpushed.txt (no suite until the batch ends)")
     if dry { return }
     drive_append(f"{dir}/unpushed.txt", brief.clone())
-    let why = drive_kept(drive_read(f"{brief}.report.md"))
-    if why != "" { println(f"CONVERT drive: {drive_stem(brief)}: {why}") }
 }
 
 // The batch ends: its suite starts in the background, and DIR's architect runs
@@ -1322,11 +1297,6 @@ fn main() throws {
     }
     if args.len() == 4 && args[1] == "--rewrite" {
         println(drive_rewrite(drive_read(args[2].clone()), drive_read(args[3].clone())))
-        return
-    }
-    if args.len() == 3 && args[1] == "--kept" {
-        let why = drive_kept(drive_read(args[2].clone()))
-        if why == "" { println("ok") } else { println(f"CONVERT drive: {why}") }
         return
     }
     if args.len() == 5 && args[1] == "--ci-wait" {

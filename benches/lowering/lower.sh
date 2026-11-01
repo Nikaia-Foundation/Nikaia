@@ -13,7 +13,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 what=${1:-all}
 work=${TMPDIR:-/tmp}/lowering-bench
 nikaia="$root/target/release/nikaia"
-source_file="$root/crates/rs2nika/convert/src/main.nika"
+source_file="$root/benches/lowering/source.nika"
 mkdir -p "$work"
 
 cargo build --manifest-path "$root/Cargo.toml" --release --quiet -p nikaia --bin nikaia

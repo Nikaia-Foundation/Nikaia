@@ -1,3 +1,0 @@
-[types]
-PathBuf = fs::Path # std's file name
-&Path = ref fs::Path # the same, lent

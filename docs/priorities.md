@@ -17,10 +17,9 @@ compiler bug a move finds goes as a brief into the bug lane
 (`docs/briefs/bugs/batch.txt`, with a `Blocks:` line) and the move waits for
 its fix there (owner, 2026-10-31; `docs/architect.md`, *Lanes*). The bug lane
 orders the other defects by the score below. The pause rule (more bugs found than fixed) still stops the self-hosting lane.
-Each move starts from an `rs2nika` draft; a converter defect met on the way
-is fixed in the converter (the 60 % rule in `scripts/drive.nika`). A move
-is faithful by default; a schematic reshape is taught to the converter first,
-a real redesign needs a named reason and gets no draft (`docs/architect.md`,
+Each move is translated by hand from the Rust (owner, 2026-11-01: the
+converter is deleted). A move is faithful by default; a real redesign needs a
+named reason (`docs/architect.md`,
 *Briefs and reports*, owner 2026-10-29).
 
 ## Estimating the terms per ticket

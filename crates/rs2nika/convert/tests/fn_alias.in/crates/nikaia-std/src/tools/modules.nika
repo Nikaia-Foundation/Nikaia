@@ -1,3 +1,0 @@
-pub fn pause_path(chain: ref Vec[String]) -> String {
-    return chain.join(" -> ")
-}

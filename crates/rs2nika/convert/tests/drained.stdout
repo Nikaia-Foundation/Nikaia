@@ -1,7 +1,0 @@
-pub fn as_functions(mut items: Vec[Spanned[Item]]) sync {
-    for mut item in items {
-        let (name, body) = match item.node { Item::Test { name, body } => (name, body), else => continue }
-        item.node = Item::Fn { name: name.clone(), body: body.clone() }
-    }
-}
-

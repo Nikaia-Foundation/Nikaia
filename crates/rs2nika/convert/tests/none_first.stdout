@@ -1,7 +1,0 @@
-pub fn key(cpu: String?) -> String {
-    let k = match cpu {
-        null => "",
-        else => name(),
-    }
-    return k
-}

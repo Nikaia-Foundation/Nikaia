@@ -1,4 +1,0 @@
-/// A file of the walk.
-pub fn project_members_is_file(p: ref fs::Path) -> bool {
-    return p.is_file()
-}

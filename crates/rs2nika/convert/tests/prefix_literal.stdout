@@ -1,9 +1,0 @@
-fn check_give() -> i64 sync {
-    return 1
-}
-
-pub fn check_other() -> String sync {
-    let n = check_give()
-    return f"give() said {n}"
-}
-

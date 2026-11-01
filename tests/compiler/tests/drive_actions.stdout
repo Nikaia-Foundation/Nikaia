@@ -3,7 +3,6 @@ would run: a batch's suite still running (target/suite.lock/testing): wait for i
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
 would run: git add T/b1.md.report.md T/b1.md.run.json T/cost.txt docs/tokenspeed.md
 would run: git commit -m 'briefs: b1 report' -- T/b1.md.report.md T/b1.md.run.json T/cost.txt docs/tokenspeed.md
-would run: git checkout -- crates/rs2nika/convert/nikaia.lock
 would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
 DRY-RUN NEXT b1
 == batch done (exit 0)
@@ -20,7 +19,6 @@ would run: rm -f T/architect-task.md.report.md
 would run: target/fast/nikaia run scripts/agent.nika -- T/architect-task.md --dir T
 would run: git add T/cost.txt docs/tokenspeed.md
 would run: git commit -m 'briefs: architect-task report' -- T/cost.txt docs/tokenspeed.md
-would run: git checkout -- crates/rs2nika/convert/nikaia.lock
 would run: append T/architect-task.md to T/unpushed.txt (tested with the next batch)
 DRY-RUN ARCHITECT BATCH DONE
 == cut (exit 0)
@@ -37,7 +35,6 @@ would run: rm -f T/architect-task.md.report.md
 would run: target/fast/nikaia run scripts/agent.nika -- T/architect-task.md --dir T
 would run: git add T/cost.txt docs/tokenspeed.md
 would run: git commit -m 'briefs: architect-task report' -- T/cost.txt docs/tokenspeed.md
-would run: git checkout -- crates/rs2nika/convert/nikaia.lock
 would run: append T/architect-task.md to T/unpushed.txt (tested with the next batch)
 DRY-RUN ARCHITECT CUT b1: too big -> ARCHITECT
 == red (exit 0)
@@ -54,7 +51,6 @@ would run: rm -f T/architect-task.md.report.md
 would run: target/fast/nikaia run scripts/agent.nika -- T/architect-task.md --dir T
 would run: git add T/cost.txt docs/tokenspeed.md
 would run: git commit -m 'briefs: architect-task report' -- T/cost.txt docs/tokenspeed.md
-would run: git checkout -- crates/rs2nika/convert/nikaia.lock
 would run: append T/architect-task.md to T/unpushed.txt (tested with the next batch)
 DRY-RUN ARCHITECT RED aaaa1111 test -> ARCHITECT
 == red ignored (exit 0)
@@ -62,7 +58,6 @@ would run: a batch's suite still running (target/suite.lock/testing): wait for i
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
 would run: git add T/b1.md.report.md T/b1.md.run.json T/cost.txt docs/tokenspeed.md
 would run: git commit -m 'briefs: b1 report' -- T/b1.md.report.md T/b1.md.run.json T/cost.txt docs/tokenspeed.md
-would run: git checkout -- crates/rs2nika/convert/nikaia.lock
 would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
 DRY-RUN NEXT b1
 == bump green (exit 0)

@@ -1,8 +1,0 @@
-pub fn entered(grammar_: String, throws_: bool) -> String sync {
-    let with_ = grammar_.len()
-    if throws_ {
-        return f"{grammar_} {with_}"
-    }
-    return grammar_.to_string()
-}
-

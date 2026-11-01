@@ -1,2 +1,0 @@
-[accessors]
-proofs::ask = ask: fn(ref TermArena, ref Vec[i64], i64) -> ProofsAsked sync # proofs.rs's thread-local book, passed in (ADR-281 D32)

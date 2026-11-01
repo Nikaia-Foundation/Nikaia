@@ -11,7 +11,7 @@ What it costs the compiler to lower a package (#727).
   is not a speed-up. The phases are a clock and only say *where* the time
   goes; they are not quoted as a result.
 * **(b)** counts the instructions (callgrind's `Ir`) of a cold
-  `nikaia lower --no-cache` of `crates/rs2nika/convert/src/main.nika`
+  `nikaia lower --no-cache` of `benches/lowering/source.nika`
   (about 5 000 lines of real Nikaia). This count is the result.
 
 ```
@@ -22,4 +22,4 @@ benches/lowering/lower.sh count    only (b)
 
 | Lowered | Instructions (Ir) |
 | :--- | ---: |
-| `rs2nika/convert/src/main.nika`, cold | 3 097 302 032 |
+| `source.nika` (the former converter), cold | 3 097 302 032 |

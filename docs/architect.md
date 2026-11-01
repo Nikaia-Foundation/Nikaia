@@ -91,14 +91,14 @@ own driver run and its own architect task (`DIR/architect-task.md`):
 * **Bug lane, `docs/briefs/bugs/`**: `ready` defects (kind 3 of `CLAUDE.md`,
   *A missing form stops the work*). A brief with a `Blocks:` line goes before
   the lane's own picks. Its own `NK` block, no version raise (`--no-bump`).
-* **Converter lane, `docs/briefs/converter/`**: the converter `rs2nika`
-  (`crates/rs2nika/convert`, its `rs2nika.names`), the patterns that cost the
-  moves the most kept lines first (`docs/rs2nika-score.md`).
+* **Converter lane**: closed (owner, 2026-11-01: the converter `rs2nika` is
+  deleted, moves are translated by hand).
 * **Other lanes** claim their issues with `wip` (the `yaml` lane,
   `docs/briefs/yaml/`, #928). An issue labelled `wip` is another lane's.
 
 **The focus rotation** (owner, 2026-11-01): `drive.nika -- --focus` runs the
-converter, main and bug lanes in turn from `docs/briefs/focus.txt`, a block of
+lanes of `docs/briefs/focus.txt` (main and bugs; the converter lane is
+closed) in turn, a block of
 up to `block` briefs each, a `Blocks:` bug brief before any block. The
 architect runs only on demand, on three triggers: `CUT`, `RED`, and `QUEUE
 EMPTY <area>` when the rotation reaches an area with no unrun brief (then at

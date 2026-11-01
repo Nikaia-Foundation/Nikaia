@@ -5,8 +5,6 @@
 #   nothing outside them is in their build, so their tests, clippy and Miri say
 #   something new only when one of them, or the script that checks them,
 #   changed.
-# * `rs2nika` - the Rust-to-Nikaia tools under crates/rs2nika/ (#579), their
-#   own Nikaia projects: their tests run when one of them changed.
 # * `floor` - the whole suite on the oldest Rust Nikaia claims (ADR-305). Any
 #   change can reach for an API newer than the floor, so it runs on every push
 #   to develop or main and on the weekly schedule; on a pull request only where
@@ -34,7 +32,6 @@ set -e
 out=${GITHUB_OUTPUT:-/dev/stdout}
 all() {
     echo "unsafe=true" >>"$out"
-    echo "rs2nika=true" >>"$out"
     echo "floor=true" >>"$out"
     echo "arm64=true" >>"$out"
     echo "docs=false" >>"$out"
@@ -72,7 +69,7 @@ code=$(echo "$changed" | grep -v -E '^(guide|website)/' |
 code2=$(echo "$changed" | grep -E '^(CHANGELOG\.md|(crates|packages|examples|benches|tools|scripts|tests|docs/specification)/)' || true)
 if [ -z "$code" ] && [ -z "$code2" ] && [ -n "$changed" ]; then
     echo "documentation only: build and test jobs are skipped"
-    for k in unsafe rs2nika floor arm64; do echo "$k=false" >>"$out"; done
+    for k in unsafe floor arm64; do echo "$k=false" >>"$out"; done
     echo "docs=true" >>"$out"
     exit 0
 fi
@@ -81,11 +78,6 @@ if echo "$changed" | grep -q '^crates/unsafe/\|^scripts/check-unsafe-crates\.sh$
     echo "unsafe=true" >>"$out"
 else
     echo "unsafe=false" >>"$out"
-fi
-if echo "$changed" | grep -q '^crates/rs2nika/'; then
-    echo "rs2nika=true" >>"$out"
-else
-    echo "rs2nika=false" >>"$out"
 fi
 if [ "$trunk" = true ] || { [ "$EVENT" = "push" ] && [ "$REF" = "refs/heads/main" ]; }; then
     echo "floor=true" >>"$out"

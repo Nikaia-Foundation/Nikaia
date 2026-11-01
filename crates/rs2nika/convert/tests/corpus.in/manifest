@@ -1,5 +1,0 @@
-attributes 76 check-free check_attributes_
-defaults 49 check-free check_defaults_
-function 9 check-free check_function_
-program 32 check-free check_program_
-seeds 53 emit+view-free emit_seeds_

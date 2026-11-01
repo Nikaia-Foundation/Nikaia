@@ -85,8 +85,7 @@ not make your gate red: report `Gate: green` and the figure under `Tests:`.
 * Valgrind cannot run a binary built for an AVX-512 CPU: name `x86-64-v3`.
 * Builders have no GitHub: the brief holds the issue text. If it does not,
   say so under `Deviation` and build from the brief's title only.
-* Syntax gaps of `tools/*.nika`: the list below, *Moving Rust into Nikaia*;
-  `crates/rs2nika/convert --lint F.nika` flags the known ones.
+* Syntax gaps of `tools/*.nika`: the list below, *Moving Rust into Nikaia*.
 * Guard tests (`range_spelling`, `shipped_ledger`, the std ledger in
   `contracts`) scan the whole repository: a script's `a..b` or a new
   `unsafe fn` fails them. They are in the gate (builder.md) for that reason.
@@ -96,10 +95,8 @@ not make your gate red: report `Gate: green` and the figure under `Tests:`.
 * **A new `tests/compiler` test is run through `nikaia test --project tests/compiler`, never only with `nikaia run`** (7c1643d, 2026-10-29: `print(m)` writes `1` without a newline, the `.stdout` held `1\n`, CI went red on bootstrap_compiler and arm64). `print` writes no newline, `println` one; the `.stdout` holds the bytes exactly.
 * **Does the lowered Rust compile? `nikaia run scratch.nika`**, a copy in the scratchpad (b1006, 2026-10-30: three turns lost). Plain `rustc` cannot link `nikaia_std`; `nikaia lower F.nika` writes `F.rs` itself, so never redirect its stdout into a file; `nikaia run` refuses a file inside `tests/compiler` (not the project's entry), so copy it out first. Wait for a background test run's wake-up, never a `sleep` loop. A method `std.contracts` declares that Rust also has under the same name (`iter`) needs only the contract: the emitter passes the name through; `std.contracts` is built into the binary, so rebuild after editing it.
 * **Test with your own copy of the binary.** In the shared checkout another agent may rebuild `target/fast/nikaia` mid-run: after your build, `cp target/fast/nikaia "$SCRATCH/nikaia"` and run long tests (`nikaia test --project tests/compiler`) with that copy (P5a lost two runs, 2026-10-28). Some tests still spawn `target/fast/nikaia` by path even then (b1034b, 2026-10-31: 5 of 6 failures were a vanished binary): such a failure is not yours, re-run that test singly. An untracked test another agent is writing may fail: name it under `Tests:`, do not touch it.
-* **`[forms X_]` rows in `rs2nika.names` match the Nikaia draft text, not the Rust** (P5b, 2026-10-29: three re-converts to learn it; P5d's rows written against the Rust matched nothing): copy the left side from the draft as it came out (`eprint(`, `host.env_var(M) != null || ...`); `{x}` stands for a dotted receiver chain only (`a.b.c`), not a call result. Before step 1 relies on rows, add one row, re-convert, and check the draft changed (one probe), then write the rest.
 * **`.map(fn(x) { x.clone() })` in `tools/*.nika` lowers as written and trips `clippy::map_clone`**: the tools module in `crates/nikaia-std/src/lib.rs` allows it since P5d (0f9a525); another lowered lint goes into the same allow list, never into the lowered file.
-* **A package is lowered file by file, each with its `beside` files** (cv2, 2026-11-01: half a run): a new mutual call between two files of a package (rs2nika's `src/*.nika`) can meet an emitter analysis that reads only one file. Probe it first as a two-file scratch package against the same calls joined into one file. The pausing graph is package-wide since 72e7789c; `code_on_a_cycle` (a lambda round a cycle) is not yet (#1129). In rs2nika's tree engine a name's text type is `text_expr` (`tr_expr.nika`), a field's type `field_ty`, and `self.fails` says the function throws.
-* **A converter draft of `impl` methods, when the brief wants free functions**: keep the bodies, redo the signatures at once (`self.x` -> a parameter); do not edit method by method (P5a kept 6 of 104 lines, 2026-10-28).
+* **A package is lowered file by file, each with its `beside` files** (cv2, 2026-11-01: half a run): a new mutual call between two files of a package can meet an emitter analysis that reads only one file. Probe it first as a two-file scratch package against the same calls joined into one file. The pausing graph is package-wide since 72e7789c; `code_on_a_cycle` (a lambda round a cycle) is not yet (#1129).
 
 * **To probe an unproved claim, put the call in a loop body or behind an input the prover cannot pin** (y4b, 2026-10-30): a value from a pure call with literal arguments is run at build time and proved, so such a probe never shows a refusal. A call is carried back to its caller's entry only from the top of a body, not from inside a loop. `--asserts` lists only the checker's claims.
 * **The lowering cache's key leaves out an inferred `sync`** (#1014, y5): a body change that makes a `tools/*.nika` function `async` leaves its callers' lowered files stale, and a touch or `NIKAIA_LOWER_CACHE_SALT` does not refresh them; declare such functions `sync`. Remove this line when #1014 closes.
@@ -228,34 +225,10 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   from an earlier listing: every commit shifts them.
 * **Edit scripts:** replace blocks bottom-up with exact-string asserts. Never
   `str.replace('', ...)` (an empty-slice replace corrupted `emit/mod.rs` once).
-* **The converter** `crates/rs2nika/convert` (a Nikaia project: `nikaia build`
-  there, then `target/nikaia/bin/rs2nika [--profile check|check-free|emit] [--prefix X_]
-  [--file] F.rs`; `check-free` for code without a `Checker`, `Emitter` or `self`:
-  no `sync` on free functions, R85) writes a first draft of a Rust function in Nikaia (TODO
-  markers where it cannot), names on stderr the callees not yet in Nikaia and
-  the functions tools/*.nika may already have; `--rules` lists its rules,
-  `--lint F.nika` flags known defects in hand-written Nikaia, and
-  `rs2nika.names` beside it maps Rust helpers to their Nikaia names;
-  `--score DRAFT FINAL` prints how much of a draft the committed code kept
-  (the report's `Rs2nika:` field). `--out DIR A.rs B.rs ..` converts many
-  files in one run, on all cores, reading the repository once: `DIR/<name>.nika`
-  and `DIR/<name>.notes` (the stderr lines), each prefixed `<name>_` unless
-  `--prefix` is given; `--corpus` also scores its cases in parallel. It writes the draft from
-  rust-analyzer's syntax tree (`--engine tree`, the default; `--out` and
-  `--file` still take the line engine, `--engine lines`). Iterator chains (`.iter().map(..).sum()`,
-  `.any(..)`, `.filter(..).map(..).collect()`) are the house style in
-  `tools/*.nika`, as the converter writes them (owner, 2026-10-27). Rust's
-  types come from rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`): `--facts
-  F` takes them (`rust-analyzer lsif crates/nikaia > x.lsif`, two minutes,
-  then `nikaia run -- x.lsif > F` in `crates/rs2nika/facts`; delete the 100 MB
-  `x.lsif` after), and closures get their types and options their `match`
-  from them (R82, R222). **What a move decides goes into `rs2nika.names`**
-  (R224): a name the Nikaia code spells otherwise (`old new`), and under
-  `[types]` a Rust type it writes otherwise (`Rc<RefCell<Node>> = NodeId`,
-  matched without spaces), each with its reason after ` #`, in the commit of
-  the move, so the next draft already carries the decision. A project of its
-  own keeps its table in the directory it converts from (or `--names FILE`);
-  it is read before the converter's; open
+* **A move is translated by hand from the Rust** (owner, 2026-11-01: the
+  converter `rs2nika` is deleted; its rules live on in this file). Iterator
+  chains (`.iter().map(..).sum()`, `.any(..)`, `.filter(..).map(..).collect()`)
+  are the house style in `tools/*.nika` (owner, 2026-10-27). Open
   lowering defects are GitHub issues, the language options against the usual
   hurdles in `docs/history/mitigation-hurdles.md`.
 
