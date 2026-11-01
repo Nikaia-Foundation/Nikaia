@@ -37,6 +37,7 @@ use nikaia_std::tools::project_members::{
 use nikaia_std::tools::project_settings::{self, ProjectSettingsRefusal, ProjectWords};
 use nikaia_std::tools::project_tests::{self, ProjectTestsOutcome as Outcome};
 pub use nikaia_std::tools::project_tests::{OutputTest, ProgramTest};
+use nikaia_std::tools::project_write::{self, ProjectWriteRefusal};
 
 use anyhow::{Context, Result, anyhow};
 use orchestrator::cache::{Artifacts, Cache, Choices, Layout, Lockfile};
@@ -1513,40 +1514,30 @@ pub fn write_proofs(root: &Path, book: Option<&crate::proofs::Book>, locked: boo
     let Some(book) = book else {
         return Ok(());
     };
-    if !locked {
-        return book
-            .write(root)
-            .with_context(|| format!("writing {}", root.join(crate::proofs::FILE).display()));
+    block_on(project_write::project_write_proofs(
+        root, book, locked, &whole,
+    ))
+    .map_err(write_refusal)
+}
+
+/// A file written whole and only where it changed
+/// (`comptime_run::write_if_changed`), as `project_write.nika` takes it: what
+/// failed, or `None`.
+fn whole(path: &Path, text: &str) -> Option<String> {
+    crate::comptime_run::write_if_changed(path, text).err()
+}
+
+/// `project_write.nika`'s refusal as the error it was before the move (C1): a
+/// statement about the build is a refusal, anything else a failure.
+fn write_refusal(thrown: nikaia_std::error::Thrown<ProjectWriteRefusal>) -> anyhow::Error {
+    written(thrown.split().0)
+}
+
+fn written(refusal: ProjectWriteRefusal) -> anyhow::Error {
+    match refusal {
+        ProjectWriteRefusal::Refused(why) => diagnostics::refuse(why),
+        ProjectWriteRefusal::Failed(why) => anyhow!(why),
     }
-    if book.searched > 0 || !book.as_recorded(root) {
-        // **Where the questions were asked** (D22), the first few: the file
-        // and the function, so the change that asked them can be found.
-        const SHOWN: usize = 5;
-        let mut places: String = book
-            .searched_at
-            .iter()
-            .take(SHOWN)
-            .map(|place| format!("\n  asked at {}", crate::proofs::shown(place, root)))
-            .collect();
-        if book.searched_at.len() > SHOWN {
-            places.push_str(&format!(
-                "\n  and at {} other places",
-                book.searched_at.len() - SHOWN
-            ));
-        }
-        let why = match book.searched {
-            0 => "it holds entries no question asked".to_string(),
-            1 => "1 question was searched".to_string(),
-            n => format!("{n} questions were searched"),
-        };
-        return Err(anyhow!(project_check::project_check_locked_proofs(
-            &root.join(crate::proofs::FILE).display().to_string(),
-            &why,
-            &places,
-            crate::proofs::FILE
-        )));
-    }
-    Ok(())
 }
 
 /// Write the ledger, or - under `--locked` - check that it did not need
@@ -1556,29 +1547,18 @@ pub fn write_proofs(root: &Path, book: Option<&crate::proofs::Book>, locked: boo
 /// meanings: the same sources and the same compiler produce the same file, so a
 /// difference is a change in a contract and never in the formatting.
 pub fn write_ledger(path: &Path, ledger: &str, locked: bool) -> Result<()> {
-    if !locked {
-        // **Written whole, and only where it changed**: builds side by side
-        // read a package's ledger (the programs `nikaia test` builds on its
-        // workers all depend on the one package), and a build that read it
-        // while another was rewriting it read half a ledger and refused
-        // sound code.
-        return crate::comptime_run::write_if_changed(path, ledger).map_err(|e| anyhow!(e));
-    }
-
-    let committed = std::fs::read_to_string(path).with_context(|| {
-        project_check::project_check_locked_ledger_missing(&path.display().to_string())
-    })?;
-
-    if committed != *ledger {
-        return Err(diagnostics::refuse(
-            project_check::project_check_locked_ledger_changed(
-                &path.display().to_string(),
-                &changed_lines(ledger, &committed).join("\n"),
-            ),
-        ));
-    }
-
-    Ok(())
+    block_on(project_write::project_write_ledger(
+        path,
+        ledger.to_string(),
+        locked,
+        &whole,
+    ))
+    .map_err(
+        |error| match nikaia_std::error::holds::<ProjectWriteRefusal>(&*error) {
+            true => written(nikaia_std::error::opened(error)),
+            false => anyhow!("{error}"),
+        },
+    )
 }
 
 /// The lines the build produced that the committed ledger does not have, each

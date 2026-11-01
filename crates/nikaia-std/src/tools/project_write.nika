@@ -1,0 +1,79 @@
+// crates/nikaia-std/src/tools/project_write.nika
+//
+// **The ledger and the proofs written, or under `--locked` compared**, for
+// the compiler's `project::write_ledger` and `project::write_proofs`. Moved
+// from Rust (ADR-294, #125, C1). Writing a file whole, and only where it
+// changed, stays Rust (`comptime_run::write_if_changed`), handed in as
+// `whole`, as `proofs_book_write` takes it.
+
+use std::fs
+
+/// Why a write stops.
+pub enum ProjectWriteRefusal {
+    /// A statement about the build, in the words the compiler reports.
+    Refused(String),
+    /// A failure that is no statement about the program (a file that could
+    /// not be read or written).
+    Failed(String),
+}
+
+impl Error for ProjectWriteRefusal {
+    fn message(ref self) -> String {
+        return match self {
+            ProjectWriteRefusal::Refused(why) => why.clone(),
+            ProjectWriteRefusal::Failed(why) => why.clone(),
+        }
+    }
+}
+
+/// Write the ledger, or - under `--locked` - check that it did not need
+/// writing.
+///
+/// The determinism guarantee (13.5) is what lets this compare bytes rather than
+/// meanings: the same sources and the same compiler produce the same file, so a
+/// difference is a change in a contract and never in the formatting.
+pub fn project_write_ledger(path: ref fs::Path, ledger: String, locked: bool, whole: fn(ref fs::Path, ref String) -> String? sync) throws {
+    if !locked {
+        // **Written whole, and only where it changed**: builds side by side
+        // read a package's ledger (the programs `nikaia test` builds on its
+        // workers all depend on the one package), and a build that read it
+        // while another was rewriting it read half a ledger and refused
+        // sound code.
+        let failed = whole(path, ledger) ?? return
+        throw ProjectWriteRefusal::Failed(failed)
+    }
+
+    let committed = fs::read_to_string(path, fs::Root::Anywhere) catch { throw ProjectWriteRefusal::Failed(f"{project_check_locked_ledger_missing(path.display().to_string())}: {error}") }
+
+    if committed != ledger {
+        throw ProjectWriteRefusal::Refused(project_check_locked_ledger_changed(path.display().to_string(), changed_lines(ledger, committed).join("\n")))
+    }
+}
+
+/// **Write `nikaia.proofs`, or - under `--locked` - check that it did not
+/// need to change** ([ADR-270](../../docs/specification/adr/adr-270.md) D21,
+/// D22): every question the build asked has an entry that checks, and every
+/// entry is one a question asked, so the file cannot rot. Nothing to do where
+/// the lowering asked nothing - a cache hit, a file outside a project.
+pub fn project_write_proofs(root: ref fs::Path, book: ref ProofsBook, locked: bool, whole: fn(ref fs::Path, ref String) -> String? sync) throws {
+    if !locked {
+        let failed = proofs_book_write(book, root, whole) ?? return
+        throw ProjectWriteRefusal::Failed(f"writing {root.join(PROOFS_FILE).display()}: {failed}")
+    }
+    if book.searched > 0 || !proofs_book_as_recorded(book, root) {
+        let mut places: String = book.searched_at.iter().take(PROJECT_WRITE_SHOWN).map(fn(place) { f"\n  asked at {proofs_shown(place, root)}" }).collect()
+        if book.searched_at.len() > PROJECT_WRITE_SHOWN {
+            places.push_str(f"\n  and at {book.searched_at.len() - PROJECT_WRITE_SHOWN} other places")
+        }
+        let why = match book.searched {
+            0 => "it holds entries no question asked",
+            1 => "1 question was searched",
+            n => f"{n} questions were searched",
+        }
+        throw ProjectWriteRefusal::Failed(project_check_locked_proofs(root.join(PROOFS_FILE).display().to_string(), why, places, PROOFS_FILE))
+    }
+}
+
+// **Where the questions were asked** (D22), the first few: the file
+// and the function, so the change that asked them can be found.
+comptime PROJECT_WRITE_SHOWN: i64 = 5
