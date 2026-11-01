@@ -7,10 +7,7 @@
 // `Part: #N`. Refuses when a listed file is unchanged or when a staged file is
 // not listed. Adds exactly the listed files, commits with the subject,
 // `Changelog:`, `Fixes #N` / `Part of #N` and the lines under `Attribution:` at
-// the end of the brief (the report's name without `.report.md`, which is the
-// brief itself when that ends in `.md`, else `<brief>.md`;
-// without them `Co-Authored-By: Claude <Model: field, default Sonnet 5.5>` and the
-// last `Claude-Session:` trailer on develop),
+// the end of the report (the agent's own trailer lines),
 // and leaves the commit local: it writes `Pushed: local <sha>` into the report
 // and prints `committed <sha8> local` (owner, 2026-10-31: the driver runs the
 // whole suite on builders' commits and pushes them when it is green).
@@ -32,11 +29,11 @@ fn commit_field(text: String, key: String) -> String {
     return ""
 }
 
-// The lines after `Attribution:` up to the end of the brief.
-fn commit_attribution(brief: String) -> String {
+// The lines after `Attribution:` up to the end of the report.
+fn commit_attribution(report: String) -> String {
     let mut out: Vec[String] = []
     let mut on = false
-    for line in brief.split("\n") {
+    for line in report.split("\n") {
         if on {
             out.push(line.trim_end().clone())
         } else if line.starts_with("Attribution:") {
@@ -46,16 +43,7 @@ fn commit_attribution(brief: String) -> String {
     return out.join("\n").trim().clone()
 }
 
-// The `Claude-Session:` line of the last commit on develop that has one.
-fn commit_session() -> String throws {
-    let body = commit_git(["log", "-1", "--grep=^Claude-Session:", "--format=%B", "develop"])
-    for line in body.split("\n") {
-        if line.starts_with("Claude-Session:") { return line.trim().clone() }
-    }
-    return ""
-}
-
-fn commit_message(report: String, brief: String) -> String throws {
+fn commit_message(report: String) -> String throws {
     let mut msg = commit_field(report.clone(), "Commit:")
     let body = commit_field(report.clone(), "Body:")
     if body != "" && body != "none" { msg = msg + f"\n\n{body}" }
@@ -68,14 +56,7 @@ fn commit_message(report: String, brief: String) -> String throws {
     } else if part != "" {
         msg = msg + f"\n\nPart of {part}"
     }
-    let mut who = commit_attribution(brief)
-    if who == "" {
-        let mut model = commit_field(report, "Model:")
-        if model == "" { model = "Sonnet 5.5" }
-        who = f"Co-Authored-By: Claude {model} <noreply@anthropic.com>"
-        let session = commit_session()
-        if session != "" { who = who + "\n" + session }
-    }
+    let who = commit_attribution(report)
     if who != "" { msg = msg + f"\n\n{who}" }
     return msg
 }
@@ -132,13 +113,6 @@ fn main() throws {
         process::exit(2)
     }
     let report = fs::read_to_string(path.clone(), fs::Root::Anywhere)
-    let brief_path = path.strip_suffix(".report.md") ?? ""
-    let mut brief: String = ""
-    if brief_path.ends_with(".md") && fs::exists(brief_path.clone(), fs::Root::Anywhere) {
-        brief = fs::read_to_string(brief_path.clone(), fs::Root::Anywhere)
-    } else if brief_path != "" && fs::exists(f"{brief_path}.md", fs::Root::Anywhere) {
-        brief = fs::read_to_string(f"{brief_path}.md", fs::Root::Anywhere)
-    }
     let mut files: Vec[String] = []
     for f in commit_field(report.clone(), "Files:").split(" ") {
         if f != "" { files.push(f.clone()) }
@@ -152,7 +126,7 @@ fn main() throws {
         println(why)
         process::exit(1)
     }
-    let msg = commit_message(report.clone(), brief)
+    let msg = commit_message(report.clone())
     if dry {
         println(f"git add {files.join(" ")}")
         println(msg)

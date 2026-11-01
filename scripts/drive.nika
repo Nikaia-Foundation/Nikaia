@@ -762,9 +762,8 @@ fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throw
     }
     let name = drive_stem(brief)
     let msg = f"briefs: {name} report"
-    let trailer = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01UVxJDveRM5qKZKyCqq6Y24"
     drive_say(dry, "git add " + paths.join(" "))
-    drive_say(dry, f"git commit -m '{msg}' -m <Attribution> -- " + paths.join(" "))
+    drive_say(dry, f"git commit -m '{msg}' -- " + paths.join(" "))
     if dry { return }
     let mut add: Vec[String] = ["add"]
     for i in 0..<paths.len() { add.push(paths[i].clone()) }
@@ -773,7 +772,7 @@ fn drive_commit(dry: bool, dir: String, brief: String, extra: Vec[String]) throw
     for i in 0..<paths.len() { status.push(paths[i].clone()) }
     let changed = process::run("git", status).stdout.trim().clone()
     if changed == "" { return }
-    let mut commit: Vec[String] = ["commit", "-m", msg, "-m", trailer, "--"]
+    let mut commit: Vec[String] = ["commit", "-m", msg, "--"]
     for i in 0..<paths.len() { commit.push(paths[i].clone()) }
     let made = process::run("git", commit)
     if !made.ok {

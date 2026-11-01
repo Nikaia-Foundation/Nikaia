@@ -192,8 +192,8 @@ paid for the rule):
   re-traces; it does not re-queue the same brief. A long brief tells the
   builder to stop about 15 turns before `max_turns`, commit what is finished
   and report `partial` (y4).
-* **The fixed block** `docs/briefs/common.part` (rules, disk, report form,
-  `Attribution:`) ends every brief, also a fix-forward, with `<full brief
+* **The fixed block** `docs/briefs/common.part` (rules, disk, report form)
+  ends every brief, also a fix-forward, with `<full brief
   path>` filled in: without the report path `batch.nika` never sees it done.
 
 **A move brief** (owner, 2026-10-28) hands over its draft: one `Cut:
@@ -250,12 +250,10 @@ The builder writes exactly `<full brief path>.report.md`, these fields only:
     Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
     Measure: <builds=.. clippy_with_tests=.. ...>   (never under Found)
+    Attribution:   (last, the builder's trailer lines below it)
 
-Every brief ends with an `Attribution:` block (the commit's trailer lines);
-`scripts/commit.nika` copies it into the message, with everything after it:
-nothing follows the `Attribution:` block, and a paragraph added on a re-run
-goes above `## Rules` (y2b 2026-10-31: an "Earlier attempt" section after it
-would have landed in the commit message). The builder's final answer
+The builder ends its report with `Attribution:` and its own commit trailer
+lines; a brief carries none. The builder's final answer
 is one line: `done <sha>, report <path>`, `BLOCKED: <reason>, report <path>`
 or `PUSH REJECTED <sha>, report <path>`, plus `NEEDS: <short>` when `Needs`
 is not `none`.

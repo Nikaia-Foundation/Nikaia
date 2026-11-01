@@ -166,8 +166,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   write `Part: #N`); then run `target/fast/nikaia run
   scripts/commit.nika -- REPORT` (`--dry-run` shows the message). It refuses an
   unchanged listed file or a staged file not listed, adds exactly the listed
-  files, writes the message (subject, `Changelog:`, `Fixes`, the brief's
-  `Attribution:` block), commits without pushing, writes `Pushed: local <sha>`
+  files, writes the message (subject, `Changelog:`, `Fixes`, the trailer
+  lines under the report's last field `Attribution:`), commits without
+  pushing, writes `Pushed: local <sha>`
   into the report and prints `committed <sha8> local`. Several commits: one report
   `<brief>.step<N>.report.md` per step, only if needed.
 * **Do not delete branches.** You cannot, and need not: leave a `wip/*` branch where it is; the owner deletes it.
