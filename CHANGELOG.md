@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1330] — 2026-11-01
+
+**check: a list or map element past a jump compares with a value (#1112)**
+- An element read with `m.get(k) ?? return` (named or inline) compared with `==` against a value that does not copy is lowered as a view, so rustc no longer refuses it (#1112).
+
 ## [0.0.1329] — 2026-10-31
 
 **spec: `ref` in front of a tuple (#1115); a path orders, equates and hashes (ADR-319 D9, #1116)**
