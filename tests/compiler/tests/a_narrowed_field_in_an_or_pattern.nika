@@ -1,0 +1,37 @@
+// A `T?` field or value narrowed by an earlier `null` arm is `Some(..)` in
+// its own alternative of an or-pattern only (#1127, #886, #902).
+enum Item { Fn { name: String?, public: bool }, Enum { name: String, public: bool }, Other }
+enum Pair { A(String?, i64), B(String, i64), C }
+
+fn names(items: ref Vec[Item]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for item in items {
+        let name = match item {
+            Item::Fn { name: null, .. } => continue,
+            Item::Fn { name, public: true } | Item::Enum { name, public: true } => name.clone(),
+            else => continue,
+        }
+        out.push(name)
+    }
+    return out
+}
+
+fn firsts(pairs: ref Vec[Pair]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for pair in pairs {
+        let first = match pair {
+            Pair::A(null, _) => continue,
+            Pair::A(s, _) | Pair::B(s, _) => s.clone(),
+            else => continue,
+        }
+        out.push(first)
+    }
+    return out
+}
+
+fn main() {
+    let v = [Item::Fn { name: "a", public: true }, Item::Fn { name: null, public: true }, Item::Enum { name: "e", public: true }, Item::Other]
+    println(names(v).join(","))
+    let p = [Pair::A("x".to_uppercase(), 1), Pair::A(null, 2), Pair::B("y".to_uppercase(), 3), Pair::C]
+    println(firsts(p).join(","))
+}

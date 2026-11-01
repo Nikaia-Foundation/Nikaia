@@ -307,66 +307,100 @@ impl EmitState {
             None => None,
         }, || vec![].into());
         if !set.is_empty() {
-            match &arm.pattern {
-                MatchPattern::Tuple { path, parts } => {
-                    out.push(&emit_match_path(world, path));
-                    out.push("(");
+            let written: Option<i64> = self.emit_core_set_pattern_written(world, walk, out, host, &arm.pattern, &set, wild, lent_key, collect, 0, depth, flow, scope)?;
+            if written.is_some() { return Ok(nikaia_std::index::or(written, || 0)); }
+        }
+        let sets: Vec<Vec<i64>> = nikaia_std::index::or(match self.facts.set_alternatives.get(&node_key(&arm.body)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into());
+        match &arm.pattern {
+            MatchPattern::Or(alternatives) => {
+                if (sets.len() as i64) == alternatives.len() as i64 {
                     let mut n: i64 = 0;
                     let mut i: i64 = 0;
-                    for part in parts.iter() {
-                        if i > 0 { out.push(", "); }
-                        let some = set.contains(&i);
-                        if !path.is_empty() && collect && self.boxed_part(world, path, i) && !binds_a_part(part) {
-                            out.push(&format!("__nikaia_box{}", n));
-                            n += 1;
-                            i += 1;
-                            continue;
-                        }
-                        if some { out.push("Some("); }
-                        n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)?;
-                        if some { out.push(")"); }
+                    for alternative in alternatives.iter() {
+                        if i > 0 { out.push(" | "); }
+                        let own = (*nikaia_std::index::get(&sets, nikaia_std::index::at(i))).to_owned();
                         i += 1;
-                    }
-                    out.push(")");
-                    return Ok(n);
-                },
-                MatchPattern::Named { path, fields, rest } => {
-                    let rest = *rest;
-                    out.push(&format!("{} {{ ", emit_match_path(world, path)));
-                    let mut n: i64 = 0;
-                    let mut first = true;
-                    let mut open = rest;
-                    let mut i: i64 = 0;
-                    for field in fields.iter() {
-                        let some = set.contains(&i);
-                        i += 1;
-                        let shorthand = emit_match_shorthand(world, field);
-                        if shorthand && wild && !some {
-                            open = true;
-                            continue;
+                        if !own.is_empty() {
+                            let written: Option<i64> = self.emit_core_set_pattern_written(world, walk, out, host, alternative, &own, wild, lent_key, collect, n, depth, flow, scope)?;
+                            if written.is_some() {
+                                n = nikaia_std::index::or(written, || n.into());
+                                continue;
+                            }
                         }
-                        if !first { out.push(", "); }
-                        first = false;
-                        if shorthand && !some {
-                            out.push(&self.emit_match_bound(world, field.name, wild, lent_key));
-                            continue;
-                        }
-                        out.push(&format!("{}: ", emit_text(world, field.name)));
-                        if some { out.push("Some("); }
-                        n = self.emit_core_pattern_written(world, walk, out, host, &field.pat, wild, lent_key, collect, n, depth, flow, scope)?;
-                        if some { out.push(")"); }
+                        n = self.emit_core_pattern_written(world, walk, out, host, alternative, wild, lent_key, collect, n, depth, flow, scope)?;
                     }
-                    if open || first {
-                        if !first { out.push(", "); }
-                        out.push("..");
-                    }
-                    out.push(" }");
                     return Ok(n);
-                },
-                _ => { },
-            }
+                }
+            },
+            _ => { },
         }
         Ok(self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, wild, lent_key, collect, 0, depth, flow, scope)?)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_set_pattern_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, set: &[i64], wild: bool, lent_key: i64, collect: bool, before: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<Option<i64>, nikaia_std::error::Thrown<EmitRefused>> {
+        Ok(match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                out.push(&emit_match_path(world, path));
+                out.push("(");
+                let mut n = before;
+                let mut i: i64 = 0;
+                for part in parts.iter() {
+                    if i > 0 { out.push(", "); }
+                    let some = set.contains(&i);
+                    if !path.is_empty() && collect && self.boxed_part(world, path, i) && !binds_a_part(part) {
+                        out.push(&format!("__nikaia_box{}", n));
+                        n += 1;
+                        i += 1;
+                        continue;
+                    }
+                    if some { out.push("Some("); }
+                    n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)?;
+                    if some { out.push(")"); }
+                    i += 1;
+                }
+                out.push(")");
+                return Ok(Some(n));
+            },
+            MatchPattern::Named { path, fields, rest } => {
+                let rest = *rest;
+                out.push(&format!("{} {{ ", emit_match_path(world, path)));
+                let mut n = before;
+                let mut first = true;
+                let mut open = rest;
+                let mut i: i64 = 0;
+                for field in fields.iter() {
+                    let some = set.contains(&i);
+                    i += 1;
+                    let shorthand = emit_match_shorthand(world, field);
+                    if shorthand && wild && !some {
+                        open = true;
+                        continue;
+                    }
+                    if !first { out.push(", "); }
+                    first = false;
+                    if shorthand && !some {
+                        out.push(&self.emit_match_bound(world, field.name, wild, lent_key));
+                        continue;
+                    }
+                    out.push(&format!("{}: ", emit_text(world, field.name)));
+                    if some { out.push("Some("); }
+                    n = self.emit_core_pattern_written(world, walk, out, host, &field.pat, wild, lent_key, collect, n, depth, flow, scope)?;
+                    if some { out.push(")"); }
+                }
+                if open || first {
+                    if !first { out.push(", "); }
+                    out.push("..");
+                }
+                out.push(" }");
+                return Ok(Some(n));
+            },
+            _ => return Ok(None),
+        })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

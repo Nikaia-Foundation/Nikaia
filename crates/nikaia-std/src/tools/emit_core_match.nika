@@ -485,81 +485,120 @@ impl EmitState {
     fn emit_core_arm_pattern_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arm: ref MatchArm, wild: bool, lent_key: i64, collect: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> i64 sync throws {
         let set: Vec[i64] = self.facts.set_positions.get(node_key(arm.body))?.clone() ?? []
         if set.len() > 0 {
-            match arm.pattern {
-                MatchPattern::Tuple { path, parts } => {
-                    out.push(emit_match_path(world, path))
-                    out.push("(")
-                    let mut n = 0
-                    let mut i: i64 = 0
-                    for part in parts {
-                        if i > 0 {
-                            out.push(", ")
-                        }
-                        let some = set.contains(i)
-                        if path.len() > 0 && collect && self.boxed_part(world, path, i) && !binds_a_part(part) {
-                            out.push(f"__nikaia_box{n}")
-                            n += 1
-                            i += 1
-                            continue
-                        }
-                        if some {
-                            out.push("Some(")
-                        }
-                        n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)
-                        if some {
-                            out.push(")")
-                        }
-                        i += 1
-                    }
-                    out.push(")")
-                    return n
-                },
-                // **A struct's field found set is `field: Some(…)`** (#886):
-                // `set` holds the fields' indexes as the pattern writes them.
-                MatchPattern::Named { path, fields, rest } => {
-                    out.push(f"{emit_match_path(world, path)} {{ ")
-                    let mut n = 0
-                    let mut first = true
-                    let mut open = rest
-                    let mut i: i64 = 0
-                    for field in fields {
-                        let some = set.contains(i)
-                        i += 1
-                        let shorthand = emit_match_shorthand(world, field)
-                        if shorthand && wild && !some {
-                            open = true
-                            continue
-                        }
-                        if !first {
-                            out.push(", ")
-                        }
-                        first = false
-                        if shorthand && !some {
-                            out.push(self.emit_match_bound(world, field.name, wild, lent_key))
-                            continue
-                        }
-                        out.push(f"{emit_text(world, field.name)}: ")
-                        if some {
-                            out.push("Some(")
-                        }
-                        n = self.emit_core_pattern_written(world, walk, out, host, field.pat, wild, lent_key, collect, n, depth, flow, scope)
-                        if some {
-                            out.push(")")
-                        }
-                    }
-                    if open || first {
-                        if !first {
-                            out.push(", ")
-                        }
-                        out.push("..")
-                    }
-                    out.push(" }")
-                    return n
-                },
-                else => {},
+            let written: i64? = self.emit_core_set_pattern_written(world, walk, out, host, arm.pattern, set, wild, lent_key, collect, 0, depth, flow, scope)
+            if written != null {
+                return written ?? 0
             }
         }
+        // **Each alternative of an or-pattern with its own set parts**
+        // (#1127): `R::A { name: Some(name), .. } | R::B { name, .. }`.
+        let sets: Vec[Vec[i64]] = self.facts.set_alternatives.get(node_key(arm.body))?.clone() ?? []
+        match arm.pattern {
+            MatchPattern::Or(alternatives) => {
+                if sets.len() == alternatives.len() {
+                    let mut n = 0
+                    let mut i: i64 = 0
+                    for alternative in alternatives {
+                        if i > 0 {
+                            out.push(" | ")
+                        }
+                        let own = sets[i].clone()
+                        i += 1
+                        if own.len() > 0 {
+                            let written: i64? = self.emit_core_set_pattern_written(world, walk, out, host, alternative, own, wild, lent_key, collect, n, depth, flow, scope)
+                            if written != null {
+                                n = written ?? n
+                                continue
+                            }
+                        }
+                        n = self.emit_core_pattern_written(world, walk, out, host, alternative, wild, lent_key, collect, n, depth, flow, scope)
+                    }
+                    return n
+                }
+            },
+            else => {},
+        }
         return self.emit_core_pattern_written(world, walk, out, host, arm.pattern, wild, lent_key, collect, 0, depth, flow, scope)
+    }
+
+    /// **A pattern with each part in `set` written `Some(…)`**: a tuple's or
+    /// variant's position (#879, #902), a struct's field by its index as
+    /// written (#886); the boxed parts numbered on from `before`. `null` for
+    /// another pattern, which the caller writes plainly.
+    fn emit_core_set_pattern_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, set: ref Vec[i64], wild: bool, lent_key: i64, collect: bool, before: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> i64? sync throws {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                out.push(emit_match_path(world, path))
+                out.push("(")
+                let mut n = before
+                let mut i: i64 = 0
+                for part in parts {
+                    if i > 0 {
+                        out.push(", ")
+                    }
+                    let some = set.contains(i)
+                    if path.len() > 0 && collect && self.boxed_part(world, path, i) && !binds_a_part(part) {
+                        out.push(f"__nikaia_box{n}")
+                        n += 1
+                        i += 1
+                        continue
+                    }
+                    if some {
+                        out.push("Some(")
+                    }
+                    n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)
+                    if some {
+                        out.push(")")
+                    }
+                    i += 1
+                }
+                out.push(")")
+                return n
+            },
+            // **A struct's field found set is `field: Some(…)`** (#886):
+            // `set` holds the fields' indexes as the pattern writes them.
+            MatchPattern::Named { path, fields, rest } => {
+                out.push(f"{emit_match_path(world, path)} {{ ")
+                let mut n = before
+                let mut first = true
+                let mut open = rest
+                let mut i: i64 = 0
+                for field in fields {
+                    let some = set.contains(i)
+                    i += 1
+                    let shorthand = emit_match_shorthand(world, field)
+                    if shorthand && wild && !some {
+                        open = true
+                        continue
+                    }
+                    if !first {
+                        out.push(", ")
+                    }
+                    first = false
+                    if shorthand && !some {
+                        out.push(self.emit_match_bound(world, field.name, wild, lent_key))
+                        continue
+                    }
+                    out.push(f"{emit_text(world, field.name)}: ")
+                    if some {
+                        out.push("Some(")
+                    }
+                    n = self.emit_core_pattern_written(world, walk, out, host, field.pat, wild, lent_key, collect, n, depth, flow, scope)
+                    if some {
+                        out.push(")")
+                    }
+                }
+                if open || first {
+                    if !first {
+                        out.push(", ")
+                    }
+                    out.push("..")
+                }
+                out.push(" }")
+                return n
+            },
+            else => return null,
+        }
     }
 
     /// The boxed part number `wanted` of a pattern (numbered as
