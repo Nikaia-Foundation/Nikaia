@@ -993,8 +993,10 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         let drained: String = dotted_path(world, receiver) ?? ""
         if drained.len() > 0 {
             let root = a_root_segment(drained)
-            // A field path of a local stays in place too: it is emptied, not moved.
-            let callers = (root == "self" && state.borrowing_self) || (state.binding(root)?.changing ?? false) || (root != drained && key != "Vec::drain")
+            // A field path of a `let mut` local stays in place too: it is emptied,
+            // not moved. An immutable local's field is taken, as it asks no `mut`.
+            let a_mut_local = state.binding(root)?.immutable == null
+            let callers = (root == "self" && state.borrowing_self) || (state.binding(root)?.changing ?? false) || (root != drained && key != "Vec::drain" && a_mut_local)
             if callers {
                 state.facts.kept_drains.insert(id_of(receiver) as i64)
             } else {

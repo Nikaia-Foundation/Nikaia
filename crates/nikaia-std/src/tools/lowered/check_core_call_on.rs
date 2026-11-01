@@ -766,7 +766,8 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         let drained: String = nikaia_std::index::or(dotted_path(world, receiver), || "".into());
         if !drained.is_empty() {
             let root = a_root_segment(&drained);
-            let callers = root == "self" && state.borrowing_self || nikaia_std::index::or(state.binding(&root).as_ref().map(|__nikaia_it| __nikaia_it.changing), || false) || root != drained && key != "Vec::drain";
+            let a_mut_local = state.binding(&root).and_then(|__nikaia_it| __nikaia_it.immutable).is_none();
+            let callers = root == "self" && state.borrowing_self || nikaia_std::index::or(state.binding(&root).as_ref().map(|__nikaia_it| __nikaia_it.changing), || false) || root != drained && key != "Vec::drain" && a_mut_local;
             if callers { state.facts.kept_drains.insert(id_of(receiver) as i64); } else {
                 let last = state.changed.len() as i64 - 1;
                 if root == drained && last >= 0 && *nikaia_std::index::get(&state.changed, nikaia_std::index::at(last)) == drained { state.drained.insert(last); }
