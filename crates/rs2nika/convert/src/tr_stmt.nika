@@ -375,6 +375,29 @@ impl TrEm {
         if self.t.is(p, "IDENT_PAT") && self.t.has_tok(p, "MUT_KW") {
             name = f"mut {name}"
         }
+        if self.t.is(p, "TUPLE_PAT") && els < 0 {
+            // `let (mut a, mut b)` -> `let mut (a, b)`; a mix stays as written (NK1307)
+            let elems = self.nodes(p)
+            let mut muts = 0
+            for el in elems.clone() {
+                if self.t.is(el, "IDENT_PAT") && self.t.has_tok(el, "MUT_KW") {
+                    muts += 1
+                }
+            }
+            if muts == elems.len() && muts > 0 {
+                name = f"mut {name}"
+            } else if muts > 0 {
+                let mut shown: Vec[String] = []
+                for el in elems {
+                    if self.t.is(el, "IDENT_PAT") && self.t.has_tok(el, "MUT_KW") {
+                        shown.push(f"mut {self.pat(el)}")
+                    } else {
+                        shown.push(self.pat(el))
+                    }
+                }
+                name = f"({shown.join(", ")})"
+            }
+        }
         let mut ty: String = ""
         if ty_n >= 0 {
             ty = f": {self.ty(ty_n)}"
