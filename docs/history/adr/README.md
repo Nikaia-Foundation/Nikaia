@@ -209,6 +209,10 @@ read the record in the right-hand column.
 | [273](adr-273.md) | A Map of `T?` Values Reads One `T?`, and Writing `null` Stores It | [ADR-293](../../specification/adr/adr-293.md) | D1→D12, D2→D13, D3→D14, D4→D15 |
 | [274](adr-274.md) | Where `??`'s Answer Is Only Read, a Value That Is a Word by Its Kind Is Copied and Everything Else Is Lent | [ADR-279](../../specification/adr/adr-279.md) | D1→D8, D2→D9 |
 | [275](adr-275.md) | A Borrowed Left Side of `??` Beside a Jump Is a View Wherever It Stands | [ADR-279](../../specification/adr/adr-279.md) | D1→D10, D2→D11 |
+| [async-1](adr-async-1.md) | `async` Starts a Child That Runs Beside the Code After It and Is Waited For Where Its Name Is First Used; `overlap` and `task::scope` Are Removed | [ADR-async-5](../../specification/adr/adr-async-5.md) | D1→D5, D2→D6, D3→D30 (its jumps D10), D4→D9, D5→D9 (its captures D2), D6→D15, D7→D8, D8→D7, D9→D21, D10→D14 (`task::cancel` removed), D11→D20, D12→D32, D13→D4, D14→D18, D15→D19, D16→D22, D17→D23, D18→D10, D19→D33 |
+| [async-2](adr-async-2.md) | Fan-Out Over a Collection Is the `par_iter` Chain, Whose Lambdas May Pause; the Compiler Picks Pieces or One Task per Element, Under One Rule Set; the `async` Loop Is Removed | [ADR-async-5](../../specification/adr/adr-async-5.md) | D1→D24, D2→D25, D3→D26, D4→D27, D5→D32, D6→D28, D7→D30, D8→D30, D9→D29 |
+| [async-3](adr-async-3.md) | Every Task Is Started in a Group and Lives at Most as Long as It; One Word, `async`, Starts Every Task, and `spawn` Becomes Its Option | [ADR-async-5](../../specification/adr/adr-async-5.md) | D1→D1, D2→D2, D3→D3, D4→D4, D5→D13, D6→D4, D7→D16 |
+| [async-4](adr-async-4.md) | `async` Is an Expression Prefix; `async e` Is Waited Where Its Value Is First Needed, `async(handle)` Gives a Handle Bound to the Group, and Only a Handle Is Cancelled | [ADR-async-5](../../specification/adr/adr-async-5.md) | D1→D5, D2→D6, D3→D7, D4→D11, D5→D12, D6→D13, D7→D9, D8→D31, D9→D10, D10→D14, D11→D22, D12→D33, D13→D34, D14→D17, D15→D16 |
 
 ## What the archived records displaced in one another
 

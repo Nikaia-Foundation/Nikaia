@@ -4480,7 +4480,7 @@ grammar! {
           // `.nika` files is `test`.
           | KW_TEST -> { 0 }
           // **`async`, the prefix that starts a task**
-          // ([ADR-async-4](../../../../docs/specification/adr/adr-async-4.md)):
+          // ([ADR-async-5](../../../../docs/specification/adr/adr-async-5.md)):
           // Part I's list has it since 0.0.1305. No `.nika` in the tree writes
           // it as a name; it appears only inside strings the lowering emits.
           | KW_ASYNC -> { 0 }

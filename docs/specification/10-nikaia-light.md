@@ -192,7 +192,7 @@ waits and takes the first to finish (Part II, 12.4).
 
 **`async` is reserved for its construct**: the prefix that starts a task (8.1.2).
 
-**`spawn` stays reserved until the move to `async(detached)` is built** (8.2): `spawn fn { … }` is still accepted and means `async(detached) fn { … }`, and the commit that removes the form releases the word ([ADR-async-3](adr/adr-async-3.md) D5).
+**`spawn` stays reserved until the move to `async(detached)` is built** (8.2): `spawn fn { … }` is still accepted and means `async(detached) fn { … }`, and the commit that removes the form releases the word ([ADR-async-5](adr/adr-async-5.md) D13).
 
 **`test` is reserved for its construct**: a `test "name" { … }` block of the
 package it stands in (Part III 14.1).
@@ -3726,7 +3726,7 @@ async(detached) fn { println("I am running in the background!") }
 ```
 
 `spawn fn { … }`, the form this replaces, is still accepted and means the same
-until every program is moved; then `spawn` is released ([ADR-async-3](adr/adr-async-3.md) D5).
+until every program is moved; then `spawn` is released ([ADR-async-5](adr/adr-async-5.md) D13).
 
 A free task does not end the program. An error that arrives in a task ends the task, `process::Exit` (7.1) included, and every such error has a receiver ([ADR-346](adr/adr-346.md)):
 
