@@ -1,0 +1,44 @@
+// An arm that takes the parts out of a `mut` parameter and gives them back
+// (Part I 6.5, ADR-094 D7) binds them by value: a part it hands to a `mut`
+// parameter, or walks with `for mut`, is its own and is changed (#734).
+enum Expr {
+	Num(i64),
+	Add { lhs: Expr, rhs: Expr },
+	Call { args: Vec[Expr] },
+}
+
+fn double(mut e: Expr) {
+	match e {
+		Expr::Add { lhs, rhs } => {
+			double(lhs)
+			double(rhs)
+			e = Expr::Add { lhs: lhs, rhs: rhs }
+		},
+		Expr::Call { args } => {
+			for mut a in args {
+				double(a)
+			}
+			e = Expr::Call { args: args }
+		},
+		Expr::Num(n) => {
+			e = Expr::Num(n * 2)
+		},
+	}
+}
+
+fn total(e: ref Expr) -> i64 {
+	return match e {
+		Expr::Num(n) => n,
+		Expr::Add { lhs, rhs } => total(lhs) + total(rhs),
+		Expr::Call { args } => args.iter().map(fn(a) { total(a) }).sum(),
+	}
+}
+
+fn main() {
+	let mut e = Expr::Add {
+		lhs: Expr::Num(1),
+		rhs: Expr::Call { args: [Expr::Num(2), Expr::Num(3)] },
+	}
+	double(e)
+	println(f"{total(e)}")
+}

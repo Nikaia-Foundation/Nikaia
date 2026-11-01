@@ -124,7 +124,10 @@ impl CheckState {
             }
             let viewed = self.a_mut_view_name(world, given_expr);
             if !(found.fits(want) || self.fits_through_deref(world, found, want) || viewed && unviewed_type(found).fits(want)) { return false; }
-            if !viewed && self.a_name_that_changes(world, given_expr) { return true; }
+            if !viewed && self.a_name_that_changes(world, given_expr) {
+                check_narrow_written_through(&mut *self, given_expr);
+                return true;
+            }
             let root: Option<String> = self.rooted_at(world, given_expr);
             if root.is_some() {
                 let changed: String = nikaia_std::index::or(root, || "".into());

@@ -176,8 +176,11 @@ impl CheckState {
             if !(found.fits(want) || self.fits_through_deref(world, found, want) || (viewed && unviewed_type(found).fits(want))) {
                 return false
             }
-            // **A reference that is already there is not written twice.**
+            // **A reference that is already there is not written twice**; a
+            // proved read of it is still lent `mut` out of its option
+            // (ADR-382 D5, bit 16).
             if !viewed && self.a_name_that_changes(world, given_expr) {
+                check_narrow_written_through(self, given_expr)
                 return true
             }
             // **The caller's name is changed there** (Part I 6.5, #734): a

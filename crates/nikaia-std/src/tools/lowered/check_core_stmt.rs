@@ -1293,6 +1293,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
                 None => {
                     mut_view = true;
                     state.facts.mut_view_reads.insert(id_of(iter) as i64, String::from(""));
+                    state.changed.push(format!("{}", *nikaia_std::index::get(&parts, 0)));
                 },
                 Some(ref kept) => { state.a_for_mut_over_a_list_not_mut(&written, &head, kept.kind == CheckKind::Parameter, span); },
             }

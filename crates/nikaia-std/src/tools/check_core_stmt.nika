@@ -1780,6 +1780,9 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
                 null => {
                     mut_view = true
                     state.facts.mut_view_reads.insert(id_of(iter) as i64, "")
+                    // **The list is changed through its elements**: an arm's
+                    // part walked so is opened `mut` (#734).
+                    state.changed.push(f"{parts[0]}")
                 },
                 kept => {
                     state.a_for_mut_over_a_list_not_mut(written, head, kept.kind == CheckKind::Parameter, span)

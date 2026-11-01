@@ -993,9 +993,10 @@ pub(crate) fn check_core_flow_changed_copies(state: &mut CheckState, body: &Expr
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let taking = state.facts.taking_arms.contains_key(&at);
     for local in frame.iter() {
         let copied = state.facts.copied_bindings.contains(&(at, local.name.to_string()));
-        if !copied && (local.lent || over_a_mut_parameter && in_place.contains(&local.id)) { continue; }
+        if !copied && (local.lent || over_a_mut_parameter && !taking && in_place.contains(&local.id)) { continue; }
         let mut changed = false;
         let mut seen = changed_from;
         while seen < state.changed.len() as i64 {
@@ -1049,11 +1050,11 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     check_core_flow_unlend_views(state, world, &arm.pattern, typed, &arm.body);
     let leaves = state.exits(world, &arm.body);
     state.a_branch_that_leaves(from, leaves, span);
-    check_core_flow_changed_copies(state, &arm.body, changed_from, &in_place, mut_subject.is_some());
     if mut_subject.is_some() {
         state.parts_taken_out_of_a_mut_parameter(world, nikaia_std::index::or(mut_subject, || ""), &arm.body, typed, &parts, handed_from);
         check_core_flow_parts_handed_on_in_place(state, &arm.body, &in_place);
     }
+    check_core_flow_changed_copies(state, &arm.body, changed_from, &in_place, mut_subject.is_some());
     state.branch.pop();
     state.scope.pop();
     if state.leaves(world, &arm.body) { return None; }

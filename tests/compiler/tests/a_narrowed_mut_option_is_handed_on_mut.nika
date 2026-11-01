@@ -1,0 +1,23 @@
+// A `mut` parameter of an option, proved present, is lent `mut` out of it when
+// it is handed to a `mut` parameter (ADR-382 D5).
+struct Counter {
+	n: i64,
+}
+
+fn bump(mut c: Counter) {
+	c.n += 1
+}
+
+fn bump_maybe(mut c: Counter?) {
+	if c != null {
+		bump(c)
+	}
+}
+
+fn main() {
+	let mut c: Counter? = Counter { n: 4 }
+	bump_maybe(c)
+	let mut none: Counter? = null
+	bump_maybe(none)
+	println(f"{c?.n ?? 0} {none?.n ?? 0}")
+}

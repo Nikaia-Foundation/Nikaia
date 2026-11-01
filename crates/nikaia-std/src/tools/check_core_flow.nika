@@ -1249,13 +1249,17 @@ fn check_core_flow_parts_handed_on_in_place(mut state: CheckState, body: ref Exp
 ///
 /// **A part bound by value that the arm changes is the arm's own as well**
 /// (#734): it is opened `let mut` again. A part bound in place out of a `mut`
-/// parameter is a `&mut` already, and is left as it is.
+/// parameter is a `&mut` already, and is left as it is; one an arm took out of
+/// it is a value, and is opened `mut` as any other.
 fn check_core_flow_changed_copies(mut state: CheckState, body: ref Expr, changed_from: i64, in_place: ref collections::BTreeSet[i64], over_a_mut_parameter: bool) sync {
     let at = id_of(body) as i64
     let frame = state.scope.last()?.clone() ?? return
+    // **An arm that takes the parts out of a `mut` parameter** binds them by
+    // value (ADR-094 D7): none is a `&mut` in place there.
+    let taking = state.facts.taking_arms.contains_key(at)
     for local in frame {
         let copied = state.facts.copied_bindings.contains((at, local.name.clone()))
-        if !copied && (local.lent || (over_a_mut_parameter && in_place.contains(local.id))) {
+        if !copied && (local.lent || (over_a_mut_parameter && !taking && in_place.contains(local.id))) {
             continue
         }
         let mut changed = false
@@ -1339,11 +1343,13 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     check_core_flow_unlend_views(state, world, arm.pattern, typed, arm.body)
     let leaves = state.exits(world, arm.body)
     state.a_branch_that_leaves(from, leaves, span)
-    check_core_flow_changed_copies(state, arm.body, changed_from, in_place, mut_subject != null)
     if mut_subject != null {
         state.parts_taken_out_of_a_mut_parameter(world, mut_subject ?? "", arm.body, typed, parts, handed_from)
         check_core_flow_parts_handed_on_in_place(state, arm.body, in_place)
     }
+    // After the taking is known: an arm that takes the parts out binds them by
+    // value, so one it changes is opened `mut` (#734).
+    check_core_flow_changed_copies(state, arm.body, changed_from, in_place, mut_subject != null)
     state.branch.pop()
     state.scope.pop()
     if state.leaves(world, arm.body) {
