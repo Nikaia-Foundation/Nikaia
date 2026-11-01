@@ -2359,7 +2359,7 @@ pub mod check_program {
 pub mod check_reads {}
 pub mod check_references {
     #[allow(unused_imports)]
-    pub use super::{check_gives_back};
+    pub use super::{check_gives_back, check_gives_back_parts};
 }
 pub mod check_refusals {
     #[allow(unused_imports)]
@@ -2803,7 +2803,7 @@ pub mod proofs_book {
 }
 pub mod prove_run {
     #[allow(unused_imports)]
-    pub use super::{PROVE_RUN_ROUNDS, ProveClaimRun, ProveComptimes, ProveWalked, prove_comptimes_of, prove_rounds, prove_answer, prove_implies, prove_with_published};
+    pub use super::{PROVE_RUN_ROUNDS, ProveClaimRun, ProveComptimes, ProveWalked, prove_comptimes_of, prove_rounds, prove_answer, prove_model, prove_implies, prove_with_published};
 }
 pub mod prove_terms {
     #[allow(unused_imports)]

@@ -194,6 +194,44 @@ impl CheckState {
 
 pub fn check_gives_back(body: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool { check_gives_back_tail(body, name, words) || check_gives_back_returns(body, name, words) }
 
+pub fn check_gives_back_parts(body: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> Vec<Vec<String>> {
+    let mut found: Vec<Vec<String>> = vec![];
+    check_gives_back_parts_into(body, name, words, &mut found);
+    found
+}
+
+pub(crate) fn check_gives_back_parts_into(expr: &Expr, name: &str, words: &winnow_grammar::InternerContext, found: &mut Vec<Vec<String>>) {
+    match expr {
+        Expr::Block(block, _) => { for tail in block_tail(block) { check_gives_back_parts_into(tail, name, words, found); } },
+        Expr::If { then_branch, else_branch, .. } => {
+            for tail in block_tail(then_branch) { check_gives_back_parts_into(tail, name, words, found); }
+            match else_branch {
+                None => { },
+                Some(other) => { for tail in block_tail(other) { check_gives_back_parts_into(tail, name, words, found); } },
+            }
+        },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { check_gives_back_parts_into(&arm.body, name, words, found); } },
+        Expr::Field { .. } => {
+            let path = match check_gives_back_field_path(expr, name, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+            found.push(path);
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn check_gives_back_field_path(expr: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> Option<Vec<String>> {
+    match expr {
+        Expr::Variable(symbol, _) => { let symbol = *symbol; if words.resolve(symbol) == name { Some(vec![]) } else { None } },
+        Expr::Field { base, name: field, .. } => {
+            let base = nikaia_std::boxed::open(base); let field = *field;
+            let mut path = match check_gives_back_field_path(base, name, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            path.push(words.resolve(field).to_string());
+            Some(path)
+        },
+        _ => None,
+    }
+}
+
 pub(crate) fn check_gives_back_is_name(expr: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool {
     match expr {
         Expr::Variable(symbol, _) => { let symbol = *symbol; words.resolve(symbol) == name },

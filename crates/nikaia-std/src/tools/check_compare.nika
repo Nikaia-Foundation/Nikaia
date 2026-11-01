@@ -364,12 +364,46 @@ impl CheckState {
                 }
                 at = at + 1
             }
-            if taken || check_gives_back(body, name, world.words) {
+            if taken || check_gives_back(body, name, world.words) || self.gives_back_a_moving_field(world, body, name, ty) {
                 continue
             }
             lent.insert(name.clone())
         }
         return lent
+    }
+
+    /// **A field the arm ends in that moves takes the part too** (#1092):
+    /// `A::Refuted(model) => model.values` moves the map out of `model`, so
+    /// `model` is bound as the value.
+    fn gives_back_a_moving_field(ref self, world: ref CheckWorld, body: ref Expr, name: ref String, ty: ref Ty) -> bool {
+        for path in check_gives_back_parts(body, name, world.words) {
+            let mut at: Ty = ty.clone()
+            let mut known = true
+            for field in path {
+                let owner = match at {
+                    Ty::Named { name: written, .. } => written.clone(),
+                    else => "",
+                }
+                let fields = self.fields_of(world, owner) ?? []
+                let mut next: Ty? = null
+                for each in fields {
+                    if each.name == field {
+                        next = each.ty.clone()
+                    }
+                }
+                match next {
+                    null => { known = false },
+                    found => { at = found.clone() },
+                }
+                if !known {
+                    break
+                }
+            }
+            if known && path.len() > 0 && self.takes_away(world, at) {
+                return true
+            }
+        }
+        return false
     }
 }
 

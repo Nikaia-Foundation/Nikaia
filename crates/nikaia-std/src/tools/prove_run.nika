@@ -183,6 +183,18 @@ pub fn prove_answer(asked: ProofsAsked) -> SolverAnswer {
     }
 }
 
+/// A checked model of `facts` and `goal`'s negation, from what the book said
+/// to them (`asked`): the values it gives (#1092).
+pub fn prove_model(held: ref TermArena, facts: ref Vec[i64], goal: i64, asked: ProofsAsked) -> collections::BTreeMap[String, i64]? {
+    let model = match asked {
+        ProofsAsked::Refuted(model) => model
+        else => {
+            return null
+        },
+    }
+    return (if lg_verify_model(held, facts, goal, model) { model.values } else { null })
+}
+
 /// Whether the conditions `from` imply every one of `to`, by the reference
 /// solver with a checked certificate; `false` where it cannot show it, or a
 /// condition does not read back (`condition` gives no nodes).

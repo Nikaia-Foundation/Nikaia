@@ -120,6 +120,14 @@ pub fn prove_answer(asked: ProofsAsked) -> SolverAnswer {
     }
 }
 
+pub fn prove_model(held: &TermArena, facts: &[i64], goal: i64, asked: ProofsAsked) -> Option<collections::BTreeMap<String, i64>> {
+    let model = match asked {
+        ProofsAsked::Refuted(model) => model,
+        _ => { return None; },
+    };
+    if lg_verify_model(held, facts, goal, &model) { Some(model.values) } else { None }
+}
+
 pub fn prove_implies(from: &[String], to: &[String], names: &collections::BTreeSet<String>, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
     if to.iter().all(|c| { from.contains(c) }) { return true; }
     let mut arena = TermArena::empty();

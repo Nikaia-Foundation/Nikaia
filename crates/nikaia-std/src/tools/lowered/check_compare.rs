@@ -218,10 +218,32 @@ impl CheckState {
                 if *nikaia_std::index::get(&self.changed, nikaia_std::index::at(at)) == *name { taken = true; }
                 at = at + 1;
             }
-            if taken || check_gives_back(body, name, world.words) { continue; }
+            if taken || check_gives_back(body, name, world.words) || self.gives_back_a_moving_field(world, body, name, ty) { continue; }
             lent.insert(name.to_string());
         }
         lent
+    }
+    pub(crate) fn gives_back_a_moving_field(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, name: &str, ty: &Ty) -> bool {
+        for path in check_gives_back_parts(body, name, world.words) {
+            let mut at: Ty = ty.clone();
+            let mut known = true;
+            for field in path.iter() {
+                let owner = match at {
+                    Ty::Named { name: ref written, .. } => written.to_string(),
+                    _ => String::from(""),
+                };
+                let fields = nikaia_std::index::or(self.fields_of(world, &owner), || vec![].into());
+                let mut next: Option<Ty> = None;
+                for each in fields.iter() { if each.name == *field { next = Some(each.ty.clone()); } }
+                match next {
+                    None => { known = false; },
+                    Some(ref found) => { at = found.clone(); },
+                }
+                if !known { break; }
+            }
+            if known && !path.is_empty() && self.takes_away(world, &at) { return true; }
+        }
+        false
     }
 }
 

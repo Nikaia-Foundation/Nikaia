@@ -326,6 +326,61 @@ pub fn check_gives_back(body: ref Expr, name: ref String, words: ref winnow_gram
     return check_gives_back_tail(body, name, words) || check_gives_back_returns(body, name, words)
 }
 
+/// **The fields of `name` the body ends in** (#1092): `model.values` at the
+/// tail of an arm, of a branch or of a block, as the paths of field names
+/// after `name`. Whether one moves is the caller's to say, by its type.
+pub fn check_gives_back_parts(body: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> Vec[Vec[String]] {
+    let mut found: Vec[Vec[String]] = []
+    check_gives_back_parts_into(body, name, words, found)
+    return found
+}
+
+fn check_gives_back_parts_into(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext, mut found: Vec[Vec[String]]) {
+    match expr {
+        Expr::Block(block, _) => {
+            for tail in block_tail(block) {
+                check_gives_back_parts_into(tail, name, words, found)
+            }
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            for tail in block_tail(then_branch) {
+                check_gives_back_parts_into(tail, name, words, found)
+            }
+            match else_branch {
+                null => {},
+                other => {
+                    for tail in block_tail(other) {
+                        check_gives_back_parts_into(tail, name, words, found)
+                    }
+                },
+            }
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                check_gives_back_parts_into(arm.body, name, words, found)
+            }
+        },
+        Expr::Field { .. } => {
+            let path = check_gives_back_field_path(expr, name, words) ?? return
+            found.push(path)
+        },
+        else => {},
+    }
+}
+
+/// `name.a.b` as `["a", "b"]`; `null` where the fields are not of `name`.
+fn check_gives_back_field_path(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> Vec[String]? {
+    return match expr {
+        Expr::Variable(symbol, _) => if words.resolve(symbol) == name { [] } else { null },
+        Expr::Field { base, name: field, .. } => {
+            let mut path = check_gives_back_field_path(base, name, words) ?? return null
+            path.push(words.resolve(field).clone())
+            path
+        },
+        else => null,
+    }
+}
+
 fn check_gives_back_is_name(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return match expr {
         Expr::Variable(symbol, _) => words.resolve(symbol) == name,

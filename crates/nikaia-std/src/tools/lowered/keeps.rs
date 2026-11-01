@@ -403,6 +403,10 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
         },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
+            if parameter_named(value, interner, context).is_none() {
+                if part_of_a_parameter(value, interner, context).is_some() && an_arm_hands_on_what_it_binds(arms, interner) { keep_part(Some(value), interner, context, own, library, walk); }
+                return;
+            }
             let name = match parameter_named(value, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return };
             if !context.lent.contains(&name) && !keeps_only_compared(arms) { walk.uses.kept.insert(name); }
         },
@@ -752,6 +756,52 @@ pub(crate) fn resolved_callee(func: &Expr, interner: &winnow_grammar::InternerCo
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn name_as_it_is(name: &str) -> String { name.to_string() }
+
+pub(crate) fn an_arm_hands_on_what_it_binds(arms: &[MatchArm], interner: &winnow_grammar::InternerContext) -> bool {
+    for arm in arms.iter() {
+        let mut bound: collections::BTreeSet<String> = collections::BTreeSet::new();
+        names_a_pattern_binds(&arm.pattern, interner, &mut bound);
+        if !bound.is_empty() && hands_on_a_bound_name(&arm.body, interner, &bound) { return true; }
+    }
+    false
+}
+
+pub(crate) fn names_a_pattern_binds(pattern: &MatchPattern, interner: &winnow_grammar::InternerContext, bound: &mut collections::BTreeSet<String>) {
+    match pattern {
+        MatchPattern::Path(segments) => {
+            if segments.len() == 1 {
+                let name = interner.resolve(*nikaia_std::index::get(&segments, 0));
+                if !names_a_type(name) { bound.insert(name.to_string()); }
+            }
+        },
+        MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { names_a_pattern_binds(part, interner, bound); } },
+        MatchPattern::List(parts) => { for part in parts.iter() { names_a_pattern_binds(part, interner, bound); } },
+        MatchPattern::Or(alternatives) => { for part in alternatives.iter() { names_a_pattern_binds(part, interner, bound); } },
+        _ => { },
+    }
+}
+
+pub(crate) fn hands_on_a_bound_name(value: &Expr, interner: &winnow_grammar::InternerContext, bound: &collections::BTreeSet<String>) -> bool {
+    match value {
+        Expr::Variable(ident, _) => { let ident = *ident; bound.contains(interner.resolve(ident)) },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); hands_on_a_bound_name(base, interner, bound) },
+        Expr::Return(held, _) => { let held = nikaia_std::boxed::open(held); match held {
+            None => false,
+            Some(one) => hands_on_a_bound_name(one, interner, bound),
+        } },
+        Expr::Block(block, _) => hands_on_a_bound_tail(block, interner, bound),
+        Expr::If { then_branch, else_branch, .. } => hands_on_a_bound_tail(then_branch, interner, bound) || match else_branch {
+            None => false,
+            Some(other) => hands_on_a_bound_tail(other, interner, bound),
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn hands_on_a_bound_tail(block: &Block, interner: &winnow_grammar::InternerContext, bound: &collections::BTreeSet<String>) -> bool {
+    for tail in block_tail(block) { if hands_on_a_bound_name(tail, interner, bound) { return true; } }
+    false
+}
 
 pub(crate) fn keeps_only_compared(arms: &[MatchArm]) -> bool {
     for arm in arms.iter() { if !a_comparison(&arm.pattern) { return false; } }

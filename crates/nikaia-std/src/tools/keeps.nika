@@ -599,7 +599,15 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         // through a reference with its default binding modes, and this compiler
         // writes no `*`. A parameter the author lent is a reference whatever
         // this column says, so it is not this arm's (issue #173).
+        // **A moving part of one an arm hands on keeps it too** (#1092), as
+        // `p.node ?? ..` does: `match a.node { x => x }` moves the field out.
         Expr::Match { value, arms, .. } => {
+            if parameter_named(value, interner, context) == null {
+                if part_of_a_parameter(value, interner, context) != null && an_arm_hands_on_what_it_binds(arms, interner) {
+                    keep_part(value, interner, context, own, library, walk)
+                }
+                return
+            }
             let name = parameter_named(value, interner, context) ?? return
             if !context.lent.contains(name) && !keeps_only_compared(arms) {
                 walk.uses.kept.insert(name)
@@ -1119,6 +1127,78 @@ fn name_as_it_is(name: ref String) -> String sync {
 /// **A scrutinee its arms only compare is read, not kept** (ADR-282 D5/D6, #810):
 /// every arm is a literal, a range, `else`, or an alternative of those, so
 /// nothing is taken out of the value. Any other pattern may bind a part of it.
+/// **An arm that hands on a part it binds** (#1092): its value is a name
+/// its pattern binds, or a field of one.
+fn an_arm_hands_on_what_it_binds(arms: ref Vec[MatchArm], interner: ref winnow_grammar::InternerContext) -> bool {
+    for arm in arms {
+        let mut bound: collections::BTreeSet[String] = collections::BTreeSet()
+        names_a_pattern_binds(arm.pattern, interner, bound)
+        if !bound.is_empty() && hands_on_a_bound_name(arm.body, interner, bound) {
+            return true
+        }
+    }
+    return false
+}
+
+/// The names a pattern binds: a lone name no capital begins, and those inside the
+/// parts of a variant, a tuple, a list or an alternative.
+fn names_a_pattern_binds(pattern: ref MatchPattern, interner: ref winnow_grammar::InternerContext, mut bound: collections::BTreeSet[String]) {
+    match pattern {
+        MatchPattern::Path(segments) => {
+            if segments.len() == 1 {
+                let name = interner.resolve(segments[0])
+                if !names_a_type(name) {
+                    bound.insert(name.clone())
+                }
+            }
+        },
+        MatchPattern::Tuple { parts, .. } => {
+            for part in parts {
+                names_a_pattern_binds(part, interner, bound)
+            }
+        },
+        MatchPattern::List(parts) => {
+            for part in parts {
+                names_a_pattern_binds(part, interner, bound)
+            }
+        },
+        MatchPattern::Or(alternatives) => {
+            for part in alternatives {
+                names_a_pattern_binds(part, interner, bound)
+            }
+        },
+        else => {},
+    }
+}
+
+/// Whether a value is a bound name, a field of one, or a branch or a
+/// `return` that ends in one.
+fn hands_on_a_bound_name(value: ref Expr, interner: ref winnow_grammar::InternerContext, bound: ref collections::BTreeSet[String]) -> bool {
+    return match value {
+        Expr::Variable(ident, _) => bound.contains(interner.resolve(ident)),
+        Expr::Field { base, .. } => hands_on_a_bound_name(base, interner, bound),
+        Expr::Return(held, _) => match held {
+            null => false,
+            one => hands_on_a_bound_name(one, interner, bound),
+        },
+        Expr::Block(block, _) => hands_on_a_bound_tail(block, interner, bound),
+        Expr::If { then_branch, else_branch, .. } => hands_on_a_bound_tail(then_branch, interner, bound) || match else_branch {
+            null => false,
+            other => hands_on_a_bound_tail(other, interner, bound),
+        },
+        else => false,
+    }
+}
+
+fn hands_on_a_bound_tail(block: ref Block, interner: ref winnow_grammar::InternerContext, bound: ref collections::BTreeSet[String]) -> bool {
+    for tail in block_tail(block) {
+        if hands_on_a_bound_name(tail, interner, bound) {
+            return true
+        }
+    }
+    return false
+}
+
 fn keeps_only_compared(arms: ref Vec[MatchArm]) -> bool {
     for arm in arms {
         if !a_comparison(arm.pattern) {

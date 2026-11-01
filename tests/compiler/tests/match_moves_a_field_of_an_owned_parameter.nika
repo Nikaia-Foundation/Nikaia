@@ -1,0 +1,87 @@
+// #1092: a by-value parameter whose part a match arm moves out is owned
+// (kept), not lent; and an arm binding whose field the arm ends in is bound
+// as the value, so the field moves.
+use std::collections
+
+struct Fault {
+    msg: String,
+}
+
+impl Error for Fault {
+    fn message(ref self) -> String {
+        return self.msg.clone()
+    }
+}
+
+struct Node {
+    v: Vec[i64],
+}
+
+struct Holder {
+    node: Node?,
+}
+
+fn by_arm(a: Holder) -> Node sync throws {
+    let node = match a.node {
+        null => throw Fault { msg: "no node" }
+        x => x
+    }
+    return node
+}
+
+fn by_coalesce(a: Holder) -> Node sync throws {
+    return a.node ?? throw Fault { msg: "no node" }
+}
+
+struct Boxed {
+    v: Shape,
+}
+
+enum Shape {
+    Seq(Vec[i64]),
+    Nothing,
+}
+
+fn by_variant(b: Boxed) -> Vec[i64] sync {
+    return match b.v {
+        Shape::Seq(items) => items,
+        else => [],
+    }
+}
+
+fn by_optional(o: Node?) -> Node sync throws {
+    return match o {
+        null => throw Fault { msg: "none" }
+        x => x
+    }
+}
+
+struct Model {
+    values: collections::BTreeMap[String, i64],
+}
+
+enum Asked {
+    Refuted(Model),
+    Unknown,
+}
+
+fn has_values(m: ref Model) -> bool {
+    return m.values.len() > 0
+}
+
+fn model_of(asked: Asked) -> collections::BTreeMap[String, i64]? {
+    return match asked {
+        Asked::Refuted(model) => if has_values(model) { model.values } else { null },
+        else => null,
+    }
+}
+
+fn main() throws {
+    println(f"{by_arm(Holder { node: Node { v: [1, 2, 3] } })?.v.len()}")
+    println(f"{by_coalesce(Holder { node: Node { v: [1, 2] } })?.v.len()}")
+    println(f"{by_variant(Boxed { v: Shape::Seq([1, 2]) }).len()} {by_variant(Boxed { v: Shape::Nothing }).len()}")
+    println(f"{by_optional(Node { v: [1] })?.v.len()}")
+    let mut values: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    values.insert("x".repeat(1), 1)
+    println(f"{model_of(Asked::Refuted(Model { values: values }))?.len() ?? 0} {model_of(Asked::Unknown)?.len() ?? 0}")
+}

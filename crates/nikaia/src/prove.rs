@@ -12,7 +12,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use nikaia_std::tools::logic_search::lg_verify_model;
 use nikaia_std::tools::prove_run;
 use nikaia_std::tools::prove_terms;
 use nikaia_std::tools::prover_arena::TermArena;
@@ -313,14 +312,9 @@ fn answer_of(held: &TermArena, facts: &[i64], goal: i64) -> SolverAnswer {
     prove_run::prove_answer(crate::proofs::ask(held, facts, goal))
 }
 
-/// A checked model of `facts` and `goal`'s negation: the values it gives.
-/// Rust until #1092: in Nikaia the arm `Refuted(model) => .. model.values`
-/// binds the model by reference and cannot move its values out.
+/// A checked model of `facts` and `goal`'s negation: `prove_run::prove_model`.
 fn model_of(held: &TermArena, facts: &[i64], goal: i64) -> Option<BTreeMap<String, i64>> {
-    let crate::proofs::Asked::Refuted(model) = crate::proofs::ask(held, facts, goal) else {
-        return None;
-    };
-    lg_verify_model(held, facts, goal, &model).then_some(model.values)
+    prove_run::prove_model(held, facts, goal, crate::proofs::ask(held, facts, goal))
 }
 
 /// **The ledger with what the prover published of each function** (ADR-269
