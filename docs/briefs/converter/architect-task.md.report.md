@@ -1,4 +1,4 @@
 Result: done
-Batch: cv1-impl-outside-type.md cv2-text-cuts.md cv3-loop-tail-and-field-patterns.md
+Batch: cv2-text-cuts.md cv3-loop-tail-and-field-patterns.md
 Owner: none
-Found: #1126 (`let mut (a, b)` is a parse error though NK1307's help prescribes it) and #1127 (#886 narrowing lost inside an or-pattern, rustc E0308), both `ready,wip`; briefs b29, b30 appended to `docs/briefs/bugs/batch.txt` (they block S1, not yet written).
+Note: the cut on cv1 was its Deviation (the Display impl stays the converter's ADAPTER comment, not an impl as the brief wrote); that is the converter's existing rule for std trait impls, accepted. cv3's pre-flight updated: b29/b30 are built. Committed locally, not pushed: local develop holds untested commits (cv1, b29, b30) ahead of origin; the driver pushes after the suite.

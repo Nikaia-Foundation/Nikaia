@@ -364,15 +364,16 @@ holds. What happened is in `git log` and the issues.*
   (`gh api .../actions/runs?branch=develop`) before treating it as red; at
   da12a9ca it was stale, CI green.
 * **Converter lane** (2026-11-01, `docs/briefs/converter/batch.txt`): cv1
-  (an `impl T` the cut does not declare is freed, as a53f456 does for a
-  declared struct: the costliest pattern of the moves' `Rs2nika:` lines), cv2
-  (text cut at a number via `t.bytes[a..<b].text()`, ADR-374), cv3 (loop-tail
-  `if let` to `?? continue`, `Some(x)` field pattern with its `null` arm,
-  `let mut (..)`). cv2+cv3 are S1's converter needs; S1 also waits on bug
-  lane b29 #1126 (`let mut (a, b)` a parse error) and b30 #1127 (#886
-  narrowing inside an or-pattern). Next converter picks: `.context(..)` is
-  dropped silently from a draft (`fs::read_to_string(p).context("..")?`);
-  `PathBuf::from`/`canonicalize`/`ancestors()` to `fs::Path` forms (wanted 4).
+  done (9d974eb3, an `impl T` the cut does not declare is freed; its Display
+  impl stays the converter's ADAPTER comment, as `tr_items.nika` writes every
+  std trait impl: accepted). Batch: cv2 (text cut at a number via
+  `t.bytes[a..<b].text()`, ADR-374), cv3 (loop-tail `if let` to `?? continue`,
+  `Some(x)` field pattern with its `null` arm, `let mut (..)`); b29 #1126 and
+  b30 #1127 are built (40944720, 1b7fa366), so S1 waits only on cv2+cv3.
+  Next converter picks: `.context(..)` is dropped silently from a draft
+  (`fs::read_to_string(p).context("..")?`); `PathBuf::from`/`canonicalize`/
+  `ancestors()` to `fs::Path` forms (wanted 4); the ADAPTER comment is German
+  (`bleibt in Rust`): English when next touched.
 * **yaml lane**: #928, #929, #604 (`wip`).
 * **Owed to the supervisor**: version raise / Changelog lines for s922b
   (`fs::Metadata::modified()`, `links()`, `file_id()`, `time::since_epoch()`,
