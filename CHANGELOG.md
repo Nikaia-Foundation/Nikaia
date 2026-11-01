@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1334] — 2026-11-01
+
+**self-hosting: project.rs's ledger and proofs writing moves into project_write.nika; rs2nika R334 (#125)**
+- Internal: write_ledger and write_proofs of project.rs move to tools/project_write.nika; an io cause is now joined into the one error message ("writing X: cause").
+- Internal: rs2nika R334: anyhow!/bail!/.context become Failed beside Refused, --only resolves forwarders, prefixed inner constants, path renames in the tree draft.
+
 ## [0.0.1333] — 2026-11-01
 
 **self-hosting: a project's drive and drive_to move into project_drive.nika (#125)**
