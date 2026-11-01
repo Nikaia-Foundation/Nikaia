@@ -384,49 +384,37 @@ pub fn toolchain_is_new_enough(floor: &str) -> Result<()> {
     ))
 }
 
-/// **Refuse a target the toolchain has no `std` for, in this compiler's words**
-/// ([ADR-037](../../../docs/specification/adr/adr-037.md) D1).
+/// **Whether the toolchain has a `std` for `triple`**
+/// ([ADR-037](../../../docs/specification/adr/adr-037.md) D1): the refusal
+/// where it has none is `project_drive_no_std_for` (`tools/project_drive.nika`).
 ///
-/// Cargo's own answer is *can't find crate for `core`*, about a crate the
-/// author never named - the same class as the floor above. The answer that
-/// helps is the command that installs it.
-///
-/// **Only a missing `std` is a refusal.** A `rustc` that does not run, or does
+/// **Only a missing `std` is a no.** A `rustc` that does not run, or does
 /// not know the triple, says nothing here, and the build goes on for Cargo to
 /// answer: refusing on a reading failure would refuse a toolchain that works.
 /// Neither is a linker, which a machine other than the host also needs and
 /// which nothing here can see.
-pub fn toolchain_can_build_for(triple: &str) -> Result<()> {
+pub fn toolchain_can_build_for(triple: &str) -> bool {
     let Ok(out) = Command::new("rustc")
         .current_dir(crate::cache::Layout::where_tools_start())
         .args(["--print", "target-libdir", "--target", triple])
         .output()
     else {
-        return Ok(());
+        return true;
     };
     let Ok(text) = String::from_utf8(out.stdout) else {
-        return Ok(());
+        return true;
     };
     let libdir = text.trim();
     if !out.status.success() || libdir.is_empty() {
-        return Ok(());
+        return true;
     }
-    let has_std = std::fs::read_dir(libdir)
+    std::fs::read_dir(libdir)
         .map(|entries| {
             entries
                 .flatten()
                 .any(|entry| entry.file_name().to_string_lossy().starts_with("libstd-"))
         })
-        .unwrap_or(false);
-    if has_std {
-        return Ok(());
-    }
-    Err(anyhow!(
-        "cannot build for `{triple}`: this toolchain has no `std` for it.\n\
-         Install it with `rustup target add {triple}`. A machine other than the one \
-         this runs on also needs a linker for it, named to Cargo in \
-         `$CARGO_HOME/config.toml` (a project's own is not read) as `[target.{triple}] linker = \"…\"`."
-    ))
+        .unwrap_or(false)
 }
 
 /// `rustc --version`'s major and minor, where both can be read.

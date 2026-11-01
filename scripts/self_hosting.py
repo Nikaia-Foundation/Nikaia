@@ -56,6 +56,7 @@ COMPILER_NIKA = {
     "parse_notes.nika": "parser: a parse error's reading, the text half (0.0.347)",
     "diffs.nika": "project: what changed in a ledger, and an output test's difference (0.0.350)",
     "project_check.nika": "project: the refusal summary of check, the switches that make a finding a warning, the --locked texts (P2)",
+    "project_drive.nika": "project: a build's and a run's steps, the members lowered in order, the gen files and switches, the toolchain refusals, the fast path, direct run or cargo run, the c-library outputs (P5c)",
     "project_lower.nika": "project: a lowering's steps, the cache hit's replay, the published contracts merged into the ledger, the notes (P5b)",
     "project_members.nika": "project: a build's packages, a dependency's renames, the members and the order they are lowered in, a package's crate root (P4a); a build's foreign boundary: the crates it declares, their descriptions and sources that moved, the proofs' digest (P4b)",
     "project_settings.nika": "project: the build settings' words, what `--refuted-claims`, `--unproved-claims`, `--optimization` and `artifact` may say, the cache key of a build, the CPU level's Cargo configuration and RUSTFLAGS, the panic strategy (P1)",
