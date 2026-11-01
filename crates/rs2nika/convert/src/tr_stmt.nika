@@ -48,6 +48,18 @@ impl TrEm {
         } else {
             tail = -1
         }
+        // a loop body's last statement, an `if let Some(p) = e { .. }` with no `else`
+        let mut last_stmt = -1
+        for k in ks {
+            if !self.t.nodes[k].tok {
+                last_stmt = k
+            }
+        }
+        let mut loop_tail = -1
+        let up = self.t.nodes[n].parent
+        if last_stmt >= 0 && up >= 0 && (self.t.is(up, "FOR_EXPR") || self.t.is(up, "WHILE_EXPR") || self.t.is(up, "LOOP_EXPR")) {
+            loop_tail = self.loop_tail_if_let(last_stmt)
+        }
         let mut gap = false
         let mut same_line = false
         for k in ks {
@@ -84,6 +96,13 @@ impl TrEm {
                 out.push("")
             }
             gap = false
+            if k == last_stmt && loop_tail >= 0 {
+                for l in self.loop_tail_lines(loop_tail, ind.clone()) {
+                    out.push(l)
+                }
+                same_line = true
+                continue
+            }
             let mut m: String = "stmt"
             if k == tail {
                 m = mode.clone()
@@ -94,6 +113,39 @@ impl TrEm {
                 out.push(l)
             }
             same_line = true
+        }
+        return out
+    }
+
+    /// The `if let Some(p) = e { .. }` (one `let`, no `else`) that statement
+    /// `k` is, or -1.
+    fn loop_tail_if_let(ref self, k: i64) -> i64 {
+        let mut e = k
+        if self.t.is(k, "EXPR_STMT") {
+            e = self.t.nth(k, 0)
+        }
+        if !self.t.is(e, "IF_EXPR") {
+            return -1
+        }
+        let parts = self.nodes(e)
+        if parts.len() != 2 || !self.t.is(parts[0], "LET_EXPR") {
+            return -1
+        }
+        let ps = self.nodes(parts[0])
+        if !self.is_some_pat(ps[0]) || self.refutable(self.t.nth(ps[0], 1)) {
+            return -1
+        }
+        return e
+    }
+
+    /// `let p = e ?? continue` and the body of that `if let`, at the loop's level.
+    fn loop_tail_lines(ref mut self, e: i64, ind: String) -> Vec[String] {
+        let parts = self.nodes(e)
+        let ps = self.nodes(parts[0])
+        let init = self.expr(ps[1])
+        let mut out: Vec[String] = [f"{ind}let {self.pat(self.t.nth(ps[0], 1))} = {init} ?? continue"]
+        for l in self.block(parts[1], ind, "stmt") {
+            out.push(l)
         }
         return out
     }

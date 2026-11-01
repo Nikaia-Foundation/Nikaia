@@ -1,0 +1,36 @@
+pub fn a(xs: ref Vec[i64?]) -> i64 {
+    let mut n = 0
+    for x in xs {
+        n += 1
+        let v = x ?? continue
+        n += v
+    }
+    return n
+}
+pub fn b(ls: ref Vec[String]) {
+    let mut i = 0
+    while i < ls.len() {
+        i += 1
+        let (k, v) = ls[i].split_once("=") ?? continue
+        println(f"{k} {v}")
+    }
+}
+pub fn c(xs: ref Vec[i64?]) {
+    for x in xs {
+        if x != null {
+            let v = x
+            println(f"{v}")
+        }
+        println("end")
+    }
+}
+pub fn d(xs: ref Vec[i64?]) {
+    for x in xs {
+        if x != null {
+            let v = x
+            println(f"{v}")
+        } else {
+            println("none")
+        }
+    }
+}
