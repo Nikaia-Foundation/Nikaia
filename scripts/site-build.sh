@@ -53,8 +53,11 @@ python3 "$ROOT/scripts/site-issues.py" "$WORK"
 # jekyll-titles-from-headings still finds that heading at the very start.
 find "$WORK" -name '*.md' -print0 |
   while IFS= read -r -d '' f; do
+    # The heading stays outside the fence, so a `{{` or `{%` in it (an issue
+    # title can hold one) is written as an entity, which Liquid passes by.
     awk '
-      NR == 1 && /^#/ { print; print "<!-- {% raw %} -->"; o = 1; next }
+      NR == 1 && /^#/ { if (/\{[{%]/) gsub(/\{/, "\\&#123;"); print
+                        print "<!-- {% raw %} -->"; o = 1; next }
       NR == 1         { print "<!-- {% raw %} -->"; print; o = 1; next }
                       { print }
       END             { if (o) { print ""; print "<!-- {% endraw %} -->" } }
