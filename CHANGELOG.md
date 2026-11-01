@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1338] — 2026-11-01
+
+**a part handed to a mut parameter is lent; parts a taking arm takes out of a mut parameter change in place (#125)**
+- Fixed: a part of a `for mut` element handed to a `mut` parameter is lent, not given away (it was refused with NK1131).
+- Fixed: parts a taking arm takes out of a `mut` parameter, and a narrowed `mut` option, are changed in place.
+
 ## [0.0.1337] — 2026-11-01
 
 **rs2nika: a type the cut does not declare has its methods freed too; rs2nika: a text cut at a number goes through its bytes (ADR-374); rs2nika: let with every name mut is let mut (..)**
