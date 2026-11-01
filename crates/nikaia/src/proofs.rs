@@ -3,107 +3,82 @@
 // **`nikaia.proofs`: what a build uses is the recorded answer**
 // ([ADR-270](../../docs/specification/adr/adr-270.md) D4, D19-D21, #448).
 //
-// Every question the prover (`prove.rs`) and the bounds walk (`bounds.rs`) ask
-// goes through [`ask`]. The query is put into normal form (`nikaia_logic::
-// Normal`), keyed by the SHA-256 of that form, and answered from the **book**
-// a project build opened, where an entry checks (D20): a `proved` entry's
-// certificate is replayed against the normal form, a `refuted` entry's model
-// evaluated. A missing entry, or one that does not check, is searched for and
-// written in. Nothing in the file can make the compiler drop a check that does
-// not hold: it needs no more trust than the solver does.
-//
-// **The book is the thread's**, opened by [`with_book`] around a build's check
-// and lowering, which run on one thread. Outside it - a test, `nikaia lower`
-// of a loose file - [`ask`] searches as it always did and records nothing.
+// The book, the questions and their answers are `proofs_answers.nika`'s. What
+// stays here is the thread they live on: a build's check and lowering run on
+// one thread, and [`with_book`], [`in_file`] and [`in_function`] open what
+// every [`ask`] on it sees, around a closure. Outside a book - a test,
+// `nikaia lower` of a loose file - [`ask`] searches and records nothing.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use nikaia_std::tools::logic_lia::{LgAnswer, LgModel as Model, lg_budget};
-use nikaia_std::tools::logic_normal::{
-    LgNormal, lg_certificate_of, lg_certificate_text, lg_model_of, lg_model_text, lg_normal_of,
-};
-use nikaia_std::tools::logic_search::{lg_check, lg_verify, lg_verify_model};
-use nikaia_std::tools::proofs_book::{PbLine, pb_read, pb_render};
+use nikaia_std::rt::exec::block_on;
+use nikaia_std::tools::proofs_answers::{self as answers, ProofsBook, ProofsThread};
 use nikaia_std::tools::prover_arena::TermArena;
-use nikaia_std::tools::solver_terms::SolverTerm;
 
-/// The file, beside `nikaia.contracts`.
-pub const FILE: &str = "nikaia.proofs";
+pub use nikaia_std::tools::proofs_answers::{
+    PROOFS_FILE as FILE, ProofsAsked as Asked, ProofsSoFar as AskedSoFar,
+};
 
-/// Where a certificate longer than [`LONG`] bytes is kept, one file per key
-/// (D19).
-pub const LONG_DIR: &str = "nikaia.proofs.d";
+/// The answers a build reads and writes (`ProofsBook`), with the file's I/O.
+#[derive(Debug, Clone)]
+pub struct Book(ProofsBook);
 
-/// A certificate longer than this is written to [`LONG_DIR`].
-const LONG: usize = 4096;
-
-/// The solver an `unknown` was given by (D19): an entry is searched again
-/// only under a different one (D21).
-pub const SOLVER: &str = "fourier-motzkin-1";
-
-/// What a question came to, in the program's names.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Asked {
-    /// The facts imply the goal; the certificate checked against the normal
-    /// form.
-    Proved,
-    /// Values under which every fact holds and the goal does not, checked.
-    Refuted(Model),
-    /// Not shown either way.
-    Unknown,
-    /// The solver's own proof did not check: a fault of the compiler, which
-    /// the caller says rather than believes.
-    Rejected(String),
+impl Default for Book {
+    fn default() -> Self {
+        Book(answers::proofs_book_empty())
+    }
 }
 
-/// One recorded answer, as the file writes it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Entry {
-    Proved(String),
-    Refuted(String),
-    Unknown(String),
+impl std::ops::Deref for Book {
+    type Target = ProofsBook;
+    fn deref(&self) -> &ProofsBook {
+        &self.0
+    }
 }
 
-/// The answers a build reads and writes.
-#[derive(Debug, Default, Clone)]
-pub struct Book {
-    entries: BTreeMap<String, Entry>,
-    /// Every key a question this build asked had: what the file keeps.
-    asked: BTreeSet<String>,
-    /// How many questions were searched rather than read.
-    pub searched: usize,
-    /// Where those questions were asked, for `--locked`'s message (D22).
-    pub searched_at: BTreeSet<Place>,
-    /// **Each loop's invariant** (ADR-361 D4), by the loop's place
-    /// (`src/main.nika:4:5`): its parts as `prover_loops.nika`'s
-    /// `loop_parts_text` writes them.
-    invariants: BTreeMap<String, String>,
-    /// The places whose invariant this build used: what the file keeps.
-    used: BTreeSet<String>,
-    /// The project the file belongs to, which a place is relative to.
-    root: Option<PathBuf>,
+impl Book {
+    /// The book `root`'s `nikaia.proofs` holds, or an empty one.
+    pub fn read(root: &Path) -> Book {
+        Book(block_on(answers::proofs_book_read(root)))
+    }
+
+    /// Write the file and its long certificates under `root`, where they
+    /// changed, whole or not at all, as the ledger beside it
+    /// (`project::write_ledger`).
+    pub fn write(&self, root: &Path) -> std::io::Result<()> {
+        let whole =
+            |path: &Path, text: &str| crate::comptime_run::write_if_changed(path, text).err();
+        match answers::proofs_book_write(&self.0, root, &whole) {
+            None => Ok(()),
+            Some(failed) => Err(std::io::Error::other(failed)),
+        }
+    }
+
+    /// Whether `root` holds exactly the file this book would write (D22).
+    pub fn as_recorded(&self, root: &Path) -> bool {
+        block_on(answers::proofs_book_as_recorded(&self.0, root))
+    }
+
+    /// How many entries the file would hold.
+    pub fn len(&self) -> usize {
+        answers::proofs_book_len(&self.0) as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
-/// What a book had asked, to go back to when a walk is repeated.
-#[derive(Debug, Clone, Default)]
-pub struct AskedSoFar {
-    asked: BTreeSet<String>,
-    used: BTreeSet<String>,
+/// Where a searched question was asked (D22): the file, the line and the
+/// function, shown relative to `root`.
+pub fn shown(place: &(Option<String>, Option<i64>, Option<String>), root: &Path) -> String {
+    answers::proofs_shown(place, root)
 }
 
 thread_local! {
-    static BOOK: RefCell<Option<Book>> = const { RefCell::new(None) };
-    /// **A question asked before, by its terms as written** (#727): the
-    /// book's key, the entry it found there and what that came to. A bounds
-    /// pass asks the same questions again under fresh term ids; this answers
-    /// them without normalising, as long as the book still holds that entry.
-    static KNOWN: RefCell<std::collections::HashMap<String, (String, Entry, Asked)>> = RefCell::new(std::collections::HashMap::new());
-    static IN_FILE: RefCell<Option<(PathBuf, String)>> = const { RefCell::new(None) };
-    /// Where each line break of the file being checked is, for [`here`].
-    static BREAKS: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
-    static FUNCTION: RefCell<Option<(String, usize)>> = const { RefCell::new(None) };
+    static THREAD: RefCell<ProofsThread> = RefCell::new(answers::proofs_thread());
     static UNITS: RefCell<Vec<(PathBuf, String)>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -126,61 +101,19 @@ pub fn in_unit<R>(at: usize, run: impl FnOnce() -> R) -> R {
     }
 }
 
-/// **Where a question was asked** (D22): the file, and the function and its
-/// line where the asker knows them. The prover's passes ask for a whole file
-/// at once, so theirs name the file alone.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Place {
-    pub file: Option<PathBuf>,
-    pub line: Option<usize>,
-    pub function: Option<String>,
-}
-
-impl Place {
-    /// `src/main.nika:3, in `f``, the file shown relative to `root`.
-    pub fn shown(&self, root: &Path) -> String {
-        let file = self.file.as_ref().map(|file| {
-            let file = file
-                .strip_prefix(root)
-                .unwrap_or(file)
-                .display()
-                .to_string();
-            match self.line {
-                Some(line) => format!("{file}:{line}"),
-                None => file,
-            }
-        });
-        let function = self.function.as_ref().map(|name| format!("in `{name}`"));
-        match (file, function) {
-            (Some(file), Some(function)) => format!("{file}, {function}"),
-            (Some(file), None) => file,
-            (None, Some(function)) => function,
-            (None, None) => "a place the compiler did not name".to_string(),
-        }
-    }
-}
-
 /// `run` with every question it asks placed in `path`, whose text is
 /// `source`.
 pub fn in_file<R>(path: &Path, source: &str, run: impl FnOnce() -> R) -> R {
-    let outer = IN_FILE.with(|held| held.replace(Some((path.to_path_buf(), source.to_string()))));
-    let breaks = source
-        .bytes()
-        .enumerate()
-        .filter(|(_, b)| *b == b'\n')
-        .map(|(at, _)| at)
-        .collect();
-    let outer_breaks = BREAKS.with(|held| held.replace(breaks));
+    let here = answers::proofs_where(path, source);
+    let outer = THREAD.with(|t| std::mem::replace(&mut t.borrow_mut().at, here));
     let out = run();
-    IN_FILE.with(|held| held.replace(outer));
-    BREAKS.with(|held| held.replace(outer_breaks));
+    THREAD.with(|t| t.borrow_mut().at = outer);
     out
 }
 
 /// **`run` for one file of the program**: its questions placed in `path`,
 /// and - for a dependency's file - answered from that package's own
-/// `nikaia.proofs` and kept out of this build's (D23). A dependency builds its
-/// own file when it is built.
+/// `nikaia.proofs` and kept out of this build's (D23).
 pub fn for_unit<R>(path: &Path, source: &str, dependency: bool, run: impl FnOnce() -> R) -> R {
     if !dependency {
         return in_file(path, source, run);
@@ -196,494 +129,65 @@ pub fn for_unit<R>(path: &Path, source: &str, dependency: bool, run: impl FnOnce
 /// `run` with every question it asks placed in the function `name`, whose
 /// declaration starts at byte `at` of the file.
 pub fn in_function<R>(name: &str, at: usize, run: impl FnOnce() -> R) -> R {
-    let outer = FUNCTION.with(|held| held.replace(Some((name.to_string(), at))));
+    let outer = THREAD.with(|t| {
+        let mut t = t.borrow_mut();
+        let name = t.function.replace(name.to_string());
+        (name, std::mem::replace(&mut t.function_at, at as i64))
+    });
     let out = run();
-    FUNCTION.with(|held| held.replace(outer));
+    THREAD.with(|t| {
+        let mut t = t.borrow_mut();
+        (t.function, t.function_at) = outer;
+    });
     out
-}
-
-/// Where the question being asked now stands.
-fn here() -> Place {
-    let function = FUNCTION.with(|held| held.borrow().clone());
-    IN_FILE.with(|held| {
-        let held = held.borrow();
-        let line = match (&*held, &function) {
-            (Some((_, source)), Some((_, at))) => {
-                let at = (*at).min(source.len());
-                Some(BREAKS.with(|breaks| breaks.borrow().partition_point(|b| *b < at)) + 1)
-            }
-            _ => None,
-        };
-        Place {
-            file: held.as_ref().map(|(path, _)| path.clone()),
-            line,
-            function: function.map(|(name, _)| name),
-        }
-    })
 }
 
 /// `run` with `book` open for every [`ask`] on this thread, and the book as
 /// it stands after.
 pub fn with_book<R>(book: Book, run: impl FnOnce() -> R) -> (R, Book) {
-    let outer = BOOK.with(|held| held.replace(Some(book)));
+    let outer = THREAD.with(|t| t.borrow_mut().book.replace(book.0));
     let out = run();
-    let book = BOOK
-        .with(|held| std::mem::replace(&mut *held.borrow_mut(), outer))
-        .unwrap_or_default();
-    (out, book)
-}
-
-/// The question as its terms are written, every node in full: two questions
-/// written alike have one normal form, whatever their term ids.
-fn written(arena: &TermArena, facts: &[i64], goal: i64) -> String {
-    let mut out = String::new();
-    for fact in facts {
-        write_term(arena, *fact, &mut out);
-        out.push(';');
-    }
-    out.push('|');
-    write_term(arena, goal, &mut out);
-    out
-}
-
-fn write_term(arena: &TermArena, id: i64, out: &mut String) {
-    use std::fmt::Write;
-    let Some(node) = arena.nodes.get(id as usize) else {
-        out.push('?');
-        return;
-    };
-    let two = |tag: char, a: i64, b: i64, out: &mut String| {
-        out.push(tag);
-        write_term(arena, a, out);
-        write_term(arena, b, out);
-    };
-    match node {
-        SolverTerm::Bool(value) => out.push(if *value { 'T' } else { 'F' }),
-        SolverTerm::Int(value) => {
-            let _ = write!(out, "i{value},");
-        }
-        SolverTerm::Var(name) => {
-            let _ = write!(out, "v{}:{name}", name.len());
-        }
-        SolverTerm::Add(a, b) => two('+', *a, *b, out),
-        SolverTerm::Sub(a, b) => two('-', *a, *b, out),
-        SolverTerm::Mul(a, b) => two('*', *a, *b, out),
-        SolverTerm::Le(a, b) => two('l', *a, *b, out),
-        SolverTerm::Lt(a, b) => two('<', *a, *b, out),
-        SolverTerm::Ge(a, b) => two('g', *a, *b, out),
-        SolverTerm::Gt(a, b) => two('>', *a, *b, out),
-        SolverTerm::Eq(a, b) => two('=', *a, *b, out),
-        SolverTerm::Ne(a, b) => two('!', *a, *b, out),
-        SolverTerm::Neg(a) => {
-            out.push('n');
-            write_term(arena, *a, out);
-        }
-        SolverTerm::Not(a) => {
-            out.push('~');
-            write_term(arena, *a, out);
-        }
-        SolverTerm::Quot(a, k) => {
-            let _ = write!(out, "q{k},");
-            write_term(arena, *a, out);
-        }
-        SolverTerm::And(parts) | SolverTerm::Or(parts) => {
-            let tag = if matches!(node, SolverTerm::And(_)) {
-                '&'
-            } else {
-                '|'
-            };
-            let _ = write!(out, "{tag}{},", parts.len());
-            for part in parts {
-                write_term(arena, *part, out);
-            }
-        }
-        SolverTerm::Other => out.push('o'),
-    }
-}
-
-/// What a question written so came to, if the open book still holds the
-/// entry it came from; the key is marked asked, as a lookup would.
-fn known(written: &str) -> Option<Asked> {
-    let (key, entry, asked) = KNOWN.with(|held| held.borrow().get(written).cloned())?;
-    BOOK.with(|held| {
-        let mut held = held.borrow_mut();
-        let book = held.as_mut()?;
-        if book.entries.get(&key) != Some(&entry) {
-            return None;
-        }
-        book.asked.insert(key);
-        Some(asked)
-    })
-}
-
-fn remember(written: Option<String>, key: &str, entry: &Entry, asked: &Asked) {
-    if let Some(written) = written {
-        KNOWN.with(|held| {
-            held.borrow_mut()
-                .insert(written, (key.to_string(), entry.clone(), asked.clone()))
-        });
-    }
+    let book = THREAD.with(|t| std::mem::replace(&mut t.borrow_mut().book, outer));
+    (out, book.map(Book).unwrap_or_default())
 }
 
 /// Whether the facts imply the goal, and if not, why not.
 pub fn ask(arena: &TermArena, facts: &[i64], goal: i64) -> Asked {
-    let written = book_open().then(|| written(arena, facts, goal));
-    if let Some(written) = &written
-        && let Some(asked) = known(written)
-    {
-        return asked;
-    }
-    let normal = lg_normal_of(arena, facts, goal);
-    if !book_open() {
-        // Nothing is recorded or looked up: no key to make (#727).
-        return search(&normal).0;
-    }
-    let text = normal.text();
-    let key = orchestrator::cache::sha256_hex(text.as_bytes());
-    let recorded = BOOK.with(|held| {
-        let mut held = held.borrow_mut();
-        let book = held.as_mut()?;
-        book.asked.insert(key.clone());
-        book.entries.get(&key).cloned()
-    });
-    if let Some(entry) = recorded
-        && let Some(asked) = read(&normal, &entry)
-    {
-        remember(written, &key, &entry, &asked);
-        return asked;
-    }
-    let (asked, entry) = search(&normal);
-    if let Some(entry) = &entry {
-        // What a read of this entry comes to: the search checked the same
-        // certificate or model.
-        remember(written, &key, entry, &asked);
-    }
-    BOOK.with(|held| {
-        if let Some(book) = held.borrow_mut().as_mut() {
-            book.searched += 1;
-            book.searched_at.insert(here());
-            match entry {
-                Some(entry) => book.entries.insert(key, entry),
-                None => book.entries.remove(&key),
-            };
-        }
-    });
-    asked
+    THREAD.with(|t| answers::proofs_ask(&mut t.borrow_mut(), arena, facts, goal))
 }
 
-/// **The invariants the book holds for the file being checked** (ADR-361
-/// D4), by the byte its loop starts at: the prover checks each with the
-/// three queries before it uses it. Nothing outside a build.
+/// The invariants the book holds for the file being checked (ADR-361 D4).
 pub fn invariants_here() -> BTreeMap<i64, String> {
-    let held = IN_FILE.with(|held| held.borrow().clone());
-    let Some((path, source)) = held else {
-        return BTreeMap::new();
-    };
-    BOOK.with(|book| {
-        let book = book.borrow();
-        let Some(book) = book.as_ref() else {
-            return BTreeMap::new();
-        };
-        let file = book.file_of(&path);
-        book.invariants
-            .iter()
-            .filter_map(|(place, parts)| {
-                let at = byte_of(place.strip_prefix(&file)?.strip_prefix(':')?, &source)?;
-                Some((at as i64, parts.clone()))
-            })
-            .collect()
-    })
+    THREAD.with(|t| answers::proofs_invariants_here(&t.borrow()))
 }
 
-/// **Keep the invariants a walk of the file being checked used** (ADR-361
-/// D4), by the byte each loop starts at.
+/// Keep the invariants a walk of the file being checked used (ADR-361 D4).
 pub fn record_invariants(used: &BTreeMap<i64, String>) {
-    record_at(used, "");
+    THREAD.with(|t| answers::proofs_record_at(&mut t.borrow_mut(), used, ""));
 }
 
-/// **Keep the invariants the bounds walk of the file being lowered used**
-/// (ADR-361 D10, D4), by the byte each loop starts at: under the loop's place
-/// and `/bounds`, beside the prover's own, which reads only its own.
+/// Keep the invariants the bounds walk of the file being lowered used
+/// (ADR-361 D10, D4), under `/bounds` beside the prover's own.
 pub fn record_bound_invariants(used: &BTreeMap<i64, String>) {
     if !used.is_empty() {
-        record_at(used, "/bounds");
+        THREAD.with(|t| answers::proofs_record_at(&mut t.borrow_mut(), used, "/bounds"));
     }
-}
-
-fn record_at(used: &BTreeMap<i64, String>, kind: &str) {
-    let held = IN_FILE.with(|held| held.borrow().clone());
-    let Some((path, source)) = held else {
-        return;
-    };
-    BOOK.with(|book| {
-        let mut book = book.borrow_mut();
-        let Some(book) = book.as_mut() else {
-            return;
-        };
-        // A file outside the project is another package's, whose file
-        // this is not.
-        if book
-            .root
-            .as_ref()
-            .is_some_and(|root| !path.starts_with(root))
-        {
-            return;
-        }
-        let file = book.file_of(&path);
-        for (at, parts) in used {
-            let place = format!("{file}:{}{kind}", place_of(*at as usize, &source));
-            book.invariants.insert(place.clone(), parts.clone());
-            book.used.insert(place);
-        }
-    });
 }
 
 /// Whether a build's book is open on this thread.
 pub fn book_open() -> bool {
-    BOOK.with(|book| book.borrow().is_some())
+    THREAD.with(|t| t.borrow().book.is_some())
 }
 
 /// What the open book has been asked so far.
 pub fn asked_so_far() -> AskedSoFar {
-    BOOK.with(|book| match book.borrow().as_ref() {
-        Some(book) => AskedSoFar {
-            asked: book.asked.clone(),
-            used: book.used.clone(),
-        },
-        None => AskedSoFar::default(),
-    })
+    THREAD.with(|t| answers::proofs_asked_so_far(&t.borrow()))
 }
 
-/// **Forget what was asked after `before`**: a walk that is repeated keeps
-/// only what its repetition asks. What was searched stays searched.
+/// Forget what was asked after `before`: a walk that is repeated keeps only
+/// what its repetition asks.
 pub fn ask_again_from(before: &AskedSoFar) {
-    BOOK.with(|book| {
-        if let Some(book) = book.borrow_mut().as_mut() {
-            book.asked = before.asked.clone();
-            book.used = before.used.clone();
-        }
-    });
-}
-
-/// `line:column` of byte `at` of `source`, both from 1.
-fn place_of(at: usize, source: &str) -> String {
-    let before = &source.as_bytes()[..at.min(source.len())];
-    let line = before.iter().filter(|b| **b == b'\n').count() + 1;
-    let start = before
-        .iter()
-        .rposition(|b| *b == b'\n')
-        .map_or(0, |n| n + 1);
-    format!("{line}:{}", before.len() - start + 1)
-}
-
-/// [`place_of`] read back.
-fn byte_of(place: &str, source: &str) -> Option<usize> {
-    let (line, column) = place.split_once(':')?;
-    let (line, column): (usize, usize) = (line.parse().ok()?, column.parse().ok()?);
-    let mut start = 0;
-    for _ in 1..line {
-        start += source[start..].find('\n')? + 1;
-    }
-    let at = start + column.checked_sub(1)?;
-    let end = source[start..]
-        .find('\n')
-        .map_or(source.len(), |n| start + n);
-    (at <= end).then_some(at)
-}
-
-/// A recorded entry, where it checks (D20) - and an `unknown` only from the
-/// solver this compiler has, since a newer one is searched again (D21).
-fn read(normal: &LgNormal, entry: &Entry) -> Option<Asked> {
-    let (arena, facts, goal) = (&normal.arena, &normal.facts, normal.goal);
-    match entry {
-        Entry::Proved(text) => {
-            let certificate = lg_certificate_of(text)?;
-            lg_verify(arena, facts, goal, &certificate)
-                .is_none()
-                .then_some(Asked::Proved)
-        }
-        Entry::Refuted(text) => {
-            let model = lg_model_of(text)?;
-            lg_verify_model(arena, facts, goal, &model)
-                .then(|| Asked::Refuted(normal.named(&model)))
-        }
-        Entry::Unknown(solver) => (solver == SOLVER).then_some(Asked::Unknown),
-    }
-}
-
-/// The reference solver's answer to the normal form, and what to record of
-/// it. A proof that does not check is not recorded.
-fn search(normal: &LgNormal) -> (Asked, Option<Entry>) {
-    let (arena, facts, goal) = (&normal.arena, &normal.facts, normal.goal);
-    match lg_check(arena, facts, goal, &lg_budget()) {
-        LgAnswer::Proved { certificate } => match lg_verify(arena, facts, goal, &certificate) {
-            None => (
-                Asked::Proved,
-                Some(Entry::Proved(lg_certificate_text(&certificate))),
-            ),
-            Some(why) => (
-                Asked::Rejected(format!(
-                    "the solver's proof did not check ({}), which is a fault of the compiler",
-                    why.debug()
-                )),
-                None,
-            ),
-        },
-        LgAnswer::Refuted { model } if lg_verify_model(arena, facts, goal, &model) => (
-            Asked::Refuted(normal.named(&model)),
-            Some(Entry::Refuted(lg_model_text(&model))),
-        ),
-        LgAnswer::Refuted { .. } => (Asked::Unknown, None),
-        LgAnswer::Unknown { .. } => (Asked::Unknown, Some(Entry::Unknown(SOLVER.to_string()))),
-    }
-}
-
-impl Book {
-    /// The book `root`'s `nikaia.proofs` holds, or an empty one. A line that
-    /// does not read is left out: it is missing, and missing is searched
-    /// (D20).
-    pub fn read(root: &Path) -> Book {
-        let mut book = Book {
-            root: Some(root.to_path_buf()),
-            ..Book::default()
-        };
-        let Ok(text) = std::fs::read_to_string(root.join(FILE)) else {
-            return book;
-        };
-        let long = |key: &str| std::fs::read_to_string(root.join(LONG_DIR).join(key)).ok();
-        for line in pb_read(&text, &long) {
-            if line.kind == "invariant" {
-                // Under the SHA-256 of its place: a line whose key is not
-                // that is missing.
-                if let Some((place, parts)) = line.body.split_once(' ')
-                    && orchestrator::cache::sha256_hex(place.as_bytes()) == line.key
-                {
-                    book.invariants.insert(place.to_string(), parts.to_string());
-                }
-                continue;
-            }
-            let entry = match line.kind.as_str() {
-                "proved" => Entry::Proved(line.body),
-                "refuted" => Entry::Refuted(line.body),
-                _ => Entry::Unknown(line.body),
-            };
-            book.entries.insert(line.key, entry);
-        }
-        book
-    }
-
-    /// The file as this build leaves it: one line per key a question asked,
-    /// sorted by key, so that two branches that add entries merge without a
-    /// conflict (D19, D21). An entry nothing asked is gone.
-    pub fn render(&self) -> (String, BTreeMap<String, String>) {
-        let mut asked: Vec<PbLine> = self
-            .entries
-            .iter()
-            .filter(|(key, _)| self.asked.contains(*key))
-            .map(|(key, entry)| {
-                let (kind, body) = match entry {
-                    Entry::Proved(text) => ("proved", text),
-                    Entry::Refuted(text) => ("refuted", text),
-                    Entry::Unknown(solver) => ("unknown", solver),
-                };
-                PbLine {
-                    key: key.clone(),
-                    kind: kind.to_string(),
-                    body: body.clone(),
-                }
-            })
-            .collect();
-        asked.extend(
-            self.invariants
-                .iter()
-                .filter(|(place, _)| self.used.contains(*place))
-                .map(|(place, parts)| PbLine {
-                    key: orchestrator::cache::sha256_hex(place.as_bytes()),
-                    kind: "invariant".to_string(),
-                    body: format!("{place} {parts}"),
-                }),
-        );
-        asked.sort_by(|a, b| a.key.cmp(&b.key));
-        let rendered = pb_render(&asked, LONG as i64);
-        (rendered.text, rendered.long)
-    }
-
-    /// Write the file and its long certificates under `root`, where they
-    /// changed.
-    pub fn write(&self, root: &Path) -> std::io::Result<()> {
-        let (text, long) = self.render();
-        let path = root.join(FILE);
-        // Whole or not at all, as the ledger beside it (`project::write_ledger`).
-        let whole = |path: &Path, text: &str| {
-            crate::comptime_run::write_if_changed(path, text).map_err(std::io::Error::other)
-        };
-        whole(&path, &text)?;
-        let dir = root.join(LONG_DIR);
-        if !long.is_empty() {
-            std::fs::create_dir_all(&dir)?;
-        }
-        for (key, certificate) in &long {
-            whole(&dir.join(key), certificate)?;
-        }
-        // A long certificate no entry points at any more goes with it.
-        if let Ok(entries) = std::fs::read_dir(&dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                // Not one another build is still writing.
-                if !long.contains_key(&name) && !name.ends_with(".partial") {
-                    let _ = std::fs::remove_file(entry.path());
-                }
-            }
-            if long.is_empty() {
-                let _ = std::fs::remove_dir(&dir);
-            }
-        }
-        Ok(())
-    }
-
-    /// Whether `root` holds exactly the file this book would write, long
-    /// certificates included (D22).
-    pub fn as_recorded(&self, root: &Path) -> bool {
-        let (text, long) = self.render();
-        if std::fs::read_to_string(root.join(FILE)).ok().as_deref() != Some(text.as_str()) {
-            return false;
-        }
-        let dir = root.join(LONG_DIR);
-        let on_disk = std::fs::read_dir(&dir)
-            .map(|entries| entries.flatten().count())
-            .unwrap_or(0);
-        on_disk == long.len()
-            && long.iter().all(|(key, certificate)| {
-                std::fs::read_to_string(dir.join(key)).ok().as_deref() == Some(certificate.as_str())
-            })
-    }
-
-    /// How many entries the file would hold.
-    pub fn len(&self) -> usize {
-        self.entries
-            .keys()
-            .filter(|key| self.asked.contains(*key))
-            .count()
-            + self.used.len()
-    }
-
-    /// `path` as a place names it: relative to the project, `/` between
-    /// its parts.
-    fn file_of(&self, path: &Path) -> String {
-        let shown = match &self.root {
-            Some(root) => path.strip_prefix(root).unwrap_or(path),
-            None => path,
-        };
-        shown
-            .components()
-            .map(|c| c.as_os_str().to_string_lossy().to_string())
-            .collect::<Vec<_>>()
-            .join("/")
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
+    THREAD.with(|t| answers::proofs_ask_again_from(&mut t.borrow_mut(), before));
 }
 
 #[cfg(test)]
@@ -723,7 +227,10 @@ mod tests {
         first.write(&dir).expect("written");
         let ((), second) = with_book(Book::read(&dir), ask_two);
         assert_eq!(second.searched, 0);
-        assert_eq!(second.render(), first.render());
+        assert_eq!(
+            answers::proofs_book_render(&second),
+            answers::proofs_book_render(&first)
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -743,7 +250,10 @@ mod tests {
         std::fs::write(dir.join(FILE), broken).expect("rewritten");
         let ((), again) = with_book(Book::read(&dir), ask_two);
         assert_eq!(again.searched, 2);
-        assert_eq!(again.render(), first.render());
+        assert_eq!(
+            answers::proofs_book_render(&again),
+            answers::proofs_book_render(&first)
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -753,10 +263,10 @@ mod tests {
     fn a_loop_place_reads_back_to_its_byte() {
         let source = "fn f() {\n    while x {\n    }\n}\n";
         let at = source.find("while").expect("the loop");
-        assert_eq!(place_of(at, source), "2:5");
-        assert_eq!(byte_of("2:5", source), Some(at));
-        assert_eq!(byte_of("2:40", source), None);
-        assert_eq!(byte_of("9:1", source), None);
+        assert_eq!(answers::proofs_place_of(at as i64, source), "2:5");
+        assert_eq!(answers::proofs_byte_of("2:5", source), Some(at as i64));
+        assert_eq!(answers::proofs_byte_of("2:40", source), None);
+        assert_eq!(answers::proofs_byte_of("9:1", source), None);
     }
 
     /// Outside a build nothing is recorded, and the answer is the same.
@@ -776,10 +286,18 @@ mod tests {
                 in_function("f", source.find("fn").expect("the fn"), ask_two)
             })
         });
-        let shown: Vec<String> = book.searched_at.iter().map(|p| p.shown(root)).collect();
+        let shown: Vec<String> = book
+            .searched_at
+            .iter()
+            .map(|p| super::shown(p, root))
+            .collect();
         assert_eq!(shown, ["src/a.nika:2, in `f`"]);
         let ((), book) = with_book(Book::default(), ask_two);
-        let shown: Vec<String> = book.searched_at.iter().map(|p| p.shown(root)).collect();
+        let shown: Vec<String> = book
+            .searched_at
+            .iter()
+            .map(|p| super::shown(p, root))
+            .collect();
         assert_eq!(shown, ["a place the compiler did not name"]);
     }
 }

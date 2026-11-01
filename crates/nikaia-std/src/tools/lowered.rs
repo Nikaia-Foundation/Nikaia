@@ -1687,6 +1687,14 @@ mod project_tests_lowered {
 #[allow(unused_imports)]
 pub use project_tests_lowered::*;
 
+mod proofs_answers_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/proofs_answers.rs");
+}
+#[allow(unused_imports)]
+pub use proofs_answers_lowered::*;
+
 mod proofs_book_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2752,6 +2760,10 @@ pub mod project_settings {
 pub mod project_tests {
     #[allow(unused_imports)]
     pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, program_tests, project_tests_stray_bounds, project_tests_bounds_report, project_tests_bounds_outcome, project_tests_explain_bounds, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict, project_tests_running, project_tests_result, project_tests_output_label, project_tests_program_label, project_tests_output_outcome, project_tests_refused_outcome, project_tests_ran_outcome, ProjectTestsBlessed, project_tests_blessed_line, project_tests_bless_program, project_tests_explain_output, project_tests_bless};
+}
+pub mod proofs_answers {
+    #[allow(unused_imports)]
+    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_nowhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_written, proofs_ask, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
 }
 pub mod proofs_book {
     #[allow(unused_imports)]

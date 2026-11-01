@@ -1543,7 +1543,7 @@ pub fn write_proofs(root: &Path, book: Option<&crate::proofs::Book>, locked: boo
             .searched_at
             .iter()
             .take(SHOWN)
-            .map(|place| format!("\n  asked at {}", place.shown(root)))
+            .map(|place| format!("\n  asked at {}", crate::proofs::shown(place, root)))
             .collect();
         if book.searched_at.len() > SHOWN {
             places.push_str(&format!(

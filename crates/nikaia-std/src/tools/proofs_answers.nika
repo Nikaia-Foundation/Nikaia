@@ -1,0 +1,610 @@
+// crates/nikaia-std/src/tools/proofs_answers.nika
+//
+// **`nikaia.proofs`: what a build uses is the recorded answer**
+// ([ADR-270](../../../../docs/specification/adr/adr-270.md) D4, D19-D21, #448).
+// Moved from `crates/nikaia/src/proofs.rs`.
+//
+// Every question the prover (`prove_run.nika`) and the bounds walk ask goes
+// through `proofs_ask`. The query is put into normal form (`lg_normal_of`),
+// keyed by the SHA-256 of that form, and answered from the **book** a project
+// build opened, where an entry checks (D20): a `proved` entry's certificate is
+// replayed against the normal form, a `refuted` entry's model evaluated. A
+// missing entry, or one that does not check, is searched for and written in.
+// Nothing in the file can make the compiler drop a check that does not hold:
+// it needs no more trust than the solver does.
+//
+// **The book is the thread's**: `ProofsThread` is what the Rust adapter
+// (`crates/nikaia/src/proofs.rs`) keeps per thread and opens around a build's
+// check and lowering. Without a book - a test, `nikaia lower` of a loose
+// file - `proofs_ask` searches as it always did and records nothing.
+
+use std::collections
+use std::fs
+use std::hash
+use std::text
+
+/// The file, beside `nikaia.contracts`.
+pub comptime PROOFS_FILE: ref String = "nikaia.proofs"
+
+/// Where a certificate longer than `PROOFS_LONG` bytes is kept, one file per
+/// key (D19).
+pub comptime PROOFS_LONG_DIR: ref String = "nikaia.proofs.d"
+
+/// A certificate longer than this is written to `PROOFS_LONG_DIR`.
+pub comptime PROOFS_LONG: i64 = 4096
+
+/// The solver an `unknown` was given by (D19): an entry is searched again
+/// only under a different one (D21).
+pub comptime PROOFS_SOLVER: ref String = "fourier-motzkin-1"
+
+/// What a question came to, in the program's names.
+pub enum ProofsAsked {
+    /// The facts imply the goal; the certificate checked against the normal
+    /// form.
+    Proved,
+    /// Values under which every fact holds and the goal does not, checked.
+    Refuted(LgModel),
+    /// Not shown either way.
+    Unknown,
+    /// The solver's own proof did not check: a fault of the compiler, which
+    /// the caller says rather than believes.
+    Rejected(String),
+}
+
+/// One recorded answer, as the file writes it.
+pub enum ProofsEntry {
+    Proved(String),
+    Refuted(String),
+    Unknown(String),
+}
+
+/// The answers a build reads and writes.
+pub struct ProofsBook {
+    pub entries: collections::BTreeMap[String, ProofsEntry],
+    /// Every key a question this build asked had: what the file keeps.
+    pub asked: collections::BTreeSet[String],
+    /// How many questions were searched rather than read.
+    pub searched: i64,
+    /// Where those questions were asked, for `--locked`'s message (D22):
+    /// the file (its text: a path has no order to keep a set in), the line
+    /// and the function, where the asker knew them.
+    pub searched_at: collections::BTreeSet[(String?, i64?, String?)],
+    /// **Each loop's invariant** (ADR-361 D4), by the loop's place
+    /// (`src/main.nika:4:5`): its parts as `loop_parts_text` writes them.
+    pub invariants: collections::BTreeMap[String, String],
+    /// The places whose invariant this build used: what the file keeps.
+    pub used: collections::BTreeSet[String],
+    /// The project the file belongs to, which a place is relative to.
+    pub root: fs::Path?,
+}
+
+/// A book with nothing in it, and no project.
+pub fn proofs_book_empty() -> ProofsBook {
+    return ProofsBook { entries: collections::BTreeMap(), asked: collections::BTreeSet(), searched: 0, searched_at: collections::BTreeSet(), invariants: collections::BTreeMap(), used: collections::BTreeSet(), root: null }
+}
+
+/// What a book had asked, to go back to when a walk is repeated.
+pub struct ProofsSoFar {
+    pub asked: collections::BTreeSet[String],
+    pub used: collections::BTreeSet[String],
+}
+
+/// **A question asked before, by its terms as written** (#727): the book's
+/// key, the entry it found there and what that came to.
+pub struct ProofsKnown {
+    pub key: String,
+    pub entry: ProofsEntry,
+    pub asked: ProofsAsked,
+}
+
+/// The file being checked: its path, its text and where each of its line
+/// breaks is.
+pub struct ProofsWhere {
+    pub file: fs::Path?,
+    pub source: String,
+    pub breaks: Vec[i64],
+}
+
+/// No file.
+pub fn proofs_nowhere() -> ProofsWhere {
+    return ProofsWhere { file: null, source: "", breaks: [] }
+}
+
+/// `path`, whose text is `source`.
+pub fn proofs_where(path: ref fs::Path, source: ref String) -> ProofsWhere {
+    let mut breaks: Vec[i64] = []
+    let mut at = 0
+    for b in source.bytes() {
+        if b == 10 {
+            breaks.push(at)
+        }
+        at += 1
+    }
+    return ProofsWhere { file: path.clone(), source: source.clone(), breaks: breaks }
+}
+
+/// What a thread holds while it asks: the open book, the questions it
+/// answered by their terms, the file and the function being checked.
+pub struct ProofsThread {
+    pub book: ProofsBook?,
+    /// A bounds pass asks the same questions again under fresh term ids;
+    /// this answers them without normalising, as long as the book still
+    /// holds that entry.
+    pub known: collections::BTreeMap[String, ProofsKnown],
+    pub at: ProofsWhere,
+    /// The function being checked and the byte its declaration starts at.
+    pub function: String?,
+    pub function_at: i64,
+}
+
+/// A thread before anything is opened.
+pub fn proofs_thread() -> ProofsThread {
+    return ProofsThread { book: null, known: collections::BTreeMap(), at: proofs_nowhere(), function: null, function_at: 0 }
+}
+
+/// Where the question being asked now stands.
+fn proofs_here(t: ref ProofsThread) -> (String?, i64?, String?) {
+    let mut line: i64? = null
+    if t.at.file != null && t.function != null {
+        let at = t.function_at.min(t.at.source.len())
+        let mut before = 0
+        for b in t.at.breaks {
+            if b < at {
+                before += 1
+            }
+        }
+        line = before + 1
+    }
+    return (t.at.file?.text_of(), line, t.function?.clone())
+}
+
+/// `src/main.nika:3, in `f``, the file shown relative to `root`.
+pub fn proofs_shown(place: (String?, i64?, String?), root: ref fs::Path) -> String {
+    let mut file: String? = null
+    let path = place.0?.clone()
+    if path != null {
+        let prefix = f"{root.text_of()}/"
+        let shown: String = path.strip_prefix(prefix)?.clone() ?? path.clone()
+        let line = place.1
+        if line != null {
+            file = f"{shown}:{line}"
+        } else {
+            file = shown
+        }
+    }
+    let name = place.2?.clone()
+    if file != null && name != null {
+        return f"{file}, in `{name}`"
+    }
+    if file != null {
+        return file
+    }
+    if name != null {
+        return f"in `{name}`"
+    }
+    return "a place the compiler did not name"
+}
+
+/// The question as its terms are written, every node in full: two questions
+/// written alike have one normal form, whatever their term ids.
+pub fn proofs_written(arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> String {
+    let mut out = ""
+    for fact in facts {
+        proofs_write_term(arena, fact, out)
+        out.push_str(";")
+    }
+    out.push_str("|")
+    proofs_write_term(arena, goal, out)
+    return out
+}
+
+fn proofs_write_term(arena: ref TermArena, id: i64, mut out: String) {
+    if id < 0 || id >= arena.nodes.len() {
+        out.push_str("?")
+        return
+    }
+    match arena.nodes[id] {
+        SolverTerm::Bool(value) => out.push_str(if value { "T" } else { "F" }),
+        SolverTerm::Int(value) => out.push_str(f"i{value},"),
+        SolverTerm::Var(name) => out.push_str(f"v{name.len()}:{name}"),
+        SolverTerm::Add(a, b) => proofs_write_two("+", arena, a, b, out),
+        SolverTerm::Sub(a, b) => proofs_write_two("-", arena, a, b, out),
+        SolverTerm::Mul(a, b) => proofs_write_two("*", arena, a, b, out),
+        SolverTerm::Le(a, b) => proofs_write_two("l", arena, a, b, out),
+        SolverTerm::Lt(a, b) => proofs_write_two("<", arena, a, b, out),
+        SolverTerm::Ge(a, b) => proofs_write_two("g", arena, a, b, out),
+        SolverTerm::Gt(a, b) => proofs_write_two(">", arena, a, b, out),
+        SolverTerm::Eq(a, b) => proofs_write_two("=", arena, a, b, out),
+        SolverTerm::Ne(a, b) => proofs_write_two("!", arena, a, b, out),
+        SolverTerm::Neg(a) => {
+            out.push_str("n")
+            proofs_write_term(arena, a, out)
+        }
+        SolverTerm::Not(a) => {
+            out.push_str("~")
+            proofs_write_term(arena, a, out)
+        }
+        SolverTerm::Quot(a, k) => {
+            out.push_str(f"q{k},")
+            proofs_write_term(arena, a, out)
+        }
+        SolverTerm::And(parts) => proofs_write_all("&", arena, parts, out),
+        SolverTerm::Or(parts) => proofs_write_all("|", arena, parts, out),
+        SolverTerm::Other => out.push_str("o"),
+    }
+}
+
+fn proofs_write_two(tag: ref String, arena: ref TermArena, a: i64, b: i64, mut out: String) {
+    out.push_str(tag)
+    proofs_write_term(arena, a, out)
+    proofs_write_term(arena, b, out)
+}
+
+fn proofs_write_all(tag: ref String, arena: ref TermArena, parts: ref Vec[i64], mut out: String) {
+    out.push_str(f"{tag}{parts.len()},")
+    for part in parts {
+        proofs_write_term(arena, part, out)
+    }
+}
+
+/// What a question written so came to, if the open book still holds the
+/// entry it came from; the key is marked asked, as a lookup would.
+fn proofs_known(mut t: ProofsThread, written: ref String) -> ProofsAsked? {
+    let held = t.known.get(written)?.clone() ?? return null
+    let mut book = t.book ?? return null
+    let entry = book.entries.get(held.key) ?? return null
+    if entry != held.entry {
+        return null
+    }
+    book.asked.insert(held.key.clone())
+    return held.asked.clone()
+}
+
+/// **Whether the facts imply the goal**, and if not, why not.
+pub fn proofs_ask(mut t: ProofsThread, arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> ProofsAsked {
+    if t.book == null {
+        // Nothing is recorded or looked up: no key to make (#727).
+        return proofs_search(lg_normal_of(arena, facts, goal)).asked
+    }
+    let written = proofs_written(arena, facts, goal)
+    let known = proofs_known(t, written)
+    if known != null {
+        return known
+    }
+    let normal = lg_normal_of(arena, facts, goal)
+    let key = hash::sha256_hex(normal.text().bytes().collect())
+    let mut recorded: ProofsEntry? = null
+    {
+        let mut book = t.book ?? return ProofsAsked::Unknown
+        book.asked.insert(key.clone())
+        recorded = book.entries.get(key)?.clone()
+    }
+    if recorded != null {
+        let asked = proofs_read(normal, recorded)
+        if asked != null {
+            t.known.insert(written.clone(), ProofsKnown { key: key.clone(), entry: recorded.clone(), asked: asked.clone() })
+            return asked
+        }
+    }
+    let found = proofs_search(normal)
+    let entry = found.entry?.clone()
+    if entry != null {
+        // What a read of this entry comes to: the search checked the same
+        // certificate or model.
+        t.known.insert(written.clone(), ProofsKnown { key: key.clone(), entry: entry.clone(), asked: found.asked.clone() })
+    }
+    let place = proofs_here(t)
+    let mut book = t.book ?? return found.asked
+    book.searched += 1
+    book.searched_at.insert(place)
+    if entry != null {
+        book.entries.insert(key, entry)
+    } else {
+        book.entries.remove(key)
+    }
+    return found.asked
+}
+
+/// A recorded entry, where it checks (D20) - and an `unknown` only from the
+/// solver this compiler has, since a newer one is searched again (D21).
+fn proofs_read(normal: ref LgNormal, entry: ref ProofsEntry) -> ProofsAsked? {
+    match entry {
+        ProofsEntry::Proved(text) => {
+            let certificate = lg_certificate_of(text) ?? return null
+            if lg_verify(normal.arena, normal.facts, normal.goal, certificate) != null {
+                return null
+            }
+            return ProofsAsked::Proved
+        }
+        ProofsEntry::Refuted(text) => {
+            let model = lg_model_of(text) ?? return null
+            if !lg_verify_model(normal.arena, normal.facts, normal.goal, model) {
+                return null
+            }
+            return ProofsAsked::Refuted(normal.named(model))
+        }
+        ProofsEntry::Unknown(solver) => {
+            if solver != PROOFS_SOLVER {
+                return null
+            }
+            return ProofsAsked::Unknown
+        }
+    }
+}
+
+/// The reference solver's answer, and what to record of it.
+pub struct ProofsSearch {
+    pub asked: ProofsAsked,
+    pub entry: ProofsEntry?,
+}
+
+/// The reference solver's answer to the normal form, and what to record of
+/// it. A proof that does not check is not recorded.
+fn proofs_search(normal: ref LgNormal) -> ProofsSearch {
+    match lg_check(normal.arena, normal.facts, normal.goal, lg_budget()) {
+        LgAnswer::Proved { certificate } => {
+            let why = lg_verify(normal.arena, normal.facts, normal.goal, certificate)
+            if why != null {
+                return ProofsSearch { asked: ProofsAsked::Rejected(f"the solver's proof did not check ({why.debug()}), which is a fault of the compiler"), entry: null }
+            }
+            return ProofsSearch { asked: ProofsAsked::Proved, entry: ProofsEntry::Proved(lg_certificate_text(certificate)) }
+        }
+        LgAnswer::Refuted { model } => {
+            if !lg_verify_model(normal.arena, normal.facts, normal.goal, model) {
+                return ProofsSearch { asked: ProofsAsked::Unknown, entry: null }
+            }
+            return ProofsSearch { asked: ProofsAsked::Refuted(normal.named(model)), entry: ProofsEntry::Refuted(lg_model_text(model)) }
+        }
+        LgAnswer::Unknown { .. } => {
+            return ProofsSearch { asked: ProofsAsked::Unknown, entry: ProofsEntry::Unknown(PROOFS_SOLVER.clone()) }
+        }
+    }
+}
+
+/// **The invariants the book holds for the file being checked** (ADR-361
+/// D4), by the byte its loop starts at: the prover checks each with the
+/// three queries before it uses it. Nothing outside a build.
+pub fn proofs_invariants_here(t: ref ProofsThread) -> collections::BTreeMap[i64, String] {
+    let mut out: collections::BTreeMap[i64, String] = collections::BTreeMap()
+    let path = t.at.file ?? return out
+    let book = t.book ?? return out
+    let file = f"{proofs_file_of(book, path)}:"
+    for (place, parts) in book.invariants.iter() {
+        let rest = place.strip_prefix(file) ?? continue
+        let at = proofs_byte_of(rest, t.at.source) ?? continue
+        out.insert(at, parts.clone())
+    }
+    return out
+}
+
+/// **Keep the invariants a walk of the file being checked used** (ADR-361
+/// D4), by the byte each loop starts at; `kind` is `""` for the prover's,
+/// `"/bounds"` for the bounds walk's (ADR-361 D10), which reads only its
+/// own.
+pub fn proofs_record_at(mut t: ProofsThread, used: ref collections::BTreeMap[i64, String], kind: ref String) {
+    let path = t.at.file?.clone() ?? return
+    let source = t.at.source.clone()
+    let mut book = t.book ?? return
+    // A file outside the project is another package's, whose file this is
+    // not.
+    let root = book.root?.clone()
+    if root != null && !path.starts_with(root) {
+        return
+    }
+    let file = proofs_file_of(book, path)
+    for (at, parts) in used.iter() {
+        let place = f"{file}:{proofs_place_of(at, source)}{kind}"
+        book.invariants.insert(place.clone(), parts.clone())
+        book.used.insert(place)
+    }
+}
+
+/// What the open book has been asked so far.
+pub fn proofs_asked_so_far(t: ref ProofsThread) -> ProofsSoFar {
+    let book = t.book ?? return ProofsSoFar { asked: collections::BTreeSet(), used: collections::BTreeSet() }
+    return ProofsSoFar { asked: book.asked.clone(), used: book.used.clone() }
+}
+
+/// **Forget what was asked after `before`**: a walk that is repeated keeps
+/// only what its repetition asks. What was searched stays searched.
+pub fn proofs_ask_again_from(mut t: ProofsThread, before: ref ProofsSoFar) {
+    let mut book = t.book ?? return
+    book.asked = before.asked.clone()
+    book.used = before.used.clone()
+}
+
+/// `line:column` of byte `at` of `source`, both from 1.
+pub fn proofs_place_of(at: i64, source: ref String) -> String {
+    let limit = at.min(source.len())
+    let mut line = 1
+    let mut start = 0
+    let mut i = 0
+    for b in source.bytes() {
+        if i >= limit {
+            break
+        }
+        if b == 10 {
+            line += 1
+            start = i + 1
+        }
+        i += 1
+    }
+    return f"{line}:{limit - start + 1}"
+}
+
+/// `proofs_place_of` read back.
+pub fn proofs_byte_of(place: ref String, source: ref String) -> i64? {
+    let parts: Vec[ref String] = place.split(":").collect()
+    if parts.len() != 2 {
+        return null
+    }
+    let line = text::parse_i64(parts[0]) ?? return null
+    let column = text::parse_i64(parts[1]) ?? return null
+    if line < 0 || column < 1 {
+        return null
+    }
+    let mut row = 1
+    let mut start = 0
+    let mut end = source.len()
+    let mut i = 0
+    for b in source.bytes() {
+        if b == 10 {
+            if row >= line {
+                end = i
+                break
+            }
+            row += 1
+            start = i + 1
+        }
+        i += 1
+    }
+    if row < line {
+        return null
+    }
+    let found = start + column - 1
+    if found > end {
+        return null
+    }
+    return found
+}
+
+/// `path` as a place names it: relative to the project.
+fn proofs_file_of(book: ref ProofsBook, path: ref fs::Path) -> String {
+    let root = book.root?.clone()
+    if root != null {
+        return (path.strip_prefix(root) ?? path.clone()).text_of()
+    }
+    return path.text_of()
+}
+
+/// The certificates kept in `dir`, by their key; none where it cannot be
+/// read.
+fn proofs_long_files(dir: ref fs::Path) -> collections::BTreeMap[String, String] {
+    let mut out: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let names = fs::read_dir(dir, fs::Root::Anywhere) catch { return out }
+    for name in names.iter() {
+        let text = fs::read_to_string(dir.join(name), fs::Root::Anywhere) catch { continue }
+        out.insert(name.text_of(), text)
+    }
+    return out
+}
+
+/// **The book `root`'s `nikaia.proofs` holds**, or an empty one. A line that
+/// does not read is left out: it is missing, and missing is searched (D20).
+pub fn proofs_book_read(root: ref fs::Path) -> ProofsBook {
+    let mut book = proofs_book_empty()
+    book.root = root.clone()
+    let text = fs::read_to_string(root.join(PROOFS_FILE), fs::Root::Anywhere) catch { return book }
+    let long = proofs_long_files(root.join(PROOFS_LONG_DIR))
+    for line in pb_read(text, fn(key) { long.get(key)?.clone() }) {
+        if line.kind == "invariant" {
+            // Under the SHA-256 of its place: a line whose key is not that
+            // is missing.
+            let pair = line.body.split_once(" ") ?? continue
+            if hash::sha256_hex(pair.0.bytes().collect()) == line.key {
+                book.invariants.insert(pair.0.clone(), pair.1.clone())
+            }
+            continue
+        }
+        if line.kind == "proved" {
+            book.entries.insert(line.key.clone(), ProofsEntry::Proved(line.body.clone()))
+        } else if line.kind == "refuted" {
+            book.entries.insert(line.key.clone(), ProofsEntry::Refuted(line.body.clone()))
+        } else {
+            book.entries.insert(line.key.clone(), ProofsEntry::Unknown(line.body.clone()))
+        }
+    }
+    return book
+}
+
+/// **The file as this build leaves it**: one line per key a question asked,
+/// sorted by key, so that two branches that add entries merge without a
+/// conflict (D19, D21). An entry nothing asked is gone.
+pub fn proofs_book_render(book: ref ProofsBook) -> PbRendered {
+    let mut lines: Vec[PbLine] = []
+    for (key, entry) in book.entries.iter() {
+        if !book.asked.contains(key) {
+            continue
+        }
+        let line = match entry {
+            ProofsEntry::Proved(text) => PbLine { key: key.clone(), kind: "proved", body: text.clone() },
+            ProofsEntry::Refuted(text) => PbLine { key: key.clone(), kind: "refuted", body: text.clone() },
+            ProofsEntry::Unknown(solver) => PbLine { key: key.clone(), kind: "unknown", body: solver.clone() },
+        }
+        lines.push(line)
+    }
+    for (place, parts) in book.invariants.iter() {
+        if book.used.contains(place) {
+            lines.push(PbLine { key: hash::sha256_hex(place.bytes().collect()), kind: "invariant", body: f"{place} {parts}" })
+        }
+    }
+    lines.sort_by_key(fn(line) { line.key.clone() })
+    return pb_render(lines, PROOFS_LONG)
+}
+
+/// **Write the file and its long certificates under `root`**, where they
+/// changed, each whole or not at all by `whole` (the ledger's way): what
+/// failed, or `null`.
+pub fn proofs_book_write(book: ref ProofsBook, root: ref fs::Path, whole: fn(ref fs::Path, ref String) -> String? sync) -> String? {
+    let rendered = proofs_book_render(book)
+    let failed = whole(root.join(PROOFS_FILE), rendered.text)
+    if failed != null {
+        return failed
+    }
+    let dir = root.join(PROOFS_LONG_DIR)
+    if rendered.long.len() > 0 {
+        fs::create_dir(dir, fs::Root::Anywhere; recursive: true) catch { return f"{error}" }
+    }
+    for (key, certificate) in rendered.long.iter() {
+        let failed = whole(dir.join(key), certificate)
+        if failed != null {
+            return failed
+        }
+    }
+    // A long certificate no entry points at any more goes with it.
+    let names = fs::read_dir(dir, fs::Root::Anywhere) catch { return null }
+    for name in names.iter() {
+        let text = name.text_of()
+        // Not one another build is still writing.
+        if !rendered.long.contains_key(text) && !text.ends_with(".partial") {
+            fs::remove(dir.join(name), fs::Root::Anywhere) catch {}
+        }
+    }
+    if rendered.long.len() == 0 {
+        fs::remove(dir, fs::Root::Anywhere) catch {}
+    }
+    return null
+}
+
+/// Whether `root` holds exactly the file this book would write, long
+/// certificates included (D22).
+pub fn proofs_book_as_recorded(book: ref ProofsBook, root: ref fs::Path) -> bool {
+    let rendered = proofs_book_render(book)
+    let text = fs::read_to_string(root.join(PROOFS_FILE), fs::Root::Anywhere) catch { return false }
+    if text != rendered.text {
+        return false
+    }
+    let dir = root.join(PROOFS_LONG_DIR)
+    let names = fs::read_dir(dir, fs::Root::Anywhere) catch { return rendered.long.len() == 0 }
+    if names.len() != rendered.long.len() {
+        return false
+    }
+    for (key, certificate) in rendered.long.iter() {
+        let held = fs::read_to_string(dir.join(key), fs::Root::Anywhere) catch { return false }
+        if held != certificate {
+            return false
+        }
+    }
+    return true
+}
+
+/// How many entries the file would hold.
+pub fn proofs_book_len(book: ref ProofsBook) -> i64 {
+    let mut count = book.used.len()
+    for key in book.entries.keys() {
+        if book.asked.contains(key) {
+            count += 1
+        }
+    }
+    return count
+}
