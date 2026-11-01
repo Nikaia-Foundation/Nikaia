@@ -30,6 +30,8 @@ use nikaia_std::node_id;
 use nikaia_std::process;
 #[allow(unused_imports)]
 use nikaia_std::text;
+#[allow(unused_imports)]
+use nikaia_std::time;
 
 mod assets_lowered {
     #[allow(unused_imports)]
@@ -902,6 +904,14 @@ mod claim_names_lowered {
 }
 #[allow(unused_imports)]
 pub use claim_names_lowered::*;
+
+mod comptime_bundle_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/comptime_bundle.rs");
+}
+#[allow(unused_imports)]
+pub use comptime_bundle_lowered::*;
 
 mod comptime_driver_lowered {
     #[allow(unused_imports)]
@@ -2437,6 +2447,10 @@ pub mod check_words {
 pub mod claim_names {
     #[allow(unused_imports)]
     pub use super::{claim_names_in, is_a_parameter};
+}
+pub mod comptime_bundle {
+    #[allow(unused_imports)]
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]

@@ -1,0 +1,434 @@
+// crates/nikaia-std/src/tools/comptime_bundle.nika
+//
+// **The bundle build-time code links against, and the run of one build-time
+// program** (ADR-321 D3, D4, D10; ADR-294, #125, K3b), moved from
+// `crates/nikaia/src/comptime_run.rs`. What it needs from the compiler - where
+// `std` is, the toolchain's answers held once per process, the CPU level, the
+// programs that did not compile, Cargo's JSON and the child's spawn with its
+// progress note - comes from `ComptimeBundleHost`; the Rust `Bundle` the other
+// Rust modules read is made from `ComptimeBundle`.
+
+use std::env
+use std::fs
+use std::hash
+use std::process
+use std::time
+
+/// **The dynamic library build-time code links against** (D3): one crate that
+/// names `std` and the grammar runtime a program's `grammar` lowers to, built
+/// by Cargo from the same compiled dependencies as anything else in the
+/// workshop.
+pub struct ComptimeBundle {
+    /// The library itself.
+    pub dylib: fs::Path,
+    /// Each crate it names, as Cargo compiled it, which `rustc` is pointed at
+    /// so that a path `nikaia_std::…` resolves in every module; the code is
+    /// the library's.
+    pub rlibs: Vec[(String, fs::Path)],
+    /// Where the libraries it was built from are.
+    pub deps: fs::Path,
+    /// What changes when the library is rebuilt: part of every key.
+    pub stamp: String,
+    /// Where the toolchain's own `std` is, which a program linked with
+    /// `prefer-dynamic` loads - and beside which the toolchain's `rustc` is.
+    pub libdir: fs::Path,
+}
+
+/// **What a bundle is built for.** Build-time code counts what it allocates
+/// against its bound (D10); a program `nikaia run` compiles against the
+/// bundle (`run_fast.rs`) means what its Cargo build means, so its
+/// bundle has no counting allocator and the profile the generated workspace
+/// gives a dependency: no overflow checks, no debug assertions, no debug
+/// information, unwinding.
+pub enum ComptimeBundleFlavour {
+    BuildTime,
+    Run,
+}
+
+/// What Cargo's messages named: the library, and each crate it names.
+pub struct ComptimeBundleArtifacts {
+    pub dylib: fs::Path?,
+    pub rlibs: Vec[(String, fs::Path)],
+}
+
+/// How the child ended: whether it said it succeeded, what it wrote, and
+/// its exit status as the system words it.
+pub struct ComptimeBundleRan {
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+    pub status: String,
+}
+
+/// Why a bundle could not be built or recorded: the text the build reports.
+pub enum ComptimeBundleFailed {
+    Said(String),
+}
+
+impl Error for ComptimeBundleFailed {
+    fn message(ref self) -> String {
+        return match self {
+            ComptimeBundleFailed::Said(text) => text.clone(),
+        }
+    }
+}
+
+/// What the compiler hands the bundle's build and a build-time run.
+pub trait ComptimeBundleHost {
+    /// Where `std`'s sources are.
+    fn std_dir(ref self) -> fs::Path sync
+    /// This compiler, as it was built.
+    fn compiler(ref self) -> String sync
+    /// `rustc --version`, once.
+    fn rustc_version(ref self) -> String sync
+    /// The dependency table of the crates `named` (space-separated).
+    fn runtime_dependencies(ref self, named: ref String) -> Vec[(String, String)] sync
+    /// The user cache, where a bundle lives.
+    fn user_cache_dir(ref self) -> fs::Path sync
+    /// Marks a cache entry used.
+    fn use_entry(ref self, at: ref fs::Path) sync
+    /// The directory Cargo and `rustc` start in.
+    fn where_tools_start(ref self) -> fs::Path sync
+    /// The library and the crates Cargo's JSON `messages` name.
+    fn artifacts(ref self, messages: ref String, named: ref Vec[String]) -> ComptimeBundleArtifacts sync
+    /// `rustc -vV`, once.
+    fn toolchain(ref self) -> String sync
+    /// `rustc --print target-libdir`, once.
+    fn target_libdir(ref self) -> String sync
+    /// The CPU level this process builds for (ADR-371 D6).
+    fn cpu_level(ref self) -> String sync
+    /// What `rustc` said of the program under `key`, where it did not compile
+    /// in this process.
+    fn not_built(ref self, key: ref String) -> String? sync
+    /// Keeps what `rustc` said of the program under `key`.
+    fn remember_not_built(ref self, key: ref String, detail: ref String) sync
+    /// A path beside `path` that no other build writes at the same time.
+    fn unique_beside(ref self, path: ref fs::Path) -> fs::Path sync
+    /// Runs `binary` with the level it reads and the libraries it loads, and
+    /// names it while it takes long (ADR-321 D12).
+    fn run_child(ref self, binary: ref fs::Path, level: ref String, libraries: ref Vec[fs::Path], name: ref String) -> ComptimeBundleRan sync throws
+}
+
+/// The run bundle's one file: the crates, named, and nothing else.
+comptime COMPTIME_BUNDLE_RUN_SOURCE: ref String = "// GENERATED: the library `nikaia run` links a program against.
+pub extern crate nikaia_std;
+pub extern crate winnow;
+pub extern crate winnow_grammar;
+"
+
+/// The run bundle's profile: what `[profile.dev]` of a generated workspace
+/// says about a crate that is not the program's.
+comptime COMPTIME_BUNDLE_RUN_PROFILE: ref String = "
+[profile.dev]
+overflow-checks = false
+debug-assertions = false
+debug = 0
+panic = \"unwind\"
+"
+
+/// The crates the bundle names: `std`, and what a `grammar` lowers to.
+comptime COMPTIME_BUNDLE_NAMED: Array[ref String, 3] = ["nikaia_std", "winnow", "winnow_grammar"]
+
+/// The crates the bundle names, as a list.
+fn comptime_bundle_named() -> Vec[String] {
+    return COMPTIME_BUNDLE_NAMED.iter().map(fn(name) { name.clone() }).collect()
+}
+
+/// A digest of a text.
+fn comptime_bundle_digest(text: String) -> String {
+    let bytes: Vec[u8] = text.bytes().collect()
+    return hash::sha256_hex(bytes)
+}
+
+/// Build the bundle, or say why it could not be built.
+///
+/// **Once per machine, not per project**: what it is depends on its manifest
+/// (where `std` comes from), its one file and the toolchain, never on the
+/// program - so it lives under the user cache, keyed by the first two, as the
+/// compiled `std` of ADR-002 D4 does. Under each project's own workshop it was
+/// built again for every new project, some forty crates (half a minute) before
+/// the first `comptime` could run. Cargo's lock on the target directory is what
+/// makes two builds at once wait for one another rather than collide.
+pub fn comptime_bundle_bundle[H: ComptimeBundleHost](host: ref H) -> ComptimeBundle throws {
+    return comptime_bundle_bundle_of(ComptimeBundleFlavour::BuildTime, host)
+}
+
+/// **The bundle `nikaia run` links a program against**, built once and then
+/// found from its record without starting Cargo: Cargo's start and freshness
+/// check is most of what a fast run saves. The record is trusted while this
+/// compiler, the toolchain and `std`'s sources are what they were when it was
+/// written, and every file it names is still there.
+pub fn comptime_bundle_run_bundle[H: ComptimeBundleHost](host: ref H) -> ComptimeBundle throws {
+    let (manifest, source) = comptime_bundle_bundle_text(ComptimeBundleFlavour::Run, host)
+    let at = comptime_bundle_bundle_dir(ComptimeBundleFlavour::Run, manifest, source, host)
+    let record = at.join("built")
+    let fingerprint = comptime_bundle_run_fingerprint(host)
+    let held = fs::read_to_string(record, fs::Root::Anywhere) catch { "" }
+    match comptime_bundle_read_record(held, fingerprint) {
+        null => {},
+        bundle => {
+            return bundle
+        },
+    }
+    let bundle = comptime_bundle_bundle_of(ComptimeBundleFlavour::Run, host)
+    let mut text = f"{fingerprint}\n{bundle.dylib.display()}\n{bundle.deps.display()}\n{bundle.libdir.display()}\n"
+    for (name, rlib) in bundle.rlibs {
+        text.push_str(f"{name}={rlib.display()}\n")
+    }
+    comptime_bundle_write_if_changed(record, text, host.unique_beside(record))
+    return bundle
+}
+
+/// What the run bundle's record is valid for: this compiler, the toolchain
+/// and the newest of `std`'s sources (a `std` edited under a development
+/// checkout is built again, as Cargo would).
+fn comptime_bundle_run_fingerprint[H: ComptimeBundleHost](host: ref H) -> String {
+    let mut newest = 0
+    let mut count = 0
+    let mut pending = [host.std_dir()]
+    while true {
+        let dir = pending.pop() ?? break
+        let names = fs::read_dir(dir, fs::Root::Anywhere) catch { continue }
+        for name in names {
+            let named = name.display()
+            if named == "target" || named == "tests" {
+                continue
+            }
+            let path = dir.join(name)
+            let meta = fs::metadata(path, fs::Root::Anywhere) catch { continue }
+            if meta.is_dir() {
+                pending.push(path)
+                continue
+            }
+            count += 1
+            let modified = meta.modified().in_nanos()
+            if modified > newest {
+                newest = modified
+            }
+        }
+    }
+    let rustc = env::var("RUSTC") ?? "rustc"
+    return comptime_bundle_digest(f"{host.compiler()}\n{host.rustc_version()}\n{rustc}\n{newest}:{count}")
+}
+
+/// The bundle a record names, where it is still the one it names.
+fn comptime_bundle_read_record(text: String, fingerprint: String) -> ComptimeBundle? {
+    let lines: Vec[String] = text.lines().collect()
+    if lines.len() < 4 || lines[0] != fingerprint {
+        return null
+    }
+    let dylib: fs::Path = lines[1]
+    let deps: fs::Path = lines[2]
+    let libdir: fs::Path = lines[3]
+    let rlibs: Vec[(String, fs::Path)] = lines.iter().skip(4).filter_map(fn(line) { line.split_once("=") }).map(fn((name, rlib)) { (name.clone(), comptime_bundle_path(rlib)) }).collect()
+    if rlibs.len() != COMPTIME_BUNDLE_NAMED.len() {
+        return null
+    }
+    let stamp = comptime_bundle_stamp_of(dylib, rlibs) catch { return null }
+    return ComptimeBundle { dylib: dylib, rlibs: rlibs, deps: deps, stamp: stamp, libdir: libdir }
+}
+
+/// A text, as a path.
+fn comptime_bundle_path(text: String) -> fs::Path {
+    let path: fs::Path = text
+    return path
+}
+
+/// A bundle's manifest and its one file.
+fn comptime_bundle_bundle_text[H: ComptimeBundleHost](flavour: ComptimeBundleFlavour, host: ref H) -> (String, String) {
+    let mut manifest = cr_bundle_manifest(host.runtime_dependencies(comptime_bundle_named().join(" ")))
+    let source = match flavour {
+        ComptimeBundleFlavour::BuildTime => cr_bundle_source(),
+        ComptimeBundleFlavour::Run => {
+            manifest.push_str(COMPTIME_BUNDLE_RUN_PROFILE)
+            COMPTIME_BUNDLE_RUN_SOURCE.clone()
+        },
+    }
+    return (manifest, source)
+}
+
+/// Where a bundle lives: the user cache, keyed by its manifest and its file.
+fn comptime_bundle_bundle_dir[H: ComptimeBundleHost](flavour: ComptimeBundleFlavour, manifest: String, source: String, host: ref H) -> fs::Path {
+    let key = comptime_bundle_digest(f"{manifest}\n{source}")
+    let short: String = key.scalars.take(16).collect()
+    let kind = match flavour {
+        ComptimeBundleFlavour::BuildTime => "build-time-bundle",
+        ComptimeBundleFlavour::Run => "run-bundle",
+    }
+    return host.user_cache_dir().join(kind).join(short)
+}
+
+/// The library and the crates it names, and when each was last built.
+fn comptime_bundle_stamp_of(dylib: ref fs::Path, rlibs: ref Vec[(String, fs::Path)]) -> String throws {
+    let mut files: Vec[fs::Path] = [dylib.clone()]
+    for (_, rlib) in rlibs {
+        files.push(rlib.clone())
+    }
+    let mut lines: Vec[String] = []
+    for file in files {
+        let meta = fs::metadata(file, fs::Root::Anywhere) catch { throw ComptimeBundleFailed::Said(f"{file.display()}: {error}") }
+        lines.push(f"{file.display()}:{meta.len()}:{meta.modified().in_nanos()}")
+    }
+    return lines.join("\n")
+}
+
+/// Builds the bundle of `flavour` with Cargo, or finds it built.
+fn comptime_bundle_bundle_of[H: ComptimeBundleHost](flavour: ComptimeBundleFlavour, host: ref H) -> ComptimeBundle throws {
+    let (manifest, bundle_source) = comptime_bundle_bundle_text(flavour, host)
+    let at = comptime_bundle_bundle_dir(flavour, manifest, bundle_source, host)
+    host.use_entry(at)
+    let dir = at.join("bundle")
+    fs::create_dir(dir.join("src"), fs::Root::Anywhere; recursive: true) catch { throw ComptimeBundleFailed::Said(f"{dir.display()}: {error}") }
+    let cargo_toml = dir.join("Cargo.toml")
+    comptime_bundle_write_if_changed(cargo_toml, manifest, host.unique_beside(cargo_toml))
+    let lib_rs = dir.join("src").join("lib.rs")
+    comptime_bundle_write_if_changed(lib_rs, bundle_source, host.unique_beside(lib_rs))
+    let cargo = env::var("CARGO") ?? "cargo"
+    let built = process::run(cargo, ["rustc", "--quiet", "--lib", "--crate-type", "dylib", "--message-format=json", "--manifest-path", cargo_toml.display(), "--target-dir", at.join("target").display(), "--", "-C", "prefer-dynamic"]; dir: host.where_tools_start().display()) catch {
+        throw ComptimeBundleFailed::Said(f"running cargo: {error}")
+    }
+    if !built.ok {
+        throw ComptimeBundleFailed::Said(built.stderr)
+    }
+    let found = host.artifacts(built.stdout, comptime_bundle_named())
+    if found.rlibs.len() != COMPTIME_BUNDLE_NAMED.len() {
+        throw ComptimeBundleFailed::Said("cargo built the bundle and named no library")
+    }
+    let dylib = found.dylib ?? throw ComptimeBundleFailed::Said("cargo built the bundle and named no library")
+    let deps = found.rlibs[0].1.parent() ?? throw ComptimeBundleFailed::Said("no directory for std")
+    let stamp = comptime_bundle_stamp_of(dylib, found.rlibs)
+    return ComptimeBundle { dylib: dylib, rlibs: found.rlibs, deps: deps, stamp: stamp, libdir: comptime_bundle_path(host.target_libdir()) }
+}
+
+/// **Compile and run one build-time program**, or hand back what it said when
+/// it ran before: its standard output, or `CheckWall::Refused` with what it
+/// wrote where it stopped. Keyed on the program, the toolchain and the bundle
+/// (D4).
+pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref ComptimeBundle, program: String, name: String, host: ref H) -> String throws {
+    // **A program that asks `target::has` answers for the build's level**
+    // (ADR-371 D6): the level is in its key and handed to it; one that does
+    // not keeps one answer for every level.
+    let level = match program.contains("target::has") {
+        true => host.cpu_level(),
+        false => "",
+    }
+    let key = comptime_bundle_digest(f"{program}\n{host.toolchain()}\n{bundle.stamp}\n{level}")
+    // What the run reads: the level's name, `native` for this machine's.
+    let named = match level.starts_with("native=") {
+        true => "native",
+        false => level,
+    }
+    let dir = at.join("comptime").join(key)
+    let answered = dir.join("answer")
+    let stopped = dir.join("stopped")
+    match fs::read_to_string(answered, fs::Root::Anywhere) catch { null } {
+        null => {},
+        answer => {
+            return answer
+        },
+    }
+    match fs::read_to_string(stopped, fs::Root::Anywhere) catch { null } {
+        null => {},
+        said => throw CheckWall::Refused { detail: said },
+    }
+    // **A program that did not compile is not compiled again** in this
+    // process: the same text fails the same way, and a check asks for one
+    // value many times over (each test, each variant).
+    match host.not_built(key) {
+        null => {},
+        detail => throw CheckWall::DidNotBuild { detail: detail },
+    }
+    let source = dir.join("main.rs")
+    comptime_bundle_write_if_changed(source, program, host.unique_beside(source)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+    // **Each build compiles and runs its own binary, in a directory of its
+    // own**, moved into place after: `rustc` names its object files after the
+    // crate, so two builds of the same program side by side wrote, linked and
+    // deleted each other's.
+    let scratch = host.unique_beside(dir.join("build"))
+    fs::create_dir(scratch, fs::Root::Anywhere; recursive: true) catch { throw CheckWall::DidNotBuild { detail: f"{scratch.display()}: {error}" } }
+    let binary = scratch.join("run")
+    let mut args: Vec[String] = ["--edition=2024", "--crate-name", "comptime", "--crate-type", "bin", "-C", "opt-level=0", "-C", "overflow-checks=on", "-C", "debug-assertions=off", "-C", "prefer-dynamic", "-A", "warnings", "--extern", f"nikaia_bundle={bundle.dylib.display()}"]
+    for (crate_name, rlib) in bundle.rlibs {
+        args.push("--extern")
+        args.push(f"{crate_name}={rlib.display()}")
+    }
+    args.push("-L")
+    args.push(f"dependency={bundle.deps.display()}")
+    args.push("-o")
+    args.push(binary.display())
+    args.push(source.display())
+    let rustc = env::var("RUSTC") ?? "rustc"
+    let compiled = process::run(rustc, args; dir: host.where_tools_start().display()) catch {
+        throw CheckWall::DidNotBuild { detail: f"running rustc: {error}" }
+    }
+    if !compiled.ok {
+        fs::remove(scratch, fs::Root::Anywhere; recursive: true) catch {}
+        host.remember_not_built(key, compiled.stderr)
+        throw CheckWall::DidNotBuild { detail: compiled.stderr }
+    }
+    let mut libraries: Vec[fs::Path] = []
+    match bundle.dylib.parent() {
+        null => {},
+        parent => libraries.push(parent),
+    }
+    libraries.push(bundle.deps.clone())
+    libraries.push(comptime_bundle_path(host.target_libdir()))
+    let ran = host.run_child(binary, named, libraries, name) catch {
+        comptime_bundle_tidy(binary, dir, scratch)
+        throw CheckWall::DidNotBuild { detail: f"running {binary.display()}: {error}" }
+    }
+    comptime_bundle_tidy(binary, dir, scratch)
+    if ran.success {
+        let answer = ran.stdout.trim().clone()
+        comptime_bundle_write_if_changed(answered, answer, host.unique_beside(answered)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+        return answer
+    }
+    let mut said = ran.stderr.trim().clone()
+    // **A run that ended without a word** - killed by the system, most often
+    // for its memory - says how it ended instead.
+    if said.is_empty() {
+        said = f"it ended without saying why ({ran.status})"
+    }
+    // **A stop the program reported is an answer**, and kept as one: the same
+    // code stops the same way. A run that died without a word is not, and is
+    // tried again next time.
+    if said.contains("the program stopped") || said.contains("nikaia-build-time:") {
+        comptime_bundle_write_if_changed(stopped, said, host.unique_beside(stopped)) catch { throw CheckWall::DidNotBuild { detail: f"{error}" } }
+    }
+    throw CheckWall::Refused { detail: said }
+}
+
+/// The binary moved beside its program, and the build's own directory gone,
+/// whatever the run came to.
+fn comptime_bundle_tidy(binary: ref fs::Path, dir: ref fs::Path, scratch: ref fs::Path) {
+    fs::rename(binary, dir.join("run"), fs::Root::Anywhere) catch {}
+    fs::remove(scratch, fs::Root::Anywhere; recursive: true) catch {}
+}
+
+/// Written only when it changed, so that Cargo's freshness keeps working.
+/// **Written whole or not at all**: builds side by side share the workshop,
+/// and one that read a file another was still writing compiled half a program
+/// or read half an answer; so the text goes to `partial` first (a path no
+/// other build writes, `ComptimeBundleHost::unique_beside`) and is moved into
+/// place.
+pub fn comptime_bundle_write_if_changed(path: ref fs::Path, text: ref String, partial: ref fs::Path) throws {
+    match path.parent() {
+        null => {},
+        parent => {
+            fs::create_dir(parent, fs::Root::Anywhere; recursive: true) catch { throw ComptimeBundleFailed::Said(f"{parent.display()}: {error}") }
+        },
+    }
+    let held = fs::read_to_string(path, fs::Root::Anywhere) catch { null }
+    match held {
+        null => {},
+        same if same == text => {
+            return
+        },
+        else => {},
+    }
+    fs::write(partial, fs::Root::Anywhere, text) catch { throw ComptimeBundleFailed::Said(f"{partial.display()}: {error}") }
+    fs::rename(partial, path, fs::Root::Anywhere) catch {
+        fs::remove(partial, fs::Root::Anywhere) catch {}
+        throw ComptimeBundleFailed::Said(f"{path.display()}: {error}")
+    }
+}

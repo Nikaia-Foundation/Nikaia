@@ -282,6 +282,7 @@ pub mod runtime {
     clippy::needless_borrows_for_generic_args,
     clippy::manual_ok_err,
     clippy::map_clone,
+    clippy::while_let_loop,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):

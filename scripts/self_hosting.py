@@ -125,6 +125,7 @@ COMPILER_NIKA = {
     "grammar_types.nika": "parser: a grammar rule that takes types copied once per list of type arguments (ADR-grammar-2 D1)",
     "grammar_run.nika": "grammar_run: a grammar run's sub-project written, built with Cargo and run over its input (GR)",
     "comptime_driver.nika": "comptime_run: the sub-program's main and its site table, and the bundle it links against (0.0.757)",
+    "comptime_bundle.nika": "comptime_run: the run bundle built with Cargo and its fingerprint, the build-time sub-program compiled with rustc and run (K3b)",
     "comptime_tree.nika": "comptime_run: the sub-program's tree - the file without its main and constants, the constants as literals, the value function - and the callee a refused run is blamed on (K1, K2)",
     "build_eval.nika": "build_time: the evaluator of a build-time expression - calls, loops, text, structs, variants and a grammar run (0.0.760)",
     "bounds_matched.nika": "bounds: what a grammar alternative's bindings matched, and what a callee's ledger entry ensures (0.0.763)",
