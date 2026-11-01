@@ -173,7 +173,7 @@ fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref 
 /// function keeps. What its type says is what the call does.
 fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], name: ref String, params: ref Vec[Ty], gives: Ty, is_sync: bool, fails: bool, span: ref Span) -> Ty sync {
     state.read_at.push((name.clone(), span.start as i64))
-    let found = check_core_arguments_given(state, world, host, args, params, false, null, span)
+    let found = check_core_arguments_to_code(state, world, host, args, params, span)
     check_core_call_lent(state, world, args, params, found)
     state.kept_arguments_are_its_own(world, args, params)
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails))
@@ -703,7 +703,14 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     if slot >= 0 && slot < args.len() as i64 {
         check_core_type_argument(state, world, args[slot], name, span)
     }
-    let found = check_core_arguments_given(state, world, host, args, expected, declared_here, callee, span)
+    // **A parameter of code is handed kept code** (#1120): its type keeps
+    // its own function parameters.
+    let mut found: Vec[Ty] = []
+    if !have && is_variable && state.run_code.contains(name) {
+        found = check_core_arguments_to_code(state, world, host, args, expected, span)
+    } else {
+        found = check_core_arguments_given(state, world, host, args, expected, declared_here, callee, span)
+    }
     // **A name of code handed to a `mut` parameter may be changed there**
     // (ADR-351 D3): what it holds afterwards is not seen here.
     let mut seen_key: String = ""

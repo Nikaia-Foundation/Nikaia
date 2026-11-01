@@ -113,7 +113,7 @@ pub(crate) fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], name: &str, params: &[Ty], gives: Ty, is_sync: bool, fails: bool, span: &Span) -> Ty {
     state.read_at.push((name.to_string(), span.start as i64));
-    let found = check_core_arguments_given(state, world, host, args, params, false, None, span);
+    let found = check_core_arguments_to_code(state, world, host, args, params, span);
     check_core_call_lent(state, world, args, params, &found);
     state.kept_arguments_are_its_own(world, args, params);
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails));
@@ -540,7 +540,8 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     if feeds { state.stored_frames.push(CheckStoredCode::empty()); }
     let slot = check_core_slot_index(world, name);
     if slot >= 0 && slot < args.len() as i64 { check_core_type_argument(state, world, nikaia_std::index::get(&args, nikaia_std::index::at(slot)), name, span); }
-    let found = check_core_arguments_given(state, world, host, args, &expected, declared_here, (callee).as_ref(), span);
+    let mut found: Vec<Ty> = vec![];
+    if !have && is_variable && state.run_code.contains(name) { found = check_core_arguments_to_code(state, world, host, args, &expected, span); } else { found = check_core_arguments_given(state, world, host, args, &expected, declared_here, (callee).as_ref(), span); }
     let mut seen_key: String = String::from("");
     if declared_here && !key.contains("::") { seen_key = key.to_string(); }
     check_core_call_mut_args(state, world, (callee).as_ref(), &seen_key, args);

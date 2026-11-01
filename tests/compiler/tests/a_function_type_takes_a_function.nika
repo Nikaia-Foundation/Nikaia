@@ -1,0 +1,38 @@
+// A function type whose parameter is itself a function (#1120): the inner
+// function is kept code, so rustc sees no nested `impl Fn`, and a lambda
+// handed there is kept.
+
+fn twice(scoped: fn(i64, fn() -> i64 sync) -> i64 sync) -> i64 sync {
+	return scoped(1, fn() { return 2 }) + 1
+}
+
+// The inner function takes a parameter and captures a local of the caller.
+fn shifted(by: i64, scoped: fn(fn(i64) -> i64 sync) -> i64 sync) -> i64 sync {
+	return scoped(fn(x) { return x + by })
+}
+
+// A named function handed where the inner function goes.
+fn tripled(x: i64) -> i64 sync {
+	return x * 3
+}
+
+fn named(scoped: fn(fn(i64) -> i64 sync) -> i64 sync) -> i64 sync {
+	return scoped(tripled)
+}
+
+// Code held in a field, called with a lambda.
+struct Runner {
+	go: fn(fn(i64) -> i64 sync) -> i64 sync,
+}
+
+fn main() {
+	println(f"{twice(fn(at, run) { return at + run() })}")
+	println(f"{shifted(10, fn(add) { return add(5) })}")
+	println(f"{named(fn(f) { return f(7) })}")
+	// A kept function value, called with a lambda.
+	let kept: fn(fn(i64) -> i64 sync) -> i64 sync = fn(f) { return f(4) + 1 }
+	let base = 100
+	println(f"{kept(fn(x) { return x + base })}")
+	let runner = Runner { go: fn(f) { return f(8) } }
+	println(f"{runner.go(fn(x) { return x - 1 })}")
+}

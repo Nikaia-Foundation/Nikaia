@@ -71,10 +71,10 @@ pub(crate) fn check_core_args_a_run_parameter(state: &CheckState, world: &CheckW
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &Expr, want: &Ty, declared_here: bool, callee: Option<&FnContract>, at: i64, span: &Span) -> Ty {
+pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &Expr, want: &Ty, declared_here: bool, callee: Option<&FnContract>, at: i64, keeps: bool, span: &Span) -> Ty {
     let id = id_of(arg) as i64;
     let optional = check_core_args_optional_code(want);
-    let runs = check_core_args_runs(callee, at) && !optional;
+    let runs = !keeps && check_core_args_runs(callee, at) && !optional;
     let code: Ty = match want {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); if optional { inner.clone() } else { want.clone() } },
         _ => want.clone(),
@@ -132,7 +132,8 @@ pub(crate) fn check_core_args_open_option(ty: &Ty) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &Expr, expected: &[Ty], declared_here: bool, callee: Option<&FnContract>, at: i64, span: &Span) -> Ty {
+pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &Expr, expected: &[Ty], declared_here: bool, callee: Option<&FnContract>, at: i64, keeps: bool, span: &Span) -> Ty {
+    let runs = !keeps && check_core_args_runs(callee, at);
     let mut lends = false;
     let mut wants_fn = false;
     let mut wants_pausing_fn = false;
@@ -160,7 +161,6 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
     let found = check_core_expr(state, world, host, arg, span);
     state.flow.lending_let = false;
     let named = check_core_args_named(&state, world, arg);
-    let runs = check_core_args_runs(callee, at);
     let mut found_fn = false;
     let mut found_throws = false;
     let mut found_sync = false;
@@ -209,7 +209,19 @@ pub fn check_core_arguments_given<H: CheckHost>(state: &mut CheckState, world: &
     let mut out: Vec<Ty> = vec![];
     let mut at: i64 = 0;
     for arg in args.iter() {
-        if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, span)); } else { out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, span)); }
+        if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, false, span)); } else { out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, false, span)); }
+        at += 1;
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_arguments_to_code<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, args: &[Expr], expected: &[Ty], span: &Span) -> Vec<Ty> {
+    let mut out: Vec<Ty> = vec![];
+    let mut at: i64 = 0;
+    for arg in args.iter() {
+        if check_core_args_is_lambda(arg, expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), false, None, at, true, span)); } else { out.push(check_core_args_other(state, world, host, arg, expected, false, None, at, true, span)); }
         at += 1;
     }
     out
@@ -222,7 +234,7 @@ pub fn check_core_arguments_bound<H: CheckHost>(state: &mut CheckState, world: &
     let mut out: Vec<Ty> = vec![];
     let mut at: i64 = 0;
     for arg in args.iter() {
-        if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, &expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, span)); } else { out.push(check_core_args_other(state, world, host, arg, &expected, declared_here, callee, at, span)); }
+        if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, &expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, false, span)); } else { out.push(check_core_args_other(state, world, host, arg, &expected, declared_here, callee, at, false, span)); }
         if at < patterns.len() as i64 {
             let before = bound.len() as i64;
             bind(nikaia_std::index::get(&patterns, nikaia_std::index::at(at)), nikaia_std::index::get(&out, nikaia_std::index::at(at)), bound);
@@ -636,7 +648,7 @@ pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &C
             let result = nikaia_std::boxed::open(result);
             let pauses: bool = !is_sync;
             let fails: bool = can_throw;
-            check_core_arguments_given(state, world, host, args, params, false, None, span);
+            check_core_arguments_to_code(state, world, host, args, params, span);
             state.kept_arguments_are_its_own(world, args, params);
             match on {
                 Ty::Named { name, .. } => {

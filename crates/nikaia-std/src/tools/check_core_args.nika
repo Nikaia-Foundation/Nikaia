@@ -98,12 +98,12 @@ fn check_core_args_a_run_parameter(state: ref CheckState, world: ref CheckWorld,
 
 /// **A lambda handed to a parameter of a function type**: typed by it, and
 /// recorded as kept, run or boxed into a future (ADR-277 D11, D12).
-fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, want: ref Ty, declared_here: bool, callee: ref FnContract?, at: i64, span: ref Span) -> Ty sync {
+fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, want: ref Ty, declared_here: bool, callee: ref FnContract?, at: i64, keeps: bool, span: ref Span) -> Ty sync {
     let id = id_of(arg) as i64
     // **Optional code keeps the lambda** (#1117): the option holds it, as a
     // container does, so it is typed by the code inside.
     let optional = check_core_args_optional_code(want)
-    let runs = check_core_args_runs(callee, at) && !optional
+    let runs = !keeps && check_core_args_runs(callee, at) && !optional
     let code: Ty = match want {
         Ty::Nullable(inner) => if optional { inner.clone() } else { want.clone() },
         else => want.clone(),
@@ -176,7 +176,8 @@ fn check_core_args_open_option(ty: ref Ty) -> bool {
 
 /// **Any other argument**: walked, and recorded where a declared function or a
 /// kept value lands in a parameter that only runs it (#502, #516).
-fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, expected: ref Vec[Ty], declared_here: bool, callee: ref FnContract?, at: i64, span: ref Span) -> Ty sync {
+fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, expected: ref Vec[Ty], declared_here: bool, callee: ref FnContract?, at: i64, keeps: bool, span: ref Span) -> Ty sync {
+    let runs = !keeps && check_core_args_runs(callee, at)
     // **A parameter that only borrows takes nothing out of `self`** (0.0.252).
     let mut lends = false
     let mut wants_fn = false
@@ -210,7 +211,6 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let found = check_core_expr(state, world, host, arg, span)
     state.flow.lending_let = false
     let named = check_core_args_named(state, world, arg)
-    let runs = check_core_args_runs(callee, at)
     let mut found_fn = false
     let mut found_throws = false
     let mut found_sync = false
@@ -298,9 +298,27 @@ pub fn check_core_arguments_given[H: CheckHost](mut state: CheckState, world: re
             // A type, read by the call itself (ADR-330 D1).
             out.push(Ty::Unknown)
         } else if check_core_args_is_lambda(arg, expected, at) {
-            out.push(check_core_args_lambda(state, world, host, arg, expected[at], declared_here, callee, at, span))
+            out.push(check_core_args_lambda(state, world, host, arg, expected[at], declared_here, callee, at, false, span))
         } else {
-            out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, span))
+            out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, false, span))
+        }
+        at += 1
+    }
+    return out
+}
+
+/// **Arguments of a call of code**, a function value or a field that holds
+/// one (#1120): a function handed to it is kept, as the code's own type
+/// keeps its function parameters (`fn(fn() -> R) -> R` takes a
+/// `Kept<dyn Fn() -> R>`), never a closure lent for the call.
+pub fn check_core_arguments_to_code[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], expected: ref Vec[Ty], span: ref Span) -> Vec[Ty] sync {
+    let mut out: Vec[Ty] = []
+    let mut at = 0
+    for arg in args {
+        if check_core_args_is_lambda(arg, expected, at) {
+            out.push(check_core_args_lambda(state, world, host, arg, expected[at], false, null, at, true, span))
+        } else {
+            out.push(check_core_args_other(state, world, host, arg, expected, false, null, at, true, span))
         }
         at += 1
     }
@@ -320,9 +338,9 @@ pub fn check_core_arguments_bound[H: CheckHost](mut state: CheckState, world: re
             // A type, read by the call itself (ADR-330 D1).
             out.push(Ty::Unknown)
         } else if check_core_args_is_lambda(arg, expected, at) {
-            out.push(check_core_args_lambda(state, world, host, arg, expected[at], declared_here, callee, at, span))
+            out.push(check_core_args_lambda(state, world, host, arg, expected[at], declared_here, callee, at, false, span))
         } else {
-            out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, span))
+            out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, false, span))
         }
         if at < patterns.len() {
             let before = bound.len()
@@ -830,7 +848,7 @@ pub fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref
         Ty::Fn { params, result, is_sync, can_throw } => {
             let pauses: bool = !is_sync
             let fails: bool = can_throw
-            check_core_arguments_given(state, world, host, args, params, false, null, span)
+            check_core_arguments_to_code(state, world, host, args, params, span)
             state.kept_arguments_are_its_own(world, args, params)
             // **A call through a function field reaches what was stored
             // there** (ADR-230 D1, D2).

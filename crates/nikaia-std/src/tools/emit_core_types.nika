@@ -88,6 +88,19 @@ impl EmitState {
         return self.emit_core_ty_named(world, walk, crossings, overlaps, ty, name, lifetimes, count)
     }
 
+    /// **A part of a code type is written as a value, not a parameter**
+    /// (#1120): the parameters and result of `fn(A, fn() -> R) -> R` are what
+    /// the code is handed, so an inner function is kept code
+    /// (`Kept<dyn Fn() -> R>`), never a nested `impl Fn` rustc refuses
+    /// (E0666); the outer parameter keeps its `impl Fn`.
+    fn emit_code_part(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type, lifetimes: EmitLifetimes, count: Count) -> String {
+        let inside = walk.in_parameter
+        walk.in_parameter = false
+        let written = self.emit_core_ty_counted(world, walk, crossings, overlaps, ty, lifetimes, count)
+        walk.in_parameter = inside
+        return written
+    }
+
     /// The type, written under the name `name` instead of the one it carries:
     /// a specialised copy writes the type its parameter stands for (ADR-304 D6)
     /// without a new type being made to hold it.
@@ -153,14 +166,14 @@ impl EmitState {
             let code = ty.code ?? return ""
             let mut params: Vec[String] = []
             for part in ty.generics {
-                params.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count)))
+                params.push(a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, lifetimes, count)))
             }
             let mut outcome: String = "()"
             if code.result != null {
                 let result = code.result ?? return ""
                 // **A list handed back as a view is a slice**, as the
                 // function's own result is (#1016).
-                let inner = a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, result, lifetimes, count))
+                let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, lifetimes, count))
                 if code.can_throw {
                     outcome = f"Result<{inner}, Box<dyn std::error::Error>>"
                 } else {
@@ -183,18 +196,18 @@ impl EmitState {
                 let result = code.result ?? return ""
                 let mut lent = 0
                 for part in ty.generics {
-                    let written = self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count)
+                    let written = self.emit_code_part(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count)
                     if written.contains("&") || written.contains("'_") {
                         lent += 1
                     }
                 }
-                let back = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, EmitLifetimes::Elided, count)
+                let back = self.emit_code_part(world, walk, crossings, overlaps, result, EmitLifetimes::Elided, count)
                 if lent > 1 && (back.contains("&") || back.contains("'_")) {
                     let mut called: Vec[String] = []
                     for part in ty.generics {
-                        called.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Call, count)))
+                        called.push(a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, EmitLifetimes::Call, count)))
                     }
-                    let inner = a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, result, EmitLifetimes::Call, count))
+                    let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, EmitLifetimes::Call, count))
                     let mut each = inner.clone()
                     if code.can_throw {
                         each = f"Result<{inner}, Box<dyn std::error::Error>>"
@@ -232,7 +245,7 @@ impl EmitState {
                 let mut elided: Vec[String] = []
                 let mut lent = false
                 for part in ty.generics {
-                    let written = a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count))
+                    let written = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count))
                     if written.contains("&") || written.contains("'_") {
                         lent = true
                     }
@@ -244,7 +257,7 @@ impl EmitState {
                     // future lives `'call`.
                     let mut called: Vec[String] = []
                     for part in ty.generics {
-                        called.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Call, count)))
+                        called.push(a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, EmitLifetimes::Call, count)))
                     }
                     let future = emit_boxed_future_in(overlaps)
                     return f"nikaia_std::func::Kept<dyn for<'call> Fn({called.join(", ")}) -> {future}<'call, {outcome}>{crossing}>"
