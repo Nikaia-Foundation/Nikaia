@@ -256,6 +256,34 @@ impl CheckState {
         return self.a_place_of_a_lent_parameter(world, value)
     }
 
+    /// **An element a `get` reads off a `ref` parameter** (#1107): `return
+    /// m.get(k)` hands back what `return m[k]` does, a view of the element,
+    /// which `get` already is below. Asked by the parameter's own type.
+    pub fn a_get_off_a_lent_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        let expected = self.expected?.clone() ?? return false
+        if !expected.is_a_view() {
+            return false
+        }
+        let (receiver, method, args) = match value {
+            Expr::MethodCall { receiver, method, args, .. } => (receiver, method, args),
+            else => return false,
+        }
+        let name = match receiver {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return false,
+        }
+        let found = self.binding(name) ?? return false
+        let held = found.immutable ?? return false
+        let (container, a_view) = match found.ty {
+            Ty::Named { name, view, .. } => (a_type_base(name), view),
+            else => return false,
+        }
+        let called = world.words.resolve(method)
+        let a_list = container == "Vec" && ((called == "get" && args.len() == 1) || ((called == "first" || called == "last") && args.len() == 0))
+        let a_map = (container == "BTreeMap" || container == "HashMap") && called == "get" && args.len() == 1
+        return held.kind == CheckKind::Parameter && a_view && (a_list || a_map)
+    }
+
     /// **A place inside a borrowed `self` or a `ref` parameter**: a field or
     /// an element, whose buffer is the caller's (#96, #738).
     pub fn a_place_of_a_lent_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {

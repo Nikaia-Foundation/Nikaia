@@ -1,0 +1,67 @@
+// #1107: an element read through a `ref` map, unwrapped by `?? return null`
+// or by a `match` binding, is the same element: a view of it, bound to a
+// `ref C` or handed back as one (ADR-282 D7, ADR-279 D8).
+use std::collections
+
+struct C { n: i64 }
+
+struct D { n: i64, s: String }
+
+fn lookup(m: ref collections::BTreeMap[String, C], k: String) -> (String, ref C)? {
+	return match m[k] {
+		null => null,
+		c => (k.clone(), c),
+	}
+}
+
+fn declared(m: ref collections::BTreeMap[String, C], k: String) -> (i64, ref C)? {
+	let c: ref C = m[k] ?? return null
+	return (1, c)
+}
+
+fn declared_get(m: ref collections::BTreeMap[String, C], k: String) -> (i64, ref C)? {
+	let c: ref C = m.get(k) ?? return null
+	return (2, c)
+}
+
+// A struct that does not copy: one that copies stays the copy the `let`
+// makes of it.
+fn bound(m: ref collections::BTreeMap[String, D], k: String) -> (i64, ref D)? {
+	let d = m[k] ?? return null
+	return (3, d)
+}
+
+fn bound_alone(m: ref collections::BTreeMap[String, D], k: String) -> ref D? {
+	let d = m[k] ?? return null
+	return d
+}
+
+fn got(m: ref collections::BTreeMap[String, C], k: String) -> ref C? {
+	return m.get(k)
+}
+
+fn moving(m: ref collections::BTreeMap[String, D], k: String) -> (String, ref D)? {
+	let d: ref D = m[k] ?? return null
+	return (d.s.clone(), d)
+}
+
+fn moving_bound(m: ref collections::BTreeMap[String, D], k: String) -> ref D? {
+	let d = m.get(k) ?? return null
+	return d
+}
+
+fn main() {
+	let mut m = collections::BTreeMap()
+	m.insert(f"a{1}", C { n: 5 })
+	let hit = lookup(m, f"a{1}")
+	println(f"{hit?.0 ?? "-"} {(hit?.1)?.n ?? 0} {lookup(m, f"b{1}")?.0 ?? "-"}")
+	println(f"{(declared(m, f"a{1}")?.1)?.n ?? 0} {declared(m, f"b{1}")?.0 ?? 0}")
+	println(f"{(declared_get(m, f"a{1}")?.1)?.n ?? 0} {declared_get(m, f"b{1}")?.0 ?? 0}")
+	println(f"{got(m, f"a{1}")?.n ?? 0} {got(m, f"b{1}")?.n ?? 0}")
+	let mut ds = collections::BTreeMap()
+	ds.insert(f"d{1}", D { n: 7, s: f"x{2}" })
+	println(f"{(bound(ds, f"d{1}")?.1)?.n ?? 0} {bound(ds, f"e{1}")?.0 ?? 0}")
+	println(f"{bound_alone(ds, f"d{1}")?.n ?? 0} {bound_alone(ds, f"e{1}")?.n ?? 0}")
+	let found = moving(ds, f"d{1}")
+	println(f"{found?.0 ?? "-"} {(found?.1)?.n ?? 0} {moving_bound(ds, f"d{1}")?.n ?? 0} {moving_bound(ds, f"e{1}")?.n ?? 0}")
+}

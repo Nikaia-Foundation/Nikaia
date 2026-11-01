@@ -168,6 +168,33 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_get_off_a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+        let expected = match match self.expected.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if !expected.is_a_view() { return false; }
+        let (receiver, method, args) = match value {
+            Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, method, args) },
+            _ => return false,
+        };
+        let name = match receiver {
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+            _ => return false,
+        };
+        let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let held = match found.immutable { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let (container, a_view) = match found.ty {
+            Ty::Named { ref name, view, .. } => (a_type_base(name), view),
+            _ => return false,
+        };
+        let called = world.words.resolve(method);
+        let a_list = container == "Vec" && (called == "get" && args.len() == 1 || (called == "first" || called == "last") && args.is_empty());
+        let a_map = (container == "BTreeMap" || container == "HashMap") && called == "get" && args.len() == 1;
+        held.kind == CheckKind::Parameter && a_view && (a_list || a_map)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_place_of_a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         let a_place = matches!(value, Expr::Field { .. } | Expr::Index { .. });
         if !a_place { return false; }

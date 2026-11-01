@@ -526,7 +526,7 @@ pub(crate) fn item_held_inline(parsed: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: 
     let generic = match generics.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
     if (generic.params.len() as i64) != ty.generics.len() as i64 { return; }
     out.insert(name.to_string());
-    for member in generic.members.iter() { item_held_through(&generic, member, parsed, &ty.generics, generics, out); }
+    for member in generic.members.iter() { item_held_through(generic, member, parsed, &ty.generics, generics, out); }
 }
 
 pub(crate) fn item_held_through(generic: &ItemGeneric<'_>, member: &Type, at: &ParsedView<'_, '_, '_, '_, '_, '_>, arguments: &[Type], generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {

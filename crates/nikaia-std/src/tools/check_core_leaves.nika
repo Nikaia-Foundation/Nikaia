@@ -134,7 +134,10 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
                 return
             }
             let ty = check_core_expr(state, world, host, value, span)
-            if !state.does_not_copy(world, ty) {
+            // **An element read bound past a jump is a view of it** (#1107):
+            // what it views is what would be given away.
+            let a_read_viewed = ty.is_a_view() && check_core_leaves_list_of_a_read(local.view_of) != null
+            if !state.does_not_copy(world, ty) && !(a_read_viewed && state.does_not_copy(world, ty.owned())) {
                 return
             }
             if a_let_view {
@@ -655,8 +658,10 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
         }
         if !lending {
             check_core_a_field_of_a_borrowed_subject(state, world, host, given, span, "handed back")
-            check_core_a_field_of_a_lent_place_handed_back(state, world, host, given, span)
+            // An element read bound past a jump is a view (#1107): its
+            // `NK1131` is the reason, not a second fault of its type.
             let before = state.findings.len() as i64
+            check_core_a_field_of_a_lent_place_handed_back(state, world, host, given, span)
             check_core_a_mut_parameter_given_away(state, world, host, given, span, "handed back")
             refused = state.findings.len() as i64 > before
         }
@@ -685,6 +690,11 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
     let expected: Ty = state.expected?.clone() ?? return
     if lending {
         found = view_of_type(found)
+    } else if value != null {
+        let given = value ?? return
+        if state.a_get_off_a_lent_parameter(world, given) {
+            found = view_of_type(found)
+        }
     }
     // **A `return` of a choice whose arms read through a borrowed parameter**
     // is asked as the function's last value is (#808).

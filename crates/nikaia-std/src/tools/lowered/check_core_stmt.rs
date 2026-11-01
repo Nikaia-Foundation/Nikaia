@@ -407,7 +407,14 @@ pub(crate) fn check_core_stmt_lent_let(state: &mut CheckState, world: &CheckWorl
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_stmt_element_view(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, found: &Ty, want: &Ty) -> i64 {
-    if !check_core_stmt_a_place(value) || found.is_a_view() { return 0; }
+    if !check_core_stmt_a_place(value) { return 0; }
+    check_core_stmt_read_viewed(state, world, found, want)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_read_viewed(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> i64 {
+    if found.is_a_view() { return 0; }
     let inner = match want {
         Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.clone() },
         _ => want.clone(),
@@ -471,6 +478,39 @@ pub(crate) fn check_core_stmt_element_read(state: &CheckState, world: &CheckWorl
             }
         },
         _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_an_element_past_a_jump(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); state.jumps(world, fallback) && check_core_stmt_an_element_read(state, world, read) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_an_element_read(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr) -> bool {
+    match read {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); dotted_path(world, base).is_some() },
+        Expr::MethodCall { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            if dotted_path(world, receiver).is_none() { return false; }
+            let key = match state.facts.method_callees.get(&(id_of(receiver) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            (key == "Vec::first" || key == "Vec::last") && args.is_empty() || (key == "Vec::get" || key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get") && args.len() == 1
+        },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_lent_struct(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && state.structs.contains_key(name) && state.does_not_copy(world, ty) },
+        _ => false,
     }
 }
 
@@ -598,6 +638,10 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         let want = written_ty(world.words, world.here.aliases, t);
         element_view = check_core_stmt_element_view(&state, world, value, &found, &want);
+        if element_view == 0 && check_core_stmt_an_element_past_a_jump(&state, world, value) {
+            let viewed = check_core_stmt_read_viewed(&state, world, &found, &want);
+            element_view = if viewed == 1 { 3 } else { viewed };
+        }
         if element_view == 0 && state.lend_choice_beside_null(world, value, &want) { element_view = 3; }
     }
     let bytes_view = !mutable && names.len() == 1 && shape.is_empty() && state.a_text_bytes_view(world, value);
@@ -827,6 +871,11 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let jumped = check_core_stmt_read_through_a_jump(&state, world, value);
     let copied_read = a_copy_by_value(&bound) && check_core_stmt_a_read_that_leaves(&state, world, value);
     if copied_read { check_core_stmt_copied_jump_reads(state, value); }
+    let mut viewed_past_a_jump = false;
+    if ty.is_none() && !mutable && names.len() == 1 && shape.is_empty() && check_core_stmt_an_element_past_a_jump(&state, world, value) && check_core_stmt_a_lent_struct(&state, world, &bound) {
+        bound = view_of_type(&bound);
+        viewed_past_a_jump = true;
+    }
     let copied_word = ty.is_none() && jumped && !copied_read && state.a_package_copy(world, &bound) && check_core_stmt_a_named(&bound);
     if copied_word { state.a_map_read_assigned(world, &bound, value, span); }
     let read_through_a_jump = jumped && !copied_read && !copied_word;
@@ -847,7 +896,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         _ => { },
     }
     let mut local = CheckLocal::free(name, bound, id);
-    if !mutable && element_read.is_some() && state.does_not_copy(world, &local.ty) { local.view_of = nikaia_std::index::or(element_read.as_deref(), || "").to_string(); }
+    if !mutable && element_read.is_some() && (state.does_not_copy(world, &local.ty) || viewed_past_a_jump) { local.view_of = nikaia_std::index::or(element_read.as_deref(), || "").to_string(); }
     local.constant = constant;
     local.lent = read_through_a_jump;
     local.empty_list = pending;

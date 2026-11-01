@@ -479,6 +479,14 @@ fn check_core_flow_member(world: ref CheckWorld, members: ref Vec[Ty], pattern: 
 
 /// **A field reached through a view is matched as the view it is**, and so is
 /// one reached through the brackets of a view.
+/// A struct type of the program, not a word by its kind (ADR-279 D8).
+fn check_core_flow_a_struct(state: ref CheckState, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, view } => !view && args.len() == 0 && state.structs.contains_key(name) && !state.a_word_by_its_kind(world, ty),
+        else => false,
+    }
+}
+
 fn check_core_flow_through_a_view(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     let a_place = match value {
         Expr::Field { .. } => true,
@@ -1358,7 +1366,10 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     // view** (#704): the language below compares a literal with a `&str`,
     // so a name the arms bind is a view of the subject.
     let text = !typed.is_a_view() && check_core_flow_owned_text(typed) && !shapes_has_a_null_arm(arms) && check_core_flow_text_arms(arms)
-    if through_a_view && !typed.is_a_view() && state.takes_away(world, typed) {
+    // A struct that copies is lent too (ADR-279 D8): with a `null` arm the
+    // name bound is the element read, a view of it (#1107).
+    let a_lent_copy = null_arm && !state.takes_away(world, typed) && check_core_flow_a_struct(state, world, typed)
+    if through_a_view && !typed.is_a_view() && (state.takes_away(world, typed) || a_lent_copy) {
         state.facts.lent_scrutinees.insert(id_of(value) as i64)
         typed = view_of_type(typed)
     }

@@ -98,7 +98,8 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
             let a_let_view = local.view_of == "" && state.a_changing_view(&written);
             if local.view_of == "" && !a_let_view || !keeps { return; }
             let ty = check_core_expr(state, world, host, value, span);
-            if !state.does_not_copy(world, &ty) { return; }
+            let a_read_viewed = ty.is_a_view() && check_core_leaves_list_of_a_read(&local.view_of).is_some();
+            if !state.does_not_copy(world, &ty) && !(a_read_viewed && state.does_not_copy(world, &ty.owned())) { return; }
             if a_let_view {
                 let place = state.a_view_described(&written);
                 let notes: Vec<String> = vec![format!("`{}` is {}, and the place belongs to its owner: a change through `{}` reaches it. Giving it away whole would take it out of something this function doesn't own.", written, place, written)];
@@ -538,8 +539,8 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         }
         if !lending {
             check_core_a_field_of_a_borrowed_subject(state, world, host, given, span, "handed back");
-            check_core_a_field_of_a_lent_place_handed_back(state, world, host, given, span);
             let before = state.findings.len() as i64;
+            check_core_a_field_of_a_lent_place_handed_back(state, world, host, given, span);
             check_core_a_mut_parameter_given_away(state, world, host, given, span, "handed back");
             refused = (state.findings.len() as i64) > before;
         }
@@ -570,7 +571,10 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
-    if lending { found = view_of_type(&found); }
+    if lending { found = view_of_type(&found); } else if value.is_some() {
+        let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        if state.a_get_off_a_lent_parameter(world, given) { found = view_of_type(&found); }
+    }
     if !lending && value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         if state.lent_arms_handed_back(world, given, check_function_is_nullable(&expected)) { found = view_of_type(&found); }

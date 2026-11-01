@@ -389,6 +389,15 @@ pub(crate) fn check_core_flow_member(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_a_struct(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && state.structs.contains_key(name) && !state.a_word_by_its_kind(world, ty) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_through_a_view(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     let a_place = matches!(value, Expr::Field { .. } | Expr::Index { .. });
     if !a_place { return false; }
@@ -1058,7 +1067,8 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     let through_the_reference = mut_subject.is_some() && a_variable;
     let through_a_view = check_core_flow_through_a_view(&state, world, value);
     let text = !typed.is_a_view() && check_core_flow_owned_text(&typed) && !shapes_has_a_null_arm(arms) && check_core_flow_text_arms(arms);
-    if through_a_view && !typed.is_a_view() && state.takes_away(world, &typed) {
+    let a_lent_copy = null_arm && !state.takes_away(world, &typed) && check_core_flow_a_struct(&state, world, &typed);
+    if through_a_view && !typed.is_a_view() && (state.takes_away(world, &typed) || a_lent_copy) {
         state.facts.lent_scrutinees.insert(id_of(value) as i64);
         typed = view_of_type(&typed);
     }
