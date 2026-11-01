@@ -45,6 +45,21 @@ pub(crate) fn check_core_stmt_got(state: &CheckState, world: &CheckWorld<'_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_got_compared(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool {
+    if ty.is_unknown() || ty.is_a_view() || check_owned_text(ty) || !state.takes_away(world, ty) { return false; }
+    match side {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = match state.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            local.view_of != ""
+        },
+        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); state.flow.std_gets.contains(&(id_of(read) as i64)) && state.jumps(world, fallback) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_got_by_a_match(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     let (read, arms) = match value {
         Expr::Match { value: read, arms, .. } => { let read = nikaia_std::boxed::open(read); (read, arms) },

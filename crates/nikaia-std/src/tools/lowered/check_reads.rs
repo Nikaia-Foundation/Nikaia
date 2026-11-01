@@ -150,7 +150,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_side_is_a_view(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool { copies_as_a_view(ty) || check_view_of_a_type(ty) || self.a_lent_name(world, side) && (check_copied(ty) || check_owned_text(ty)) || self.a_side_is_lent(world, side, ty) }
+    pub(crate) fn a_side_is_a_view(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool { copies_as_a_view(ty) || check_view_of_a_type(ty) || self.a_lent_name(world, side) && (check_copied(ty) || check_owned_text(ty)) || self.a_side_is_lent(world, side, ty) || check_core_stmt_got_compared(self, world, side, ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_side_is_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool {

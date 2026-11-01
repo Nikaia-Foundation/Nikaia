@@ -214,6 +214,7 @@ impl CheckState {
             || check_view_of_a_type(ty)
             || (self.a_lent_name(world, side) && (check_copied(ty) || check_owned_text(ty)))
             || self.a_side_is_lent(world, side, ty)
+            || check_core_stmt_got_compared(self, world, side, ty)
     }
 
     /// A parameter the function is lent, or a `let` over a place: a view below

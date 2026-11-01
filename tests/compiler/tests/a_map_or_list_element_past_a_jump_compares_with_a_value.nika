@@ -1,0 +1,58 @@
+// A list or map element read past a jump is a view of what the list or map
+// keeps; compared with a value of a type that does not copy, it is read
+// through (#1112). A parameter and a `for` binding compared so stay as they were.
+
+use std::collections
+
+enum E {
+	A(String),
+	B,
+}
+
+struct K {
+	e: E,
+}
+
+fn same(m: ref collections::BTreeMap[String, E], k: String, held: ref K) -> bool {
+	let found = m.get(k) ?? return false
+	return found == held.e
+}
+
+fn rev(m: ref collections::BTreeMap[String, E], k: String, held: ref K) -> bool {
+	let found = m.get(k) ?? return false
+	return held.e == found
+}
+
+fn lst(xs: Vec[E], held: ref K) -> bool {
+	let found = xs.get(0) ?? return false
+	return found == held.e
+}
+
+fn inl(xs: Vec[E]) -> bool {
+	return (xs.get(0) ?? return false) == E::B
+}
+
+fn param(a: E, held: K) -> bool {
+	return a == held.e
+}
+
+fn each(xs: Vec[E], held: ref K) -> bool {
+	for x in xs {
+		if x == held.e {
+			return true
+		}
+	}
+	return false
+}
+
+fn main() {
+	let mut m: collections::BTreeMap[String, E] = collections::BTreeMap()
+	m.insert("a", E::A("x"))
+	let held = K { e: E::A("x") }
+	println(f"same {same(m, "a", held)}")
+	println(f"rev {rev(m, "a", held)}")
+	println(f"lst {lst([E::A("x")], held)}")
+	println(f"inl {inl([E::B])}")
+	println(f"param {param(E::B, K { e: E::B })}")
+	println(f"each {each([E::B, E::A("x")], held)}")
+}
