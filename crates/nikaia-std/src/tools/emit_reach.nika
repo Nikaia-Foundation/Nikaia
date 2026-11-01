@@ -7,11 +7,8 @@
 
 use std::collections
 
-/// A function key to the pausing keys it reaches, through a call of a name, a
-/// path or a method. A bare method name draws an edge to **every** pausing key
-/// that ends in it, which over-approximates and is safe: a cycle too many
-/// boxes a future that did not need it.
-pub fn pausing_reach(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+/// The keys of the ledger's functions that may pause.
+fn reach_pausing_keys(contracts: ref Ledger) -> collections::BTreeSet[String] {
     let mut pausing: collections::BTreeSet[String] = collections::BTreeSet()
     for key in contracts.functions.keys() {
         let contract = contracts.functions.get(key) ?? continue
@@ -19,6 +16,17 @@ pub fn pausing_reach(words: ref winnow_grammar::InternerContext, aliases: ref co
             pausing.insert(key.clone())
         }
     }
+    return pausing
+}
+
+/// A function key of one file to the pausing keys it calls, through a call
+/// of a name, a path or a method. A bare method name draws an edge to
+/// **every** pausing key that ends in it, which over-approximates and is
+/// safe: a cycle too many boxes a future that did not need it. Each file of
+/// a package gives its edges, and `pausing_reach` closes them all: a cycle
+/// may pass through several files (`impl S` in two of them).
+pub fn pausing_edges(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let pausing = reach_pausing_keys(contracts)
     let empty: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     if pausing.len() == 0 {
         return empty
@@ -53,6 +61,13 @@ pub fn pausing_reach(words: ref winnow_grammar::InternerContext, aliases: ref co
             else => {},
         }
     }
+    return graph
+}
+
+/// A function key to the pausing keys it reaches, from the edges of every
+/// file of the unit (`pausing_edges`).
+pub fn pausing_reach(graph: ref collections::BTreeMap[String, collections::BTreeSet[String]], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let pausing = reach_pausing_keys(contracts)
     // Reachability to a fixpoint.
     let mut reaches = graph.clone()
     while true {

@@ -823,7 +823,7 @@ impl<'p> Emitter<'p> {
         .counts;
 
         // ADR-055 D6, before `own_contracts` is moved into place.
-        let reach = pausing_reach(parsed, &own_contracts);
+        let reach = pausing_reach(parsed, beside, &own_contracts);
 
         // **The classes of the file's maps** (ADR-010 D9, #581): where the
         // package is untrusted, the `let`s, parameters and results whose class
@@ -1262,16 +1262,29 @@ pub(crate) fn package_borrowing(units: &[&Parsed]) -> std::collections::BTreeSet
 /// **The cycle test is reachability from a function to itself**, computed to a
 /// fixpoint. `n` is the number of functions in one program, and the obvious
 /// algorithm is the one whose correctness a reader can check.
+///
+/// **The graph is the package's, not the file's**: a cycle may pass through
+/// methods of one type written in two files, and each file is lowered with the
+/// others beside it.
 fn pausing_reach(
     parsed: &Parsed,
+    beside: &[&Parsed],
     contracts: &crate::contracts::Ledger,
 ) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
-    nikaia_std::tools::emit_reach::pausing_reach(
-        &parsed.interner,
-        &parsed.aliases,
-        &parsed.program.items,
-        contracts,
-    )
+    let mut graph: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+        Default::default();
+    for unit in std::iter::once(parsed).chain(beside.iter().copied()) {
+        let edges = nikaia_std::tools::emit_reach::pausing_edges(
+            &unit.interner,
+            &unit.aliases,
+            &unit.program.items,
+            contracts,
+        );
+        for (key, reached) in edges {
+            graph.entry(key).or_default().extend(reached);
+        }
+    }
+    nikaia_std::tools::emit_reach::pausing_reach(&graph, contracts)
 }
 
 /// **Which branches an `overlap` starts first**, for `--overlaps`

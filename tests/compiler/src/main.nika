@@ -1,3 +1,5 @@
+use std::fs
+
 pub struct Places {
 	pub a: String?,
 	pub b: String?,
@@ -45,4 +47,21 @@ pub fn same[T](x: T) -> T {
 }
 
 fn main() {
+}
+
+/// Two methods of one type in two files that call each other and pause
+/// (`pausing_cycle_across_files`): the cycle is boxed although neither file
+/// holds it whole (`nest_beside.nika` holds `close`).
+pub struct Nest {
+	pub depth: i64,
+}
+
+impl Nest {
+	pub fn open(ref mut self, k: i64) -> String {
+		if k <= 0 {
+			return fs::read_to_string("/dev/null", fs::Root::Anywhere) catch { "" }
+		}
+		self.depth += 1
+		return f"<{self.close(k - 1)}>"
+	}
 }

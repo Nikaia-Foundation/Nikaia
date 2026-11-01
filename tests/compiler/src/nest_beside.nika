@@ -1,0 +1,6 @@
+impl Nest {
+	/// The other half of `open`'s cycle (`main.nika`).
+	pub fn close(ref mut self, k: i64) -> String {
+		return self.open(k)
+	}
+}

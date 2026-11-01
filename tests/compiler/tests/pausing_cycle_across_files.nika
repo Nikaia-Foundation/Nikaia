@@ -1,0 +1,9 @@
+use compiler_tests
+
+/// A cycle of pausing methods through two files of a package is boxed:
+/// `Nest::open` in `src/main.nika`, `Nest::close` in `src/nest_beside.nika`.
+fn main() {
+	let mut n = compiler_tests::Nest { depth: 0 }
+	println(n.open(3))
+	println(f"{n.depth}")
+}

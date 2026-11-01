@@ -9,6 +9,14 @@
 # something this compiler cannot name.
 version = 4
 
+[fn."Nest::close"]
+pub = true
+signature = "(ref mut self, k: i64) -> String"
+
+[fn."Nest::open"]
+pub = true
+signature = "(ref mut self, k: i64) -> String"
+
 [fn."copy_places"]
 sync = "inferred"
 returns = "a: ref(p), b: ref(p), value: ref(p)"
@@ -49,6 +57,10 @@ sync = "inferred"
 keeps = ["x"]
 touches = []
 signature = "[T](x: T) -> T"
+
+[type."Nest"]
+pub = true
+fields = ["pub depth: i64"]
 
 [type."Places"]
 pub = true
