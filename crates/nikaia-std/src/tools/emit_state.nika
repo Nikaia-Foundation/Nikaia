@@ -93,6 +93,9 @@ pub struct EmitState {
     pub built_at_build_time: collections::BTreeSet[String],
     /// The pausing functions each pausing function reaches (`emit_reach.nika`).
     pub pausing_reach: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// The calls between functions that run a `sync` code parameter, over
+    /// the unit and the ones beside it (`code_cycle_edges`, #1129).
+    pub code_cycle_graph: collections::BTreeMap[String, collections::BTreeSet[String]],
     /// The types this unit and the ones beside it declare an `impl Error` for.
     pub declared_errors: collections::BTreeSet[String],
     /// The generated sum of each set of errors, by the set.

@@ -1,0 +1,2 @@
+/// The other half of `cycle_ping`'s cycle (`main.nika`, #1129).
+pub fn cycle_pong(n: i64, known: fn(ref String) -> i64? sync) -> i64 sync { return cycle_ping(n, known) }

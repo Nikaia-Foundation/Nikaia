@@ -43,6 +43,7 @@ pub struct EmitState {
     pub shared: collections::BTreeMap<String, Count>,
     pub built_at_build_time: collections::BTreeSet<String>,
     pub pausing_reach: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub code_cycle_graph: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub declared_errors: collections::BTreeSet<String>,
     pub sums: collections::BTreeMap<Vec<String>, String>,
     pub dsl_drivers: collections::BTreeSet<String>,

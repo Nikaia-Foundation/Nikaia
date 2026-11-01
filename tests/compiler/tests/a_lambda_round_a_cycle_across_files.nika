@@ -1,0 +1,8 @@
+use compiler_tests
+
+/// A lambda handed round a call cycle through two files of a package is
+/// `&dyn Fn` (#1129): `cycle_ping` in `src/main.nika`, `cycle_pong` in
+/// `src/cycle_beside.nika`.
+fn main() {
+	println(f"{compiler_tests::cycle_ping(2, fn(_name) { null })}")
+}

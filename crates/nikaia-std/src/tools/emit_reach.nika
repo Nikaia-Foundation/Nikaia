@@ -164,17 +164,9 @@ fn reach_set_for(reaches: ref collections::BTreeMap[String, collections::BTreeSe
     return found.clone()
 }
 
-/// **Whether a function that runs a `sync` code parameter lies on a cycle of
-/// such functions** (ADR-277 D11, #1023): each new lambda handed round the
-/// cycle is a new type, so `impl Fn` would instantiate the function without
-/// end, and the parameter is written `&dyn Fn` there. Only a function generic
-/// over its lambda carries the lambda's type on, so the graph holds those
-/// alone; a method of a trait's `impl` keeps the trait's shape and is left out.
-pub fn code_on_a_cycle(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], contracts: ref Ledger, key: ref String) -> bool {
-    let own = contracts.functions.get(key) ?? return false
-    if !reach_runs_code(own) {
-        return false
-    }
+/// A code-running function key of one file to the code-running keys it
+/// calls (`code_on_a_cycle`, #1129).
+pub fn code_cycle_edges(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
     let mut running: collections::BTreeSet[String] = collections::BTreeSet()
     for name in contracts.functions.keys() {
         let contract = contracts.functions.get(name) ?? continue
@@ -218,6 +210,23 @@ pub fn code_on_a_cycle(words: ref winnow_grammar::InternerContext, aliases: ref 
             },
             else => {},
         }
+    }
+    return graph
+}
+
+/// **Whether a function that runs a `sync` code parameter lies on a cycle of
+/// such functions** (ADR-277 D11, #1023): each new lambda handed round the
+/// cycle is a new type, so `impl Fn` would instantiate the function without
+/// end, and the parameter is written `&dyn Fn` there. Only a function generic
+/// over its lambda carries the lambda's type on, so the graph holds those
+/// alone; a method of a trait's `impl` keeps the trait's shape and is left out.
+///
+/// Each file of a package gives its edges (`code_cycle_edges`), merged over
+/// the file and its `beside` units (#1129): a cycle may pass through two files.
+pub fn code_on_a_cycle(graph: ref collections::BTreeMap[String, collections::BTreeSet[String]], contracts: ref Ledger, key: ref String) -> bool {
+    let own = contracts.functions.get(key) ?? return false
+    if !reach_runs_code(own) {
+        return false
     }
     if !graph.contains_key(key) {
         return false

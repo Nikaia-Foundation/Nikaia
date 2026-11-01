@@ -824,6 +824,7 @@ impl<'p> Emitter<'p> {
 
         // ADR-055 D6, before `own_contracts` is moved into place.
         let reach = pausing_reach(parsed, beside, &own_contracts);
+        let code_cycle_graph = code_cycle_graph(parsed, beside, &own_contracts);
 
         // **The classes of the file's maps** (ADR-010 D9, #581): where the
         // package is untrusted, the `let`s, parameters and results whose class
@@ -998,6 +999,7 @@ impl<'p> Emitter<'p> {
                 &parsed.program.items,
             ),
             pausing_reach: reach,
+            code_cycle_graph,
             own_methods: nikaia_std::tools::ty::method_index(&own_contracts),
             library_methods: nikaia_std::tools::ty::method_index(library),
             own_contracts,
@@ -1285,6 +1287,30 @@ fn pausing_reach(
         }
     }
     nikaia_std::tools::emit_reach::pausing_reach(&graph, contracts)
+}
+
+/// **The calls between the functions that run a `sync` code parameter**, over
+/// the file and its `beside` units (ADR-277 D11, #1129): a cycle that hands a
+/// lambda on may pass through two files, like `pausing_reach`'s.
+fn code_cycle_graph(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    contracts: &crate::contracts::Ledger,
+) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
+    let mut graph: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+        Default::default();
+    for unit in std::iter::once(parsed).chain(beside.iter().copied()) {
+        let edges = nikaia_std::tools::emit_reach::code_cycle_edges(
+            &unit.interner,
+            &unit.aliases,
+            &unit.program.items,
+            contracts,
+        );
+        for (key, reached) in edges {
+            graph.entry(key).or_default().extend(reached);
+        }
+    }
+    graph
 }
 
 /// **Which branches an `overlap` starts first**, for `--overlaps`

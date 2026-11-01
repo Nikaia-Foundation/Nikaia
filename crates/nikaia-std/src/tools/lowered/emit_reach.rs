@@ -133,9 +133,7 @@ pub(crate) fn reach_set_for(reaches: &collections::BTreeMap<String, collections:
     found.to_owned()
 }
 
-pub fn code_on_a_cycle(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], contracts: &Ledger, key: &str) -> bool {
-    let own = match contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if !reach_runs_code(&own) { return false; }
+pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let mut running: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in contracts.functions.keys() {
         let contract = match contracts.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -175,16 +173,22 @@ pub fn code_on_a_cycle(words: &winnow_grammar::InternerContext, aliases: &collec
             _ => { },
         }
     }
+    graph
+}
+
+pub fn code_on_a_cycle(graph: &collections::BTreeMap<String, collections::BTreeSet<String>>, contracts: &Ledger, key: &str) -> bool {
+    let own = match contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if !reach_runs_code(&own) { return false; }
     if !graph.contains_key(key) { return false; }
     let mut pending: Vec<String> = vec![];
-    for first in reach_set_for(&graph, key) { pending.push(first); }
+    for first in reach_set_for(graph, key) { pending.push(first); }
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut at: i64 = 0;
     while ((at) as usize) < pending.len() {
         let next = (*nikaia_std::index::get(&pending, (at) as usize)).to_string();
         at += 1;
         if next == key { return true; }
-        if seen.insert(next.to_string()) { for then in reach_set_for(&graph, &next) { pending.push(then); } }
+        if seen.insert(next.to_string()) { for then in reach_set_for(graph, &next) { pending.push(then); } }
     }
     false
 }

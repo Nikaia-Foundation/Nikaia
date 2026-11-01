@@ -65,3 +65,14 @@ impl Nest {
 		return f"<{self.close(k - 1)}>"
 	}
 }
+
+/// One half of a call cycle that hands a new lambda on each round, through
+/// two files (`a_lambda_round_a_cycle_across_files`, #1129): `cycle_pong` is
+/// in `cycle_beside.nika`, and the parameter must be `&dyn Fn` in both.
+pub fn cycle_alt(name: String) -> i64? sync { return name.len() }
+
+pub fn cycle_ping(n: i64, known: fn(ref String) -> i64? sync) -> i64 sync {
+	if n == 0 { return known("a") ?? 0 }
+	let more = fn(name) { known(name) ?? cycle_alt(name) }
+	return cycle_pong(n - 1, more)
+}

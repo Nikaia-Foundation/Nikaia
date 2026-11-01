@@ -343,7 +343,7 @@ impl EmitState {
                     } else { lengths.push(String::from("")); }
                     at += 1;
                 }
-                let on_a_cycle = code_on_a_cycle(world.words, world.aliases, world.items, &self.own_contracts, &key);
+                let on_a_cycle = code_on_a_cycle(&self.code_cycle_graph, &self.own_contracts, &key);
                 walk.dyn_code = on_a_cycle;
                 let mut either_first: Vec<String> = vec![];
                 let mut k: i64 = 0;
