@@ -468,12 +468,23 @@ impl EmitState {
         // no count to look up and no annotation to write, because a hull's count
         // is decided per value and a destructure names none.
         if names.len() > 1 || shape.len() != 0 {
+            // **`mut` in front of the pattern marks every name in it** (#1126,
+            // as `for mut (a, b)` does): Rust's `let (mut a, mut b)`, and
+            // the names the body leaves alone are no warning.
             let mut bound: Vec[String] = []
             for each in names {
-                bound.push(self.emit_stmt_local(emit_text(world, each)))
+                let local = self.emit_stmt_local(emit_text(world, each))
+                if mut_word != "" && local != "_" {
+                    bound.push(f"mut {local}")
+                } else {
+                    bound.push(local)
+                }
             }
             let pattern = emit_stmt_tuple_pattern(bound, shape)
-            out.push(f"let {mut_word}{pattern} = ")
+            if mut_word != "" {
+                out.push("#[allow(unused_mut)] ")
+            }
+            out.push(f"let {pattern} = ")
             let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
             out.push(before)
             // **Out of a place, the tuple is lent** (#465).
@@ -958,6 +969,11 @@ impl EmitState {
         }
         let names = written.join(", ")
         let bound = emit_stmt_tuple_pattern(written, shape)
+        // A name of a `mut` head the body leaves alone is no warning (#1126).
+        let mut allowed = ""
+        if mutable && !viewed && each.len() > 1 {
+            allowed = "#[allow(unused_mut)] "
+        }
         let plain = emit_stmt_tuple_pattern(each, shape)
         // **A step that pauses is a loop that gives its thread up** (ADR-172
         // D1): the sequence is bound once and stepped with a `.next().await`.
@@ -978,14 +994,14 @@ impl EmitState {
             // A produced sequence is walked by value (ADR-105 D2).
             out.push(";\n")
             out.push(inner)
-            out.push(f"while let Some({bound}) = __nikaia_sequence.next().await ")
+            out.push(f"{allowed}while let Some({bound}) = __nikaia_sequence.next().await ")
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))
             out.push("\n")
             out.push(pad)
             out.push("}")
             return
         }
-        out.push(f"for {bound} in ")
+        out.push(f"{allowed}for {bound} in ")
         // **A `for` lends** (ADR-094 D4), a place and not a call, a range or a
         // literal; **a name holding a sequence is not a place that lends**
         // (ADR-293 D19): the checker says which loops walk by value.

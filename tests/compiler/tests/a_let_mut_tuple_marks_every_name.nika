@@ -1,0 +1,12 @@
+// #1126: `mut` in front of a tuple pattern marks every name in it, in a `let`
+// as in a `for`, and a name the body leaves alone is no warning.
+fn main() {
+	let mut (at, depth) = (0, 0)
+	at += 1
+	depth += at
+	println(f"{at} {depth}")
+	for mut (a, b) in [(1, 2)] {
+		a += b
+		println(f"{a}")
+	}
+}

@@ -337,10 +337,12 @@ impl EmitState {
             let mut bound: Vec<String> = vec![];
             for each in names.iter() {
                 let each = *each;
-                bound.push(self.emit_stmt_local(&emit_text(world, each)));
+                let local = self.emit_stmt_local(&emit_text(world, each));
+                if mut_word != "" && local != "_" { bound.push(format!("mut {}", local)); } else { bound.push(local); }
             }
             let pattern = emit_stmt_tuple_pattern(&bound, shape);
-            out.push(&format!("let {}{} = ", mut_word, pattern));
+            if mut_word != "" { out.push("#[allow(unused_mut)] "); }
+            out.push(&format!("let {} = ", pattern));
             let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
             out.push(&before);
             if mut_word == "" && self.facts.lent_lets.contains(&at) { out.push("&"); }
@@ -718,6 +720,8 @@ impl EmitState {
         for one in each.iter() { if mutable && !viewed && one != "_" { written.push(format!("mut {}", one)); } else { written.push(one.to_string()); } }
         let names = written.join(", ");
         let bound = emit_stmt_tuple_pattern(&written, shape);
+        let mut allowed = "";
+        if mutable && !viewed && each.len() > 1 { allowed = "#[allow(unused_mut)] "; }
         let plain = emit_stmt_tuple_pattern(&each, shape);
         if self.facts.pausing_loops.contains(&at) {
             let mut unwrap: Option<String> = None;
@@ -730,14 +734,14 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, iter, depth + 1, flow, scope)?;
             out.push(";\n");
             out.push(&inner);
-            out.push(&format!("while let Some({}) = __nikaia_sequence.next().await ", bound));
+            out.push(&format!("{}while let Some({}) = __nikaia_sequence.next().await ", allowed, bound));
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))?;
             out.push("\n");
             out.push(&pad);
             out.push("}");
             return Ok(());
         }
-        out.push(&format!("for {} in ", bound));
+        out.push(&format!("{}for {} in ", allowed, bound));
         let lends = is_a_place(iter) && !self.facts.owned_loops.contains(&at);
         self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)?;
         if lends && viewed { out.push(".iter_mut()"); } else if lends {
