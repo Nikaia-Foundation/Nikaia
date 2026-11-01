@@ -30,6 +30,30 @@
 
 ---
 
+## When people and AI write code together
+
+More and more code is written with a model, or by an agent that changes a program on its own.
+Such code reads well, and its mistakes are often the kind review finds hardest: two tasks that
+change the same value, an error that nobody handles, a call outside what a function expects.
+Nikaia's compiler looks for these before the program runs. It refuses two tasks that would
+change the same value at once and names what they share, it refuses an error that is neither
+handled nor declared with `throws`, and it carries each `assert` back to the calls that must
+meet it. Where it cannot tell what a call touches, as in a Rust crate or a C library, it does
+not refuse, and `nikaia build --asserts` lists which claims it proved and which are checked at
+run time.
+
+That makes the compiler a reviewer for every change, whether a person wrote it or a model did.
+Its messages say what is wrong and what to write instead, so an agent can read the error,
+change the code and build again, and the person reviews a program the compiler has already
+checked. Memory, waiting and sharing are left to the compiler and the build settings, so the
+code a person reads is mostly about the task itself.
+
+No model has Nikaia in its training data yet. Generating it means putting the specification in
+the model's context, and `docs/specification/` together with `examples/` serves for that
+today. The compiler is pre-alpha. The longer argument is in the [Manifesto](manifesto.md), §8.
+
+---
+
 ## The idea
 
 Python or JavaScript are quick to write, but the programs are slower than they could be, and

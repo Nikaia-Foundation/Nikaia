@@ -14,7 +14,8 @@ description: >-
   are dated there and here, and change together; where the two disagree, those
   pages are the ones to fix first and this page follows them. What "Very safe"
   shows in detail (contracts, loops, the report, data from outside, the command
-  line) is on its five pages under safe/.
+  line) is on its five pages under safe/. The "People and AI" section is the
+  README's "When people and AI write code together", shortened.
 -->
 
 <section class="hero">
@@ -22,6 +23,11 @@ description: >-
     <div class="hero-text">
       <p class="hero-eyebrow">A programming language · pre-alpha</p>
       <h1>Safe. Fast. Easy to read.<br><span>A programming language for software you can rely on.</span></h1>
+      <p class="hero-lead">
+        Software you can rely on, whether a person writes it, a model, or both together. The
+        compiler checks for the mistakes that are easy to miss in review before the program
+        runs, and says where its checks stop.
+      </p>
       <p class="hero-lead">
         Nikaia is a programming language for applications: backends, web services, and
         software that has to be fast and correct at the same time. That is its home.
@@ -44,6 +50,24 @@ description: >-
     <div class="hero-art">
       <img src="{{ "/assets/hero.jpg" | relative_url }}" alt="The Nikaia logo: a wing turning into a blue letter N" width="900" height="764">
     </div>
+  </div>
+</section>
+
+<section class="home-section" id="ai">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">People and AI</p>
+    <h2 class="home-heading">When people and AI write code together</h2>
+    <p class="safe-lead home-intro">More and more code is written with a model, or by an agent
+    that changes a program on its own. Such code reads well, and its mistakes are often the kind
+    review finds hardest: two tasks that change the same value, an error that nobody handles, a
+    call outside what a function expects. Nikaia's compiler looks for these before the program
+    runs, and where it cannot tell what a call touches, as in a Rust crate or a C library, it
+    says so instead of refusing.</p>
+    <p class="safe-lead home-intro">Its messages say what is wrong and what to write instead,
+    so an agent can read the error, change the code and build again, and the person reviews a
+    program the compiler has already checked. No model has Nikaia in its training data yet:
+    generating it means putting the specification in the model's context. The compiler is
+    pre-alpha. <a href="{{ "/manifesto.html#8-a-language-for-the-age-of-generated-code" | relative_url }}">The longer argument →</a></p>
   </div>
 </section>
 
