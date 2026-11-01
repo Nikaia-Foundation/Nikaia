@@ -1,5 +1,5 @@
 //! **The reductions and searches over a sequence, and two cuts of text**
-//! (`docs/selfhosting-gaps.md`, LANGUAGE): `any`, `all`, `find`, `position`,
+//! (self-hosting, LANGUAGE): `any`, `all`, `find`, `position`,
 //! `filter_map`, `last`, `take_while`, `skip_while`, `max`, `min`, `sum`,
 //! `min_by_key`, `max_by_key` and `flat_map` on `Seq`, `rsplit`, `split_at`, `split_once` and `rsplit_once` on text. Each is run with `nikaia run`, with
 //! its empty case, and the three that stop early show where they stopped.

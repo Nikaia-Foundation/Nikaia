@@ -157,10 +157,10 @@ value that copies).
   refuse it, `NK1307`), the checker (`check_core_stmt_for`,
   `view_changes.nika`), the lowering (`emit_stmt_for`) and the converter
   (`rs2nika`: `for x in &mut v`, `v.iter_mut()` become `for mut x in v`) are
-  built from #951's *To build*. A map's `iter_mut()` / `values_mut()` stays a
-  gap row until section 6's first point is built.
+  built from #951's *To build*. A map's `iter_mut()` / `values_mut()` stays open as
+  #1133 until section 6's first point is built.
 * The index loops in `tools/*.nika` that only touch `v[i]` become `for mut`;
-  `docs/selfhosting-gaps.md` and `docs/builder-facts.md` drop the gap when it is
+  `docs/builder-facts.md` drops the gap when it is
   built.
 
 ## 6. What this does not decide

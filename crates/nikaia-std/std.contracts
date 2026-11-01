@@ -3125,8 +3125,8 @@ touches = []
 # more than `?`.
 signature = "[T](self: Seq[T], f: fn(T)) -> Seq[T] ends"
 
-# --- Reductions and searches over a sequence (`docs/selfhosting-gaps.md`,
-# LANGUAGE). Each is the language below's own iterator method; the ones that
+# --- Reductions and searches over a sequence (self-hosting, LANGUAGE).
+# Each is the language below's own iterator method; the ones that
 # take a lambda have `sync(f)` for `map`'s reason.
 
 # Whether the function says yes to any element; it stops at the first yes.

@@ -111,8 +111,7 @@ direction, in short:
 
 * **Self-hosting first** (owner, 2026-10-27): until the compiler holds no logic
   in Rust, every round moves code into Nikaia, largest files first. The road and
-  what is left: [`selfhosting-plan.md`](selfhosting-plan.md),
-  [`selfhosting-gaps.md`](selfhosting-gaps.md).
+  what is left: [`selfhosting-plan.md`](selfhosting-plan.md) and the issues.
 * **Compiler defects** a move or a package runs into are fixed as they are met.
 * **The task model** ([#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983)):
   parser, checker, runtime and lowering of `async`, then `overlap`, `task::scope`

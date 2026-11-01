@@ -92,8 +92,8 @@ The rules every session and agent needs. What only the main session does
   `scalars.take(16)` for a refused slice, a loop for a missing map `.iter()`;
   each is debt). Whoever meets something Nikaia, `std` or the toolchain lacks
   sorts it first, before writing a line around it:
-  1. **Absent on purpose**: an ADR or a section of Part I-III refuses it (the
-     *Not gaps, by design* rows of `docs/selfhosting-gaps.md` cite theirs).
+  1. **Absent on purpose**: an ADR or a section of Part I-III refuses it.
+     The ADR is the record; there is no separate list.
      Then build it the way that ADR says, and name the ADR in the report.
   2. **Not decided yet** (it did not matter when the part was written) or
      **missing because nobody thought of it**: stop. Commit nothing that writes
