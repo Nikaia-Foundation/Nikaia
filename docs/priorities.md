@@ -1,4 +1,4 @@
-# How the architect chooses the next topic
+# How the supervisor chooses the next topic
 
 Model from an outside adviser (owner, 2026-10-25), made usable here.
 
@@ -15,11 +15,11 @@ largest Rust files first (`project.rs`, `parser/mod.rs`, `comptime_run.rs`,
 `check/mod.rs`); its one exception is a fix-forward for a red `develop`. A
 compiler bug a move finds goes as a brief into the bug lane
 (`docs/briefs/bugs/batch.txt`, with a `Blocks:` line) and the move waits for
-its fix there (owner, 2026-10-31; `docs/architect.md`, *Lanes*). The bug lane
+its fix there (owner, 2026-10-31; `docs/supervisor.md`, *Lanes*). The bug lane
 orders the other defects by the score below. The pause rule (more bugs found than fixed) still stops the self-hosting lane.
 Each move is translated by hand from the Rust (owner, 2026-11-01: the
 converter is deleted). A move is faithful by default; a real redesign needs a
-named reason (`docs/architect.md`,
+named reason (`docs/supervisor.md`,
 *Briefs and reports*, owner 2026-10-29).
 
 ## Estimating the terms per ticket
@@ -40,8 +40,8 @@ The score decides within each lane (the lanes are set above). The default prior 
 compiler bugs, self-hosting, CI speed. A bug a builder is
 blocked on comes first. Any other departure from bugs-first is allowed when
 the figures say so, and the brief states them. The owner delegated this rule
-and the weight (10M per S point) to the architect (2026-10-25); the architect
-revises the weight from measurements.
+and the weight (10M per S point) to the architect (2026-10-25), the supervisor's since the role was removed
+(owner, 2026-11-01); the supervisor revises the weight from measurements.
 
 ## Before scoring a ticket
 
@@ -57,4 +57,4 @@ which past run), area`; on a departure from bugs-first, the figures.
 
 ## Current figures
 
-In `docs/architect.md`, *State*. Past scores are in git (`git log -p docs/priorities.md`).
+In `docs/supervisor.md`, *State*. Past scores are in git (`git log -p docs/priorities.md`).

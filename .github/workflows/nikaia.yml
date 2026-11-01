@@ -59,7 +59,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # One line per run: the architect counts the CPU models the pool gives.
+      # One line per run: the supervisor counts the CPU models the pool gives.
       - name: Runner CPU
         run: echo "runner-cpu $(rustc --print target-cpus | grep native) nproc=$(nproc)"
 

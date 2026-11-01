@@ -35,7 +35,7 @@ fn main() throws {
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    fs::write(f"{tmp}/a.md", fs::Root::Anywhere, "---\nagent: architect\nmodel: opus\nmax_turns: 7\nbudget_usd: 5\n---\nbody\n")
+    fs::write(f"{tmp}/a.md", fs::Root::Anywhere, "---\nagent: qa\nmodel: opus\nmax_turns: 7\nbudget_usd: 5\n---\nbody\n")
     fs::write(f"{tmp}/p.md", fs::Root::Anywhere, "no frontmatter\n")
     fs::write(f"{tmp}/batch.txt", fs::Root::Anywhere, "a.md\np.md\n")
     let first = process::run(nikaia.clone(), ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo.clone())

@@ -1,4 +1,4 @@
-with frontmatter: NEXT T/a.md architect opus 7 5 medium
+with frontmatter: NEXT T/a.md qa opus 7 5 medium
 without frontmatter, report without Owner: NEXT T/p.md builder sonnet 120 20 medium
 Owner none: NEXT T/p.md builder sonnet 120 20 medium
 Owner question: OWNER a.md: opus or sonnet?

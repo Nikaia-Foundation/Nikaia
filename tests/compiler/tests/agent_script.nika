@@ -32,12 +32,12 @@ fn main() throws {
     let script = f"#!/bin/sh\nsid=\"\"\nwhile [ $# -gt 0 ]; do if [ \"$1\" = --session-id ]; then sid=$2; fi; shift; done\necho '{json}' | sed \"s/SID/$sid/\"\ntouch {tmp}/b.report.md\n"
     fs::write(fake.clone(), fs::Root::Anywhere, script.clone())
     process::run("chmod", ["+x", fake.clone()]; dir: repo.clone())
-    fs::write(f"{tmp}/b.md", fs::Root::Anywhere, "---\nagent: architect\nmodel: opus\nmax_turns: 7\n---\nbody\n")
+    fs::write(f"{tmp}/b.md", fs::Root::Anywhere, "---\nagent: qa\nmodel: opus\nmax_turns: 7\n---\nbody\n")
     fs::write(f"{tmp}/plain.md", fs::Root::Anywhere, "no frontmatter\n")
 
     let dry = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dry-run"]; dir: repo.clone())
     let words = dry.stdout.trim().split(" ").collect()
-    println(f"architect: {words[7]} {words[8]} {words[9]} {words[10]} {words[11]} {words[12]} {words[13]} {words[14]}")
+    println(f"qa: {words[7]} {words[8]} {words[9]} {words[10]} {words[11]} {words[12]} {words[13]} {words[14]}")
     println(f"tools: {words.len() > 20} {words[words.len() - 1]}")
     let plain = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/plain.md", "--dry-run"]; dir: repo.clone())
     let pw = plain.stdout.trim().split(" ").collect()

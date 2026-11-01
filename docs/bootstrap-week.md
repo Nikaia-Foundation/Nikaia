@@ -4,7 +4,7 @@ The owner's decision (2026-10-28, binding, a condition of the budget): by
 **2026-11-04** self-hosting is complete, as a **complete bootstrap**. At most
 two parallel move lanes, one lane for lowering defects, one for compiler bugs;
 parallelism that lowers quality is counterproductive, and token cost counts.
-This file is the plan; the architect's *State* (`docs/architect.md`) and the
+This file is the plan; the supervisor's *State* (`docs/supervisor.md`) and the
 plan rows (`docs/selfhosting-plan.md`) stay where they are and point here.
 
 **The goal, as the owner corrected it (2026-10-28, two messages; the first D-2
@@ -323,7 +323,7 @@ Every Rust file has one owning lane for the week; a lane edits only its own.
 brief only if its `Owns:` is disjoint from every running brief's. A fix that
 needs a file a move lane owns waits for that slice to land, or the
 supervisor reassigns the file for one brief. `docs/selfhosting-plan.md`,
-`docs/architect.md`, `docs/priorities.md` and `scripts/self_hosting.py` are
+`docs/supervisor.md`, `docs/priorities.md` and `scripts/self_hosting.py` are
 edited in C1 only: lane 2 and the fix lanes put plan rows and new
 `self_hosting.py` rows into their report (`Body:`), and the supervisor or the
 architect writes them.

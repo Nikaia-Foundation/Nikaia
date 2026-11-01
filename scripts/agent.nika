@@ -63,9 +63,6 @@ fn agent_effort_ok(effort: String) -> bool {
 }
 
 fn agent_tools(agent: String) -> String {
-    if agent == "architect" {
-        return "Read Grep Glob Bash Edit Write mcp__github__issue_read mcp__github__issue_write mcp__github__add_issue_comment mcp__github__list_issues mcp__github__search_issues mcp__github__sub_issue_write mcp__github__get_label"
-    }
     return "Bash Read Edit Write Grep Glob"
 }
 

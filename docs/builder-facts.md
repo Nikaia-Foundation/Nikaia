@@ -144,7 +144,7 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   `target/fast/nikaia lower f.nika` or `nikaia run f.nika`. A defect that shows
   only in `tools/*.nika` needs a throwaway probe function in a tools file and
   `nikaia lower-std`; look at `tools/lowered/<file>.rs`, then restore both.
-* **Syntax gaps** (each cost a build cycle), classed by the architect
+* **Syntax gaps** (each cost a build cycle), classed by the architect (now the supervisor)
   (2026-10-29, probes on `target/fast/nikaia run`). Not a licence to write
   around (CLAUDE.md *A missing form stops the work*): **[design]** holds, build
   that way; **[gap #N]** is a `decision` issue: meeting it stops the slice

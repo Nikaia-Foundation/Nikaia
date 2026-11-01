@@ -17,7 +17,7 @@ The rules every session and agent needs. What only the main session does
   `nikaia run scripts/pre-push.nika` (fmt, ADR citations, badges, version, on
   what is staged, not the working tree). Never the full suite.
   Small commits, often.
-* **Agents commit, the supervisor pushes.** A builder, QA agent or architect
+* **Agents commit, the supervisor pushes.** A builder or QA agent
   commits locally; the driver or the main session tests and pushes
   (`docs/supervisor.md`). A session working alone pushes its own commits to
   `develop` after `git pull --rebase origin develop`; no pull requests.
@@ -54,7 +54,7 @@ The rules every session and agent needs. What only the main session does
   `tools/*.nika`); the `.rs` the lowering writes from it
   (`crates/nikaia-std/src/tools/lowered/`) is output. A step that cannot be
   done without writing Rust stops before the first line: `Result: blocked`,
-  `Found:` the gap in Nikaia, `Needs: architect decision`. Briefs that still
+  `Found:` the gap in Nikaia, `Needs: supervisor decision`. Briefs that still
   order Rust are read with this rule over them. A defect in existing Rust is
   fixed in Rust only where that code cannot be converted to Nikaia directly;
   where it can, the fix moves it into Nikaia.
@@ -72,8 +72,8 @@ The rules every session and agent needs. What only the main session does
 ## Who reads what else
 
 * **The main session** (supervisor: starts agents, talks to the owner, raises
-  versions, watches CI, runs decision rounds): `docs/supervisor.md`, and
-  `docs/architect.md` for the architect and the lanes.
+  versions, watches CI, runs decision rounds, writes the briefs and keeps the lanes and the
+  issues): `docs/supervisor.md`.
 * **Builders**: `.claude/agents/builder.md` (the cycle and the gate) and
   `docs/builder-facts.md` (where things live, traps, and the self-hosting
   rules: slices, syntax gaps of `tools/*.nika`, lowering).
@@ -98,10 +98,10 @@ The rules every session and agent needs. What only the main session does
   2. **Not decided yet** (it did not matter when the part was written) or
      **missing because nobody thought of it**: stop. Commit nothing that writes
      around it; the report says `Result: blocked`, `Found:` the gap with a probe
-     of a few lines, `Needs: architect decision`. The architect decides it
-     (owner, 2026-10-31): an obvious language change or extension, by the
-     language principles (`docs/architect.md`, *Language decisions*), it
-     approves itself, writes the ADR or specification text and files the
+     of a few lines, `Needs: supervisor decision`. The supervisor decides it
+     (owner, 2026-10-31 and 2026-11-01): an obvious language change or
+     extension, by the language principles (`docs/supervisor.md`, *Language
+     decisions*), it approves itself, writes the ADR or specification text and files the
      build (`ready`); only a genuinely non-obvious question goes to the owner
      as a `decision` issue with a decision paper. Either way the work waits
      for the build of that decision.
@@ -119,7 +119,7 @@ The rules every session and agent needs. What only the main session does
   (status label `ready`), never in a file in the repository, and the work that
   needs it waits for the fix. Who finds a defect that blocks the work fixes
   it at once, in any lane (owner, 2026-11-01); only what does not fit the
-  round goes to the bug lane (`docs/architect.md`, *Lanes*).
+  round goes to the bug lane (`docs/supervisor.md`, *Lanes*).
 * **The disk is shared and small.** Delete `target/` of a worktree you no
   longer use; keep `target/nikaia-project-tests` (the tests' cache, pruned by
   the compiler to `NIKAIA_CACHE_LIMIT`). Never run the full suite locally by hand

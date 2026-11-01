@@ -3,8 +3,8 @@
 //     nikaia run scripts/cycle.nika -- DIR [--apply] [--done N]
 //
 //     CI <sha8> green|red|running|unknown
-//     NEXT <abs brief> <agent> <model> <turns> <budget> <effort> | CUT <brief>: <line> -> ARCHITECT | BATCH DONE
-//     RED <sha8> <jobs> -> ARCHITECT          (only when the tip is red)
+//     NEXT <abs brief> <agent> <model> <turns> <budget> <effort> | CUT <brief>: <line> -> SUPERVISOR | BATCH DONE
+//     RED <sha8> <jobs> -> SUPERVISOR          (only when the tip is red)
 //     BUMP pending <n> changelog lines | BUMP <version> pushed | NO BUMP: <why>
 //     OWNER <n> open: <first line>            (DIR/owner.txt, one per line)
 //     OWNER <brief>: <question>               (a report's `Owner:`; first one
@@ -48,7 +48,7 @@ fn cycle_red(line: String) -> String {
     let parts = line.split(" ").collect()
     if parts.len() < 3 || parts[2] != "failure" { return "" }
     let jobs = if parts.len() > 3 { parts[3].clone() } else { "" }
-    return f"RED {parts[1]} {jobs} -> ARCHITECT"
+    return f"RED {parts[1]} {jobs} -> SUPERVISOR"
 }
 
 fn cycle_bump(line: String) -> String {
@@ -129,7 +129,7 @@ fn main() throws {
             fs::write(f"{dir}/QUESTION", fs::Root::Anywhere, q.clone() + "\n")
         }
     }
-    if batch.starts_with("CUT") { println(cycle_cap(batch.clone() + " -> ARCHITECT")) } else { println(cycle_cap(batch.clone())) }
+    if batch.starts_with("CUT") { println(cycle_cap(batch.clone() + " -> SUPERVISOR")) } else { println(cycle_cap(batch.clone())) }
     let mut bump = cycle_bump(lines[2].clone())
     if apply && ci.ends_with("green") && !batch.starts_with("NEXT") && bump != "" {
         let rel = process::run(exe, ["run", "scripts/release.nika", "--", dir.clone()])

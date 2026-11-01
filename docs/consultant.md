@@ -17,11 +17,11 @@ main session only (`.claude/agents/consultant.md`).
 
 The main session passes the recommendations to the owner (in German, one
 topic at a time, with an introduction from zero, as in `docs/supervisor.md`). The
-architect turns an accepted one into an issue, an ADR or a brief.
+supervisor turns an accepted one into an issue, an ADR or a brief.
 
 ## Not the consultant's job
 
 * Reading the whole repository: the main session brings what is needed.
 * Writing files in the repository or pushing.
-* Taking the architect's place: the score, the briefs and the issue labels stay
-  the architect's.
+* Taking the supervisor's place: the score, the briefs and the issue labels stay
+  the supervisor's.

@@ -40,8 +40,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   lowering or `std` defect that blocks your step is fixed by you, at once,
   whatever lane the brief is from: in the compiler, with a `tests/compiler/`
   test, as its own commit, then the step goes on. Never work around it in the
-  moved code. Only when the fix does not fit the time box below, or needs an
-  architect decision, stop: commit nothing that routes around it, report
+  moved code. Only when the fix does not fit the time box below, or needs a
+  decision, stop: commit nothing that routes around it, report
   `Result: blocked` with the defect and a probe of a few lines.
 * **A missing form stops the slice too** (owner, 2026-10-29; CLAUDE.md, *A
   missing form stops the work*). A `std` entry, a method, a syntax or a
@@ -49,9 +49,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   `entry`, no `take(16)` for a refused slice, no index loop for `zip`) unless
   an ADR or Part I-III refuses it, and the report then names that ADR. Without
   one: commit nothing that routes around it, report `Result: blocked`,
-  `Found:` the gap with a probe, `Needs: architect decision`, and end. The
-  architect decides an obvious gap itself (owner, 2026-10-31) and takes only a
-  non-obvious one to the owner; either way the gap is filed, not built around.
+  `Found:` the gap with a probe, `Needs: supervisor decision`, and end. The
+  supervisor decides an obvious gap itself (owner, 2026-10-31 and 2026-11-01)
+  and takes only a non-obvious one to the owner; either way the gap is filed, not built around.
 * **At about 120 turns, or when your context passes about 200k tokens**,
   stop starting new work: commit what is verified, and report what
   is left, so a fresh agent can take it from the repository.
@@ -59,7 +59,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   40 turns, or going in circles (the same probe, file or hypothesis again):
   stop. Commit nothing half-made, report `Result: partial` with what you
   ruled out, the smallest probe, and where you suspect the fault (file and
-  function), so the architect can narrow it.
+  function), so the supervisor can narrow it.
 * **Wait in one call.** Run a build or a test in the foreground with a long
   timeout, or with `run_in_background` and let its end wake you. Never poll
   with repeated `tail`, `ps` or `sleep` calls.
