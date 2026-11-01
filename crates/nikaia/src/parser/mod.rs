@@ -2131,19 +2131,31 @@ grammar! {
           //
           // `(A, B)?` is a nullable tuple, written as every `T?` (Part I 2.3,
           // ADR-364); it lowers to `Option<(A, B)>`.
+          //
+          // **`(T)` is `T`** (#1117): parentheses around one type group it,
+          // as they group an expression, and make no tuple of one. That is
+          // how a function type takes a `?` of its own: `(fn(i64) -> i64)?`
+          // is an optional function, where `fn(i64) -> i64?` hands back an
+          // optional.
           | "(" parts:type_refs ")" nullable:question? -> {
-                Type {
-                    name: _state.intern("tuple"),
-                    generics: parts,
-                    is_view: false,
-                    is_tuple: true,
-                    is_nullable: nullable.is_some(),
-                    code: Box::new(None),
-                    count: None,
-                    is_mut: false,
-                    is_slice: false,
-                    either: false,
-                    lasting: false,
+                if let [one] = parts.as_slice() {
+                    let mut inner = one.clone();
+                    inner.is_nullable = inner.is_nullable || nullable.is_some();
+                    inner
+                } else {
+                    Type {
+                        name: _state.intern("tuple"),
+                        generics: parts,
+                        is_view: false,
+                        is_tuple: true,
+                        is_nullable: nullable.is_some(),
+                        code: Box::new(None),
+                        count: None,
+                        is_mut: false,
+                        is_slice: false,
+                        either: false,
+                        lasting: false,
+                    }
                 }
             }
           // **A parameter may be code**

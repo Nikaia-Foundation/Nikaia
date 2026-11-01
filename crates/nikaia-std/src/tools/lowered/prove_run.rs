@@ -48,7 +48,7 @@ pub(crate) fn prove_whole(below: &str) -> bool { nikaia_std::list::contains(&vec
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, claims: &collections::BTreeSet<(i64, i64)>, comptimes: &ProveComptimes, rounds: i64, run: &impl Fn(&Expr, &str, &[i64]) -> ProveClaimRun, asked_so_far: &impl Fn() -> ProofsSoFar, invariants_here: &impl Fn() -> collections::BTreeMap<i64, String>, ask_again_from: &impl Fn(&ProofsSoFar), record: &impl Fn(&collections::BTreeMap<i64, String>), searched: &impl Fn(&ProverState), counted: &impl Fn(&ProverState), ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> ProveWalked {
+pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, claims: &collections::BTreeSet<(i64, i64)>, comptimes: &ProveComptimes, run: &Option<nikaia_std::func::Kept<dyn Fn(&Expr, &str, &[i64]) -> ProveClaimRun + '_>>, asked_so_far: &impl Fn() -> ProofsSoFar, invariants_here: &impl Fn() -> collections::BTreeMap<i64, String>, ask_again_from: &impl Fn(&ProofsSoFar), record: &impl Fn(&collections::BTreeMap<i64, String>), searched: &impl Fn(&ProverState), counted: &impl Fn(&ProverState), ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> ProveWalked {
     let mut pinned = comptimes.by_name.to_owned();
     let mut not_run: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     let mut stopped: collections::BTreeMap<String, String> = collections::BTreeMap::new();
@@ -70,7 +70,7 @@ pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, 
         counted(&walked.walk.state);
         round += 1;
         let wanted: Vec<String> = walked.walk.state.wanted.iter().filter(|&call| { !pinned.contains_key(call) && !not_run.contains_key(call) && !stopped.contains_key(call) }).map(|call| { call.to_string() }).collect::<Vec<_>>();
-        if wanted.is_empty() || round > rounds { return walked; }
+        if wanted.is_empty() || round > PROVE_RUN_ROUNDS || run.is_none() { return walked; }
         for call in wanted.iter() {
             let site = match walked.walk.state.call_sites.get(call) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let called = match walked.walk.state.call_args.get(call) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -78,7 +78,7 @@ pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, 
             let key = (callee.to_string(), args.to_owned());
             let came = match answered.get(&key) {
                 None => {
-                    let fresh = run(&site, &callee, &args);
+                    let fresh = run.as_ref().unwrap()(&site, &callee, &args);
                     answered.insert(key, fresh.clone());
                     fresh
                 },

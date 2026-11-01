@@ -75,6 +75,18 @@ impl EmitState {
             walk.specialising = held;
             return written;
         }
+        if (*ty.code).is_some() && ty.is_nullable {
+            let mut inner: Type = ty.clone();
+            inner.is_nullable = false;
+            let runs = walk.in_parameter && walk.code_parameter_runs;
+            walk.in_parameter = false;
+            let written = self.emit_core_ty_named(world, walk, crossings, overlaps && !runs, &inner, name, lifetimes, count);
+            if runs && written.ends_with('>') {
+                let open: String = nikaia_std::index::or(written.strip_suffix('>'), || "").to_string();
+                return format!("Option<{} + '_>>", open);
+            }
+            return format!("Option<{}>", written);
+        }
         if (*ty.code).is_some() {
             let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
             let mut params: Vec<String> = vec![];

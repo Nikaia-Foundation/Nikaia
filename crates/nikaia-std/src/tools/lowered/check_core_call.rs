@@ -650,7 +650,20 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
         },
     }
     if check_core_call_is_variable(func) && !state.run_code.contains(&name) {
-        let looked: Ty = nikaia_std::index::or(state.lookup(&name), || Ty::Unknown);
+        let mut looked: Ty = nikaia_std::index::or(state.lookup(&name), || Ty::Unknown);
+        match looked {
+            Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); match *inner {
+                Ty::Fn { .. } => {
+                    let read = check_narrow_read_as_proved(state, func, &name, &looked, span);
+                    match read {
+                        Ty::Nullable(_) => { },
+                        _ => { looked = inner.clone(); },
+                    }
+                },
+                _ => { },
+            }; },
+            _ => { },
+        }
         match looked {
             Ty::Fn { ref params, ref result, is_sync, can_throw } => {
                 let result = nikaia_std::boxed::open(result);

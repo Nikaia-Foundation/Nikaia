@@ -403,9 +403,10 @@ impl EmitState {
         let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(node_key(arg))
         // **A plain value lent to a `T?` the callee reads as `&Option<T>`**
         // (#1080) is lent in an option made for the call: `&Some(name.clone())`,
-        // a place copied in, a value made there moved in.
+        // a place copied in, a value made there moved in. A named function
+        // kept there (#1117) is a closure made there, not a place.
         let lent_option = lend && before == "Some(" && self.emit_arg_opening(callee, i) == ""
-        let copy_in = lent_option && emit_arg_names_a_place(arg)
+        let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(node_key(arg))
         if lent_option {
             out.push("&")
         }

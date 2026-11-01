@@ -112,7 +112,7 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
             Item::Fn { name, args, body, .. } => {
                 let name = *name;
                 let key = key_of_function((name).as_ref(), "", names);
-                let mut node = sync_node(&seen_in(body, names, unaliased, holes_of, &no_root, false), program, &code_of(args, names), names, own, library, graph.unit);
+                let mut node = sync_node(&seen_in(body, names, unaliased, holes_of, &no_root, false), program, &code_of(args, body, names), names, own, library, graph.unit);
                 sync_methods(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut node);
                 graph.nodes.insert(key, node);
             },
@@ -124,7 +124,7 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
                         Item::Fn { name, args, body, .. } => {
                             let name = *name;
                             let key = key_of_function((name).as_ref(), &owner, names);
-                            let mut node = sync_node(&seen_in(body, names, unaliased, holes_of, &no_root, false), program, &code_of(args, names), names, own, library, graph.unit);
+                            let mut node = sync_node(&seen_in(body, names, unaliased, holes_of, &no_root, false), program, &code_of(args, body, names), names, own, library, graph.unit);
                             sync_methods(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut node);
                             declared_by((trait_name).as_ref(), &key_of_function((name).as_ref(), "", names), names, own, library, &mut node);
                             graph.nodes.insert(key, node);
@@ -164,13 +164,62 @@ pub(crate) fn declared_by(trait_name: Option<&winnow_grammar::Symbol>, method: &
     }
 }
 
-pub(crate) fn code_of(args: &[FnArg], names: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, bool> {
+pub(crate) fn code_of(args: &[FnArg], body: &Block, names: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, bool> {
     let mut code: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     for arg in args.iter() {
         let declared = match (*arg.ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         code.insert(names.resolve(arg.name).to_string(), !declared.is_sync);
     }
+    code_bound_in(body, names, &mut code);
     code
+}
+
+pub(crate) fn code_bound_in(block: &Block, names: &winnow_grammar::InternerContext, code: &mut collections::BTreeMap<String, bool>) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names: bound, ty, value, .. } => {
+                if bound.len() == 1 {
+                    let name = names.resolve(*nikaia_std::index::get(&bound, 0)).to_string();
+                    let written = code_written((ty).as_ref());
+                    if written.is_some() { code.insert(name, nikaia_std::index::or(written, || false)); } else {
+                        let from = code_source(value, names, &code);
+                        if from.is_some() { code.insert(name, nikaia_std::index::or(from, || false)); }
+                    }
+                }
+            },
+            _ => { },
+        }
+        for expr in check_visit_stmt(&stmt.node) {
+            match expr {
+                Expr::Match { value, arms, .. } => {
+                    let value = nikaia_std::boxed::open(value);
+                    let from = match code_source(value, names, &code) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    for arm in arms.iter() {
+                        match &arm.pattern {
+                            MatchPattern::Path(segments) => { if segments.len() == 1 { code.insert(names.resolve(*nikaia_std::index::get(&segments, 0)).to_string(), from); } },
+                            _ => { },
+                        }
+                    }
+                },
+                _ => { },
+            }
+        }
+        for inner in check_visit_stmt_blocks(&stmt.node) { code_bound_in(inner, names, code); }
+    }
+}
+
+pub(crate) fn code_written(ty: Option<&Type>) -> Option<bool> {
+    let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let declared = match (*written.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(!declared.is_sync)
+}
+
+pub(crate) fn code_source(value: &Expr, names: &winnow_grammar::InternerContext, code: &collections::BTreeMap<String, bool>) -> Option<bool> {
+    match value {
+        Expr::Variable(name, _) => { let name = *name; code.get(names.resolve(name)).copied() },
+        Expr::Coalesce { value: held, .. } => { let held = nikaia_std::boxed::open(held); code_source(held, names, code) },
+        _ => None,
+    }
 }
 
 pub(crate) fn sync_node(seen: &[Seen], program: &Program, code: &collections::BTreeMap<String, bool>, names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, unit: i64) -> SyncNode {
@@ -263,7 +312,7 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
         match &item.node {
             Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                 let is_sync = *is_sync; let name = *name;
-                let promise = match promise_of(&key_of_function((name).as_ref(), "", names), args, is_sync, sync_by, names) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let promise = match promise_of(&key_of_function((name).as_ref(), "", names), args, body, is_sync, sync_by, names) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 violations_in(&seen_in(body, names, unaliased, holes_of, &no_root, false), &promise, program, names, own, library, &mut found);
             },
             Item::Impl { target, methods, .. } => {
@@ -272,7 +321,7 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
                     match &method.node {
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                             let is_sync = *is_sync; let name = *name;
-                            let promise = match promise_of(&key_of_function((name).as_ref(), &owner, names), args, is_sync, sync_by, names) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                            let promise = match promise_of(&key_of_function((name).as_ref(), &owner, names), args, body, is_sync, sync_by, names) { Some(__nikaia_value) => __nikaia_value, None => continue };
                             violations_in(&seen_in(body, names, unaliased, holes_of, &no_root, false), &promise, program, names, own, library, &mut found);
                         },
                         _ => { },
@@ -285,7 +334,7 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
     found
 }
 
-pub(crate) fn promise_of(caller: &str, args: &[FnArg], is_sync: bool, sync_by: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext) -> Option<Promise> {
+pub(crate) fn promise_of(caller: &str, args: &[FnArg], body: &Block, is_sync: bool, sync_by: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext) -> Option<Promise> {
     if !is_sync && sync_by.is_empty() { return None; }
     let mut allowed: collections::BTreeSet<String> = collections::BTreeSet::new();
     for arg in args.iter() {
@@ -298,6 +347,13 @@ pub(crate) fn promise_of(caller: &str, args: &[FnArg], is_sync: bool, sync_by: &
         let parameter = names.resolve(one).to_string();
         allowed.insert(parameter.to_string());
         named.push(parameter);
+    }
+    let mut kept: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
+    for parameter in allowed.iter() { kept.insert(parameter.to_string(), false); }
+    code_bound_in(body, names, &mut kept);
+    for (local, pauses) in kept.iter() {
+        let pauses = nikaia_std::num::value(pauses);
+        if !pauses { allowed.insert(local.to_string()); }
     }
     let mut promise: String = String::from("sync");
     if !named.is_empty() {

@@ -402,7 +402,11 @@ impl EmitState {
                 let kept = match self.facts.kept_calls.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 let pauses = kept.0;
                 let fails = kept.1;
-                out.push(&format!("{}(", escaped_name(&emit_text(world, name))));
+                let how = nikaia_std::index::or(self.facts.narrowed_reads.get(&key), || -1);
+                if how >= 0 {
+                    self.emit_expr_narrowed(out, EmitOut { buf: escaped_name(&emit_text(world, name)), entries: vec![] }, how, false);
+                    out.push("(");
+                } else { out.push(&format!("{}(", escaped_name(&emit_text(world, name)))); }
                 let mut at = 0;
                 for arg in args.iter() {
                     if at > 0 { out.push(", "); }

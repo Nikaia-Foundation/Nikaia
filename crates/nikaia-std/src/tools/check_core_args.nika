@@ -74,7 +74,7 @@ fn check_core_args_is_lambda(arg: ref Expr, expected: ref Vec[Ty], at: i64) -> b
     }
     return match expected[at] {
         Ty::Fn { .. } => true,
-        else => false,
+        else => check_core_args_optional_code(expected[at]),
     }
 }
 
@@ -100,10 +100,17 @@ fn check_core_args_a_run_parameter(state: ref CheckState, world: ref CheckWorld,
 /// recorded as kept, run or boxed into a future (ADR-277 D11, D12).
 fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, want: ref Ty, declared_here: bool, callee: ref FnContract?, at: i64, span: ref Span) -> Ty sync {
     let id = id_of(arg) as i64
-    let runs = check_core_args_runs(callee, at)
+    // **Optional code keeps the lambda** (#1117): the option holds it, as a
+    // container does, so it is typed by the code inside.
+    let optional = check_core_args_optional_code(want)
+    let runs = check_core_args_runs(callee, at) && !optional
+    let code: Ty = match want {
+        Ty::Nullable(inner) => if optional { inner.clone() } else { want.clone() },
+        else => want.clone(),
+    }
     match arg {
         Expr::Closure { params, mutable, body, .. } => {
-            match want {
+            match code {
                 Ty::Fn { params: given, result, is_sync, can_throw } => {
                     let pauses: bool = !is_sync
                     let fails: bool = can_throw
@@ -120,7 +127,7 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                         let who = check_core_args_keepers(state, callee, at)
                         state.a_kept_lambda_takes_these(world, arg, pauses, who, span)
                     }
-                    state.a_lambdas_text_is_its_own(world, want, arg)
+                    state.a_lambdas_text_is_its_own(world, code, arg)
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, CheckPromises { may_pause: pauses, may_fail: fails }, span)
                     if paused && !declared_here {
                         state.flow.paused_args.push(id)
@@ -253,7 +260,23 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     if wants_fn && found_fn && !runs {
         check_core_a_kept_lambda(state, world, host, expected[at], arg, span)
     }
+    // **Code handed to an optional parameter is kept by the option**
+    // (#1117), as a container keeps it.
+    if found_fn && at < expected.len() as i64 && check_core_args_optional_code(expected[at]) {
+        check_core_a_kept_lambda(state, world, host, expected[at], arg, span)
+    }
     return found
+}
+
+/// Whether a parameter's type is optional code, `(fn(A) -> R)?` (#1117).
+fn check_core_args_optional_code(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(inner) => match inner {
+            Ty::Fn { .. } => true,
+            else => false,
+        },
+        else => false,
+    }
 }
 
 /// Whether the parameter at `at` is a type in the parameter list (ADR-330

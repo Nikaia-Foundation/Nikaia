@@ -1,0 +1,53 @@
+// An optional function is written with its `?` around it (#1117):
+// `(fn(i64) -> i64 sync)?`. A `match`, a `??` and a test `!= null` each
+// make it callable, a named function and a lambda are handed to it as they
+// are, and `(T)` is `T`.
+
+fn double(n: i64) -> i64 sync { return n * 2 }
+
+fn by_match(n: i64, run: (fn(i64) -> i64 sync)?) -> i64 sync {
+    match run {
+        null => return n,
+        r => return r(n),
+    }
+}
+
+fn by_test(n: i64, run: (fn(i64) -> i64 sync)?) -> i64 sync {
+    if run != null { return run(n) }
+    return n
+}
+
+fn by_coalesce(n: i64, run: (fn(i64) -> i64 sync)?) -> i64 sync {
+    let r = run ?? return n
+    return r(n)
+}
+
+fn by_typed_let(n: i64, run: (fn(i64) -> i64 sync)?) -> i64 sync {
+    let r: fn(i64) -> i64 sync = run ?? return n
+    return r(n)
+}
+
+fn in_a_loop(n: i64, run: (fn(i64) -> i64 sync)?) -> i64 sync {
+    let mut total = 0
+    let mut i = 0
+    while i < n {
+        let r = run ?? return total
+        total = total + r(i)
+        i = i + 1
+    }
+    return total
+}
+
+fn unused(n: i64, run: (fn(i64) -> i64 sync)?) -> i64 sync { return n }
+
+fn grouped(n: i64, run: (fn(i64) -> i64 sync)) -> i64 sync { return run(n) }
+
+fn main() {
+    println(f"{by_match(3, double)} {by_match(3, null)}")
+    println(f"{by_test(3, double)} {by_test(3, null)} {by_test(4, fn(x) { x + 1 })}")
+    println(f"{by_coalesce(3, double)} {by_coalesce(3, null)}")
+    println(f"{by_typed_let(3, double)} {by_typed_let(3, null)}")
+    println(f"{unused(3, double)} {unused(3, null)}")
+    println(f"{grouped(3, double)}")
+    println(f"{in_a_loop(3, double)} {in_a_loop(3, null)}")
+}

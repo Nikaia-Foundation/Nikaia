@@ -265,7 +265,7 @@ impl EmitState {
         }
         let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(&node_key(arg));
         let lent_option = lend && before == "Some(" && self.emit_arg_opening(callee, i) == "";
-        let copy_in = lent_option && emit_arg_names_a_place(arg);
+        let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if lent_option { out.push("&"); }
         out.push(&before);
         if either { out.push("nikaia_std::either_text::either("); }

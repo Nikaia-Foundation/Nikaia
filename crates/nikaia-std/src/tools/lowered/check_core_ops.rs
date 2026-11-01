@@ -564,6 +564,15 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
         state.facts.view_fallbacks.insert(id_of(fallback) as i64);
         return check_core_ops_view("str");
     }
+    if place && nullable && state.jumps(world, fallback) {
+        match inner {
+            Ty::Fn { .. } => {
+                state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".clone()"));
+                return inner.clone();
+            },
+            _ => { },
+        }
+    }
     if place {
         let opened: Option<String> = state.a_coalesce_that_may_lend(world, &left, fallback, &other);
         if opened.is_some() { state.flow.pending_coalesces.push(CheckPendingCoalesce { key: id_of(expr) as i64, left: id_of(value) as i64, ty: left.clone(), span: Span { start: span.start, end: span.end }, opened: nikaia_std::index::or(opened.as_deref(), || "").to_string() }); } else { state.hands_over(world, value, &left, "given to `??`", span); }

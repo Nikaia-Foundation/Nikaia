@@ -172,7 +172,7 @@ pub fn unit_sync(program: ref Program, names: ref winnow_grammar::InternerContex
         match item.node {
             Item::Fn { name, args, body, .. } => {
                 let key = key_of_function(name, "", names)
-                let mut node = sync_node(seen_in(body, names, unaliased, holes_of, no_root, false), program, code_of(args, names), names, own, library, graph.unit)
+                let mut node = sync_node(seen_in(body, names, unaliased, holes_of, no_root, false), program, code_of(args, body, names), names, own, library, graph.unit)
                 sync_methods(graph.methods[key], own, library, node)
                 graph.nodes.insert(key, node)
             }
@@ -182,7 +182,7 @@ pub fn unit_sync(program: ref Program, names: ref winnow_grammar::InternerContex
                     match method.node {
                         Item::Fn { name, args, body, .. } => {
                             let key = key_of_function(name, owner, names)
-                            let mut node = sync_node(seen_in(body, names, unaliased, holes_of, no_root, false), program, code_of(args, names), names, own, library, graph.unit)
+                            let mut node = sync_node(seen_in(body, names, unaliased, holes_of, no_root, false), program, code_of(args, body, names), names, own, library, graph.unit)
                             sync_methods(graph.methods[key], own, library, node)
                             declared_by(trait_name, key_of_function(name, "", names), names, own, library, node)
                             graph.nodes.insert(key, node)
@@ -248,13 +248,78 @@ fn declared_by(trait_name: ref winnow_grammar::Symbol?, method: ref String, name
 
 // **The parameters that are code, and whether each may pause** (ADR-277 D6,
 // D11): a call to one of these names is not a name nothing describes.
-fn code_of(args: ref Vec[FnArg], names: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, bool] {
+fn code_of(args: ref Vec[FnArg], body: ref Block, names: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, bool] {
     let mut code: collections::BTreeMap[String, bool] = collections::BTreeMap()
     for arg in args {
         let declared = arg.ty.code ?? continue
         code.insert(names.resolve(arg.name).clone(), !declared.is_sync)
     }
+    code_bound_in(body, names, code)
     return code
+}
+
+// **Code bound to a local is that code under another name** (#1117): `let r =
+// run ?? return n`, `let r: fn(i64) -> i64 sync = ..` and an arm of `match
+// run` that binds a name call what `run` calls, and pause where it pauses.
+// By name, whether the code may pause.
+fn code_bound_in(block: ref Block, names: ref winnow_grammar::InternerContext, mut code: collections::BTreeMap[String, bool]) {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names: bound, ty, value, .. } => {
+                if bound.len() == 1 {
+                    let name = names.resolve(bound[0]).clone()
+                    let written = code_written(ty)
+                    if written != null {
+                        code.insert(name, written ?? false)
+                    } else {
+                        let from = code_source(value, names, code)
+                        if from != null {
+                            code.insert(name, from ?? false)
+                        }
+                    }
+                }
+            }
+            else => {}
+        }
+        for expr in check_visit_stmt(stmt.node) {
+            match expr {
+                Expr::Match { value, arms, .. } => {
+                    let from = code_source(value, names, code) ?? continue
+                    for arm in arms {
+                        match arm.pattern {
+                            MatchPattern::Path(segments) => {
+                                if segments.len() == 1 {
+                                    code.insert(names.resolve(segments[0]).clone(), from)
+                                }
+                            }
+                            else => {}
+                        }
+                    }
+                }
+                else => {}
+            }
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            code_bound_in(inner, names, code)
+        }
+    }
+}
+
+// Whether a declared type is code that may pause; null where it is no code.
+fn code_written(ty: ref Type?) -> bool? {
+    let written = ty ?? return null
+    let declared = written.code ?? return null
+    return !declared.is_sync
+}
+
+// Whether the code a value hands over may pause: a name bound to code, or its
+// option with a fallback (`run ?? return n`); null where it is no such value.
+fn code_source(value: ref Expr, names: ref winnow_grammar::InternerContext, code: ref collections::BTreeMap[String, bool]) -> bool? {
+    return match value {
+        Expr::Variable(name, _) => code.get(names.resolve(name)),
+        Expr::Coalesce { value: held, .. } => code_source(held, names, code),
+        else => null,
+    }
 }
 
 // What one body does to its own claim: the calls the walk met, each by the
@@ -378,7 +443,7 @@ pub fn unit_violations(program: ref Program, names: ref winnow_grammar::Interner
     for item in program.items {
         match item.node {
             Item::Fn { name, args, body, is_sync, sync_by, .. } => {
-                let promise = promise_of(key_of_function(name, "", names), args, is_sync, sync_by, names) ?? continue
+                let promise = promise_of(key_of_function(name, "", names), args, body, is_sync, sync_by, names) ?? continue
                 violations_in(seen_in(body, names, unaliased, holes_of, no_root, false), promise, program, names, own, library, found)
             }
             Item::Impl { target, methods, .. } => {
@@ -386,7 +451,7 @@ pub fn unit_violations(program: ref Program, names: ref winnow_grammar::Interner
                 for method in methods {
                     match method.node {
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
-                            let promise = promise_of(key_of_function(name, owner, names), args, is_sync, sync_by, names) ?? continue
+                            let promise = promise_of(key_of_function(name, owner, names), args, body, is_sync, sync_by, names) ?? continue
                             violations_in(seen_in(body, names, unaliased, holes_of, no_root, false), promise, program, names, own, library, found)
                         }
                         else => {}
@@ -399,7 +464,7 @@ pub fn unit_violations(program: ref Program, names: ref winnow_grammar::Interner
     return found
 }
 
-fn promise_of(caller: ref String, args: ref Vec[FnArg], is_sync: bool, sync_by: ref Vec[winnow_grammar::Symbol], names: ref winnow_grammar::InternerContext) -> Promise? {
+fn promise_of(caller: ref String, args: ref Vec[FnArg], body: ref Block, is_sync: bool, sync_by: ref Vec[winnow_grammar::Symbol], names: ref winnow_grammar::InternerContext) -> Promise? {
     if !is_sync && sync_by.len() == 0 {
         return null
     }
@@ -415,6 +480,17 @@ fn promise_of(caller: ref String, args: ref Vec[FnArg], is_sync: bool, sync_by: 
         let parameter = names.resolve(one).clone()
         allowed.insert(parameter.clone())
         named.push(parameter)
+    }
+    // The locals bound to such code are kept with it (#1117).
+    let mut kept: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    for parameter in allowed {
+        kept.insert(parameter.clone(), false)
+    }
+    code_bound_in(body, names, kept)
+    for (local, pauses) in kept {
+        if !pauses {
+            allowed.insert(local.clone())
+        }
     }
     let mut promise: String = "sync"
     if named.len() > 0 {

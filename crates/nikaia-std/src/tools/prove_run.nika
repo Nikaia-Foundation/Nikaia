@@ -91,9 +91,9 @@ fn prove_whole(below: String) -> bool {
 
 /// **Prove every `assert` of the program.** `claims` are the checker's: a
 /// call is an `assert` exactly where the checker recognised the prelude's.
-/// `run` runs a call an open claim reads (ADR-359 D11-D13), at most `rounds`
-/// times over: the walk is repeated with its value. A build that cannot
-/// compile and run code gives no rounds.
+/// `run` runs a call an open claim reads (ADR-359 D11-D13), at most
+/// `PROVE_RUN_ROUNDS` times over: the walk is repeated with its value. A
+/// build that cannot compile and run code gives none (`null`), and no rounds.
 ///
 /// **The invariants in `nikaia.proofs`** (ADR-361 D4) are checked and used
 /// without a search. A walk that searched one is repeated with what it found,
@@ -101,7 +101,7 @@ fn prove_whole(below: String) -> bool {
 /// book is the thread's, so the adapter asks it (`asked_so_far`,
 /// `invariants_here`, `ask_again_from`, `record`). `searched` counts each
 /// walk's invariants, `counted` each round's extra queries.
-pub fn prove_rounds(program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, claims: ref collections::BTreeSet[(i64, i64)], comptimes: ref ProveComptimes, rounds: i64, run: fn(ref Expr, ref String, ref Vec[i64]) -> ProveClaimRun sync, asked_so_far: fn() -> ProofsSoFar sync, invariants_here: fn() -> collections::BTreeMap[i64, String] sync, ask_again_from: fn(ref ProofsSoFar) sync, record: fn(ref collections::BTreeMap[i64, String]) sync, searched: fn(ref ProverState) sync, counted: fn(ref ProverState) sync, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> ProveWalked sync {
+pub fn prove_rounds(program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, claims: ref collections::BTreeSet[(i64, i64)], comptimes: ref ProveComptimes, run: (fn(ref Expr, ref String, ref Vec[i64]) -> ProveClaimRun sync)?, asked_so_far: fn() -> ProofsSoFar sync, invariants_here: fn() -> collections::BTreeMap[i64, String] sync, ask_again_from: fn(ref ProofsSoFar) sync, record: fn(ref collections::BTreeMap[i64, String]) sync, searched: fn(ref ProverState) sync, counted: fn(ref ProverState) sync, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> ProveWalked sync {
     let mut pinned = comptimes.by_name.clone()
     let mut not_run: collections::BTreeMap[String, String] = collections::BTreeMap()
     let mut stopped: collections::BTreeMap[String, String] = collections::BTreeMap()
@@ -127,7 +127,7 @@ pub fn prove_rounds(program: ref Program, words: ref winnow_grammar::InternerCon
         counted(walked.walk.state)
         round += 1
         let wanted: Vec[String] = walked.walk.state.wanted.iter().filter(fn(call) { !pinned.contains_key(call) && !not_run.contains_key(call) && !stopped.contains_key(call) }).map(fn(call) { call.clone() }).collect()
-        if wanted.is_empty() || round > rounds {
+        if wanted.is_empty() || round > PROVE_RUN_ROUNDS || run == null {
             return walked
         }
         for call in wanted {

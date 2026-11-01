@@ -52,8 +52,13 @@ pub fn written_ty(names: ref winnow_grammar::InternerContext, aliases: ref colle
         }
         return Ty::Tuple(written_all(names, aliases, ty.generics))
     }
-    // **A parameter that is code** (ADR-277 D6), read before the `?`: the
-    // grammar gives the form no `?` to begin with.
+    // **A parameter that is code** (ADR-277 D6). Its `?` is written around
+    // it, `(fn(i64) -> i64)?` (#1117): the code, nullable.
+    if ty.code != null && ty.is_nullable {
+        let mut inner = ty.clone()
+        inner.is_nullable = false
+        return Ty::Nullable(written_ty(names, aliases, inner))
+    }
     if ty.code != null {
         let code = ty.code ?? return Ty::Unknown
         let params = written_all(names, aliases, ty.generics)

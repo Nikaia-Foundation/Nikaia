@@ -128,6 +128,26 @@ impl EmitState {
             return written
         }
 
+        // **Optional code is kept** (#1117): an option holds its function as
+        // a container does, so `(fn(A) -> R)?` is an
+        // `Option<Kept<dyn Fn(A) -> R>>`, in a parameter too. A parameter
+        // that only runs it takes code that borrows, as `impl Fn` does:
+        // `dyn Fn(A) -> R + '_`.
+        if ty.code != null && ty.is_nullable {
+            let mut inner: Type = ty.clone()
+            inner.is_nullable = false
+            let runs = walk.in_parameter && walk.code_parameter_runs
+            walk.in_parameter = false
+            // **Optional code the callee only runs is lent for the call**
+            // (#1117): it borrows what the caller has, `+ '_`, and crosses no
+            // thread, as `impl Fn` does not.
+            let written = self.emit_core_ty_named(world, walk, crossings, overlaps && !runs, inner, name, lifetimes, count)
+            if runs && written.ends_with(">") {
+                let open: String = (written.strip_suffix(">") ?? "").clone()
+                return f"Option<{open} + '_>>"
+            }
+            return f"Option<{written}>"
+        }
         // A parameter that is code (ADR-277 D6, D11, D13).
         if ty.code != null {
             let code = ty.code ?? return ""

@@ -839,7 +839,22 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     // **A kept function value called by name.**
     if check_core_call_is_variable(func) && !state.run_code.contains(name) {
-        let looked: Ty = state.lookup(name) ?? Ty::Unknown
+        let mut looked: Ty = state.lookup(name) ?? Ty::Unknown
+        // **Optional code a test proved not `null` is called as the code**
+        // (#1117, ADR-382): the read is the narrowed one, unwrapped below.
+        match looked {
+            Ty::Nullable(inner) => match inner {
+                Ty::Fn { .. } => {
+                    let read = check_narrow_read_as_proved(state, func, name, looked, span)
+                    match read {
+                        Ty::Nullable(_) => {},
+                        else => { looked = inner.clone() },
+                    }
+                },
+                else => {},
+            },
+            else => {},
+        }
         match looked {
             Ty::Fn { params, result, is_sync, can_throw } => {
                 let pauses_not: bool = is_sync

@@ -589,7 +589,15 @@ impl EmitState {
                 let kept = self.facts.kept_calls.get(key) ?? return false
                 let pauses = kept.0
                 let fails = kept.1
-                out.push(f"{escaped_name(emit_text(world, name))}(")
+                // **Optional code proved not `null` is unwrapped where it is
+                // called** (#1117, ADR-382).
+                let how = self.facts.narrowed_reads.get(key) ?? -1
+                if how >= 0 {
+                    self.emit_expr_narrowed(out, EmitOut { buf: escaped_name(emit_text(world, name)), entries: [] }, how, false)
+                    out.push("(")
+                } else {
+                    out.push(f"{escaped_name(emit_text(world, name))}(")
+                }
                 let mut at = 0
                 for arg in args {
                     if at > 0 {

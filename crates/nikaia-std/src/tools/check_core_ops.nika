@@ -817,6 +817,18 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
         state.facts.view_fallbacks.insert(id_of(fallback) as i64)
         return check_core_ops_view("str")
     }
+    // **Code on the left of `??` is shared, never taken** (#1117): a kept
+    // function is cloned by a count, so `let run = run ?? return` reads the
+    // option as often as a loop comes by.
+    if place && nullable && state.jumps(world, fallback) {
+        match inner {
+            Ty::Fn { .. } => {
+                state.facts.lent_coalesces.insert(id_of(expr) as i64, ".clone()")
+                return inner.clone()
+            },
+            else => {},
+        }
+    }
     // **A name on the left of `??` is taken where the answer is kept and lent
     // where it is only read** (ADR-279 D5).
     if place {

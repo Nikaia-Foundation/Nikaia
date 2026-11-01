@@ -47,7 +47,10 @@ pub(crate) fn check_core_args_is_lambda(arg: &Expr, expected: &[Ty], at: i64) ->
         _ => { },
     }
     if !closure { return false; }
-    matches!(*nikaia_std::index::get(&expected, nikaia_std::index::at(at)), Ty::Fn { .. })
+    match nikaia_std::index::get(&expected, nikaia_std::index::at(at)) {
+        Ty::Fn { .. } => true,
+        _ => check_core_args_optional_code(nikaia_std::index::get(&expected, nikaia_std::index::at(at))),
+    }
 }
 
 pub(crate) fn check_core_args_named(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) -> bool {
@@ -70,12 +73,17 @@ pub(crate) fn check_core_args_a_run_parameter(state: &CheckState, world: &CheckW
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &Expr, want: &Ty, declared_here: bool, callee: Option<&FnContract>, at: i64, span: &Span) -> Ty {
     let id = id_of(arg) as i64;
-    let runs = check_core_args_runs(callee, at);
+    let optional = check_core_args_optional_code(want);
+    let runs = check_core_args_runs(callee, at) && !optional;
+    let code: Ty = match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); if optional { inner.clone() } else { want.clone() } },
+        _ => want.clone(),
+    };
     match arg {
         Expr::Closure { params, mutable, body, .. } => {
-            match want {
-                Ty::Fn { params: given, result, is_sync, can_throw } => {
-                    let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
+            match code {
+                Ty::Fn { params: ref given, ref result, is_sync, can_throw } => {
+                    let result = nikaia_std::boxed::open(result);
                     let pauses: bool = !is_sync;
                     let fails: bool = can_throw;
                     if pauses && declared_here {
@@ -89,13 +97,13 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                         let who = check_core_args_keepers(&state, callee, at);
                         state.a_kept_lambda_takes_these(world, arg, pauses, &who, span);
                     }
-                    state.a_lambdas_text_is_its_own(world, want, arg);
+                    state.a_lambdas_text_is_its_own(world, &code, arg);
                     let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, &CheckPromises { may_pause: pauses, may_fail: fails }, span);
                     if paused && !declared_here { state.flow.paused_args.push(id); }
                     state.flow.lambda_tails.insert(id, came_to.clone());
                     state.flow.lambda_firsts.insert(id, state.flow.last_lambda_first);
-                    let written: Ty = nikaia_std::index::or(match result {
-                        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                    let written: Ty = nikaia_std::index::or(match result.as_ref() {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     }, || Ty::Unknown);
                     if !written.is_unknown() {
@@ -175,7 +183,15 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
         if wants_pausing_fn && !found_sync { state.facts.kept_args_run_async.insert(id_of(arg) as i64, arity); }
     }
     if wants_fn && found_fn && !runs { check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), arg, span); }
+    if found_fn && at < expected.len() as i64 && check_core_args_optional_code(nikaia_std::index::get(&expected, nikaia_std::index::at(at))) { check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), arg, span); }
     found
+}
+
+pub(crate) fn check_core_args_optional_code(ty: &Ty) -> bool {
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); matches!(inner, Ty::Fn { .. }) },
+        _ => false,
+    }
 }
 
 pub(crate) fn check_core_args_slot(callee: Option<&FnContract>, at: i64) -> bool {

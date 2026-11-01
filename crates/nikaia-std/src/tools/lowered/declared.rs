@@ -24,6 +24,11 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
         if ty.is_nullable { return Ty::Nullable(Box::new(Ty::Tuple(written_all(names, aliases, &ty.generics)))); }
         return Ty::Tuple(written_all(names, aliases, &ty.generics));
     }
+    if (*ty.code).is_some() && ty.is_nullable {
+        let mut inner = ty.clone();
+        inner.is_nullable = false;
+        return Ty::Nullable(Box::new(written_ty(names, aliases, &inner)));
+    }
     if (*ty.code).is_some() {
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let params = written_all(names, aliases, &ty.generics);

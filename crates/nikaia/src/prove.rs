@@ -142,6 +142,9 @@ pub fn second_queries() -> usize {
     SECOND_QUERIES.with(|n| n.get())
 }
 
+/// The runner `prove_rounds` is lent, counting each run (#1117).
+type CountedRun<'a> = std::sync::Arc<dyn Fn(&Expr, &str, &[i64]) -> ClaimRun + 'a>;
+
 /// Prove every `assert` of the program (`prove_run::prove_rounds`). `claims`
 /// are the checker's: a call is an `assert` exactly where the checker
 /// recognised the prelude's. `run`, where the build can compile and run code,
@@ -160,18 +163,20 @@ pub fn prove(
         .iter()
         .map(|(at, node)| (*at as i64, *node as i64))
         .collect();
-    let rounds = match run {
-        Some(_) => prove_run::PROVE_RUN_ROUNDS,
-        None => 0,
-    };
-    let runner = |site: &Expr, callee: &str, args: &[i64]| match run {
-        Some(run) => {
-            CLAIM_RUNS.with(|runs| runs.set(runs.get() + 1));
-            TOTAL_RUNS.fetch_add(1, Relaxed);
-            run(site, callee, args)
-        }
-        None => ClaimRun::NotRun("This build has no place to compile build-time code in.".into()),
-    };
+    // A build that cannot run code gives no runner, and `prove_rounds` asks
+    // no round (#1117).
+    let runner = run.map(|run| {
+        // `Kept` holds an `Arc`; this one lives for the call and crosses no
+        // thread.
+        #[allow(clippy::arc_with_non_send_sync)]
+        let counted: CountedRun<'_> =
+            std::sync::Arc::new(move |site: &Expr, callee: &str, args: &[i64]| {
+                CLAIM_RUNS.with(|runs| runs.set(runs.get() + 1));
+                TOTAL_RUNS.fetch_add(1, Relaxed);
+                run(site, callee, args)
+            });
+        nikaia_std::func::Kept(counted)
+    });
     // What the walks searched for, by whether a build's `nikaia.proofs` was
     // open (ADR-361 D4).
     let searched = |state: &ProverState| {
@@ -197,7 +202,6 @@ pub fn prove(
         library,
         &claims,
         comptimes,
-        rounds,
         &runner,
         &crate::proofs::asked_so_far,
         &crate::proofs::invariants_here,
