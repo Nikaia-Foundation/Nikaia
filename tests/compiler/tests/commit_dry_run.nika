@@ -1,5 +1,5 @@
-// scripts/commit.nika --dry-run: the brief of an `X.md.report.md` is `X.md`
-// (its Attribution: block), and the report's Body: is a paragraph.
+// scripts/commit.nika --dry-run: the lines under the report's last field
+// `Attribution:` end the message, and the report's Body: is a paragraph.
 use std::fs
 use std::process
 
@@ -23,8 +23,8 @@ fn main() throws {
     let nikaia = toolchain()
     process::run("git", ["init", "-q", tmp.clone()])
     fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "x\n")
-    fs::write(f"{tmp}/X.md", fs::Root::Anywhere, "# Brief\n\nAttribution:\nCo-Authored-By: Test <t@example.com>\nClaude-Session: https://example.com/s\n")
-    fs::write(f"{tmp}/X.md.report.md", fs::Root::Anywhere, "Result: done\nFiles: a.txt\nCommit: a subject\nBody: A paragraph for the body.\nChangelog: none\n")
+    fs::write(f"{tmp}/X.md", fs::Root::Anywhere, "# Brief\n")
+    fs::write(f"{tmp}/X.md.report.md", fs::Root::Anywhere, "Result: done\nFiles: a.txt\nCommit: a subject\nBody: A paragraph for the body.\nChangelog: none\nAttribution:\nCo-Authored-By: Test <t@example.com>\nClaude-Session: https://example.com/s\n")
     let out = process::run(nikaia, ["run", f"{repo}/scripts/commit.nika", "--", "--dry-run", f"{tmp}/X.md.report.md"]; dir: tmp.clone())
     println(out.stdout.trim())
     process::run("rm", ["-rf", tmp])
