@@ -155,7 +155,7 @@ code lines. The agents table of this snapshot (the per-commit table is
 ## Runs
 
 One row per agent, from `nikaia run scripts/tokenspeed.nika -- --short DIR|FILE`
-after it ends, with the builder's rs2nika line. `scripts/agent.nika` appends the
+after it ends. `scripts/agent.nika` appends the
 row of a headless run itself, once per agent id, and leaves the file to the
 supervisor's commit.
 

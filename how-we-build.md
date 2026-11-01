@@ -1,6 +1,6 @@
 # How we build Nikaia
 
-**Strategy.** Correctness first, then self-hosting: writing the compiler in Nikaia tests the language for real and finds bugs; faster CI and the `rs2nika` converter serve those two and count only as far as they speed them. We optimise the converter to reach self-hosting faster and safer, not for its own sake.
+**Strategy.** Correctness first, then self-hosting: writing the compiler in Nikaia tests the language for real and finds bugs; faster CI serves those two and counts only as far as it speeds them.
 
 **Formula.** The next topic is the one with the highest
 

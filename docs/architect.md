@@ -91,14 +91,11 @@ own driver run and its own architect task (`DIR/architect-task.md`):
 * **Bug lane, `docs/briefs/bugs/`**: `ready` defects (kind 3 of `CLAUDE.md`,
   *A missing form stops the work*). A brief with a `Blocks:` line goes before
   the lane's own picks. Its own `NK` block, no version raise (`--no-bump`).
-* **Converter lane**: closed (owner, 2026-11-01: the converter `rs2nika` is
-  deleted, moves are translated by hand).
 * **Other lanes** claim their issues with `wip` (the `yaml` lane,
   `docs/briefs/yaml/`, #928). An issue labelled `wip` is another lane's.
 
 **The focus rotation** (owner, 2026-11-01): `drive.nika -- --focus` runs the
-lanes of `docs/briefs/focus.txt` (main and bugs; the converter lane is
-closed) in turn, a block of
+lanes of `docs/briefs/focus.txt` (main and bugs) in turn, a block of
 up to `block` briefs each, a `Blocks:` bug brief before any block. The
 architect runs only on demand, on three triggers: `CUT`, `RED`, and `QUEUE
 EMPTY <area>` when the rotation reaches an area with no unrun brief (then at
@@ -227,25 +224,14 @@ between steps, and the callers of what moves including
 
 * `Shape: faithful` (default): the same functions, bodies and data; Rust that
   stays Rust is reached through one-line adapters with unchanged signatures.
-* `Shape: schematic <pattern>...`: a fixed rule the converter applies to every
-  occurrence. A pattern rs2nika does not know goes under *Needs* with a
-  three-line Rust probe and the Nikaia it must become; the move enters
-  `batch.txt` only after the converter commit that teaches it.
+* `Shape: schematic <pattern>...`: one fixed rewrite applied by hand to every
+  occurrence, each pattern stated in the brief with a three-line Rust probe and
+  the Nikaia it becomes.
 * `Shape: redesign <reason>`: only for (1) data held by a crate or type that
   stays Rust and no adapter reaches, or (2) a shape `std` or the lowering
-  cannot say yet, with the issue. Not taste, names, "cleaner". No `Convert:`
-  line (so no 60 % rule), the report writes `Rs2nika: none (redesign)`, and
-  the brief states the full target shape. A redesigned part under a third of
+  cannot say yet, with the issue. Not taste, names, "cleaner". The brief
+  states the full target shape. A redesigned part under a third of
   the brief splits off into its own brief.
-
-Converter patterns learned: methods to prefixed free functions with a `mut`
-parameter (a53f456); `mem::take` of a field to `drain()` (fab482f); `env::var`
-to `host.env_var` (1b08236). Wanted, in order: (1) `--prefix` on every free
-function, type and call; (2) a method of a struct that stays Rust to a free
-function over the fields it reads; (3) a named Rust call to a host method, in
-general; (4) Rust error and path calls to `std` (`refuse`/`.context` to
-`throw`, `ancestors()` to a `parent()` loop, `PathBuf` to `fs::Path`); (5) in
-a loop, `let Some(x) = e else { continue }` to `let x = e ?? continue`.
 
 ### The report
 
@@ -328,13 +314,11 @@ committed (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
   (547e6462). Batch: K3b run 3 (`k3b-comptime-bundle.md`, cherry-picks
   `wip/k3b-comptime-bundle-run2` 707d5e53, applies clean at e1a88e49; #1106
   fixed 1a5fdf6d; old report `.run2`), C1c (`c1c-ledger-lookup.md`, closes
-  row C1; shape probed). **S1** needs converter commits first (`.get(range)`
-  on a `String` is NK1214 by design, ADR-374; `else if let`; facade's
-  or-pattern; cv3 built the `Some(x)` field pattern): a converter brief before
-  the move. P5e waits on the O rows (#923). To check when next near
+  row C1; shape probed). **S1** is translated by hand (`.get(range)` on a
+  `String` is NK1214 by design, ADR-374). P5e waits on the O rows (#923). To check when next near
   `trust.rs`: `join` makes a package that reads no untrusted source all-fast
   even where keys come through a trait barrier (ADR-010 D9 point 5).
-* **Next main batch**: S1 once its converter brief is built; the next plan
+* **Next main batch**: S1; the next plan
   rows after K3b. Owed, each its own brief: R0 (#921),
   `scripts/plan_rows.nika`, the driver writing the failing job's clippy output
   into `architect-input.txt`, fold `ComptimeRan` into `CheckWall`, #1102
@@ -357,17 +341,6 @@ committed (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
   String` is NK1106; `String?` == `String` refused (NK1102): decide whether by
   design when next met. A bare `RED` line in `architect-input.txt` (no sha) is
   not the driver's: check the newest develop runs before treating it as red.
-* **Converter lane** (2026-11-01, `docs/briefs/converter/batch.txt`): cv1
-  done (9d974eb3; its Display impl stays the converter's ADAPTER comment:
-  accepted), cv2 done (db8d8364, text cuts via bytes, ADR-374; its emitter fix
-  72e7789c made the pausing graph package-wide). cv2's Found (`code_on_a_cycle`
-  reads one file) probed and filed #1129, bug brief b31 (`ready,wip`, blocks
-  nothing). Batch: cv3 (loop-tail `if let` to `?? continue`, `Some(x)` field
-  pattern, `let mut (..)`); after it S1 waits on nothing in this lane.
-  Next converter picks: `.context(..)` is dropped silently from a draft
-  (`fs::read_to_string(p).context("..")?`); `PathBuf::from`/`canonicalize`/
-  `ancestors()` to `fs::Path` forms (wanted 4); the ADAPTER comment is German
-  (`bleibt in Rust`): English when next touched.
 * **yaml lane**: #928, #929, #604 (`wip`).
 * **Owed to the supervisor**: version raise / Changelog lines for s922b
   (`fs::Metadata::modified()`, `links()`, `file_id()`, `time::since_epoch()`,

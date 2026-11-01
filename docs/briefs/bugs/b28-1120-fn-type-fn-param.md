@@ -6,8 +6,6 @@ budget_usd: 18
 ---
 # Brief: #1120, a function type with a function parameter lowers to nested `impl Trait` (rustc E0666)
 
-Blocks: c2-rs2nika-thread-local.md step 2 (a scoped accessor such as `proofs::in_function` becomes a parameter of this shape; `fold_bound.rs` `proven_counters` waits)
-
 Score: compiler bug, a program `nikaia check` accepts fails `nikaia run`; blocks a self-hosting move. Cause traced to the function, not run: small.
 
 Facts: Where things live, Traps already met, Commands

@@ -125,4 +125,4 @@ The rules every session and agent needs. What only the main session does
   the compiler to `NIKAIA_CACHE_LIMIT`). Never run the full suite locally by hand
   (about 45 minutes; a driver runs it per batch): CI runs it on every push to `develop`.
 * The working rules for a move (slices, patterns, syntax gaps, lowered types,
-  `lower-std`, the converter) are in `docs/builder-facts.md`.
+  `lower-std`) are in `docs/builder-facts.md`.

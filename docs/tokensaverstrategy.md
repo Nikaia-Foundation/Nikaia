@@ -32,32 +32,21 @@ is not the output but the **prefix every turn re-reads**.
 * **The measurement is cheap for the supervisor.** After each agent ends,
   `nikaia run scripts/tokenspeed.nika -- --short AGENTS_DIR` prints one Markdown row (the
   latest agent, counted only over the commits of its window); the supervisor
-  appends it to the *Runs* table in `docs/tokenspeed.md` with the agent's
-  rs2nika line. The full tables are drawn only for a dated snapshot.
+  appends it to the *Runs* table in `docs/tokenspeed.md`. The full tables are drawn only for a dated snapshot.
 
 ## Chain: research agent, then builder
 
 The supervisor's own context is the most expensive one: it lives the whole
-session. So it does not read the plan, the call graph or the draft itself.
+session. So it does not read the plan, the call graph or the Rust itself.
 
 1. A **research agent** (`builder` type, told not to edit or commit) reads the
    plan's section (`docs/selfhosting-plan.md`), the call graph
-   (`scripts/c6/cg.py`) and the rs2nika draft of the slice, and writes a
+   (`scripts/c6/cg.py`) and the Rust of the slice, and writes a
    **brief of at most 80 lines** to a file in the scratchpad: the functions in
-   order, the callees not yet in Nikaia, the draft's path, the defects it
-   expects. It reports the path and five lines.
+   order, the callees not yet in Nikaia, the defects it expects. It reports
+   the path and five lines.
 2. The **builder** gets the path to the brief and the steps, nothing else.
 3. The supervisor reads only the two reports.
-
-## The rs2nika draft is the default
-
-Every move of a Rust function starts from the draft of
-`crates/rs2nika/convert` (`rs2nika --profile check|emit F.rs`), never from an
-empty file. The builder reports in one line how much of it it kept
-(`rs2nika: kept N of M lines; fixed by hand: ...`), and the supervisor
-records it in the *Runs* row. A pattern the builder fixes by hand more than
-once becomes a rule of the converter (`--rules`) or a `--lint` check, in its
-own commit.
 
 ## Compiler defects first
 

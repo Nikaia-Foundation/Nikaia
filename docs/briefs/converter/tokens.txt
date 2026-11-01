@@ -1,7 +1,0 @@
-/home/user/Nikaia/docs/briefs/converter/architect-task.md 4008128 66
-/home/user/Nikaia/docs/briefs/converter/qa/qa-task.md 1555377 45
-/home/user/Nikaia/docs/briefs/converter/cv1-impl-outside-type.md 191594 10
-/home/user/Nikaia/docs/briefs/converter/architect-task.md 330433 13
-/home/user/Nikaia/docs/briefs/converter/cv2-text-cuts.md 6398369 92
-/home/user/Nikaia/docs/briefs/converter/architect-task.md 649725 20
-/home/user/Nikaia/docs/briefs/converter/cv3-loop-tail-and-field-patterns.md 2748477 47

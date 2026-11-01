@@ -1,13 +1,12 @@
 # Self-hosting: what is still missing (2026-10-27, 0.0.1226)
 
 A note for #125 and #579. It names what keeps Rust code from moving into
-Nikaia **today**: forms the language lacks, gaps in the converter, and the
-parts that stay Rust on purpose. Every language row below was probed today on
+Nikaia **today**: forms the language lacks and the parts that stay Rust on purpose. Every language row below was probed today on
 a small program with `target/fast/nikaia run`. Anything not listed was either
 built since the first version of this note or never needed (see *Resolved
 since*).
 
-**Material** (the survival measurement, `crates/rs2nika/survival`, reads it):
+**Material**:
 three commits, thirteen functions: `5755b65` (`several_errors`,
 `wholly_known`, `a_map_type`, `is_a_literal_other_than`, `a_copied_part`),
 `3e26691` (`tail_of`, `articles`, `unpromised`), `07c5b14` (`payload_of`,
@@ -44,12 +43,6 @@ from a field of a `ref` struct (NK1106). (`ref T?` for Rust's `&Option<T>`
 is `T?`: NK1261.) Each one becomes a row above, or a line under *Resolved since*,
 when it is probed.
 
-## Converter (rs2nika, #579, #802)
-
-* `Option::as_mut()` on a field: no translation; the language's form is the
-  narrowed write (ADR-382, above), which the converter could emit.
-* `spec?.clone()` on a `String?` is written right only with `--facts`.
-
 ## Compiler defects that block a move
 
 Filed as issues, never in this note: lowering defects #586, view structs
@@ -84,11 +77,9 @@ The first version of this note listed: slice patterns (`[a, b]`, `[a, .., z]`,
 option, vectors of views (`Vec[ref S]`), or-pattern arms with a guard,
 `let .. else` (as `?? continue`), and the missing `std` entries of the
 LANGUAGE section. All of these work today. Struct update was listed by
-mistake: Nikaia writes `p with { a: 1 }` (Part I 4.2), and rs2nika R74
-converts `S { a: 1, ..p }` to it.
+mistake: Nikaia writes `p with { a: 1 }` (Part I 4.2).
 
 ## Method
 
-Originals: `git show <commit>^:crates/nikaia/src/check/mod.rs`. Drafts:
-`target/nikaia/bin/rs2nika --profile check --file F.rs`. A language gap is
+Originals: `git show <commit>^:crates/nikaia/src/check/mod.rs`. A language gap is
 listed only after a probe of a few lines fails on today's `develop`.

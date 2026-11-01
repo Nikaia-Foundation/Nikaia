@@ -42,15 +42,15 @@ fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
     let focus = f"{tmp}/focus.txt"
-    fs::write(focus.clone(), fs::Root::Anywhere, "block 3\narea converter docs/briefs/converter\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent converter 2\n")
+    fs::write(focus.clone(), fs::Root::Anywhere, "block 3\narea prover docs/briefs/prover\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent prover 2\n")
     println(f"next: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone()]))}")
     println(f"skip selfhosting: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone(), "selfhosting"]))}")
-    fs::write(focus.clone(), fs::Root::Anywhere, "block 2\narea converter docs/briefs/converter\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent bugs 1\n")
+    fs::write(focus.clone(), fs::Root::Anywhere, "block 2\narea prover docs/briefs/prover\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent bugs 1\n")
     let wrapped = drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone()])
     println(f"wrap: {current(wrapped.clone())} (block line kept: {wrapped.starts_with("block 2\n")})")
-    println(f"only the current one left: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone(), "converter", "selfhosting"]))}")
-    println(f"all empty: {drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone(), "converter", "selfhosting", "bugs"])}")
-    fs::write(focus.clone(), fs::Root::Anywhere, "block 3\narea converter docs/briefs/converter\narea bugs docs/briefs/bugs\n")
+    println(f"only the current one left: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone(), "prover", "selfhosting"]))}")
+    println(f"all empty: {drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone(), "prover", "selfhosting", "bugs"])}")
+    fs::write(focus.clone(), fs::Root::Anywhere, "block 3\narea prover docs/briefs/prover\narea bugs docs/briefs/bugs\n")
     println(f"no current line: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone()]))}")
 
     // The log line of a block of three briefs; a fourth brief is left unrun.
@@ -61,13 +61,13 @@ fn main() throws {
     fs::write(f"{d}/c.md", fs::Root::Anywhere, "c\n")
     fs::write(f"{d}/left.md", fs::Root::Anywhere, "left\n")
     fs::write(f"{d}/batch.txt", fs::Root::Anywhere, "a.md\nb.md\nc.md\nleft.md\ngone.md\n")
-    fs::write(f"{d}/a.md.report.md", fs::Root::Anywhere, "Result: done\nRs2nika: kept 80 of 100 lines; the rest renamed\n")
-    fs::write(f"{d}/b.report.md", fs::Root::Anywhere, "Result: partial (two steps left)\nRs2nika: none\n")
-    fs::write(f"{d}/c.md.report.md", fs::Root::Anywhere, "Result: blocked\nRs2nika: kept 5 of 20 lines\n")
+    fs::write(f"{d}/a.md.report.md", fs::Root::Anywhere, "Result: done\n")
+    fs::write(f"{d}/b.report.md", fs::Root::Anywhere, "Result: partial (two steps left)\n")
+    fs::write(f"{d}/c.md.report.md", fs::Root::Anywhere, "Result: blocked\n")
     fs::write(f"{d}/tokens.txt", fs::Root::Anywhere, f"{d}/old.md 999 9\n{d}/a.md 1000 10\n{d}/b.md 200 4\n{d}/c.md 30 2\n")
     fs::write(f"{d}/cost.txt", fs::Root::Anywhere, "2026-11-01 1.5\n2026-11-01 0.255\n")
     let briefs = [f"{d}/a.md", f"{d}/b.md", f"{d}/c.md"]
-    let mut args: Vec[String] = ["--focus-log", d.clone(), "converter"]
+    let mut args: Vec[String] = ["--focus-log", d.clone(), "prover"]
     for b in briefs { args.push(b.clone()) }
     println(f"log: {drive(nikaia.clone(), repo.clone(), tmp.clone(), args.clone())}")
     args[2] = "bugs"

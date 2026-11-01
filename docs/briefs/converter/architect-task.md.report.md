@@ -1,3 +1,0 @@
-Result: done
-Batch: cv3-loop-tail-and-field-patterns.md
-Owner: none

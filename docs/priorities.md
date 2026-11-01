@@ -37,8 +37,7 @@ only the order matters, not the number.
 ## Order
 
 The score decides within each lane (the lanes are set above). The default prior is the adviser's order:
-compiler bugs, self-hosting, CI speed, `rs2nika` (the converter only when it
-measurably speeds a planned move, not for completeness). A bug a builder is
+compiler bugs, self-hosting, CI speed. A bug a builder is
 blocked on comes first. Any other departure from bugs-first is allowed when
 the figures say so, and the brief states them. The owner delegated this rule
 and the weight (10M per S point) to the architect (2026-10-25); the architect

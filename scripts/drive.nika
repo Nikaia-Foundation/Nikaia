@@ -816,8 +816,8 @@ fn drive_architect(exe: String, dry: bool, dir: String, stop: String, input: Str
 // The words of the first line of a focus file that starts with `key`, empty
 // without one. The file (docs/briefs/focus.txt):
 //     block 3
-//     area converter docs/briefs/converter
-//     current converter 0
+//     area bugs docs/briefs/bugs
+//     current bugs 0
 fn drive_focus_words(text: String, key: String) -> Vec[String] {
     for line in text.split("\n") {
         let words = line.trim().split(" ").collect()
@@ -904,21 +904,6 @@ fn drive_focus_next(text: String, skipped: String) -> String {
     return ""
 }
 
-// `kept N of M` of a report's `Rs2nika:` line as [N, M], empty without one.
-fn drive_kept_counts(report: String) -> Vec[i64] {
-    let mut out: Vec[i64] = []
-    let field = drive_field(report, "Rs2nika")
-    let at = field.find("kept ") ?? return out
-    let rest = field[at + "kept ".len()..<field.len()].clone()
-    let words = rest.split(" ").collect()
-    if words.len() < 3 || words[1] != "of" { return out }
-    let kept = text::parse_i64(words[0].clone()) ?? return out
-    let all = text::parse_i64(words[2].replace(",", "").replace(";", "")) ?? return out
-    out.push(kept)
-    out.push(all)
-    return out
-}
-
 // Micro-dollars of "12.34": whole * 1_000_000 + the first six decimals.
 fn drive_micro(cost: String) -> i64 throws {
     let parts = cost.trim().split(".").collect()
@@ -930,9 +915,7 @@ fn drive_micro(cost: String) -> i64 throws {
 }
 
 // The focus log's line of one block: `<stamp> <area> briefs <n> done <d>
-// partial <p> blocked <b> noop <o> tokens <t> cost <c> queue <q>`, and
-// `kept <k>/<m>` for the converter and self-hosting areas when a report has an
-// `Rs2nika:` count. `tokens`: the rows (`BRIEF TOKENS CALLS`) of the block's
+// partial <p> blocked <b> noop <o> tokens <t> cost <c> queue <q>`. `tokens`: the rows (`BRIEF TOKENS CALLS`) of the block's
 // briefs from tokens.txt; `costs`: the cost.txt lines (`DATE USD`) the block
 // added.
 fn drive_focus_line(stamp: String, area: String, reports: Vec[String], tokens: Vec[String], costs: Vec[String], queue: i64) -> String throws {
@@ -940,21 +923,12 @@ fn drive_focus_line(stamp: String, area: String, reports: Vec[String], tokens: V
     let mut partial = 0
     let mut blocked = 0
     let mut noop = 0
-    let mut kept = 0
-    let mut all = 0
-    let mut counted = false
     for report in reports {
         let result = drive_word(drive_field(report.clone(), "Result"))
         if result == "done" { done += 1 }
         if result == "partial" { partial += 1 }
         if result == "blocked" { blocked += 1 }
         if result == "noop" { noop += 1 }
-        let pair = drive_kept_counts(report.clone())
-        if pair.len() == 2 {
-            kept += pair[0]
-            all += pair[1]
-            counted = true
-        }
     }
     let mut sum = 0
     for row in tokens {
@@ -969,9 +943,7 @@ fn drive_focus_line(stamp: String, area: String, reports: Vec[String], tokens: V
     let cents = (micro + 5000) / 10000
     let rest = cents % 100
     let pad = if rest < 10 { "0" } else { "" }
-    let mut line = f"{stamp} {area} briefs {reports.len()} done {done} partial {partial} blocked {blocked} noop {noop} tokens {sum} cost {cents / 100}.{pad}{rest} queue {queue}"
-    if counted && (area == "converter" || area == "selfhosting") { line = line + f" kept {kept}/{all}" }
-    return line
+    return f"{stamp} {area} briefs {reports.len()} done {done} partial {partial} blocked {blocked} noop {noop} tokens {sum} cost {cents / 100}.{pad}{rest} queue {queue}"
 }
 
 // The report of a brief that exists (`BRIEF.report.md`, else the stem's), or "".
