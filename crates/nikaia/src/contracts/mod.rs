@@ -167,7 +167,6 @@ pub trait LedgerOps: Sized {
         library: &Ledger,
     ) -> (Self, Vec<crate::check::Checked>, sync::Noted);
     fn lookup(&self, name: &str) -> Option<(String, &FnContract)>;
-    fn candidates(&self, method: &str) -> Vec<(&str, &FnContract)>;
     fn render(&self) -> String;
     fn render_derived(&self) -> String;
     fn read_beside(path: &std::path::Path) -> Option<Ledger>;
@@ -441,18 +440,13 @@ impl LedgerOps for Ledger {
         // this one needs nothing from the other - and both are handed the same
         // `resolved`, because ADR-288's whole point is that there is one
         // answer to what `a.add(v)` goes to and both walks read it.
-        let stored: BTreeMap<String, crate::check::StoredCode> = checked
-            .iter()
-            .flat_map(|c| c.stored_code.iter().map(|(k, v)| (k.clone(), v.clone())))
-            .fold(BTreeMap::new(), |mut all, (key, code)| {
-                let entry: &mut crate::check::StoredCode = all
-                    .entry(key)
-                    .or_insert_with(crate::check::StoredCode::empty);
-                entry.resolved.extend(code.resolved);
-                entry.unresolved |= code.unresolved;
-                entry.free.extend(code.free);
-                all
-            });
+        let stored: BTreeMap<String, crate::check::StoredCode> =
+            nikaia_std::tools::ledger_items::ledger_items_stored(
+                &checked
+                    .iter()
+                    .map(|c| c.stored_code.clone())
+                    .collect::<Vec<_>>(),
+            );
         throws::infer(&mut ledger, units, library, &resolved, &stored);
         // **The fourth derived column** ([ADR-288](../../../docs/specification/adr/adr-288.md)
         // D2), and the one that was specified without an inference. After
@@ -549,37 +543,6 @@ impl LedgerOps for Ledger {
         self.functions
             .get(name)
             .map(|contract| (name.to_string(), contract))
-    }
-
-    /// Every entry a bare method name could resolve to.
-    ///
-    /// Which one `xs.len()` *is* depends on what `xs` is, and that is the type
-    /// checker's answer rather than this file's (ADR-288). But a question
-    /// weaker than "which entry" can be answered without it: if **every**
-    /// `::len` in the ledger reaches nothing, then `xs.len()` reaches nothing
-    /// whatever `xs` turns out to be. An over-approximation over the
-    /// candidates, which is the direction ADR-292 D3 requires.
-    ///
-    /// **Only a method is a candidate**: an entry whose signature takes no
-    /// `self` is a function a call names by its path, and `x.lines()` never
-    /// reaches `io::lines()`. Counted in, it made every `text.lines()` over a
-    /// lent parameter keep it, because a function whose first parameter is not
-    /// a lent `self` reads, to [`keeps`], as one that takes its receiver whole
-    /// (found moving the ledger's reader to Nikaia, 0.0.258). An entry with no
-    /// signature is still a candidate - what it takes is unknown.
-    fn candidates(&self, method: &str) -> Vec<(&str, &FnContract)> {
-        let suffix = format!("::{method}");
-        self.functions
-            .iter()
-            .filter(|(key, _)| key.ends_with(&suffix))
-            .filter(|(_, contract)| {
-                contract
-                    .signature
-                    .as_ref()
-                    .is_none_or(|s| s.params.first().is_some_and(|(name, _)| name == "self"))
-            })
-            .map(|(key, contract)| (key.as_str(), contract))
-            .collect()
     }
 
     /// The file, as it is written out: `tools/ledger_text.nika` (ADR-294,

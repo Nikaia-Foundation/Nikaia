@@ -2667,7 +2667,7 @@ pub mod ledger_defaults {
 }
 pub mod ledger_items {
     #[allow(unused_imports)]
-    pub use super::{types_this_file_declares, types_declared_in, impl_parameters, a_literal, declared_extern, declared_grammar, literal_of, PublishedEnsures, expression_ensures, ComputedAt, declare_items, attribute_values};
+    pub use super::{types_this_file_declares, types_declared_in, impl_parameters, a_literal, declared_extern, declared_grammar, literal_of, PublishedEnsures, expression_ensures, ComputedAt, declare_items, attribute_values, ledger_items_stored};
 }
 pub mod ledger_ops {
     #[allow(unused_imports)]

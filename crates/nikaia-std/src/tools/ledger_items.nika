@@ -482,3 +482,18 @@ fn attribute_texts(ledger: ref Ledger, library: ref Ledger, view: ref ParsedView
         return attribute_value(ledger, library, view.words, named, attribute, fn(ty, argument) { computed(unit, ty, argument) })
     }).collect()
 }
+
+/// **The stored code of every unit, merged by function** (ADR-230 D1): what
+/// `infer_package_noted` hands to `throws` and `locks`.
+pub fn ledger_items_stored(codes: Vec[collections::BTreeMap[String, CheckStoredCode]]) -> collections::BTreeMap[String, CheckStoredCode] {
+    let mut all: collections::BTreeMap[String, CheckStoredCode] = collections::BTreeMap()
+    for unit in codes {
+        for (key, code) in unit {
+            let mut entry = all.entry(key.clone()).or_insert_with(CheckStoredCode::empty)
+            entry.resolved.extend(code.resolved.iter().cloned())
+            entry.unresolved |= code.unresolved
+            entry.free.extend(code.free.iter().cloned())
+        }
+    }
+    return all
+}
