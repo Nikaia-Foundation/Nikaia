@@ -312,12 +312,18 @@ tokens and turns per finished step, steps per day; counted, not timed.
 *Current state only, rewritten (not appended) by the architect when it ends:
 open lanes, what blocks what, figures, decisions in force that no ADR or issue
 holds. What happened is in `git log` and the issues.*
-**2026-11-01 (after e1a88e49).** Self-hosting: about 83.3 % of the toolchain
-(`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
+**2026-11-01 (after fb4c04b6).** Self-hosting: 83.2 % of the toolchain as
+committed (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
 2026-11-04), rows and `Cut:` lines in `docs/selfhosting-plan.md`.
 
-* **CI**: main session: `rustup update stable` at a quiet moment (this
-  machine's `stable` is 1.97; 1.99.1 is installed beside it).
+* **CI**: RED 05fffc84 (`bootstrap_compiler`, `badges.py --check`) fixed
+  forward by QA 7b3c9c5e; ci/briefs green at fb4c04b6. Cause: b22's edit of
+  `emit_core_leaves.nika` sits uncommitted in the shared tree and moves the
+  share to 83.3 %; whoever commits it reruns `scripts/badges.py`. Main
+  session: `rustup update stable` at a quiet moment (this machine's `stable`
+  is 1.97; 1.99.1 is installed beside it).
+* **Since then**: b28 #1120 done (4001fe0b); its Found is #1124 (`ready`,
+  no lane yet).
 * **Main lane** (`docs/briefs/batch.txt`): P5c done (655b51b6), C1b done
   (547e6462). Batch: K3b run 3 (`k3b-comptime-bundle.md`, cherry-picks
   `wip/k3b-comptime-bundle-run2` 707d5e53, applies clean at e1a88e49; #1106
