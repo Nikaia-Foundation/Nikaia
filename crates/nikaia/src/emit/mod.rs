@@ -1223,15 +1223,6 @@ pub(crate) fn borrowing_structs_beside(
     .collect()
 }
 
-/// **A function type holds what its result holds, and nothing it is
-/// handed**: a kept function's parameters are borrowed for the call alone and
-/// written without a lifetime ([`Emitter::ty_counted`]), so a struct whose
-/// only field is `fn(ref String) -> i64` names no lifetime either - with one,
-/// it was *lifetime parameter `'a` is never used*.
-pub(crate) fn holds_view(ty: &Type) -> bool {
-    nikaia_std::tools::views::holds_view(ty)
-}
-
 /// Every view-holding type the files of a package declare, by name: each
 /// file's [`borrowing_structs_beside`] read against what the others found,
 /// until nothing more is found - a struct in one file can hold an `enum` of a

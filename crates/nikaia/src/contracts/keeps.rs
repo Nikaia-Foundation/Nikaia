@@ -33,8 +33,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::ast::{Expr, Item};
 use crate::parser::Parsed;
 
-use super::{INPUT, Ledger};
-use crate::contracts::ty::TyOps;
+use super::Ledger;
 
 /// Whether a callee **lends** the parameter at `at`, so that the compiler
 /// writes the reference and the caller does not
@@ -99,446 +98,78 @@ pub fn moves(ty: &super::ty::Ty) -> bool {
     nikaia_std::tools::lends::moves(ty)
 }
 
-/// What one function's body does with each of its parameters, declared in
-/// Nikaia (`tools/lends.nika`): kept on its own evidence, or handed to a callee
-/// whose answer the fixpoint waits for.
-use nikaia_std::tools::lends::{Passed, Uses, kept_by};
+pub use nikaia_std::tools::keeps::{KeepsColumn as Column, KeepsKeeper as Keeper};
+use nikaia_std::tools::keeps::{KeepsHost, KeepsIndexes};
 
-/// A parameter taken by value: neither written `ref` nor `mut`.
-fn by_value(arg: &crate::ast::FnArg) -> bool {
-    !arg.ty.is_view && !arg.mutable
-}
-
-fn no_uses() -> Uses {
-    Uses {
-        kept: BTreeSet::new(),
-        passed: Vec::new(),
-    }
-}
-
-/// Give every function in the ledger the `keeps` its body earns.
-///
-/// A **least** fixpoint, where [`super::sync::infer`]'s is a greatest one, and
-/// the difference is which direction is safe: `sync` is a promise and is taken
-/// away on doubt, `keeps` is a restriction and is added on doubt. So this
-/// starts from *nothing is kept* and adds until nothing changes, and two
-/// functions that pass each other a parameter neither stores keep neither —
-/// which a greatest fixpoint would have got wrong here exactly as a least one
-/// would have got mutual recursion wrong there.
-///
-/// The iteration walks `BTreeMap`s and repeats until nothing changes, so the
-/// answer does not depend on the order the source declared things in — which it
-/// must not, because Part III 13.5 makes this file a pure function of (source,
-/// toolchain) and `--locked` compares it byte for byte.
+/// Give every function in the ledger the `keeps` its body earns: the walk, the
+/// trait edges and the least fixpoint are Nikaia (`tools/keeps.nika`,
+/// ADR-294, #125); this builds what they are handed.
 pub fn infer(
     ledger: &mut Ledger,
     units: &[&Parsed],
     library: &Ledger,
     resolved: &BTreeMap<String, crate::check::MethodCalls>,
 ) -> Column {
-    let mut graph: BTreeMap<String, Uses> = BTreeMap::new();
-    // What the package's declarations say about the types a parse hands back,
-    // read once for the grammar arm below.
-    let package = super::tether::declared_in(units);
-
-    // **The two ledgers by a method's name** (#727): neither changes until
-    // the walk below is done, so the index cannot go stale.
+    let views: Vec<_> = units
+        .iter()
+        .map(|parsed| crate::check::parsed_view_of(parsed))
+        .collect();
     let own_methods = nikaia_std::tools::ty::method_index(ledger);
     let library_methods = nikaia_std::tools::ty::method_index(library);
-    let indexed = (&own_methods, &library_methods);
-    // **An `impl`'s method keeps what its trait's method keeps**, by position
-    // (ADR-277 D11). For a by-value **data** parameter the trait's column is
-    // still the seed *by value means kept* (#1012 step 3 computes it); a `fn`
-    // parameter's is computed in the fixpoint below (D17). Read once, from
-    // every unit, before the walk: the trait may be declared after its `impl`.
-    let mut trait_keeps: BTreeMap<(String, String), Vec<usize>> = BTreeMap::new();
-    for parsed in units.iter().copied() {
-        for item in &parsed.program.items {
-            if let Item::Trait { name, methods, .. } = &item.node {
-                for method in methods {
-                    let positions = method
-                        .node
-                        .args
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, arg)| by_value(arg) && arg.ty.code.is_none())
-                        .map(|(at, _)| at)
-                        .collect();
-                    trait_keeps.insert(
-                        (
-                            parsed.text(*name).to_string(),
-                            parsed.text(method.node.name).to_string(),
-                        ),
-                        positions,
-                    );
-                }
-            }
-        }
-    }
-    // **The impls of each trait method of this package** (ADR-277 D17), by
-    // the trait method's ledger name: the edges *the trait keeps what an impl
-    // keeps* are added once every impl has been seen.
-    let mut impls_of: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    // **Every impl of a trait method**, with its unit, for `NK1264` below:
-    // which of them answer a trait of another package is known only once
-    // every unit's traits are in the graph.
-    let mut impl_rows: Vec<ImplRow<'_>> = Vec::new();
-    for (unit, parsed) in units.iter().copied().enumerate() {
-        for item in &parsed.program.items {
-            match &item.node {
-                Item::Fn { .. } => {
-                    if let Some((name, uses)) =
-                        uses_of(parsed, &item.node, None, ledger, library, indexed, resolved)
-                    {
-                        graph.insert(name, uses);
-                    }
-                }
-                Item::Impl {
-                    trait_name,
-                    target,
-                    methods,
-                } => {
-                    let target = parsed.text(target.name).to_string();
-                    let trait_name = trait_name.map(|t| parsed.text(t).to_string());
-                    for method in methods {
-                        if let Some((name, mut uses)) = uses_of(
-                            parsed,
-                            &method.node,
-                            Some(&target),
-                            ledger,
-                            library,
-                            indexed,
-                            resolved,
-                        ) {
-                            if let (
-                                Some(owner),
-                                Item::Fn {
-                                    name: Some(own),
-                                    receiver,
-                                    args,
-                                    ..
-                                },
-                            ) = (&trait_name, &method.node)
-                            {
-                                let own = parsed.text(*own).to_string();
-                                let at_trait = format!("{owner}::{own}");
-                                let key = (owner.clone(), own);
-                                for &at in trait_keeps.get(&key).into_iter().flatten() {
-                                    if let Some(arg) = args.get(at) {
-                                        uses.kept.insert(parsed.text(arg.name).to_string());
-                                    }
-                                }
-                                // **An impl keeps what its trait method keeps**
-                                // (D17, D11): a `fn` parameter is handed to the
-                                // trait method's node, in the loop rather than
-                                // before it. A trait of another package answers
-                                // from its ledger (`keeps_its`).
-                                let first = usize::from(receiver.is_some());
-                                for (at, arg) in args.iter().enumerate() {
-                                    if by_value(arg) && arg.ty.code.is_some() {
-                                        uses.passed.push(Passed {
-                                            parameter: parsed.text(arg.name).to_string(),
-                                            callee: at_trait.clone(),
-                                            at: (at + first) as i64,
-                                        });
-                                    }
-                                }
-                                impls_of
-                                    .entry(at_trait.clone())
-                                    .or_default()
-                                    .insert(name.clone());
-                                impl_rows.push(ImplRow {
-                                    unit,
-                                    method,
-                                    target: target.clone(),
-                                    key: name.clone(),
-                                    trait_name: owner.clone(),
-                                    at_trait,
-                                    first,
-                                });
-                            }
-                            graph.insert(name, uses);
-                        }
-                    }
-                }
-                // **A trait's method keeps what its package's impls keep**
-                // (ADR-277 D17): a call through a bound (`host.go(f)` under
-                // `[H: A]`) cannot see which `impl` answers, so the column is
-                // the union of theirs, and with no impl the method runs. Its
-                // own evidence is empty (a trait method has no body); the
-                // edges to its impls are added below. A by-value **data**
-                // parameter keeps the seed *by value means kept* until #1012
-                // step 3.
-                Item::Trait { name, methods, .. } => {
-                    let owner = parsed.text(*name);
-                    for method in methods {
-                        let mut uses = no_uses();
-                        for arg in method.node.args.iter() {
-                            if by_value(arg) && arg.ty.code.is_none() {
-                                uses.kept.insert(parsed.text(arg.name).to_string());
-                            }
-                        }
-                        graph.insert(format!("{owner}::{}", parsed.text(method.node.name)), uses);
-                    }
-                }
-                // **A `entry` rule is an entry, and its one parameter is the
-                // text** ([ADR-296](../../../docs/specification/adr/adr-296.md)
-                // D1). Whether it keeps that text is not a question about an
-                // action block at all: a parse keeps its input exactly when
-                // what it hands back holds a view **into** the input, which is
-                // [ADR-283](../../../docs/specification/adr/adr-283.md)'s
-                // tether read off the rule's declared result.
-                //
-                // **Before this the entry was in the ledger with the column
-                // empty**, and `keeps_its` reads an absent `keeps` on a present
-                // entry as *keeps nothing* — so every caller of a parse was
-                // told it could lend text a parse holds views into. That is
-                // this file's own polarity inverted, and it is what
-                // [ADR-186](../../../docs/specification/adr/adr-186.md) D1 is
-                // about: the answer is
-                // derived now, so an empty column means *asked and no*.
-                Item::Grammar(def) => {
-                    let named = parsed.text(def.name).to_string();
-                    for rule in def.rules.iter().filter(|r| r.is_entry) {
-                        let mut uses = no_uses();
-                        if super::tether::a_parse_that_views(
-                            parsed,
-                            rule.ret_type.as_ref(),
-                            &package,
-                        ) {
-                            uses.kept.insert(INPUT.to_string());
-                        }
-                        // **The values an entry takes after its input are
-                        // kept** (ADR-grammar-1 D2, #1041): the rule's parser
-                        // takes each by value and holds it for the whole
-                        // parse, so a caller hands it over as it would to an
-                        // ordinary function that keeps it. A copied type is
-                        // still copied (`lends` asks `moves` first).
-                        for arg in rule.args.iter().filter(|a| by_value(a)) {
-                            uses.kept.insert(parsed.text(arg.name).to_string());
-                        }
-                        graph.insert(format!("{named}::{}", parsed.text(rule.name)), uses);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    // **The trait keeps what an impl keeps** (D17): each `fn` parameter of a
-    // trait method is handed to every impl of it in this package, at the same
-    // position. With the impls' edges back, a trait method and its impls are
-    // one cycle and settle on one column; the least fixpoint leaves a cycle
-    // nothing stores run.
-    for parsed in units.iter().copied() {
-        for item in &parsed.program.items {
-            let Item::Trait { name, methods, .. } = &item.node else {
-                continue;
-            };
-            let owner = parsed.text(*name);
-            for method in methods {
-                let key = format!("{owner}::{}", parsed.text(method.node.name));
-                let Some(impls) = impls_of.get(&key) else {
-                    continue;
-                };
-                let first = usize::from(method.node.receiver.is_some());
-                let edges: Vec<Passed> = method
-                    .node
-                    .args
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, arg)| by_value(arg) && arg.ty.code.is_some())
-                    .flat_map(|(at, arg)| {
-                        impls.iter().map(move |callee| Passed {
-                            parameter: parsed.text(arg.name).to_string(),
-                            callee: callee.clone(),
-                            at: (at + first) as i64,
-                        })
-                    })
-                    .collect();
-                if let Some(uses) = graph.get_mut(&key) {
-                    uses.passed.extend(edges);
-                }
-            }
-        }
-    }
-
-    // **The least fixpoint is Nikaia** (`tools/lends.nika`, #125): it starts
-    // from what each body keeps on its own evidence and adds what the callees
-    // it hands a parameter to keep, until nothing changes.
-    let kept = kept_by(&graph, ledger, library);
-    let column = the_impls_own(
-        units, &impl_rows, &graph, ledger, library, indexed, resolved,
-    );
-    for (name, parameters) in kept {
-        if let Some(contract) = ledger.functions.get_mut(&name) {
-            contract.keeps = parameters.into_iter().collect();
-        }
-    }
-    column
+    let host = Host {
+        units,
+        own_methods: &own_methods,
+        library_methods: &library_methods,
+        resolved,
+    };
+    nikaia_std::tools::keeps::keeps_infer(
+        ledger,
+        &views,
+        library,
+        resolved,
+        &KeepsIndexes {
+            own: &own_methods,
+            library: &library_methods,
+        },
+        &host,
+    )
 }
 
-/// **What the impls of trait methods keep on their own evidence** (ADR-277
-/// D17), for the build to say.
-#[derive(Debug, Default)]
-pub struct Column {
-    /// The impls of another package's trait that keep more than its column
-    /// (`NK1264`), each with the index of its unit among those inferred.
-    pub beyond: Vec<(usize, crate::check::Finding)>,
-    /// **Every trait method of this package**, with the impls that keep each
-    /// parameter (named as the trait method names it): what `NK1265` and a
-    /// refused lending caller name. A trait method with no keeping impl is
-    /// here with nothing under it.
-    pub keepers: BTreeMap<String, BTreeMap<String, Vec<Keeper>>>,
+/// What the Nikaia walk asks of the compiler: a literal's holes, and the
+/// statement that keeps a parameter, which needs the unit's own tokens.
+struct Host<'a> {
+    units: &'a [&'a Parsed],
+    own_methods: &'a nikaia_std::tools::ty::MethodIndex,
+    library_methods: &'a nikaia_std::tools::ty::MethodIndex,
+    resolved: &'a BTreeMap<String, crate::check::MethodCalls>,
 }
 
-/// An impl that keeps a trait method's parameter, and the statement that
-/// keeps it.
-#[derive(Debug, Clone)]
-pub struct Keeper {
-    /// The impl method's ledger name (`Keep::take`).
-    pub name: String,
-    /// Its unit's index among those inferred.
-    pub unit: usize,
-    pub span: crate::ast::Span,
-}
+impl KeepsHost for Host<'_> {
+    fn holes(&self, unit: i64, expr: &Expr) -> Vec<Expr> {
+        crate::emit::literal_expressions(self.units[unit as usize], expr)
+    }
 
-/// One method of an `impl Trait for Target`, as the walk above met it.
-struct ImplRow<'a> {
-    unit: usize,
-    method: &'a crate::ast::Spanned<Item>,
-    target: String,
-    key: String,
-    trait_name: String,
-    at_trait: String,
-    first: usize,
-}
-
-/// **An impl of another package's trait keeps at most the column**
-/// ([ADR-277](../../../docs/specification/adr/adr-277.md) D17): it is a client
-/// of the contract its callers were written against. Its own evidence, without
-/// the edge back to the trait method (which would hand it the column itself),
-/// against the library's column; a position it keeps that the column runs is
-/// `NK1264`, at the first statement whose prefix of the body keeps it.
-fn the_impls_own(
-    units: &[&Parsed],
-    rows: &[ImplRow<'_>],
-    graph: &BTreeMap<String, Uses>,
-    ledger: &Ledger,
-    library: &Ledger,
-    indexed: (
-        &nikaia_std::tools::ty::MethodIndex,
-        &nikaia_std::tools::ty::MethodIndex,
-    ),
-    resolved: &BTreeMap<String, crate::check::MethodCalls>,
-) -> Column {
-    let mut column = Column::default();
-    for row in rows.iter().filter(|row| graph.contains_key(&row.at_trait)) {
-        column.keepers.entry(row.at_trait.clone()).or_default();
+    fn keeping_statement(
+        &self,
+        unit: i64,
+        method: &crate::ast::Spanned<Item>,
+        target: String,
+        parameter: String,
+        own_kept: &BTreeMap<String, BTreeSet<String>>,
+        own: &Ledger,
+        library: &Ledger,
+    ) -> crate::ast::Span {
+        keeping_statement(
+            self.units[unit as usize],
+            method,
+            &target,
+            &parameter,
+            own_kept,
+            (own, library),
+            (self.own_methods, self.library_methods),
+            self.resolved,
+        )
     }
-    // Only a by-value `fn` parameter has a column the impls make (D17; a data
-    // parameter's is the seed until #1012 step 3).
-    let asked: Vec<&ImplRow<'_>> = rows
-        .iter()
-        .filter(|row| match &row.method.node {
-            Item::Fn { args, .. } => args.iter().any(|a| by_value(a) && a.ty.code.is_some()),
-            _ => false,
-        })
-        .filter(|row| {
-            graph.contains_key(&row.at_trait) || library.functions.contains_key(&row.at_trait)
-        })
-        .collect();
-    if asked.is_empty() {
-        return column;
-    }
-    // **Each impl's own evidence**: no edge into a trait method, which would
-    // hand an impl the column it is asked about.
-    let traits: BTreeSet<&str> = asked.iter().map(|row| row.at_trait.as_str()).collect();
-    let mut own_graph = graph.clone();
-    for uses in own_graph.values_mut() {
-        uses.passed
-            .retain(|passed| !traits.contains(passed.callee.as_str()));
-    }
-    let own_kept = kept_by(&own_graph, ledger, library);
-    for row in asked {
-        let foreign = !graph.contains_key(&row.at_trait);
-        let Some(contract) = (match foreign {
-            true => library.functions.get(&row.at_trait),
-            false => ledger.functions.get(&row.at_trait),
-        }) else {
-            continue;
-        };
-        let Item::Fn { args, .. } = &row.method.node else {
-            continue;
-        };
-        let parsed = units[row.unit];
-        for (at, arg) in args.iter().enumerate() {
-            let parameter = parsed.text(arg.name).to_string();
-            if !by_value(arg)
-                || arg.ty.code.is_none()
-                || !own_kept
-                    .get(&row.key)
-                    .is_some_and(|kept| kept.contains(&parameter))
-            {
-                continue;
-            }
-            let theirs = contract
-                .signature
-                .as_ref()
-                .and_then(|s| s.params.get(at + row.first))
-                .map(|(name, _)| name.clone());
-            // An absent position is a signature read wrongly: nothing to say.
-            let Some(theirs) = theirs else { continue };
-            if foreign && contract.keeps.contains(&theirs) {
-                continue;
-            }
-            let span = keeping_statement(
-                parsed, row, &parameter, &own_kept, ledger, library, indexed, resolved,
-            );
-            if !foreign {
-                column
-                    .keepers
-                    .entry(row.at_trait.clone())
-                    .or_default()
-                    .entry(theirs)
-                    .or_default()
-                    .push(Keeper {
-                        name: row.key.clone(),
-                        unit: row.unit,
-                        span,
-                    });
-                continue;
-            }
-            column.beyond.push((
-                row.unit,
-                crate::check::Finding {
-                    severity: crate::check::Severity::Error,
-                    span,
-                    code: "NK1264".to_string(),
-                    message: format!(
-                        "`{}` keeps `{parameter}`, which the trait method `{}` runs.",
-                        row.key, row.at_trait
-                    ),
-                    notes: vec![
-                        format!(
-                            "callers through `{}` were written against its `keeps` column, which keeps nothing at `{theirs}` (ADR-277 D17).",
-                            row.at_trait
-                        ),
-                        format!(
-                            "only the package that declares `{}` widens the column.",
-                            row.trait_name
-                        ),
-                    ],
-                    help: Some(format!(
-                        "run `{parameter}` here rather than keep it, or keep it in a type of your own that does not implement `{}`.",
-                        row.trait_name
-                    )),
-                    labels: Vec::new(),
-                },
-            ));
-        }
-    }
-    column
 }
 
 /// **The statement that keeps `parameter`**: the first prefix of the impl's
@@ -547,36 +178,42 @@ fn the_impls_own(
 #[allow(clippy::too_many_arguments)]
 fn keeping_statement(
     parsed: &Parsed,
-    row: &ImplRow<'_>,
+    method: &crate::ast::Spanned<Item>,
+    target: &str,
     parameter: &str,
     own_kept: &BTreeMap<String, BTreeSet<String>>,
-    ledger: &Ledger,
-    library: &Ledger,
-    indexed: (
+    (ledger, library): (&Ledger, &Ledger),
+    (own_methods, library_methods): (
         &nikaia_std::tools::ty::MethodIndex,
         &nikaia_std::tools::ty::MethodIndex,
     ),
     resolved: &BTreeMap<String, crate::check::MethodCalls>,
 ) -> crate::ast::Span {
-    let Item::Fn { body, .. } = &row.method.node else {
-        return row.method.span;
+    let Item::Fn { body, .. } = &method.node else {
+        return method.span;
     };
+    let view = crate::check::parsed_view_of(parsed);
     for end in 1..=body.stmts.len() {
-        let mut prefix = row.method.node.clone();
+        let mut prefix = method.node.clone();
         if let Item::Fn { body, .. } = &mut prefix {
             body.stmts.truncate(end);
         }
-        let Some((_, uses)) = uses_of(
-            parsed,
+        let Some(found) = nikaia_std::tools::keeps::keeps_uses_of(
+            &view,
             &prefix,
-            Some(&row.target),
+            &Some(target.to_string()),
             ledger,
             library,
-            indexed,
+            &KeepsIndexes {
+                own: own_methods,
+                library: library_methods,
+            },
             resolved,
+            &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
         ) else {
             continue;
         };
+        let uses = found.uses;
         if uses.kept.contains(parameter)
             || uses.passed.iter().any(|passed| {
                 passed.parameter == parameter
@@ -592,188 +229,5 @@ fn keeping_statement(
             return body.stmts[end - 1].span;
         }
     }
-    row.method.span
-}
-
-/// One function's parameters, and what its body does with each.
-///
-/// `None` for a declaration with no body — a `trait`'s method, which keeps
-/// nothing because it does nothing, and whose `impl`s answer for themselves.
-fn uses_of(
-    parsed: &Parsed,
-    item: &Item,
-    target: Option<&str>,
-    ledger: &Ledger,
-    library: &Ledger,
-    (own_methods, library_methods): (
-        &nikaia_std::tools::ty::MethodIndex,
-        &nikaia_std::tools::ty::MethodIndex,
-    ),
-    resolved: &BTreeMap<String, crate::check::MethodCalls>,
-) -> Option<(String, Uses)> {
-    let Item::Fn {
-        name,
-        receiver,
-        args,
-        config,
-        body,
-        ret_type,
-        ..
-    } = item
-    else {
-        return None;
-    };
-
-    let own = match name {
-        Some(name) => parsed.text(*name).to_string(),
-        None => "new".to_string(),
-    };
-    let key = match target {
-        Some(target) => format!("{target}::{own}"),
-        None => own,
-    };
-
-    // **An option is a parameter too** (Part I 5.1): named at the call, but
-    // what the body does with it is asked as of any other, so a `String`
-    // option the body only reads is lent as a `String` parameter is
-    // ([ADR-282](../../../docs/specification/adr/adr-282.md) D2, D5).
-    let mut parameters: BTreeSet<String> = args
-        .iter()
-        .map(|a| parsed.text(a.name).to_string())
-        .chain(config.iter().map(|c| parsed.text(c.name).to_string()))
-        .collect();
-    // A method's receiver is a parameter, and `self.field = x` is one of the
-    // shapes this analysis exists for — so it is in the set like any other.
-    if target.is_some() {
-        parameters.insert("self".to_string());
-    }
-    if parameters.is_empty() {
-        return Some((key, no_uses()));
-    }
-    // **The parameters the author lent**: `ref self`, `ref mut self`, an
-    // argument whose type is written `ref`, and one written `mut`, which the
-    // callee changes in place ([ADR-094](../../../docs/specification/adr/adr-094.md)
-    // D3). Each is a reference in the Rust whatever this walk decides, so a
-    // `match` over one already matches through a reference - the
-    // over-approximation in [`classify`]'s `match` arm is not for them
-    // (issue #173, found at 0.0.254).
-    let mut lent: BTreeSet<String> = args
-        .iter()
-        .filter(|a| a.ty.is_view || a.mutable)
-        .map(|a| parsed.text(a.name).to_string())
-        .chain(
-            config
-                .iter()
-                .filter(|c| c.ty.is_view)
-                .map(|c| parsed.text(c.name).to_string()),
-        )
-        .collect();
-    // Of those, the ones no body keeps: see below.
-    let mut unkept: BTreeSet<String> = args
-        .iter()
-        .filter(|a| a.mutable)
-        .map(|a| parsed.text(a.name).to_string())
-        .collect();
-    if target.is_some() && receiver.as_ref().is_some_and(|r| r.is_ref) {
-        lent.insert("self".to_string());
-        unkept.insert("self".to_string());
-    }
-
-    // **A result that is a view keeps nothing by returning.** `-> &str` hands
-    // back a view of a parameter, which `borrows` already records; it is
-    // `-> String` that moves the value out of the call.
-    // **Text both kinds flow into is not a view to hand back**
-    // ([ADR-282](../../../docs/specification/adr/adr-282.md) D21): an
-    // `EitherText` may own its text, so returning a field of one takes it out
-    // of the parameter, as returning a `String` field does.
-    let returns_a_view = ret_type
-        .as_ref()
-        .is_some_and(|ty| super::holds_view(ty) && !holds_either(ty));
-
-    // **The fields of each parameter whose type this file declares.** A
-    // parameter of a type from a package or from `std` has none here, and
-    // `hand_over` reads that absence as *unknown*, which keeps.
-    let declared = crate::views::fields_of(parsed);
-    let fields: BTreeMap<String, BTreeMap<String, super::ty::Ty>> = args
-        .iter()
-        .filter_map(|arg| {
-            let of = declared.get(&arg.ty.name)?;
-            Some((
-                parsed.text(arg.name).to_string(),
-                of.iter()
-                    .map(|(name, ty)| (name.clone(), super::ty::Ty::from_ast(parsed, ty)))
-                    .collect(),
-            ))
-        })
-        .collect();
-
-    // **Whether this body's method calls resolved at all.** A receiver whose
-    // method nothing describes may be a `self`-by-value method, and a parameter
-    // handed to one is moved out of — so the fail-closed answer for a *whole
-    // body* is the one the type checker already computed
-    // ([ADR-288](../../../docs/specification/adr/adr-288.md)).
-    let unresolved = resolved.get(&key).is_some_and(|m| m.unresolved);
-    // **The walk is Nikaia** (`tools/keeps.nika`, #125): every statement's
-    // expressions classified where they stand, then the blocks it holds, and
-    // **the value a body ends in leaves the call**, as a `return` does.
-    let context = nikaia_std::tools::keeps::KeepsBody {
-        parameters: parameters.clone(),
-        lent,
-        fields,
-        returns_a_view,
-        hands_back_its_last: ret_type.is_some() && !returns_a_view,
-        unresolved,
-        // **A receiver's declared type narrows the method it reaches** (#791).
-        // A generic one by its name: `re: regex::Regex[regex::Dynamic]`
-        // reaches `regex::Regex::find`, not `Seq::find`, which keeps its
-        // receiver.
-        types: args
-            .iter()
-            .filter(|a| !a.ty.is_slice)
-            .map(|a| {
-                (
-                    parsed.text(a.name).to_string(),
-                    parsed.text(a.ty.name).to_string(),
-                )
-            })
-            .chain(target.map(|t| ("self".to_string(), t.to_string())))
-            .collect(),
-        own_methods,
-        library_methods,
-        // **A `ref Bytes` a `.clone()` keeps** (ADR-373 D1, D4).
-        cloned_keeps: args
-            .iter()
-            .filter(|a| {
-                a.ty.is_view
-                    && !a.ty.is_nullable
-                    && !a.ty.is_slice
-                    && a.ty.generics.is_empty()
-                    && parsed.text(a.ty.name) == "Bytes"
-            })
-            .map(|a| parsed.text(a.name).to_string())
-            .collect(),
-    };
-    let mut uses = nikaia_std::tools::keeps::uses_in(
-        body,
-        &parsed.interner,
-        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-        &context,
-        ledger,
-        library,
-    );
-    // **A receiver the author wrote `ref` is not kept** (issue #173), **nor an
-    // argument written `mut`** (0.0.258): each is a reference by the author's
-    // word, which no walk here widens - a use that would need it whole is
-    // `NK1131`'s. An argument written `ref` is not in this rule: a parse keeps
-    // the text its result views
-    // ([ADR-186](../../../docs/specification/adr/adr-186.md) D1).
-    uses.kept.retain(|name| !unkept.contains(name));
-    uses.passed
-        .retain(|passed| !unkept.contains(&passed.parameter));
-    Some((key, uses))
-}
-
-/// Whether a declared type has text both kinds flow into anywhere in it.
-fn holds_either(ty: &crate::ast::Type) -> bool {
-    ty.either || ty.generics.iter().any(holds_either)
+    method.span
 }

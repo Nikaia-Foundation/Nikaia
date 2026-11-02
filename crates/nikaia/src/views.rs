@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 use winnow_grammar::Symbol as Ident;
 
-use crate::ast::{Expr, Type};
+use crate::ast::Expr;
 use crate::check::Finding;
 use crate::contracts::Ledger;
 use crate::parser::Parsed;
@@ -105,16 +105,4 @@ fn own_buffer(parsed: &Parsed, value: &Expr, own: &Ledger, library: &Ledger) -> 
         crate::contracts::tether::makes_a_buffer(parsed, value, own, library),
         crate::contracts::tether::Buffer::Named(_)
     )
-}
-
-/// Every struct's and enum's fields, by the name that declares them.
-///
-/// An enum's variants are flattened into it: for the one question this map is
-/// asked - does this field hold a view - a variant's field is a field of the
-/// enum.
-pub(crate) fn fields_of(parsed: &Parsed) -> HashMap<Ident, Vec<(String, Type)>> {
-    nikaia_std::tools::views::fields_held(&parsed.interner, &parsed.program.items)
-        .into_iter()
-        .map(|held| (held.name, held.fields))
-        .collect()
 }

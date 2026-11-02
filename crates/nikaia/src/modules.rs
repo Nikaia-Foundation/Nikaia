@@ -402,7 +402,7 @@ pub struct Program {
 /// An impl that keeps a trait method's parameter, as a message names it:
 /// `` `Keep::take` (src/main.nika:9: `self.held.push(f)`) ``.
 fn keeper_said(units: &[Unit], keeper: &crate::contracts::keeps::Keeper) -> String {
-    let unit = &units[keeper.unit];
+    let unit = &units[keeper.unit as usize];
     let at = (keeper.span.start as usize).min(unit.source.len());
     let line = unit.source[..at].matches('\n').count() + 1;
     let text = unit.source.lines().nth(line - 1).unwrap_or("").trim();
@@ -771,7 +771,7 @@ impl collecting::ModulesProgramHost for ProgramHost<'_> {
                 .column
                 .beyond
                 .into_iter()
-                .map(|(at, finding)| (at + from as usize, finding)),
+                .map(|(at, finding)| (at as usize + from as usize, finding)),
         );
         self.keepers
             .borrow_mut()
@@ -782,7 +782,7 @@ impl collecting::ModulesProgramHost for ProgramHost<'_> {
                         let impls = impls
                             .into_iter()
                             .map(|keeper| crate::contracts::keeps::Keeper {
-                                unit: keeper.unit + from as usize,
+                                unit: keeper.unit + from,
                                 ..keeper
                             })
                             .collect();

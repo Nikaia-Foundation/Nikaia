@@ -179,13 +179,13 @@ pub fn infer(
     Noted {
         by_code,
         why,
-        column: Default::default(),
+        ..Noted::default()
     }
 }
 
 /// What [`infer`] learns besides the ledger's own column, for the build to say
 /// ([ADR-288](../../../docs/specification/adr/adr-288.md) D29, D32).
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Noted {
     /// The functions that pause only where their lambdas do, with the code
     /// parameters that decide (D2).
@@ -196,6 +196,20 @@ pub struct Noted {
     /// ([ADR-277](../../../docs/specification/adr/adr-277.md) D17): `NK1264`
     /// and the keepers `NK1265` names.
     pub column: super::keeps::Column,
+}
+
+impl Default for Noted {
+    fn default() -> Self {
+        Noted {
+            by_code: BTreeMap::new(),
+            why: BTreeMap::new(),
+            // The lowered column has no `Default`: nothing kept, nothing beyond.
+            column: super::keeps::Column {
+                beyond: Vec::new(),
+                keepers: BTreeMap::new(),
+            },
+        }
+    }
 }
 
 /// **The way from a function to the statement that makes it pause**, in

@@ -39,7 +39,9 @@ pub struct KeepsBody {
     /// name, `self` included: a method call on one reaches that type's method
     /// (#791), not every method of the same name.
     pub types: collections::BTreeMap[String, String],
-    /// The two ledgers' functions by a method's name.
+    /// **The two ledgers by a method's name** (#727): neither changes while the
+/// walk runs, so the index cannot go stale. Built by the caller, because a
+/// struct holding views of values the caller owns is built where they are.
     pub own_methods: ref MethodIndex,
     pub library_methods: ref MethodIndex,
     /// **The `ref Bytes` parameters**, which a `.clone()` keeps (ADR-373 D1,
@@ -1223,4 +1225,602 @@ fn a_comparison(pattern: ref MatchPattern) -> bool {
         },
         else => false,
     }
+}
+
+// **Which parameters a body keeps, for a whole package** (ADR-094 D2, ADR-277
+// D17): each function's own evidence from the walk above, the edges between a
+// trait's methods and its impls, and then the least fixpoint (`kept_by`).
+
+/// What the compiler does for the walk: the holes of a literal are read from
+/// a unit's source, and the statement that keeps a parameter is cut out of a
+/// method's body, which needs the unit's tokens.
+pub trait KeepsHost {
+    fn holes(ref self, unit: i64, expr: ref Expr) -> Vec[Expr] sync
+    fn keeping_statement(ref self, unit: i64, method: ref Spanned[Item], target: String, parameter: String, own_kept: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, library: ref Ledger) -> Span sync
+}
+
+/// **What the impls of trait methods keep on their own evidence** (ADR-277
+/// D17), for the build to say.
+pub struct KeepsColumn {
+    /// The impls of another package's trait that keep more than its column
+    /// (`NK1264`), each with the index of its unit among those inferred.
+    pub beyond: Vec[(i64, CheckFinding)],
+    /// **Every trait method of this package**, with the impls that keep each
+    /// parameter (named as the trait method names it): what `NK1265` and a
+    /// refused lending caller name. A trait method with no keeping impl is
+    /// here with nothing under it.
+    pub keepers: collections::BTreeMap[String, collections::BTreeMap[String, Vec[KeepsKeeper]]],
+}
+
+/// An impl that keeps a trait method's parameter, and the statement that
+/// keeps it.
+pub struct KeepsKeeper {
+    /// The impl method's ledger name (`Keep::take`).
+    pub name: String,
+    /// Its unit's index among those inferred.
+    pub unit: i64,
+    pub span: Span,
+}
+
+/// One method of an `impl Trait for Target`, as the walk met it.
+pub struct KeepsImplRow {
+    pub unit: i64,
+    pub method: ref Spanned[Item],
+    pub target: String,
+    pub key: String,
+    pub trait_name: String,
+    pub at_trait: String,
+    pub first: i64,
+}
+
+/// **The two ledgers by a method's name** (#727): neither changes while the
+/// walk runs, so the index cannot go stale. Built by the caller, because a
+/// struct holding views of values the caller owns is built where they are.
+pub struct KeepsIndexes {
+    pub own: ref MethodIndex,
+    pub library: ref MethodIndex,
+}
+
+/// One function's key in the ledger, and what its body does with each
+/// parameter.
+pub struct KeepsFound {
+    pub key: String,
+    pub uses: Uses,
+}
+
+/// A parameter taken by value: neither written `ref` nor `mut`.
+fn by_value(arg: ref FnArg) -> bool {
+    return !arg.ty.is_view && !arg.mutable
+}
+
+fn no_uses() -> Uses {
+    return Uses { kept: collections::BTreeSet(), passed: [] }
+}
+
+/// Give every function in the ledger the `keeps` its body earns.
+///
+/// A **least** fixpoint, where `sync`'s is a greatest one, and the difference
+/// is which direction is safe: `sync` is a promise and is taken away on doubt,
+/// `keeps` is a restriction and is added on doubt. So this starts from
+/// *nothing is kept* and adds until nothing changes, and two functions that
+/// pass each other a parameter neither stores keep neither.
+///
+/// The iteration walks `BTreeMap`s and repeats until nothing changes, so the
+/// answer does not depend on the order the source declared things in - which
+/// it must not, because Part III 13.5 makes this file a pure function of
+/// (source, toolchain) and `--locked` compares it byte for byte.
+pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView], library: ref Ledger, resolved: ref collections::BTreeMap[String, CheckMethodCalls], indexes: KeepsIndexes, host: ref H) -> KeepsColumn {
+    let mut graph: collections::BTreeMap[String, Uses] = collections::BTreeMap()
+    // What the package's declarations say about the types a parse hands back,
+    // read once for the grammar arm below.
+    let mut package = PackageTypes::empty()
+    for view in units {
+        declare_unit(view.words, view.items, package)
+    }
+    // **An `impl`'s method keeps what its trait's method keeps**, by position
+    // (ADR-277 D11), keyed by the trait method's ledger name. For a by-value
+    // **data** parameter the trait's column is still the seed *by value means
+    // kept* (#1012 step 3 computes it); a `fn` parameter's is computed in the
+    // fixpoint below (D17). Read once, from every unit, before the walk: the
+    // trait may be declared after its `impl`.
+    let mut trait_keeps: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+    for view in units {
+        for item in view.items {
+            match item.node {
+                Item::Trait { name, methods, .. } => {
+                    let owner = view.text(name)
+                    for method in methods {
+                        let positions: Vec[i64] = method.node.args.iter().enumerate().filter(fn((at, arg)) { by_value(arg) && arg.ty.code == null }).map(fn((at, arg)) { at }).collect()
+                        let called = view.text(method.node.name)
+                        trait_keeps.insert(f"{owner}::{called}", positions)
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    // **The impls of each trait method of this package** (ADR-277 D17), by
+    // the trait method's ledger name: the edges *the trait keeps what an impl
+    // keeps* are added once every impl has been seen.
+    let mut impls_of: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    // **Every impl of a trait method**, with its unit, for `NK1264` below:
+    // which of them answer a trait of another package is known only once
+    // every unit's traits are in the graph.
+    let mut impl_rows: Vec[KeepsImplRow] = []
+    let mut unit = 0
+    for view in units {
+        for item in view.items {
+            match item.node {
+                Item::Fn { .. } => {
+                    let found = keeps_uses_of(view, item.node, null, ledger, library, indexes, resolved, fn(e) { host.holes(unit, e) }) ?? continue
+                    graph.insert(found.key.clone(), found.uses)
+                },
+                Item::Impl { trait_name, target, methods } => {
+                    let target_name = view.text(target.name)
+                    let owner = match trait_name {
+                        null => "",
+                        t => view.text(t),
+                    }
+                    for method in methods {
+                        let mut found = keeps_uses_of(view, method.node, target_name.clone(), ledger, library, indexes, resolved, fn(e) { host.holes(unit, e) }) ?? continue
+                        if trait_name != null {
+                            match method.node {
+                                Item::Fn { name, receiver, args, .. } => {
+                                    let own = view.text(name ?? continue)
+                                    let at_trait = f"{owner}::{own}"
+                                    for at in trait_positions(trait_keeps, at_trait) {
+                                        if at < args.len() {
+                                            found.uses.kept.insert(view.text(args[at].name))
+                                        }
+                                    }
+                                    // **An impl keeps what its trait method keeps**
+                                    // (D17, D11): a `fn` parameter is handed to the
+                                    // trait method's node, in the loop rather than
+                                    // before it. A trait of another package answers
+                                    // from its ledger (`keeps_its`).
+                                    let first = if receiver != null { 1 } else { 0 }
+                                    let mut at = 0
+                                    for arg in args {
+                                        if by_value(arg) && arg.ty.code != null {
+                                            found.uses.passed.push(Passed { parameter: view.text(arg.name), callee: at_trait.clone(), at: at + first })
+                                        }
+                                        at += 1
+                                    }
+                                    add_impl(impls_of, at_trait, found.key)
+                                    impl_rows.push(KeepsImplRow { unit: unit, method: method, target: target_name.clone(), key: found.key.clone(), trait_name: owner.clone(), at_trait: at_trait.clone(), first: first })
+                                },
+                                else => {},
+                            }
+                        }
+                        graph.insert(found.key.clone(), found.uses)
+                    }
+                },
+                // **A trait's method keeps what its package's impls keep**
+                // (ADR-277 D17): a call through a bound (`host.go(f)` under
+                // `[H: A]`) cannot see which `impl` answers, so the column is
+                // the union of theirs, and with no impl the method runs. Its
+                // own evidence is empty (a trait method has no body); the
+                // edges to its impls are added below. A by-value **data**
+                // parameter keeps the seed *by value means kept* until #1012
+                // step 3.
+                Item::Trait { name, methods, .. } => {
+                    let owner = view.text(name)
+                    for method in methods {
+                        let mut uses = no_uses()
+                        for arg in method.node.args {
+                            if by_value(arg) && arg.ty.code == null {
+                                uses.kept.insert(view.text(arg.name))
+                            }
+                        }
+                        let called = view.text(method.node.name)
+                        graph.insert(f"{owner}::{called}", uses)
+                    }
+                },
+                // **A `entry` rule is an entry, and its one parameter is the
+                // text** (ADR-296 D1). Whether it keeps that text is not a
+                // question about an action block at all: a parse keeps its
+                // input exactly when what it hands back holds a view **into**
+                // the input, which is ADR-283's tether read off the rule's
+                // declared result.
+                //
+                // **Before this the entry was in the ledger with the column
+                // empty**, and `keeps_its` reads an absent `keeps` on a present
+                // entry as *keeps nothing* - so every caller of a parse was
+                // told it could lend text a parse holds views into. That is
+                // this file's own polarity inverted, and it is what ADR-186 D1
+                // is about: the answer is derived now, so an empty column means
+                // *asked and no*.
+                Item::Grammar(def) => {
+                    let named = view.text(def.name)
+                    for rule in def.rules {
+                        if !rule.is_entry {
+                            continue
+                        }
+                        let mut uses = no_uses()
+                        if a_parse_that_views(view.words, rule.ret_type, package) {
+                            uses.kept.insert(INPUT_POSITION.clone())
+                        }
+                        // **The values an entry takes after its input are
+                        // kept** (ADR-grammar-1 D2, #1041): the rule's parser
+                        // takes each by value and holds it for the whole
+                        // parse, so a caller hands it over as it would to an
+                        // ordinary function that keeps it. A copied type is
+                        // still copied (`lends` asks `moves` first).
+                        for arg in rule.args {
+                            if by_value(arg) {
+                                uses.kept.insert(view.text(arg.name))
+                            }
+                        }
+                        let called = view.text(rule.name)
+                        graph.insert(f"{named}::{called}", uses)
+                    }
+                },
+                else => {},
+            }
+        }
+        unit += 1
+    }
+
+    // **The trait keeps what an impl keeps** (D17): each `fn` parameter of a
+    // trait method is handed to every impl of it in this package, at the same
+    // position. With the impls' edges back, a trait method and its impls are
+    // one cycle and settle on one column; the least fixpoint leaves a cycle
+    // nothing stores run.
+    for view in units {
+        for item in view.items {
+            match item.node {
+                Item::Trait { name, methods, .. } => {
+                    let owner = view.text(name)
+                    for method in methods {
+                        let called = view.text(method.node.name)
+                        let key = f"{owner}::{called}"
+                        let impls = impls_of[key] ?? continue
+                        let first = if method.node.receiver != null { 1 } else { 0 }
+                        let mut edges: Vec[Passed] = []
+                        let mut at = 0
+                        for arg in method.node.args {
+                            if by_value(arg) && arg.ty.code != null {
+                                for callee in impls {
+                                    edges.push(Passed { parameter: view.text(arg.name), callee: callee.clone(), at: at + first })
+                                }
+                            }
+                            at += 1
+                        }
+                        if graph.contains_key(key) {
+                            let mut uses = graph[key] ?? continue
+                            uses.passed.extend(edges)
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+
+    // **The least fixpoint** starts from what each body keeps on its own
+    // evidence and adds what the callees it hands a parameter to keep, until
+    // nothing changes.
+    let kept = kept_by(graph, ledger, library)
+    let column = keeps_the_impls_own(units, impl_rows, graph, ledger, library, host)
+    for (name, parameters) in kept {
+        if ledger.functions.contains_key(name) {
+            let mut contract = ledger.functions[name] ?? continue
+            let mut list: Vec[String] = []
+            for parameter in parameters {
+                list.push(parameter.clone())
+            }
+            contract.keeps = list
+        }
+    }
+    return column
+}
+
+fn trait_positions(keeps: ref collections::BTreeMap[String, Vec[i64]], key: ref String) -> Vec[i64] {
+    let held = keeps[key] ?? return []
+    return held.clone()
+}
+
+fn add_impl(mut impls_of: collections::BTreeMap[String, collections::BTreeSet[String]], at_trait: ref String, name: ref String) {
+    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+    if impls_of.contains_key(at_trait) {
+        let held = impls_of[at_trait] ?? return
+        names.extend(held.clone())
+    }
+    names.insert(name.clone())
+    impls_of.insert(at_trait.clone(), names)
+}
+
+/// **An impl of another package's trait keeps at most the column** (ADR-277
+/// D17): it is a client of the contract its callers were written against. Its
+/// own evidence, without the edge back to the trait method (which would hand
+/// it the column itself), against the library's column; a position it keeps
+/// that the column runs is `NK1264`, at the first statement whose prefix of the
+/// body keeps it.
+fn keeps_the_impls_own[H: KeepsHost](units: ref Vec[ParsedView], rows: ref Vec[KeepsImplRow], graph: ref collections::BTreeMap[String, Uses], ledger: ref Ledger, library: ref Ledger, host: ref H) -> KeepsColumn {
+    let mut column = KeepsColumn { beyond: [], keepers: collections::BTreeMap() }
+    for row in rows {
+        if graph.contains_key(row.at_trait) && !column.keepers.contains_key(row.at_trait) {
+            column.keepers.insert(row.at_trait.clone(), collections::BTreeMap())
+        }
+    }
+    // Only a by-value `fn` parameter has a column the impls make (D17; a data
+    // parameter's is the seed until #1012 step 3).
+    let mut asked: Vec[ref KeepsImplRow] = []
+    for row in rows {
+        if asks_a_column(row, graph, library) {
+            asked.push(row)
+        }
+    }
+    if asked.len() == 0 {
+        return column
+    }
+    // **Each impl's own evidence**: no edge into a trait method, which would
+    // hand an impl the column it is asked about.
+    let mut traits: collections::BTreeSet[String] = collections::BTreeSet()
+    for row in asked {
+        traits.insert(row.at_trait.clone())
+    }
+    let mut own_graph: collections::BTreeMap[String, Uses] = collections::BTreeMap()
+    for (name, uses) in graph {
+        let mut passed: Vec[Passed] = []
+        for p in uses.passed {
+            if !traits.contains(p.callee) {
+                passed.push(Passed { parameter: p.parameter.clone(), callee: p.callee.clone(), at: p.at })
+            }
+        }
+        own_graph.insert(name.clone(), Uses { kept: uses.kept.clone(), passed: passed })
+    }
+    let own_kept = kept_by(own_graph, ledger, library)
+    for row in asked {
+        let foreign = !graph.contains_key(row.at_trait)
+        let contract = (match foreign {
+            true => library.functions[row.at_trait],
+            false => ledger.functions[row.at_trait],
+        }) ?? continue
+        let mine = own_kept[row.key] ?? continue
+        match row.method.node {
+            Item::Fn { args, .. } => {
+                let view = units[row.unit]
+                let mut at = 0
+                for arg in args {
+                    at += 1
+                    let parameter = view.text(arg.name)
+                    if !by_value(arg) || arg.ty.code == null || !mine.contains(parameter) {
+                        continue
+                    }
+                    // An absent position is a signature read wrongly: nothing to say.
+                    let theirs = trait_parameter_at(contract, at - 1 + row.first) ?? continue
+                    if foreign && contract.keeps.contains(theirs) {
+                        continue
+                    }
+                    let span = host.keeping_statement(row.unit, row.method, row.target.clone(), parameter.clone(), own_kept, ledger, library)
+                    if !foreign {
+                        add_keeper(column, row.at_trait, theirs, KeepsKeeper { name: row.key.clone(), unit: row.unit, span: span })
+                        continue
+                    }
+                    column.beyond.push((row.unit, check_refusal("NK1264", span, f"`{row.key}` keeps `{parameter}`, which the trait method `{row.at_trait}` runs.", [f"callers through `{row.at_trait}` were written against its `keeps` column, which keeps nothing at `{theirs}` (ADR-277 D17).", f"only the package that declares `{row.trait_name}` widens the column."], f"run `{parameter}` here rather than keep it, or keep it in a type of your own that does not implement `{row.trait_name}`.")))
+                }
+            },
+            else => {},
+        }
+    }
+    return column
+}
+
+// The name the trait method's signature gives the parameter at `at`.
+fn trait_parameter_at(contract: ref FnContract, at: i64) -> String? {
+    let signature = contract.signature ?? return null
+    if at >= signature.params.len() {
+        return null
+    }
+    let (name, _) = signature.params[at].clone()
+    return name
+}
+
+fn asks_a_column(row: ref KeepsImplRow, graph: ref collections::BTreeMap[String, Uses], library: ref Ledger) -> bool {
+    let takes_a_fn = match row.method.node {
+        Item::Fn { args, .. } => args.iter().any(fn(a) { by_value(a) && a.ty.code != null }),
+        else => false,
+    }
+    return takes_a_fn && (graph.contains_key(row.at_trait) || library.functions.contains_key(row.at_trait))
+}
+
+fn add_keeper(mut column: KeepsColumn, at_trait: ref String, parameter: ref String, keeper: KeepsKeeper) {
+    let mut inner: collections::BTreeMap[String, Vec[KeepsKeeper]] = collections::BTreeMap()
+    if column.keepers.contains_key(at_trait) {
+        let held = column.keepers[at_trait] ?? return
+        for (name, keepers) in held {
+            inner.insert(name.clone(), copied_keepers(keepers))
+        }
+    }
+    let mut list: Vec[KeepsKeeper] = []
+    if inner.contains_key(parameter) {
+        let had = inner[parameter] ?? return
+        list = copied_keepers(had)
+    }
+    list.push(keeper)
+    inner.insert(parameter.clone(), list)
+    column.keepers.insert(at_trait.clone(), inner)
+}
+
+fn copied_keepers(keepers: ref Vec[KeepsKeeper]) -> Vec[KeepsKeeper] {
+    let mut copy: Vec[KeepsKeeper] = []
+    for one in keepers {
+        copy.push(KeepsKeeper { name: one.name.clone(), unit: one.unit, span: one.span.clone() })
+    }
+    return copy
+}
+
+/// One function's parameters, and what its body does with each.
+///
+/// `None` for a declaration with no body - a `trait`'s method, which keeps
+/// nothing because it does nothing, and whose `impl`s answer for themselves.
+pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledger: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> KeepsFound? {
+    match item {
+        Item::Fn { name, receiver, args, config, body, ret_type, .. } => {
+            let own = match name {
+                null => "new",
+                n => view.text(n),
+            }
+            let target_name = target?.clone() ?? ""
+            let is_method = target != null
+            let key = if is_method { f"{target_name}::{own}" } else { own }
+
+            // **An option is a parameter too** (Part I 5.1): named at the call,
+            // but what the body does with it is asked as of any other, so a
+            // `String` option the body only reads is lent as a `String`
+            // parameter is (ADR-282 D2, D5).
+            let mut parameters: collections::BTreeSet[String] = collections::BTreeSet()
+            for a in args {
+                parameters.insert(view.text(a.name))
+            }
+            for c in config {
+                parameters.insert(view.text(c.name))
+            }
+            // A method's receiver is a parameter, and `self.field = x` is one
+            // of the shapes this analysis exists for - so it is in the set like
+            // any other.
+            if is_method {
+                parameters.insert("self")
+            }
+            if parameters.len() == 0 {
+                return KeepsFound { key: key, uses: no_uses() }
+            }
+            // **The parameters the author lent**: `ref self`, `ref mut self`, an
+            // argument whose type is written `ref`, and one written `mut`,
+            // which the callee changes in place (ADR-094 D3). Each is a
+            // reference in the Rust whatever this walk decides, so a `match`
+            // over one already matches through a reference - the
+            // over-approximation in `classify`'s `match` arm is not for them
+            // (issue #173, found at 0.0.254).
+            let mut lent: collections::BTreeSet[String] = collections::BTreeSet()
+            // Of those, the ones no body keeps: see below.
+            let mut unkept: collections::BTreeSet[String] = collections::BTreeSet()
+            for a in args {
+                if a.ty.is_view || a.mutable {
+                    lent.insert(view.text(a.name))
+                }
+                if a.mutable {
+                    unkept.insert(view.text(a.name))
+                }
+            }
+            for c in config {
+                if c.ty.is_view {
+                    lent.insert(view.text(c.name))
+                }
+            }
+            if is_method && (receiver?.is_ref ?? false) {
+                lent.insert("self")
+                unkept.insert("self")
+            }
+
+            // **A result that is a view keeps nothing by returning.** `-> &str`
+            // hands back a view of a parameter, which `borrows` already
+            // records; it is `-> String` that moves the value out of the call.
+            // **Text both kinds flow into is not a view to hand back**
+            // (ADR-282 D21): an `EitherText` may own its text, so returning a
+            // field of one takes it out of the parameter, as returning a
+            // `String` field does.
+            let returns_a_view = keeps_result_is_a_view(ret_type)
+
+            // **The fields of each parameter whose type this file declares.** A
+            // parameter of a type from a package or from `std` has none here,
+            // and `hand_over` reads that absence as *unknown*, which keeps.
+            let declared = fields_held(view.words, view.items)
+            let mut fields: collections::BTreeMap[String, collections::BTreeMap[String, Ty]] = collections::BTreeMap()
+            for arg in args {
+                let mut of: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+                let mut found = false
+                for held in declared {
+                    if held.name == arg.ty.name {
+                        of = collections::BTreeMap()
+                        for (field, ty) in held.fields {
+                            of.insert(field.clone(), written_ty(view.words, view.aliases, ty))
+                        }
+                        found = true
+                    }
+                }
+                if found {
+                    fields.insert(view.text(arg.name), of)
+                }
+            }
+
+            // **Whether this body's method calls resolved at all.** A receiver
+            // whose method nothing describes may be a `self`-by-value method,
+            // and a parameter handed to one is moved out of - so the
+            // fail-closed answer for a *whole body* is the one the type checker
+            // already computed (ADR-288).
+            let mut unresolved = false
+            if resolved.contains_key(key) {
+                let calls = resolved[key] ?? return null
+                unresolved = calls.unresolved
+            }
+            // **A receiver's declared type narrows the method it reaches**
+            // (#791). A generic one by its name: `re: regex::Regex[regex::Dynamic]`
+            // reaches `regex::Regex::find`, not `Seq::find`, which keeps its
+            // receiver.
+            let mut types: collections::BTreeMap[String, String] = collections::BTreeMap()
+            for a in args {
+                if !a.ty.is_slice {
+                    types.insert(view.text(a.name), view.text(a.ty.name))
+                }
+            }
+            if is_method {
+                types.insert("self", target_name.clone())
+            }
+            // **A `ref Bytes` a `.clone()` keeps** (ADR-373 D1, D4).
+            let mut cloned_keeps: collections::BTreeSet[String] = collections::BTreeSet()
+            for a in args {
+                if a.ty.is_view && !a.ty.is_nullable && !a.ty.is_slice && a.ty.generics.len() == 0 && view.text(a.ty.name) == "Bytes" {
+                    cloned_keeps.insert(view.text(a.name))
+                }
+            }
+            // **The walk** (`uses_in`): every statement's expressions
+            // classified where they stand, then the blocks it holds, and **the
+            // value a body ends in leaves the call**, as a `return` does.
+            let context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps }
+            let uses = uses_in(body, view.words, holes_of, context, ledger, library)
+            // **A receiver the author wrote `ref` is not kept** (issue #173),
+            // **nor an argument written `mut`** (0.0.258): each is a reference
+            // by the author's word, which no walk here widens - a use that
+            // would need it whole is `NK1131`'s. An argument written `ref` is
+            // not in this rule: a parse keeps the text its result views
+            // (ADR-186 D1).
+            let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
+            for name in uses.kept {
+                if !unkept.contains(name) {
+                    kept.insert(name.clone())
+                }
+            }
+            let mut passed: Vec[Passed] = []
+            for p in uses.passed {
+                if !unkept.contains(p.parameter) {
+                    passed.push(Passed { parameter: p.parameter.clone(), callee: p.callee.clone(), at: p.at })
+                }
+            }
+            return KeepsFound { key: key, uses: Uses { kept: kept, passed: passed } }
+        },
+        else => {
+            return null
+        },
+    }
+    return null
+}
+
+fn keeps_result_is_a_view(ret_type: ref Type?) -> bool {
+    let ty = ret_type ?? return false
+    return holds_view(ty) && !keeps_holds_either(ty)
+}
+
+/// Whether a declared type has text both kinds flow into anywhere in it.
+fn keeps_holds_either(ty: ref Type) -> bool {
+    if ty.either {
+        return true
+    }
+    for inner in ty.generics {
+        if keeps_holds_either(inner) {
+            return true
+        }
+    }
+    return false
 }

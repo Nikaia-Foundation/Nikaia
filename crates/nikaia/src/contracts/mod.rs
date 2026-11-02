@@ -45,7 +45,7 @@ use anyhow::{Result, anyhow};
 
 use crate::ast::{Expr, Item};
 use crate::contracts::ty::TyOps;
-use crate::emit::{borrowing_structs_beside, holds_view, package_borrowing};
+use crate::emit::{borrowing_structs_beside, package_borrowing};
 use crate::parser::Parsed;
 
 /// **The ledger's small records are declared in Nikaia**
