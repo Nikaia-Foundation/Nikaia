@@ -238,3 +238,4 @@
 /home/user/Nikaia/docs/briefs/architect-task.md 355164 15
 /home/user/Nikaia/docs/briefs/k3b-comptime-bundle.md 496613 10
 /home/user/Nikaia/docs/briefs/c1c-ledger-lookup.md 442454 13
+/home/user/Nikaia/docs/briefs/s2-bounds-report.md 1914496 24
