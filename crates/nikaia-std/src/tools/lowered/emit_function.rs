@@ -89,7 +89,7 @@ impl EmitState {
     }
     pub(crate) fn emit_fn_lends(&self, world: &EmitWorld<'_, '_, '_, '_>, key: &str, at: i64) -> bool {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        emit_arg_lends_own(&c, at, world.library, &self.described)
+        emit_arg_lends_own(c, at, world.library, &self.described)
     }
     pub(crate) fn emit_fn_written_as_view(&self, key: &str, at: i64) -> bool {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -105,11 +105,11 @@ impl EmitState {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match c.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         if at < 0 || at >= signature.config.len() as i64 { return false; }
-        lends_option(&c, nikaia_std::index::get(&signature.config, nikaia_std::index::at(at)))
+        lends_option(c, nikaia_std::index::get(&signature.config, nikaia_std::index::at(at)))
     }
     pub(crate) fn emit_fn_keeps_bytes(&self, key: &str, at: i64) -> bool {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        keeps_its_bytes(&c, at)
+        keeps_its_bytes(c, at)
     }
     pub(crate) fn emit_fn_stores(&self, key: &str) -> Vec<String> {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };

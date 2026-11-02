@@ -2172,8 +2172,8 @@ pub(crate) fn prover_loop_bits(walk: &mut ProverWalk, scope: &ProverScope, chang
     let mut out: collections::BTreeMap<String, ProverBits> = collections::BTreeMap::new();
     for n in changed.iter() {
         if !scope.bits.contains_key(n) { continue; }
-        let before = match (*nikaia_std::index::get(&scope.bits, n)).copied() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if prover_assigns_inside(walk, body, n, &before, scope, words) { out.insert(n.to_string(), ProverBits { lo: before.lo, hi: before.hi }); }
+        let before = match *nikaia_std::index::get(&scope.bits, n) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if prover_assigns_inside(walk, body, n, before, scope, words) { out.insert(n.to_string(), ProverBits { lo: before.lo, hi: before.hi }); }
     }
     out
 }

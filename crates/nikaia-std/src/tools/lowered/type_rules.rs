@@ -668,7 +668,7 @@ pub(crate) enum TrJob {
 
 pub(crate) fn tr_at(spans: &collections::BTreeMap<u32, Span>, id: u32, span: &Span) -> Span {
     let found = match spans.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return tr_span(span) };
-    tr_span(&found)
+    tr_span(found)
 }
 
 pub fn tr_expand(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, items: &mut Vec<Spanned<Item>>, spans: &collections::BTreeMap<u32, Span>) -> Option<TrRefusal> {

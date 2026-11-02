@@ -148,7 +148,7 @@ pub fn bounds_aggressive(args: &[FnArg], body: &Block, nonnegative: collections:
             for (key, bound) in walk.assumed.iter() {
                 let bound = *bound;
                 let seen = match found.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                if bound.holds(&seen) { kept.insert(key.to_string(), bound.clone()); }
+                if bound.holds(seen) { kept.insert(key.to_string(), bound.clone()); }
             }
             walk.assumed = kept;
             if (walk.assumed.len() as i64) == before {

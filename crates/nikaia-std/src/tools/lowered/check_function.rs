@@ -378,7 +378,7 @@ pub(crate) fn check_function_is_branching(expr: &Expr) -> bool {
 
 pub(crate) fn check_function_lends(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let contract = match world.own.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    lends_in_own(&contract, at, &vec![world.library])
+    lends_in_own(contract, at, &vec![world.library])
 }
 
 pub(crate) fn check_function_keeps(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<String> {
@@ -388,7 +388,7 @@ pub(crate) fn check_function_keeps(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 
 pub(crate) fn check_function_options_lowered(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<ConfigContract> {
     let contract = match world.own.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-    lowered_options(&contract)
+    lowered_options(contract)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

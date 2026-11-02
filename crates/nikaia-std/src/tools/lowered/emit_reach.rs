@@ -137,7 +137,7 @@ pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &colle
     let mut running: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in contracts.functions.keys() {
         let contract = match contracts.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if reach_runs_code(&contract) { running.insert(name.to_string()); }
+        if reach_runs_code(contract) { running.insert(name.to_string()); }
     }
     let mut by_last: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for name in running.iter() {
@@ -178,7 +178,7 @@ pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &colle
 
 pub fn code_on_a_cycle(graph: &collections::BTreeMap<String, collections::BTreeSet<String>>, contracts: &Ledger, key: &str) -> bool {
     let own = match contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if !reach_runs_code(&own) { return false; }
+    if !reach_runs_code(own) { return false; }
     if !graph.contains_key(key) { return false; }
     let mut pending: Vec<String> = vec![];
     for first in reach_set_for(graph, key) { pending.push(first); }

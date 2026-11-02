@@ -136,7 +136,7 @@ impl EmitState {
             Expr::Variable(name, _) => {
                 let name = *name;
                 let declared = match self.foreign_results.get(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                return self.handle_named(world, &declared);
+                return self.handle_named(world, declared);
             },
             _ => { },
         }

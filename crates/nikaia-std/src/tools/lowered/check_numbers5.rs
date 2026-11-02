@@ -79,7 +79,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn an_open_comptime_named(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> Option<CheckOpenComptime> {
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let at = match (*nikaia_std::index::get(&self.open_comptimes, &local.id)).copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let at = match *nikaia_std::index::get(&self.open_comptimes, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(CheckOpenComptime { name: local.name.to_string(), at: at.clone() })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

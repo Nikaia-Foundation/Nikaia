@@ -305,7 +305,7 @@ impl EmitState {
             }
             failed = "assumption_failed";
         }
-        if !claim.assumed && emit_call_claim_held(&claim) {
+        if !claim.assumed && emit_call_claim_held(claim) {
             out.push("()");
             return Ok(true);
         }

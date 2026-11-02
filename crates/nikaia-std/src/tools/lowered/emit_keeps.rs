@@ -68,7 +68,7 @@ impl EmitState {
     }
     pub fn kept_lifetimes(&self, key: &str, lifetimes: EmitLifetimes) -> Option<EmitLifetimes> {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if !takes_a_keep(&contract) { return None; }
+        if !takes_a_keep(contract) { return None; }
         if lifetimes.params() == "'a" { return Some(EmitLifetimes::Named); }
         Some(EmitLifetimes::Kept)
     }

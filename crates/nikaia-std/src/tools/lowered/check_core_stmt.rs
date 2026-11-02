@@ -531,7 +531,7 @@ pub(crate) fn check_core_stmt_an_element_read(state: &CheckState, world: &CheckW
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_lent_struct(state: &CheckState, ty: &Ty) -> bool {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && state.structs.contains_key(name) },
+        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && (state.structs.contains_key(name) || state.parts_beside.contains_key(name) && !state.enums.contains_key(name)) },
         _ => false,
     }
 }

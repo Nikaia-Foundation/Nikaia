@@ -48,11 +48,10 @@ impl EmitState {
         let mut out: collections::BTreeMap<Vec<String>, String> = collections::BTreeMap::new();
         for key in self.own_contracts.functions.keys() {
             let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let members = &contract.fails_with;
-            if members.len() < 2 { continue; }
+            if contract.fails_with.len() < 2 { continue; }
             let mut all_named = true;
-            for member in members.iter() { if self.name_of_error(world, member) == 0 { all_named = false; } }
-            if all_named { out.insert(members.to_owned(), sum_name(&members)); }
+            for member in contract.fails_with.iter() { if self.name_of_error(world, member) == 0 { all_named = false; } }
+            if all_named { out.insert(contract.fails_with.to_owned(), sum_name(&contract.fails_with)); }
         }
         out
     }

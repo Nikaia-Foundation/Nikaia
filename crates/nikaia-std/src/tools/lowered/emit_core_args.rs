@@ -119,17 +119,17 @@ impl EmitState {
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
         if signature.takes_a_receiver() { return false; }
-        emit_arg_lends_own(&contract, i, world.library, &self.described)
+        emit_arg_lends_own(contract, i, world.library, &self.described)
     }
     pub(crate) fn emit_arg_keeps_bytes(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, method_callee: Option<&str>, i: i64) -> bool {
         if method_callee.is_some() {
             let key = match method_callee { Some(__nikaia_value) => __nikaia_value, None => return false };
             if self.own_contracts.functions.contains_key(key) {
                 let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-                return emit_takes_self(&c) && keeps_its_bytes(&c, i + 1);
+                return emit_takes_self(c) && keeps_its_bytes(c, i + 1);
             }
             let c = match world.library.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-            return emit_takes_self(&c) && keeps_its_bytes(&c, i + 1);
+            return emit_takes_self(c) && keeps_its_bytes(c, i + 1);
         }
         if self.own_contracts.functions.contains_key(callee) { return keeps_its_bytes(match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
         keeps_its_bytes(match world.library.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i)
@@ -137,7 +137,7 @@ impl EmitState {
     pub(crate) fn emit_arg_opening(&self, callee: &str, i: i64) -> String {
         if self.own_contracts.functions.contains_key(callee) {
             let contract = match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-            return emit_arg_opening_in(&contract, i);
+            return emit_arg_opening_in(contract, i);
         }
         let candidates = emit_candidates(&self.own_contracts, callee);
         let mut first: String = String::from("");
@@ -461,7 +461,7 @@ impl EmitState {
         let mut lent: Vec<bool> = vec![];
         let mut any = false;
         for at in 0..signature.params.len() as i64 {
-            let one = emit_arg_lends_own(&contract, at, world.library, &self.described) && !(at < viewed.len() as i64 && *nikaia_std::index::get(&viewed, nikaia_std::index::at(at)));
+            let one = emit_arg_lends_own(contract, at, world.library, &self.described) && !(at < viewed.len() as i64 && *nikaia_std::index::get(&viewed, nikaia_std::index::at(at)));
             any = any || one;
             lent.push(one);
         }

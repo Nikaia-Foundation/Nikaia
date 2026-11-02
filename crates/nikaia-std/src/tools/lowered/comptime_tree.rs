@@ -682,7 +682,7 @@ pub(crate) fn comptime_callee_nothing_declares<H: ComptimeComputeHost>(host: &H,
 // this was written - see `contracts::sync`.
 pub(crate) fn comptime_forbidden_because(derived: &Ledger) -> Option<String> {
     let contract = match derived.functions.get(VALUE_FN) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    bt_may_not_run(&contract)
+    bt_may_not_run(contract)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

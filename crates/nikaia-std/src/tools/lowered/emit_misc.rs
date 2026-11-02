@@ -330,7 +330,7 @@ impl EmitState {
             if param.0 != name { continue; }
             let is_code = matches!(param.1, Ty::Fn { .. });
             if !is_code || nikaia_std::list::contains(&contract.keeps, &name) { continue; }
-            if !emit_arg_lends_own(&contract, at, world.library, &self.described) { return true; }
+            if !emit_arg_lends_own(contract, at, world.library, &self.described) { return true; }
         }
         false
     }

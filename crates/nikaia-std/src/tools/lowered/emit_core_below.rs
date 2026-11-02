@@ -250,7 +250,7 @@ pub(crate) fn emit_written_callee(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr
 
 pub(crate) fn emit_ledger_takes_a_keep(ledger: &Ledger, name: &str) -> bool {
     let contract = match ledger.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    takes_a_keep(&contract)
+    takes_a_keep(contract)
 }
 
 impl EmitWalk {
@@ -273,15 +273,15 @@ impl EmitState {
         let constructor = format!("{}::new", name);
         if self.own_contracts.functions.contains_key(&name) {
             let found = match self.own_contracts.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-            return emit_config_of(&found);
+            return emit_config_of(found);
         }
         if self.own_contracts.functions.contains_key(&constructor) {
             let found = match self.own_contracts.functions.get(&constructor) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-            return emit_config_of(&found);
+            return emit_config_of(found);
         }
         if world.library.functions.contains_key(&name) {
             let found = match world.library.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-            return emit_config_of(&found);
+            return emit_config_of(found);
         }
         vec![]
     }

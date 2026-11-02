@@ -7,7 +7,7 @@ pub fn changed_contracts(now: &Ledger, committed: &Ledger, keepers: &collections
         let new = match now.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let old = match committed.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !new.public || !mine(key) { continue; }
-        out.push_str(&column_moved(key, &old, &new, by_parameter));
+        out.push_str(&column_moved(key, old, new, by_parameter));
     }
     for (key, new) in now.functions.iter() {
         let old = match committed.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };

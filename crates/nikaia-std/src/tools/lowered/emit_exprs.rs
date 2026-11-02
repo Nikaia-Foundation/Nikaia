@@ -7,7 +7,7 @@ pub(crate) fn emit_candidates(ledger: &Ledger, method: &str) -> Vec<FnContract> 
     for key in ledger.functions.keys() {
         if !key.ends_with(&suffix) { continue; }
         let contract = match ledger.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if emit_takes_self(&contract) { out.push(contract.clone()); }
+        if emit_takes_self(contract) { out.push(contract.clone()); }
     }
     out
 }
