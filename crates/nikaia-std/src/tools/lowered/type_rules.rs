@@ -690,7 +690,7 @@ pub fn tr_expand(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str)
 pub(crate) fn tr_rewrite_item(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, changed: &collections::BTreeSet<String>, own: &collections::BTreeMap<String, TrMethods>, spans: &collections::BTreeMap<u32, Span>, item: &mut Spanned<Item>) {
     let span = tr_span(&item.span);
     match item.node {
-        Item::Impl { ref target, methods, .. } => {
+        Item::Impl { ref target, ref mut methods, .. } => {
             let owner: Option<String> = Some(words.resolve(target.name).to_string());
             for method in methods.iter_mut() {
                 let at = tr_span(&(*method).span);
