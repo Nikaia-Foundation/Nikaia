@@ -1,0 +1,104 @@
+// crates/nikaia-std/src/tools/parse_findings.nika
+//
+// **What the parser refuses, as a finding** (Part III C.2): a reading of
+// `parse_errors.nika` put at the byte the compiler's spans count in, the
+// refusals the parser makes itself (`NK1307`, a source too long, a parse that
+// stopped short, a copy of a grammar rule that could not be made), and the
+// line a refusal travels as where no path is known to render it at. Moved from
+// the compiler's `parser` (ADR-294, #125, #557); the compiler keeps only the
+// reading of its generated parser's error (`failure_of`) and the turn of a
+// finding into its own refusal.
+
+/// A refusal as it travels: the finding for whoever has the path to render
+/// it at, and a line for whoever does not.
+pub struct ParseFindingsRefusal {
+    pub finding: Finding,
+    pub line: String,
+}
+
+/// **A source every `Span` can point into**, or the reason it is refused
+/// before it is read (ADR-294 D7): a span holds its byte offsets as `u32`,
+/// so a file longer than `longest` bytes would have nodes whose place cannot
+/// be said. Nothing where it fits.
+pub fn parse_findings_too_long(length: i64, longest: i64) -> String? {
+    if length > longest {
+        return f"This file is {length} bytes, but a source file can be at most {longest} bytes (4 GiB)."
+    }
+    return null
+}
+
+/// The character index byte `byte` of `source` stands at: what the parse
+/// errors (`parse_errors.nika`) count in. A byte past the end is the end.
+pub fn parse_findings_char_of(source: String, byte: i64) -> i64 {
+    let end = byte.min(source.len())
+    return source.bytes[0..<end].iter().filter(fn(b) { (b & 192) != 128 }).count()
+}
+
+/// The byte character `at` of `source` stands at: what a reading in
+/// characters is turned into for a span. One past the last character, or
+/// before the first, is the end.
+fn parse_findings_byte_of(source: String, at: i64) -> i64 {
+    if at < 0 {
+        return source.len()
+    }
+    return source.chars().take(at).map(fn(c) { utf8_width(c) }).sum()
+}
+
+/// **A refusal at byte `at`**, the caret under `word` (nothing where it is
+/// empty).
+pub fn parse_findings_at(at: i64, word: String, message: String, notes: Vec[String], help: String?) -> Finding {
+    let span = Span { start: at as u32, end: at as u32 }
+    return Finding { code: "", span: span, message: message, notes: notes, help: help, warning: false, labels: [CheckLabel { span: span, word: word, text: "", main: true }] }
+}
+
+/// A reading of `parse_errors.nika`, its character turned into the byte the
+/// span counts in.
+fn parse_findings_reading(reading: ParseReading, source: String) -> Finding {
+    let at = parse_findings_byte_of(source, reading.at)
+    return parse_findings_at(at, reading.word, reading.message, reading.notes, reading.help)
+}
+
+/// **A parse error in the words every other message uses** (Part III C.2,
+/// rule 5): `parse_errors.nika`'s reading, at its byte.
+pub fn parse_findings_parse_error(error: ref Failure, source: String, stops_at: fn(ref String) -> i64 sync) -> Finding {
+    return parse_findings_reading(a_parse_error(error, source, stops_at), source)
+}
+
+/// **What a failed parse of a whole file is refused with**: an unclosed
+/// `/* … */` at the `/*` that opened it (ADR-307 D2), else the parse error
+/// where the parser stopped.
+pub fn parse_findings_failure(error: ref Failure, source: String, stops_at: fn(ref String) -> i64 sync) -> Finding {
+    let unclosed = unclosed_block_comment(error, source) ?? return parse_findings_parse_error(error, source, stops_at)
+    return parse_findings_reading(unclosed, source)
+}
+
+/// **`mut` in front of one name inside a tuple pattern is not supported yet**
+/// (`NK1307`, ADR-views-2 D1, section 6): refused now, possible later, and not
+/// refused on purpose. `at` is the byte the `mut` starts at.
+pub fn parse_findings_mut_name_in_a_tuple(at: i64) -> Finding {
+    let span = Span { start: at as u32, end: (at + 3) as u32 }
+    return Finding { code: "NK1307", span: span, message: "`mut` in front of one name of a tuple pattern isn't supported yet.", notes: ["This is not refused on purpose: the form is left for later, and a program that spells it today would change meaning if it were added in a hurry."], help: "Write `mut` in front of the whole pattern, which marks every name in it: `let mut (tx, rx) = …`, `for mut (a, b) in pairs`.", warning: false, labels: [CheckLabel { span: span, word: "mut", text: "not supported yet", main: true }] }
+}
+
+/// **The refusal a parse error travels as**: the finding, and the line with
+/// its position, 1-based line and column in characters, for whoever has no
+/// path to render it at.
+pub fn parse_findings_refusal(finding: Finding, source: String) -> ParseFindingsRefusal {
+    let end = (finding.span.start as i64).min(source.len())
+    let mut from = end
+    while from > 0 && source.bytes[from - 1] != 10 {
+        from -= 1
+    }
+    let line = source.bytes[0..<from].iter().filter(fn(b) { b == 10 }).count() + 1
+    let column = parse_findings_char_of(source, end) - parse_findings_char_of(source, from) + 1
+    let said_message = said(finding.message)
+    return ParseFindingsRefusal { finding: finding, line: f"{said_message} (line {line}, column {column})" }
+}
+
+/// **A refusal of the copying of a grammar rule** (`grammar_types.nika`,
+/// ADR-grammar-2), as the parser's: its code and headline are the line.
+pub fn parse_findings_types_refusal(refusal: GrammarTypesRefusal) -> ParseFindingsRefusal {
+    let line = f"{refusal.code}: {refusal.message}"
+    let finding = Finding { code: refusal.code, span: refusal.span, message: refusal.message, notes: [refusal.note], help: refusal.help, warning: false, labels: [CheckLabel { span: refusal.span, word: "", text: "", main: true }] }
+    return ParseFindingsRefusal { finding: finding, line: line }
+}

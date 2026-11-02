@@ -646,7 +646,11 @@ pub fn parse_expression_from(
         // A hole has no line of its own to show, so its way out is said beside
         // the headline, where the lowering's message about the hole carries it.
         .map_err(|e| {
-            let finding = a_parse_error(&e, input);
+            let finding = nikaia_std::tools::parse_findings::parse_findings_parse_error(
+                &failure_of(&e, input),
+                input,
+                &stops_at_char,
+            );
             let said = std::iter::once(&finding.message)
                 .chain(&finding.help)
                 .map(|part| crate::diagnostics::said(part))
@@ -675,25 +679,14 @@ pub fn parse_expression_from(
 /// have nodes whose place cannot be said. None has been written by hand; one
 /// that is generated can be split by what generated it.
 pub fn fits(length: usize) -> Result<()> {
-    if length > ast::LONGEST_SOURCE {
-        return Err(crate::diagnostics::refuse(format!(
-            "This file is {length} bytes, but a source file can be at most {} bytes (4 GiB).",
-            ast::LONGEST_SOURCE
-        )));
+    let at_most = |n: usize| i64::try_from(n).unwrap_or(i64::MAX);
+    match nikaia_std::tools::parse_findings::parse_findings_too_long(
+        at_most(length),
+        at_most(ast::LONGEST_SOURCE),
+    ) {
+        Some(reason) => Err(crate::diagnostics::refuse(reason)),
+        None => Ok(()),
     }
-    Ok(())
-}
-
-/// The byte a character index of `source` stands at - what the text half in
-/// Nikaia answers in, turned into what a span counts.
-fn byte_of(source: &str, at: i64) -> Option<usize> {
-    let at = usize::try_from(at).ok()?;
-    Some(
-        source
-            .char_indices()
-            .nth(at)
-            .map_or(source.len(), |(byte, _)| byte),
-    )
 }
 
 /// Where a parse of `input` stops, or `None` where it goes through.
@@ -712,7 +705,7 @@ fn stops_at(input: &str) -> Option<usize> {
 /// The character index a byte offset of `source` stands at - what the parse
 /// errors in Nikaia (`tools/parse_errors.nika`) count in.
 fn char_of(source: &str, byte: usize) -> i64 {
-    source[..byte.min(source.len())].chars().count() as i64
+    nikaia_std::tools::parse_findings::parse_findings_char_of(source, byte as i64)
 }
 
 /// Where a parse of `input` stops, as a character index, or -1 where it goes
@@ -733,42 +726,6 @@ fn failure_of(error: &ParseError, source: &str) -> nikaia_std::tools::parse_erro
         has_message: error.message.is_some(),
         message: error.message.clone().unwrap_or_default(),
     }
-}
-
-/// A reading Nikaia made, as the compiler's finding.
-fn finding_of(
-    reading: nikaia_std::tools::parse_errors::ParseReading,
-    source: &str,
-) -> crate::check::Finding {
-    let at = byte_of(source, reading.at).unwrap_or(source.len());
-    a_parse_finding(
-        at,
-        &reading.word,
-        reading.message,
-        reading.notes,
-        reading.help,
-    )
-}
-
-/// **The message an unclosed `/* … */` gets, said at the `/*` that opened it**
-/// ([ADR-307](../../../../docs/specification/adr/adr-307.md) D2); the words are
-/// `tools/parse_errors.nika`'s.
-fn unclosed_block_comment(error: &ParseError, source: &str) -> Option<crate::check::Finding> {
-    nikaia_std::tools::parse_errors::unclosed_block_comment(&failure_of(error, source), source)
-        .map(|reading| finding_of(reading, source))
-}
-
-/// **A parse error in the words every other message uses** (Part III C.2,
-/// rule 5): what was expected, what was there, and what to write. All of it is
-/// `tools/parse_errors.nika`; the program changed to see whether a reading
-/// would parse further is asked of this parser.
-fn a_parse_error(error: &ParseError, source: &str) -> crate::check::Finding {
-    let reading = nikaia_std::tools::parse_errors::a_parse_error(
-        &failure_of(error, source),
-        source,
-        &stops_at_char,
-    );
-    finding_of(reading, source)
 }
 
 pub fn parse_to_ast(input: &str) -> Result<Parsed> {
@@ -809,23 +766,28 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
             // the end of the file, which is the one place a parse error's
             // position is the reader's to be told rather than the parser's
             // ([ADR-307](../../../../docs/specification/adr/adr-307.md) D2).
-            let finding =
-                unclosed_block_comment(&e, input).unwrap_or_else(|| a_parse_error(&e, input));
+            let finding = nikaia_std::tools::parse_findings::parse_findings_failure(
+                &failure_of(&e, input),
+                input,
+                &stops_at_char,
+            );
             refuse_parsing(finding, input)
         })?;
 
     // **`mut` in front of one name of a tuple pattern** (`NK1307`, ADR-views-2 D1).
     if let Some(at) = stream.state.user_state.mut_name {
-        return Err(refuse_parsing(a_mut_name_in_a_tuple(at), input));
+        let finding =
+            nikaia_std::tools::parse_findings::parse_findings_mut_name_in_a_tuple(at as i64);
+        return Err(refuse_parsing(finding, input));
     }
 
     // The generated entry point already refuses leftover input; this is a
     // backstop so a partial parse can never be reported as a success.
     if !stream.input.is_empty() {
         let at = input.len() - stream.input.len();
-        let finding = a_parse_finding(
-            at,
-            "",
+        let finding = nikaia_std::tools::parse_findings::parse_findings_at(
+            at as i64,
+            String::new(),
             "The parser stopped here, before the end of the file.".to_string(),
             Vec::new(),
             None,
@@ -963,22 +925,7 @@ fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
 fn a_types_refusal(
     refusal: nikaia_std::tools::grammar_types::GrammarTypesRefusal,
 ) -> anyhow::Error {
-    let span = refusal.span;
-    let finding = crate::check::Finding {
-        severity: crate::check::Severity::Error,
-        span,
-        code: refusal.code.clone(),
-        message: refusal.message.clone(),
-        notes: vec![refusal.note],
-        help: Some(refusal.help),
-        labels: vec![crate::check::Label {
-            span,
-            word: String::new(),
-            text: String::new(),
-            main: true,
-        }],
-    };
-    crate::diagnostics::refuse_finding(finding, format!("{}: {}", refusal.code, refusal.message))
+    refused(nikaia_std::tools::parse_findings::parse_findings_types_refusal(refusal))
 }
 
 /// **A copy's actions, guards and bounds with the rule's type parameters
@@ -1021,63 +968,18 @@ fn put_rule_types(
     copy
 }
 
-fn a_parse_finding(
-    at: usize,
-    word: &str,
-    message: String,
-    notes: Vec<String>,
-    help: Option<String>,
-) -> crate::check::Finding {
-    crate::check::Finding {
-        severity: crate::check::Severity::Error,
-        span: ast::Span::new(at, at),
-        code: String::new(),
-        message,
-        notes,
-        help,
-        labels: vec![crate::check::Label {
-            span: ast::Span::new(at, at),
-            word: word.to_string(),
-            text: String::new(),
-            main: true,
-        }],
-    }
-}
-
-/// **`mut` in front of one name inside a tuple pattern is not supported yet**
-/// (`NK1307`, [ADR-views-2](../../../../docs/specification/adr/adr-views-2.md)
-/// D1, section 6): refused now, possible later, and not refused on purpose.
-fn a_mut_name_in_a_tuple(at: usize) -> crate::check::Finding {
-    let span = ast::Span::new(at, at + 3);
-    crate::check::Finding {
-        severity: crate::check::Severity::Error,
-        span,
-        code: "NK1307".to_string(),
-        message: "`mut` in front of one name of a tuple pattern isn't supported yet.".to_string(),
-        notes: vec![
-            "This is not refused on purpose: the form is left for later, and a program that spells it today would change meaning if it were added in a hurry.".to_string(),
-        ],
-        help: Some(
-            "Write `mut` in front of the whole pattern, which marks every name in it: `let mut (tx, rx) = …`, `for mut (a, b) in pairs`.".to_string(),
-        ),
-        labels: vec![crate::check::Label {
-            span,
-            word: "mut".to_string(),
-            text: "not supported yet".to_string(),
-            main: true,
-        }],
-    }
-}
-
 /// The refusal a parse error travels as: the finding for whoever has the path
-/// to render it at, and a line with its position for whoever does not.
-fn refuse_parsing(finding: crate::check::Finding, source: &str) -> anyhow::Error {
-    let (line, column) = winnow_grammar::span::line_column(source, finding.span.at());
-    let message = format!(
-        "{} (line {line}, column {column})",
-        crate::diagnostics::said(&finding.message)
-    );
-    crate::diagnostics::refuse_finding(finding, message)
+/// to render it at, and a line with its position for whoever does not
+/// (`tools/parse_findings.nika`).
+fn refuse_parsing(finding: nikaia_std::tools::findings::Finding, source: &str) -> anyhow::Error {
+    refused(nikaia_std::tools::parse_findings::parse_findings_refusal(
+        finding, source,
+    ))
+}
+
+/// A refusal `tools/parse_findings.nika` made, as the compiler's.
+fn refused(refusal: nikaia_std::tools::parse_findings::ParseFindingsRefusal) -> anyhow::Error {
+    crate::diagnostics::refuse_finding(crate::traits::from_nikaia(refusal.finding), refusal.line)
 }
 
 // --- Action-block helpers ---

@@ -1659,6 +1659,14 @@ mod parse_errors_lowered {
 #[allow(unused_imports)]
 pub use parse_errors_lowered::*;
 
+mod parse_findings_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/parse_findings.rs");
+}
+#[allow(unused_imports)]
+pub use parse_findings_lowered::*;
+
 mod parse_notes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2842,6 +2850,10 @@ pub mod order {
 pub mod parse_errors {
     #[allow(unused_imports)]
     pub use super::{Failure, ParseReading, RESERVED_WORDS, a_parse_error, unclosed_block_comment};
+}
+pub mod parse_findings {
+    #[allow(unused_imports)]
+    pub use super::{ParseFindingsRefusal, parse_findings_too_long, parse_findings_char_of, parse_findings_at, parse_findings_parse_error, parse_findings_failure, parse_findings_mut_name_in_a_tuple, parse_findings_refusal, parse_findings_types_refusal};
 }
 pub mod parse_notes {
     #[allow(unused_imports)]
