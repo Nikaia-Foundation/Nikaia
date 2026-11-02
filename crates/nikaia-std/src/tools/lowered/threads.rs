@@ -265,12 +265,12 @@ pub fn is_may(answer: &Crossing) -> bool { answer.may() }
 
 pub fn is_refused(answer: &Crossing) -> bool { nikaia_std::index::or(answer.refused_part(), || "".into()) != "" }
 
-pub fn why_word(answer: &Crossing) -> &'static str {
-    let why = match answer.why() { Some(__nikaia_value) => __nikaia_value, None => return "none" };
+pub fn why_word(answer: &Crossing) -> String {
+    let why = match answer.why() { Some(__nikaia_value) => __nikaia_value, None => return String::from("none") };
     match why {
-        Refusal::Lock => "lock",
-        Refusal::Count => "count",
-        Refusal::Said => "said",
+        Refusal::Lock => String::from("lock"),
+        Refusal::Count => String::from("count"),
+        Refusal::Said => String::from("said"),
     }
 }
 
