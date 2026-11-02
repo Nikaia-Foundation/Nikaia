@@ -1220,7 +1220,7 @@ pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWor
 /// **`value as T`**: what may be named, and what a cast records.
 pub fn check_core_cast[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, inner: ref Expr, ty: ref Type, span: ref Span) -> Ty sync {
     let from = check_core_expr(state, world, host, inner, span)
-    let into = host.declared(state, ty, span)
+    let into = check_walked_declared(state, world, ty, span)
     state.a_cast_over_a_lent_binding(world, inner, span)
     // **An integer becomes a `scalar` by `as` only from a `u8`** (Part I
     // 2.2, #1003): every byte value is a scalar value, and no wider integer

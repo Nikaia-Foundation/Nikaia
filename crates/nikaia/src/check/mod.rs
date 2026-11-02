@@ -31,7 +31,7 @@ use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::assets::Reads;
-use crate::ast::{self, Expr, Item, Span};
+use crate::ast::{Expr, Item};
 use crate::build_time;
 use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, Ledger, ty::Ty};
@@ -389,7 +389,6 @@ fn walked<'a>(
         here: beside.iter().position(|other| std::ptr::eq(*other, parsed)),
         world: &world,
         s: core::Baton::new(s),
-        spares: Vec::new(),
     };
     checker.collect_types();
     checker.nikaia(|state, world, host| {
@@ -428,13 +427,7 @@ fn walked<'a>(
         // ([ADR-269](../../docs/specification/adr/adr-269.md) D4), and checked
         // when the program runs where it cannot. After the walk,
         // because the checker is what decided which calls are the prelude's.
-        let keys: BTreeSet<(usize, usize)> = checker
-            .s
-            .facts
-            .claims
-            .keys()
-            .map(|(a, b)| (*a as usize, *b as usize))
-            .collect();
+        let keys: BTreeSet<(i64, i64)> = checker.s.facts.claims.keys().cloned().collect();
         let comptimes = crate::prove::comptimes_of(parsed, &checker.s.facts.comptime_values);
         // **A call an open claim reads is run as a `comptime` is**
         // ([ADR-359](../../docs/specification/adr/adr-359.md) D11-D13), where this
@@ -449,33 +442,15 @@ fn walked<'a>(
         };
         let proved = crate::prove::prove(parsed, own, library, &keys, &comptimes, run);
         checker.s.findings.extend(proved.findings);
-        checker.s.facts.entries = proved.entries;
-        checker.s.facts.reaches = proved.reaches;
-        checker.s.facts.published = proved.published;
-        // **A `std` precondition at a call is a claim of the program**
-        // (#1003): held, refused (`NK1300`) and listed as an `assert` is.
-        for ((at, node), written) in proved.std_claims {
-            checker.s.facts.claims.insert(
-                (at as i64, node as i64),
-                Claim {
-                    held: None,
-                    written,
-                    left: None,
-                    right: None,
-                    assumed: false,
-                },
-            );
-        }
-        for (key, held) in proved.held {
-            if let Some(claim) = checker
-                .s
-                .facts
-                .claims
-                .get_mut(&(key.0 as i64, key.1 as i64))
-            {
-                claim.held = Some(held);
-            }
-        }
+        // What the prover found, put into the facts (`check_walked.nika`).
+        check_walked::check_walked_proved(
+            &mut checker.s,
+            proved.entries,
+            proved.reaches,
+            proved.published,
+            &proved.std_claims,
+            &proved.held,
+        );
         // A naked view parameter that is kept past the call (`NK2302`). Also a
         // separate walk, and for the same reason: it asks where a *value* goes
         // rather than what a type is. It reads both ledgers, because **a call says
@@ -659,18 +634,7 @@ fn propagation(
     // into `hyper_shim` keeps decides how its argument is written, and a walk
     // that could not resolve the callee lowered a literal it had been told to
     // build as text of its own (0.0.230, issue #155 before it).
-    for (name, contract) in &described.functions {
-        library
-            .functions
-            .entry(name.clone())
-            .or_insert_with(|| contract.clone());
-    }
-    for (name, contract) in &described.types {
-        library
-            .types
-            .entry(name.clone())
-            .or_insert_with(|| contract.clone());
-    }
+    check_walked::check_walked_with_described(&mut library, described);
     // **The same walk the refusal ran**, `beside` included: a `comptime` that
     // calls across a file boundary is answered by the checker, and what the
     // emitter writes is that answer. Handing it fewer files than the check had
@@ -720,8 +684,6 @@ struct Checker<'a> {
     /// What it looks at and does not own: the names, and the two ledgers. A
     /// reference, so the moved code can be handed it while the checker is lent.
     world: &'a CheckWorld<'a, 'a, 'a, 'a, 'a, 'a, 'a>,
-    /// States with nothing in them, for the crossings into Nikaia (`core.rs`).
-    spares: Vec<Box<CheckState>>,
     parsed: &'a Parsed,
     /// **The program's other files**, for the one question that needs a body
     /// rather than a contract — a `comptime` calling across a file boundary.
@@ -765,7 +727,7 @@ impl<'a> Checker<'a> {
     /// copy, asked again until nothing more joins. So a type that holds itself
     /// never does - it holds itself through a box the compiler wrote
     /// ([ADR-246](../../docs/specification/adr/adr-246.md)), and a box is not
-    /// a copy - where [`Comparable`]'s walk, which answers *yes* on a cycle,
+    /// a copy - where `check_compare.nika`'s walk (ADR-204 D1), which answers *yes* on a cycle,
     /// would have said it was.
     fn collect_copies(&mut self) {
         self.s.collect_copies(self.world);
@@ -775,61 +737,6 @@ impl<'a> Checker<'a> {
     /// ([ADR-285](../../docs/specification/adr/adr-285.md) D24, D25, D27).
     fn numbers_typed_by_their_uses(&mut self) {
         self.s.numbers_typed_by_their_uses();
-    }
-
-    // --- statements ---------------------------------------------------------
-
-    // --- expressions --------------------------------------------------------
-
-    /// `Shared(x)`, `SharedMut(x)` and `Locked(x)` make a hull
-    /// ([ADR-281](../../docs/specification/adr/adr-281.md) D2).
-    ///
-    /// **One argument, and the hull takes the type of what it is handed.** A
-    /// literal hands over `Unknown`, which is not a failure here: the hull is made
-    /// by a *call* in the emitted code too, so the language below gives the number
-    /// its type the way it gives one to any argument. That is the difference
-    /// between a constructor and an annotation, and it is why the annotation could
-    /// not answer `SharedMut(0)` at all.
-    /// A type **as it is written**, checked for the one spelling this language
-    /// does not have ([ADR-281](../../docs/specification/adr/adr-281.md) D3).
-    ///
-    /// `Shared[Locked[T]]` is what `SharedMut[T]` is, and two ways to write one
-    /// type is the thing the short name was given a name *instead* of
-    /// ([ADR-281](../../docs/specification/adr/adr-281.md) D3). Worse than
-    /// untidy: the two are the same bytes below and two different types up here,
-    /// so a value of one would not fit the other while the emitted Rust could not
-    /// tell them apart.
-    ///
-    /// It runs at the positions a **program** writes a type, and the message
-    /// carries the replacement.
-    fn declared(&mut self, ty: &ast::Type, span: &Span) -> Ty {
-        self.s.spelling(self.world, ty, span);
-        let written = Ty::from_ast(self.parsed, ty);
-        self.a_key_with_no_order(&written, span);
-        written
-    }
-
-    /// **`NK1247`: an ordered map or set whose key has no order**
-    /// ([ADR-010](../../docs/specification/adr/adr-010.md) D10).
-    ///
-    /// `BTreeMap` and `BTreeSet` keep their keys in order, so the key has to
-    /// have one. The types of the language answer from a list (a float has none),
-    /// a type this language declares has none, and a type whose parts are Rust
-    /// answers from the ledger's `orders` column, whose absence is *no*. Asked at
-    /// the positions a program writes a type, over everything inside it.
-    fn a_key_with_no_order(&mut self, ty: &Ty, span: &Span) {
-        let asking = Comparable {
-            beside: &self.world.parts_beside,
-            structs: &self.s.structs,
-            enums: &self.s.enums,
-            payloads: &self.s.enum_payloads,
-            parameters: &self.s.struct_parameters,
-            own: self.world.own,
-            library: self.world.library,
-        };
-        let refused =
-            nikaia_std::tools::check_compare::compare_keys_with_no_order(&asking, ty, span);
-        self.s.findings.extend(refused);
     }
 
     // --- the one shape every check has --------------------------------------
@@ -938,37 +845,9 @@ const SHARED_MUT: &str = "SharedMut";
 /// import is that this file knows them by name.
 pub const HULLS: [&str; 3] = [SHARED, SHARED_MUT, LOCKED];
 
-/// The two doors that take **several** locks at once
-/// ([ADR-281](../../../docs/specification/adr/adr-281.md)).
-///
-/// They are not ledger entries and not grammar: the parser already takes
-/// `access_all(a, b) fn(x, y) { … }` as an ordinary call with a trailing lambda
-/// (Part I 5.3), and what is missing is only somebody to type it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MultiLock {
-    /// `access_all` - every lock read in place, none of them changed.
-    Reading,
-    /// `update_all` - every lock written, one new value each.
-    Writing,
-}
-
-impl MultiLock {
-    /// The name a program writes, or `None` for anything else.
-    pub fn named(name: &str) -> Option<MultiLock> {
-        match name {
-            "access_all" => Some(MultiLock::Reading),
-            "update_all" => Some(MultiLock::Writing),
-            _ => None,
-        }
-    }
-
-    pub fn written(self) -> &'static str {
-        match self {
-            MultiLock::Reading => "access_all",
-            MultiLock::Writing => "update_all",
-        }
-    }
-}
+/// The two doors that take **several** locks at once (ADR-281):
+/// `tools/check_walked.nika`.
+pub use nikaia_std::tools::check_walked::CheckMultiLock as MultiLock;
 
 /// **A `'…'` as the language below writes it** (ADR-320 D8): as written
 /// where it is one scalar, and the one scalar NFC composes it to, as
@@ -1056,7 +935,3 @@ pub fn refuse_assumes_in_std(checked: &mut Checked) {
 pub fn written(parsed: &Parsed, expr: &Expr) -> String {
     nikaia_std::tools::written::written_expression(&parsed.interner, expr)
 }
-
-/// **Whether two values of this type may be compared** (ADR-204 D1):
-/// `tools/check_compare.nika`.
-use nikaia_std::tools::check_compare::CheckComparable as Comparable;

@@ -418,8 +418,8 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
         if plain_text && check_function_lends(world, key, at + offset) {
             let mut viewed = arg.ty.clone();
             viewed.is_view = true;
-            ty = host.declared(state, &viewed, &arg.span);
-        } else { ty = host.declared(state, &arg.ty, &arg.span); }
+            ty = check_walked_declared(state, world, &viewed, &arg.span);
+        } else { ty = check_walked_declared(state, world, &arg.ty, &arg.span); }
         check_reflected_field_kept(state, world, &arg.ty, &arg.span, true);
         let id = state.a_new_binding();
         let mut local = CheckLocal::free(name, ty.erase(parameters), id);

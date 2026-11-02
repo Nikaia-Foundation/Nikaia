@@ -939,7 +939,7 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 // this was written - see `contracts::sync`.
 pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, inner: &Expr, ty: &Type, span: &Span) -> Ty {
     let from = check_core_expr(state, world, host, inner, span);
-    let into = host.declared(state, ty, span);
+    let into = check_walked_declared(state, world, ty, span);
     state.a_cast_over_a_lent_binding(world, inner, span);
     let into_a_scalar = match into {
         Ty::Named { ref name, ref args, .. } => (name == "scalar" || name == "char") && args.is_empty(),

@@ -161,7 +161,7 @@ pub fn check_defaults_item_constants<H: CheckHost>(state: &mut CheckState, world
                 let mut declared: Ty = Ty::Unknown;
                 if ty.is_some() {
                     let written = match ty { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    declared = host.declared(state, written, &item.span);
+                    declared = check_walked_declared(state, world, written, &item.span);
                 }
                 let spelled = world.here.text(name);
                 state.facts.comptime_names.insert(spelled.to_string());

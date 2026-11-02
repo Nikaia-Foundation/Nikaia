@@ -346,7 +346,7 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
     let mut want: Ty? = null
     if ty != null {
         let written = ty ?? return Ty::Unknown
-        want = host.declared(state, written, span)
+        want = check_walked_declared(state, world, written, span)
     }
 
     // What the emitter writes, spelled in the language below: before the type

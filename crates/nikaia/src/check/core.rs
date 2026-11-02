@@ -1,27 +1,20 @@
 //! **The Rust side of the checker's core** (ADR-294, #125, #558, C-6, U-c0): the
-//! baton the state travels in, and the host the moved code asks the rest of the
-//! checker through.
+//! baton the state travels in, and the crossing into the moved code, which asks
+//! the rest of the compiler through `host::Host`.
 //!
 //! **The state is a baton.** `Checker::s` holds it as `Baton`, a
 //! `Option<Box<CheckState>>` that dereferences to the state and panics while the
 //! state is out on a crossing: a forgotten swap is a panic, never a silent empty
 //! state. A stub (`Checker::nikaia`) takes the box out, runs a Nikaia function
-//! on `&mut *state`, and puts it back. A host method (`Core::hosted`) swaps the
-//! state it is handed with the heap spare, lends the box to the checker, runs
-//! the Rust, and swaps it back.
+//! on `&mut *state`, and puts it back.
 //!
-//! **Never build a `CheckState` in a stub's or a host method's frame**: it is
-//! some kilobytes, and a frame of that size on each crossing is what the stack
-//! of a deeply nested program does not have (measured on 8 MB: a state by value
-//! costs 8.6 KB a crossing, a box with a cold spare 192 bytes). The spares come
-//! from a pool, `Checker::spares`, and a `#[cold]` constructor makes one when it
-//! is empty.
+//! **Never build a `CheckState` in a stub's frame**: it is some kilobytes, and
+//! a frame of that size on each crossing is what the stack of a deeply nested
+//! program does not have (measured on 8 MB: a state by value costs 8.6 KB a
+//! crossing). The one state of a walk is made on the heap (`hollow`).
 
 use super::*;
-use nikaia_std::tools::build_eval::BtRead;
-use nikaia_std::tools::check_host::{CheckBuilt, CheckComputed, CheckHost};
 use nikaia_std::tools::check_narrow::CheckNarrowing;
-use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 
 /// The checker's state, which is out of the checker while Nikaia code runs.
@@ -56,8 +49,7 @@ impl DerefMut for Baton {
     }
 }
 
-/// **A state with nothing in it**, on the heap: what a spare is made of, and
-/// what `walked` fills in.
+/// **A state with nothing in it**, on the heap: what `walked` fills in.
 #[cold]
 #[inline(never)]
 pub(super) fn hollow() -> Box<CheckState> {
@@ -140,176 +132,20 @@ pub(super) fn hollow() -> Box<CheckState> {
     })
 }
 
-/// What the moved code sees of the checker: the host for the services that
-/// stay Rust, and the checker itself for the hubs, `expr` and `block`.
-pub(super) struct Core<'c, 'a> {
-    c: RefCell<&'c mut Checker<'a>>,
-    h: host::Host<'a>,
-    spare: RefCell<Option<Box<CheckState>>>,
-}
-
 impl<'a> Checker<'a> {
     /// Run `f` with the state handed to Nikaia: the box leaves the checker for
-    /// the time, with the world and a host that can bring it back.
+    /// the time, with the world and the host the moved code asks the compiler
+    /// through.
     #[track_caller]
     pub(super) fn nikaia<R>(
         &mut self,
-        f: impl FnOnce(&mut CheckState, &CheckWorld<'a, 'a, 'a, 'a, 'a, 'a, 'a>, &Core<'_, 'a>) -> R,
+        f: impl FnOnce(&mut CheckState, &CheckWorld<'a, 'a, 'a, 'a, 'a, 'a, 'a>, &host::Host<'a>) -> R,
     ) -> R {
         let mut state = crate::baton::out_of(self.s.0.take(), "the state");
-        let spare = self.spares.pop().unwrap_or_else(hollow);
         let world = self.world;
         let h = self.host();
-        let core = Core {
-            c: RefCell::new(&mut *self),
-            h,
-            spare: RefCell::new(Some(spare)),
-        };
-        let result = f(&mut state, world, &core);
-        let spare = core
-            .spare
-            .into_inner()
-            .expect("a spare state is still lent out");
-        self.spares.push(spare);
+        let result = f(&mut state, world, &h);
         self.s.0 = Some(state);
         result
-    }
-}
-
-impl<'a> Core<'_, 'a> {
-    /// Run Rust code on behalf of Nikaia: the state it holds goes back into the
-    /// checker (by swapping the box contents with the spare, so no state is
-    /// built or moved by value), and comes out again at the end.
-    fn hosted<R>(&self, state: &mut CheckState, run: impl FnOnce(&mut Checker<'a>) -> R) -> R {
-        let mut checker = self.c.borrow_mut();
-        let mut lent = self
-            .spare
-            .borrow_mut()
-            .take()
-            .expect("the spare state is out: the host was entered twice");
-        std::mem::swap(state, &mut *lent);
-        assert!(checker.s.0.is_none(), "the state was in two places at once");
-        checker.s.0 = Some(lent);
-        let result = run(&mut checker);
-        let mut back = checker
-            .s
-            .0
-            .take()
-            .expect("the state was taken during a hosted call");
-        std::mem::swap(state, &mut *back);
-        *self.spare.borrow_mut() = Some(back);
-        result
-    }
-}
-
-impl CheckHost for Core<'_, '_> {
-    fn hole(&self, site: u32, text: &str) -> Option<Expr> {
-        self.h.hole(site, text)
-    }
-
-    fn kept_call(
-        &self,
-        func: &Expr,
-        arity: i64,
-        receiver: bool,
-    ) -> (Vec<winnow_grammar::Symbol>, Expr) {
-        self.h.kept_call(func, arity, receiver)
-    }
-
-    fn intern(&self, text: &str) -> winnow_grammar::Symbol {
-        self.h.intern(text)
-    }
-
-    fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr {
-        self.h.wrap_hole(hole, wraps)
-    }
-
-    fn literal_holes(&self, literal: &Expr) -> Vec<Expr> {
-        self.h.literal_holes(literal)
-    }
-
-    fn free_calls(&self, body: &crate::ast::Block) -> BTreeSet<String> {
-        self.h.free_calls(body)
-    }
-
-    fn evaluate(&self, value: &Expr, held: &BTreeMap<String, build_time::Value>) -> CheckBuilt {
-        self.h.evaluate(value, held)
-    }
-
-    fn compute_comptime(
-        &self,
-        value: &Expr,
-        found: &Ty,
-        bound: &str,
-        known: &BTreeMap<String, build_time::Value>,
-        typed: &BTreeMap<String, Ty>,
-        steps: Option<u64>,
-        bytes: Option<u64>,
-    ) -> CheckComputed {
-        self.h
-            .compute_comptime(value, found, bound, known, typed, steps, bytes)
-    }
-
-    fn somewhere(&self) -> bool {
-        self.h.somewhere()
-    }
-
-    fn decoded(&self, literal: &str) -> Option<String> {
-        self.h.decoded(literal)
-    }
-
-    fn composed(&self, text: &str) -> String {
-        self.h.composed(text)
-    }
-
-    fn read(&self, path: &str) -> BtRead {
-        self.h.read(path)
-    }
-
-    fn assets_read_in(&self, value: &Expr, read: &BTreeMap<String, String>) -> Expr {
-        self.h.assets_read_in(value, read)
-    }
-
-    fn value_fn(&self) -> String {
-        self.h.value_fn()
-    }
-
-    fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)> {
-        self.h.holes_read(literal)
-    }
-
-    fn declared(&self, state: &mut CheckState, ty: &crate::ast::Type, span: &Span) -> Ty {
-        self.hosted(state, |checker| checker.declared(ty, span))
-    }
-
-    fn float_text(&self, number: f64) -> String {
-        self.h.float_text(number)
-    }
-
-    fn type_of(&self, ty: &crate::ast::Type) -> Ty {
-        self.h.type_of(ty)
-    }
-
-    fn constants_beside(&self) -> Vec<(String, Ty)> {
-        self.h.constants_beside()
-    }
-
-    fn impl_parameters(&self, target: &crate::ast::Type) -> Vec<String> {
-        self.h.impl_parameters(target)
-    }
-
-    fn instantiations_beside(
-        &self,
-        modules: &BTreeSet<String>,
-        mine: &BTreeSet<String>,
-    ) -> Vec<((String, String), Vec<FieldContract>)> {
-        self.h.instantiations_beside(modules, mine)
-    }
-
-    fn an_escape_nothing_names(
-        &self,
-        text: &str,
-    ) -> Option<nikaia_std::tools::escapes::NotAnEscape> {
-        self.h.an_escape_nothing_names(text)
     }
 }

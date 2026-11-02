@@ -223,7 +223,7 @@ pub fn check_defaults_item_constants[H: CheckHost](mut state: CheckState, world:
                 let mut declared: Ty = Ty::Unknown
                 if ty != null {
                     let written = ty ?? continue
-                    declared = host.declared(state, written, item.span)
+                    declared = check_walked_declared(state, world, written, item.span)
                 }
                 let spelled = world.here.text(name)
                 state.facts.comptime_names.insert(spelled.clone())

@@ -306,3 +306,75 @@ fn check_walked_function_at(view: ref ParsedView, byte: i64) -> String? {
     }
     return null
 }
+
+/// **A type as a program writes it, read** (ADR-281 D3, ADR-010 D10): the
+/// one spelling the language does not have refused, the type built from the
+/// annotation, and an ordered map or set whose key has no order refused
+/// (`NK1247`), over everything inside it. Asked at the positions a program
+/// writes a type.
+pub fn check_walked_declared(mut state: CheckState, world: ref CheckWorld, ty: ref Type, span: ref Span) -> Ty sync {
+    state.spelling(world, ty, span)
+    let written = written_ty(world.here.words, world.here.aliases, ty)
+    let refused = collect_keys_unordered(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, written, span)
+    state.findings.extend(refused)
+    return written
+}
+
+/// **What the prover found, put into the facts** (ADR-269 D4, D5, D18): the
+/// checked entries, how each call reaches them and what the ledger
+/// publishes; a `std` precondition at a call becomes a claim of the program
+/// (#1003), held, refused (`NK1300`) and listed as an `assert` is; and each
+/// claim the prover reached is told how it is held.
+pub fn check_walked_proved(mut state: CheckState, entries: collections::BTreeMap[String, Vec[PreconditionCheck]], reaches: collections::BTreeMap[(String, String), CallReach], published: collections::BTreeMap[String, Published], std_claims: ref collections::BTreeMap[(i64, i64), String], held: ref collections::BTreeMap[(i64, i64), ClaimHeld]) sync {
+    state.facts.entries = entries
+    state.facts.reaches = reaches
+    state.facts.published = published
+    for (key, written) in std_claims {
+        state.facts.claims.insert(key.clone(), FactClaim { held: null, written: written.clone(), left: null, right: null, assumed: false })
+    }
+    for (key, how) in held {
+        let mut claim = state.facts.claims.get(key) ?? continue
+        claim.held = how.clone()
+    }
+}
+
+/// **The `std` library a walk resolves against, with the described crates'
+/// boundary** (`project::Foreign::library`): a described entry joins where
+/// `std` has none by its name, and `std` wins a collision. What a call into
+/// a described crate keeps decides how its argument is written (#155).
+pub fn check_walked_with_described(mut library: Ledger, described: ref Ledger) sync {
+    for (name, contract) in described.functions {
+        library.functions.entry(name.clone()).or_insert_with(fn() { contract.clone() })
+    }
+    for (name, contract) in described.types {
+        library.types.entry(name.clone()).or_insert_with(fn() { contract.clone() })
+    }
+}
+
+/// **The two doors that take several locks at once** (ADR-281): not ledger
+/// entries and not grammar, but ordinary calls with a trailing lambda
+/// (Part I 5.3) that the checker types.
+pub enum CheckMultiLock {
+    /// `access_all`: every lock read in place, none of them changed.
+    Reading,
+    /// `update_all`: every lock written, one new value each.
+    Writing,
+}
+
+impl CheckMultiLock {
+    /// The name a program writes, or `null` for anything else.
+    pub fn named(name: String) -> CheckMultiLock? sync {
+        return match name {
+            "access_all" => CheckMultiLock::Reading,
+            "update_all" => CheckMultiLock::Writing,
+            else => null,
+        }
+    }
+
+    pub fn written(self) -> String sync {
+        return match self {
+            CheckMultiLock::Reading => "access_all",
+            CheckMultiLock::Writing => "update_all",
+        }
+    }
+}

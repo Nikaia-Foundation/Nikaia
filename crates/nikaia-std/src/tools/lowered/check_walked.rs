@@ -194,3 +194,59 @@ pub(crate) fn check_walked_function_at(view: &ParsedView<'_, '_, '_, '_, '_, '_>
     None
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_walked_declared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span) -> Ty {
+    state.spelling(world, ty, span);
+    let written = written_ty(world.here.words, world.here.aliases, ty);
+    let refused = collect_keys_unordered(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, &written, span);
+    state.findings.extend(refused);
+    written
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_walked_proved(state: &mut CheckState, entries: collections::BTreeMap<String, Vec<PreconditionCheck>>, reaches: collections::BTreeMap<(String, String), CallReach>, published: collections::BTreeMap<String, Published>, std_claims: &collections::BTreeMap<(i64, i64), String>, held: &collections::BTreeMap<(i64, i64), ClaimHeld>) {
+    state.facts.entries = entries;
+    state.facts.reaches = reaches;
+    state.facts.published = published;
+    for (key, written) in std_claims.iter() { state.facts.claims.insert(key.clone(), FactClaim { held: None, written: written.to_string(), left: None, right: None, assumed: false }); }
+    for (key, how) in held.iter() {
+        let claim = match state.facts.claims.get_mut(&key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        claim.held = Some(how.clone());
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_walked_with_described(library: &mut Ledger, described: &Ledger) {
+    for (name, contract) in described.functions.iter() { library.functions.entry(name.to_string()).or_insert_with(|| { contract.clone() }); }
+    for (name, contract) in described.types.iter() { library.types.entry(name.to_string()).or_insert_with(|| { contract.clone() }); }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckMultiLock {
+    Reading,
+    Writing,
+}
+
+impl CheckMultiLock {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn named(name: &str) -> Option<CheckMultiLock> {
+        match name {
+            "access_all" => Some(CheckMultiLock::Reading),
+            "update_all" => Some(CheckMultiLock::Writing),
+            _ => None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn written(self) -> String {
+        match self {
+            CheckMultiLock::Reading => String::from("access_all"),
+            CheckMultiLock::Writing => String::from("update_all"),
+        }
+    }
+}
+

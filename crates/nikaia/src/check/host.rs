@@ -332,12 +332,6 @@ impl CheckHost for Host<'_> {
         )
     }
 
-    /// Code below the core never walks an expression: the hubs are the core's
-    /// host's (`core::Core`), until the dispatcher moves (U-c7, U-c11).
-    fn declared(&self, _state: &mut CheckState, _ty: &crate::ast::Type, _span: &Span) -> Ty {
-        unreachable!("`declared` is asked of the core's host, not of the services")
-    }
-
     fn float_text(&self, number: f64) -> String {
         format!("{number:?}")
     }

@@ -45,7 +45,7 @@ pub type Reaches = BTreeMap<(String, String), Reach>;
 #[derive(Debug, Default)]
 pub struct Proved {
     pub findings: Vec<Finding>,
-    pub held: BTreeMap<(usize, usize), Held>,
+    pub held: BTreeMap<(i64, i64), Held>,
     /// By the ledger's key (`f`, `Type::m`): what the checked entry checks.
     pub entries: BTreeMap<String, Vec<Check>>,
     pub reaches: Reaches,
@@ -54,7 +54,7 @@ pub struct Proved {
     /// **`std`'s preconditions at the calls** (ADR-269 D5, #1003): claims
     /// no `assert` states, keyed as `held` is, each written
     /// `callee: condition`.
-    pub std_claims: BTreeMap<(usize, usize), String>,
+    pub std_claims: BTreeMap<(i64, i64), String>,
 }
 
 /// Read off the checker's `comptime_values` (the type below and the literal,
@@ -153,15 +153,11 @@ pub fn prove(
     parsed: &Parsed,
     own: &Ledger,
     library: &Ledger,
-    claims: &BTreeSet<(usize, usize)>,
+    claims: &BTreeSet<(i64, i64)>,
     comptimes: &Comptimes,
     run: Option<ClaimRunner<'_>>,
 ) -> Proved {
     use std::sync::atomic::Ordering::Relaxed;
-    let claims: BTreeSet<(i64, i64)> = claims
-        .iter()
-        .map(|(at, node)| (*at as i64, *node as i64))
-        .collect();
     // A build that cannot run code gives no runner, and `prove_rounds` asks
     // no round (#1117).
     let runner = run.map(|run| {
@@ -199,7 +195,7 @@ pub fn prove(
         &parsed.interner,
         own,
         library,
-        &claims,
+        claims,
         comptimes,
         &runner,
         &crate::proofs::asked_so_far,
@@ -227,19 +223,11 @@ fn finished(walked: prove_run::ProveWalked) -> Proved {
             .into_iter()
             .map(crate::traits::from_nikaia)
             .collect(),
-        held: walk
-            .held
-            .into_iter()
-            .map(|((at, node), held)| ((at as usize, node as usize), held))
-            .collect(),
+        held: walk.held,
         entries: answers.entries,
         reaches: walk.reaches,
         published: answers.published,
-        std_claims: walk
-            .std_claims
-            .into_iter()
-            .map(|((at, node), written)| ((at as usize, node as usize), written))
-            .collect(),
+        std_claims: walk.std_claims,
     }
 }
 

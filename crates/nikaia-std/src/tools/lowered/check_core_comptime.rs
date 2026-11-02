@@ -280,7 +280,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
     let mut want: Option<Ty> = None;
     if ty.is_some() {
         let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        want = Some(host.declared(state, written, span));
+        want = Some(check_walked_declared(state, world, written, span));
     }
     let turn: Option<CheckUnrolling> = match state.flow.unrolling.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),

@@ -51,7 +51,6 @@ pub trait CheckHost {
     fn value_fn(&self) -> String;
     fn an_escape_nothing_names(&self, text: &str) -> Option<NotAnEscape>;
     fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)>;
-    fn declared(&self, state: &mut CheckState, ty: &Type, span: &Span) -> Ty;
     fn float_text(&self, number: f64) -> String;
     fn type_of(&self, ty: &Type) -> Ty;
     fn constants_beside(&self) -> Vec<(String, Ty)>;

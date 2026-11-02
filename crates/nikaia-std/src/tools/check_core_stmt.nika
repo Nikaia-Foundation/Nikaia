@@ -925,7 +925,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     let mut bound = Ty::Unknown
     if ty != null {
         let t: ref Type = ty ?? return check_core_stmt_unit()
-        let want = host.declared(state, t, span)
+        let want = check_walked_declared(state, world, t, span)
         check_reflected_field_kept(state, world, t, span, false)
         // **The annotation is no longer the constructor** (ADR-281 D2).
         state.constant_fits(world, value, want, span)
