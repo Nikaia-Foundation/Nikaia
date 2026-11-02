@@ -654,14 +654,8 @@ pub fn project_for_file(
         let project = Project::open(&layout.root, target, user_parallelism)?;
         if canonical(file) != canonical(&project.entry()) {
             refuse!(
-                "{} is not the entry point of the project at {}.\n\
-                 `nikaia run` with a file runs the program whose entry it is, and this \
-                 project's program starts at `{ENTRY}`. Run `nikaia run --project {}`, or \
-                 `nikaia lower {}` to lower the file to Rust.",
-                file.display(),
-                project.root.display(),
-                project.root.display(),
-                file.display()
+                "{}",
+                project_drive::project_drive_not_the_entry(file, &project.root, ENTRY)
             );
         }
         return Ok(project);
@@ -671,49 +665,43 @@ pub fn project_for_file(
     lower_reading(file, &settings, no_cache, &[], allowlist)?;
     let warned = true;
 
-    let canonical_file = canonical(file);
-    let key = orchestrator::cache::sha256_hex(canonical_file.to_string_lossy().as_bytes());
-    let stem = file
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-    // Cargo's package names are letters, digits, `-` and `_`, starting with a
-    // letter; the binary is called what the package is.
-    let name = match stem.chars().next() {
-        Some(first)
-            if first.is_ascii_alphabetic()
-                && stem
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') =>
-        {
-            stem
-        }
-        _ => "program".to_string(),
+    // The kept project's root, its manifest and the copy of the file:
+    // `project_drive_kept_for_file` (`tools/project_drive.nika`).
+    let host = KeptHost {
+        failed: RefCell::new(None),
     };
-    let root = Layout::user_cache_dir()
-        .join("run")
-        .join(format!("{name}-{}", &key[..16]));
-    // An entry of the user cache like any other: pruned when it was used
-    // longest ago (#724).
-    orchestrator::cache::use_entry(&root);
-    write_if_changed(
-        &root.join("nikaia.toml"),
-        &format!(
-            "# Kept by `nikaia run` for {} (ADR-260 D4): a file outside any project\n\
-             # is built as one of its own. Rewritten from that file on every run.\n\
-             [package]\nname = \"{name}\"\nversion = \"0.0.0\"\n",
-            canonical_file.display()
-        ),
-    )?;
-    write_if_changed(
-        &root.join(ENTRY),
-        &std::fs::read_to_string(file)
-            .with_context(|| format!("cannot read {}", file.display()))?,
-    )?;
+    let root = block_on(project_drive::project_drive_kept_for_file(
+        file, ENTRY, &host,
+    ))
+    .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))?;
     let mut project = Project::open(&root, target, user_parallelism)?;
     project.warned = warned;
     project.written = Some(file.to_path_buf());
     Ok(project)
+}
+
+/// What `project_drive_kept_for_file` asks of the compiler: the user's cache
+/// and [`write_if_changed`]; a refusal of the write is kept in `failed`.
+struct KeptHost {
+    failed: RefCell<Option<anyhow::Error>>,
+}
+
+impl project_drive::ProjectDriveKeptHost for KeptHost {
+    fn user_cache_dir(&self) -> PathBuf {
+        Layout::user_cache_dir()
+    }
+
+    fn use_entry(&self, entry: &Path) {
+        orchestrator::cache::use_entry(entry);
+    }
+
+    fn write_if_changed(&self, path: &Path, text: &str) -> HostResult<()> {
+        write_if_changed(path, text).map(|_| ()).map_err(|error| {
+            let said = format!("{error:#}");
+            *self.failed.borrow_mut() = Some(error);
+            said.into()
+        })
+    }
 }
 
 pub fn lower_reading(

@@ -11,6 +11,7 @@
 
 use std::env
 use std::fs
+use std::hash
 
 /// **What one member's lowering hands back** (`project.rs`'s `Lowered`): the
 /// Rust, the files it read, the notes to say after the build, and a library's
@@ -514,4 +515,53 @@ fn project_drive_c_library[H: ProjectDriveHost](host: ref H, header: ref String,
 /// place them.
 pub fn project_drive_backend_said(messages: String) -> bool {
     return messages.lines().any(fn(line) { line.contains("\"compiler-message\"") })
+}
+
+/// What `project_drive_kept_for_file` asks of the compiler (`project.rs`'s
+/// `KeptHost`): the user's cache and the write that leaves a file alone when
+/// its bytes are the same; a refusal of a `throws` method is kept there.
+pub trait ProjectDriveKeptHost {
+    /// The user's cache directory (`Layout::user_cache_dir`).
+    fn user_cache_dir(ref self) -> fs::Path sync
+    /// Marks `entry` of the user cache as used now, so it is pruned last (#724).
+    fn use_entry(ref self, entry: ref fs::Path) sync
+    /// Writes `text` to `path` where it differs from what is there.
+    fn write_if_changed(ref self, path: ref fs::Path, text: ref String) sync throws
+}
+
+/// **The refusal of a file of a project that is not its entry**
+/// ([ADR-260](../../docs/specification/adr/adr-260.md) D4): a project has one
+/// program, and running another file of it would run something the project
+/// does not build.
+pub fn project_drive_not_the_entry(file: ref fs::Path, root: ref fs::Path, entry: String) -> String {
+    return f"{file.display()} is not the entry point of the project at {root.display()}.\n`nikaia run` with a file runs the program whose entry it is, and this project's program starts at `{entry}`. Run `nikaia run --project {root.display()}`, or `nikaia lower {file.display()}` to lower the file to Rust."
+}
+
+/// **The project `nikaia run <file>` keeps for a file outside any project**
+/// ([ADR-260](../../docs/specification/adr/adr-260.md) D4), in the user's
+/// cache and keyed on the file's path, built through the same Cargo workspace
+/// `nikaia build` makes: its root, with the manifest and the copy of the file
+/// as `entry` written there. Each is rewritten only when its bytes changed,
+/// so Cargo's freshness keeps working. Moved from `project.rs`'s
+/// `project_for_file` (ADR-294, #125).
+pub fn project_drive_kept_for_file[H: ProjectDriveKeptHost](file: ref fs::Path, entry: String, host: ref H) -> fs::Path throws {
+    let canonical_file = project_members_canonical(file)
+    let bytes: Vec[u8] = canonical_file.display().bytes().collect()
+    let hex = hash::sha256_hex(bytes)
+    let key: String = hex.scalars.take(16).collect()
+    let stem = (file.with_extension("").file_name()?.display() ?? "").to_lowercase()
+    // Cargo's package names are letters, digits, `-` and `_`, starting with a
+    // letter; the binary is called what the package is. The stem is lowercase
+    // already, so a letter here is `a` to `z`.
+    let first = stem.scalars.next() ?? ' '
+    let fits = first >= 'a' && first <= 'z' && stem.scalars.all(fn(c) { (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' })
+    let name = if fits { stem } else { "program" }
+    let root = host.user_cache_dir().join("run").join(f"{name}-{key}")
+    // An entry of the user cache like any other: pruned when it was used
+    // longest ago (#724).
+    host.use_entry(root)
+    host.write_if_changed(root.join("nikaia.toml"), f"# Kept by `nikaia run` for {canonical_file.display()} (ADR-260 D4): a file outside any project\n# is built as one of its own. Rewritten from that file on every run.\n[package]\nname = \"{name}\"\nversion = \"0.0.0\"\n")
+    let source = fs::read_to_string(file, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"cannot read {file.display()}: {error}") }
+    host.write_if_changed(root.join(entry), source)
+    return root
 }

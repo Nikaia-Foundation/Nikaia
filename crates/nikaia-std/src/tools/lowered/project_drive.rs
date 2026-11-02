@@ -282,3 +282,34 @@ pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &st
 
 pub fn project_drive_backend_said(messages: &str) -> bool { messages.lines().any(|line| { line.contains("\"compiler-message\"") }) }
 
+pub trait ProjectDriveKeptHost {
+    fn user_cache_dir(&self) -> fs::Path;
+    fn use_entry(&self, entry: &std::path::Path);
+    fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+pub fn project_drive_not_the_entry(file: &std::path::Path, root: &std::path::Path, entry: &str) -> String { format!("{} is not the entry point of the project at {}.\n`nikaia run` with a file runs the program whose entry it is, and this project's program starts at `{}`. Run `nikaia run --project {}`, or `nikaia lower {}` to lower the file to Rust.", nikaia_std::fs::path::display(&(file)), nikaia_std::fs::path::display(&(root)), entry, nikaia_std::fs::path::display(&(root)), nikaia_std::fs::path::display(&(file))) }
+
+pub async fn project_drive_kept_for_file<H: ProjectDriveKeptHost>(file: &std::path::Path, entry: &str, host: &H) -> Result<fs::Path, Box<dyn std::error::Error>> {
+    let canonical_file = project_members_canonical(file);
+    let bytes: Vec<u8> = nikaia_std::fs::path::display(&(canonical_file)).bytes().collect::<Vec<_>>();
+    let hex = hash::sha256_hex(&bytes);
+    let key: String = hex.chars().take(16).collect();
+    let stem = nikaia_std::index::or(match nikaia_std::fs::path::file_name(&(nikaia_std::fs::path::with_extension(&(file), std::path::Path::new(&(""))))).as_ref() {
+        Some(__nikaia_it) => Some(nikaia_std::fs::path::display(&(__nikaia_it))),
+        None => None,
+    }, || "".into()).to_lowercase();
+    let first = nikaia_std::index::or(stem.chars().next(), || ' '.into());
+    let fits = first >= 'a' && first <= 'z' && stem.chars().all(|c| { c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '_' });
+    let name = if fits { stem } else { String::from("program") };
+    let root = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(host.user_cache_dir()), std::path::Path::new(&("run")))), std::path::Path::new(&(format!("{}-{}", name, key))));
+    host.use_entry(&root);
+    host.write_if_changed(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml"))), &format!("# Kept by `nikaia run` for {} (ADR-260 D4): a file outside any project\n# is built as one of its own. Rewritten from that file on every run.\n[package]\nname = \"{}\"\nversion = \"0.0.0\"\n", nikaia_std::fs::path::display(&(canonical_file)), name))?;
+    let source = match fs::read_to_string(file, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(format!("cannot read {}: {}", nikaia_std::fs::path::display(&(file)), error)), &"project_drive_kept_for_file")) },
+    };
+    host.write_if_changed(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&(entry))), &source)?;
+    Ok(root)
+}
+
