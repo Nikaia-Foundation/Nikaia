@@ -40,3 +40,4 @@
 /home/user/Nikaia/docs/briefs/bugs/qa/qa-task.md 582130 17
 /home/user/Nikaia/docs/briefs/bugs/b34-557-same-line.md 560142 7
 /home/user/Nikaia/docs/briefs/bugs/qa/qa-task.md 2080725 48
+/home/user/Nikaia/docs/briefs/bugs/b35-1142-1143-owned-field-and-temp-arg.md 3978294 67
