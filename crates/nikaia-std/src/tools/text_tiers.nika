@@ -527,6 +527,10 @@ struct TierLocal {
     /// Bound by a `let` to a value made there, not read out of a name, a
     /// field or an element, or by a pattern to a number (#1005).
     made: bool,
+    /// An element a `for` walks of a list of text of its own that is no
+    /// parameter's, or a view of one (#1144): no keep holds it past the
+    /// loop, so its text form is text of its own.
+    unkept: bool,
 }
 
 /// What one walk found, every position by its word.
@@ -774,7 +778,7 @@ fn tier_arm_read(node: i64, mut walk: TierWalk) -> bool {
 }
 
 fn plain_local(kinds: Kinds) -> TierLocal {
-    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false }
+    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false }
 }
 
 fn tier_at(word: ref String, mut walk: TierWalk) -> Tier {
@@ -1442,6 +1446,97 @@ fn bind_whole_name(pattern: ref MatchPattern, subject: ref Expr, null_arm: bool,
             }
         }
         else => {}
+    }
+}
+
+/// **The `T` a bare name or `Some(a)` binds** beside a `null` arm (ADR-352
+/// D1) is of the subject's kinds, as `let a = subject ?? ...` binds it
+/// (#1144); the binders below refine it where they know more.
+fn bind_bare_payload(pattern: ref MatchPattern, subject: ref Expr, null_arm: bool, scrutinee: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) {
+    if scrutinee.either || (scrutinee.owned && (scrutinee.view || scrutinee.still)) {
+        return
+    }
+    let name = match pattern {
+        MatchPattern::Path(named) => {
+            if !null_arm || named.len() != 1 {
+                return
+            }
+            named[0]
+        }
+        MatchPattern::Tuple { path, parts } => {
+            if path.len() != 1 || parts.len() != 1 || joined_segments(path, ask.names) != "Some" {
+                return
+            }
+            match parts[0] {
+                MatchPattern::Path(named) => {
+                    if named.len() != 1 {
+                        return
+                    }
+                    named[0]
+                }
+                else => return,
+            }
+        }
+        else => return,
+    }
+    let word = ask.names.resolve(name)
+    if names_a_type(word) {
+        return
+    }
+    let mut local = plain_local(scrutinee.clone())
+    local.unkept = unkept_root(subject, ask, walk)
+    bind_tier_local(word.clone(), local, walk)
+}
+
+/// Only text of its own, no view and no literal.
+fn only_own_text(kinds: ref Kinds) -> bool {
+    return kinds.owned && !kinds.view && !kinds.lasting && !kinds.still && !kinds.either
+}
+
+/// Whether a value is read out of a parameter (or `self`), through fields and
+/// the methods called on it.
+fn rooted_in_a_parameter(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    return match value {
+        Expr::Variable(name, _) => {
+            let word = ask.names.resolve(name)
+            if word == "self" {
+                return true
+            }
+            let local = tier_local(word, walk) ?? return false
+            let declared = local.declared ?? return false
+            match declared.owner {
+                TextOwner::Param(_, _) => true,
+                else => false,
+            }
+        }
+        Expr::Field { base, .. } => rooted_in_a_parameter(base, ask, walk),
+        // A method's result is new, unless it views what it is called on or
+        // lends an element of it; one that takes the element out hands over
+        // text of its own.
+        Expr::MethodCall { receiver, method, .. } => {
+            let name = ask.names.resolve(method)
+            if name == "pop" || name == "remove" || name == "drain" {
+                return false
+            }
+            (views_what_it_is_called_on(name) || hands_back_an_element(name)) && rooted_in_a_parameter(receiver, ask, walk)
+        }
+        else => false,
+    }
+}
+
+/// Whether a value is, or views, a name no keep holds past its loop
+/// (`TierLocal::unkept`): through the methods called on it, its fields and
+/// the left side of `??`.
+fn unkept_root(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    return match value {
+        Expr::Variable(name, _) => {
+            let local = tier_local(ask.names.resolve(name), walk) ?? return false
+            local.unkept
+        }
+        Expr::Field { base, .. } => unkept_root(base, ask, walk),
+        Expr::MethodCall { receiver, .. } => unkept_root(receiver, ask, walk),
+        Expr::Coalesce { value: first, .. } => unkept_root(first, ask, walk),
+        else => false,
     }
 }
 
@@ -2391,6 +2486,7 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
                 if bindings.len() == 1 {
                     local.from = from?.clone()
                     local.of = walked?.clone()
+                    local.unkept = only_own_text(kinds) && !rooted_in_a_parameter(iter, ask, walk)
                 }
                 if map != null {
                     let found = map?.clone() ?? continue
@@ -2471,7 +2567,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         }
     }
     if names.len() == 1 {
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false, made: !a_read(value) }
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk) }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
@@ -4382,6 +4478,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             let mut payloads: Vec[String] = []
             for arm in arms {
                 open_tier_scope(walk)
+                bind_bare_payload(arm.pattern, value, shapes_has_a_null_arm(arms), scrutinee, ask, walk)
                 let mut bound = bind_static_payloads(arm.pattern, ask, walk)
                 bind_tuple_parts(arm.pattern, scrutinee, ask, walk)
                 bind_whole_name(arm.pattern, value, shapes_has_a_null_arm(arms), scrutinee, ask, walk)
@@ -4817,6 +4914,11 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
         // name bound to text of its own (`f"..."`, `+`, `clone`) or to a
         // number keeps it through `.to_string()`.
         if owned_local(receiver, received, ask, walk) {
+            return owned_kinds()
+        }
+        // **A view of an element a loop walks is text of its own** (#1144):
+        // no keep holds the element past the loop.
+        if unkept_root(receiver, ask, walk) {
             return owned_kinds()
         }
         // **A view of a call's result does not outlive the statement**: the
@@ -5488,7 +5590,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         let owner = TextOwner::Param(key.clone(), at)
         let kinds = kinds_of(owner, arg.ty, [], ask, walk)
         let of: String = ask.names.resolve(arg.ty.name).clone()
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: arg.ty.clone() }, from: null, empty: -1, through: [], lent: false, made: false }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: arg.ty.clone() }, from: null, empty: -1, through: [], lent: false, made: false, unkept: false }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
@@ -5501,7 +5603,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     walk.lent_self = false
     if receiver != null && target != null {
         walk.lent_self = receiver?.is_ref ?? false
-        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false }
+        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false }
         bind_tier_local("self", local, walk)
     }
     walk.handed_back = -1

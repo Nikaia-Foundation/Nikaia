@@ -1,0 +1,89 @@
+// #1144: a view a match arm's name binds, put into a set the function hands
+// back as `rest.to_string()`, is bound to what the match is on (here static
+// text), as `let rest = ... ?? continue` is. A view of an element a loop
+// walks of a list made here is copied with `.clone()` (ADR-282 D8: the text
+// form of text is the text itself); its `.to_string()` is refused with
+// NK1102, never left to rustc (to_string_of_loop_view_refused).
+use std::collections
+
+trait Host {
+    fn names(ref self, text: String) -> Vec[String] sync
+}
+
+struct Lines {}
+
+impl Host for Lines {
+    fn names(ref self, text: String) -> Vec[String] sync {
+        let mut out: Vec[String] = []
+        for l in text.lines() {
+            out.push(f"{l}")
+        }
+        return out
+    }
+}
+
+fn make(n: i64) -> Vec[String] {
+    let mut v: Vec[String] = []
+    v.push(f"x {n}")
+    v.push(f"y {n}")
+    return v
+}
+
+// A match arm's name over a parameter's literals.
+fn matched_set(all: Vec[String]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for full in all {
+        match full.strip_prefix("shim::") {
+            null => {},
+            rest => { out.insert(rest.to_string()) },
+        }
+    }
+    return out
+}
+
+// An element of a call's result, through `??`.
+fn direct(n: i64) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for full in make(n) {
+        let rest = full.strip_prefix("x ") ?? continue
+        out.push(rest.clone())
+    }
+    return out
+}
+
+// An element of a list made here, in a match arm.
+fn named(n: i64) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let all = make(n)
+    for full in all {
+        match full.strip_prefix("x ") {
+            null => {},
+            rest => { out.push(rest.clone()) },
+        }
+    }
+    return out
+}
+
+// What a host hands back, cut by a prefix made here (the describe move).
+fn written[H: Host](text: String, crate_word: String, host: ref H) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    let prefix = f"{crate_word}::"
+    for full in host.names(text.clone()) {
+        match full.strip_prefix(prefix) {
+            null => {},
+            rest => { out.insert(rest.clone()) },
+        }
+    }
+    return out
+}
+
+fn main() {
+    for n in matched_set(["shim::a", "x::b", "shim::c"]) {
+        println(n)
+    }
+    println(direct(1)[0])
+    println(named(2)[0])
+    for n in written("shim::one\nother::two\nshim::three", "shim", Lines {}) {
+        println(n)
+    }
+}
