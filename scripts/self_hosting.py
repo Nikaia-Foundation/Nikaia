@@ -84,6 +84,7 @@ COMPILER_NIKA = {
     "parse_numbers.nika": "parser: a number as it is read - the four spellings, the separator, a scale - and every way it is refused (0.0.744)",
     "interpreter.nika": "interpreter: what `nikaia interpret` walks and says of `main` (0.0.744)",
     "parse_errors.nika": "parser: a parse error in the reader's words - what was expected, the mistake where it was made, the notes (0.0.747)",
+    "parse_findings.nika": "parser: a parse error, NK1307, a source too long and a grammar-copy refusal as findings, and the line a refusal travels as (#557 step 4b)",
     "tree_build.nika": "parser: what the grammar's actions build the tree with - the postfix steps, the folds of a head and its tails, a lambda's parameters, a guarded jump (0.0.749)",
     "node_numbers.nika": "parser: the numbering pass - every parsed node its id, in input order and dense, and the span table by number (ADR-383)",
     "parsed_tree.nika": "parser: the aliases a file declares, and a file's declared types with their views written back as lists (0.0.751)",
