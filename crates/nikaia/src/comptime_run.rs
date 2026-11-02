@@ -93,11 +93,12 @@ pub(crate) fn unit_without_its_constants(
 /// #529; `comptime_readers_dropped`, followed through over the files). What
 /// went is handed back.
 pub(crate) fn without_readers(units: &mut [Parsed], absent: BTreeSet<String>) -> BTreeSet<String> {
+    // **The count is read before the cell is lent**: a `borrow()` in the
+    // argument list lives to the end of the call, and the closure's
+    // `borrow_mut()` then panics.
+    let count = units.len() as i64;
     let units = RefCell::new(units);
-    tree::comptime_readers_dropped(units.borrow().len() as i64, absent, &|at: i64,
-                                                                          gone: &BTreeSet<
-        String,
-    >| {
+    tree::comptime_readers_dropped(count, absent, &|at: i64, gone: &BTreeSet<String>| {
         drop_readers(&mut units.borrow_mut()[at as usize], gone)
     })
 }
