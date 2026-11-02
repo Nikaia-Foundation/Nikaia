@@ -145,3 +145,61 @@ pub fn opening(code: &str) -> String {
     String::from("(empty)")
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpecReached {
+    pub stage: i64,
+    pub codes: Vec<String>,
+}
+
+pub trait SpecHost {
+    fn reach(&self, source: &str) -> SpecReached;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpecBest {
+    pub stage: i64,
+    pub reading: String,
+    pub codes: Vec<String>,
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn specbook_furthest<H: SpecHost>(code: &str, host: &H) -> SpecBest {
+    let mut best = SpecBest { stage: 0, reading: String::from("as written"), codes: vec![] };
+    for reading in readings(code) {
+        let reached = host.reach(&reading.source);
+        let stage = reached.stage;
+        if stage > best.stage { best = SpecBest { stage, reading: reading.name.to_string(), codes: reached.codes }; }
+        if stage == 2 { break; }
+    }
+    best
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpecLine {
+    pub file: String,
+    pub stage: String,
+    pub reading: String,
+    pub discusses_a_refusal: bool,
+    pub sketch: bool,
+    pub codes: Vec<String>,
+    pub code: String,
+}
+
+pub fn specbook_report(lines: &[SpecLine]) -> String {
+    let mut out: String = String::from("");
+    let mut nth: collections::HashMap<String, i64> = collections::HashMap::<_, _>::default();
+    for v in lines.iter() {
+        let ordinal = nikaia_std::index::or(nth.get(&v.file), || 0) + 1;
+        nth.insert(v.file.to_string(), ordinal);
+        let mut notes: Vec<String> = vec![];
+        if v.discusses_a_refusal { notes.push(String::from("about-a-refusal")); }
+        if v.sketch { notes.push(String::from("sketch")); }
+        if !v.codes.is_empty() { notes.push(v.codes.join(",")); }
+        let mut noted: String = String::from("");
+        if !notes.is_empty() { noted = format!(" [{}]", notes.join(" ")); }
+        out.push_str(&format!("{} #{} {} ({}){}  {}\n", v.file, ordinal, v.stage, v.reading, noted, opening(&v.code)));
+    }
+    out
+}
+

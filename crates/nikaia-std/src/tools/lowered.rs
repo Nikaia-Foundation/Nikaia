@@ -2929,7 +2929,7 @@ pub mod sources {
 }
 pub mod specbook {
     #[allow(unused_imports)]
-    pub use super::{SpecBlock, blocks_in, discusses_a_refusal, is_a_sketch, Reading, readings, opening};
+    pub use super::{SpecBlock, blocks_in, discusses_a_refusal, is_a_sketch, Reading, readings, opening, SpecReached, SpecHost, SpecBest, specbook_furthest, SpecLine, specbook_report};
 }
 pub mod spelling {
     #[allow(unused_imports)]

@@ -4,8 +4,11 @@
 // for the compiler's `specbook` (`tests/specification.rs` and its baseline).
 // The text half, moved from Rust (ADR-294, #125): what a page's blocks are,
 // whether the page is discussing a refusal in one, whether an elision stands
-// where code would, and the programs a block can be read as. Reading the pages
-// and taking each reading through the compiler stays Rust.
+// where code would, the programs a block can be read as, which reading got
+// furthest, and the report. Reading the pages and taking one source through
+// the compiler stays Rust (`SpecHost`).
+
+use std::collections
 
 /// One ```nika block of a page: the 1-based line its code starts on, the
 /// code, and what the page says about it.
@@ -226,4 +229,89 @@ pub fn opening(code: ref String) -> String {
         return cut
     }
     return "(empty)"
+}
+
+/// What the compiler made of one reading of a block: how far it got - 0 no
+/// reading parses, 1 the checker refuses it, 2 it checks and lowers - and the
+/// codes the checker raised, in order.
+pub struct SpecReached {
+    pub stage: i64,
+    pub codes: Vec[String],
+}
+
+/// The compiler's side of a walk: one source taken through parsing, the
+/// checker and the lowering, which only it can do.
+pub trait SpecHost {
+    fn reach(ref self, source: ref String) -> SpecReached sync
+}
+
+/// The reading of a block that got furthest, and how far.
+pub struct SpecBest {
+    pub stage: i64,
+    pub reading: String,
+    pub codes: Vec[String],
+}
+
+/// Take a block as far as it goes: each reading is tried and the furthest
+/// wins, the first of equals; one that lowers ends the search. A block no
+/// reading parses is a fragment, as written.
+pub fn specbook_furthest[H: SpecHost](code: ref String, host: ref H) -> SpecBest sync {
+    let mut best = SpecBest { stage: 0, reading: "as written", codes: [] }
+    for reading in readings(code) {
+        let reached = host.reach(reading.source)
+        let stage = reached.stage
+        if stage > best.stage {
+            best = SpecBest { stage: stage, reading: reading.name.clone(), codes: reached.codes }
+        }
+        if stage == 2 {
+            break
+        }
+    }
+    return best
+}
+
+/// One block's verdict, as the report writes it.
+pub struct SpecLine {
+    pub file: String,
+    /// The stage's word: `fragment`, `refused` or `lowered`.
+    pub stage: String,
+    pub reading: String,
+    pub discusses_a_refusal: bool,
+    pub sketch: bool,
+    /// The codes the checker raised, in order.
+    pub codes: Vec[String],
+    pub code: String,
+}
+
+/// The report, one line per block, in a form a diff can be read from.
+///
+/// **A block is addressed by its ordinal in its page and not by its line**: a
+/// line number moves whenever a paragraph above the block gains a sentence,
+/// so every prose edit churned the whole tail of the file (measured: twenty-one
+/// lines moved and not one verdict did). The ordinal moves only when a block is
+/// added, removed or reordered, which is a change worth seeing; the block's own
+/// first line of code is what a reader recognises it by.
+pub fn specbook_report(lines: ref Vec[SpecLine]) -> String {
+    let mut out: String = ""
+    let mut nth: collections::HashMap[String, i64] = collections::HashMap()
+    for v in lines {
+        let ordinal = (nth.get(v.file) ?? 0) + 1
+        nth.insert(v.file.clone(), ordinal)
+        let mut notes: Vec[String] = []
+        if v.discusses_a_refusal {
+            notes.push("about-a-refusal")
+        }
+        if v.sketch {
+            notes.push("sketch")
+        }
+        if !v.codes.is_empty() {
+            notes.push(v.codes.join(","))
+        }
+        let mut noted: String = ""
+        if !notes.is_empty() {
+            noted = f" [{notes.join(" ")}]"
+        }
+        out.push_str(f"{v.file} #{ordinal} {v.stage} ({v.reading}){noted}  {opening(v.code)}\n")
+    }
+    return out
 }

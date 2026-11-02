@@ -125,15 +125,7 @@ pub fn blocks(dir: &Path) -> Vec<Block> {
 pub fn readings(code: &str) -> Vec<(&'static str, String)> {
     nikaia_std::tools::specbook::readings(code)
         .into_iter()
-        .map(|reading| {
-            let name = match reading.name.as_str() {
-                "as written" => "as written",
-                "items and a main" => "items and a main",
-                "a body" => "a body",
-                _ => "items, then a body",
-            };
-            (name, reading.source)
-        })
+        .map(|reading| (reading_name(&reading.name), reading.source))
         .collect()
 }
 
@@ -158,35 +150,57 @@ pub fn workshop() -> PathBuf {
 
 /// Take every block as far as it goes, as a build reads it: a `comptime` that
 /// calls something is compiled and run in `workshop`
-/// ([ADR-321](../../docs/specification/adr/adr-321.md) D1).
+/// ([ADR-321](../../docs/specification/adr/adr-321.md) D1). Which reading got
+/// furthest is **`tools/specbook.nika`**'s (`specbook_furthest`, #125); taking
+/// one source through the compiler is [`reach`]'s.
 pub fn verdicts(dir: &Path, workshop: &Path) -> Vec<Verdict> {
     let reads = crate::assets::Reads::at(dir).building_in(workshop);
+    let host = Host { reads: &reads };
     blocks(dir)
         .into_iter()
         .map(|block| {
-            let mut best = Verdict {
-                stage: Stage::Fragment,
-                reading: "as written",
-                codes: BTreeSet::new(),
-                block: block.clone(),
-            };
-            for (reading, source) in readings(&block.code) {
-                let (stage, codes) = reach(&source, &reads);
-                if stage > best.stage {
-                    best = Verdict {
-                        stage,
-                        reading,
-                        codes,
-                        block: block.clone(),
-                    };
-                }
-                if stage == Stage::Lowered {
-                    break;
-                }
+            let best = nikaia_std::tools::specbook::specbook_furthest(&block.code, &host);
+            Verdict {
+                stage: match best.stage {
+                    0 => Stage::Fragment,
+                    1 => Stage::Refused,
+                    _ => Stage::Lowered,
+                },
+                reading: reading_name(&best.reading),
+                codes: best.codes.into_iter().collect(),
+                block,
             }
-            best
         })
         .collect()
+}
+
+/// The compiler's side of [`verdicts`]: one source, through the three stages.
+struct Host<'a> {
+    reads: &'a crate::assets::Reads,
+}
+
+impl nikaia_std::tools::specbook::SpecHost for Host<'_> {
+    fn reach(&self, source: &str) -> nikaia_std::tools::specbook::SpecReached {
+        let (stage, codes) = reach(source, self.reads);
+        nikaia_std::tools::specbook::SpecReached {
+            stage: match stage {
+                Stage::Fragment => 0,
+                Stage::Refused => 1,
+                Stage::Lowered => 2,
+            },
+            codes: codes.into_iter().collect(),
+        }
+    }
+}
+
+/// A reading's name as the one a [`Verdict`] keeps.
+fn reading_name(name: &str) -> &'static str {
+    match name {
+        "as written" => "as written",
+        "items and a main" => "items and a main",
+        "a body" => "a body",
+        _ => "items, then a body",
+    }
 }
 
 /// One source, through the three stages.
@@ -225,57 +239,25 @@ fn reach(source: &str, reads: &crate::assets::Reads) -> (Stage, BTreeSet<String>
     }
 }
 
-/// The report, one line per block, in a form a diff can be read from.
-///
-/// **A block is addressed by its ordinal in its page and not by its line**, and
-/// that is the difference between a baseline worth having and one nobody
-/// believes. A line number moves whenever a paragraph above the block gains a
-/// sentence, so every prose edit churned the whole tail of the file and the real
-/// changes were somewhere in the noise — measured, on a run where twenty-one
-/// lines moved and not one verdict did.
-///
-/// The ordinal moves only when a block is **added, removed or reordered**, which
-/// is a change worth seeing. What replaces the line as the thing a reader
-/// recognises is the block's own first line of code, which says more about which
-/// block it is than a number ever did.
+/// The report, one line per block, in a form a diff can be read from: each
+/// block by its ordinal in its page, its stage, the reading that got furthest,
+/// its notes and its first line of code. Written by **`tools/specbook.nika`**
+/// (`specbook_report`, #125), which says why a block is not addressed by its
+/// line.
 pub fn report(dir: &Path, workshop: &Path) -> String {
-    let mut out = String::new();
-    let mut nth: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
-    for v in verdicts(dir, workshop) {
-        let at = nth.entry(v.block.file.clone()).or_insert(0);
-        *at += 1;
-        let ordinal = *at;
-        let mut notes: Vec<String> = Vec::new();
-        if v.block.discusses_a_refusal {
-            notes.push("about-a-refusal".to_string());
-        }
-        if v.block.sketch {
-            notes.push("sketch".to_string());
-        }
-        if !v.codes.is_empty() {
-            notes.push(v.codes.iter().cloned().collect::<Vec<_>>().join(","));
-        }
-        out.push_str(&format!(
-            "{} #{ordinal} {} ({}){}  {}\n",
-            v.block.file,
-            v.stage.word(),
-            v.reading,
-            match notes.is_empty() {
-                true => String::new(),
-                false => format!(" [{}]", notes.join(" ")),
-            },
-            opening(&v.block.code),
-        ));
-    }
-    out
-}
-
-/// The block's first line of code, as the thing a reader recognises it by.
-///
-/// Trimmed and cut, because this is an anchor and not the content: a long line
-/// would put the interesting part of the report off the edge of a terminal.
-fn opening(code: &str) -> String {
-    nikaia_std::tools::specbook::opening(code)
+    let lines: Vec<nikaia_std::tools::specbook::SpecLine> = verdicts(dir, workshop)
+        .into_iter()
+        .map(|v| nikaia_std::tools::specbook::SpecLine {
+            file: v.block.file,
+            stage: v.stage.word().to_string(),
+            reading: v.reading.to_string(),
+            discusses_a_refusal: v.block.discusses_a_refusal,
+            sketch: v.block.sketch,
+            codes: v.codes.into_iter().collect(),
+            code: v.block.code,
+        })
+        .collect();
+    nikaia_std::tools::specbook::specbook_report(&lines)
 }
 
 #[cfg(test)]
