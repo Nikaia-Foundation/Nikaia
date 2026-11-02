@@ -497,3 +497,166 @@ pub fn ledger_items_stored(mut codes: Vec[collections::BTreeMap[String, CheckSto
     }
     return all
 }
+
+/// What inferring a package's ledger asks of the compiler (M5, #125): the
+/// checker and the columns still inferred in Rust, each over the units the
+/// host holds, named by their place. The host keeps what they answer beside
+/// the ledger (the checked units, the method calls they resolved, the stored
+/// code, what `sync` noted and the last `keeps` column), for the caller to
+/// take after the run.
+pub trait LedgerInferHost {
+    /// Every unit checked against the package's declarations in `ledger`,
+    /// with the other units beside it.
+    fn check_units(ref self, ledger: ref Ledger) sync
+    fn infer_sync(ref self, mut ledger: Ledger) sync
+    /// Whether the prover reads `condition` back over `readable`.
+    fn reads_back(ref self, condition: ref String, readable: ref collections::BTreeSet[String]) -> bool sync
+    fn infer_throws(ref self, mut ledger: Ledger) sync
+    fn infer_touch(ref self, mut ledger: Ledger) sync
+    fn result_sources(ref self, unit: i64, own: ref Ledger) -> Vec[ResultSource] sync
+    fn places_stored(ref self, unit: i64, own: ref Ledger) -> Vec[PlacesStored] sync
+    fn infer_keeps(ref self, mut ledger: Ledger) sync
+    fn infer_sharing(ref self, mut ledger: Ledger, unit: i64) sync
+    fn infer_maps(ref self, mut ledger: Ledger) sync
+    fn infer_locks(ref self, mut ledger: Ledger) sync
+    fn infer_tether(ref self, mut ledger: Ledger) sync
+    /// A default a run's sub-program already computed (#468).
+    fn known_default(ref self, unit: i64, key: ref String, at: i64) -> String? sync
+    /// `expr` of unit `unit`, computed as a `ty` and written as a literal:
+    /// folded where it is literals alone, else run in the workshop
+    /// (ADR-318 D1); `name` is what a compiled run calls it.
+    fn computed_literal(ref self, unit: i64, name: ref String, expr: ref Expr, ty: ref Ty) -> String? sync
+}
+
+/// **A package's ledger, inferred** into `ledger`, which holds the header:
+/// the entries every declaration makes, then each derived column in the
+/// order its inputs are written. `borrowing[u]` is what holds a view in unit
+/// `u`, by name (#544).
+pub fn ledger_infer_package[H: LedgerInferHost](mut ledger: Ledger, units: ref Vec[ParsedView], borrowing: ref Vec[collections::BTreeSet[String]], library: ref Ledger, host: ref H) {
+    // **The item loop**: the entries every declaration makes, and the
+    // defaults it could not write as a literal (ADR-318 D1), evaluated once
+    // the entries exist.
+    let defaults = declare_items(units, borrowing, ledger)
+    // **Every unit is checked against the whole package's declarations**,
+    // which is the other half of D2: a call to the file next door resolves
+    // there too, so the method calls the walks below read are the package's.
+    host.check_units(ledger)
+    host.infer_sync(ledger)
+    // **An expression function's `ensures`** (ADR-314 D3): after `sync`,
+    // which it is only given for.
+    ledger_expression_ensures(ledger, units, host)
+    // Kap 7.1: `throws` in the source says *that* it fails; this says with
+    // what (ADR-023 D1). After `sync`, because both read bodies and only
+    // this one needs nothing from the other, and both read the same method
+    // answers (ADR-288).
+    host.infer_throws(ledger)
+    // **The fourth derived column** (ADR-288 D2). After `throws` for
+    // tidiness: it reads the same bodies and needs nothing either produced.
+    host.infer_touch(ledger)
+    // **The fifth derived column** (ADR-094 D2): its fixpoint reads a
+    // callee's `signature`, which the item loop wrote, and a callee's own
+    // `keeps`. **What each result points into is written first** (#697).
+    ledger_result_sources(ledger, units.len(), host)
+    host.infer_keeps(ledger)
+    // **And again, until `keeps` settles** (#720): a parameter `keeps` says
+    // is kept is moved in, not viewed, so the result no longer points into
+    // it, and a caller that hands its own parameter there keeps that too.
+    for _round in 0..<8 {
+        let before: Vec[Vec[String]] = ledger.functions.values().map(fn(c) { c.keeps.clone() }).collect()
+        ledger_result_sources(ledger, units.len(), host)
+        host.infer_keeps(ledger)
+        let after: Vec[Vec[String]] = ledger.functions.values().map(fn(c) { c.keeps.clone() }).collect()
+        if after == before {
+            break
+        }
+    }
+    // ADR-037 D7: which count each `Shared` class gets, after `keeps` (#532),
+    // a unit at a time against the package's ledger.
+    for unit in 0..<units.len() {
+        host.infer_sharing(ledger, unit)
+    }
+    // **The `maps` key** (ADR-010 D9, #581 step 6).
+    host.infer_maps(ledger)
+    // Beside `keeps`: it reads the checker's method answers and the entries
+    // the item loop wrote.
+    host.infer_locks(ledger)
+    // **Last of the columns, and it reads none of the above** (ADR-283 D5).
+    host.infer_tether(ledger)
+    // **What a result points into, written** (ADR-283 D25, #580), again, so
+    // a callee of another unit is read as written once its unit has been.
+    ledger_result_sources(ledger, units.len(), host)
+    ledger_evaluate_defaults(ledger, units, defaults, host)
+    attribute_values(ledger, units, library, fn(unit, ty, argument) { host.computed_literal(unit, "an attribute's argument", argument, ty) })
+}
+
+/// The rounds of `write_result_sources`, with the analyses of one unit the
+/// host's.
+fn ledger_result_sources[H: LedgerInferHost](mut ledger: Ledger, units: i64, host: ref H) {
+    write_result_sources(ledger, units, fn(unit, own) { host.result_sources(unit, own) }, fn(unit, own) { host.places_stored(unit, own) })
+}
+
+/// Every expression function's published `ensures` (ADR-314 D3), written
+/// into its entry.
+fn ledger_expression_ensures[H: LedgerInferHost](mut ledger: Ledger, units: ref Vec[ParsedView], host: ref H) {
+    for view in units {
+        for item in view.items {
+            let published = expression_ensures(item.node, view.words, ledger, fn(condition, readable) { host.reads_back(condition, readable) }) ?? continue
+            let mut contract = ledger.functions.get(published.key) ?? continue
+            contract.ensures = [published.condition]
+            contract.from = ["return"]
+        }
+    }
+}
+
+/// **The defaults the item loop could not write as a literal**, computed
+/// (ADR-318 D1): read where a run's sub-program already computed one (#468),
+/// else folded or run by the host.
+fn ledger_evaluate_defaults[H: LedgerInferHost](mut ledger: Ledger, units: ref Vec[ParsedView], defaults: ref Vec[ComputedAt], host: ref H) {
+    for computed in defaults {
+        if !computed.field {
+            match host.known_default(computed.unit, computed.key, computed.at) {
+                null => {},
+                text => {
+                    set_default(ledger, computed.key, computed.at, computed.field, text)
+                    continue
+                },
+            }
+        }
+        let text = ledger_computed_default(units[computed.unit], computed, host) ?? continue
+        set_default(ledger, computed.key, computed.at, computed.field, text)
+    }
+}
+
+/// The default `computed` names, computed as the type it is declared with:
+/// a struct's field, or the option of a free function or of an `impl`'s
+/// method.
+fn ledger_computed_default[H: LedgerInferHost](view: ref ParsedView, computed: ref ComputedAt, host: ref H) -> String? {
+    let item = view.items.get(computed.item) ?? return null
+    if computed.field {
+        let fields = match item.node {
+            Item::Struct { fields, .. } => fields,
+            else => return null,
+        }
+        let field = fields.get(computed.at) ?? return null
+        let default = field.default ?? return null
+        return host.computed_literal(computed.unit, computed.option, default.value, written_ty(view.words, view.aliases, field.ty))
+    }
+    let m = computed.method ?? return ledger_option_default(view, computed, item.node, host)
+    let methods = match item.node {
+        Item::Impl { methods, .. } => methods,
+        else => return null,
+    }
+    let method = methods.get(m) ?? return null
+    return ledger_option_default(view, computed, method.node, host)
+}
+
+/// The default of `function`'s option `computed.at`, computed as its declared
+/// type; none where `function` is not a function.
+fn ledger_option_default[H: LedgerInferHost](view: ref ParsedView, computed: ref ComputedAt, function: ref Item, host: ref H) -> String? {
+    let config = match function {
+        Item::Fn { config, .. } => config,
+        else => return null,
+    }
+    let option = config.get(computed.at) ?? return null
+    return host.computed_literal(computed.unit, computed.option, option.default, written_ty(view.words, view.aliases, option.ty))
+}

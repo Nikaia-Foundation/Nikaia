@@ -318,3 +318,103 @@ pub fn ledger_items_stored(codes: &mut Vec<collections::BTreeMap<String, CheckSt
     all
 }
 
+pub trait LedgerInferHost {
+    fn check_units(&self, ledger: &Ledger);
+    fn infer_sync(&self, ledger: &mut Ledger);
+    fn reads_back(&self, condition: &str, readable: &collections::BTreeSet<String>) -> bool;
+    fn infer_throws(&self, ledger: &mut Ledger);
+    fn infer_touch(&self, ledger: &mut Ledger);
+    fn result_sources(&self, unit: i64, own: &Ledger) -> Vec<ResultSource>;
+    fn places_stored(&self, unit: i64, own: &Ledger) -> Vec<PlacesStored>;
+    fn infer_keeps(&self, ledger: &mut Ledger);
+    fn infer_sharing(&self, ledger: &mut Ledger, unit: i64);
+    fn infer_maps(&self, ledger: &mut Ledger);
+    fn infer_locks(&self, ledger: &mut Ledger);
+    fn infer_tether(&self, ledger: &mut Ledger);
+    fn known_default(&self, unit: i64, key: &str, at: i64) -> Option<String>;
+    fn computed_literal(&self, unit: i64, name: &str, expr: &Expr, ty: &Ty) -> Option<String>;
+}
+
+pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], library: &Ledger, host: &H) {
+    let defaults = declare_items(units, borrowing, ledger);
+    host.check_units(&ledger);
+    host.infer_sync(ledger);
+    ledger_expression_ensures(ledger, units, host);
+    host.infer_throws(ledger);
+    host.infer_touch(ledger);
+    ledger_result_sources(ledger, units.len() as i64, host);
+    host.infer_keeps(ledger);
+    for _round in 0..8 {
+        let before: Vec<Vec<String>> = ledger.functions.values().map(|c| { c.keeps.to_owned() }).collect::<Vec<_>>();
+        ledger_result_sources(ledger, units.len() as i64, host);
+        host.infer_keeps(ledger);
+        let after: Vec<Vec<String>> = ledger.functions.values().map(|c| { c.keeps.to_owned() }).collect::<Vec<_>>();
+        if after == before { break; }
+    }
+    for unit in 0..units.len() as i64 { host.infer_sharing(ledger, unit); }
+    host.infer_maps(ledger);
+    host.infer_locks(ledger);
+    host.infer_tether(ledger);
+    ledger_result_sources(ledger, units.len() as i64, host);
+    ledger_evaluate_defaults(ledger, units, &defaults, host);
+    attribute_values(ledger, units, library, &|unit, ty, argument| { host.computed_literal(unit, "an attribute's argument", argument, ty) });
+}
+
+pub(crate) fn ledger_result_sources<H: LedgerInferHost>(ledger: &mut Ledger, units: i64, host: &H) { write_result_sources(ledger, units, &|unit, own| { host.result_sources(unit, own) }, &|unit, own| { host.places_stored(unit, own) }); }
+
+pub(crate) fn ledger_expression_ensures<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], host: &H) {
+    for view in units.iter() {
+        for item in view.items.iter() {
+            let published = match expression_ensures(&item.node, view.words, &ledger, &|condition, readable| { host.reads_back(condition, readable) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let contract = match ledger.functions.get_mut(&published.key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            contract.ensures = vec![published.condition];
+            contract.from = vec![String::from("return")];
+        }
+    }
+}
+
+pub(crate) fn ledger_evaluate_defaults<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], defaults: &[ComputedAt], host: &H) {
+    for computed in defaults.iter() {
+        if !computed.field {
+            match host.known_default(computed.unit, &computed.key, computed.at) {
+                None => { },
+                Some(text) => {
+                    set_default(ledger, &computed.key, computed.at, computed.field, text);
+                    continue;
+                },
+            }
+        }
+        let text = match ledger_computed_default(nikaia_std::index::get(&units, nikaia_std::index::at(computed.unit)), computed, host) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        set_default(ledger, &computed.key, computed.at, computed.field, text);
+    }
+}
+
+pub(crate) fn ledger_computed_default<H: LedgerInferHost>(view: &ParsedView<'_, '_, '_, '_, '_, '_>, computed: &ComputedAt, host: &H) -> Option<String> {
+    let item = match view.items.get(nikaia_std::count::of(computed.item)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if computed.field {
+        let fields = match &item.node {
+            Item::Struct { fields, .. } => fields,
+            _ => return None,
+        };
+        let field = match fields.get(nikaia_std::count::of(computed.at)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let default = match field.default.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return host.computed_literal(computed.unit, &computed.option, &default.value, &written_ty(view.words, view.aliases, &field.ty));
+    }
+    let m = match computed.method { Some(__nikaia_value) => __nikaia_value, None => return ledger_option_default(view, computed, &item.node, host) };
+    let methods = match &item.node {
+        Item::Impl { methods, .. } => methods,
+        _ => return None,
+    };
+    let method = match methods.get(nikaia_std::count::of(m)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    ledger_option_default(view, computed, &method.node, host)
+}
+
+pub(crate) fn ledger_option_default<H: LedgerInferHost>(view: &ParsedView<'_, '_, '_, '_, '_, '_>, computed: &ComputedAt, function: &Item, host: &H) -> Option<String> {
+    let config = match function {
+        Item::Fn { config, .. } => config,
+        _ => return None,
+    };
+    let option = match config.get(nikaia_std::count::of(computed.at)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    host.computed_literal(computed.unit, &computed.option, &option.default, &written_ty(view.words, view.aliases, &option.ty))
+}
+
