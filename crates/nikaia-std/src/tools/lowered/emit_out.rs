@@ -44,6 +44,23 @@ impl EmitOut {
             if (*entry).end >= at { (*entry).end += by; }
         }
     }
+    pub fn take_lend(&mut self) -> bool {
+        if self.buf.ends_with('&') && !self.buf.ends_with("&&") {
+            self.buf.pop();
+            return true;
+        }
+        false
+    }
+    pub fn insert_after_first_brace(&mut self, text: &str) {
+        let at = (match nikaia_std::search::find(&self.buf, &"{", 0) { Some(__nikaia_value) => __nikaia_value, None => return }) + 1;
+        self.buf.insert_str(nikaia_std::count::of(at), text);
+        self.shift_entries(at, text.len() as i64);
+    }
+    pub fn insert_before_last_brace(&mut self, text: &str) {
+        let at = match nikaia_std::search::rfind(&self.buf, &"}") { Some(__nikaia_value) => __nikaia_value, None => return };
+        self.buf.insert_str(nikaia_std::count::of(at), text);
+        self.shift_entries(at, text.len() as i64);
+    }
     pub fn append(&mut self, other: EmitOut) {
         let offset = self.buf.len() as i64;
         self.buf.push_str(&other.buf);

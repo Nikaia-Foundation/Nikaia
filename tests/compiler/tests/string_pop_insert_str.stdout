@@ -1,0 +1,6 @@
+& fn f() {}
+fn f() { body }
+fn f() { body ; }
+pub fn f() { body ; } // é
+é 25
+true

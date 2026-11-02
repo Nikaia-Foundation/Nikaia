@@ -285,44 +285,6 @@ impl SourceMap {
 /// (`tools/emit_out.nika`).
 type Out = nikaia_std::tools::emit_out::EmitOut;
 
-/// What `std` has no entry for yet: `String::pop` and `String::insert_str`.
-trait OutText {
-    fn take_lend(&mut self) -> bool;
-    fn insert_after_first_brace(&mut self, text: &str);
-    fn insert_before_last_brace(&mut self, text: &str);
-}
-
-impl OutText for Out {
-    /// **Takes back a `&` just written**, where what follows is already the
-    /// reference it asked for (0.0.250): `&*get(&v, i)` is `get(&v, i)`, and
-    /// the long form is what `clippy` refuses in `std`. Not `&&`, which is the
-    /// operator, and not `&mut `, which ends in a space. A `&` at the end of the
-    /// buffer is inside no recorded span, so the map is untouched.
-    fn take_lend(&mut self) -> bool {
-        if self.buf.ends_with('&') && !self.buf.ends_with("&&") {
-            self.buf.pop();
-            return true;
-        }
-        false
-    }
-
-    /// Insert text just inside the first `{`, moving the map entries after it.
-    fn insert_after_first_brace(&mut self, text: &str) {
-        let Some(at) = self.buf.find('{').map(|at| at + 1) else {
-            return;
-        };
-        self.buf.insert_str(at, text);
-        self.shift_entries(at as i64, text.len() as i64);
-    }
-    fn insert_before_last_brace(&mut self, text: &str) {
-        let Some(at) = self.buf.rfind('}') else {
-            return;
-        };
-        self.buf.insert_str(at, text);
-        self.shift_entries(at as i64, text.len() as i64);
-    }
-}
-
 pub fn emit_program(parsed: &Parsed, build: Build) -> Result<Lowered> {
     let trust = crate::contracts::trust::analyse(parsed, std_ledger());
     Emitter::new(parsed, build, trust.provenance).program()

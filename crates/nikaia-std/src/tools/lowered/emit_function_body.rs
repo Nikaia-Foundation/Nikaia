@@ -79,8 +79,8 @@ impl EmitState {
             }
             let mut written = EmitOut::empty();
             self.emit_function_block(world, walk, &mut written, host, body, depth, flow, &scope, tail, settled)?;
-            if main_ends { host.insert_before_last_brace(&mut written, main_call); }
-            if !first.is_empty() { host.insert_after_first_brace(&mut written, &format!(" {}", first.join(" "))); }
+            if main_ends { written.insert_before_last_brace(main_call); }
+            if !first.is_empty() { written.insert_after_first_brace(&format!(" {}", first.join(" "))); }
             out.append(written);
             return Ok(());
         }

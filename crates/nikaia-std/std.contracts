@@ -2793,6 +2793,25 @@ sync = true
 touches = []
 signature = "(ref mut self, text: ref String)"
 
+# **Taking the last character off** (#1180). Nothing described it, so the
+# emitter's own `take_lend` stayed Rust. The last scalar, or `null` where the
+# text is empty.
+[fn."String::pop"]
+pub = true
+sync = true
+touches = []
+signature = "(ref mut self) -> scalar?"
+
+# **Putting text in at a byte position** (#1180), the position counted in
+# `i64` as `find` gives it and converted as `Vec::insert`'s is (ADR-293 D20).
+# A position before the start, past the end or off a scalar's start aborts,
+# as `split_at`'s does.
+[fn."String::insert_str"]
+pub = true
+sync = true
+touches = []
+signature = "(ref mut self, at: i64, text: ref String)"
+
 # The first element, or nothing where the list is empty.
 [fn."Vec::first"]
 pub = true

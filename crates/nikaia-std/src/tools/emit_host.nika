@@ -17,11 +17,6 @@ pub trait EmitHost {
     /// (`text_tiers::wrap_hole`).
     fn wrap_hole(ref self, hole: ref Expr, wraps: ref Vec[(i64, winnow_grammar::Symbol)]) -> Expr sync
 
-    /// Takes back a `&` just written, where what follows is already the
-    /// reference it asked for (0.0.250): `&*get(&v, i)` is `get(&v, i)`. `std`
-    /// has no `String::pop` entry.
-    fn take_lend(ref self, mut out: EmitOut) -> bool sync
-
     /// Whether a constant sum takes the first type that holds it (ADR-285 D22):
     /// `fold::constant_of` and `fold::wants_widening`.
     fn wants_widening(ref self, node: ref Expr) -> bool sync
@@ -36,13 +31,6 @@ pub trait EmitHost {
     /// (`Emitter::nonnegative_bodies`, keyed by the block's address); `null`
     /// where it recorded none.
     fn known_nonnegative(ref self, body: ref Block) -> Vec[String]? sync
-
-    /// Text put just inside the first `{` of `out`, the map moved along
-    /// (`std` has no `String::insert_str`).
-    fn insert_after_first_brace(ref self, mut out: EmitOut, text: ref String) sync
-
-    /// The same, just before the last `}`.
-    fn insert_before_last_brace(ref self, mut out: EmitOut, text: ref String) sync
 
     /// `Emitter::ty_filled` with named lifetimes: a type as a grammar rule
     /// returns it.

@@ -6,9 +6,9 @@
 // recorded, so "innermost first" survives an `append`. The compiler's
 // `SourceMap` is built from them once, when the module is done.
 //
-// Not here: taking a `&` back off the end of the buffer and inserting text
-// after the first `{` - `std` has no `String::pop` or `String::insert_str`
-// entry - which the emitter does on `buf` and then tells `shift_entries`.
+// Also here since #1180 (`String::pop`, `String::insert_str`): taking a `&`
+// back off the end of the buffer, and text put in after the first `{` or
+// before the last `}`, the map moved along.
 
 /// One run of the generated text and the source span that wrote it.
 pub struct EmitMapEntry {
@@ -78,6 +78,33 @@ impl EmitOut {
                 entry.end += by
             }
         }
+    }
+
+    /// **Takes back a `&` just written**, where what follows is already the
+    /// reference it asked for (0.0.250): `&*get(&v, i)` is `get(&v, i)`, and
+    /// the long form is what `clippy` refuses in `std`. Not `&&`, which is the
+    /// operator, and not `&mut `, which ends in a space. A `&` at the end of the
+    /// buffer is inside no recorded span, so the map is untouched.
+    pub fn take_lend(ref mut self) -> bool {
+        if self.buf.ends_with("&") && !self.buf.ends_with("&&") {
+            self.buf.pop()
+            return true
+        }
+        return false
+    }
+
+    /// Insert text just inside the first `{`, moving the map entries after it.
+    pub fn insert_after_first_brace(ref mut self, text: ref String) {
+        let at = (self.buf.find("{") ?? return) + 1
+        self.buf.insert_str(at, text)
+        self.shift_entries(at, text.len())
+    }
+
+    /// The same, just before the last `}`.
+    pub fn insert_before_last_brace(ref mut self, text: ref String) {
+        let at = self.buf.rfind("}") ?? return
+        self.buf.insert_str(at, text)
+        self.shift_entries(at, text.len())
     }
 
     /// Append a scratch buffer, moving its map entries into place. Order is

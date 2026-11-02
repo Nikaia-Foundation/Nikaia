@@ -3,13 +3,10 @@
 
 pub trait EmitHost {
     fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr;
-    fn take_lend(&self, out: &mut EmitOut) -> bool;
     fn wants_widening(&self, node: &Expr) -> bool;
     fn block_mentions(&self, block: &Block, name: &str) -> bool;
     fn error_type(&self, node: &Expr) -> Option<String>;
     fn known_nonnegative(&self, body: &Block) -> Option<Vec<String>>;
-    fn insert_after_first_brace(&self, out: &mut EmitOut, text: &str);
-    fn insert_before_last_brace(&self, out: &mut EmitOut, text: &str);
     fn ty_named(&self, walk: &mut EmitWalk, ty: &Type) -> Result<String, Box<dyn std::error::Error>>;
     fn given_up_unmuted(&self, at: i64) -> bool;
     fn given_up_rebound(&self, at: i64) -> Option<bool>;

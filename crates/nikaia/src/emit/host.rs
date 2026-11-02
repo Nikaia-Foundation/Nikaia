@@ -24,7 +24,7 @@ use nikaia_std::tools::emit_kinds::EmitRefused;
 use nikaia_std::tools::emit_seeds::EmitSeedsShape;
 use nikaia_std::tools::emit_state::EmitWalk;
 
-use super::{Emitter, Out};
+use super::Emitter;
 use crate::ast::{Block, Expr};
 
 type Crossing = Result<(), Box<dyn std::error::Error>>;
@@ -99,14 +99,6 @@ impl EmitHost for Emitter<'_> {
             .map(|known| known.iter().map(|s| self.text(*s).to_string()).collect())
     }
 
-    fn insert_after_first_brace(&self, out: &mut Out, text: &str) {
-        super::OutText::insert_after_first_brace(out, text);
-    }
-
-    fn insert_before_last_brace(&self, out: &mut Out, text: &str) {
-        super::OutText::insert_before_last_brace(out, text);
-    }
-
     fn ty_named(
         &self,
         walk: &mut EmitWalk,
@@ -140,10 +132,6 @@ impl EmitHost for Emitter<'_> {
         let mut wrapped = hole.clone();
         crate::text_tiers::wrap_hole(&mut wrapped, &wraps);
         wrapped
-    }
-
-    fn take_lend(&self, out: &mut Out) -> bool {
-        super::OutText::take_lend(out)
     }
 
     fn wants_widening(&self, node: &Expr) -> bool {

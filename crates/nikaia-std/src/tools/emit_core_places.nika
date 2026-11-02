@@ -425,7 +425,7 @@ impl EmitState {
             // is below - so a lend in front of it is already there, and is
             // taken.
             if self.facts.flat_reads.contains(node_key(node)) {
-                host.take_lend(out)
+                out.take_lend()
                 out.push("nikaia_std::index::flat(")
                 self.emit_core_index_read(world, walk, out, host, base, index, true, depth, flow, scope)
                 out.push(")")
@@ -435,13 +435,13 @@ impl EmitState {
             // the `Option<&V>` a `ref V?` is. A sequence's read keeps the
             // cancelling.
             if self.map_key(index, false) != null {
-                host.take_lend(out)
+                out.take_lend()
                 self.emit_core_index_read(world, walk, out, host, base, index, true, depth, flow, scope)
                 return
             }
             let mut lent = false
             if !self.slices(index) {
-                lent = host.take_lend(out)
+                lent = out.take_lend()
             }
             self.emit_core_index_read(world, walk, out, host, base, index, !lent, depth, flow, scope)
             return

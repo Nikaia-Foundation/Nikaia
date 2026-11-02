@@ -266,19 +266,19 @@ impl EmitState {
     pub fn emit_core_index<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if !flow.in_a_place {
             if self.facts.flat_reads.contains(&node_key(node)) {
-                host.take_lend(out);
+                out.take_lend();
                 out.push("nikaia_std::index::flat(");
                 self.emit_core_index_read(world, walk, out, host, base, index, true, depth, flow, scope)?;
                 out.push(")");
                 return Ok(());
             }
             if self.map_key(index, false).is_some() {
-                host.take_lend(out);
+                out.take_lend();
                 self.emit_core_index_read(world, walk, out, host, base, index, true, depth, flow, scope)?;
                 return Ok(());
             }
             let mut lent = false;
-            if !self.slices(index) { lent = host.take_lend(out); }
+            if !self.slices(index) { lent = out.take_lend(); }
             self.emit_core_index_read(world, walk, out, host, base, index, !lent, depth, flow, scope)?;
             return Ok(());
         }
