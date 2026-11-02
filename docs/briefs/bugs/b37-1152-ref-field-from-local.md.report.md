@@ -11,3 +11,4 @@ Changelog: A `ref T` field takes an owned local by lending it, and a struct buil
 Attribution:
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
+Pushed: local 2ea6b8254a1b2341bdc48215ad9e72af1218fe5a
