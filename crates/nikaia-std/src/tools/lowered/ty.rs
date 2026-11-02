@@ -1227,3 +1227,213 @@ pub fn method_keys(index: &MethodIndex, method: &str) -> Vec<String> {
     out
 }
 
+pub(crate) fn ty_test_bound(pattern: &str, actual: &str) -> collections::BTreeMap<String, Ty> {
+    let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+    bind(&parse(pattern), &parse(actual), &mut out);
+    out
+}
+
+pub(crate) fn ty_test_view(name: String) -> Ty { Ty::Named { name, args: vec![], view: true } }
+
+pub(crate) fn ty_test_name(name: String) -> Ty { Ty::Named { name, args: vec![], view: false } }
+
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    for written in ["i32", "ref String", "String", "Vec[Row]", "HashMap[ref String, Stats]", "(Op, i64)", "Vec[(ref String, i64)]", "?"] {
+        let ty = parse(written);
+        if !(AsRef::<str>::as_ref(&(ty.text())) == AsRef::<str>::as_ref(&(written))) { nikaia_std::abort::assertion_failed("assert(ty.text() == written)", None, &[("ty.text()", (&&nikaia_std::abort::Operand(&(ty.text()))).shown()), ("written", (&&nikaia_std::abort::Operand(&(written))).shown()), ]) };
+        if !(parse(&ty.text()) == ty) { nikaia_std::abort::assertion_failed("assert(parse(ty.text()) == ty)", None, &[("parse(ty.text())", (&&nikaia_std::abort::Operand(&(parse(&ty.text())))).shown()), ("ty", (&&nikaia_std::abort::Operand(&(ty))).shown()), ]) };
+    }
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let pairs = vec![("&str", "ref String"), ("&String", "ref String"), ("&Stats", "ref Stats"), ("&mut sqlite3", "ref mut sqlite3"), ("&[u8]", "ref Array[u8]"), ("ref [u8]", "ref Array[u8]"), ("&$V", "ref $V"), ("HashMap[&str, Stats]", "HashMap[ref String, Stats]")];
+    for (old, new) in pairs.iter() {
+        let old = *old;let new = *new;
+        if !(parse(old) == parse(new)) { nikaia_std::abort::assertion_failed("assert(parse(old) == parse(new))", None, &[("parse(old)", (&&nikaia_std::abort::Operand(&(parse(old)))).shown()), ("parse(new)", (&&nikaia_std::abort::Operand(&(parse(new)))).shown()), ]) };
+        if !(parse(old).text() == new) { nikaia_std::abort::assertion_failed("assert(parse(old).text() == new)", None, &[("parse(old).text()", (&&nikaia_std::abort::Operand(&(parse(old).text()))).shown()), ("new", (&&nikaia_std::abort::Operand(&(new))).shown()), ]) };
+    }
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+    let known = ty_test_name(String::from("i32"));
+    if !(Ty::Unknown.fits(&known)) { nikaia_std::abort::assertion_failed("assert(Ty::Unknown.fits(known))", None, &[]) };
+    if !(known.fits(&Ty::Unknown)) { nikaia_std::abort::assertion_failed("assert(known.fits(Ty::Unknown))", None, &[]) };
+    if !(Ty::Unknown.fits(&Ty::Unknown)) { nikaia_std::abort::assertion_failed("assert(Ty::Unknown.fits(Ty::Unknown))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+    if !(ty_test_name(String::from("i32")).fits(&ty_test_name(String::from("i32")))) { nikaia_std::abort::assertion_failed("assert(ty_test_name(\"i32\").fits(ty_test_name(\"i32\")))", None, &[]) };
+    if !(!ty_test_name(String::from("i32")).fits(&ty_test_name(String::from("i64")))) { nikaia_std::abort::assertion_failed("assert(!ty_test_name(\"i32\").fits(ty_test_name(\"i64\")))", None, &[]) };
+    if !(!ty_test_view(String::from("str")).fits(&ty_test_name(String::from("String")))) { nikaia_std::abort::assertion_failed("assert(!ty_test_view(\"str\").fits(ty_test_name(\"String\")))", None, &[]) };
+    if !(parse("Vec[Row]").fits(&parse("Vec[Row]"))) { nikaia_std::abort::assertion_failed("assert(parse(\"Vec[Row]\").fits(parse(\"Vec[Row]\")))", None, &[]) };
+    if !(!parse("Vec[Row]").fits(&parse("Vec[Hit]"))) { nikaia_std::abort::assertion_failed("assert(!parse(\"Vec[Row]\").fits(parse(\"Vec[Hit]\")))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
+    if !(parse("Vec[?]").fits(&parse("Vec[Row]"))) { nikaia_std::abort::assertion_failed("assert(parse(\"Vec[?]\").fits(parse(\"Vec[Row]\")))", None, &[]) };
+    if !(parse("(i32, ?)").fits(&parse("(i32, String)"))) { nikaia_std::abort::assertion_failed("assert(parse(\"(i32, ?)\").fits(parse(\"(i32, String)\")))", None, &[]) };
+    if !(!parse("(i32, ?)").fits(&parse("(String, String)"))) { nikaia_std::abort::assertion_failed("assert(!parse(\"(i32, ?)\").fits(parse(\"(String, String)\")))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
+    for written in ["fn()", "fn(ref Stats)", "fn(ref String, i64)", "fn(?)"] { if !(AsRef::<str>::as_ref(&(parse(written).text())) == AsRef::<str>::as_ref(&(written))) { nikaia_std::abort::assertion_failed("assert(parse(written).text() == written)", None, &[("parse(written).text()", (&&nikaia_std::abort::Operand(&(parse(written).text()))).shown()), ("written", (&&nikaia_std::abort::Operand(&(written))).shown()), ]) }; }
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
+    let parsed = parse("fn(&Stats)");
+    let params: Vec<Ty> = match parsed {
+        Ty::Fn { ref params, .. } => params.to_owned(),
+        _ => vec![],
+    };
+    if !(params.len() == 1) { nikaia_std::abort::assertion_failed("assert(params.len() == 1)", None, &[("params.len()", (&&nikaia_std::abort::Operand(&(params.len() as i64))).shown()), ]) };
+    if !(*nikaia_std::index::get(&params, 0) == ty_test_view(String::from("Stats"))) { nikaia_std::abort::assertion_failed("assert(params[0] == ty_test_view(\"Stats\"))", None, &[("params[0]", (&&nikaia_std::abort::Operand(&(*nikaia_std::index::get(&params, 0)))).shown()), ("ty_test_view(\"Stats\")", (&&nikaia_std::abort::Operand(&(ty_test_view(String::from("Stats"))))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
+    let one = parse("fn(&Stats)");
+    if !(one.fits(&parse("fn(&Stats)"))) { nikaia_std::abort::assertion_failed("assert(one.fits(parse(\"fn(&Stats)\")))", None, &[]) };
+    if !(!one.fits(&parse("fn(i64)"))) { nikaia_std::abort::assertion_failed("assert(!one.fits(parse(\"fn(i64)\")))", None, &[]) };
+    if !(!one.fits(&parse("fn()"))) { nikaia_std::abort::assertion_failed("assert(!one.fits(parse(\"fn()\")))", None, &[]) };
+    if !(!one.fits(&ty_test_name(String::from("Stats")))) { nikaia_std::abort::assertion_failed("assert(!one.fits(ty_test_name(\"Stats\")))", None, &[]) };
+    if !(!ty_test_name(String::from("Stats")).fits(&one)) { nikaia_std::abort::assertion_failed("assert(!ty_test_name(\"Stats\").fits(one))", None, &[]) };
+    if !(one.fits(&Ty::Unknown)) { nikaia_std::abort::assertion_failed("assert(one.fits(Ty::Unknown))", None, &[]) };
+    if !(Ty::Unknown.fits(&one)) { nikaia_std::abort::assertion_failed("assert(Ty::Unknown.fits(one))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
+    if !(parse("$V") == Ty::Var { name: String::from("V"), view: false }) { nikaia_std::abort::assertion_failed("assert(parse(\"$V\") == …)", None, &[("parse(\"$V\")", (&&nikaia_std::abort::Operand(&(parse("$V")))).shown()), ("…", (&&nikaia_std::abort::Operand(&(Ty::Var { name: String::from("V"), view: false }))).shown()), ]) };
+    if !(parse("ref $V").text() == "ref $V") { nikaia_std::abort::assertion_failed("assert(parse(\"ref $V\").text() == \"ref $V\")", None, &[("parse(\"ref $V\").text()", (&&nikaia_std::abort::Operand(&(parse("ref $V").text()))).shown()), ]) };
+    if !(parse("$V").text() == "$V") { nikaia_std::abort::assertion_failed("assert(parse(\"$V\").text() == \"$V\")", None, &[("parse(\"$V\").text()", (&&nikaia_std::abort::Operand(&(parse("$V").text()))).shown()), ]) };
+    if !(parse("Entry[$V]").text() == "Entry[$V]") { nikaia_std::abort::assertion_failed("assert(parse(\"Entry[$V]\").text() == \"Entry[$V]\")", None, &[("parse(\"Entry[$V]\").text()", (&&nikaia_std::abort::Operand(&(parse("Entry[$V]").text()))).shown()), ]) };
+    if !(parse("fn(ref $V)").text() == "fn(ref $V)") { nikaia_std::abort::assertion_failed("assert(parse(\"fn(ref $V)\").text() == \"fn(ref $V)\")", None, &[("parse(\"fn(ref $V)\").text()", (&&nikaia_std::abort::Operand(&(parse("fn(ref $V)").text()))).shown()), ]) };
+    if !(parse("V") == ty_test_name(String::from("V"))) { nikaia_std::abort::assertion_failed("assert(parse(\"V\") == ty_test_name(\"V\"))", None, &[("parse(\"V\")", (&&nikaia_std::abort::Operand(&(parse("V")))).shown()), ("ty_test_name(\"V\")", (&&nikaia_std::abort::Operand(&(ty_test_name(String::from("V"))))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_9() -> Result<(), Box<dyn std::error::Error>> {
+    let bound = ty_test_bound("&HashMap[$K, $V]", "HashMap[&str, Stats]");
+    if !(nikaia_std::index::or(match *nikaia_std::index::get(&bound, "K") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown) == ty_test_view(String::from("str"))) { nikaia_std::abort::assertion_failed("assert((bound[\"K\"]?.clone() ?? Ty::Unknown) == ty_test_view(\"str\"))", None, &[("bound[\"K\"]?.clone() ?? Ty::Unknown", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(match *nikaia_std::index::get(&bound, "K") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown)))).shown()), ("ty_test_view(\"str\")", (&&nikaia_std::abort::Operand(&(ty_test_view(String::from("str"))))).shown()), ]) };
+    if !(nikaia_std::index::or(match *nikaia_std::index::get(&bound, "V") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown) == ty_test_name(String::from("Stats"))) { nikaia_std::abort::assertion_failed("assert((bound[\"V\"]?.clone() ?? Ty::Unknown) == ty_test_name(\"Stats\"))", None, &[("bound[\"V\"]?.clone() ?? Ty::Unknown", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(match *nikaia_std::index::get(&bound, "V") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown)))).shown()), ("ty_test_name(\"Stats\")", (&&nikaia_std::abort::Operand(&(ty_test_name(String::from("Stats"))))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_10() -> Result<(), Box<dyn std::error::Error>> {
+    let bound = ty_test_bound("&HashMap[$K, $V]", "HashMap[?, ?]");
+    if !(substitute(&parse("Entry[$V]"), &bound) == parse("Entry[?]")) { nikaia_std::abort::assertion_failed("assert(substitute(parse(\"Entry[$V]\"), bound) == parse(\"Entry[?]\"))", None, &[("substitute(parse(\"Entry[$V]\"), bound)", (&&nikaia_std::abort::Operand(&(substitute(&parse("Entry[$V]"), &bound)))).shown()), ("parse(\"Entry[?]\")", (&&nikaia_std::abort::Operand(&(parse("Entry[?]")))).shown()), ]) };
+    let none = ty_test_bound("&HashMap[$K, $V]", "Vec[i64]");
+    if !(none.is_empty()) { nikaia_std::abort::assertion_failed("assert(none.len() == 0)", None, &[("none.len()", (&&nikaia_std::abort::Operand(&(none.len() as i64))).shown()), ]) };
+    if !(substitute(&parse("$V"), &none) == Ty::Unknown) { nikaia_std::abort::assertion_failed("assert(substitute(parse(\"$V\"), none) == Ty::Unknown)", None, &[("substitute(parse(\"$V\"), none)", (&&nikaia_std::abort::Operand(&(substitute(&parse("$V"), &none)))).shown()), ("Ty::Unknown", (&&nikaia_std::abort::Operand(&(Ty::Unknown))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_11() -> Result<(), Box<dyn std::error::Error>> {
+    let empty: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+    if !(substitute(&parse("$V"), &empty) == Ty::Unknown) { nikaia_std::abort::assertion_failed("assert(substitute(parse(\"$V\"), empty) == Ty::Unknown)", None, &[("substitute(parse(\"$V\"), empty)", (&&nikaia_std::abort::Operand(&(substitute(&parse("$V"), &empty)))).shown()), ("Ty::Unknown", (&&nikaia_std::abort::Operand(&(Ty::Unknown))).shown()), ]) };
+    if !(substitute(&parse("fn(&$V)"), &empty) == parse("fn(?)")) { nikaia_std::abort::assertion_failed("assert(substitute(parse(\"fn(&$V)\"), empty) == parse(\"fn(?)\"))", None, &[("substitute(parse(\"fn(&$V)\"), empty)", (&&nikaia_std::abort::Operand(&(substitute(&parse("fn(&$V)"), &empty)))).shown()), ("parse(\"fn(?)\")", (&&nikaia_std::abort::Operand(&(parse("fn(?)")))).shown()), ]) };
+    if !(parse("$V").fits(&ty_test_name(String::from("i32")))) { nikaia_std::abort::assertion_failed("assert(parse(\"$V\").fits(ty_test_name(\"i32\")))", None, &[]) };
+    if !(ty_test_name(String::from("i32")).fits(&parse("$V"))) { nikaia_std::abort::assertion_failed("assert(ty_test_name(\"i32\").fits(parse(\"$V\")))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_12() -> Result<(), Box<dyn std::error::Error>> {
+    let at_entry = ty_test_bound("&HashMap[$K, $V]", "HashMap[&str, Stats]");
+    let entry = substitute(&parse("Entry[$V]"), &at_entry);
+    if !(entry == parse("Entry[Stats]")) { nikaia_std::abort::assertion_failed("assert(entry == parse(\"Entry[Stats]\"))", None, &[("entry", (&&nikaia_std::abort::Operand(&(entry))).shown()), ("parse(\"Entry[Stats]\")", (&&nikaia_std::abort::Operand(&(parse("Entry[Stats]")))).shown()), ]) };
+    let at_and_modify = ty_test_bound("Entry[$V]", &entry.text());
+    let lambda = substitute(&parse("fn(&$V)"), &at_and_modify);
+    if !(lambda == parse("fn(&Stats)")) { nikaia_std::abort::assertion_failed("assert(lambda == parse(\"fn(&Stats)\"))", None, &[("lambda", (&&nikaia_std::abort::Operand(&(lambda))).shown()), ("parse(\"fn(&Stats)\")", (&&nikaia_std::abort::Operand(&(parse("fn(&Stats)")))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_13() -> Result<(), Box<dyn std::error::Error>> {
+    let bound = ty_test_bound("&Vec[$T]", "Vec[i64]");
+    if !(nikaia_std::index::or(match *nikaia_std::index::get(&bound, "T") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown) == ty_test_name(String::from("i64"))) { nikaia_std::abort::assertion_failed("assert((bound[\"T\"]?.clone() ?? Ty::Unknown) == ty_test_name(\"i64\"))", None, &[("bound[\"T\"]?.clone() ?? Ty::Unknown", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(match *nikaia_std::index::get(&bound, "T") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown)))).shown()), ("ty_test_name(\"i64\")", (&&nikaia_std::abort::Operand(&(ty_test_name(String::from("i64"))))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn a_type_round_trips_through_its_text() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn the_spelling_it_replaces_reads_back_as_the_same_type() {
+        super::__nikaia_test_1().unwrap()
+    }
+    #[test]
+    fn unknown_fits_anything() {
+        super::__nikaia_test_2().unwrap()
+    }
+    #[test]
+    fn two_known_types_fit_only_when_equal() {
+        super::__nikaia_test_3().unwrap()
+    }
+    #[test]
+    fn an_unknown_argument_makes_the_whole_fit() {
+        super::__nikaia_test_4().unwrap()
+    }
+    #[test]
+    fn a_function_type_round_trips() {
+        super::__nikaia_test_5().unwrap()
+    }
+    #[test]
+    fn a_function_type_is_not_a_name() {
+        super::__nikaia_test_6().unwrap()
+    }
+    #[test]
+    fn a_function_type_fits_its_own_shape() {
+        super::__nikaia_test_7().unwrap()
+    }
+    #[test]
+    fn a_variable_round_trips_and_is_not_a_name() {
+        super::__nikaia_test_8().unwrap()
+    }
+    #[test]
+    fn the_receiver_binds_what_the_signature_names() {
+        super::__nikaia_test_9().unwrap()
+    }
+    #[test]
+    fn a_receiver_that_says_nothing_leaves_the_variables_unbound() {
+        super::__nikaia_test_10().unwrap()
+    }
+    #[test]
+    fn an_unbound_variable_becomes_unknown() {
+        super::__nikaia_test_11().unwrap()
+    }
+    #[test]
+    fn the_chain_from_a_map_to_a_lambda_parameter() {
+        super::__nikaia_test_12().unwrap()
+    }
+    #[test]
+    fn a_view_binds_against_a_value() {
+        super::__nikaia_test_13().unwrap()
+    }
+}

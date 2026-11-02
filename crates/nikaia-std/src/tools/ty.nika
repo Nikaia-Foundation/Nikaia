@@ -2017,3 +2017,144 @@ pub fn method_keys(index: ref MethodIndex, method: ref String) -> Vec[String] {
     }
     return out
 }
+
+// --- Tests moved from the compiler's `contracts::ty` (ADR-294, #125) ---
+
+fn ty_test_bound(pattern: ref String, actual: ref String) -> collections::BTreeMap[String, Ty] {
+    let mut out: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    bind(parse(pattern), parse(actual), out)
+    return out
+}
+
+fn ty_test_view(name: String) -> Ty {
+    return Ty::Named { name: name, args: [], view: true }
+}
+
+fn ty_test_name(name: String) -> Ty {
+    return Ty::Named { name: name, args: [], view: false }
+}
+
+/// A type is written the way the source writes it, and reads back the same.
+test "a type round trips through its text" {
+    for written in ["i32", "ref String", "String", "Vec[Row]", "HashMap[ref String, Stats]", "(Op, i64)", "Vec[(ref String, i64)]", "?"] {
+        let ty = parse(written)
+        assert(ty.text() == written)
+        assert(parse(ty.text()) == ty)
+    }
+}
+
+/// The spelling `ref` replaces still reads back, as the same type
+/// (ADR-184 D1, D4, D2).
+test "the spelling it replaces reads back as the same type" {
+    let pairs = [("&str", "ref String"), ("&String", "ref String"), ("&Stats", "ref Stats"), ("&mut sqlite3", "ref mut sqlite3"), ("&[u8]", "ref Array[u8]"), ("ref [u8]", "ref Array[u8]"), ("&$V", "ref $V"), ("HashMap[&str, Stats]", "HashMap[ref String, Stats]")]
+    for (old, new) in pairs {
+        assert(parse(old) == parse(new))
+        assert(parse(old).text() == new)
+    }
+}
+
+/// Unknown fits everything, in both directions.
+test "unknown fits anything" {
+    let known = ty_test_name("i32")
+    assert(Ty::Unknown.fits(known))
+    assert(known.fits(Ty::Unknown))
+    assert(Ty::Unknown.fits(Ty::Unknown))
+}
+
+/// Two known types fit only when they are written the same.
+test "two known types fit only when equal" {
+    assert(ty_test_name("i32").fits(ty_test_name("i32")))
+    assert(!ty_test_name("i32").fits(ty_test_name("i64")))
+    assert(!ty_test_view("str").fits(ty_test_name("String")))
+    assert(parse("Vec[Row]").fits(parse("Vec[Row]")))
+    assert(!parse("Vec[Row]").fits(parse("Vec[Hit]")))
+}
+
+/// An unknown part is still no claim about the whole.
+test "an unknown argument makes the whole fit" {
+    assert(parse("Vec[?]").fits(parse("Vec[Row]")))
+    assert(parse("(i32, ?)").fits(parse("(i32, String)")))
+    assert(!parse("(i32, ?)").fits(parse("(String, String)")))
+}
+
+/// A function type reads back the way it was written (ADR-288).
+test "a function type round trips" {
+    for written in ["fn()", "fn(ref Stats)", "fn(ref String, i64)", "fn(?)"] {
+        assert(parse(written).text() == written)
+    }
+}
+
+/// `fn(&Stats)` is not a type named `fn(&Stats)`.
+test "a function type is not a name" {
+    let parsed = parse("fn(&Stats)")
+    let params: Vec[Ty] = match parsed {
+        Ty::Fn { params, .. } => params.clone(),
+        else => [],
+    }
+    assert(params.len() == 1)
+    assert(params[0] == ty_test_view("Stats"))
+}
+
+/// It fits another lambda of the same shape, and nothing else written down.
+test "a function type fits its own shape" {
+    let one = parse("fn(&Stats)")
+    assert(one.fits(parse("fn(&Stats)")))
+    assert(!one.fits(parse("fn(i64)")))
+    assert(!one.fits(parse("fn()")))
+    assert(!one.fits(ty_test_name("Stats")))
+    assert(!ty_test_name("Stats").fits(one))
+    assert(one.fits(Ty::Unknown))
+    assert(Ty::Unknown.fits(one))
+}
+
+/// A variable reads back the way it is written, and is not a name.
+test "a variable round trips and is not a name" {
+    assert(parse("$V") == Ty::Var { name: "V", view: false })
+    assert(parse("ref $V").text() == "ref $V")
+    assert(parse("$V").text() == "$V")
+    assert(parse("Entry[$V]").text() == "Entry[$V]")
+    assert(parse("fn(ref $V)").text() == "fn(ref $V)")
+    assert(parse("V") == ty_test_name("V"))
+}
+
+/// The receiver binds the variables, one level and by position.
+test "the receiver binds what the signature names" {
+    let bound = ty_test_bound("&HashMap[$K, $V]", "HashMap[&str, Stats]")
+    assert((bound["K"]?.clone() ?? Ty::Unknown) == ty_test_view("str"))
+    assert((bound["V"]?.clone() ?? Ty::Unknown) == ty_test_name("Stats"))
+}
+
+/// A receiver that says nothing binds nothing, and nothing is `?`.
+test "a receiver that says nothing leaves the variables unbound" {
+    let bound = ty_test_bound("&HashMap[$K, $V]", "HashMap[?, ?]")
+    assert(substitute(parse("Entry[$V]"), bound) == parse("Entry[?]"))
+    let none = ty_test_bound("&HashMap[$K, $V]", "Vec[i64]")
+    assert(none.len() == 0)
+    assert(substitute(parse("$V"), none) == Ty::Unknown)
+}
+
+/// An unbound variable becomes `?` - never a type called `$V` (ADR-024 D4).
+test "an unbound variable becomes unknown" {
+    let empty: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    assert(substitute(parse("$V"), empty) == Ty::Unknown)
+    assert(substitute(parse("fn(&$V)"), empty) == parse("fn(?)"))
+    assert(parse("$V").fits(ty_test_name("i32")))
+    assert(ty_test_name("i32").fits(parse("$V")))
+}
+
+/// `HashMap[&str, Stats]` to `Entry[Stats]` to `fn(&Stats)`: what gives the
+/// `a` in `.and_modify fn { a.add(t) }` a type.
+test "the chain from a map to a lambda parameter" {
+    let at_entry = ty_test_bound("&HashMap[$K, $V]", "HashMap[&str, Stats]")
+    let entry = substitute(parse("Entry[$V]"), at_entry)
+    assert(entry == parse("Entry[Stats]"))
+    let at_and_modify = ty_test_bound("Entry[$V]", entry.text())
+    let lambda = substitute(parse("fn(&$V)"), at_and_modify)
+    assert(lambda == parse("fn(&Stats)"))
+}
+
+/// The view flag does not stop a binding.
+test "a view binds against a value" {
+    let bound = ty_test_bound("&Vec[$T]", "Vec[i64]")
+    assert((bound["T"]?.clone() ?? Ty::Unknown) == ty_test_name("i64"))
+}
