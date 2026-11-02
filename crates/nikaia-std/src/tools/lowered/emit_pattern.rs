@@ -246,6 +246,10 @@ impl EmitState {
             out.push(emit_here_rule());
             return Ok(());
         }
+        if called == "same_line" && generics.is_empty() && args.is_empty() && !walk.grammar_rules.contains(&called) {
+            out.push(emit_same_line_rule());
+            return Ok(());
+        }
         if called == "span" && generics.is_empty() && args.len() == 1 && !walk.grammar_rules.contains(&called) {
             out.push(&format!("{}(p = (", emit_span_rule()));
             self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;

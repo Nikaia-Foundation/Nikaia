@@ -58,6 +58,47 @@ fn emit_here_rule() -> String {
     return "__nikaia_here"
 }
 
+/// The template rule `same_line` lowers to (ADR-339 D2): an `extern rule`
+/// over the function written after the grammar (`emit_same_line_function`).
+fn emit_same_line_rule() -> String {
+    return "__nikaia_same_line"
+}
+
+/// The name a grammar's own `WS` takes under the `WS` that records what it
+/// skipped, in a grammar that writes `same_line`: upper case, so the backend
+/// reads it as a lexical rule, which skips no whitespace inside itself.
+fn emit_own_ws_rule() -> String {
+    return "NIKAIA_OWN_WS"
+}
+
+/// What the backend skips where a grammar declares no `WS`: any run of
+/// whitespace, none too.
+fn emit_default_ws() -> String {
+    return "multispace0"
+}
+
+/// **The function behind a grammar's `same_line`** (ADR-339 D2, the Rust
+/// parser's `same_line` in `parser/mod.rs`): it fails where the token at the
+/// current position came right after a skipped run that held a line break,
+/// and covers nothing. One per grammar copy, so the text copy and the one over
+/// bytes, written in the same module, do not collide.
+fn emit_same_line_function(name: ref String) -> String {
+    let mut out: Vec[String] = []
+    out.push("#[allow(non_snake_case, dead_code)]\n")
+    out.push(f"fn {emit_same_line_rule()}_{name}<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> Result<(), ::winnow_grammar::ParseError>\n")
+    out.push("where\n")
+    out.push("    B: ::winnow_grammar::rt::Slice,\n")
+    out.push("    S: Clone + ::std::fmt::Debug + ::winnow_grammar::StateOf<::nikaia_std::grammar::LineBreaks>,\n")
+    out.push("{\n")
+    out.push("    let at = ::winnow::stream::Location::current_token_start(&*i) as i64;\n")
+    out.push("    if ::winnow_grammar::StateOf::<::nikaia_std::grammar::LineBreaks>::state(&mut i.state.user_state).began_a_line(at) {\n")
+    out.push("        return Err(::winnow_grammar::ParseError::from_input(i));\n")
+    out.push("    }\n")
+    out.push("    Ok(())\n")
+    out.push("}\n")
+    return out.join("")
+}
+
 /// Whether a pattern writes the built-in `called` with `arity` arguments
 /// anywhere in it, where the grammar declares no rule of that name.
 fn emit_writes_a_built_in(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, called: String, arity: i64) -> bool {
@@ -261,11 +302,11 @@ impl EmitState {
             out.push("        input bytes;\n")
         }
         walk.grammar_bytes = bytes
-        self.emit_grammar_body(world, walk, out, host, def, bytes)
+        self.emit_grammar_body(world, walk, out, host, def, name, bytes)
         walk.grammar_bytes = false
     }
 
-    fn emit_grammar_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef, bytes: bool) sync throws {
+    fn emit_grammar_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef, name: ref String, bytes: bool) sync throws {
         let mut types: collections::BTreeMap[String, String] = collections::BTreeMap()
         for rule in def.rules {
             match rule.ret_type {
@@ -287,10 +328,35 @@ impl EmitState {
         }
         walk.grammar_values = valued
         walk.grammar_members = []
+        // **`same_line` asks what the last `WS` skipped held** (ADR-339 D2,
+        // D3): the lowering, not the grammar, gives the parser a state of
+        // `LineBreaks`, a `WS` that records each run in it, and an `extern
+        // rule` over the function written after the grammar that asks it.
+        let mut lines = false
+        for rule in def.rules {
+            for alt in rule.alts {
+                lines = lines || emit_writes_a_built_in(world, walk, alt.pattern.node, "same_line", 0)
+            }
+        }
+        let own_ws = walk.grammar_rules.contains("WS")
+        if lines {
+            out.push(f"        use super::{emit_same_line_rule()}_{name} as {emit_same_line_rule()};\n")
+            out.push("        state ::nikaia_std::grammar::LineBreaks;\n")
+            out.push(f"        extern rule {emit_same_line_rule()} -> ();\n")
+            // The grammar's own `WS` is skipped under its new name, or the
+            // default whitespace is written out; `text` / `bytes` hands back
+            // the run either covered, and `@` where it was.
+            let over = if bytes { "bytes" } else { "text" }
+            let skipped = if own_ws { f"{over}({emit_own_ws_rule()})" } else { emit_default_ws() }
+            let newline = if own_ws && bytes { "w.contains(&b'\\n')" } else { "w.contains('\\n')" }
+            out.push(f"\n        rule WS -> () =\n          w:{skipped} @ at\n")
+            out.push(f"            -> {{ _state.user().ran(at.start as i64, at.end as i64, {newline}) }}\n")
+        }
         for rule in def.rules {
             out.push("\n")
             let st = out.mark()
-            self.emit_grammar_rule(world, walk, out, host, rule, bytes)
+            let renamed = if lines && own_ws && emit_text(world, rule.name) == "WS" { emit_own_ws_rule() } else { "" }
+            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes)
             if !bytes {
                 out.record(rule.span, st)
             }
@@ -372,9 +438,12 @@ impl EmitState {
         }
         out.push("    }\n")
         out.push("}\n")
+        if lines {
+            out.push(emit_same_line_function(name))
+        }
     }
 
-    fn emit_grammar_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, bytes: bool) sync throws {
+    fn emit_grammar_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, renamed: ref String, bytes: bool) sync throws {
         match rule.frame {
             frame => out.push(f"        {frame_attribute(frame)}\n"),
             null => {},
@@ -404,7 +473,10 @@ impl EmitState {
             values.push(f"{emit_text(world, option.name)}: {host.ty_named(walk, option.ty)}")
         }
         let taken = if values.is_empty() { "" } else { f"({values.join(", ")})" }
-        out.push(f"        {vis}rule {emit_text(world, rule.name)}{taken}{ret}{label} =\n")
+        // A grammar's own `WS` under the recording one keeps its body and
+        // takes `renamed` (`emit_grammar_body`).
+        let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { renamed.clone() }
+        out.push(f"        {vis}rule {rule_name}{taken}{ret}{label} =\n")
 
         for i in 0..<rule.alts.len() {
             let alt = rule.alts[i]

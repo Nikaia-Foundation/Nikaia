@@ -31,6 +31,29 @@ pub(crate) fn emit_count_rule() -> &'static str { "__nikaia_count" }
 
 pub(crate) fn emit_here_rule() -> &'static str { "__nikaia_here" }
 
+pub(crate) fn emit_same_line_rule() -> &'static str { "__nikaia_same_line" }
+
+pub(crate) fn emit_own_ws_rule() -> &'static str { "NIKAIA_OWN_WS" }
+
+pub(crate) fn emit_default_ws() -> String { String::from("multispace0") }
+
+pub(crate) fn emit_same_line_function(name: &str) -> String {
+    let mut out: Vec<String> = vec![];
+    out.push(String::from("#[allow(non_snake_case, dead_code)]\n"));
+    out.push(format!("fn {}_{}<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> Result<(), ::winnow_grammar::ParseError>\n", emit_same_line_rule(), name));
+    out.push(String::from("where\n"));
+    out.push(String::from("    B: ::winnow_grammar::rt::Slice,\n"));
+    out.push(String::from("    S: Clone + ::std::fmt::Debug + ::winnow_grammar::StateOf<::nikaia_std::grammar::LineBreaks>,\n"));
+    out.push(String::from("{\n"));
+    out.push(String::from("    let at = ::winnow::stream::Location::current_token_start(&*i) as i64;\n"));
+    out.push(String::from("    if ::winnow_grammar::StateOf::<::nikaia_std::grammar::LineBreaks>::state(&mut i.state.user_state).began_a_line(at) {\n"));
+    out.push(String::from("        return Err(::winnow_grammar::ParseError::from_input(i));\n"));
+    out.push(String::from("    }\n"));
+    out.push(String::from("    Ok(())\n"));
+    out.push(String::from("}\n"));
+    out.join("")
+}
+
 pub(crate) fn emit_writes_a_built_in(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, called: &str, arity: i64) -> bool {
     match pattern {
         Pattern::Seq(parts) => parts.iter().any(|part| { emit_writes_a_built_in(world, walk, &part.node, called, arity) }),
@@ -172,13 +195,14 @@ impl EmitState {
         out.push(&format!("    grammar {} {{\n", name));
         if bytes { out.push("        input bytes;\n"); }
         walk.grammar_bytes = bytes;
-        self.emit_grammar_body(world, walk, out, host, def, bytes)?;
+        self.emit_grammar_body(world, walk, out, host, def, name, bytes)?;
         walk.grammar_bytes = false;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_grammar_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, def: &GrammarDef, bytes: bool) -> Result<(), Box<dyn std::error::Error>> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_grammar_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, def: &GrammarDef, name: &str, bytes: bool) -> Result<(), Box<dyn std::error::Error>> {
         let mut types: collections::BTreeMap<String, String> = collections::BTreeMap::new();
         for rule in def.rules.iter() {
             match &rule.ret_type {
@@ -194,10 +218,24 @@ impl EmitState {
         for rule in def.rules.iter() { if !rule.args.is_empty() || !rule.config.is_empty() { valued.insert(emit_text(world, rule.name), rule.clone()); } }
         walk.grammar_values = valued;
         walk.grammar_members = vec![];
+        let mut lines = false;
+        for rule in def.rules.iter() { for alt in rule.alts.iter() { lines = lines || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "same_line", 0); } }
+        let own_ws = walk.grammar_rules.contains("WS");
+        if lines {
+            out.push(&format!("        use super::{}_{} as {};\n", emit_same_line_rule(), name, emit_same_line_rule()));
+            out.push("        state ::nikaia_std::grammar::LineBreaks;\n");
+            out.push(&format!("        extern rule {} -> ();\n", emit_same_line_rule()));
+            let over = if bytes { "bytes" } else { "text" };
+            let skipped = if own_ws { format!("{}({})", over, emit_own_ws_rule()) } else { emit_default_ws() };
+            let newline = if own_ws && bytes { "w.contains(&b'\\n')" } else { "w.contains('\\n')" };
+            out.push(&format!("\n        rule WS -> () =\n          w:{} @ at\n", skipped));
+            out.push(&format!("            -> {{ _state.user().ran(at.start as i64, at.end as i64, {}) }}\n", newline));
+        }
         for rule in def.rules.iter() {
             out.push("\n");
             let st = out.mark();
-            self.emit_grammar_rule(world, walk, out, host, rule, bytes)?;
+            let renamed = if lines && own_ws && emit_text(world, rule.name) == "WS" { emit_own_ws_rule() } else { "" };
+            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes)?;
             if !bytes { out.record(&rule.span, st); }
         }
         let mut lists = false;
@@ -254,11 +292,13 @@ impl EmitState {
         }
         out.push("    }\n");
         out.push("}\n");
+        if lines { out.push(&emit_same_line_function(name)); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_grammar_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, bytes: bool) -> Result<(), Box<dyn std::error::Error>> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_grammar_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, renamed: &str, bytes: bool) -> Result<(), Box<dyn std::error::Error>> {
         match &rule.frame {
             Some(frame) => { out.push(&format!("        {}\n", frame_attribute(frame))); },
             None => { },
@@ -278,7 +318,8 @@ impl EmitState {
         for arg in rule.args.iter() { values.push(format!("{}: {}", emit_text(world, arg.name), host.ty_named(walk, &arg.ty)?)); }
         for option in rule.config.iter() { values.push(format!("{}: {}", emit_text(world, option.name), host.ty_named(walk, &option.ty)?)); }
         let taken = if values.is_empty() { String::from("") } else { format!("({})", values.join(", ")) };
-        out.push(&format!("        {}rule {}{}{}{} =\n", vis, emit_text(world, rule.name), taken, ret, label));
+        let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { renamed.to_string() };
+        out.push(&format!("        {}rule {}{}{}{} =\n", vis, rule_name, taken, ret, label));
         for i in 0..rule.alts.len() as i64 {
             let alt = nikaia_std::index::get(&rule.alts, (i) as usize);
             let separator = if i == 0 { "  " } else { "| " };

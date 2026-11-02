@@ -136,6 +136,7 @@ impl CheckState {
             if called == "bytes" && !args.is_empty() { return pattern_named("Bytes", true); }
             if called == "span" && args.len() == 1 { return pattern_named("text::Span", false); }
             if called == "here" && args.is_empty() { return pattern_named("u32", false); }
+            if called == "same_line" && args.is_empty() { return Ty::Tuple(vec![]); }
             if called == "count" && args.len() == 1 { return pattern_named("i64", false); }
             if called == "peek" && args.len() == 1 { return self.pattern_type(world, &nikaia_std::index::get(&args, 0).node, rules); }
             if called == "list" && args.len() == 2 { return list_of_known(self.pattern_type(world, &nikaia_std::index::get(&args, 0).node, rules)); }

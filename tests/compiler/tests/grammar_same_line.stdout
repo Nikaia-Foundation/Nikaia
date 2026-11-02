@@ -1,0 +1,7 @@
+a | list(0) / a | list(0)
+a[0] / a[0]
+f | group(x) / f | group(x)
+f(x) / f(x)
+a[0]! / a[0]!
+a[0] | list(1) / a[0] | list(1)
+a | list(0)(x) | group(y) / a | list(0)(x) | group(y)

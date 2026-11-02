@@ -309,6 +309,12 @@ impl EmitState {
             out.push(emit_here_rule())
             return
         }
+        // `same_line` asks the record the grammar's `WS` keeps (ADR-339 D2),
+        // through the `extern rule` the grammar is given.
+        if called == "same_line" && generics.len() == 0 && args.len() == 0 && !walk.grammar_rules.contains(called) {
+            out.push(emit_same_line_rule())
+            return
+        }
         if called == "span" && generics.len() == 0 && args.len() == 1 && !walk.grammar_rules.contains(called) {
             out.push(f"{emit_span_rule()}(p = (")
             self.emit_pattern(world, walk, out, host, args[0])

@@ -162,6 +162,11 @@ impl CheckState {
             if called == "here" && args.len() == 0 {
                 return pattern_named("u32", false)
             }
+            // **`same_line` matches nothing and fails after a line break**
+            // (ADR-339 D2): it covers no input and yields no value.
+            if called == "same_line" && args.len() == 0 {
+                return Ty::Tuple([])
+            }
             // **How often `p` matched**, an `i64` (ADR-grammar-1 D5).
             if called == "count" && args.len() == 1 {
                 return pattern_named("i64", false)

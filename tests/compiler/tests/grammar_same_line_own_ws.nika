@@ -1,0 +1,32 @@
+// `same_line` in a grammar with its own `WS` (ADR-339 D2, #557): the line
+// break counts wherever the skipped run holds it, after a line comment and
+// inside a block comment too. `a /* c */ [0]` is an index; `a // c\n[0]` and
+// `a /*\n*/ [0]` are a name and then a list.
+grammar Q {
+    entry rule items -> Vec[String] = xs:postfix* eof -> { xs }
+    rule postfix -> String = a:atom ss:suffix* -> { f"{a}{ss.join("")}" }
+    rule suffix -> String = same_line "[" n:name "]" -> { f"[{n}]" }
+    rule atom -> String = n:name -> { n }
+        | "[" n:name "]" -> { f"list({n})" }
+    rule name -> String = s:text(alpha1 | digit+) -> { s.clone() }
+    rule WS = (SPACE | LINE_COMMENT | BLOCK_COMMENT)* -> { }
+    rule SPACE = multispace1 -> { }
+    rule LINE_COMMENT = "//" until(line_ending) -> { }
+    rule BLOCK_COMMENT = "/*" until("*/") "*/" -> { }
+}
+
+fn bytes_of(text: String) -> Bytes {
+    let mut all: Vec[u8] = []
+    for b in text.bytes() {
+        all.push(b)
+    }
+    return Bytes(all)
+}
+
+fn main() {
+    for s in ["a // c\n[0]", "a /* c */ [0]", "a /*\n*/ [0]", "a/**/[0] // end"] {
+        let text = Q::items(s) catch { ["refused"] }
+        let bytes = Q::items(bytes_of(s)) catch { ["refused"] }
+        println(f"{text.join(" | ")} / {bytes.join(" | ")}")
+    }
+}

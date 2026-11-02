@@ -1,0 +1,42 @@
+// crates/nikaia-std/src/runtime/line_breaks.nika
+//
+// **What the whitespace a generated parser last skipped held** (#557,
+// [ADR-339](../../../../docs/specification/adr/adr-339.md) D2): the record the
+// grammar built-in `same_line` asks.
+//
+// A grammar that writes `same_line` is lowered with this record as its parser's
+// state (ADR-339 D3: the lowering, not the grammar, declares it): its `WS`
+// calls `ran` with the run it skipped, and `same_line` fails where
+// `began_a_line` says the token at its place came after a line break. The
+// record is by position, so the answer is a fact about the input and an
+// alternative that backtracks over the same place reads the same answer.
+//
+// The logic is `PrTrivia`'s `ran` / `began_a_line` (`tools/parser_leaves.nika`)
+// without the doc-comment bookkeeping the compiler's own parser needs.
+
+/// The end of the last whitespace run skipped and whether a line break was in
+/// it (or in the run that ended where it began).
+pub struct LineBreaks {
+    pub end: i64,
+    pub newline: bool,
+}
+
+/// The record before anything was skipped: no token began a line.
+pub fn line_breaks() -> LineBreaks {
+    return LineBreaks { end: 0, newline: false }
+}
+
+impl LineBreaks {
+    /// Records a run of whitespace from `start` to `end`. A run that starts
+    /// where the last one ended carries its line break on.
+    pub fn ran(ref mut self, start: i64, end: i64, newline: bool) {
+        let carried = self.end == start && self.newline
+        self.end = end
+        self.newline = newline || carried
+    }
+
+    /// Whether the token at `at` came right after a run with a line break.
+    pub fn began_a_line(ref self, at: i64) -> bool {
+        return self.end == at && self.newline
+    }
+}

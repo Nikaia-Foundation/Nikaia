@@ -1,0 +1,36 @@
+// `same_line` (Part II 10.8, ADR-339 D2, #557) matches nothing and fails
+// where the whitespace skipped just before it held a line break: `a [0]` is an
+// index and `f (x)` a call, but `a\n[0]` is a name and then a list, and
+// `f\n(x)` a name and then a group. Over text and over a `Bytes` alike.
+//
+// The answer is a fact about the input: in `a [0]\n[1]` the first `index`
+// alternative skips the break after `[0]` and fails at the `!` it wants; the
+// second asks `same_line` before `[0]` again and gets the same answer as the
+// first did, and the `[1]` after the break is not an index.
+grammar P {
+    entry rule items -> Vec[String] = xs:postfix* eof -> { xs }
+    rule postfix -> String = a:atom ss:suffix* -> { f"{a}{ss.join("")}" }
+    rule suffix -> String = same_line "[" n:name "]" "!" -> { f"[{n}]!" }
+        | same_line "[" n:name "]" -> { f"[{n}]" }
+        | same_line "(" n:name ")" -> { f"({n})" }
+    rule atom -> String = n:name -> { n }
+        | "[" n:name "]" -> { f"list({n})" }
+        | "(" n:name ")" -> { f"group({n})" }
+    rule name -> String = s:text(alpha1 | digit+) -> { s.clone() }
+}
+
+fn bytes_of(text: String) -> Bytes {
+    let mut all: Vec[u8] = []
+    for b in text.bytes() {
+        all.push(b)
+    }
+    return Bytes(all)
+}
+
+fn main() {
+    for s in ["a\n[0]", "a [0]", "f\n(x)", "f (x)", "a [0] !", "a [0]\n[1]", "a\n\n  [0](x)\n(y)"] {
+        let text = P::items(s) catch { ["refused"] }
+        let bytes = P::items(bytes_of(s)) catch { ["refused"] }
+        println(f"{text.join(" | ")} / {bytes.join(" | ")}")
+    }
+}

@@ -109,6 +109,14 @@ fn not_text(bytes: &[u8], at: usize) -> ParseError {
     ParseError::of(error.render(bytes))
 }
 
+/// **What the whitespace a parser last skipped held** (#557,
+/// [ADR-339](../../../docs/specification/adr/adr-339.md) D2): every entry
+/// hands it to the parser as its state, and a grammar that writes `same_line`
+/// declares it (`state`), records each `WS` run in it and asks it. A grammar
+/// that does not write `same_line` declares no state and never touches it.
+/// The record is Nikaia, `runtime/line_breaks.nika`.
+pub use crate::runtime::LineBreaks;
+
 /// **`G::rule(text)`, lowered**: the entry rule run over the whole of `source`,
 /// and its failure rendered against it.
 ///
@@ -120,14 +128,18 @@ fn not_text(bytes: &[u8], at: usize) -> ParseError {
 /// becomes a line and a column only against the text.
 pub fn parse<'a, S, O>(
     source: &'a S,
-    mut rule: impl winnow::Parser<winnow_grammar::ParseInput<'a, ()>, O, winnow_grammar::ParseError>,
+    mut rule: impl winnow::Parser<
+        winnow_grammar::ParseInput<'a, LineBreaks>,
+        O,
+        winnow_grammar::ParseError,
+    >,
 ) -> Result<O, ParseError>
 where
     S: Source + ?Sized,
 {
     let source = source.text()?;
-    let mut stream = winnow_grammar::ParseInput::<()> {
-        state: winnow_grammar::ParseContext::<()>::default(),
+    let mut stream = winnow_grammar::ParseInput::<LineBreaks> {
+        state: winnow_grammar::ParseContext::with_state(crate::runtime::line_breaks()),
         input: winnow::stream::LocatingSlice::new(source),
     };
     rule.parse_next(&mut stream)
@@ -185,10 +197,14 @@ fn in_pieces<O: Send>(
 /// bytes.
 pub fn parse_bytes<'a, O>(
     source: &'a [u8],
-    mut rule: impl winnow::Parser<winnow_grammar::ParseBytes<'a, ()>, O, winnow_grammar::ParseError>,
+    mut rule: impl winnow::Parser<
+        winnow_grammar::ParseBytes<'a, LineBreaks>,
+        O,
+        winnow_grammar::ParseError,
+    >,
 ) -> Result<O, ParseError> {
-    let mut stream = winnow_grammar::ParseBytes::<()> {
-        state: winnow_grammar::ParseContext::<()>::default(),
+    let mut stream = winnow_grammar::ParseBytes::<LineBreaks> {
+        state: winnow_grammar::ParseContext::with_state(crate::runtime::line_breaks()),
         input: winnow::stream::LocatingSlice::new(source),
     };
     rule.parse_next(&mut stream)

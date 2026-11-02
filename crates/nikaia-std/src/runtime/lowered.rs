@@ -27,7 +27,19 @@ mod http1_lowered {
 #[allow(unused_imports)]
 pub use http1_lowered::*;
 
+mod line_breaks_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/line_breaks.rs");
+}
+#[allow(unused_imports)]
+pub use line_breaks_lowered::*;
+
 pub mod http1 {
     #[allow(unused_imports)]
     pub use super::{Field, Line, Written, Header, Read, Http1, read_head, written};
+}
+pub mod line_breaks {
+    #[allow(unused_imports)]
+    pub use super::{LineBreaks, line_breaks};
 }
