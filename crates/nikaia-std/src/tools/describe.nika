@@ -132,6 +132,9 @@ pub trait DescribeHost {
     /// The qualified names a `.nika` text writes (`foreign::qualified_names`),
     /// `null` where the text does not parse.
     fn qualified_names(ref self, text: ref String) -> Vec[String]? sync
+    /// The crate's own version, from the `Cargo.toml` in `crate_root`; `null`
+    /// where there is none to read.
+    fn cargo_version(ref self, crate_root: ref fs::Path) -> String? sync
 }
 
 /// **Why a crate's shipped ledger is refused** (ADR-290 D22, D5), `null`
@@ -287,4 +290,49 @@ pub fn describe_without_dots(path: ref fs::Path) -> fs::Path {
         out = out.join(part)
     }
     return out
+}
+
+/// The crate's version and its `.rs` files, by their path inside the crate.
+pub struct DescribeSources {
+    pub version: String,
+    pub files: collections::BTreeMap[String, String],
+}
+
+/// **Where the crate's sources are, and every `.rs` under its `src/`**: `key`
+/// is the manifest's entry for `crate_word`, `version` and `declared` its
+/// `version` and `path` where it says them.
+///
+/// A `path` dependency only: a version dependency's sources are in Cargo's
+/// registry cache, under a layout this compiler does not resolve (ADR-002 D1).
+/// The path is relative to `nikaia.toml` (ADR-286 D16), and resolved lexically,
+/// not by the file system: a crate may be described before the project was
+/// ever built, the order `NK2504` puts a reader in.
+pub fn describe_crate_sources[H: DescribeHost](root: ref fs::Path, version: String?, declared: String?, crate_word: String, key: String, host: ref H) -> DescribeSources throws {
+    let path = declared ?? throw Refused::Because(f"`{key}` is a dependency by version, and `nikaia describe` can only read crates given by `path`. Use a `path` dependency, or write `contracts/{crate_word}.contracts` by hand.")
+    let crate_root = describe_without_dots(root.join(path))
+    if !describe_is_dir(crate_root) {
+        throw Refused::Because(f"The sources of `{key}` aren't at {crate_root.display()}. (A `path` in `nikaia.toml` is relative to `nikaia.toml`.)")
+    }
+    let mut known = (version ?? "?").clone()
+    if known == "?" {
+        known = (host.cargo_version(crate_root) ?? "?").clone()
+    }
+    // The walk is `tools/sources.nika`'s (ADR-290 D14, D19). A crate with no
+    // `src` has no `.rs` file, which the refusal below says.
+    let src = crate_root.join("src")
+    let mut files: collections::BTreeMap[String, String] = collections::BTreeMap()
+    if describe_is_dir(src) {
+        files = rust_sources(src.display()) catch { throw Refused::Because(f"reading the sources of `{key}`: {error}") }
+    }
+    if files.is_empty() {
+        throw Refused::Because(f"There's no `.rs` file under {src.display()}, and `nikaia describe` reads the crate's sources.")
+    }
+    return DescribeSources { version: known, files: files }
+}
+
+// Whether `path` names a directory, following links; `false` where it cannot
+// be read.
+fn describe_is_dir(path: ref fs::Path) -> bool sync {
+    let meta = fs::metadata(path, fs::Root::Anywhere) catch { return false }
+    return meta.is_dir()
 }

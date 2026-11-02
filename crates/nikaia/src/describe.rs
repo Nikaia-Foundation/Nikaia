@@ -287,56 +287,28 @@ struct Sources {
 /// generated manifest, which put this reader and Cargo in two different
 /// directories for one crate's sources — and only this one had a test.
 fn crate_sources(root: &Path, value: &toml::Value, crate_word: &str, key: &str) -> Result<Sources> {
-    let version = value
-        .get("version")
-        .and_then(toml::Value::as_str)
-        .unwrap_or("?")
-        .to_string();
-    let Some(declared) = value.get("path").and_then(toml::Value::as_str) else {
-        bail!(
-            "`{key}` is a dependency by version, and `nikaia describe` can only read \
-             crates given by `path`. Use a `path` dependency, or write \
-             `contracts/{crate_word}.contracts` by hand."
-        );
+    // **Where the sources are, the refusals and the walk are Nikaia's**
+    // (`tools/describe.nika`, #125); the `toml` value's `version` and `path`
+    // are read here, and the crate's `Cargo.toml` by `Host::cargo_version`.
+    let text = |key: &str| {
+        value
+            .get(key)
+            .and_then(toml::Value::as_str)
+            .map(str::to_string)
     };
-    // **Resolved lexically and not by the filesystem**: a crate may perfectly
-    // well be described before the project has ever been built - which is the
-    // order `NK2504` puts a reader in. `canonicalize` on a directory that is
-    // not there yet fails, and what it would have answered is a `..` this can
-    // walk off itself.
-    let crate_root = without_dots(&root.join(declared));
-    if !crate_root.is_dir() {
-        bail!(
-            "The sources of `{key}` aren't at {}. (A `path` in `nikaia.toml` is relative \
-             to `nikaia.toml`.)",
-            crate_root.display()
-        );
-    }
-    let version = match version.as_str() {
-        "?" => cargo_version(&crate_root).unwrap_or_else(|| "?".to_string()),
-        given => given.to_string(),
-    };
-
-    // **The walk is Nikaia's** (ADR-290 D14, ADR-290 D19): `tools/sources.nika`
-    // reads every `.rs` under `src` by `fs::walk`, and this drives it to its
-    // end. A crate with no `src` has no `.rs` file, which the next lines say.
-    let src = crate_root.join("src");
-    let files = match src.is_dir() {
-        false => BTreeMap::new(),
-        true => nikaia_std::rt::exec::block_on(nikaia_std::tools::sources::rust_sources(
-            &src.to_string_lossy(),
-        ))
-        .map_err(|e| anyhow::anyhow!("{e}"))
-        .with_context(|| format!("reading the sources of `{key}`"))?,
-    };
-    if files.is_empty() {
-        bail!(
-            "There's no `.rs` file under {}, and `nikaia describe` reads the crate's \
-             sources.",
-            src.display()
-        );
-    }
-    Ok(Sources { version, files })
+    let found = block_on(describe::describe_crate_sources(
+        root,
+        text("version"),
+        text("path"),
+        crate_word,
+        key,
+        &Host,
+    ))
+    .map_err(|thrown| anyhow::anyhow!("{thrown}"))?;
+    Ok(Sources {
+        version: found.version,
+        files: found.files,
+    })
 }
 
 /// **Every description this build reads, as one digest**, for the cache key
@@ -416,6 +388,10 @@ fn names_the_program_writes(root: &Path, crate_word: &str) -> Result<BTreeSet<St
 struct Host;
 
 impl DescribeHost for Host {
+    fn cargo_version(&self, crate_root: &Path) -> Option<String> {
+        cargo_version(crate_root)
+    }
+
     fn qualified_names(&self, text: &str) -> Option<Vec<String>> {
         let parsed = crate::parser::parse_to_ast(text).ok()?;
         Some(
