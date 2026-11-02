@@ -94,6 +94,13 @@ impl Bytes {
         ByteReads::text(self.as_slice())
     }
 
+    /// The bytes as text, each run that is not UTF-8 replaced by U+FFFD
+    /// (#1182): an owned copy, never a refusal, for output a program only
+    /// shows, such as a child process's.
+    pub fn text_lossy(&self) -> String {
+        String::from_utf8_lossy(self.as_slice()).into_owned()
+    }
+
     /// The first `byte` at or after the position `from`, or `None`
     /// (ADR-320 D6): a byte search of the kind `memchr` does. A `from` before
     /// the start searches from the start; one past the end finds nothing.
@@ -164,6 +171,9 @@ impl Bytes {
 pub trait ByteReads {
     /// The bytes as text, where they are text: [`Bytes::text`].
     fn text(&self) -> Result<&str, crate::io::IoError>;
+    /// The bytes as text, each run that is not UTF-8 U+FFFD:
+    /// [`Bytes::text_lossy`].
+    fn text_lossy(&self) -> String;
     /// The first `byte`, or byte of a set, at or after `from`, or `None`:
     /// [`Bytes::find`].
     fn find<N: Needle>(&self, byte: N, from: i64) -> Option<i64>;
@@ -181,6 +191,10 @@ pub trait ByteReads {
 }
 
 impl ByteReads for [u8] {
+    fn text_lossy(&self) -> String {
+        String::from_utf8_lossy(self).into_owned()
+    }
+
     fn text(&self) -> Result<&str, crate::io::IoError> {
         std::str::from_utf8(self).map_err(|at| {
             crate::io::IoError::NotText(format!(

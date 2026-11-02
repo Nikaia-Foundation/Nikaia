@@ -5836,6 +5836,14 @@ touches = []
 throws = ["io::IoError"]
 signature = "(ref self) -> ref(self) String"
 
+# The bytes as text, each run that is not UTF-8 replaced by U+FFFD (#1182):
+# an owned copy that never fails, for output a program only shows.
+[fn."Bytes::text_lossy"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self) -> String"
+
 # The first `byte` at or after `from`, or nothing (ADR-320 D6): a byte search
 # of the kind `memchr` does. **`byte` may also be a `bytes::ByteSet`**
 # (ADR-375 D3), the first byte of the set; the checker takes either.

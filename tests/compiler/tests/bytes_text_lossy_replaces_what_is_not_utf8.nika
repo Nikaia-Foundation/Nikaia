@@ -1,0 +1,14 @@
+// `Bytes.text_lossy()` (#1182): a run that is not UTF-8 becomes U+FFFD, valid text is kept.
+fn shown(b: ref Bytes) -> String {
+    return b.text_lossy()
+}
+
+fn main() {
+    let b = Bytes([0x41, 0xff, 0x42])
+    let t = b.text_lossy()
+    println(f"{t} {t.len()}")
+    let ok = Bytes("héllo".bytes().collect())
+    println(shown(ok))
+    let empty = Bytes([])
+    println(f"[{empty.text_lossy()}]")
+}

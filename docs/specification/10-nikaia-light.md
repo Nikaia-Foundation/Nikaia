@@ -901,7 +901,8 @@ while true {
 list's `iter` gives its elements, `b.starts_with(prefix)` and
 `b.ends_with(suffix)`, each a `ref Bytes` compared byte for byte, and
 `b.text()`, which checks UTF-8 and is
-`NotText` where it fails. An index outside stops the program, as a list's does.
+`NotText` where it fails, and `b.text_lossy()`, an owned copy in which each
+run that is not UTF-8 is U+FFFD. An index outside stops the program, as a list's does.
 **A `Bytes` searches for a set of bytes** ([ADR-375](adr/adr-375.md)):
 `bytes::ByteSet([';', '\n'])` is such a set, of any bytes, built once. A set
 written empty is refused (`NK1287`); one empty at run time finds nothing.
