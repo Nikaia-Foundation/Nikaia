@@ -1922,7 +1922,7 @@ pub(crate) fn bounding_proven_count(proven: &BoundsProven) -> i64 { proven.indic
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn bounding_while(walk: &mut BoundsWalk, cond: &Expr, body: &Block, changed: &BoundsChanged, cands: &[String], facts: &mut BoundsFacts, invariant: &[i64], context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &dyn Fn(&TermArena, &[i64], i64) -> bool) {
-    let outside = &bounding_changed_in_expr(cond, context, words).values;
+    let outside = bounding_changed_in_expr(cond, context, words).values;
     let steps = bounding_turn_steps(&walk, body, &outside, changed, &facts, context, words);
     let mut turn_facts: Vec<i64> = vec![];
     let mut step: Vec<(String, i64, i64)> = vec![];

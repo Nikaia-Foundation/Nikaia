@@ -38,6 +38,15 @@ fn check_core_places_a_list(base: ref String) -> bool {
 }
 
 /// Whether an expression is a range written in place.
+/// A call of a function or a method.
+fn check_core_places_a_call(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Call { .. } => true,
+        Expr::MethodCall { .. } => true,
+        else => false,
+    }
+}
+
 fn check_core_places_a_range(index: ref Expr) -> bool sync {
     return match index {
         Expr::Range { .. } => true,
@@ -246,6 +255,14 @@ pub fn check_core_field[H: CheckHost](mut state: CheckState, world: ref CheckWor
 
 fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, base: ref Expr, name: winnow_grammar::Symbol, span: ref Span) -> Ty sync {
     let on = check_core_expr(state, world, host, base, span)
+    // **A field of a call's owned result is moved out, not lent** (#1191).
+    let owned_result = match on {
+        Ty::Named { view, .. } => !view,
+        else => false,
+    }
+    if owned_result && check_core_places_a_call(base) {
+        state.flow.owned_call_bases.insert(id_of(base) as i64)
+    }
     let field: String = f"{world.words.resolve(name)}"
     // **`x.name::member` asks a type** (ADR-330 D5): only a reflected
     // field's `.ty` is one.

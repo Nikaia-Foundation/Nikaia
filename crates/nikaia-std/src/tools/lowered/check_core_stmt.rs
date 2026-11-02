@@ -230,7 +230,25 @@ pub(crate) fn check_core_stmt_a_call(value: &Expr) -> bool { matches!(value, Exp
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_stmt_a_place(value: &Expr) -> bool { matches!(value, Expr::Field { .. } | Expr::Index { .. }) }
+pub(crate) fn check_core_stmt_a_place(state: &CheckState, value: &Expr) -> bool {
+    match value {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); check_core_stmt_a_lent_root(state, base) },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); check_core_stmt_a_lent_root(state, base) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_lent_root(state: &CheckState, value: &Expr) -> bool {
+    match value {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); check_core_stmt_a_lent_root(state, base) },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); check_core_stmt_a_lent_root(state, base) },
+        Expr::Call { .. } => !state.flow.owned_call_bases.contains(&(id_of(value) as i64)),
+        Expr::MethodCall { .. } => !state.flow.owned_call_bases.contains(&(id_of(value) as i64)),
+        _ => true,
+    }
+}
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -429,7 +447,7 @@ pub(crate) fn check_core_stmt_lent_let(state: &mut CheckState, world: &CheckWorl
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_stmt_element_view(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, found: &Ty, want: &Ty) -> i64 {
-    if !check_core_stmt_a_place(value) { return 0; }
+    if !check_core_stmt_a_place(state, value) { return 0; }
     check_core_stmt_read_viewed(state, world, found, want)
 }
 
@@ -677,7 +695,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     }
     for n in bound_names.iter() { if n != "_" { state.written_at.push((n.to_string(), span.start as i64)); } }
     if !mutable && ty.is_none() && check_core_stmt_a_lent_list_read(&state, world, value) { check_core_stmt_lent_let(state, world, names, span); }
-    if !moved_out && check_core_stmt_a_place(value) && state.takes_away(world, &found) && !state.facts.text_bytes.contains(&node_key(value)) { check_core_stmt_lent_let(state, world, names, span); }
+    if !moved_out && check_core_stmt_a_place(&state, value) && state.takes_away(world, &found) && !state.facts.text_bytes.contains(&node_key(value)) { check_core_stmt_lent_let(state, world, names, span); }
     if mutable && names.len() == 1 && shape.is_empty() {
         let place = check_core_stmt_view_place(&state, world, value);
         if place.is_some() {

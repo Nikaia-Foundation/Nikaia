@@ -203,6 +203,10 @@ pub struct CheckFlow {
     /// A list's `get`, `first` or `last` of a tuple, by the call's id: a view
     /// of the element below (`Option<&T>`).
     pub lent_list_reads: collections::BTreeSet[i64],
+    /// A call a field is read off whose result is handed over owned, by the
+    /// call's id (#1191): `f().inner` is a part of a value nothing else owns,
+    /// so a `let` of it moves it out and is no view.
+    pub owned_call_bases: collections::BTreeSet[i64],
     /// A `get` of a `std` list or map, by the call's id: the read a `let mut`
     /// past a jump turns into a mutable view of the entry (#952).
     pub std_gets: collections::BTreeSet[i64],
@@ -391,6 +395,7 @@ impl CheckFlow {
             map_read_sites: collections::BTreeSet(),
             map_views: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
+            owned_call_bases: collections::BTreeSet(),
             std_gets: collections::BTreeSet(),
             view_reads: collections::BTreeSet(),
             std_entry_views: collections::BTreeSet(),

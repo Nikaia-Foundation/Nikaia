@@ -16,6 +16,10 @@ pub(crate) fn check_core_places_a_list(base: &str) -> bool { base == "Vec" || ba
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_places_a_call(value: &Expr) -> bool { matches!(value, Expr::Call { .. } | Expr::MethodCall { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_places_a_range(index: &Expr) -> bool { matches!(index, Expr::Range { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -170,6 +174,11 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
     let on = check_core_expr(state, world, host, base, span);
+    let owned_result = match on {
+        Ty::Named { view, .. } => !view,
+        _ => false,
+    };
+    if owned_result && check_core_places_a_call(base) { state.flow.owned_call_bases.insert(id_of(base) as i64); }
     let field: String = format!("{}", world.words.resolve(name));
     if field.contains("::") && !safe {
         let reflected = match on {

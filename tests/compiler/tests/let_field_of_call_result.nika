@@ -1,0 +1,43 @@
+/// A `let` of a field of a call's result moves the field out of the value
+/// the call hands over (#1191); a field of a call that hands back a `ref`
+/// stays a view of what it lends.
+struct Inner { name: String }
+struct Outer { inner: String, part: Inner, names: Vec[String] }
+struct Held { name: String }
+struct Holder { held: Held }
+
+fn literal() -> Outer {
+	return Outer { inner: "x", part: Inner { name: "y" }, names: ["p"] }
+}
+
+fn made(k: i64) -> Outer {
+	return Outer { inner: f"x{k}", part: Inner { name: f"y{k}" }, names: [f"p{k}", f"q{k}"] }
+}
+
+impl Holder {
+	fn again(ref self) -> Outer { return made(9) }
+	fn lent(ref self) -> ref Held { return self.held }
+}
+
+fn lent_of(h: ref Holder) -> ref Held { return h.held }
+
+fn main() {
+	let i = literal().inner
+	let s: String = i
+	println(s)
+	let j = made(2).part.name
+	let t: String = j
+	println(t)
+	let ns = made(3).names
+	let v: Vec[String] = ns
+	println(f"{v.len()}")
+	let k = 5
+	let h = Holder { held: Held { name: f"h{k}" } }
+	let m = h.again().inner
+	let u: String = m
+	println(u)
+	let a = h.lent().name
+	println(a)
+	let b = lent_of(h).name
+	println(b)
+}

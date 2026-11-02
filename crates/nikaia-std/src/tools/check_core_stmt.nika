@@ -309,12 +309,27 @@ fn check_core_stmt_a_call(value: ref Expr) -> bool sync {
     }
 }
 
-/// A field or an index, the places a `let` is a view of.
-fn check_core_stmt_a_place(value: ref Expr) -> bool sync {
+/// A field or an index, the places a `let` is a view of. **Not off a call's
+/// owned result** (#1191): `f().inner` reads a part of a value the call hands
+/// over, which nothing else owns, so the `let` moves it out rather than
+/// lending it.
+fn check_core_stmt_a_place(state: ref CheckState, value: ref Expr) -> bool sync {
     return match value {
-        Expr::Field { .. } => true,
-        Expr::Index { .. } => true,
+        Expr::Field { base, .. } => check_core_stmt_a_lent_root(state, base),
+        Expr::Index { base, .. } => check_core_stmt_a_lent_root(state, base),
         else => false,
+    }
+}
+
+/// What a field or an index chain is read off lends it, unless it is a call
+/// whose result is handed over owned.
+fn check_core_stmt_a_lent_root(state: ref CheckState, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Field { base, .. } => check_core_stmt_a_lent_root(state, base),
+        Expr::Index { base, .. } => check_core_stmt_a_lent_root(state, base),
+        Expr::Call { .. } => !state.flow.owned_call_bases.contains(id_of(value) as i64),
+        Expr::MethodCall { .. } => !state.flow.owned_call_bases.contains(id_of(value) as i64),
+        else => true,
     }
 }
 
@@ -552,7 +567,7 @@ fn check_core_stmt_lent_let(mut state: CheckState, world: ref CheckWorld, names:
 /// 1 where the read is lent, 2 where it is a word by its kind and is copied
 /// (`NK1257`), 0 where the rule has nothing to say.
 pub fn check_core_stmt_element_view(state: ref CheckState, world: ref CheckWorld, value: ref Expr, found: ref Ty, want: ref Ty) -> i64 sync {
-    if !check_core_stmt_a_place(value) {
+    if !check_core_stmt_a_place(state, value) {
         return 0
     }
     return check_core_stmt_read_viewed(state, world, found, want)
@@ -900,7 +915,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     }
     // **A `let` over a place is a view of it** (ADR-094 D4).
     // **Moved out of its owner, it is no view** (#665): the name owns what it holds.
-    if !moved_out && check_core_stmt_a_place(value) && state.takes_away(world, found) && !state.facts.text_bytes.contains(node_key(value)) {
+    if !moved_out && check_core_stmt_a_place(state, value) && state.takes_away(world, found) && !state.facts.text_bytes.contains(node_key(value)) {
         check_core_stmt_lent_let(state, world, names, span)
     }
     // **The place a `let mut` is a view of**, for the messages that name it
