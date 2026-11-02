@@ -2462,7 +2462,7 @@ pub mod check_walk {
 }
 pub mod check_walked {
     #[allow(unused_imports)]
-    pub use super::{check_walked_settle, check_walked_kept_call, check_walked_unsigned_slots, check_walked_unrolling, check_walked_written, check_walked_seed, check_walked_payload_of, check_walked_place_of, check_walked_declared, check_walked_proved, check_walked_with_described, CheckMultiLock};
+    pub use super::{check_walked_settle, check_walked_kept_call, check_walked_unsigned_slots, check_walked_unrolling, check_walked_written, check_walked_seed, check_walked_payload_of, check_walked_place_of, check_walked_declared, check_walked_proved, CheckWalkedProved, CheckWalkedPasses, check_walked_walk, check_walked_with_described, CheckMultiLock};
 }
 pub mod check_walks {
     #[allow(unused_imports)]

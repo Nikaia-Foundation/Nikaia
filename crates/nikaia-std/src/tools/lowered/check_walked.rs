@@ -217,6 +217,63 @@ pub fn check_walked_proved(state: &mut CheckState, entries: collections::BTreeMa
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckWalkedProved {
+    pub findings: Vec<CheckFinding>,
+    pub held: collections::BTreeMap<(i64, i64), ClaimHeld>,
+    pub entries: collections::BTreeMap<String, Vec<PreconditionCheck>>,
+    pub reaches: collections::BTreeMap<(String, String), CallReach>,
+    pub published: collections::BTreeMap<String, Published>,
+    pub std_claims: collections::BTreeMap<(i64, i64), String>,
+}
+
+pub trait CheckWalkedPasses {
+    fn dsl_findings(&self) -> Vec<CheckFinding>;
+    fn nonnegative(&self, facts: &CheckFacts, nodes: &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>;
+    fn proved(&self, facts: &CheckFacts) -> CheckWalkedProved;
+    fn view_findings(&self) -> Vec<CheckFinding>;
+    fn view_change_findings(&self, lent: &collections::BTreeSet<i64>, coalesced: &collections::BTreeSet<i64>, mut_viewed: &collections::BTreeSet<i64>) -> Vec<CheckFinding>;
+    fn tethered(&self) -> (Option<Vec<BufferPlan>>, Vec<CheckFinding>);
+    fn trait_findings(&self) -> Vec<CheckFinding>;
+    fn type_findings(&self) -> Vec<CheckFinding>;
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, passes: &P, harvesting: bool, computes: bool) {
+    check_walked_seed(state, world);
+    let dsl_drivers: collections::BTreeSet<String> = drivers(world.here.words, world.here.items).into_iter().collect();
+    state.dsl_drivers = dsl_drivers;
+    state.collect_types(world);
+    state.collect_copies(world);
+    check_program_program(state, world, host);
+    if harvesting { return; }
+    check_program_instantiations_beside(state, world, host);
+    check_program_unroll(state, world, host);
+    check_walked_unsigned_slots(state, &|facts, nodes| { passes.nonnegative(facts, nodes) });
+    state.walls_a_refusal_explains();
+    state.facts.walks_fields = state.walks_fields.to_owned();
+    state.findings.extend(passes.dsl_findings());
+    if computes {
+        let proved = passes.proved(&state.facts);
+        state.findings.extend(proved.findings);
+        check_walked_proved(state, proved.entries, proved.reaches, proved.published, &proved.std_claims, &proved.held);
+        state.findings.extend(passes.view_findings());
+        let coalesced = vc_coalesced(&state.facts);
+        let mut_viewed = vc_mut_viewed(&state.facts);
+        state.findings.extend(passes.view_change_findings(&state.facts.lent_lets, &coalesced, &mut_viewed));
+        let (plans, refused) = passes.tethered();
+        if plans.is_some() { state.facts.keep_plans = std::convert::identity(plans); }
+        state.findings.extend(refused);
+    }
+    state.findings.extend(passes.trait_findings());
+    check_crossings_language_impls(state, world);
+    state.findings.extend(passes.type_findings());
+    state.numbers_typed_by_their_uses();
+    for (_, finding) in std::mem::take(&mut state.arm_disagreements).into_iter() { state.findings.push(finding); }
+    check_walked_settle(state);
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_walked_with_described(library: &mut Ledger, described: &Ledger) {

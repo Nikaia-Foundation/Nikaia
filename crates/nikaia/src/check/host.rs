@@ -6,6 +6,7 @@
 use super::*;
 use nikaia_std::tools::build_eval::BtRead;
 use nikaia_std::tools::check_host::{CheckBuilt, CheckComputed, CheckHost};
+use nikaia_std::tools::check_walked::{CheckWalkedPasses, CheckWalkedProved};
 
 pub(super) struct Host<'a> {
     pub(super) parsed: &'a Parsed,
@@ -396,5 +397,97 @@ impl CheckHost for Host<'_> {
         text: &str,
     ) -> Option<nikaia_std::tools::escapes::NotAnEscape> {
         crate::build_time::an_escape_nothing_names(text)
+    }
+}
+
+/// **The passes the walk runs once it is over** (`check_walked.nika`,
+/// `CheckWalkedPasses`): each reads the parsed file whole, which only Rust
+/// holds.
+impl CheckWalkedPasses for Host<'_> {
+    fn dsl_findings(&self) -> Vec<Finding> {
+        crate::dsl::check(self.parsed)
+    }
+
+    fn nonnegative(&self, facts: &CheckFacts, nodes: &BTreeSet<i64>) -> BTreeSet<i64> {
+        crate::bounds::proven(
+            self.parsed,
+            &crate::bounds::Sites::of(facts),
+            &[self.own, self.library],
+            nodes,
+            // What the checker accepts does not depend on an optimization
+            // (ADR-361 D10).
+            false,
+        )
+        .nonnegative
+        .into_iter()
+        .collect()
+    }
+
+    fn proved(&self, facts: &CheckFacts) -> CheckWalkedProved {
+        let keys: BTreeSet<(i64, i64)> = facts.claims.keys().cloned().collect();
+        let comptimes = crate::prove::comptimes_of(self.parsed, &facts.comptime_values);
+        let runner = |call: &Expr, callee: &str, args: &[i64]| {
+            self.run_for_a_claim(call, callee, args, &comptimes.by_name)
+        };
+        let run: Option<crate::prove::ClaimRunner<'_>> = match self.somewhere() {
+            true => Some(&runner),
+            false => None,
+        };
+        let proved =
+            crate::prove::prove(self.parsed, self.own, self.library, &keys, &comptimes, run);
+        CheckWalkedProved {
+            findings: proved.findings,
+            held: proved.held,
+            entries: proved.entries,
+            reaches: proved.reaches,
+            published: proved.published,
+            std_claims: proved.std_claims,
+        }
+    }
+
+    fn view_findings(&self) -> Vec<Finding> {
+        crate::views::check(self.parsed, self.own, self.library)
+    }
+
+    fn view_change_findings(
+        &self,
+        lent: &BTreeSet<i64>,
+        coalesced: &BTreeSet<i64>,
+        mut_viewed: &BTreeSet<i64>,
+    ) -> Vec<Finding> {
+        crate::view_changes::analyse(
+            self.parsed,
+            self.own,
+            self.library,
+            lent,
+            coalesced,
+            mut_viewed,
+        )
+        .0
+    }
+
+    fn tethered(
+        &self,
+    ) -> (
+        Option<Vec<nikaia_std::tools::buffers::BufferPlan>>,
+        Vec<Finding>,
+    ) {
+        let plans = crate::contracts::keep::buffer_plans(
+            self.parsed,
+            Some(&crate::contracts::keep::beside(self.beside)),
+            self.own,
+            self.library,
+        );
+        let std = crate::contracts::std_ledger();
+        let kept = (std::ptr::eq(self.library, std) || self.library == std).then(|| plans.clone());
+        (kept, crate::contracts::tether::refusals_of(plans))
+    }
+
+    fn trait_findings(&self) -> Vec<Finding> {
+        crate::traits::check(self.parsed, self.own)
+    }
+
+    fn type_findings(&self) -> Vec<Finding> {
+        crate::types::check(self.parsed, self.own, self.library)
     }
 }

@@ -338,6 +338,113 @@ pub fn check_walked_proved(mut state: CheckState, entries: collections::BTreeMap
     }
 }
 
+/// **What the prover found** (`prove::Proved`), as the walk reads it: the
+/// findings, how each claim is held, the checked entries, how each call
+/// reaches them, what the ledger publishes and `std`'s preconditions at the
+/// calls.
+pub struct CheckWalkedProved {
+    pub findings: Vec[CheckFinding],
+    pub held: collections::BTreeMap[(i64, i64), ClaimHeld],
+    pub entries: collections::BTreeMap[String, Vec[PreconditionCheck]],
+    pub reaches: collections::BTreeMap[(String, String), CallReach],
+    pub published: collections::BTreeMap[String, Published],
+    pub std_claims: collections::BTreeMap[(i64, i64), String],
+}
+
+/// **The passes of the compiler the walk runs once it is over** (ADR-294,
+/// #125, M10): each still Rust where it reads the parsed file whole, so each
+/// is a question to `check/host.rs`, answered with findings.
+pub trait CheckWalkedPasses {
+    /// The DSL parameters a call forgot, and the ones it invented (ADR-296 D5).
+    fn dsl_findings(ref self) -> Vec[CheckFinding] sync
+    /// Which of `nodes` are proved `>= 0` where they stand (`bounds::proven`).
+    fn nonnegative(ref self, facts: ref CheckFacts, nodes: ref collections::BTreeSet[i64]) -> collections::BTreeSet[i64] sync
+    /// The prover's answer for every claim the walk kept (ADR-269 D4), a call
+    /// an open claim reads run as a `comptime` is where the build can
+    /// (ADR-359 D11-D13).
+    fn proved(ref self, facts: ref CheckFacts) -> CheckWalkedProved sync
+    /// A naked view parameter kept past the call (`NK2302`).
+    fn view_findings(ref self) -> Vec[CheckFinding] sync
+    /// A change in place of data a view still to be used may point into
+    /// (`NK2305`, ADR-353 D4).
+    fn view_change_findings(ref self, lent: ref collections::BTreeSet[i64], coalesced: ref collections::BTreeSet[i64], mut_viewed: ref collections::BTreeSet[i64]) -> Vec[CheckFinding] sync
+    /// The buffer plans, kept for the emitter where they are made against
+    /// `std` alone, as it makes them (#727), and the tether's refusals
+    /// (`NK2303`, ADR-283 D9).
+    fn tethered(ref self) -> (Vec[BufferPlan]?, Vec[CheckFinding]) sync
+    /// What an `impl` owes the `trait` it names (Part I 4.7).
+    fn trait_findings(ref self) -> Vec[CheckFinding] sync
+    /// A type nothing declares (Part I 2.2, ADR-096).
+    fn type_findings(ref self) -> Vec[CheckFinding] sync
+}
+
+/// **The checker's walk of one file, from the seed to the settled findings**
+/// (`check::walked`, ADR-294, #125, M10). `harvesting` stops it once the calls
+/// have been typed (ADR-304 D6); `computes` runs the walks that answer only
+/// with findings and proofs, which the ledger's pass does not (#727).
+pub fn check_walked_walk[H: CheckHost, P: CheckWalkedPasses](mut state: CheckState, world: ref CheckWorld, host: ref H, passes: ref P, harvesting: bool, computes: bool) sync {
+    check_walked_seed(state, world)
+    let dsl_drivers: collections::BTreeSet[String] = drivers(world.here.words, world.here.items).drain().collect()
+    state.dsl_drivers = dsl_drivers
+    state.collect_types(world)
+    state.collect_copies(world)
+    check_program_program(state, world, host)
+    // **Only the call sites were wanted**, and everything below answers a
+    // different question at a cost the asking unit has already paid for
+    // itself (ADR-304 D6).
+    if harvesting {
+        return
+    }
+    // **The calls that stand in the program's other files**, before the turns
+    // are walked, because a copy is written by the unit that declares the
+    // function and decided at the call - which may be a file away (Part I 9.1).
+    check_program_instantiations_beside(state, world, host)
+    // **And once more per unrolled turn** (ADR-304 D7, D6), which the walk
+    // above is what found: a call may stand above the function it names.
+    check_program_unroll(state, world, host)
+    check_walked_unsigned_slots(state, fn(facts, nodes) { passes.nonnegative(facts, nodes) })
+    state.walls_a_refusal_explains()
+    state.facts.walks_fields = state.walks_fields.clone()
+    // ADR-296 D5: a question about a statement's holes rather than a type.
+    state.findings.extend(passes.dsl_findings())
+    // **The ledger's pass reports nothing** (#727): what its caller reads is
+    // which calls resolve where and what each body stores, never a finding or
+    // a proof.
+    if computes {
+        // **Every `assert` outside a test is proved where it can be**
+        // (ADR-269 D4), after the walk, because the checker is what decided
+        // which calls are the prelude's.
+        let proved = passes.proved(state.facts)
+        state.findings.extend(proved.findings)
+        check_walked_proved(state, proved.entries, proved.reaches, proved.published, proved.std_claims, proved.held)
+        // Where a value goes, not what a type is (`NK2302`).
+        state.findings.extend(passes.view_findings())
+        // Where a view points and when it is used (`NK2305`).
+        let coalesced = vc_coalesced(state.facts)
+        let mut_viewed = vc_mut_viewed(state.facts)
+        state.findings.extend(passes.view_change_findings(state.facts.lent_lets, coalesced, mut_viewed))
+        // A view handed back that points into a buffer the body owns (`NK2303`).
+        let (plans, refused) = passes.tethered()
+        if plans != null {
+            state.facts.keep_plans = plans
+        }
+        state.findings.extend(refused)
+    }
+    // Part I 4.7: it reads the ledger's **finished** `sync` column (ADR-080).
+    state.findings.extend(passes.trait_findings())
+    check_crossings_language_impls(state, world)
+    // Part I 2.2: a written *name*, not a value's type (ADR-096).
+    state.findings.extend(passes.type_findings())
+    // **What no function body held**, typed the same way (ADR-285).
+    state.numbers_typed_by_their_uses()
+    // **Arms that disagree, where no position asked them** (#596).
+    for (_, finding) in state.arm_disagreements.drain() {
+        state.findings.push(finding)
+    }
+    // The findings and method sets in their final form; the order is the span's.
+    check_walked_settle(state)
+}
+
 /// **The `std` library a walk resolves against, with the described crates'
 /// boundary** (`project::Foreign::library`): a described entry joins where
 /// `std` has none by its name, and `std` wins a collision. What a call into

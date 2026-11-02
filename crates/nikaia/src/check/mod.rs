@@ -37,7 +37,6 @@ use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, Ledger, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
-use nikaia_std::tools::check_crossings;
 use nikaia_std::tools::check_flow::{CheckConstant, CheckFlow};
 use nikaia_std::tools::check_items;
 pub use nikaia_std::tools::check_state::{
@@ -380,8 +379,6 @@ fn walked<'a>(
     let mut s = core::hollow();
     s.flow = CheckFlow::start(computes, harvesting);
     s.modules = modules.clone();
-    check_walked::check_walked_seed(&mut s, &world);
-    s.dsl_drivers = crate::dsl::drivers(parsed).into_iter().collect();
     let mut checker = Checker {
         parsed,
         beside,
@@ -390,135 +387,10 @@ fn walked<'a>(
         world: &world,
         s: core::Baton::new(s),
     };
-    checker.collect_types();
+    // The walk from the seed to the settled findings (`check_walked.nika`).
     checker.nikaia(|state, world, host| {
-        nikaia_std::tools::check_program::check_program_program(state, world, host)
+        check_walked::check_walked_walk(state, world, host, host, harvesting, computes)
     });
-    // **Only the call sites were wanted**, and everything below this line
-    // answers a different question at a cost the asking unit has already paid
-    // for itself (ADR-304 D6).
-    if harvesting {
-        return finished(checker);
-    }
-    // **The calls that stand in the program's other files**, before the turns
-    // are walked, because a copy is written by the unit that declares the
-    // function and decided at the call - which may be a file away (Part I 9.1).
-    checker.nikaia(|state, world, host| {
-        nikaia_std::tools::check_program::check_program_instantiations_beside(state, world, host)
-    });
-    // **And once more per unrolled turn** (ADR-304 D7, ADR-304 D6), which the
-    // walk above is what found: a call may stand above the function it names.
-    checker.nikaia(|state, world, host| {
-        nikaia_std::tools::check_program::check_program_unroll(state, world, host)
-    });
-    checker.unsigned_slots_proved(parsed);
-    checker.s.walls_a_refusal_explains();
-    checker.s.facts.walks_fields = checker.s.walks_fields.clone();
-    // ADR-296 D5: the DSL parameters a call forgot, and the ones it invented.
-    // A separate walk because it answers a question about a *statement's
-    // holes* rather than about a type, and it needs no ledger to answer it.
-    checker.s.findings.extend(crate::dsl::check(parsed));
-    // **The ledger's pass reports nothing** (#727): what its caller reads is
-    // which calls resolve where and what each body stores (`methods`,
-    // `stored_code`), never a finding or a proof, so the walks below that
-    // answer only with findings and proofs run in the check that reports them.
-    if computes {
-        // **Every `assert` outside a test is proved where it can be**
-        // ([ADR-269](../../docs/specification/adr/adr-269.md) D4), and checked
-        // when the program runs where it cannot. After the walk,
-        // because the checker is what decided which calls are the prelude's.
-        let keys: BTreeSet<(i64, i64)> = checker.s.facts.claims.keys().cloned().collect();
-        let comptimes = crate::prove::comptimes_of(parsed, &checker.s.facts.comptime_values);
-        // **A call an open claim reads is run as a `comptime` is**
-        // ([ADR-359](../../docs/specification/adr/adr-359.md) D11-D13), where this
-        // build has a place to compile it.
-        let host = checker.host();
-        let runner = |call: &Expr, callee: &str, args: &[i64]| {
-            host.run_for_a_claim(call, callee, args, &comptimes.by_name)
-        };
-        let run: Option<crate::prove::ClaimRunner<'_>> = match reads.workshop().somewhere() {
-            true => Some(&runner),
-            false => None,
-        };
-        let proved = crate::prove::prove(parsed, own, library, &keys, &comptimes, run);
-        checker.s.findings.extend(proved.findings);
-        // What the prover found, put into the facts (`check_walked.nika`).
-        check_walked::check_walked_proved(
-            &mut checker.s,
-            proved.entries,
-            proved.reaches,
-            proved.published,
-            &proved.std_claims,
-            &proved.held,
-        );
-        // A naked view parameter that is kept past the call (`NK2302`). Also a
-        // separate walk, and for the same reason: it asks where a *value* goes
-        // rather than what a type is. It reads both ledgers, because **a call says
-        // which of its arguments its result may point into** and a parameter that
-        // is none of them does not escape through it.
-        checker
-            .s
-            .findings
-            .extend(crate::views::check(parsed, own, library));
-        // A change in place of data a view still to be used may point into
-        // (`NK2305`, ADR-353 D4). A walk of its own, like `views`: it asks where a
-        // view points and when it is used, not what a type is.
-        let (changed, _) = crate::view_changes::analyse(
-            parsed,
-            own,
-            library,
-            &checker.s.facts.lent_lets,
-            &crate::view_changes::coalesced(&checker.s.facts),
-            &crate::view_changes::mut_viewed(&checker.s.facts),
-        );
-        checker.s.findings.extend(changed);
-        // A view handed back that points into a buffer the body owns (`NK2303`).
-        // The tether's own refusal
-        // ([ADR-283](../../docs/specification/adr/adr-283.md) D9), and a walk of
-        // its own for the same reason `views` is: it asks where a *value* points
-        // rather than what a type is. It reads both ledgers, because which calls
-        // make a buffer is what they say.
-        // The plans once, kept for the emitter where they are its own: made
-        // against `std` alone, as it makes them (#727).
-        let plans = crate::contracts::keep::buffer_plans(
-            parsed,
-            Some(&crate::contracts::keep::beside(beside)),
-            own,
-            library,
-        );
-        let std = crate::contracts::std_ledger();
-        if std::ptr::eq(library, std) || library == std {
-            checker.s.facts.keep_plans = Some(plans.clone());
-        }
-        checker
-            .s
-            .findings
-            .extend(crate::contracts::tether::refusals_of(plans));
-    }
-    // Kap 4.7: what an `impl` owes the `trait` it names. Separate for a reason
-    // of its own - it reads the ledger's **finished** `sync` column, and the
-    // type walk runs before `sync::infer` fills that in
-    // ([ADR-080](../../docs/specification/adr/adr-080.md)).
-    checker.s.findings.extend(crate::traits::check(parsed, own));
-    checker.nikaia(|state, world, _| check_crossings::check_crossings_language_impls(state, world));
-    // Part I 2.2: a **type** nothing declares, which had nothing where a value
-    // has had `NK1117` since ADR-298
-    // ([ADR-096](../../docs/specification/adr/adr-096.md)). Separate for the
-    // same reason as the three above: it asks about a written *name* rather
-    // than about a value's type, so it needs the item tree and neither the
-    // scope stack nor the inference.
-    checker
-        .s
-        .findings
-        .extend(crate::types::check(parsed, own, library));
-    // **What no function body held**, typed the same way (ADR-285).
-    checker.numbers_typed_by_their_uses();
-    // **Arms that disagree, where no position asked them** (#596).
-    let disagreeing = std::mem::take(&mut checker.s.arm_disagreements);
-    checker.s.findings.extend(disagreeing.into_values());
-    // The findings and method sets in their final form (`check_walked.nika`);
-    // the order is the span's.
-    checker.nikaia(|state, _, _| check_walked::check_walked_settle(state));
     finished(checker)
 }
 
@@ -712,57 +584,6 @@ impl<'a> Checker<'a> {
             own: self.world.own,
             library: self.world.library,
         }
-    }
-
-    fn collect_types(&mut self) {
-        self.s.collect_types(self.world);
-        self.collect_copies();
-    }
-
-    /// **Which declared types derive `Copy`**
-    /// ([ADR-294](../../docs/specification/adr/adr-294.md) D9.1,
-    /// [`Checked::copies`]).
-    ///
-    /// The least answer that holds: a type joins once every part of it is a
-    /// copy, asked again until nothing more joins. So a type that holds itself
-    /// never does - it holds itself through a box the compiler wrote
-    /// ([ADR-246](../../docs/specification/adr/adr-246.md)), and a box is not
-    /// a copy - where `check_compare.nika`'s walk (ADR-204 D1), which answers *yes* on a cycle,
-    /// would have said it was.
-    fn collect_copies(&mut self) {
-        self.s.collect_copies(self.world);
-    }
-
-    /// **Every open number of a body, decided** once the body has been walked
-    /// ([ADR-285](../../docs/specification/adr/adr-285.md) D24, D25, D27).
-    fn numbers_typed_by_their_uses(&mut self) {
-        self.s.numbers_typed_by_their_uses();
-    }
-
-    // --- the one shape every check has --------------------------------------
-
-    /// **The signed values in unsigned slots, asked of the walk** (ADR-285
-    /// D32, [`crate::bounds::proven`]): one proved `>= 0` where it stands is
-    /// taken as it is; one that is not is the slot's refusal, with the two
-    /// ways to say it.
-    fn unsigned_slots_proved(&mut self, parsed: &Parsed) {
-        let (own, library) = (self.world.own, self.world.library);
-        self.nikaia(|state, _, _| {
-            check_walked::check_walked_unsigned_slots(state, &|facts, nodes| {
-                crate::bounds::proven(
-                    parsed,
-                    &crate::bounds::Sites::of(facts),
-                    &[own, library],
-                    nodes,
-                    // What the checker accepts does not depend on an optimization
-                    // (ADR-361 D10).
-                    false,
-                )
-                .nonnegative
-                .into_iter()
-                .collect()
-            })
-        });
     }
 
     // --- crossing a thread (ADR-005 §1 Group B, `NK25xx`) -------------------
