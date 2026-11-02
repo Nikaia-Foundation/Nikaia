@@ -288,9 +288,11 @@ pub fn translate(rustc_json: &str, map: &SourceMap, source: &str) -> Vec<Diagnos
 /// [ADR-005](../../../../docs/specification/adr/adr-005.md) D7 now enumerates
 /// `E0277` among.
 pub fn translate_units(json: &str, map: &SourceMap, sources: &[&str]) -> Vec<Diagnostic> {
-    let lines: Vec<LineIndex> = sources.iter().map(|s| LineIndex::new(s)).collect();
-    let mut out = Vec::new();
-
+    // **Read here, placed in Nikaia** (`tools/diagnostics.nika`, ADR-294,
+    // #125): this side reads the JSON and asks the emitter's map where the
+    // primary byte came from; what the message becomes is decided there.
+    use nikaia_std::tools::diagnostics::{DiagnosticsChild, DiagnosticsRead};
+    let mut read = Vec::new();
     for line in json.lines() {
         let Ok(value) = serde_json::from_str::<Value>(line) else {
             continue;
@@ -302,77 +304,57 @@ pub fn translate_units(json: &str, map: &SourceMap, sources: &[&str]) -> Vec<Dia
             Some(_) => continue,
             None => value,
         };
-
-        let level = value["level"].as_str().unwrap_or_default();
-        if !matches!(level, "error" | "warning") {
-            continue;
-        }
-
-        let raw = value["message"].as_str().unwrap_or_default();
-        if raw.starts_with("aborting due to") {
-            continue;
-        }
-        let message = in_this_language(raw);
-
-        // **The one rule, and it needs no list** (ADR-056 D2). Every name this
-        // compiler substituted on the way out is put back on the way in; where
-        // putting it back makes the message say the same thing on *both* sides
-        // of an `expected … found …`, the substitution collapsed a distinction
-        // the reader would need - and it did so because this compiler wrote two
-        // different Rust types for one Nikaia type, which is a defect of its
-        // own. So that message is not shown as a fact about the program.
-        //
-        // Detected by comparing the two, which is what makes this general: a
-        // substitution added later needs no entry anywhere, because it is the
-        // *collapse* that is noticed and not the name.
-        let internal =
-            match both_sides_the_same(&message).is_some() && both_sides_the_same(raw).is_none() {
-                true => Some(raw.to_string()),
-                false => None,
-            };
-
         let primary = value["spans"].as_array().and_then(|spans| {
             spans
                 .iter()
                 .find(|s| s["is_primary"].as_bool() == Some(true))
         });
-
-        let generated_line = primary
-            .and_then(|s| s["line_start"].as_u64())
-            .map(|l| l as usize);
-        let label = primary
-            .and_then(|s| s["label"].as_str())
-            .map(in_this_language);
-        let location = primary
+        let located = primary
             .and_then(|s| s["byte_start"].as_u64())
-            .and_then(|offset| map.locate(offset as usize))
-            .and_then(|(unit, span)| Some(lines.get(unit)?.locate(span, unit)));
-
-        let notes = value["children"]
-            .as_array()
-            .map(|children| {
-                children
-                    .iter()
-                    .filter(|c| matches!(c["level"].as_str(), Some("note") | Some("help")))
-                    .filter_map(|c| c["message"].as_str())
-                    .filter(|note| !is_rust_internal(note))
-                    .map(in_this_language)
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        out.push(Diagnostic {
-            level: level.to_string(),
-            message,
-            location,
-            generated_line,
-            notes,
-            internal,
-            label,
+            .and_then(|offset| map.locate(offset as usize));
+        read.push(DiagnosticsRead {
+            level: value["level"].as_str().unwrap_or_default().to_string(),
+            message: value["message"].as_str().unwrap_or_default().to_string(),
+            generated_line: primary
+                .and_then(|s| s["line_start"].as_u64())
+                .map(|l| l as i64),
+            label: primary
+                .and_then(|s| s["label"].as_str())
+                .map(str::to_string),
+            located: located.is_some(),
+            unit: located.map_or(0, |(unit, _)| unit as i64),
+            span: located.map_or(Span::from(0..0), |(_, span)| span),
+            children: value["children"]
+                .as_array()
+                .map(|children| {
+                    children
+                        .iter()
+                        .map(|c| DiagnosticsChild {
+                            level: c["level"].as_str().map(str::to_string),
+                            message: c["message"].as_str().map(str::to_string),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
         });
     }
-
-    out
+    nikaia_std::tools::diagnostics::diagnostics_placed(&read, sources)
+        .into_iter()
+        .map(|placed| Diagnostic {
+            level: placed.level,
+            message: placed.message,
+            location: placed.located.then_some(Location {
+                line: placed.line as usize,
+                column: placed.column as usize,
+                span: placed.span,
+                unit: placed.unit as usize,
+            }),
+            generated_line: placed.generated_line.map(|l| l as usize),
+            notes: placed.notes,
+            internal: placed.internal,
+            label: placed.label,
+        })
+        .collect()
 }
 
 /// **A boundary whose ledger may be stale**
@@ -414,120 +396,6 @@ pub fn a_stale_boundary(
     diagnostic.message = restated.message;
     diagnostic.notes = restated.notes;
     true
-}
-
-/// Whether a note from the backend tells the reader about **Rust** rather than
-/// about their program.
-///
-/// [ADR-300](../../../../docs/specification/adr/adr-300.md): a diagnostic is
-/// about the `.nika` file the user wrote. Most of what the backend says survives
-/// translation because it is about the program either way - *"the literal
-/// `3000000000` does not fit into the type `i32` whose range is
-/// `-2147483648..=2147483647`"* is as true here as there. These two classes do
-/// not, and the test for both is the same: **can the reader act on it?**
-///
-/// **A lint attribute cannot be written in this language**, so
-/// ``#[deny(overflowing_literals)]` on by default`` and
-/// ``#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default`` name
-/// a thing a Nikaia program has no way to mention. They are the backend
-/// explaining its own configuration.
-///
-/// **And Rust's tooling is not the reader's tooling.** *"use `cargo add fremd` to
-/// add it to your `Cargo.toml`"* points at a file this compiler generates and the
-/// reader does not edit; their file is `nikaia.toml` and there is no `nikaia add`.
-/// `RUST_BACKTRACE` and `rustc --explain` are the same shape.
-///
-/// **And a remedy in a type the specification does not offer.**
-/// *"consider using the type `u32` instead"* is what `rustc` says about a literal
-/// too large for an `i32`. It was kept here once, checked, on the ground that
-/// `let x: u32 = 3000000000` compiles - and it does. What changed is
-/// [ADR-285](../../../../docs/specification/adr/adr-285.md) D2: the numeric
-/// surface is the one Part I 2.2 names, and `u32` is deliberately not on it. So
-/// the sentence points at a type a reader should not reach for, when the answer
-/// is `i64` or a use that widens the literal. A remedy that works is kept; one
-/// that leads out of the language is not.
-///
-/// **And three notes a `?.` used to hang on a move error.** `x?.field` is an
-/// `Option::map`, so using `x` again is a move - a rule the language below is
-/// right to hold ([ADR-005](../../../../docs/specification/adr/adr-005.md)), and
-/// the headline names the program's own variable on the program's own line. The
-/// notes did not: `Option::<T>::map` takes ownership, so *consider calling
-/// `.as_ref()`*, `.as_mut()`, or `clone`. None of the three is anything a
-/// `.nika` file can write, and all of them are about a shape this compiler
-/// chose. **The headline is kept and the notes go**, which is the split this
-/// function is for.
-///
-/// **What is deliberately kept**, because it was checked rather than assumed:
-/// *"if this is intentional, prefix it with an underscore"* describes something
-/// that works in Nikaia - `let _unused = 5` is accepted - so dropping it would
-/// cost a reader a remedy they can follow. A note is suppressed for naming
-/// something unreachable, never for sounding foreign.
-fn is_rust_internal(note: &str) -> bool {
-    nikaia_std::tools::rustc_words::is_rust_internal(note)
-}
-
-/// **A name this compiler substituted on the way out, put back on the way in.**
-///
-/// The emitter writes a trusted input's map as `TrustedMap`, which is
-/// `HashMap<K, V, BuildHasherDefault<FxHasher>>`
-/// ([ADR-010](../../../../docs/specification/adr/adr-010.md) D5). So a `rustc`
-/// message about such a map names a hasher the program never mentions - measured,
-/// *"type annotations needed for `HashMap<_, _, BuildHasherDefault<FxHasher>>`"*
-/// for `let m = HashMap::new()`, which is a real defect in the program reported
-/// against the right line in half the backend's words.
-///
-/// **Every substitution is undone, and there is no list**
-/// ([ADR-056](../../../../docs/specification/adr/adr-056.md) D1). This used to be
-/// decided per name, on whether the substitution was *"a name and not a
-/// translation"* - and `Shared[T]` was kept out on the ground that `Rc` and `Arc`
-/// are different types, so a message saying *"expected `Shared[T]`, found
-/// `Shared[T]`"* would hide a defect in this compiler.
-///
-/// **That reasoning had only two options where there are three.** Leaving Rust's
-/// words standing does not help the reader either: they wrote `Shared[Conn]` and
-/// have no idea what an `Rc` is, and C.1 calls an untranslated backend error
-/// reaching them a bug in this compiler. The third option is the one the page
-/// already names: report it **as** that bug. So the name is put back like every
-/// other, and where putting it back makes the message say the same thing twice,
-/// `translate_units` turns it into an internal error carrying the backend's own
-/// words (D2).
-///
-/// **And one that is a translation rather than a name.** `x?.field` over a
-/// member that is **not copied** lowers to `Option::map` (or `and_then`), which
-/// takes its receiver by value - so using `x` again is a move, and the note
-/// explaining *why* says *"`Option::<T>::map` takes ownership of the receiver
-/// `self`"*. The explanation is the part a reader needs and the spelling is a
-/// shape this compiler chose, so the spelling is replaced with the one the
-/// program wrote: `?.`. This is not the `Shared[T]` case - there is no second
-/// Nikaia form for it to be confused with, so nothing about this compiler can
-/// hide behind it.
-///
-/// **Narrowed to that one case at 0.0.140**
-/// ([ADR-278](../../../../docs/specification/adr/adr-278.md)). A reached
-/// **method**, and a field whose member **copies**, take the receiver by
-/// `as_ref()` now and there is no move left to explain; what still moves is the
-/// member that would come out as a *view*, and that waits on one question about
-/// `??` ([ADR-278](../../../../docs/specification/adr/adr-278.md) D20,
-/// `docs/open-decisions.md`) rather than on a state - three of the four shapes
-/// a `?.` has are Borrowed, and the fourth is `NK2303`'s.
-/// The two types an `expected … found …` names, where both are the same.
-///
-/// Rust writes a type mismatch as *"expected `A`, found `B`"*, so a message
-/// naming one thing twice is a message that cannot be about the program. Used on
-/// both sides of the translation: a message rustc itself wrote that way is its
-/// own business (two types of one name, from two crates), and one that only
-/// *became* that way is this compiler's.
-fn both_sides_the_same(message: &str) -> Option<String> {
-    nikaia_std::tools::rustc_words::both_sides_the_same(message)
-}
-
-/// A `rustc` message with every name this compiler substituted put back:
-/// `Rc<T>` and `Arc<T>` as `Shared[T]`, the lock's shapes as `Locked`, a
-/// trusted map as `HashMap`, `Option::map` as the `?.` the program wrote
-/// ([ADR-056](../../../../docs/specification/adr/adr-056.md) D1). **Written in
-/// Nikaia** (`tools/rustc_words.nika`, #125).
-fn in_this_language(message: &str) -> String {
-    nikaia_std::tools::rustc_words::in_this_language(message)
 }
 
 /// Render a diagnostic the way a compiler does: the place, the message, the
@@ -667,39 +535,6 @@ fn shown(finding: &crate::check::Finding) -> nikaia_std::tools::render::Shown {
 /// whole, whichever piece came first.
 pub fn said(text: &str) -> String {
     nikaia_std::tools::rustc_words::said(text)
-}
-
-/// Byte offset -> line and column, computed once per file.
-struct LineIndex {
-    /// Byte offset of the start of each line.
-    starts: Vec<usize>,
-}
-
-impl LineIndex {
-    fn new(source: &str) -> Self {
-        let mut starts = vec![0];
-        starts.extend(
-            source
-                .char_indices()
-                .filter(|(_, c)| *c == '\n')
-                .map(|(i, _)| i + 1),
-        );
-        Self { starts }
-    }
-
-    fn locate(&self, span: Span, unit: usize) -> Location {
-        let line = match self.starts.binary_search(&span.at()) {
-            Ok(i) => i,
-            Err(i) => i - 1,
-        };
-
-        Location {
-            line: line + 1,
-            column: span.at() - self.starts[line] + 1,
-            span,
-            unit,
-        }
-    }
 }
 
 #[cfg(test)]

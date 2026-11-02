@@ -1,0 +1,141 @@
+// crates/nikaia-std/src/tools/diagnostics.nika
+//
+// **Where an error is reported** (ADR-296 D18, ADR-300): `rustc` reports
+// byte offsets into the emitted Rust, the emitter's map trades them for the
+// `.nika` span that produced them, and this file turns each backend message
+// into one about the program - its place as an editor counts, its words put
+// back into this language (`rustc_words.nika`), the notes about Rust dropped.
+// Moved from the compiler's `diagnostics` (ADR-294, #125).
+//
+// The compiler keeps what only it can do: reading the JSON a line holds,
+// unwrapping Cargo's envelope, and asking the emitter's map where the primary
+// span's byte came from. What the message then becomes is decided here.
+//
+// What it deliberately does not do is rewrite the message. Because the
+// lowering is name-for-name (ADR-296 D17), a backend sentence is already about
+// the Nikaia source - only its position was wrong.
+
+/// One backend message as the compiler read it from a line of JSON.
+pub struct DiagnosticsRead {
+    /// `level`, or empty where the line has none.
+    pub level: String,
+    /// `message`, or empty where the line has none.
+    pub message: String,
+    /// The primary span's `line_start` in the emitted Rust.
+    pub generated_line: i64?,
+    /// What the backend wrote under the primary span's caret.
+    pub label: String?,
+    /// Whether the map knew which `.nika` span the primary byte came from;
+    /// `unit` and `span` are then that place.
+    pub located: bool,
+    pub unit: i64,
+    pub span: Span,
+    /// The backend's notes and helps, as `(level, message)` where each was
+    /// written as text.
+    pub children: Vec[DiagnosticsChild],
+}
+
+/// A message under a backend message.
+pub struct DiagnosticsChild {
+    pub level: String?,
+    pub message: String?,
+}
+
+/// One message, placed in the `.nika` file where that was possible: the
+/// compiler's `Diagnostic` with its numbers as `i64`.
+pub struct DiagnosticsPlaced {
+    pub level: String,
+    pub message: String,
+    /// Whether the place is known; `line`, `column` (1-based, as an editor
+    /// counts), `span` and `unit` (which file of the program) are then it.
+    pub located: bool,
+    pub line: i64,
+    pub column: i64,
+    pub span: Span,
+    pub unit: i64,
+    /// Where in the emitted Rust it was reported, kept whether or not the map
+    /// knew.
+    pub generated_line: i64?,
+    pub notes: Vec[String],
+    /// The backend's own words, where translating them made the message say
+    /// the same thing on both sides of an `expected ... found ...` (ADR-056
+    /// D2): this compiler's defect, not a fact about the program.
+    pub internal: String?,
+    pub label: String?,
+}
+
+/// The backend's messages about the program, in order. A level other than
+/// `error` or `warning`, and rustc's own *aborting due to N previous errors*,
+/// carry nothing about a place and are dropped. `sources` are the program's
+/// files, in the units the map counts.
+pub fn diagnostics_placed(read: ref Vec[DiagnosticsRead], sources: ref Vec[ref String]) -> Vec[DiagnosticsPlaced] {
+    let starts: Vec[Vec[i64]] = sources.iter().map(fn(s) { diagnostics_line_starts(s) }).collect()
+    let mut out: Vec[DiagnosticsPlaced] = []
+    for one in read {
+        if one.level != "error" && one.level != "warning" {
+            continue
+        }
+        if one.message.starts_with("aborting due to") {
+            continue
+        }
+        let message = in_this_language(one.message)
+        // **The one rule, and it needs no list** (ADR-056 D2): where putting
+        // every substituted name back makes the message say the same thing on
+        // both sides of an `expected ... found ...`, this compiler wrote two
+        // Rust types for one Nikaia type. It is the collapse that is noticed,
+        // not the name, so a substitution added later needs no entry anywhere.
+        let mut internal: String? = null
+        if both_sides_the_same(message) != null && both_sides_the_same(one.message) == null {
+            internal = one.message.clone()
+        }
+        let label: String? = match one.label {
+            null => null,
+            written => in_this_language(written),
+        }
+        let notes: Vec[String] = one.children.iter().filter(fn(c) { diagnostics_a_note(c) }).map(fn(c) { in_this_language(c.message ?? "") }).collect()
+        let mut placed = DiagnosticsPlaced { level: one.level.clone(), message: message, located: false, line: 0, column: 0, span: Span::nowhere(), unit: 0, generated_line: one.generated_line, notes: notes, internal: internal, label: label }
+        if one.located && one.unit >= 0 && one.unit < starts.len() {
+            let at = one.span.start as i64
+            let line = diagnostics_line_of(starts[one.unit], at)
+            placed.located = true
+            placed.line = line + 1
+            placed.column = at - starts[one.unit][line] + 1
+            placed.span = one.span.clone()
+            placed.unit = one.unit
+        }
+        out.push(placed)
+    }
+    return out
+}
+
+/// Whether a child message is a note the reader gets: a `note` or a `help`,
+/// written as text, and about the program rather than about Rust
+/// (`rustc_words.nika`, `is_rust_internal`).
+fn diagnostics_a_note(child: ref DiagnosticsChild) -> bool {
+    let level = (child.level ?? "").clone()
+    if level != "note" && level != "help" {
+        return false
+    }
+    let message = child.message ?? return false
+    return !is_rust_internal(message)
+}
+
+/// The byte each line of `source` starts at: 0, and one past every line
+/// break.
+fn diagnostics_line_starts(source: String) -> Vec[i64] {
+    let mut starts: Vec[i64] = [0]
+    let mut at = 0
+    for b in source.bytes() {
+        at += 1
+        if b == 10 {
+            starts.push(at)
+        }
+    }
+    return starts
+}
+
+/// The line (from 0) the byte `at` is on: the last line that starts at or
+/// before it.
+fn diagnostics_line_of(starts: ref Vec[i64], at: i64) -> i64 {
+    return starts.iter().filter(fn(s) { s <= at }).count() - 1
+}

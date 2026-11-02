@@ -969,6 +969,14 @@ mod describe_lowered {
 #[allow(unused_imports)]
 pub use describe_lowered::*;
 
+mod diagnostics_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/diagnostics.rs");
+}
+#[allow(unused_imports)]
+pub use diagnostics_lowered::*;
+
 mod diffs_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2495,6 +2503,10 @@ pub mod declared {
 pub mod describe {
     #[allow(unused_imports)]
     pub use super::{Drafted, drafted};
+}
+pub mod diagnostics {
+    #[allow(unused_imports)]
+    pub use super::{DiagnosticsRead, DiagnosticsChild, DiagnosticsPlaced, diagnostics_placed};
 }
 pub mod diffs {
     #[allow(unused_imports)]
