@@ -1,0 +1,22 @@
+// A number taken out of a map's pair by a lambda's tuple pattern is the
+// number, not a view of it (ADR-182 D1, as a loop binding is): it is handed
+// to a set's `contains` and put into a tuple of `i64`.
+use std::collections
+
+fn main() {
+	let mut m: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+	m.insert(1, 10)
+	m.insert(2, 20)
+	m.insert(3, 30)
+	let mut proved: collections::BTreeSet[i64] = collections::BTreeSet()
+	proved.insert(2)
+	proved.insert(3)
+	let kept: Vec[(i64, i64)] = m.iter().filter(fn((at, _)) {
+		proved.contains(at)
+	}).map(fn((at, n)) {
+		(at, n)
+	}).collect()
+	for (at, n) in kept {
+		println(f"{at} {n}")
+	}
+}

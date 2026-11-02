@@ -60,7 +60,9 @@ impl CheckState {
             let bound = world.words.resolve(*nikaia_std::index::get(&names, (index) as usize)).to_string();
             self.nameable(&bound, span, "a `let`");
             self.a_tuple_part_is_lent(lent, &bound, nikaia_std::index::get(&parts, (index) as usize), at, frame);
-            self.bind_with(bound.to_string(), (*nikaia_std::index::get(&parts, (index) as usize)).clone(), None);
+            let mut ty = (*nikaia_std::index::get(&parts, (index) as usize)).clone();
+            if self.facts.copied_tuple_parts.contains(&(at, bound.to_string())) { ty = ty.owned(); }
+            self.bind_with(bound.to_string(), ty, None);
             if check_owned_text(nikaia_std::index::get(&parts, (index) as usize)) && (lent || (*nikaia_std::index::get(&parts, (index) as usize)).is_a_view()) {
                 let local = match self.binding(&bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 self.flow.lent_text_params.insert(local.id);

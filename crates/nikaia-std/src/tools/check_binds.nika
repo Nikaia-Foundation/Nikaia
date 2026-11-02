@@ -80,7 +80,13 @@ impl CheckState {
             let bound = world.words.resolve(names[index]).clone()
             self.nameable(bound, span, "a `let`")
             self.a_tuple_part_is_lent(lent, bound, parts[index], at, frame)
-            self.bind_with(bound.clone(), parts[index].clone(), null)
+            // **A number read out of its view is the number** (ADR-182 D1),
+            // as a loop's copied binding is: `num::value` below.
+            let mut ty = parts[index].clone()
+            if self.facts.copied_tuple_parts.contains((at, bound.clone())) {
+                ty = ty.owned()
+            }
+            self.bind_with(bound.clone(), ty, null)
             // **A text among the parts that is a view** is `&String` or
             // `&&str` below, so a comparison reads it as `str` (#688).
             if check_owned_text(parts[index]) && (lent || parts[index].is_a_view()) {
