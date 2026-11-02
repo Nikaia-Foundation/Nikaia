@@ -552,15 +552,12 @@ pub enum ComptimeDriven {
     NoHandBack,
 }
 
+pub const COMPTIME_STOPPED_AT: &str = "@";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ComptimeRan {
-    Answer(String),
-    NowhereToBuild,
-    InsideAnother { name: String },
-    NoCrossedForm { ty: String, because: String },
-    DidNotBuild { detail: String },
-    Refused { detail: String },
-    Unreadable { detail: String },
+pub struct ComptimeLowered {
+    pub rust: String,
+    pub rows: Vec<(i64, i64, i64)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -574,7 +571,9 @@ pub trait ComptimeComputeHost {
     fn file_count(&self) -> i64;
     fn sub_program(&self, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &impl Fn(&str) -> Option<BuildValue>, typed: &impl Fn(&str) -> Option<Ty>) -> Option<i64>;
     fn unit_without_its_constants(&self, at: i64, bound: &str, known: &impl Fn(&str) -> Option<BuildValue>, typed: &impl Fn(&str) -> Option<Ty>) -> Option<i64>;
-    fn undeclared_callee(&self, here: i64, value: &Expr) -> Option<String>;
+    fn file_words(&self, at: i64) -> &winnow_grammar::InternerContext;
+    fn file_items(&self, at: i64) -> &[Spanned<Item>];
+    fn library(&self) -> &Ledger;
     fn constants_of_files(&self) -> collections::BTreeSet<String>;
     fn constants_of_units(&self, units: &[i64]) -> collections::BTreeSet<String>;
     fn drop_readers(&self, unit: i64, gone: &collections::BTreeSet<String>) -> Vec<String>;
@@ -582,10 +581,11 @@ pub trait ComptimeComputeHost {
     fn unit_package(&self, unit: i64) -> Option<String>;
     fn by_package(&self, units: &[i64]) -> collections::BTreeMap<String, Ledger>;
     fn derived(&self, units: &[i64], packages: &collections::BTreeMap<String, Ledger>) -> Ledger;
-    fn forbidden_because(&self, derived: &Ledger) -> Option<String>;
-    fn culprit(&self, here: i64, value: &Expr, derived: &Ledger) -> Option<String>;
-    fn driven(&self, units: &[i64], here: i64, derived: &Ledger, packages: &collections::BTreeMap<String, Ledger>, ty: &Ty) -> ComptimeDriven;
-    fn run_comptime(&self, program: &str, bound: &str) -> ComptimeRan;
+    fn lowered_alone(&self, unit: i64) -> Option<ComptimeLowered>;
+    fn lowered_units(&self, units: &[i64], here: i64, derived: &Ledger, packages: &collections::BTreeMap<String, Ledger>) -> Option<ComptimeLowered>;
+    fn dump(&self, unit: i64, ty: &Ty, out: &mut String) -> Option<CheckWall>;
+    fn bounds(&self) -> (u64, u64);
+    fn run_comptime(&self, program: &str, bound: &str, answer: &mut String) -> Option<CheckWall>;
     fn decode(&self, text: &str) -> Option<BuildValue>;
     fn enter_ahead(&self, bound: &str) -> bool;
     fn is_ahead(&self, name: &str) -> bool;
@@ -601,7 +601,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     let not_here: nikaia_std::func::Kept<dyn Fn(&str) -> CheckComputed + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |why| { CheckComputed::NotHere(why.to_string()) }));
     let sub = match host.sub_program(here, bound, value, ty, &known, &typed) {
         None => {
-            match host.undeclared_callee(here, value) {
+            match comptime_callee_nothing_declares(host, here, value) {
                 None => { },
                 Some(ref callee) => { return CheckComputed::NotHere(format!("It calls `{}`, which no file of your program declares and `std` doesn't have", callee)); },
             }
@@ -645,32 +645,75 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     let packages = host.by_package(&others);
     let unit_refs: Vec<i64> = units.iter().copied().filter(|&u| { host.unit_package(u) == home }).collect::<Vec<_>>();
     let derived = host.derived(&unit_refs, &packages);
-    match host.forbidden_because(&derived) {
+    match comptime_forbidden_because(&derived) {
         None => { },
         Some(because) => {
-            let callee: String = nikaia_std::index::or(host.culprit(here, value, &derived).map(String::from), || String::from(bound));
+            let callee: String = nikaia_std::index::or(comptime_forbidden_callee(host, here, value, &derived).map(String::from), || String::from(bound));
             return CheckComputed::Forbidden { callee, because };
         },
     }
-    let program = match host.driven(&units, here, &derived, &packages, ty) {
+    let program = match comptime_driven(host, &units, here, &derived, &packages, ty) {
         ComptimeDriven::Program(program) => program,
         ComptimeDriven::NotLowered => return not_here(COMPTIME_NOT_LOWERED),
         ComptimeDriven::Uncrossed { ref ty, ref because } => { return CheckComputed::NotHere(format!("Its type `{}` can't be handed back from the program that computes it: {}", ty, because)); },
         ComptimeDriven::NoHandBack => return not_here("Its type can't be handed back from the program that computes it"),
     };
-    match host.run_comptime(&program, bound) {
-        ComptimeRan::Answer(ref text) => match host.decode(text) {
-            None => not_here(COMPTIME_NOT_READ),
-            Some(computed) => CheckComputed::Value(computed),
-        },
-        ComptimeRan::Refused { ref detail } if detail.contains(NOT_COMPUTED_YET) => not_here("It leaves out an option whose default isn't computed"),
-        ComptimeRan::Refused { detail } => CheckComputed::Stopped(detail),
-        ComptimeRan::NowhereToBuild => not_here(NOWHERE),
-        ComptimeRan::InsideAnother { .. } => not_here("It is met while another build-time program is built, and one isn't built inside another"),
-        ComptimeRan::NoCrossedForm { ref ty, ref because } => CheckComputed::NotHere(format!("`{}` has no form that crosses from build time: {}", ty, because)),
-        ComptimeRan::DidNotBuild { .. } => not_here(COMPTIME_NOT_LOWERED),
-        ComptimeRan::Unreadable { .. } => not_here(COMPTIME_NOT_READ),
+    let mut answer: String = String::from("");
+    let wall = match host.run_comptime(&program, bound, &mut answer) { Some(__nikaia_value) => __nikaia_value, None => return match host.decode(&answer) {
+        None => not_here(COMPTIME_NOT_READ),
+        Some(computed) => CheckComputed::Value(computed),
+    } };
+    match wall {
+        CheckWall::Refused { ref detail } if detail.contains(NOT_COMPUTED_YET) => not_here("It leaves out an option whose default isn't computed"),
+        CheckWall::Refused { detail } => CheckComputed::Stopped(detail),
+        CheckWall::NowhereToBuild => not_here(NOWHERE),
+        CheckWall::InsideAnother { .. } => not_here("It is met while another build-time program is built, and one isn't built inside another"),
+        CheckWall::NoCrossedForm { ref ty, ref because } => CheckComputed::NotHere(format!("`{}` has no form that crosses from build time: {}", ty, because)),
+        CheckWall::DidNotBuild { .. } => not_here(COMPTIME_NOT_LOWERED),
+        CheckWall::Unreadable { .. } => not_here(COMPTIME_NOT_READ),
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_callee_nothing_declares<H: ComptimeComputeHost>(host: &H, here: i64, value: &Expr) -> Option<String> { comptime_undeclared_callee(host.file_words(here), value, host.library(), &|name| { (nikaia_std::range::span(0, host.file_count())).any(|at| { comptime_declares(host.file_items(at), host.file_words(at), name) }) }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_forbidden_because(derived: &Ledger) -> Option<String> {
+    let contract = match derived.functions.get(VALUE_FN) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    bt_may_not_run(&contract)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_forbidden_callee<H: ComptimeComputeHost>(host: &H, here: i64, value: &Expr, derived: &Ledger) -> Option<String> {
+    comptime_culprit(host.file_words(here), value, derived, &|key| {
+        let contract = match derived.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => match host.library().functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false } };
+        bt_may_not_run(&contract).is_some()
+    })
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_driven<H: ComptimeComputeHost>(host: &H, units: &[i64], here: i64, derived: &Ledger, packages: &collections::BTreeMap<String, Ledger>, ty: &Ty) -> ComptimeDriven {
+    let found: Option<ComptimeLowered> = match units.len() as i64 {
+        1 => host.lowered_alone(*nikaia_std::index::get(&units, nikaia_std::index::at(here))),
+        _ => host.lowered_units(units, here, derived, packages),
+    };
+    let lowered = match found { Some(__nikaia_value) => __nikaia_value, None => return ComptimeDriven::NotLowered };
+    let mut dump: String = String::from("");
+    let wall = host.dump(*nikaia_std::index::get(&units, nikaia_std::index::at(here)), ty, &mut dump);
+    match wall {
+        None => { },
+        Some(ref refused) => { return match *refused {
+            CheckWall::NoCrossedForm { ref ty, ref because } => ComptimeDriven::Uncrossed { ty: ty.to_string(), because: because.to_string() },
+            _ => ComptimeDriven::NoHandBack,
+        }; },
+    }
+    let (steps, bytes) = host.bounds();
+    let program = match cr_with_driver(&lowered.rust, &lowered.rows, VALUE_FN, &dump, &gr_dump_helpers(), COMPTIME_STOPPED_AT, steps, bytes) { Some(__nikaia_value) => __nikaia_value, None => return ComptimeDriven::NotLowered };
+    ComptimeDriven::Program(program)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

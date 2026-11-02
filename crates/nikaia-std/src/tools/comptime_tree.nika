@@ -734,7 +734,7 @@ pub comptime COMPTIME_NOT_CARRIED: ref String = "A `comptime` declared beside it
 pub comptime NOWHERE: ref String = "This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it"
 
 /// What lowering a run's units and giving them a `main` came to
-/// (`ComptimeComputeHost::driven`).
+/// (`comptime_driven`).
 pub enum ComptimeDriven {
     /// The program, ready to compile.
     Program(String),
@@ -746,16 +746,15 @@ pub enum ComptimeDriven {
     NoHandBack,
 }
 
-/// What a compiled build-time run came to: its answer, or the wall it met
-/// (the grammar runner's `Wall`, `grammar_run.rs`).
-pub enum ComptimeRan {
-    Answer(String),
-    NowhereToBuild,
-    InsideAnother { name: String },
-    NoCrossedForm { ty: String, because: String },
-    DidNotBuild { detail: String },
-    Refused { detail: String },
-    Unreadable { detail: String },
+/// What a stop's row names instead of a file (`cr_with_driver`): the file's
+/// place among the program's follows it, and then the byte.
+pub comptime COMPTIME_STOPPED_AT: ref String = "@"
+
+/// **One lowering of a run's units**: the Rust, and the source map's rows
+/// as `(generated line, byte, unit)`.
+pub struct ComptimeLowered {
+    pub rust: String,
+    pub rows: Vec[(i64, i64, i64)],
 }
 
 /// One `comptime` a file declares, as `comptime_worked_out_ahead` reads it.
@@ -779,9 +778,12 @@ pub trait ComptimeComputeHost {
     /// (`comptime_unit_without_its_constants`), as a new unit; `null` where a
     /// constant worked out has no literal.
     fn unit_without_its_constants(ref self, at: i64, bound: ref String, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync) -> i64? sync
-    /// The callee `value` in file `here` calls that nothing declares
-    /// (`comptime_undeclared_callee`).
-    fn undeclared_callee(ref self, here: i64, value: ref Expr) -> String? sync
+    /// The names of file `at`.
+    fn file_words(ref self, at: i64) -> ref winnow_grammar::InternerContext sync
+    /// The items of file `at`.
+    fn file_items(ref self, at: i64) -> ref Vec[Spanned[Item]] sync
+    /// `std`'s ledger, as the build reads it.
+    fn library(ref self) -> ref Ledger sync
     /// Every `comptime` the program's files declare.
     fn constants_of_files(ref self) -> collections::BTreeSet[String] sync
     /// Every `comptime` the units declare.
@@ -799,15 +801,21 @@ pub trait ComptimeComputeHost {
     /// The ledger `units` come to against `std` and `packages`, each under
     /// its name.
     fn derived(ref self, units: ref Vec[i64], packages: ref collections::BTreeMap[String, Ledger]) -> Ledger sync
-    /// Why the value function of `derived` may not run at build time.
-    fn forbidden_because(ref self, derived: ref Ledger) -> String? sync
-    /// The callee the rule forbids (`comptime_culprit`) of `value` in file `here`.
-    fn culprit(ref self, here: i64, value: ref Expr, derived: ref Ledger) -> String? sync
-    /// `units` lowered with `units[here]` as the entry, with the dump of `ty`
-    /// and a `main` that writes it.
-    fn driven(ref self, units: ref Vec[i64], here: i64, derived: ref Ledger, packages: ref collections::BTreeMap[String, Ledger], ty: ref Ty) -> ComptimeDriven sync
-    /// `program` compiled and run in the workshop under `bound`.
-    fn run_comptime(ref self, program: ref String, bound: ref String) -> ComptimeRan sync
+    /// Unit `unit` lowered alone, its steps counted; `null` where the
+    /// emitter refused it.
+    fn lowered_alone(ref self, unit: i64) -> ComptimeLowered? sync
+    /// `units` lowered as one program with `units[here]` as the entry, its
+    /// steps counted (`comptime_lowered_units`); `null` where the emitter
+    /// refused one.
+    fn lowered_units(ref self, units: ref Vec[i64], here: i64, derived: ref Ledger, packages: ref collections::BTreeMap[String, Ledger]) -> ComptimeLowered? sync
+    /// The dump of a value of type `ty` (`grammar_run_dump`) over unit
+    /// `unit`, written to `out`; the wall where it has none.
+    fn dump(ref self, unit: i64, ty: ref Ty, mut out: String) -> CheckWall? sync
+    /// What a run may spend: counted steps and bytes (ADR-321 D7, D10).
+    fn bounds(ref self) -> (u64, u64) sync
+    /// `program` compiled and run in the workshop under `bound`: its answer
+    /// written to `answer`, or the wall it met.
+    fn run_comptime(ref self, program: ref String, bound: ref String, mut answer: String) -> CheckWall? sync
     /// A run's answer read back as a value.
     fn decode(ref self, text: ref String) -> BuildValue? sync
     /// `bound` marked as being worked out ahead; `false` where it already was.
@@ -835,7 +843,7 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
         null => {
             // **A callee nothing declares is named** (0.0.113): its result has no
             // type, so neither has the value, and the callee is why.
-            match host.undeclared_callee(here, value) {
+            match comptime_callee_nothing_declares(host, here, value) {
                 null => {},
                 callee => {
                     return CheckComputed::NotHere(f"It calls `{callee}`, which no file of your program declares and `std` doesn't have")
@@ -892,14 +900,14 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
     let packages = host.by_package(others)
     let unit_refs: Vec[i64] = units.iter().filter(fn(u) { host.unit_package(u) == home }).collect()
     let derived = host.derived(unit_refs, packages)
-    match host.forbidden_because(derived) {
+    match comptime_forbidden_because(derived) {
         null => {},
         because => {
-            let callee: String = host.culprit(here, value, derived) ?? bound
+            let callee: String = comptime_forbidden_callee(host, here, value, derived) ?? bound
             return CheckComputed::Forbidden { callee: callee, because: because }
         },
     }
-    let program = match host.driven(units, here, derived, packages, ty) {
+    let program = match comptime_driven(host, units, here, derived, packages, ty) {
         ComptimeDriven::Program(program) => program,
         ComptimeDriven::NotLowered => return not_here(COMPTIME_NOT_LOWERED),
         ComptimeDriven::Uncrossed { ty, because } => {
@@ -907,21 +915,70 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
         },
         ComptimeDriven::NoHandBack => return not_here("Its type can't be handed back from the program that computes it"),
     }
-    return match host.run_comptime(program, bound) {
-        ComptimeRan::Answer(text) => match host.decode(text) {
-            null => not_here(COMPTIME_NOT_READ),
-            computed => CheckComputed::Value(computed),
-        },
+    let mut answer: String = ""
+    let wall = host.run_comptime(program, bound, answer) ?? return match host.decode(answer) {
+        null => not_here(COMPTIME_NOT_READ),
+        computed => CheckComputed::Value(computed),
+    }
+    return match wall {
         // A default this run did not have is the default's own refusal,
         // said where it is written.
-        ComptimeRan::Refused { detail } if detail.contains(NOT_COMPUTED_YET) => not_here("It leaves out an option whose default isn't computed"),
-        ComptimeRan::Refused { detail } => CheckComputed::Stopped(detail),
-        ComptimeRan::NowhereToBuild => not_here(NOWHERE),
-        ComptimeRan::InsideAnother { .. } => not_here("It is met while another build-time program is built, and one isn't built inside another"),
-        ComptimeRan::NoCrossedForm { ty, because } => CheckComputed::NotHere(f"`{ty}` has no form that crosses from build time: {because}"),
-        ComptimeRan::DidNotBuild { .. } => not_here(COMPTIME_NOT_LOWERED),
-        ComptimeRan::Unreadable { .. } => not_here(COMPTIME_NOT_READ),
+        CheckWall::Refused { detail } if detail.contains(NOT_COMPUTED_YET) => not_here("It leaves out an option whose default isn't computed"),
+        CheckWall::Refused { detail } => CheckComputed::Stopped(detail),
+        CheckWall::NowhereToBuild => not_here(NOWHERE),
+        CheckWall::InsideAnother { .. } => not_here("It is met while another build-time program is built, and one isn't built inside another"),
+        CheckWall::NoCrossedForm { ty, because } => CheckComputed::NotHere(f"`{ty}` has no form that crosses from build time: {because}"),
+        CheckWall::DidNotBuild { .. } => not_here(COMPTIME_NOT_LOWERED),
+        CheckWall::Unreadable { .. } => not_here(COMPTIME_NOT_READ),
     }
+}
+
+/// **The callee nothing declares** (`comptime_undeclared_callee`): neither
+/// `std` nor a file of the program, each read with its own names.
+fn comptime_callee_nothing_declares[H: ComptimeComputeHost](host: ref H, here: i64, value: ref Expr) -> String? sync {
+    return comptime_undeclared_callee(host.file_words(here), value, host.library(), fn(name) {
+        (0..<host.file_count()).any(fn(at) { comptime_declares(host.file_items(at), host.file_words(at), name) })
+    })
+}
+
+/// **Why the value function of `derived` may not run at build time**
+/// (ADR-287 D13, D14), read off its entry; `null` where it may.
+fn comptime_forbidden_because(derived: ref Ledger) -> String? sync {
+    let contract = derived.functions.get(VALUE_FN) ?? return null
+    return bt_may_not_run(contract)
+}
+
+/// **The callee the rule forbids** (`comptime_culprit`) of `value` in file
+/// `here`: the rule (D2) is asked of the program's entry for a key, and then
+/// of `std`'s.
+fn comptime_forbidden_callee[H: ComptimeComputeHost](host: ref H, here: i64, value: ref Expr, derived: ref Ledger) -> String? sync {
+    return comptime_culprit(host.file_words(here), value, derived, fn(key) {
+        let contract = derived.functions.get(key) ?? host.library().functions.get(key) ?? return false
+        bt_may_not_run(contract) != null
+    })
+}
+
+/// **The run's program**: `units` lowered with `units[here]` as the entry
+/// (alone where it is the only one), the dump of `ty`, and a `main` that
+/// reports a stop, computes the value and writes it (`cr_with_driver`).
+fn comptime_driven[H: ComptimeComputeHost](host: ref H, units: ref Vec[i64], here: i64, derived: ref Ledger, packages: ref collections::BTreeMap[String, Ledger], ty: ref Ty) -> ComptimeDriven sync {
+    let found: ComptimeLowered? = match units.len() {
+        1 => host.lowered_alone(units[here]),
+        else => host.lowered_units(units, here, derived, packages),
+    }
+    let lowered = found ?? return ComptimeDriven::NotLowered
+    let mut dump: String = ""
+    let wall = host.dump(units[here], ty, dump)
+    match wall {
+        null => {},
+        refused => return match refused {
+            CheckWall::NoCrossedForm { ty, because } => ComptimeDriven::Uncrossed { ty: ty.clone(), because: because.clone() },
+            else => ComptimeDriven::NoHandBack,
+        },
+    }
+    let (steps, bytes) = host.bounds()
+    let program = cr_with_driver(lowered.rust, lowered.rows, VALUE_FN, dump, gr_dump_helpers(), COMPTIME_STOPPED_AT, steps, bytes) ?? return ComptimeDriven::NotLowered
+    return ComptimeDriven::Program(program)
 }
 
 /// **The constants a run reads before their turn**, worked out ahead

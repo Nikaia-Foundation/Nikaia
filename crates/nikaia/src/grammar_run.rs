@@ -379,25 +379,6 @@ impl nikaia_std::tools::grammar_run::GrammarDriverHost for Driver<'_> {
     }
 }
 
-/// **The dump, written inline**, from the declaration and not from the value,
-/// so a shape a `const` cannot hold is refused *before* a parser is compiled.
-/// **Written in Nikaia** (`tools/dump.nika`, `tools/grammar_run.nika`, #125);
-/// what stays here is handing over the program's file and `std`'s ledger.
-pub(crate) fn dumper(parsed: &Parsed, result: &Ty) -> Result<String, Wall> {
-    let mut out = String::new();
-    match nikaia_std::tools::grammar_run::grammar_run_dump(
-        &parsed.interner,
-        &parsed.aliases,
-        &parsed.program,
-        crate::contracts::std_ledger(),
-        result,
-        &mut out,
-    ) {
-        None => Ok(out),
-        Some(wall) => Err(wall),
-    }
-}
-
 /// **Reading back what the sub-program wrote.**
 ///
 /// The encoder is generated above and this reads it — two halves of one format,

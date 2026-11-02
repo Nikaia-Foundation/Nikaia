@@ -370,8 +370,16 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         ))
     }
 
-    fn undeclared_callee(&self, here: i64, value: &Expr) -> Option<String> {
-        undeclared_callee(self.files, here as usize, value, self.library)
+    fn file_words(&self, at: i64) -> &winnow_grammar::InternerContext {
+        &self.files[at as usize].interner
+    }
+
+    fn file_items(&self, at: i64) -> &[crate::ast::Spanned<crate::ast::Item>] {
+        &self.files[at as usize].program.items
+    }
+
+    fn library(&self) -> &crate::contracts::Ledger {
+        self.library
     }
 
     fn constants_of_files(&self) -> BTreeSet<String> {
@@ -418,68 +426,57 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         crate::contracts::Ledger::infer_package(&refs, &with_packages)
     }
 
-    fn forbidden_because(&self, derived: &crate::contracts::Ledger) -> Option<String> {
-        derived
-            .functions
-            .get(VALUE_FN)
-            .and_then(crate::build_time::may_not_run)
+    fn lowered_alone(&self, unit: i64) -> Option<tree::ComptimeLowered> {
+        let held = self.units.borrow();
+        crate::emit::emit_program(&held[unit as usize], counted())
+            .ok()
+            .map(rows_of)
     }
 
-    fn culprit(
-        &self,
-        here: i64,
-        value: &Expr,
-        derived: &crate::contracts::Ledger,
-    ) -> Option<String> {
-        culprit(self.files[here as usize], value, derived, self.library)
-    }
-
-    fn driven(
+    fn lowered_units(
         &self,
         units: &[i64],
         here: i64,
         derived: &crate::contracts::Ledger,
         packages: &BTreeMap<String, crate::contracts::Ledger>,
-        ty: &Ty,
-    ) -> tree::ComptimeDriven {
+    ) -> Option<tree::ComptimeLowered> {
         let held = self.units.borrow();
         let refs: Vec<&Parsed> = units.iter().map(|&at| &held[at as usize]).collect();
-        let here = here as usize;
-        let counted = crate::emit::Build {
-            counts_steps: true,
-            ..Default::default()
-        };
-        let lowered = match refs.len() {
-            1 => crate::emit::emit_program(refs[here], counted).ok(),
-            _ => lowered_units(&refs, here, counted, derived, packages, self.library),
-        };
-        let Some(lowered) = lowered else {
-            return tree::ComptimeDriven::NotLowered;
-        };
-        let dump = match crate::grammar_run::dumper(refs[here], ty) {
-            Ok(dump) => dump,
-            Err(Wall::NoCrossedForm { ty, because }) => {
-                return tree::ComptimeDriven::Uncrossed { ty, because };
-            }
-            Err(_) => return tree::ComptimeDriven::NoHandBack,
-        };
-        match with_driver(&lowered, &dump, self.bounds) {
-            Some(program) => tree::ComptimeDriven::Program(program),
-            None => tree::ComptimeDriven::NotLowered,
-        }
+        lowered_units(
+            &refs,
+            here as usize,
+            counted(),
+            derived,
+            packages,
+            self.library,
+        )
+        .map(rows_of)
     }
 
-    fn run_comptime(&self, program: &str, bound: &str) -> tree::ComptimeRan {
+    fn dump(&self, unit: i64, ty: &Ty, out: &mut String) -> Option<Wall> {
+        let held = self.units.borrow();
+        let unit = &held[unit as usize];
+        nikaia_std::tools::grammar_run::grammar_run_dump(
+            &unit.interner,
+            &unit.aliases,
+            &unit.program,
+            crate::contracts::std_ledger(),
+            ty,
+            out,
+        )
+    }
+
+    fn bounds(&self) -> (u64, u64) {
+        (self.bounds.steps, self.bounds.bytes)
+    }
+
+    fn run_comptime(&self, program: &str, bound: &str, answer: &mut String) -> Option<Wall> {
         match self.workshop.run_comptime(program, bound) {
-            Ok(text) => tree::ComptimeRan::Answer(text),
-            Err(Wall::NowhereToBuild) => tree::ComptimeRan::NowhereToBuild,
-            Err(Wall::InsideAnother { outer }) => tree::ComptimeRan::InsideAnother { name: outer },
-            Err(Wall::NoCrossedForm { ty, because }) => {
-                tree::ComptimeRan::NoCrossedForm { ty, because }
+            Ok(text) => {
+                *answer = text;
+                None
             }
-            Err(Wall::DidNotBuild { detail }) => tree::ComptimeRan::DidNotBuild { detail },
-            Err(Wall::Refused { detail }) => tree::ComptimeRan::Refused { detail },
-            Err(Wall::Unreadable { detail }) => tree::ComptimeRan::Unreadable { detail },
+            Err(wall) => Some(wall),
         }
     }
 
@@ -528,36 +525,26 @@ thread_local! {
         const { std::cell::RefCell::new(BTreeSet::new()) };
 }
 
-/// **The callee nothing declares** (`comptime_undeclared_callee`): neither
-/// `library` nor a file of the program, each read with its own interner.
-fn undeclared_callee(
-    files: &[&Parsed],
-    here: usize,
-    value: &Expr,
-    library: &crate::contracts::Ledger,
-) -> Option<String> {
-    tree::comptime_undeclared_callee(&files[here].interner, value, library, &|name: &str| {
-        files
-            .iter()
-            .any(|file| tree::comptime_declares(&file.program.items, &file.interner, name))
-    })
+/// A run's lowering is built with its steps counted (ADR-321 D7).
+fn counted() -> crate::emit::Build {
+    crate::emit::Build {
+        counts_steps: true,
+        ..Default::default()
+    }
 }
 
-/// **The callee the rule forbids** (`comptime_culprit`): the rule (D2) is
-/// asked of the program's entry for a key, and then of `std`'s.
-fn culprit(
-    parsed: &Parsed,
-    value: &Expr,
-    derived: &crate::contracts::Ledger,
-    library: &crate::contracts::Ledger,
-) -> Option<String> {
-    tree::comptime_culprit(&parsed.interner, value, derived, &|key: &str| {
-        derived
-            .functions
-            .get(key)
-            .or_else(|| library.functions.get(key))
-            .is_some_and(|contract| crate::build_time::may_not_run(contract).is_some())
-    })
+/// `lowered`'s text and its source map's rows, as `comptime_driven` reads
+/// them.
+fn rows_of(lowered: crate::emit::Lowered) -> tree::ComptimeLowered {
+    let rows = lowered
+        .map
+        .rows()
+        .map(|(generated, byte, unit)| (generated as i64, byte as i64, unit as i64))
+        .collect();
+    tree::ComptimeLowered {
+        rust: lowered.rust,
+        rows,
+    }
 }
 
 // --- the defaults a ledger records -------------------------------------------
@@ -621,37 +608,6 @@ pub(crate) fn defaults_workshop() -> Option<std::sync::Arc<crate::grammar_run::W
     DEFAULTS.with(|held| held.borrow().clone())
 }
 
-/// **The lowered sub-program with a `main` of its own**: the generated one
-/// starts the runtime and runs the program's body, and this one reports a stop,
-/// computes the value and writes it.
-///
-/// **A stop names the byte it came from**, where the program's own table names
-/// a `.nika` line (ADR-300 D9): the sub-program has no file of its own, and the
-/// checker turns the byte back into a place in the file it is checking. A row
-/// is the generated line, [`STOPPED_AT`], and the byte the line's outermost
-/// node starts at.
-pub(crate) fn with_driver(
-    lowered: &crate::emit::Lowered,
-    dump: &str,
-    bounds: Bounds,
-) -> Option<String> {
-    let rows: Vec<(i64, i64, i64)> = lowered
-        .map
-        .rows()
-        .map(|(generated, byte, unit)| (generated as i64, byte as i64, unit as i64))
-        .collect();
-    nikaia_std::tools::comptime_driver::cr_with_driver(
-        &lowered.rust,
-        &rows,
-        VALUE_FN,
-        dump,
-        &nikaia_std::tools::grammar_decode::gr_dump_helpers(),
-        STOPPED_AT,
-        bounds.steps,
-        bounds.bytes,
-    )
-}
-
 /// **What a build-time run may spend** ([ADR-321](../../../docs/specification/adr/adr-321.md)
 /// D7, D10): counted steps and bytes live at once. How a `comptime` raises
 /// either is not decided (D11); a workshop carries them, so that this
@@ -671,10 +627,6 @@ impl Default for Bounds {
         }
     }
 }
-
-/// What a stop's row names instead of a file: the file's place among the
-/// program's follows it, and then the byte.
-pub(crate) const STOPPED_AT: &str = "@";
 
 // --- compiling and running -----------------------------------------------------
 //
