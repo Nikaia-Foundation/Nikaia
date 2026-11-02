@@ -317,6 +317,10 @@ impl EmitState {
             out.push(&format!("*{}", self.emit_expr_read_name(world, name, node)));
             return Ok(());
         }
+        if self.facts.copied_views.contains(&at) && !self.facts.copied_args.contains(&at) {
+            out.push(&format!("*{}", self.emit_expr_read_name(world, name, node)));
+            return Ok(());
+        }
         out.push(&self.emit_expr_read_name(world, name, node));
         let key = match self.keep_plan_key(&walk, &scope.function) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };

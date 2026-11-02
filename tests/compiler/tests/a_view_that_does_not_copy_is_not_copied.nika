@@ -1,0 +1,10 @@
+// A view of a type that does not copy stays refused where the value is
+// wanted (ADR-387 D2): the copy is the program's to write, `.clone()`.
+struct D { s: String }
+
+fn main() {
+	let xs = [D { s: "a" }]
+	let e: ref D = xs[0]
+	let g: D = e
+	print(f"{g.s}\n")
+}

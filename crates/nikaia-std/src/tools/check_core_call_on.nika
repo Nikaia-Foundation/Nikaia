@@ -710,6 +710,11 @@ fn check_core_call_on_given[H: CheckHost](mut state: CheckState, world: ref Chec
             state.facts.nullable_args.insert(id_of(given) as i64, how ?? continue)
             continue
         }
+        // **A view of a value that copies, where the value is wanted**
+        // (ADR-387 D1): `kept.push(e)` copies out of `e`.
+        if state.a_view_copied_out(world, have, want, given) {
+            continue
+        }
         if !is_a_literal(given) && an_integer_that_does_not_widen(have, want) {
             let at = check_span_at(world, given, span)
             state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })

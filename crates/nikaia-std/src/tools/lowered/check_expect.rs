@@ -142,6 +142,21 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_view_copied_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>) -> bool {
+        let given = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let named = matches!(given, Expr::Variable(_, _));
+        if !named || !self.a_view_that_copies(world, found) { return false; }
+        let value_of = unviewed_type(found);
+        let wanted = match want {
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); *inner == value_of },
+            _ => *want == value_of,
+        };
+        if !wanted { return false; }
+        self.facts.copied_views.insert(id_of(given) as i64);
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn expect_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
         if value.is_some() {
@@ -175,6 +190,7 @@ impl CheckState {
         }
         let mut target: Ty = want.clone();
         if nullable { target = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
+        if self.a_view_copied_out(world, found, want, value) { return; }
         let before = self.findings.len() as i64;
         self.expect_type(world, present, &target, span, what, message);
         self.said_as_declared(present, value, before);

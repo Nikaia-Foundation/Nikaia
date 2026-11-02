@@ -470,6 +470,13 @@ impl EmitState {
             out.push(f"*{self.emit_expr_read_name(world, name, node)}")
             return
         }
+        // **A view of a value that copies, where the value is wanted**
+        // (ADR-387 D1): copied out of it, unless the call writes that `*`
+        // (`copied_args`).
+        if self.facts.copied_views.contains(at) && !self.facts.copied_args.contains(at) {
+            out.push(f"*{self.emit_expr_read_name(world, name, node)}")
+            return
+        }
         out.push(self.emit_expr_read_name(world, name, node))
         // **A binding packed for a task is read through its handle** (ADR-283
         // D11), for as long as the read borrows it - and so is an element

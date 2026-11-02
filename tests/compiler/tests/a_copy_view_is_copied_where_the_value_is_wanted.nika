@@ -1,0 +1,54 @@
+// A view of a type that copies is copied where the value is wanted (ADR-387
+// D1, #1107): a `return`, a `let`, a field, a described method's argument, a
+// number, and a map's read unwrapped past a jump, handed back as a view and
+// as the value.
+use std::collections
+
+struct C { n: i64 }
+struct Holder { c: C }
+
+fn first(xs: ref Vec[C]) -> C {
+	let e: ref C = xs[0]
+	return e
+}
+
+fn pick(m: ref collections::BTreeMap[String, C], k: String) -> C? {
+	let c = m.get(k) ?? return null
+	return c
+}
+
+fn read(m: ref collections::BTreeMap[String, C], k: String) -> ref C? {
+	let c = m[k] ?? return null
+	return c
+}
+
+fn take(m: ref collections::BTreeMap[String, C], k: String) -> C? {
+	let c = m[k] ?? return null
+	return c
+}
+
+fn typed(m: ref collections::BTreeMap[String, C], k: String) -> C? {
+	let c = m[k] ?? return null
+	let d: C = c
+	return d
+}
+
+fn main() {
+	let xs = [C { n: 1 }, C { n: 2 }]
+	let e: ref C = xs[1]
+	let g: C = e
+	let h = Holder { c: e }
+	let mut kept: Vec[C] = []
+	kept.push(e)
+	let ys = [3, 4]
+	let f: ref i64 = ys[0]
+	let i: i64 = f
+	let mut m: collections::BTreeMap[String, C] = collections::BTreeMap()
+	m.insert("a", C { n: 5 })
+	let p = pick(m, "a") ?? return
+	print(f"{first(xs).n} {g.n} {h.c.n} {kept.len()} {i} {p.n}\n")
+	let r = read(m, "a") ?? return
+	let t = take(m, "a") ?? return
+	let d = typed(m, "a") ?? return
+	print(f"{r.n} {t.n} {d.n}\n")
+}

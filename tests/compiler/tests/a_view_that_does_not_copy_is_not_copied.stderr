@@ -1,0 +1,8 @@
+error[NK1103]: This value is `ref D`, but the `let` declares `D`.
+  --> tests/a_view_that_does_not_copy_is_not_copied.nika:8:13
+   |
+ 8 | 	let g: D = e
+   |             ^
+   |
+   = help: Make it a `D`, or change the declaration to `ref D`.
+1 type error

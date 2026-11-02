@@ -426,6 +426,10 @@ pub struct CheckFacts {
     /// `bool` or a `char`, is `(*c)` below.
     pub view_derefs: collections::BTreeSet[i64],
     pub copied_args: collections::BTreeSet[i64],
+    /// **A name that is a view of a value that copies, where the value is
+    /// wanted** (ADR-387 D1): a `let`, a `return`, a field, a described
+    /// method's argument. Written `*name` below.
+    pub copied_views: collections::BTreeSet[i64],
     pub settle_fns: collections::BTreeMap[String, bool],
     pub settle_lets: collections::BTreeMap[i64, bool],
     pub lent_lets: collections::BTreeSet[i64],
@@ -660,6 +664,7 @@ impl CheckFacts {
             reborrowed_args: collections::BTreeSet(),
             view_derefs: collections::BTreeSet(),
             copied_args: collections::BTreeSet(),
+            copied_views: collections::BTreeSet(),
             settle_fns: collections::BTreeMap(),
             settle_lets: collections::BTreeMap(),
             lent_lets: collections::BTreeSet(),

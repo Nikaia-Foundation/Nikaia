@@ -201,6 +201,31 @@ impl CheckState {
         }
     }
 
+    /// **A view of a value that copies, where the value is wanted** (ADR-387
+    /// D1, widening ADR-233 D4 from a call to every such place): a name of a
+    /// `ref C` where a `C` or a `C?` is wanted is copied out of, `*name`
+    /// below. A `*` on what an operator made is not Rust, so only a name.
+    pub fn a_view_copied_out(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?) -> bool sync {
+        let given = value ?? return false
+        let named = match given {
+            Expr::Variable(_, _) => true,
+            else => false,
+        }
+        if !named || !self.a_view_that_copies(world, found) {
+            return false
+        }
+        let value_of = unviewed_type(found)
+        let wanted = match want {
+            Ty::Nullable(inner) => inner == value_of,
+            else => want == value_of,
+        }
+        if !wanted {
+            return false
+        }
+        self.facts.copied_views.insert(id_of(given) as i64)
+        return true
+    }
+
     pub fn expect_kept(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
         // **A place that says its type is a use of the numbers put there**
         // (ADR-285 D24): a field, a `let`'s annotation, what a function hands
@@ -255,6 +280,9 @@ impl CheckState {
         let mut target: Ty = want.clone()
         if nullable {
             target = Ty::Named { name: "String", args: [], view: false }
+        }
+        if self.a_view_copied_out(world, found, want, value) {
+            return
         }
         let before = self.findings.len()
         self.expect_type(world, present, target, span, what, message)

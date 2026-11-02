@@ -511,6 +511,11 @@ fn check_core_stmt_a_number_read_through_a_lent_binding(mut state: CheckState, w
     if !local.lent || state.number_shaped(world, value) {
         return
     }
+    // **Unless the view is of a value that copies**: it is copied out
+    // (ADR-387 D1).
+    if state.facts.copied_views.contains(id_of(value) as i64) {
+        return
+    }
     state.a_copy_the_source_did_not_write(name, wanted, span)
 }
 
@@ -662,13 +667,12 @@ fn check_core_stmt_an_element_read(state: ref CheckState, world: ref CheckWorld,
     }
 }
 
-/// A struct of the program that does not copy, which a read lends (ADR-279
-/// D8) and which is the reference below already. One that copies stays the
-/// copy a `let` makes of it: a `ref C` of it is not yet copied out where a
-/// `C` is wanted (#1107).
-fn check_core_stmt_a_lent_struct(state: ref CheckState, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+/// A struct of the program, which a read lends (ADR-279 D8) and which is the
+/// reference below already. One that copies is a view too: where a `C` is
+/// wanted, the view is copied out (ADR-387 D1, #1107).
+fn check_core_stmt_a_lent_struct(state: ref CheckState, ty: ref Ty) -> bool sync {
     return match ty {
-        Ty::Named { name, args, view } => !view && args.len() == 0 && state.structs.contains_key(name) && state.does_not_copy(world, ty),
+        Ty::Named { name, args, view } => !view && args.len() == 0 && state.structs.contains_key(name),
         else => false,
     }
 }
@@ -1219,7 +1223,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // D7), as `m[k]` bound without the jump is: handed back where a view is
     // declared, it is the same element.
     let mut viewed_past_a_jump = false
-    if ty == null && !mutable && names.len() == 1 && shape.len() == 0 && check_core_stmt_an_element_past_a_jump(state, world, value) && check_core_stmt_a_lent_struct(state, world, bound) {
+    if ty == null && !mutable && names.len() == 1 && shape.len() == 0 && check_core_stmt_an_element_past_a_jump(state, world, value) && check_core_stmt_a_lent_struct(state, bound) {
         bound = view_of_type(bound)
         viewed_past_a_jump = true
     }

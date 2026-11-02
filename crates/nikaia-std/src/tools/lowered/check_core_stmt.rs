@@ -394,6 +394,7 @@ pub(crate) fn check_core_stmt_a_number_read_through_a_lent_binding(state: &mut C
     };
     let local: CheckLocal = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
     if !local.lent || state.number_shaped(world, value) { return; }
+    if state.facts.copied_views.contains(&(id_of(value) as i64)) { return; }
     state.a_copy_the_source_did_not_write(&name, &wanted, span);
 }
 
@@ -528,9 +529,9 @@ pub(crate) fn check_core_stmt_an_element_read(state: &CheckState, world: &CheckW
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_stmt_a_lent_struct(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+pub(crate) fn check_core_stmt_a_lent_struct(state: &CheckState, ty: &Ty) -> bool {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && state.structs.contains_key(name) && state.does_not_copy(world, ty) },
+        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && state.structs.contains_key(name) },
         _ => false,
     }
 }
@@ -894,7 +895,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let copied_read = a_copy_by_value(&bound) && check_core_stmt_a_read_that_leaves(&state, world, value);
     if copied_read { check_core_stmt_copied_jump_reads(state, value); }
     let mut viewed_past_a_jump = false;
-    if ty.is_none() && !mutable && names.len() == 1 && shape.is_empty() && check_core_stmt_an_element_past_a_jump(&state, world, value) && check_core_stmt_a_lent_struct(&state, world, &bound) {
+    if ty.is_none() && !mutable && names.len() == 1 && shape.is_empty() && check_core_stmt_an_element_past_a_jump(&state, world, value) && check_core_stmt_a_lent_struct(&state, &bound) {
         bound = view_of_type(&bound);
         viewed_past_a_jump = true;
     }
