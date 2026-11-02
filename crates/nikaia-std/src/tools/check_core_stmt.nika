@@ -340,6 +340,31 @@ fn check_core_stmt_a_part_of_an_owned_parameter(state: ref CheckState, world: re
     }
 }
 
+/// A field path whose root is a `let` without `mut` that owns what it holds
+/// (#1142): not a view of a place, not a `for` binding, not a parameter.
+fn check_core_stmt_a_part_of_an_unchanged_let(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Field { base, .. } => match base {
+            Expr::Variable(symbol, _) => check_core_stmt_an_unchanged_owned_let(state, f"{world.words.resolve(symbol)}"),
+            else => check_core_stmt_a_part_of_an_unchanged_let(state, world, base),
+        },
+        else => false,
+    }
+}
+
+/// A name bound by a `let` without `mut`, owning its value.
+fn check_core_stmt_an_unchanged_owned_let(state: ref CheckState, name: ref String) -> bool sync {
+    if state.lent_here(name) || state.got_past_a_jump.contains(name) {
+        return false
+    }
+    let local: CheckLocal = state.binding(name) ?? return false
+    let how: CheckImmutable = local.immutable ?? return false
+    return match how.kind {
+        CheckKind::Let => true,
+        else => false,
+    }
+}
+
 /// A bare name.
 fn check_core_stmt_a_name(value: ref Expr) -> bool sync {
     return match value {
@@ -848,7 +873,12 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         let to = f"bound to `{bound_names.join("`, `")}` by a `let`"
         let before = state.findings.len()
         state.hands_over(world, value, found, to, span)
-        moved_out = a_name_or_a_field(value) && check_core_stmt_a_part_of_an_owned_parameter(state, world, value) && state.findings.len() == before
+        // **A `let mut` over a part of a `let` the function may not change
+        // takes the part** (#1142): no change could reach the place through
+        // it, so it is no view (ADR-094 D4), and it moves, as a part of an
+        // owned parameter does (#665).
+        let owned_root = check_core_stmt_a_part_of_an_owned_parameter(state, world, value) || (mutable && check_core_stmt_a_part_of_an_unchanged_let(state, world, value))
+        moved_out = a_name_or_a_field(value) && owned_root && state.findings.len() == before
     }
     // **And a `let` gives the name a value again**, as an assignment does.
     for n in bound_names {

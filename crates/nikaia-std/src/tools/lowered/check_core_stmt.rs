@@ -258,6 +258,27 @@ pub(crate) fn check_core_stmt_a_part_of_an_owned_parameter(state: &CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_part_of_an_unchanged_let(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
+            Expr::Variable(symbol, _) => { let symbol = *symbol; check_core_stmt_an_unchanged_owned_let(state, &format!("{}", world.words.resolve(symbol))) },
+            _ => check_core_stmt_a_part_of_an_unchanged_let(state, world, base),
+        } },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_an_unchanged_owned_let(state: &CheckState, name: &str) -> bool {
+    if state.lent_here(name) || state.got_past_a_jump.contains(name) { return false; }
+    let local: CheckLocal = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let how: CheckImmutable = match local.immutable { Some(__nikaia_value) => __nikaia_value, None => return false };
+    matches!(how.kind, CheckKind::Let)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_name(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -650,7 +671,8 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let to = format!("bound to `{}` by a `let`", bound_names.join("`, `"));
         let before = state.findings.len() as i64;
         state.hands_over(world, value, &found, &to, span);
-        moved_out = a_name_or_a_field(value) && check_core_stmt_a_part_of_an_owned_parameter(&state, world, value) && (state.findings.len() as i64) == before;
+        let owned_root = check_core_stmt_a_part_of_an_owned_parameter(&state, world, value) || mutable && check_core_stmt_a_part_of_an_unchanged_let(&state, world, value);
+        moved_out = a_name_or_a_field(value) && owned_root && (state.findings.len() as i64) == before;
     }
     for n in bound_names.iter() { if n != "_" { state.written_at.push((n.to_string(), span.start as i64)); } }
     if !mutable && ty.is_none() && check_core_stmt_a_lent_list_read(&state, world, value) { check_core_stmt_lent_let(state, world, names, span); }

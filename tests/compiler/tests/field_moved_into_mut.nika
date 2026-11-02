@@ -1,0 +1,23 @@
+// A field of a `let` without `mut`, bound to a `let mut` that changes it,
+// takes the field: no change could reach `walk` through it (#1142).
+struct Site {
+    line: i64,
+}
+struct Walk {
+    sites: Vec[Site],
+    name: String,
+}
+fn collect() -> Walk {
+    Walk { sites: [Site { line: 3 }, Site { line: 1 }], name: "w" }
+}
+fn main() {
+    let walk = collect()
+    let mut sites = walk.sites
+    sites.sort_by_key(fn(s) { s.line })
+    sites.push(Site { line: 9 })
+    println(f"{sites[0].line} {sites.len()}")
+    let other = collect()
+    let mut names = other.name
+    names.push_str("!")
+    println(names)
+}
