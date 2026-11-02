@@ -44,7 +44,7 @@ test "a program with file names compiles and runs" {
 }
 
 // What a program does with a name, it does on the `Path` (ADR-319 D3), and
-// `==` is byte for byte, so `dir//data.csv` is another name.
+// `==` compares whole parts (ADR-319 D9), so `dir//data.csv` is the same name.
 test "a file names operations run" {
     let p: fs::Path = "dir/data.csv"
     let q: fs::Path = "dir//data.csv"
@@ -58,7 +58,7 @@ test "a file names operations run" {
     let first = f"{csv} {dir} {bak.display()} {joined.display()} {name.display()} {ext.display()}"
     let second = f"{p == "dir/data.csv"} {p == q} {"x" != p}"
     assert(first == "true true dir/data.bak dir/other.txt data.csv csv")
-    assert(second == "true false true")
+    assert(second == "true true true")
 }
 
 // An `f"…"` with a file's name in it is a name (ADR-319 D4): the parts are
