@@ -42,3 +42,4 @@
 /home/user/Nikaia/docs/briefs/bugs/qa/qa-task.md 2080725 48
 /home/user/Nikaia/docs/briefs/bugs/b35-1142-1143-owned-field-and-temp-arg.md 3978294 67
 /home/user/Nikaia/docs/briefs/bugs/b36-1144-to-string-owned.md 4564149 72
+/home/user/Nikaia/docs/briefs/bugs/b22-1099-fstring-no-hole-braces.md 310798 11
