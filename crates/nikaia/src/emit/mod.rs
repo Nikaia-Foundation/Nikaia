@@ -676,6 +676,7 @@ impl<'p> Emitter<'p> {
             library,
             checked,
             checked_plans,
+            &parsed.refused_moves,
             &nikaia_std::tools::emit_contracts::EmitContractsBuild {
                 leaves_values: build.leaves_values,
                 bounds_removed: build.bounds == crate::bounds::BoundsChecks::Removed,
@@ -684,21 +685,11 @@ impl<'p> Emitter<'p> {
             },
         );
         let nonnegative_bodies = host.nonnegative_locals.take();
-        let state = made.state;
-        let give_ups = crate::view_changes::analyse(
-            parsed,
-            &state.own_contracts,
-            library,
-            &state.facts.lent_lets,
-            &crate::view_changes::coalesced(&state.facts),
-            &crate::view_changes::mut_viewed(&state.facts),
-        )
-        .1;
         Self {
             parsed,
             build,
-            s: state,
-            give_ups,
+            s: made.state,
+            give_ups: made.give_ups,
             w: std::cell::RefCell::new(Some(EmitWalk::fresh())),
             failed: std::cell::RefCell::new(None),
             world: EmitWorld {

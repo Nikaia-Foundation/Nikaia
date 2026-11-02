@@ -30,10 +30,15 @@ pub struct EmitContractsBuild {
     pub trusted: bool,
 }
 
-/// The state, and which checks a statement holds and which are proved.
+/// The state, which checks a statement holds and which are proved, and what
+/// a give-up lowers to.
 pub struct EmitContractsMade {
     pub state: EmitState,
     pub order_proofs: EmitOrderProofs,
+    /// **What a give-up lowers to** (ADR-353 D3, `view_changes`): an
+    /// assignment that becomes a binding of its own, and the `let`s that need
+    /// no `mut` because of it.
+    pub give_ups: VcGiveUps,
 }
 
 /// What the state asks of the parsed file and the analyses only Rust holds;
@@ -65,8 +70,9 @@ pub trait EmitContractsHost {
 /// - a program's rather than a file's. `units` are the file's view and those
 /// of the files `beside` it, in that order; `checked` the facts of a check
 /// already run as `propagation_against` would run it, `checked_plans` its
-/// keep plans (#727).
-pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H, parsed: ref P, units: ref Vec[ParsedView], beside: ref Vec[ParsedView], program: ref Program, own_contracts: Ledger, described: ref Ledger, library: ref Ledger, checked: CheckFacts?, checked_plans: Vec[BufferPlan]?, build: ref EmitContractsBuild) -> EmitContractsMade sync {
+/// keep plans (#727); `refused` the names the tier pass moved into a position
+/// that must hold text of its own (`Parsed::refused_moves`).
+pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H, parsed: ref P, units: ref Vec[ParsedView], beside: ref Vec[ParsedView], program: ref Program, own_contracts: Ledger, described: ref Ledger, library: ref Ledger, checked: CheckFacts?, checked_plans: Vec[BufferPlan]?, refused: ref collections::BTreeMap[i64, TierRefusal], build: ref EmitContractsBuild) -> EmitContractsMade sync {
     let words = units[0].words
     let items = units[0].items
     let tables = emit_tables_items(words, items)
@@ -196,7 +202,21 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
     state.kept_calls = holes.kept_calls
     let world = EmitWorld { words: words, aliases: units[0].aliases, items: items, library: library }
     state.sums = state.error_sums(world)
-    return EmitContractsMade { state: state, order_proofs: order_proofs }
+    let coalesced = vc_coalesced(state.facts)
+    let mut_viewed = vc_mut_viewed(state.facts)
+    let ask = VcAsk {
+        names: words,
+        items: items,
+        own: state.own_contracts,
+        library: library,
+        lent: state.facts.lent_lets,
+        coalesced: coalesced,
+        refused: refused,
+        viewed: units[0].viewed_arms,
+        mut_viewed: mut_viewed,
+    }
+    // The give-ups read the state, so they are worked out before it moves.
+    return EmitContractsMade { give_ups: vc_analyse(ask, fn(e) { emit_holes_literal(parsed, words, e) }).give_ups, state: state, order_proofs: order_proofs }
 }
 
 /// The functions of this program that can pause **and take part in a cycle**

@@ -21,6 +21,7 @@ pub struct EmitContractsBuild {
 pub struct EmitContractsMade {
     pub state: EmitState,
     pub order_proofs: EmitOrderProofs,
+    pub give_ups: VcGiveUps,
 }
 
 pub trait EmitContractsHost {
@@ -39,7 +40,7 @@ pub trait EmitContractsHost {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, build: &EmitContractsBuild) -> EmitContractsMade {
+pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, refused: &collections::BTreeMap<i64, TierRefusal>, build: &EmitContractsBuild) -> EmitContractsMade {
     let words = nikaia_std::index::get(&units, 0).words;
     let items = nikaia_std::index::get(&units, 0).items;
     let tables = emit_tables_items(words, items);
@@ -62,23 +63,23 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     let fold_callees = emit_holes_fold_callees(parsed, words, &tables.grammars);
     let keep_plans: collections::BTreeMap<String, BufferPlan> = nikaia_std::index::or(checked_plans, || host.buffer_plans(&own_contracts).into()).into_iter().map(|plan| { (plan.key.to_string(), plan) }).collect();
     let proven_indices: collections::BTreeSet<i64> = propagation.list_indices.iter().copied().filter(|&node| { build.bounds_removed && proven.indices.contains(&node) }).collect();
-    let proven_arithmetic: collections::BTreeMap<i64, String> = propagation.arithmetic.iter().chain(propagation.shifts.iter()).filter(|&__nikaia_tuple7488| {
-        let (at, _) = __nikaia_tuple7488; let at = nikaia_std::num::value(at);
+    let proven_arithmetic: collections::BTreeMap<i64, String> = propagation.arithmetic.iter().chain(propagation.shifts.iter()).filter(|&__nikaia_tuple7900| {
+        let (at, _) = __nikaia_tuple7900; let at = nikaia_std::num::value(at);
         build.overflow_removed && proven.arithmetic.contains(&at)
-    }).map(|__nikaia_tuple7566| {
-        let (at, ty) = __nikaia_tuple7566; let at = nikaia_std::num::value(at);
+    }).map(|__nikaia_tuple7978| {
+        let (at, ty) = __nikaia_tuple7978; let at = nikaia_std::num::value(at);
         (at, ty.to_string())
     }).collect();
-    let proven_negations: collections::BTreeMap<i64, String> = propagation.negations.iter().filter(|&__nikaia_tuple7710| {
-        let (at, _) = __nikaia_tuple7710; let at = nikaia_std::num::value(at);
+    let proven_negations: collections::BTreeMap<i64, String> = propagation.negations.iter().filter(|&__nikaia_tuple8122| {
+        let (at, _) = __nikaia_tuple8122; let at = nikaia_std::num::value(at);
         build.overflow_removed && proven.negations.contains(&at)
-    }).map(|__nikaia_tuple7787| {
-        let (at, ty) = __nikaia_tuple7787; let at = nikaia_std::num::value(at);
+    }).map(|__nikaia_tuple8199| {
+        let (at, ty) = __nikaia_tuple8199; let at = nikaia_std::num::value(at);
         (at, ty.to_string())
     }).collect();
     let believed_arithmetic: collections::BTreeMap<i64, String> = if unchecked { propagation.arithmetic.to_owned() } else { collections::BTreeMap::new() };
-    let mut state = EmitState { described: described.clone(), view_slots: emit_tables_read_view_slots(&own_contracts).into_iter().filter(|__nikaia_tuple8535| {
-        let (name, _) = __nikaia_tuple8535;
+    let mut state = EmitState { described: described.clone(), view_slots: emit_tables_read_view_slots(&own_contracts).into_iter().filter(|__nikaia_tuple8947| {
+        let (name, _) = __nikaia_tuple8947;
         name.contains("::")
     }).chain(units.iter().flat_map(|unit| { emit_tables_view_slots(unit.words, unit.items, &package_wide) })).chain(emit_tables_read_view_slots(described).into_iter()).collect(), borrowing: emit_tables_borrowing_structs_beside(words, items, &package_wide).iter().map(|s| { words.resolve(*s).to_string() }).chain(package_wide.iter().cloned()).collect(), tethered: emit_tables_tethered(&own_contracts, beside), declared_errors: emit_tables_declared_errors(units), carries_input: host.carries_input(&own_contracts), fold_callees, by_name: tables.by_name, grammars: tables.grammars, methods: tables.methods, keep_plans, structs: tables.structs, structs_beside: emit_tables_structs_beside(beside), template_holes: collections::BTreeMap::new(), template_errors: collections::BTreeMap::new(), hole_wraps: host.hole_wraps(), kept_calls: collections::BTreeMap::new(), uses_std: tables.uses_std, is_std: false, fails: tables.fails, trusted_input: build.trusted, unchecked_assumes: unchecked, believed_arithmetic, trusted_lets: plan.lets, escaped_lets: plan.escaped, fast_slots: plan.slots, seeded_calls: host.seeded_calls(), seeds: host.seeds(), proven_indices, proven_arithmetic, proven_negations, proven_calls: proven.calls, facts: propagation, cleaned_types: nikaia_std::index::or(match own_contracts.implementations.get("Cleanup") {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -90,7 +91,10 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     state.kept_calls = holes.kept_calls;
     let world = EmitWorld { words, aliases: nikaia_std::index::get(&units, 0).aliases, items, library };
     state.sums = state.error_sums(&world);
-    EmitContractsMade { state, order_proofs }
+    let coalesced = vc_coalesced(&state.facts);
+    let mut_viewed = vc_mut_viewed(&state.facts);
+    let ask = VcAsk { names: words, items, own: &state.own_contracts, library, lent: &state.facts.lent_lets, coalesced: &coalesced, refused, viewed: nikaia_std::index::get(&units, 0).viewed_arms, mut_viewed: &mut_viewed };
+    EmitContractsMade { give_ups: vc_analyse(&ask, &|e| { emit_holes_literal(parsed, words, e) }).give_ups, state, order_proofs }
 }
 
 pub(crate) fn emit_contracts_pausing_reach(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
