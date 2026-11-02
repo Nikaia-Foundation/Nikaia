@@ -1,0 +1,226 @@
+// crates/nikaia-std/src/tools/emit_contracts.nika
+//
+// **What the emitter works out before it writes a line** (ADR-294, #125, M7),
+// moved from `Emitter::with_contracts` in `emit/mod.rs`: the check's facts,
+// what the prover proved of them, the tables of the file's items and the
+// package's, put together into the `EmitState` the emitter reads from then on.
+// What only Rust can reach - the check and the prover over the parsed file,
+// the sharing analysis, the seeds, the keep plans - is asked of the host
+// (`EmitContractsHost`, implemented in `emit/mod.rs`).
+
+use std::collections
+
+/// What the prover proved of the check's sites (`bounds::Proven`), the parts
+/// the emitter's state reads.
+pub struct EmitContractsProven {
+    pub indices: collections::BTreeSet[i64],
+    pub arithmetic: collections::BTreeSet[i64],
+    pub negations: collections::BTreeSet[i64],
+    pub calls: collections::BTreeMap[i64, String],
+}
+
+/// The build's switches that decide what the state holds.
+pub struct EmitContractsBuild {
+    /// The check leaves every `comptime` and default alone (`Build::leaves_values`).
+    pub leaves_values: bool,
+    /// `remove-bounds-checks:on` and `remove-overflow-checks:on` (ADR-306 D1, D6).
+    pub bounds_removed: bool,
+    pub overflow_removed: bool,
+    /// The package is trusted (ADR-010 D9).
+    pub trusted: bool,
+}
+
+/// The state, and which checks a statement holds and which are proved.
+pub struct EmitContractsMade {
+    pub state: EmitState,
+    pub order_proofs: EmitOrderProofs,
+}
+
+/// What the state asks of the parsed file and the analyses only Rust holds;
+/// `own` is the program's own ledger, before it moves into the state.
+pub trait EmitContractsHost {
+    /// The check's facts with every `comptime` and default left alone
+    /// (`check::propagation_leaving_values`).
+    fn propagation_leaving_values(ref self, own: ref Ledger) -> CheckFacts sync
+    /// The check's facts against the ledgers (`check::propagation_against`).
+    fn propagation_against(ref self, own: ref Ledger) -> CheckFacts sync
+    /// What the prover proves of `facts`' sites against `published` and
+    /// `std`'s ledger (`bounds::proven`); the host keeps the rest.
+    fn proven(ref self, facts: ref CheckFacts, published: ref Ledger) -> EmitContractsProven sync
+    /// Which count each `Shared` value gets (`sharing::analyse_program`).
+    fn shared(ref self, own: ref Ledger) -> collections::BTreeMap[String, Count] sync
+    /// Whether a body may hold type parameters (`Seeds::is_empty`, negated).
+    fn has_seeds(ref self) -> bool sync
+    fn seeded_calls(ref self) -> collections::BTreeMap[String, (i64, i64)] sync
+    fn seeds(ref self) -> EmitSeedsTables sync
+    /// What each call carries of its input (`views::carried`).
+    fn carries_input(ref self, own: ref Ledger) -> collections::BTreeMap[i64, collections::BTreeSet[String]] sync
+    /// The keep plans of the file (`keep::buffer_plans`).
+    fn buffer_plans(ref self, own: ref Ledger) -> Vec[BufferPlan] sync
+    /// What the tier pass wrapped in each hole (`Parsed::hole_wraps`).
+    fn hole_wraps(ref self) -> collections::BTreeMap[i64, Vec[(i64, winnow_grammar::Symbol)]] sync
+}
+
+/// **The emitter's state of one file** against contracts that already exist
+/// - a program's rather than a file's. `units` are the file's view and those
+/// of the files `beside` it, in that order; `checked` the facts of a check
+/// already run as `propagation_against` would run it, `checked_plans` its
+/// keep plans (#727).
+pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H, parsed: ref P, units: ref Vec[ParsedView], beside: ref Vec[ParsedView], program: ref Program, own_contracts: Ledger, described: ref Ledger, library: ref Ledger, checked: CheckFacts?, checked_plans: Vec[BufferPlan]?, build: ref EmitContractsBuild) -> EmitContractsMade sync {
+    let words = units[0].words
+    let items = units[0].items
+    let tables = emit_tables_items(words, items)
+
+    // One type check, both of its answers about where a failure leaves.
+    //
+    // ADR-025 D7 for the loops: the type checker knows which `for` iterates
+    // something whose step can fail, because it infers the iterator's type
+    // and reads the ledger. Matching on the name `io::lines` here would
+    // have caught the one-line form and quietly missed
+    // `let s = io::lines()` followed by `for line in s`. ADR-288 for the
+    // method calls: a receiver's type is the type checker's to know, and
+    // there is one type checker (ADR-288).
+    let propagation = match build.leaves_values {
+        true => host.propagation_leaving_values(own_contracts),
+        false => checked ?? host.propagation_against(own_contracts),
+    }
+    let published_contracts = prove_with_published(own_contracts, propagation.published)
+    // **Proved at every build, written without the check only where the
+    // build says so** (ADR-306 D14): what is proved does not depend on
+    // `remove-bounds-checks` or `remove-overflow-checks`.
+    let proven = host.proven(propagation, published_contracts)
+
+    // **Which checks a statement holds and which are proved**, whatever
+    // the build writes of them: the order of a block's statements reads
+    // it (ADR-379).
+    let order_proofs = EmitOrderProofs {
+        indices: propagation.list_indices.clone(),
+        proved_indices: proven.indices.clone(),
+        operations: propagation.arithmetic.keys().chain(propagation.shifts.keys()).collect(),
+        proved_operations: proven.arithmetic.clone(),
+        negations: propagation.negations.keys().collect(),
+        proved_negations: proven.negations.clone(),
+    }
+
+    // ADR-037 D7: which count each `Shared` value gets. Computed over the
+    // whole unit, because a count belongs to an allocation and a handle's
+    // class may reach into another function.
+    let shared = host.shared(own_contracts)
+
+    // ADR-055 D6, before `own_contracts` is moved into place.
+    let reach = emit_contracts_pausing_reach(units, own_contracts)
+    let code_cycle_graph = emit_contracts_code_cycle_graph(units, own_contracts)
+
+    // **The classes of the file's maps** (ADR-010 D9, #581): where the
+    // package is untrusted, the `let`s, parameters and results whose class
+    // no untrusted key reaches keep the fast hash.
+    let plan = match build.trusted {
+        // Only where a body may hold type parameters is it asked.
+        true => MapPlan { lets: collections::BTreeSet(), slots: collections::BTreeSet(), escaped: if host.has_seeds() { trusted_maps(program, words, library).escaped } else { collections::BTreeSet() } },
+        false => trusted_maps(program, words, library),
+    }
+    let package_wide = emit_tables_package_borrowing(units)
+    let unchecked = build.bounds_removed || build.overflow_removed
+    let fold_callees = emit_holes_fold_callees(parsed, words, tables.grammars)
+    let keep_plans: collections::BTreeMap[String, BufferPlan] = (checked_plans ?? host.buffer_plans(own_contracts)).drain().map(fn(plan) { (plan.key.clone(), plan) }).collect()
+    let proven_indices: collections::BTreeSet[i64] = propagation.list_indices.iter().filter(fn(node) { build.bounds_removed && proven.indices.contains(node) }).collect()
+    // **A shift proved to count inside its width** (ADR-306 D18) is
+    // written as an operation proved inside its type is.
+    let proven_arithmetic: collections::BTreeMap[i64, String] = propagation.arithmetic.iter().chain(propagation.shifts.iter()).filter(fn((at, _)) { build.overflow_removed && proven.arithmetic.contains(at) }).map(fn((at, ty)) { (at, ty.clone()) }).collect()
+    let proven_negations: collections::BTreeMap[i64, String] = propagation.negations.iter().filter(fn((at, _)) { build.overflow_removed && proven.negations.contains(at) }).map(fn((at, ty)) { (at, ty.clone()) }).collect()
+    // **The arithmetic of a believed `assume` is exact** (ADR-376 D2).
+    let believed_arithmetic: collections::BTreeMap[i64, String] = if unchecked { propagation.arithmetic.clone() } else { collections::BTreeMap() }
+    let mut state = EmitState {
+        described: described.clone(),
+        // **A dependency's type keeps its places where it is written**
+        // (ADR-353 D7, #1037): the program's own ledger holds the types
+        // of the packages it reads under their written path
+        // (`two::Node`), with that package's `tethered`; a bare key is
+        // this package's own, read from the units above.
+        view_slots: emit_tables_read_view_slots(own_contracts).drain().filter(fn((name, _)) { name.contains("::") }).chain(units.iter().flat_map(fn(unit) { emit_tables_view_slots(unit.words, unit.items, package_wide) })).chain(emit_tables_read_view_slots(described).drain()).collect(),
+        // **A type of another file of the package that holds a view
+        // borrows here too**: `impl TrEm` in a second file declares the
+        // lifetime the struct was written with in the first.
+        borrowing: emit_tables_borrowing_structs_beside(words, items, package_wide).iter().map(fn(s) { words.resolve(s).clone() }).chain(package_wide.iter().cloned()).collect(),
+        tethered: emit_tables_tethered(own_contracts, beside),
+        declared_errors: emit_tables_declared_errors(units),
+        carries_input: host.carries_input(own_contracts),
+        fold_callees: fold_callees,
+        by_name: tables.by_name,
+        grammars: tables.grammars,
+        methods: tables.methods,
+        keep_plans: keep_plans,
+        structs: tables.structs,
+        structs_beside: emit_tables_structs_beside(beside),
+        template_holes: collections::BTreeMap(),
+        template_errors: collections::BTreeMap(),
+        hole_wraps: host.hole_wraps(),
+        kept_calls: collections::BTreeMap(),
+        uses_std: tables.uses_std,
+        is_std: false,
+        fails: tables.fails,
+        trusted_input: build.trusted,
+        unchecked_assumes: unchecked,
+        believed_arithmetic: believed_arithmetic,
+        trusted_lets: plan.lets,
+        escaped_lets: plan.escaped,
+        fast_slots: plan.slots,
+        seeded_calls: host.seeded_calls(),
+        seeds: host.seeds(),
+        proven_indices: proven_indices,
+        proven_arithmetic: proven_arithmetic,
+        proven_negations: proven_negations,
+        // **A method call whose precondition is proved where it stands**
+        // calls the entry that does not check it (ADR-269 D20, #776), as
+        // a call the prover proved does, whatever the build removes.
+        proven_calls: proven.calls,
+        facts: propagation,
+        cleaned_types: own_contracts.implementations.get("Cleanup")?.clone() ?? collections::BTreeSet(),
+        shared: shared,
+        built_at_build_time: emit_holes_built_at_build_time(parsed, words, items),
+        pausing_reach: reach,
+        code_cycle_graph: code_cycle_graph,
+        own_methods: method_index(own_contracts),
+        library_methods: method_index(library),
+        own_contracts: own_contracts,
+        dsl_drivers: drivers(words, items).drain().collect(),
+        foreign_params: foreign_params(words, items),
+        opaque_handles: opaque_handles(words, items),
+        foreign_results: foreign_results(words, items),
+        entry: true,
+        sums: collections::BTreeMap(),
+    }
+    let holes = emit_holes_tables(parsed, words, items)
+    state.template_holes = holes.holes
+    state.template_errors = holes.errors
+    state.kept_calls = holes.kept_calls
+    let world = EmitWorld { words: words, aliases: units[0].aliases, items: items, library: library }
+    state.sums = state.error_sums(world)
+    return EmitContractsMade { state: state, order_proofs: order_proofs }
+}
+
+/// The functions of this program that can pause **and take part in a cycle**
+/// (ADR-055 D6's first sharp edge), over the file and its `beside` units: a
+/// cycle may pass through two files.
+fn emit_contracts_pausing_reach(units: ref Vec[ParsedView], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let mut graph: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for unit in units {
+        for (key, reached) in pausing_edges(unit.words, unit.aliases, unit.items, contracts).drain() {
+            graph.entry(key).or_default().extend(reached)
+        }
+    }
+    return pausing_reach(graph, contracts)
+}
+
+/// **The calls between the functions that run a `sync` code parameter**, over
+/// the file and its `beside` units (ADR-277 D11, #1129): a cycle that hands a
+/// lambda on may pass through two files, like `emit_contracts_pausing_reach`'s.
+fn emit_contracts_code_cycle_graph(units: ref Vec[ParsedView], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let mut graph: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for unit in units {
+        for (key, reached) in code_cycle_edges(unit.words, unit.aliases, unit.items, contracts).drain() {
+            graph.entry(key).or_default().extend(reached)
+        }
+    }
+    return graph
+}

@@ -205,6 +205,7 @@ COMPILER_NIKA = {
     "emit_tables.nika": "emit: which structs and enums hold a view into the input, and the view-holding fields of each struct that holds two or more (E11-5)",
     "emit_needs.nika": "emit: what a program's preamble has to say (`emit::Needs`), and the abort table of its lines (E12-1)",
     "emit_holes.nika": "emit: the holes of a literal as their readers read them, and the names a walk through them finds (E12-2)",
+    "emit_contracts.nika": "emit: the emitter's state of one file against existing contracts - the check's facts, what is proved of them, the file's and the package's tables (M7)",
     "emit_fold.nika": "emit: a fold and a par_fold of a grammar pattern, step and merge (E10-2)",
     "emit_host.nika": "emit: the host trait the emitter's core asks of the Rust side, and the first moved methods: a cast's operand, a bare range, an index (0.0.816)",
     "emit_seeds.nika": "emit: the map-position seeds: the writer (`EmitSeedsPlace`, the written type's text), the `EmitSeedsTables` with its type queries, and the reader's decisions: the counting fixpoint, the barrier closure, the hands test, and the AST walks of the reader (#867, E12-3a; `analyse_with` stays Rust, behind `EmitSeedsHost`)",

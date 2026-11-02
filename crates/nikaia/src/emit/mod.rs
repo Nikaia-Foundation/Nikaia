@@ -525,25 +525,6 @@ pub fn needs_of(parsed: &Parsed) -> Needs {
     })
 }
 
-/// What each `extern "C"` declaration in this file takes
-/// ([ADR-302](../../docs/specification/adr/adr-302.md) D5), by the name a call
-/// writes.
-fn foreign_params(parsed: &Parsed) -> std::collections::BTreeMap<String, Vec<Type>> {
-    nikaia_std::tools::emit_items::foreign_params(&parsed.interner, &parsed.program.items)
-}
-
-/// The opaque handles this file declares, by name, with the function that ends
-/// each one's life ([ADR-302](../../docs/specification/adr/adr-302.md) D7).
-fn opaque_handles(parsed: &Parsed) -> std::collections::BTreeMap<String, String> {
-    nikaia_std::tools::emit_items::opaque_handles(&parsed.interner, &parsed.program.items)
-}
-
-/// What each `extern "C"` declaration hands back, by the name a call writes
-/// ([ADR-302](../../docs/specification/adr/adr-302.md) D12).
-fn foreign_results(parsed: &Parsed) -> std::collections::BTreeMap<String, Type> {
-    nikaia_std::tools::emit_items::foreign_results(&parsed.interner, &parsed.program.items)
-}
-
 /// `std`'s shipped contracts, parsed once.
 ///
 /// A malformed ledger is a bug in this repository rather than in a user's
@@ -705,7 +686,9 @@ impl<'p> Emitter<'p> {
     }
 
     /// The same, against contracts that already exist - a program's rather than
-    /// a file's.
+    /// a file's. The state is put together in `tools/emit_contracts.nika`;
+    /// what stays here is what only Rust reaches (the seeds, the check and the
+    /// prover over the parsed file, the view changes).
     #[allow(clippy::too_many_arguments)]
     fn with_contracts(
         parsed: &'p Parsed,
@@ -731,122 +714,13 @@ impl<'p> Emitter<'p> {
                 &nikaia_std::tools::emit_tables::emit_tables_described_maps(described),
             )
         };
-        let nikaia_std::tools::emit_tables::EmitTablesItems {
-            grammars,
-            structs,
-            methods,
-            by_name,
-            uses_std,
-            fails,
-        } = nikaia_std::tools::emit_tables::emit_tables_items(
-            &parsed.interner,
-            &parsed.program.items,
-        );
-
-        // One type check, both of its answers about where a failure leaves.
-        //
-        // ADR-025 D7 for the loops: the type checker knows which `for` iterates
-        // something whose step can fail, because it infers the iterator's type
-        // and reads the ledger. Matching on the name `io::lines` here would
-        // have caught the one-line form and quietly missed
-        // `let s = io::lines()` followed by `for line in s`. ADR-288 for the
-        // method calls: a receiver's type is the type checker's to know, and
-        // there is one type checker (ADR-288).
         // The check's keep plans, where it made them as this does (#727).
         let mut checked = checked;
         let checked_plans = checked.as_mut().and_then(|facts| facts.keep_plans.take());
-        let propagation = match build.leaves_values {
-            false if let Some(facts) = checked => facts,
-            true => crate::check::propagation_leaving_values(
-                parsed,
-                beside,
-                &own_contracts,
-                described,
-                reads,
-            ),
-            false => {
-                crate::check::propagation_against(parsed, beside, &own_contracts, described, reads)
-            }
-        };
-        let published_contracts =
-            crate::prove::with_published(&own_contracts, &propagation.published);
-        // **Proved at every build, written without the check only where the
-        // build says so** (ADR-306 D14): what is proved does not depend on
-        // `remove-bounds-checks` or `remove-overflow-checks`.
-        let mut proven = crate::bounds::proven(
-            parsed,
-            &crate::bounds::Sites {
-                lengths: &propagation.std_lengths,
-                sized: &propagation.sized_lengths,
-                char_codes: &propagation.char_codes,
-                arithmetic: &propagation.arithmetic,
-                negations: &propagation.negations,
-                whole_fields: &propagation.whole_fields,
-                array_lengths: &propagation.array_lengths,
-                shifts: &propagation.shifts,
-                std_receivers: &propagation.std_receivers,
-                simd_loads: &propagation.simd_loads,
-                comptime_values: &propagation.comptime_values,
-            },
-            &[&published_contracts, std_ledger()],
-            &std::collections::BTreeSet::new(),
-            build.prove_through_loops,
-        );
-
-        // **Which checks a statement holds and which are proved**, whatever
-        // the build writes of them: the order of a block's statements reads
-        // it (ADR-379).
-        let order_proofs = nikaia_std::tools::emit_order::EmitOrderProofs {
-            indices: propagation.list_indices.iter().copied().collect(),
-            proved_indices: proven.indices.iter().copied().collect(),
-            operations: propagation
-                .arithmetic
-                .keys()
-                .chain(propagation.shifts.keys())
-                .copied()
-                .collect(),
-            proved_operations: proven.arithmetic.iter().copied().collect(),
-            negations: propagation.negations.keys().copied().collect(),
-            proved_negations: proven.negations.iter().copied().collect(),
-        };
-
-        // ADR-037 D7: which count each `Shared` value gets. Computed over the
-        // whole unit, because a count belongs to an allocation and a handle's
-        // class may reach into another function.
         let library = std_ledger();
-        let shared = crate::contracts::sharing::analyse_program(
-            parsed,
-            &own_contracts,
-            library,
-            build.crossings_are_possible(),
-        )
-        .counts;
-
-        // ADR-055 D6, before `own_contracts` is moved into place.
-        let reach = pausing_reach(parsed, beside, &own_contracts);
-        let code_cycle_graph = code_cycle_graph(parsed, beside, &own_contracts);
-
-        // **The classes of the file's maps** (ADR-010 D9, #581): where the
-        // package is untrusted, the `let`s, parameters and results whose class
-        // no untrusted key reaches keep the fast hash.
-        let plan = match provenance {
-            crate::contracts::Provenance::Trusted => crate::contracts::trust::MapPlan {
-                lets: Default::default(),
-                slots: Default::default(),
-                // Only where a body may hold type parameters is it asked.
-                escaped: match seeds_of.is_empty() {
-                    true => Default::default(),
-                    false => crate::contracts::trust::trusted_maps(parsed, library).escaped,
-                },
-            },
-            crate::contracts::Provenance::Untrusted => {
-                crate::contracts::trust::trusted_maps(parsed, library)
-            }
-        };
         let units: Vec<&Parsed> = std::iter::once(parsed)
             .chain(beside.iter().copied())
             .collect();
-        let package_wide = package_borrowing(&units);
         let unit_views: Vec<_> = units
             .iter()
             .map(|p| crate::check::parsed_view_of(p))
@@ -855,170 +729,37 @@ impl<'p> Emitter<'p> {
             .iter()
             .map(|p| crate::check::parsed_view_of(p))
             .collect();
-        let state = EmitState {
-            described: described.clone(),
-            // **A dependency's type keeps its places where it is written**
-            // (ADR-353 D7, #1037): the program's own ledger holds the types
-            // of the packages it reads under their written path
-            // (`two::Node`), with that package's `tethered`; a bare key is
-            // this package's own, read from the units above.
-            view_slots: nikaia_std::tools::emit_tables::emit_tables_read_view_slots(&own_contracts)
-                .into_iter()
-                .filter(|(name, _)| name.contains("::"))
-                .chain(view_slots(&units, &package_wide))
-                .chain(nikaia_std::tools::emit_tables::emit_tables_read_view_slots(
-                    described,
-                ))
-                .collect(),
-            // **A type of another file of the package that holds a view
-            // borrows here too**: `impl TrEm` in a second file declares the
-            // lifetime the struct was written with in the first.
-            borrowing: borrowing_structs_beside(parsed, &package_wide)
-                .into_iter()
-                .map(|s| parsed.text(s).to_string())
-                .chain(package_wide.iter().cloned())
-                .collect(),
-            tethered: nikaia_std::tools::emit_tables::emit_tables_tethered(
-                &own_contracts,
-                &beside_views,
-            ),
-            declared_errors: nikaia_std::tools::emit_tables::emit_tables_declared_errors(
-                &unit_views,
-            ),
-            carries_input: crate::views::carried(parsed, &own_contracts, library)
-                .into_iter()
-                .map(|(at, symbols)| {
-                    (
-                        at as i64,
-                        symbols
-                            .into_iter()
-                            .map(|s| parsed.text(s).to_string())
-                            .collect(),
-                    )
-                })
-                .collect(),
-            fold_callees: nikaia_std::tools::emit_holes::emit_holes_fold_callees(
-                parsed,
-                &parsed.interner,
-                &grammars,
-            ),
-            by_name,
-            grammars,
-            methods,
-            keep_plans: checked_plans
-                .unwrap_or_else(|| {
-                    crate::contracts::keep::buffer_plans(
-                        parsed,
-                        Some(&crate::contracts::keep::beside(&units)),
-                        &own_contracts,
-                        library,
-                    )
-                })
-                .into_iter()
-                .map(|plan| (plan.key.clone(), plan))
-                .collect(),
-            structs,
-            structs_beside: nikaia_std::tools::emit_tables::emit_tables_structs_beside(
-                &beside_views,
-            ),
-            template_holes: Default::default(),
-            template_errors: Default::default(),
-            hole_wraps: parsed
-                .hole_wraps
-                .iter()
-                .map(|(at, wraps)| {
-                    (
-                        *at as i64,
-                        wraps.iter().map(|(n, s)| (*n as i64, *s)).collect(),
-                    )
-                })
-                .collect(),
-            kept_calls: Default::default(),
-            uses_std,
-            is_std: false,
-            fails,
-            trusted_input: provenance == crate::contracts::Provenance::Trusted,
-            unchecked_assumes: build.bounds == crate::bounds::BoundsChecks::Removed
-                || build.overflow == crate::bounds::OverflowChecks::Removed,
-            // **The arithmetic of a believed `assume` is exact** (ADR-376 D2).
-            believed_arithmetic: match build.bounds == crate::bounds::BoundsChecks::Removed
-                || build.overflow == crate::bounds::OverflowChecks::Removed
-            {
-                true => propagation.arithmetic.clone(),
-                false => Default::default(),
-            },
-            trusted_lets: plan.lets.clone(),
-            escaped_lets: plan.escaped.clone(),
-            fast_slots: plan.slots.clone(),
-            seeded_calls: seeds_of.calls().clone(),
-            seeds: seeds_of.tables().clone(),
-            proven_indices: propagation
-                .list_indices
-                .iter()
-                .copied()
-                .filter(|node| {
-                    build.bounds == crate::bounds::BoundsChecks::Removed
-                        && proven.indices.contains(node)
-                })
-                .collect(),
-            // **A shift proved to count inside its width** (ADR-306 D18) is
-            // written as an operation proved inside its type is.
-            proven_arithmetic: propagation
-                .arithmetic
-                .iter()
-                .chain(propagation.shifts.iter())
-                .filter(|(at, _)| {
-                    build.overflow == crate::bounds::OverflowChecks::Removed
-                        && proven.arithmetic.contains(at)
-                })
-                .map(|(at, ty)| (*at, ty.clone()))
-                .collect(),
-            proven_negations: propagation
-                .negations
-                .iter()
-                .filter(|(at, _)| {
-                    build.overflow == crate::bounds::OverflowChecks::Removed
-                        && proven.negations.contains(at)
-                })
-                .map(|(at, ty)| (*at, ty.clone()))
-                .collect(),
-            // **A method call whose precondition is proved where it stands**
-            // calls the entry that does not check it (ADR-269 D20, #776), as
-            // a call the prover proved does, whatever the build removes.
-            proven_calls: proven.calls.clone(),
-            facts: propagation,
-            cleaned_types: own_contracts
-                .implementations
-                .get("Cleanup")
-                .cloned()
-                .unwrap_or_default(),
-            shared,
-            built_at_build_time: nikaia_std::tools::emit_holes::emit_holes_built_at_build_time(
-                parsed,
-                &parsed.interner,
-                &parsed.program.items,
-            ),
-            pausing_reach: reach,
-            code_cycle_graph,
-            own_methods: nikaia_std::tools::ty::method_index(&own_contracts),
-            library_methods: nikaia_std::tools::ty::method_index(library),
-            own_contracts,
-            dsl_drivers: crate::dsl::drivers(parsed).into_iter().collect(),
-            foreign_params: foreign_params(parsed),
-            opaque_handles: opaque_handles(parsed),
-            foreign_results: foreign_results(parsed),
-            entry: true,
-            sums: std::collections::BTreeMap::new(),
-        };
-        let mut state = state;
-        let tables = nikaia_std::tools::emit_holes::emit_holes_tables(
+        let host = ContractsHost {
             parsed,
-            &parsed.interner,
-            &parsed.program.items,
+            beside,
+            units: &units,
+            described,
+            reads,
+            library,
+            build: &build,
+            seeds: &seeds_of,
+            nonnegative_locals: std::cell::RefCell::new(HashMap::new()),
+        };
+        let made = nikaia_std::tools::emit_contracts::emit_contracts_state(
+            &host,
+            parsed,
+            &unit_views,
+            &beside_views,
+            &parsed.program,
+            own_contracts,
+            described,
+            library,
+            checked,
+            checked_plans,
+            &nikaia_std::tools::emit_contracts::EmitContractsBuild {
+                leaves_values: build.leaves_values,
+                bounds_removed: build.bounds == crate::bounds::BoundsChecks::Removed,
+                overflow_removed: build.overflow == crate::bounds::OverflowChecks::Removed,
+                trusted: provenance == crate::contracts::Provenance::Trusted,
+            },
         );
-        state.template_holes = tables.holes;
-        state.template_errors = tables.errors;
-        state.kept_calls = tables.kept_calls;
+        let nonnegative_bodies = host.nonnegative_locals.take();
+        let state = made.state;
         let give_ups = crate::view_changes::analyse(
             parsed,
             &state.own_contracts,
@@ -1028,7 +769,7 @@ impl<'p> Emitter<'p> {
             &crate::view_changes::mut_viewed(&state.facts),
         )
         .1;
-        let mut made = Self {
+        Self {
             parsed,
             build,
             s: state,
@@ -1042,12 +783,10 @@ impl<'p> Emitter<'p> {
                 library,
             },
             seeds: seeds_of,
-            nonnegative_bodies: std::mem::take(&mut proven.nonnegative_locals),
+            nonnegative_bodies,
             main_params: std::cell::RefCell::new(Vec::new()),
-            order_proofs,
-        };
-        made.s.sums = made.s.error_sums(&made.world);
-        made
+            order_proofs: made.order_proofs,
+        }
     }
 
     /// The same, said of a module rather than of the crate root.
@@ -1185,26 +924,142 @@ impl<'p> Emitter<'p> {
     }
 }
 
-// --- Free helpers ---
-
-/// **The view-holding fields of each struct that holds two or more**
-/// (ADR-353 D1, D7): one lifetime each, `pub` or not, in the order written.
-/// An error keeps one place.
-pub(crate) fn view_slots(
-    units: &[&Parsed],
-    borrowing: &std::collections::BTreeSet<String>,
-) -> std::collections::BTreeMap<String, Vec<String>> {
-    units
-        .iter()
-        .flat_map(|parsed| {
-            nikaia_std::tools::emit_tables::emit_tables_view_slots(
-                &parsed.interner,
-                &parsed.program.items,
-                borrowing,
-            )
-        })
-        .collect()
+/// What `tools/emit_contracts.nika` asks of the parsed file and the analyses
+/// only Rust holds; it keeps what the prover proved of the bodies' locals for
+/// the emitter that follows.
+struct ContractsHost<'a> {
+    parsed: &'a Parsed,
+    beside: &'a [&'a Parsed],
+    units: &'a [&'a Parsed],
+    described: &'a crate::contracts::Ledger,
+    reads: &'a Reads,
+    library: &'a crate::contracts::Ledger,
+    build: &'a Build,
+    seeds: &'a seeds::Seeds,
+    nonnegative_locals: std::cell::RefCell<HashMap<usize, HashSet<Symbol>>>,
 }
+
+impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> {
+    fn propagation_leaving_values(
+        &self,
+        own: &crate::contracts::Ledger,
+    ) -> crate::check::CheckFacts {
+        crate::check::propagation_leaving_values(
+            self.parsed,
+            self.beside,
+            own,
+            self.described,
+            self.reads,
+        )
+    }
+
+    fn propagation_against(&self, own: &crate::contracts::Ledger) -> crate::check::CheckFacts {
+        crate::check::propagation_against(self.parsed, self.beside, own, self.described, self.reads)
+    }
+
+    fn proven(
+        &self,
+        facts: &crate::check::CheckFacts,
+        published: &crate::contracts::Ledger,
+    ) -> nikaia_std::tools::emit_contracts::EmitContractsProven {
+        let proven = crate::bounds::proven(
+            self.parsed,
+            &crate::bounds::Sites {
+                lengths: &facts.std_lengths,
+                sized: &facts.sized_lengths,
+                char_codes: &facts.char_codes,
+                arithmetic: &facts.arithmetic,
+                negations: &facts.negations,
+                whole_fields: &facts.whole_fields,
+                array_lengths: &facts.array_lengths,
+                shifts: &facts.shifts,
+                std_receivers: &facts.std_receivers,
+                simd_loads: &facts.simd_loads,
+                comptime_values: &facts.comptime_values,
+            },
+            &[published, std_ledger()],
+            &std::collections::BTreeSet::new(),
+            self.build.prove_through_loops,
+        );
+        *self.nonnegative_locals.borrow_mut() = proven.nonnegative_locals;
+        nikaia_std::tools::emit_contracts::EmitContractsProven {
+            indices: proven.indices.into_iter().collect(),
+            arithmetic: proven.arithmetic.into_iter().collect(),
+            negations: proven.negations.into_iter().collect(),
+            calls: proven.calls,
+        }
+    }
+
+    fn shared(
+        &self,
+        own: &crate::contracts::Ledger,
+    ) -> std::collections::BTreeMap<String, nikaia_std::tools::ty::Count> {
+        crate::contracts::sharing::analyse_program(
+            self.parsed,
+            own,
+            self.library,
+            self.build.crossings_are_possible(),
+        )
+        .counts
+    }
+
+    fn has_seeds(&self) -> bool {
+        !self.seeds.is_empty()
+    }
+
+    fn seeded_calls(&self) -> std::collections::BTreeMap<String, (i64, i64)> {
+        self.seeds.calls().clone()
+    }
+
+    fn seeds(&self) -> nikaia_std::tools::emit_seeds::EmitSeedsTables {
+        self.seeds.tables().clone()
+    }
+
+    fn carries_input(
+        &self,
+        own: &crate::contracts::Ledger,
+    ) -> std::collections::BTreeMap<i64, std::collections::BTreeSet<String>> {
+        crate::views::carried(self.parsed, own, self.library)
+            .into_iter()
+            .map(|(at, symbols)| {
+                (
+                    at as i64,
+                    symbols
+                        .into_iter()
+                        .map(|s| self.parsed.text(s).to_string())
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    fn buffer_plans(
+        &self,
+        own: &crate::contracts::Ledger,
+    ) -> Vec<nikaia_std::tools::buffers::BufferPlan> {
+        crate::contracts::keep::buffer_plans(
+            self.parsed,
+            Some(&crate::contracts::keep::beside(self.units)),
+            own,
+            self.library,
+        )
+    }
+
+    fn hole_wraps(&self) -> std::collections::BTreeMap<i64, Vec<(i64, Symbol)>> {
+        self.parsed
+            .hole_wraps
+            .iter()
+            .map(|(at, wraps)| {
+                (
+                    *at as i64,
+                    wraps.iter().map(|(n, s)| (*n as i64, *s)).collect(),
+                )
+            })
+            .collect()
+    }
+}
+
+// --- Free helpers ---
 
 /// **The same, with the types another file of the package declares**
 /// (Part I 9.1, #544): `outside` names the ones known to hold a view, so a
@@ -1233,75 +1088,6 @@ pub(crate) fn package_borrowing(units: &[&Parsed]) -> std::collections::BTreeSet
         .map(|p| crate::check::parsed_view_of(p))
         .collect();
     nikaia_std::tools::emit_tables::emit_tables_package_borrowing(&views)
-}
-
-/// Walk every expression in a block, including the ones inside statements.
-/// The functions of this program that can pause **and take part in a cycle**
-/// ([ADR-055](../../../docs/specification/adr/adr-055.md) D6's first sharp
-/// edge).
-///
-/// A recursive `async fn` has an infinitely sized future, and `rustc` says so:
-/// *"recursion in an async fn requires boxing"*. `examples/json/src/main.nika` has two of
-/// them - `show` and `longest` both walk a tree - so this is not a case to meet
-/// later, it is the corpus on day one.
-///
-/// **The graph is syntactic, and over-approximating is the safe direction.** A
-/// free call names its callee outright; a method call does not name its receiver's
-/// type, so an edge is drawn to *every* pausing method of that name. Boxing a
-/// call that did not need it costs one allocation and nothing else, while missing
-/// one is a program that does not compile - so where the two readings differ this
-/// takes the wider.
-///
-/// **The cycle test is reachability from a function to itself**, computed to a
-/// fixpoint. `n` is the number of functions in one program, and the obvious
-/// algorithm is the one whose correctness a reader can check.
-///
-/// **The graph is the package's, not the file's**: a cycle may pass through
-/// methods of one type written in two files, and each file is lowered with the
-/// others beside it.
-fn pausing_reach(
-    parsed: &Parsed,
-    beside: &[&Parsed],
-    contracts: &crate::contracts::Ledger,
-) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
-    let mut graph: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
-        Default::default();
-    for unit in std::iter::once(parsed).chain(beside.iter().copied()) {
-        let edges = nikaia_std::tools::emit_reach::pausing_edges(
-            &unit.interner,
-            &unit.aliases,
-            &unit.program.items,
-            contracts,
-        );
-        for (key, reached) in edges {
-            graph.entry(key).or_default().extend(reached);
-        }
-    }
-    nikaia_std::tools::emit_reach::pausing_reach(&graph, contracts)
-}
-
-/// **The calls between the functions that run a `sync` code parameter**, over
-/// the file and its `beside` units (ADR-277 D11, #1129): a cycle that hands a
-/// lambda on may pass through two files, like `pausing_reach`'s.
-fn code_cycle_graph(
-    parsed: &Parsed,
-    beside: &[&Parsed],
-    contracts: &crate::contracts::Ledger,
-) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
-    let mut graph: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
-        Default::default();
-    for unit in std::iter::once(parsed).chain(beside.iter().copied()) {
-        let edges = nikaia_std::tools::emit_reach::code_cycle_edges(
-            &unit.interner,
-            &unit.aliases,
-            &unit.program.items,
-            contracts,
-        );
-        for (key, reached) in edges {
-            graph.entry(key).or_default().extend(reached);
-        }
-    }
-    graph
 }
 
 /// **Which branches an `overlap` starts first**, for `--overlaps`

@@ -1033,6 +1033,14 @@ mod emit_core_args_lowered {
 #[allow(unused_imports)]
 pub use emit_core_args_lowered::*;
 
+mod emit_contracts_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_contracts.rs");
+}
+#[allow(unused_imports)]
+pub use emit_contracts_lowered::*;
+
 mod emit_core_below_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2544,6 +2552,10 @@ pub mod emit_core_leaves {
     pub use super::{emit_bytes_grammar, emit_fold_options};
 }
 pub mod emit_core_match {}
+pub mod emit_contracts {
+    #[allow(unused_imports)]
+    pub use super::{EmitContractsProven, EmitContractsBuild, EmitContractsMade, EmitContractsHost, emit_contracts_state};
+}
 pub mod emit_core_places {}
 pub mod emit_core_reads {}
 pub mod emit_core_types {
