@@ -156,6 +156,11 @@ impl Manifest {
         &self.file.version
     }
 
+    /// What `tools/manifest.nika` read, for a reader in Nikaia.
+    pub fn file(&self) -> &decide::ManifestFile {
+        &self.file
+    }
+
     /// Everything `[dependencies]` declared, in the order Cargo will see it.
     pub fn dependencies(&self) -> &BTreeMap<String, Dependency> {
         &self.dependencies

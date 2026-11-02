@@ -257,33 +257,14 @@ fn rust_dependency(
     manifest: &crate::manifest::Manifest,
     crate_word: &str,
 ) -> Result<(String, toml::Value)> {
-    for (key, declared) in manifest.dependencies() {
-        if key.replace('-', "_") != crate_word {
-            continue;
-        }
-        let crate::manifest::Dependency::Rust(value) = declared else {
-            bail!(
-                "`{key}` is a Nikaia package, not a Rust crate. `nikaia describe` is for \
-                 `[dependencies]` entries with `type = \"rust\"`."
-            );
-        };
-        return Ok((key.clone(), value.clone()));
+    // **Which entry, and the refusals, are Nikaia's** (`tools/describe.nika`,
+    // #125); the `toml` value Cargo is handed is this crate's.
+    let key = describe::describe_rust_dependency(manifest.file(), crate_word)
+        .map_err(|thrown| anyhow::anyhow!("{thrown}"))?;
+    match manifest.dependencies().get(&key) {
+        Some(crate::manifest::Dependency::Rust(value)) => Ok((key, value.clone())),
+        _ => unreachable!("`{key}` was answered as a Rust crate"),
     }
-    // A manifest key whose program word differs (`low-bits` for `low_bits`):
-    // the refusal names the word that works (Part III 15.2).
-    for key in manifest.dependencies().keys() {
-        let word = key.replace('-', "_");
-        if key != &word && key == crate_word {
-            bail!(
-                "`{crate_word}` is the manifest's key, not the crate's name: write \
-                 `nikaia describe {word}`, the name a program writes after `use`."
-            );
-        }
-    }
-    bail!(
-        "`{crate_word}` isn't in this project's `[dependencies]`. Add it to `nikaia.toml` \
-         first: only crates the project depends on can be described."
-    )
 }
 
 /// The crate's `.rs` files, by their path inside the crate.

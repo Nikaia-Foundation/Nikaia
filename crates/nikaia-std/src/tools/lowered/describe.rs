@@ -97,6 +97,21 @@ pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::p
     Some(format!("`{}` has changed since its shipped description was reviewed: `{}`{} changed since.\nA description is written by a person, so the crate's nikaia.contracts has to be reviewed again, not just regenerated.", declared, first, more))
 }
 
+pub fn describe_rust_dependency(manifest: &ManifestFile, crate_word: &str) -> Result<String, nikaia_std::error::Thrown<Refused>> {
+    for (key, declared) in manifest.dependencies.iter() {
+        if key.replace('-', "_") != crate_word { continue; }
+        match declared.shape {
+            DependencyShape::Rust => { return Ok(key.to_string()); },
+            _ => { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is a Nikaia package, not a Rust crate. `nikaia describe` is for `[dependencies]` entries with `type = \"rust\"`.", key)), &"describe_rust_dependency")); },
+        }
+    }
+    for (key, _) in manifest.dependencies.iter() {
+        let word = key.replace('-', "_");
+        if *key != word && key == crate_word { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is the manifest's key, not the crate's name: write `nikaia describe {}`, the name a program writes after `use`.", crate_word, word)), &"describe_rust_dependency")); }
+    }
+    return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` isn't in this project's `[dependencies]`. Add it to `nikaia.toml` first: only crates the project depends on can be described.", crate_word)), &"describe_rust_dependency"))
+}
+
 pub fn describe_unanswered(names: &collections::BTreeSet<String>, crate_word: &str, ledger: &Ledger) -> Vec<String> { names.iter().map(|name| { format!("{}::{}", crate_word, name) }).filter(|name| { !ledger.functions.contains_key(nikaia_std::index::as_text(&name)) && !ledger.types.contains_key(nikaia_std::index::as_text(&name)) }).collect::<Vec<_>>() }
 
 pub(crate) fn describe_header_version(text: &str, crate_word: &str) -> Option<String> {

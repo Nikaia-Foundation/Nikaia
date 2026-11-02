@@ -165,6 +165,32 @@ pub fn describe_adopt_refusal(declared: String, crate_word: String, shipped: ref
     return f"`{declared}` has changed since its shipped description was reviewed: `{first}`{more} changed since.\nA description is written by a person, so the crate's nikaia.contracts has to be reviewed again, not just regenerated."
 }
 
+/// **The manifest's key for the crate a program writes `crate_word`**
+/// (ADR-290 D1), refused where that entry is no Rust crate or none is there.
+///
+/// The key is the manifest's and the word is Cargo's, which is the translation
+/// D1 already makes: `hyper-shim` in the manifest is `hyper_shim` in a program.
+pub fn describe_rust_dependency(manifest: ref ManifestFile, crate_word: String) -> String throws {
+    for (key, declared) in manifest.dependencies {
+        if key.replace("-", "_") != crate_word {
+            continue
+        }
+        match declared.shape {
+            DependencyShape::Rust => return key.clone(),
+            else => throw Refused::Because(f"`{key}` is a Nikaia package, not a Rust crate. `nikaia describe` is for `[dependencies]` entries with `type = \"rust\"`."),
+        }
+    }
+    // A manifest key whose program word differs (`low-bits` for `low_bits`):
+    // the refusal names the word that works (Part III 15.2).
+    for (key, _) in manifest.dependencies {
+        let word = key.replace("-", "_")
+        if key != word && key == crate_word {
+            throw Refused::Because(f"`{crate_word}` is the manifest's key, not the crate's name: write `nikaia describe {word}`, the name a program writes after `use`.")
+        }
+    }
+    throw Refused::Because(f"`{crate_word}` isn't in this project's `[dependencies]`. Add it to `nikaia.toml` first: only crates the project depends on can be described.")
+}
+
 /// **What the program writes of `crate_word` that `ledger` does not answer**
 /// (ADR-290 D5): each of `names` as `crate::name`, in their order, where the
 /// ledger has neither a function nor a type of that name.
