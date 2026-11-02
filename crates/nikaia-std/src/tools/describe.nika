@@ -135,15 +135,14 @@ pub trait DescribeHost {
 }
 
 /// **Why a crate's shipped ledger is refused** (ADR-290 D22, D5), `null`
-/// where it describes the crate as it is now: `described` is the version its
-/// `# crate:` line names for `crate_word`, `version` the crate's, `files` the
-/// crate's sources by their path in it.
+/// where it describes the crate as it is now: `text` is the shipped file,
+/// `version` the crate's, `files` the crate's sources by their path in it.
 ///
 /// A ledger that names another version than the crate's, or whose recorded
 /// sources hash differently from the crate's own, describes code that is no
 /// longer there, and is refused rather than believed.
-pub fn describe_adopt_refusal(declared: String, crate_word: String, shipped: ref fs::Path, derived: ref fs::Path, described: String?, version: String, ledger: ref Ledger, files: ref collections::BTreeMap[String, String]) -> String? {
-    match described {
+pub fn describe_adopt_refusal(declared: String, crate_word: String, shipped: ref fs::Path, derived: ref fs::Path, text: String, version: String, ledger: ref Ledger, files: ref collections::BTreeMap[String, String]) -> String? {
+    match describe_header_version(text, crate_word) {
         null => return f"`{declared}`'s shipped {shipped.display()} doesn't say which crate and version it describes. Its header needs the line `# crate: {crate_word} {version}`.",
         said => {
             if said != version {
@@ -164,6 +163,18 @@ pub fn describe_adopt_refusal(declared: String, crate_word: String, shipped: ref
         else => f" and {moved.len() - 1} more files",
     }
     return f"`{declared}` has changed since its shipped description was reviewed: `{first}`{more} changed since.\nA description is written by a person, so the crate's nikaia.contracts has to be reviewed again, not just regenerated."
+}
+
+// The version the first `# crate: ` line of a shipped ledger names, where it
+// names `crate_word` first; `?` where it names no version after it.
+fn describe_header_version(text: String, crate_word: String) -> String? {
+    let line = text.lines().find_map(fn(line) { line.strip_prefix("# crate: ") }) ?? return null
+    let words: Vec[String] = line.split_whitespace().collect()
+    let first = words.first() ?? return null
+    if first != crate_word {
+        return null
+    }
+    return (words.get(1) ?? "?").clone()
 }
 
 /// **Every description this build reads, as one digest**, for the cache key

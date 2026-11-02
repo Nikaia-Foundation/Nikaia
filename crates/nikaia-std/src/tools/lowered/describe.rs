@@ -79,8 +79,8 @@ pub trait DescribeHost {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::path::Path, derived: &std::path::Path, described: Option<String>, version: &str, ledger: &Ledger, files: &collections::BTreeMap<String, String>) -> Option<String> {
-    match described {
+pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::path::Path, derived: &std::path::Path, text: &str, version: &str, ledger: &Ledger, files: &collections::BTreeMap<String, String>) -> Option<String> {
+    match describe_header_version(text, crate_word) {
         None => { return Some(format!("`{}`'s shipped {} doesn't say which crate and version it describes. Its header needs the line `# crate: {} {}`.", declared, nikaia_std::fs::path::display(&(shipped)), crate_word, version)); },
         Some(ref said) => { if said != version { return Some(format!("`{}`'s shipped {} describes version {}, and the crate is {}. A description is reviewed for one version: review it again in the crate.", declared, nikaia_std::fs::path::display(&(shipped)), said, version)); } },
     }
@@ -95,6 +95,14 @@ pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::p
         _ => format!(" and {} more files", moved.len() as i64 - 1),
     };
     Some(format!("`{}` has changed since its shipped description was reviewed: `{}`{} changed since.\nA description is written by a person, so the crate's nikaia.contracts has to be reviewed again, not just regenerated.", declared, first, more))
+}
+
+pub(crate) fn describe_header_version(text: &str, crate_word: &str) -> Option<String> {
+    let line = match text.lines().find_map(|line| { line.strip_prefix("# crate: ") }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let words: Vec<&str> = line.split_whitespace().collect::<Vec<_>>();
+    let first = match words.first().copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if first != crate_word { return None; }
+    Some(nikaia_std::index::or(words.get(1).copied(), || "?").to_string())
 }
 
 pub async fn describe_descriptions_digest(directory: &std::path::Path) -> String {

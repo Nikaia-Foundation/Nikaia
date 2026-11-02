@@ -156,21 +156,16 @@ fn adopt(root: &Path, crate_word: &str) -> Result<Option<Described>> {
         );
     };
     let sources = crate_sources(root, &value, crate_word, &declared)?;
-    let says = text.lines().find_map(|line| line.strip_prefix("# crate: "));
-    let described = says.and_then(|line| {
-        let mut words = line.split_whitespace();
-        (words.next() == Some(crate_word)).then(|| words.next().unwrap_or("?").to_string())
-    });
     // **The checks are Nikaia's** (`tools/describe.nika`, #125): the version
-    // the header names, the `[sources]` beside it and their hashes against the
-    // crate's own.
+    // the `# crate:` header names, the `[sources]` beside it and their hashes
+    // against the crate's own.
     let derived = crate::contracts::derived_path(&shipped);
     if let Some(refusal) = describe::describe_adopt_refusal(
         &declared,
         crate_word,
         &shipped,
         &derived,
-        described,
+        &text,
         &sources.version,
         &ledger,
         &sources.files,
