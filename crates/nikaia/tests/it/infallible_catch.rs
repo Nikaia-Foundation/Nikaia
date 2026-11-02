@@ -95,7 +95,7 @@ fn what_cannot_fail_is_refused() {
 ///
 /// `risky` declares `throws`; a failure inside an *argument* is still inside
 /// the guarded expression; and a call the ledger does not describe is the C.4
-/// case — `insert_str` is `common`'s stand-in for that, so the day somebody
+/// case — `split_off` is `common`'s stand-in for that, so the day somebody
 /// writes it down this moves with the rest.
 #[test]
 fn what_might_fail_is_left_alone() {

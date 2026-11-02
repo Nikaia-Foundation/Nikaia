@@ -357,10 +357,11 @@ pub fn compile(source: &Path, args: &[&str]) -> Output {
 /// [ADR-295](../../../../docs/specification/adr/adr-295.md) D5 made a member on
 /// a parameter with no bound `NK1126`, so the erasure is now a **refusal** and
 /// not an unknown. This constant stays, and the day somebody writes
-/// `insert_str` down it moves rather than goes.
-pub const UNDESCRIBED_METHOD: &str = "insert_str";
+/// `split_off` down it moves rather than goes (it was `insert_str` until that
+/// was written down, #1180).
+pub const UNDESCRIBED_METHOD: &str = "split_off";
 
-/// The same, as a call on a `String` receiver: `s.insert_str(0, "x")`.
+/// The same, as a call on a `String` receiver: `s.split_off(0, "x")`.
 pub fn undescribed_call(receiver: &str) -> String {
     format!("{receiver}.{UNDESCRIBED_METHOD}(0, \"x\")")
 }
