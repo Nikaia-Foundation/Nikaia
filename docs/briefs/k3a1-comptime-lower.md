@@ -6,7 +6,7 @@ budget_usd: 20
 ---
 # Brief: K3a part 1, `lowered_units`, `without_foreign`, `dependency_modules`, `by_package` of `comptime_run.rs` into `comptime_tree.nika` (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1 (`docs/bootstrap-week.md`, K rows of `comptime_run.rs`). Plan row K3a (`docs/selfhosting-plan.md`, *Large files 3*) split in two: this part (~150 Rust lines: the assembly of a build-time program of several files) now; part 2 (`compute`, `computed`, `worked_out_ahead`, `undeclared_callee`, `culprit`, 284-595) next, over this part's host. S=1.
+Score: self-hosting lane, bootstrap lane 1 (`docs/bootstrap.md`, K rows of `comptime_run.rs`). Plan row K3a (`docs/selfhosting-plan.md`, *Large files 3*) split in two: this part (~150 Rust lines: the assembly of a build-time program of several files) now; part 2 (`compute`, `computed`, `worked_out_ahead`, `undeclared_callee`, `culprit`, 284-595) next, over this part's host. S=1.
 
 Cut: crates/nikaia/src/comptime_run.rs:119-271
 Convert: --profile check-free --prefix comptime_

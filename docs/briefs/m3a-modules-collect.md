@@ -6,7 +6,7 @@ budget_usd: 25
 ---
 # Brief: M3a, `modules.rs`' collection of units into `modules.nika` (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1 (`docs/bootstrap-week.md`, Fri 10-30 row: M3 `modules.rs` collect, taken a day early as the plan's second row). Plan row M3a of `docs/selfhosting-plan.md`, *Large files 3: lane 1's drivers* (draft 95 %). S=2, C~3-5 M (comparable: M1, M2). Different file from P5a (`project.rs`), so the two do not shift each other's lines.
+Score: self-hosting lane, bootstrap lane 1 (`docs/bootstrap.md`, row: M3 `modules.rs` collect, taken a day early as the plan's second row). Plan row M3a of `docs/selfhosting-plan.md`, *Large files 3: lane 1's drivers* (draft 95 %). S=2, C~3-5 M (comparable: M1, M2). Different file from P5a (`project.rs`), so the two do not shift each other's lines.
 
 Cut: crates/nikaia/src/modules.rs:37-480
 Cut: crates/nikaia/src/modules.rs:1066-1088

@@ -6,7 +6,7 @@ budget_usd: 25
 ---
 # Brief: P4b, a build's foreign boundary of `project.rs` into Nikaia (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1 (`docs/bootstrap-week.md`, Wed 10-28 row: P4a, P4b, `project.rs` -660). Plan row P4, second half. S=2, C~3-5 M (comparable: P3a, S2). P4a is on `develop` (3620d27, `project_members.nika`, 80.7 %).
+Score: self-hosting lane, bootstrap lane 1 (`docs/bootstrap.md`, row: P4a, P4b, `project.rs` -660). Plan row P4, second half. S=2, C~3-5 M (comparable: P3a, S2). P4a is on `develop` (3620d27, `project_members.nika`, 80.7 %).
 
 Cut: crates/nikaia/src/project.rs:1408-1547
 Cut: crates/nikaia/src/project.rs:1578-1596
@@ -19,7 +19,7 @@ The driver converts these before you start and names the draft (`.draft.nika`, `
 * Plan row P4 (copied), second half: `Foreign`, `crates_beneath`, `Foreign::of`/`packages`, `sources_that_moved`, `proofs_digest`, `description_at` into `project_members.nika`; `Foreign::library` stays Rust (`contracts::std_library`). Draft share of the row 88%.
 * Locations at 905bee7, `crates/nikaia/src/project.rs`: `pub struct Foreign` :1438 (doc from :1408) with `impl Default` :1476, `crates_beneath` :1491, `impl Foreign` :1511 (`of` :1517, `library` :1561, `packages` :1587), `sources_that_moved` :1606, `proofs_digest` :1630, `description_at` :1657. Callers: `project.rs` :1051 (`proofs_digest`), :1175-1176 and :2994-2995 (`Foreign::of` / `default`), :1220 (`packages`), :1525/:1529 (`description_at`, `sources_that_moved`); `modules.rs` :1086 (`Foreign::of(root).descriptions`); `Around<'a>` :1679 holds `&'a Foreign`.
 * P4a's manifest view: `trait ProjectMembersHost` (`project_members.nika` :30) with `manifest_at(ref self, path: ref fs::Path) -> ProjectMembersManifest? sync` (:33); `ProjectMembersManifest` carries the path dependencies and the foreign crates. `crates_beneath` and `Foreign::of` read manifests through it, not through a new method.
-* `std` has no `Seq.chain` (#924, not this week): write a loop, as P4a did.
+* `std` has no `Seq.chain` (#924): write a loop, as P4a did.
 * `Ledger` is already Nikaia's (`tools/ty.nika` :1233). Its Rust-side methods (`LedgerOps` in `crates/nikaia/src/contracts/mod.rs`: `empty`/`blank`, `absorb` :305, `read_beside` :864) stay Rust; `crate::describe::crate_root` (`describe.rs` :453) stays Rust.
 * `std` has no SHA-256 (Part III 17). The precedent is S2's: a host trait method `fn sha256_hex(ref self, read: ref Vec[u8]) -> String sync` (`SysrootHost`, `tools/sysroot_cache.nika` :50-52), implemented in Rust with `orchestrator::cache::sha256_hex`. Use the same shape: one host trait (e.g. `ForeignHost`) for `sha256_hex`, `read_beside`, `absorb`, `empty_ledger`, `crate_root`; the manifest reads go through P4a's view (`manifest_at` or what P4a named in its commit).
 * `std` counterparts checked for the rest: `fs::read`, `fs::read_dir`, `fs::canonical(path, fs::Root::Anywhere)`, `Path.join`/`file_name`, `Set` and `Map` exist. If a moved line needs a `std` call that is missing, stop and report it under `Needs:`.
@@ -34,7 +34,7 @@ The driver converts these before you start and names the draft (`.draft.nika`, `
 A lowering defect met is fixed in the compiler as its own commit with a test (*Fix, do not work around*, `CLAUDE.md`), except #909 and #916 above; if it is more than one step, stop and report it under `Needs:`.
 
 ## Done when
-`nikaia test --project tests/compiler` once, no `--both-settings` (no `check_*`/`emit_*` file changes, bootstrap-week L4c); `it` tests filtered on `foreign describe contracts_across proofs NK2504 rust_dep` plus the guard set of `.claude/agents/builder.md` (not `nikaia_test::the_compiler_test_package_*`); `nikaia --lib project::` passes; clippy clean; lower-std fixpoint. Commit `project: a build's foreign boundary into Nikaia (P4b)`, `Part: #125`. Changelog: none (a move).
+`nikaia test --project tests/compiler` once, no `--both-settings` (no `check_*`/`emit_*` file changes, bootstrap L4c); `it` tests filtered on `foreign describe contracts_across proofs NK2504 rust_dep` plus the guard set of `.claude/agents/builder.md` (not `nikaia_test::the_compiler_test_package_*`); `nikaia --lib project::` passes; clippy clean; lower-std fixpoint. Commit `project: a build's foreign boundary into Nikaia (P4b)`, `Part: #125`. Changelog: none (a move).
 
 ## Stop and report if
 An open design choice beyond the ones left above; a `.stderr` or message that would change; a missing `std` call; an error in another agent's file.

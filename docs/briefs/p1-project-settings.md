@@ -6,7 +6,7 @@ budget_usd: 25
 ---
 # Brief: P1, the build settings' words of `project.rs` into Nikaia (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1 (`docs/bootstrap-week.md`, Thu 10-29 row: P1 settings, then K1+K2, P5). Plan row P1 (`docs/selfhosting-plan.md`), ~300 lines, draft share 59 % (the converter's *fewer arguments than holes* TODO in `choices`' 12-hole `format!`; under 60 % the driver prints `CONVERT` and goes on, the converter lane repairs beside you: rewrite that one call by hand). Runs after P4b, whose lines lie below these, so these ranges hold.
+Score: self-hosting lane, bootstrap lane 1 (`docs/bootstrap.md`, row: P1 settings, then K1+K2, P5). Plan row P1 (`docs/selfhosting-plan.md`), ~300 lines, draft share 59 % (the converter's *fewer arguments than holes* TODO in `choices`' 12-hole `format!`; under 60 % the driver prints `CONVERT` and goes on, the converter lane repairs beside you: rewrite that one call by hand). Runs after P4b, whose lines lie below these, so these ranges hold.
 
 Cut: crates/nikaia/src/project.rs:171-302
 Cut: crates/nikaia/src/project.rs:441-452
@@ -32,7 +32,7 @@ The driver converts these before you start and names the draft (`.draft.nika`, `
 A lowering defect met is fixed in the compiler as its own commit with a test (*Fix, do not work around*, `CLAUDE.md`), except #909 and #916 above; if it is more than one step, stop and report it under `Needs:`.
 
 ## Done when
-`nikaia --lib project::` passes; `it` tests filtered on `project:: c_library bounds_checks target_has simd assert` plus the guard set of `.claude/agents/builder.md` (not `nikaia_test::the_compiler_test_package_*`); `nikaia test --project tests/compiler` once, no `--both-settings` (no `check_*`/`emit_*` file changes, bootstrap-week L4c); clippy clean; lower-std fixpoint. Commit `project: the build settings' words into Nikaia (P1)`, `Part: #125`. Changelog: none (a move).
+`nikaia --lib project::` passes; `it` tests filtered on `project:: c_library bounds_checks target_has simd assert` plus the guard set of `.claude/agents/builder.md` (not `nikaia_test::the_compiler_test_package_*`); `nikaia test --project tests/compiler` once, no `--both-settings` (no `check_*`/`emit_*` file changes, bootstrap L4c); clippy clean; lower-std fixpoint. Commit `project: the build settings' words into Nikaia (P1)`, `Part: #125`. Changelog: none (a move).
 
 ## Stop and report if
 An open design choice beyond the ones left above; a `.stderr` or message that would change; a missing `std` call besides the two named; an error in another agent's file.

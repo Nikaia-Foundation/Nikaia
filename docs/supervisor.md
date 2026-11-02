@@ -580,7 +580,7 @@ The brief is the work order.
 The owner sets the stage. 1 Serial: one builder at a time; a defect found on
 the way is repaired first. 2 Two: a second builder on files the first does not
 touch. 3 More: by the owner, with stage 2's figures. Now (owner, 2026-10-26,
-widened by `docs/bootstrap-week.md` 3): stage 1 within each lane, the lanes
+widened by `docs/bootstrap.md` 3): stage 1 within each lane, the lanes
 side by side; throughput comes from scripts; the main session is woken only on
 an escalation.
 
@@ -597,8 +597,8 @@ tokens and turns per finished step, steps per day; counted, not timed.
 open lanes, what blocks what, figures, decisions in force that no ADR or issue
 holds. What happened is in `git log` and the issues.*
 **2026-11-01 (after fb4c04b6).** Self-hosting: 83.2 % of the toolchain as
-committed (`scripts/self_hosting.py`). Plan: `docs/bootstrap-week.md` (deadline
-2026-11-04), rows and `Cut:` lines in `docs/selfhosting-plan.md`.
+committed (`scripts/self_hosting.py`). Plan: `docs/bootstrap.md`,
+rows and `Cut:` lines in `docs/selfhosting-plan.md`.
 
 * **CI**: RED 05fffc84 (`bootstrap_compiler`, `badges.py --check`) fixed
   forward by QA 7b3c9c5e; ci/briefs green at fb4c04b6. Cause: b22's edit of

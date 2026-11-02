@@ -21,7 +21,7 @@ fn tag[H: Hasher](seed: String, host: ref H) -> String {
 Lowers to `fn tag<'r, H>(seed: &'r str, host: &'r H) -> &'r str`; rustc: *cannot return value referencing local `hex`*. With `host: ref Plain` (a concrete type) the result is `-> &'static str`, also wrong. The result is a view of a local owned `String`, not of a parameter: the function must return an owned `String` (the checker's own reading of `-> String`).
 
 ## Locations
-Lowering lane (`docs/bootstrap-week.md` section 3): the result tier is decided in `text_tiers.nika` / `views.nika` (Rust `text_tiers.rs`, `views.rs`); resolve with `nikaia run scripts/where.nika -- NAME`.
+Lowering lane (`docs/bootstrap.md` section 3): the result tier is decided in `text_tiers.nika` / `views.nika` (Rust `text_tiers.rs`, `views.rs`); resolve with `nikaia run scripts/where.nika -- NAME`.
 
 ## To build
 1. A `tests/compiler` program with the probe (generic and concrete host) and its `.stdout`; it fails today in rustc.
@@ -29,7 +29,7 @@ Lowering lane (`docs/bootstrap-week.md` section 3): the result tier is decided i
 
 Report form: `docs/briefs/common.part`.
 
-Work in checkout C3 (`/home/user/nikaia-fix`, `docs/bootstrap-week.md` section 3); before pushing, `git fetch origin develop && git rebase origin/develop`. The commit says `Fixes #933`.
+Work in checkout C3 (`/home/user/nikaia-fix`, `docs/bootstrap.md` section 3); before pushing, `git fetch origin develop && git rebase origin/develop`. The commit says `Fixes #933`.
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.

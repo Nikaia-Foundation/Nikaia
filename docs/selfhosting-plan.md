@@ -803,7 +803,7 @@ existing file, so they may run side by side). Known risk of each:
 
 Read at a4b33a0 (`project.rs` 3,565 lines, `modules.rs` 1,088, `comptime_run.rs`
 1,269, `grammar_run.rs` 522, `manifest.rs` 599, `build_time.rs` 387: 7,430). The
-earlier tables' *Stays Rust* drivers are this week's work (`docs/bootstrap-week.md`
+earlier tables' *Stays Rust* drivers are now moved too (`docs/bootstrap.md`
 section 1): the question per row is which part is Nikaia over host callbacks and which
 adapter lines it leaves. Line ranges are at a4b33a0: re-grep the names before cutting.
 *Draft* is as above, `rs2nika --profile check-free --prefix X_ --file` over a scratch

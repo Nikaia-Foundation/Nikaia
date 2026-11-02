@@ -6,7 +6,7 @@ budget_usd: 25
 ---
 # Brief: MF, `manifest.rs`' `Manifest` and its readers into `manifest.nika` (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1 (`docs/bootstrap-week.md`, Fri 10-30 row: `manifest.rs`). Plan row MF of `docs/selfhosting-plan.md`, *Large files 3* (draft 100 %, no prerequisite). S=2, C~3-5 M (comparable: P4a, M2). Runs after M3a (`modules.rs`); different files.
+Score: self-hosting lane, bootstrap lane 1 (`docs/bootstrap.md`, row: `manifest.rs`). Plan row MF of `docs/selfhosting-plan.md`, *Large files 3* (draft 100 %, no prerequisite). S=2, C~3-5 M (comparable: P4a, M2). Runs after M3a (`modules.rs`); different files.
 
 Cut: crates/nikaia/src/manifest.rs:20-358
 Convert: --profile check-free --prefix manifest_

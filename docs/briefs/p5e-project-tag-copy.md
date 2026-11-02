@@ -6,7 +6,7 @@ budget_usd: 20
 ---
 # Brief: P5a rest, `program_name`, `root_tag`, `own_copy`, `trace` of `project.rs` into `project_settings.nika` (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1 (`docs/bootstrap-week.md`, P5 `project.rs` build drivers). The rest of plan row P5a (`docs/selfhosting-plan.md`, *Large files 3*), left by 2e13458 on two defects: #934 (fixed b1759a1) and #933 (brief `b933-method-result-owned.md`, the brief before this one in the batch). Small move (~70 lines), S=1.
+Score: self-hosting lane, bootstrap lane 1 (`docs/bootstrap.md`, P5 `project.rs` build drivers). The rest of plan row P5a (`docs/selfhosting-plan.md`, *Large files 3*), left by 2e13458 on two defects: #934 (fixed b1759a1) and #933 (brief `b933-method-result-owned.md`, the brief before this one in the batch). Small move (~70 lines), S=1.
 
 Cut: crates/nikaia/src/project.rs:2740-2779
 Cut: crates/nikaia/src/project.rs:3365-3391

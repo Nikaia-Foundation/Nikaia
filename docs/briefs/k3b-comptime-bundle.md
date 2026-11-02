@@ -7,7 +7,7 @@ effort: medium
 ---
 # Brief: K3b, the bundle and the `comptime` run of `comptime_run.rs` into `comptime_bundle.nika` (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1 (`docs/bootstrap-week.md`). Plan row K3b of `docs/selfhosting-plan.md` (draft 32 %; prerequisites K3a and BT built, #920 built 8eb22790, #922 steps 1-2 built, step 4 by `s922b-metadata-times.md` right before this brief). S=2, C~3-5 M (comparable: P5d, the reverted GR b070adb9). Second of the batch; P5c (`project.rs`) runs after it and calls this brief's `comptime_bundle_write_if_changed`.
+Score: self-hosting lane, bootstrap lane 1 (`docs/bootstrap.md`). Plan row K3b of `docs/selfhosting-plan.md` (draft 32 %; prerequisites K3a and BT built, #920 built 8eb22790, #922 steps 1-2 built, step 4 by `s922b-metadata-times.md` right before this brief). S=2, C~3-5 M (comparable: P5d, the reverted GR b070adb9). Second of the batch; P5c (`project.rs`) runs after it and calls this brief's `comptime_bundle_write_if_changed`.
 
 Cut: crates/nikaia/src/comptime_run.rs:716-1264
 Convert: --profile check-free --prefix comptime_bundle_

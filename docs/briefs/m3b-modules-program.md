@@ -6,7 +6,7 @@ budget_usd: 25
 ---
 # Brief: M3b, `Program::of` and `Program::emit_reading` of `modules.rs` into `modules.nika` (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1 (`docs/bootstrap-week.md`). Plan row M3b of `docs/selfhosting-plan.md`, *Large files 3* (draft 100 %, prerequisite M3a built in 1890fc9). S=2, C~3-5 M (comparable: M3a, P4b). Runs after MF (`manifest.rs`); different files, both add to the index `lowered.rs`, so serial.
+Score: self-hosting lane, bootstrap lane 1 (`docs/bootstrap.md`). Plan row M3b of `docs/selfhosting-plan.md`, *Large files 3* (draft 100 %, prerequisite M3a built in 1890fc9). S=2, C~3-5 M (comparable: M3a, P4b). Runs after MF (`manifest.rs`); different files, both add to the index `lowered.rs`, so serial.
 
 Cut: crates/nikaia/src/modules.rs:455-554
 Cut: crates/nikaia/src/modules.rs:657-828

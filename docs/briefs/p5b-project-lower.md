@@ -6,7 +6,7 @@ budget_usd: 25
 ---
 # Brief: P5b, `lower_reading` of `project.rs` into a new `project_lower.nika` (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1 (`docs/bootstrap-week.md`). Plan row P5b of `docs/selfhosting-plan.md`, *Large files 3* (draft 36 %; prerequisites M3b built in 093923c, P5d before it in this batch). S=2, C~4-6 M (comparable: M3b). Narrowed from the plan row: `lower`, `reads_for`, `reads_for_file`, `read_file`, `packages_of_file` are adapters already, `project_for_file`'s name rule needs `is_ascii_alphanumeric` (#924, after 11-04) and `foreign_library` needs `std_library` (Rust): all stay.
+Score: self-hosting lane, bootstrap lane 1 (`docs/bootstrap.md`). Plan row P5b of `docs/selfhosting-plan.md`, *Large files 3* (draft 36 %; prerequisites M3b built in 093923c, P5d before it in this batch). S=2, C~4-6 M (comparable: M3b). Narrowed from the plan row: `lower`, `reads_for`, `reads_for_file`, `read_file`, `packages_of_file` are adapters already, `project_for_file`'s name rule needs `is_ascii_alphanumeric` (#924) and `foreign_library` needs `std_library` (Rust): all stay.
 
 Cut: crates/nikaia/src/project.rs:730-1108
 Convert: --profile check-free --prefix project_lower_

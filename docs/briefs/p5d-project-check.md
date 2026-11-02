@@ -6,7 +6,7 @@ budget_usd: 25
 ---
 # Brief: P5d, `check`, `newly`, `keeps_that_moved` and `explain` of `project.rs` into `project_check.nika` (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1 (`docs/bootstrap-week.md`). Plan row P5d of `docs/selfhosting-plan.md`, *Large files 3* (draft 54 %; prerequisite P2 built). S=2, C~3-5 M (comparable: M3b, P4b). First of the batch; P5b (`lower_reading`, same file, other lines) runs after it.
+Score: self-hosting lane, bootstrap lane 1 (`docs/bootstrap.md`). Plan row P5d of `docs/selfhosting-plan.md`, *Large files 3* (draft 54 %; prerequisite P2 built). S=2, C~3-5 M (comparable: M3b, P4b). First of the batch; P5b (`lower_reading`, same file, other lines) runs after it.
 
 Cut: crates/nikaia/src/project.rs:1193-1488
 Cut: crates/nikaia/src/project.rs:1490-1674

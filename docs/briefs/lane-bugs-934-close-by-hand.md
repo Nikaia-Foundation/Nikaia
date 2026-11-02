@@ -28,7 +28,7 @@ Compiler lane: NK2605 is raised from the `check_*` files (`check_may_fail.nika`,
 
 Report form: `docs/briefs/common.part`.
 
-Work in checkout C3 (`/home/user/nikaia-fix`, `docs/bootstrap-week.md` section 3); before pushing, `git fetch origin develop && git rebase origin/develop`. The commit says `Fixes #934`.
+Work in checkout C3 (`/home/user/nikaia-fix`, `docs/bootstrap.md` section 3); before pushing, `git fetch origin develop && git rebase origin/develop`. The commit says `Fixes #934`.
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
 * Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.

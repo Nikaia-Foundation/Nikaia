@@ -7,7 +7,7 @@ budget_usd: 25
 
 # R0: the compiler's Nikaia leaves `std` for `crates/nikaia-compiler` (#921)
 
-**Score terms** (`docs/priorities.md`, `docs/bootstrap-week.md` section 1):
+**Score terms** (`docs/priorities.md`, `docs/bootstrap.md` section 1):
 owner's correction 2026-10-28, point 3: the compiler's Nikaia sits in
 `crates/nikaia-std/src/tools` and from outside reads as part of the standard
 library. One mechanical move commit, at a quiet moment; no line of logic
@@ -138,7 +138,7 @@ Rust paths: `nikaia_std::tools::X` becomes `nikaia_compiler::X`
    `scripts/where.nika`, `scripts/tokenspeed.nika`, `scripts/test_bump.sh`,
    `.github/` (if any), `.claude/agents/builder.md`, `docs/builder-facts.md`,
    `docs/selfhosting-plan.md`, `docs/modular-compiler.md`,
-   `examples/README.md`. **Not** in `docs/bootstrap-week.md` (it names both
+   `examples/README.md`. **Not** in `docs/bootstrap.md` (it names both
    places on purpose), `docs/history/`, `docs/briefs/` (records), `CHANGELOG.md`, or ADRs other
    than ADR-294. `CLAUDE.md`'s clippy sentence becomes: "Lints about code the
    lowering writes are allowed at the crate root of `crates/nikaia-compiler`
@@ -215,7 +215,7 @@ Rust paths: `nikaia_std::tools::X` becomes `nikaia_compiler::X`
   A compile error that is not a path or a visibility is `Found:`, stop.
 * Disk: `NIKAIA_CACHE_LIMIT=2G`. C1's `target/` is the driver's: do not
   delete it; report `df -h /home/user` before and after. At most two clones
-  with `target/` besides (bootstrap week: D-1).
+  with `target/` besides (bootstrap: D-1).
 * Not yours (other agents' files in C1, leave them as they are):
   `docs/briefs/*.report.md`, `docs/briefs/*.run.json`, `docs/briefs/cost.txt`,
   `docs/briefs/tokens.txt`, `crates/rs2nika/convert/tests/many_files.in/out/`.
