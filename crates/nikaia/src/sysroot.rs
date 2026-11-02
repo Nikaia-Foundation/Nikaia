@@ -52,17 +52,6 @@ const TOOLS_PACKAGE: &str = "lowered.rs";
 /// one `.nika` recompiles one module.
 const TOOLS_FILES: &str = "lowered";
 
-/// **What `lib.rs` writes by hand beside the package, by the file it serves**:
-/// the names a Rust caller reaches through that file's path, which are Rust
-/// because Nikaia cannot say them - a `Span`'s `usize` doors, and the one call
-/// that turns a generated parser into a result. The per-file modules
-/// [`lower_tools`] writes list them with the file's own names.
-const HAND_WRITTEN: &[(&str, &[&str])] = &[
-    ("ast.nika", &["LONGEST_SOURCE", "offset"]),
-    ("http1.nika", &["written"]),
-    ("rust.nika", &["file"]),
-];
-
 /// What the Rust a tool module reads says it does (ADR-294 D9.3).
 const TOOLS_DESCRIBED: &str = include_str!("../../nikaia-std/src/tools/described.contracts");
 
@@ -240,10 +229,7 @@ impl Codegen {
     /// One line per key, in key order, so the same table renders the same way
     /// however it was read.
     fn render(&self) -> String {
-        self.table
-            .iter()
-            .map(|(key, value)| format!("{key}={value}\n"))
-            .collect()
+        nikaia_std::tools::sysroot_package::sysroot_package_render(&self.table)
     }
 }
 
@@ -328,20 +314,22 @@ pub fn lower_std_module(path: &Path) -> Result<String> {
 /// findings cost ten cycles when only the first was reported, and each cycle
 /// can be a rebuild.
 fn every_refusal(path: &Path, source: &str, refusals: &[&crate::check::Finding]) -> String {
-    let mut ordered: Vec<&&crate::check::Finding> = refusals.iter().collect();
-    ordered.sort_by_key(|finding| finding.span.at());
-    let shown: Vec<String> = ordered
-        .into_iter()
-        .map(|finding| {
-            crate::diagnostics::render_finding(finding, &path.display().to_string(), source)
-        })
-        .collect();
-    format!(
-        "{}\n{} refusal{} in {}",
-        shown.join("\n"),
-        refusals.len(),
-        if refusals.len() == 1 { "" } else { "s" },
-        path.display()
+    struct Render;
+    impl nikaia_std::tools::sysroot_package::SysrootPackageHost for Render {
+        fn render_finding(
+            &self,
+            finding: &crate::check::Finding,
+            path: &str,
+            source: &str,
+        ) -> String {
+            crate::diagnostics::render_finding(finding, path, source)
+        }
+    }
+    nikaia_std::tools::sysroot_package::sysroot_package_every_refusal(
+        &path.display().to_string(),
+        source,
+        refusals,
+        &Render,
     )
 }
 
@@ -407,51 +395,10 @@ pub fn lower_tools_files_on(
 /// The ranges are the statements' extent, so a comment between two statements
 /// goes with them and a comment outside a body stays.
 fn without_bodies(source: &str, parsed: &crate::parser::Parsed) -> String {
-    fn bodies(item: &crate::ast::Spanned<crate::ast::Item>, cut: &mut Vec<(usize, usize)>) {
-        let block = match &item.node {
-            crate::ast::Item::Fn { body, .. } => body,
-            crate::ast::Item::Test { body, .. } | crate::ast::Item::Bench { body, .. } => body,
-            crate::ast::Item::Impl { methods, .. } => {
-                methods.iter().for_each(|m| bodies(m, cut));
-                return;
-            }
-            _ => return,
-        };
-        if let (Some(first), Some(last)) = (block.stmts.first(), block.stmts.last()) {
-            cut.push((first.span.start as usize, last.span.end as usize));
-        }
-    }
-    let mut cut: Vec<(usize, usize)> = Vec::new();
-    parsed
-        .program
-        .items
-        .iter()
-        .for_each(|i| bodies(i, &mut cut));
-    cut.sort();
-    let mut kept = String::new();
-    let mut at = 0;
-    for (start, end) in cut {
-        if start < at
-            || end > source.len()
-            || !source.is_char_boundary(start)
-            || !source.is_char_boundary(end)
-        {
-            // Not a range this can trust: the whole text is the interface.
-            return source.to_string();
-        }
-        kept.push_str(&source[at..start]);
-        at = end;
-    }
-    kept.push_str(&source[at..]);
-    // A line that is only a comment says nothing to another file (a `///`
-    // line is a doc and stays).
-    kept.lines()
-        .filter(|line| {
-            let line = line.trim_start();
-            !line.starts_with("//") || line.starts_with("///")
-        })
-        .flat_map(|line| [line, "\n"])
-        .collect()
+    nikaia_std::tools::sysroot_package::sysroot_package_without_bodies(
+        source,
+        &parsed.program.items,
+    )
 }
 
 /// **The package's files read and parsed**: each file's size and text, and
@@ -727,93 +674,28 @@ fn lower_tools_files_cached(
     let results = in_parallel(&order, threads, lower_one);
     timer.lap("files");
 
-    let mut imports: Vec<String> = Vec::new();
-    let mut modules: Vec<(String, String)> = Vec::new();
-    let mut facades: Vec<(String, String)> = Vec::new();
-    let mut files: Vec<(String, String)> = Vec::new();
-    let mut grammar = false;
-    for ((path, unit), (lowered, checking, emitting)) in paths.iter().zip(&parsed).zip(results) {
+    let mut texts: Vec<String> = Vec::new();
+    for ((path, _), (lowered, checking, emitting)) in paths.iter().zip(&parsed).zip(results) {
         timer.file(path, checking, emitting);
         let (lowered, was_cached) = lowered?;
         *reused += usize::from(was_cached);
-        // **One preamble for the package**: a `use std::…` is the file's
-        // import of a `std` module, and one namespace imports it once.
-        let mut body = String::new();
-        let mut lines = lowered.lines().peekable();
-        while let Some(line) = lines.next() {
-            if line == "#[allow(unused_imports)]"
-                && let Some(next) = lines.peek()
-                && next.starts_with("use nikaia_std::")
-            {
-                let import = next.to_string();
-                lines.next();
-                if !imports.contains(&import) {
-                    imports.push(import);
-                }
-                continue;
-            }
-            body.push_str(line);
-            body.push('\n');
-        }
-        grammar |= unit
-            .program
-            .items
-            .iter()
-            .any(|item| matches!(item.node, crate::ast::Item::Grammar(_)));
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default();
-        let stem = name.trim_end_matches(".nika");
-        // **One module per file** (#667 step 4): the file's items see the
-        // package's names through `use super::*`, and the package root
-        // re-exports them; an item another file may call is `pub(crate)`.
-        modules.push((stem.to_string(), format!(
-            "mod {stem}_lowered {{\n    #[allow(unused_imports)]\n    use super::*;\n    include!(\"{TOOLS_FILES}/{stem}.rs\");\n}}\n#[allow(unused_imports)]\npub use {stem}_lowered::*;\n\n"
-        )));
-        let text = format!(
-            "// Generated by the Nikaia bootstrap compiler (Stage 0).\n// Edit {name} in the directory above, not this file.\n\n{}",
-            shared(body.trim_start_matches('\n'))
-        );
-        files.push((format!("{TOOLS_FILES}/{stem}.rs"), text));
-        facades.push((stem.to_string(), facade(name, unit)));
+        texts.push(lowered);
     }
-    // **Sorted by file**, whatever order the files were read in.
-    modules.sort();
-    facades.sort();
-    files.sort();
-
-    let mut rust = String::new();
-    rust.push_str("// Generated by the Nikaia bootstrap compiler (Stage 0).\n");
-    rust.push_str("// Edit the .nika sources in this directory, not this file.\n\n");
-    if grammar {
-        rust.push_str("use winnow_grammar::grammar;\n");
-    }
-    rust.push_str("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n");
-    rust.push_str("#[allow(unused_imports)]\npub use nikaia_std::abort::panic;\n");
-    // **`Bytes` as a program has it** (Part I 1.3, the prelude): the type,
-    // its constructor and the reads a `ref Bytes` (lowered `&[u8]`) answers.
-    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::bytes::Bytes;\n");
-    rust.push_str(
-        "#[allow(unused_imports)]\nuse nikaia_std::bytes::{ByteCopy as _, ByteReads as _};\n",
-    );
-    // **The prelude's method traits** (Part I 1.3): a trait method such as
-    // `d.in_nanos()` or `x.low_bits(n)` needs its trait in scope.
-    rust.push_str(
-        "#[allow(unused_imports)]\nuse nikaia_std::time::{DurationExt as _, DurationIn as _, InstantSince as _};\n",
-    );
-    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::num::LowBits as _;\n");
-    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::list::ListExt as _;\n");
-    imports.sort();
-    for import in imports {
-        rust.push_str("#[allow(unused_imports)]\n");
-        rust.push_str(&import);
-        rust.push('\n');
-    }
-    rust.push('\n');
-    modules.iter().for_each(|(_, one)| rust.push_str(one));
-    facades.iter().for_each(|(_, one)| rust.push_str(one));
-    files.insert(0, (TOOLS_PACKAGE.to_string(), rust));
+    let names: Vec<String> = paths
+        .iter()
+        .map(|path| {
+            path.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    let views: Vec<_> = parsed
+        .iter()
+        .map(|unit| crate::check::parsed_view_of(unit))
+        .collect();
+    let files =
+        nikaia_std::tools::sysroot_package::sysroot_package_assemble(&names, &texts, &views);
     timer.lap("assemble");
     timer.report();
     Ok(Package { files })
@@ -874,164 +756,6 @@ impl std::fmt::Display for Package {
             .iter()
             .try_for_each(|(name, text)| write!(out, "// --- {name} ---\n{text}"))
     }
-}
-
-/// **Makes a file's items visible to the others of its package**: a lowered
-/// file is a module of its own, and an item written without `pub` is private
-/// to it. Every top-level `fn`, `const`, `static`, `struct`, `enum`, `type`
-/// and `trait` that stands at the start of a line outside any string, comment
-/// or brace becomes `pub(crate)`.
-fn shared(text: &str) -> String {
-    const KEYWORDS: [&str; 9] = [
-        "fn ",
-        "const ",
-        "static ",
-        "struct ",
-        "enum ",
-        "type ",
-        "trait ",
-        "unsafe fn ",
-        "async fn ",
-    ];
-    let bytes = text.as_bytes();
-    let mut out = String::with_capacity(text.len() + 4096);
-    let (mut at, mut depth, mut start) = (0usize, 0i64, true);
-    let mut inherent = false;
-    let mut in_struct = false;
-    let mut copied = 0usize;
-    while at < bytes.len() {
-        if start && depth == 0 {
-            // An `impl` without `for` is inherent: its methods take a
-            // visibility, a trait impl's do not.
-            in_struct = ["struct ", "pub struct "]
-                .iter()
-                .any(|k| text[at..].starts_with(k));
-            inherent = text[at..].starts_with("impl")
-                && !text[at..]
-                    .split('{')
-                    .next()
-                    .unwrap_or_default()
-                    .contains(" for ");
-            if KEYWORDS.iter().any(|k| text[at..].starts_with(k)) {
-                out.push_str(&text[copied..at]);
-                out.push_str("pub(crate) ");
-                copied = at;
-            }
-        } else if start && depth == 1 && in_struct {
-            // A field written without `pub` is private to its module.
-            let field = at + 4;
-            let rest = text.get(field..).unwrap_or_default();
-            let name = rest
-                .bytes()
-                .take_while(|b| b.is_ascii_alphanumeric() || *b == b'_')
-                .count();
-            if text[at..].starts_with("    ")
-                && name > 0
-                && !rest.starts_with("pub")
-                && rest[name..].starts_with(": ")
-            {
-                out.push_str(&text[copied..field]);
-                out.push_str("pub(crate) ");
-                copied = field;
-            }
-        } else if start && depth == 1 && inherent {
-            let method = at + 4;
-            if text[at..].starts_with("    ")
-                && text.get(method..).is_some_and(|rest| {
-                    KEYWORDS[..2]
-                        .iter()
-                        .chain(&KEYWORDS[7..])
-                        .any(|k| rest.starts_with(k))
-                })
-            {
-                out.push_str(&text[copied..method]);
-                out.push_str("pub(crate) ");
-                copied = method;
-            }
-        }
-        start = false;
-        match bytes[at] {
-            b'\n' => start = true,
-            b'{' => depth += 1,
-            b'}' => depth -= 1,
-            b'/' if bytes.get(at + 1) == Some(&b'/') => {
-                // A line comment: to the end of the line.
-                while at + 1 < bytes.len() && bytes[at + 1] != b'\n' {
-                    at += 1;
-                }
-            }
-            b'/' if bytes.get(at + 1) == Some(&b'*') => {
-                let mut nest = 0;
-                while at < bytes.len() {
-                    if text[at..].starts_with("/*") {
-                        nest += 1;
-                        at += 1;
-                    } else if text[at..].starts_with("*/") {
-                        nest -= 1;
-                        at += 1;
-                        if nest == 0 {
-                            break;
-                        }
-                    }
-                    at += 1;
-                }
-                at = at.min(bytes.len().saturating_sub(1));
-            }
-            b'r' | b'b'
-                if (at == 0
-                    || !(bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_'))
-                    && raw_string(text, at).is_some() =>
-            {
-                at = raw_string(text, at).unwrap_or(at);
-            }
-            b'"' => {
-                at += 1;
-                while at < bytes.len() && bytes[at] != b'"' {
-                    at += usize::from(bytes[at] == b'\\');
-                    at += 1;
-                }
-            }
-            b'\'' => {
-                // A character literal, not a lifetime: `'x'` or `'\..'`.
-                if bytes.get(at + 1) == Some(&b'\\') {
-                    at += 2;
-                    while at < bytes.len() && bytes[at] != b'\'' {
-                        at += 1;
-                    }
-                } else if let Some(c) = text[at + 1..].chars().next()
-                    && bytes.get(at + 1 + c.len_utf8()) == Some(&b'\'')
-                {
-                    at += 1 + c.len_utf8();
-                }
-            }
-            _ => {}
-        }
-        at += 1;
-    }
-    out.push_str(&text[copied.min(text.len())..]);
-    out
-}
-
-/// Where a raw string (`r"…"`, `r#"…"#`, `br"…"`) that starts at `at` ends:
-/// the index of its last byte.
-fn raw_string(text: &str, at: usize) -> Option<usize> {
-    let bytes = text.as_bytes();
-    let mut i = at;
-    if bytes[i] == b'b' {
-        i += 1;
-    }
-    if bytes.get(i) != Some(&b'r') {
-        return None;
-    }
-    i += 1;
-    let hashes = bytes[i..].iter().take_while(|b| **b == b'#').count();
-    i += hashes;
-    if bytes.get(i) != Some(&b'"') {
-        return None;
-    }
-    let close = format!("\"{}", "#".repeat(hashes));
-    let end = text[i + 1..].find(&close)?;
-    Some(i + 1 + end + close.len() - 1)
 }
 
 /// **Where `lower-std`'s time goes** (#667): with `NIKAIA_LOWER_TIMES` set,
@@ -1167,56 +891,6 @@ fn in_parallel<T: Send>(
     };
     done.sort_by_key(|(at, _)| *at);
     done.into_iter().map(|(_, answer)| answer).collect()
-}
-
-/// **One file's names, as a path into the package**: `pub mod ty { pub use
-/// super::{Ty, …}; }`. What the file declares `pub`, its grammars, and what
-/// `lib.rs` writes for it by hand ([`HAND_WRITTEN`]).
-fn facade(file: &str, unit: &crate::parser::Parsed) -> String {
-    use crate::ast::Item;
-    let mut names: Vec<String> = Vec::new();
-    for item in &unit.program.items {
-        let name = match &item.node {
-            Item::Fn {
-                name: Some(name),
-                is_public: true,
-                receiver: None,
-                ..
-            }
-            | Item::Enum {
-                name,
-                is_public: true,
-                ..
-            }
-            | Item::Struct {
-                name,
-                is_public: true,
-                ..
-            }
-            | Item::Trait {
-                name,
-                is_public: true,
-                ..
-            }
-            | Item::Comptime {
-                name, public: true, ..
-            } => unit.text(*name),
-            Item::Grammar(grammar) => unit.text(grammar.name),
-            _ => continue,
-        };
-        names.push(crate::emit::escaped(name).to_string());
-    }
-    if let Some((_, extra)) = HAND_WRITTEN.iter().find(|(name, _)| *name == file) {
-        names.extend(extra.iter().map(|name| name.to_string()));
-    }
-    let module = file.trim_end_matches(".nika");
-    match names.is_empty() {
-        true => format!("pub mod {module} {{}}\n"),
-        false => format!(
-            "pub mod {module} {{\n    #[allow(unused_imports)]\n    pub use super::{{{}}};\n}}\n",
-            names.join(", ")
-        ),
-    }
 }
 
 /// Where `lower_std_module`'s result is committed: beside the source, same stem.

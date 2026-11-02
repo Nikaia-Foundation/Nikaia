@@ -1,0 +1,379 @@
+// crates/nikaia-std/src/tools/sysroot_package.nika
+//
+// **The toolchain's Nikaia assembled as the one package it is** (S1, #125):
+// what `crates/nikaia/src/sysroot.rs` did with the lowered texts - the
+// refusals of a file, a file's interface without its bodies, `pub(crate)`
+// written on the items another module may call, each file's facade, and the
+// package's index - moved. `sysroot.rs` keeps the parallel lowering, the cache
+// and `Phases`; the renderer of a finding stays Rust and is the host's.
+
+/// **What `lib.rs` writes by hand beside the package, by the file it serves**:
+/// the names a Rust caller reaches through that file's path, which are Rust
+/// because Nikaia cannot say them - a `Span`'s `usize` doors, and the one call
+/// that turns a generated parser into a result. The per-file modules the
+/// assembly writes list them with the file's own names.
+pub struct SysrootPackageHand {
+    pub file: ref String,
+    pub names: ref Array[ref String],
+}
+
+comptime SYSROOT_PACKAGE_HAND_WRITTEN: ref Array[SysrootPackageHand] = [SysrootPackageHand { file: "ast.nika", names: ["LONGEST_SOURCE", "offset"] }, SysrootPackageHand { file: "http1.nika", names: ["written"] }, SysrootPackageHand { file: "rust.nika", names: ["file"] }]
+
+/// What the assembly needs from the compiler: a finding laid out on its file.
+pub trait SysrootPackageHost {
+    /// A finding rendered against the file's text (`diagnostics::render_finding`).
+    fn render_finding(ref self, finding: ref CheckFinding, path: ref String, source: ref String) -> String sync
+}
+
+/// **Every refusal of a file, as `nikaia check` says them** (#575): in file
+/// order, each with its place, its notes and its help. A file with ten
+/// findings cost ten cycles when only the first was reported, and each cycle
+/// can be a rebuild.
+pub fn sysroot_package_every_refusal[H: SysrootPackageHost](path: ref String, source: ref String, refusals: ref Vec[ref CheckFinding], host: ref H) -> String {
+    let mut ordered: Vec[ref CheckFinding] = refusals.clone()
+    ordered.sort_by_key(fn(f) { f.span.start })
+    let shown: Vec[String] = ordered.iter().map(fn(f) { host.render_finding(f, path, source) }).collect()
+    let n = refusals.len()
+    let s = match n == 1 { true => "", false => "s" }
+    return f"{shown.join("\n")}\n{n} refusal{s} in {path}"
+}
+
+/// One line per key, in key order, so the same table renders the same way
+/// however it was read.
+pub fn sysroot_package_render(table: ref collections::BTreeMap[String, String]) -> String {
+    let lines: Vec[String] = table.iter().map(fn(entry) { f"{entry.0}={entry.1}\n" }).collect()
+    return lines.join("")
+}
+
+/// **The source with every body taken out** (#667): what another file of the
+/// package can see of this one - its names, signatures, types and constants.
+/// The ranges are the statements' extent, so a comment between two statements
+/// goes with them and a comment outside a body stays.
+pub fn sysroot_package_without_bodies(source: ref String, items: ref Vec[Spanned[Item]]) -> String sync {
+    let mut cut: Vec[(i64, i64)] = []
+    for item in items {
+        sysroot_package_bodies(item, cut)
+    }
+    cut.sort()
+    let mut kept: String = ""
+    let mut at = 0
+    let n = source.bytes.len()
+    for (start, end) in cut {
+        if start < at || end > n {
+            // Not a range this can trust: the whole text is the interface.
+            return source.clone()
+        }
+        kept.push_str(source.bytes[at..<start].text() catch { return source.clone() })
+        at = end
+    }
+    kept.push_str(source.bytes[at..<n].text() catch { return source.clone() })
+    // A line that is only a comment says nothing to another file (a `///`
+    // line is a doc and stays).
+    let lines: Vec[String] = kept.lines().filter(fn(line) { !line.trim_start().starts_with("//") || line.trim_start().starts_with("///") }).map(fn(line) { f"{line}\n" }).collect()
+    return lines.join("")
+}
+
+fn sysroot_package_bodies(item: ref Spanned[Item], mut cut: Vec[(i64, i64)]) sync {
+    let block = match item.node {
+        Item::Fn { body, .. } => body,
+        Item::Test { body, .. } | Item::Bench { body, .. } => body,
+        Item::Impl { methods, .. } => {
+            for method in methods {
+                sysroot_package_bodies(method, cut)
+            }
+            return
+        }
+        else => return,
+    }
+    if !block.stmts.is_empty() {
+        let first = (block.stmts[0].span.start) as i64
+        let last = (block.stmts[block.stmts.len() - 1].span.end) as i64
+        cut.push((first, last))
+    }
+}
+
+/// Whether `word` stands in `text` at byte `at`.
+fn sysroot_package_at(text: ref String, at: i64, word: ref String) -> bool {
+    let n = word.bytes.len()
+    if at < 0 || at + n > text.bytes.len() {
+        return false
+    }
+    let head = text.bytes[at..<at + n].text() catch { return false }
+    return head == word
+}
+
+/// The bytes `a` to `b` of `text`, empty where they are not on scalars.
+fn sysroot_package_slice(text: ref String, a: i64, b: i64) -> String {
+    return text.bytes[a..<b].text() catch { "" }
+}
+
+/// Whether the byte is a letter, a digit or `_`.
+fn sysroot_package_word_byte(b: i64) -> bool {
+    return (b >= 48 && b <= 57) || (b >= 65 && b <= 90) || (b >= 97 && b <= 122) || b == 95
+}
+
+/// Whether the head of the item at `at`, up to its first `{`, has ` for `: a
+/// trait impl.
+fn sysroot_package_has_for(text: ref String, at: i64) -> bool {
+    let n = text.bytes.len()
+    let mut end = at
+    while end < n && text.bytes[end] != 123 {
+        end += 1
+    }
+    return sysroot_package_slice(text, at, end).contains(" for ")
+}
+
+/// **Makes a file's items visible to the others of its package**: a lowered
+/// file is a module of its own, and an item written without `pub` is private
+/// to it. Every top-level `fn`, `const`, `static`, `struct`, `enum`, `type`
+/// and `trait` that stands at the start of a line outside any string, comment
+/// or brace becomes `pub(crate)`.
+pub fn sysroot_package_shared(text: ref String) -> String {
+    let keywords: Vec[String] = ["fn ", "const ", "static ", "struct ", "enum ", "type ", "trait ", "unsafe fn ", "async fn "]
+    let method_keywords: Vec[String] = ["fn ", "const ", "unsafe fn ", "async fn "]
+    let n = text.bytes.len()
+    let mut out: String = ""
+    let mut at = 0
+    let mut depth = 0
+    let mut start = true
+    let mut inherent = false
+    let mut in_struct = false
+    let mut copied = 0
+    while at < n {
+        if start && depth == 0 {
+            // An `impl` without `for` is inherent: its methods take a
+            // visibility, a trait impl's do not.
+            in_struct = sysroot_package_at(text, at, "struct ") || sysroot_package_at(text, at, "pub struct ")
+            inherent = sysroot_package_at(text, at, "impl") && !sysroot_package_has_for(text, at)
+            if keywords.iter().any(fn(k) { sysroot_package_at(text, at, k) }) {
+                out.push_str(sysroot_package_slice(text, copied, at))
+                out.push_str("pub(crate) ")
+                copied = at
+            }
+        } else if start && depth == 1 && in_struct {
+            // A field written without `pub` is private to its module.
+            let field = at + 4
+            let mut name = 0
+            while field + name < n && sysroot_package_word_byte((text.bytes[field + name]) as i64) {
+                name += 1
+            }
+            if sysroot_package_at(text, at, "    ") && name > 0 && !sysroot_package_at(text, field, "pub") && sysroot_package_at(text, field + name, ": ") {
+                out.push_str(sysroot_package_slice(text, copied, field))
+                out.push_str("pub(crate) ")
+                copied = field
+            }
+        } else if start && depth == 1 && inherent {
+            let method = at + 4
+            if sysroot_package_at(text, at, "    ") && method_keywords.iter().any(fn(k) { sysroot_package_at(text, method, k) }) {
+                out.push_str(sysroot_package_slice(text, copied, method))
+                out.push_str("pub(crate) ")
+                copied = method
+            }
+        }
+        start = false
+        let b = (text.bytes[at]) as i64
+        let next = match at + 1 < n { true => (text.bytes[at + 1]) as i64, false => -1 }
+        let raw = match (b == 114 || b == 98) && (at == 0 || !sysroot_package_word_byte((text.bytes[at - 1]) as i64)) {
+            true => sysroot_package_raw_string(text, at) ?? -1,
+            false => -1,
+        }
+        if b == 10 {
+            start = true
+        } else if b == 123 {
+            depth += 1
+        } else if b == 125 {
+            depth -= 1
+        } else if b == 47 && next == 47 {
+            // A line comment: to the end of the line.
+            while at + 1 < n && text.bytes[at + 1] != 10 {
+                at += 1
+            }
+        } else if b == 47 && next == 42 {
+            let mut nest = 0
+            while at < n {
+                if sysroot_package_at(text, at, "/*") {
+                    nest += 1
+                    at += 1
+                } else if sysroot_package_at(text, at, "*/") {
+                    nest -= 1
+                    at += 1
+                    if nest == 0 {
+                        break
+                    }
+                }
+                at += 1
+            }
+            at = at.min(n - 1)
+        } else if raw >= 0 {
+            at = raw
+        } else if b == 34 {
+            at += 1
+            while at < n && text.bytes[at] != 34 {
+                if text.bytes[at] == 92 {
+                    at += 1
+                }
+                at += 1
+            }
+        } else if b == 39 {
+            // A character literal, not a lifetime: `'x'` or `'\..'`.
+            if next == 92 {
+                at += 2
+                while at < n && text.bytes[at] != 39 {
+                    at += 1
+                }
+            } else if next >= 0 {
+                let width = match next < 128 { true => 1, false => match next < 224 { true => 2, false => match next < 240 { true => 3, false => 4 } } }
+                if at + 1 + width < n && text.bytes[at + 1 + width] == 39 {
+                    at += 1 + width
+                }
+            }
+        }
+        at += 1
+    }
+    out.push_str(sysroot_package_slice(text, copied.min(n), n))
+    return out
+}
+
+/// Where a raw string (`r"…"`, `r#"…"#`, `br"…"`) that starts at `at` ends:
+/// the index of its last byte.
+fn sysroot_package_raw_string(text: ref String, at: i64) -> i64? {
+    let n = text.bytes.len()
+    let mut i = at
+    if text.bytes[i] == 98 {
+        i += 1
+    }
+    if i >= n || text.bytes[i] != 114 {
+        return null
+    }
+    i += 1
+    let mut close: String = "\""
+    while i < n && text.bytes[i] == 35 {
+        close.push_str("#")
+        i += 1
+    }
+    if i >= n || text.bytes[i] != 34 {
+        return null
+    }
+    let width = close.bytes.len()
+    let mut j = i + 1
+    while j + width <= n {
+        if sysroot_package_at(text, j, close) {
+            return j + width - 1
+        }
+        j += 1
+    }
+    return null
+}
+
+/// **One file's names, as a path into the package**: `pub mod ty { pub use
+/// super::{Ty, …}; }`. What the file declares `pub`, its grammars, and what
+/// `lib.rs` writes for it by hand (`SYSROOT_PACKAGE_HAND_WRITTEN`).
+pub fn sysroot_package_facade(file: ref String, unit: ref ParsedView) -> String {
+    let mut names: Vec[String] = []
+    for item in unit.items {
+        let name: String = match item.node {
+            Item::Fn { name, is_public: true, receiver: null, .. } => unit.text(name ?? continue),
+            Item::Enum { name, is_public: true, .. } => unit.text(name),
+            Item::Struct { name, is_public: true, .. } => unit.text(name),
+            Item::Trait { name, is_public: true, .. } => unit.text(name),
+            Item::Comptime { name, public: true, .. } => unit.text(name),
+            Item::Grammar(def) => unit.text(def.name),
+            else => continue,
+        }
+        names.push(match is_reserved(name) { true => f"r#{name}", false => name })
+    }
+    for hand in SYSROOT_PACKAGE_HAND_WRITTEN {
+        if hand.file == file {
+            for word in hand.names {
+                names.push(word.clone())
+            }
+        }
+    }
+    let module = file.trim_end_matches(".nika")
+    return match names.is_empty() {
+        true => f"pub mod {module} {{}}\n",
+        false => f"pub mod {module} {{\n    #[allow(unused_imports)]\n    pub use super::{{{names.join(", ")}}};\n}}\n",
+    }
+}
+
+/// **The package**: from the files' names (`ast.nika`), what each lowered to
+/// and its parse, the index (`lowered.rs`) first and then one generated file
+/// per `.nika`, sorted by file whatever order they were read in.
+pub fn sysroot_package_assemble(names: ref Vec[String], lowered: ref Vec[String], views: ref Vec[ParsedView]) -> Vec[(String, String)] {
+    let mut imports: Vec[String] = []
+    let mut modules: Vec[(String, String)] = []
+    let mut facades: Vec[(String, String)] = []
+    let mut files: Vec[(String, String)] = []
+    let mut has_grammar = false
+    for at in 0..<names.len() {
+        let name = names[at].clone()
+        // **One preamble for the package**: a `use std::…` is the file's
+        // import of a `std` module, and one namespace imports it once.
+        let mut body: String = ""
+        let all: Vec[String] = lowered[at].lines().map(fn(line) { line.clone() }).collect()
+        let mut i = 0
+        while i < all.len() {
+            if all[i] == "#[allow(unused_imports)]" && i + 1 < all.len() && all[i + 1].starts_with("use nikaia_std::") {
+                let import = all[i + 1].clone()
+                i += 2
+                if !imports.contains(import) {
+                    imports.push(import)
+                }
+                continue
+            }
+            body.push_str(all[i])
+            body.push_str("\n")
+            i += 1
+        }
+        if views[at].items.iter().any(fn(item) { match item.node { Item::Grammar(_) => true, else => false } }) {
+            has_grammar = true
+        }
+        let stem = name.trim_end_matches(".nika")
+        // **One module per file** (#667 step 4): the file's items see the
+        // package's names through `use super::*`, and the package root
+        // re-exports them; an item another file may call is `pub(crate)`.
+        modules.push((stem.clone(), f"mod {stem}_lowered {{\n    #[allow(unused_imports)]\n    use super::*;\n    include!(\"{SYSROOT_TOOLS_FILES}/{stem}.rs\");\n}}\n#[allow(unused_imports)]\npub use {stem}_lowered::*;\n\n"))
+        let shown = sysroot_package_shared(body.trim_start_matches("\n"))
+        let text = f"// Generated by the Nikaia bootstrap compiler (Stage 0).\n// Edit {name} in the directory above, not this file.\n\n{shown}"
+        files.push((f"{SYSROOT_TOOLS_FILES}/{stem}.rs", text))
+        facades.push((stem.clone(), sysroot_package_facade(name, views[at])))
+    }
+    // **Sorted by file**, whatever order the files were read in.
+    modules.sort()
+    facades.sort()
+    files.sort()
+
+    let mut rust: String = "// Generated by the Nikaia bootstrap compiler (Stage 0).\n// Edit the .nika sources in this directory, not this file.\n\n"
+    if has_grammar {
+        rust.push_str("use winnow_grammar::grammar;\n")
+    }
+    rust.push_str("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n")
+    rust.push_str("#[allow(unused_imports)]\npub use nikaia_std::abort::panic;\n")
+    // **`Bytes` as a program has it** (Part I 1.3, the prelude): the type,
+    // its constructor and the reads a `ref Bytes` (lowered `&[u8]`) answers.
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::bytes::Bytes;\n")
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::bytes::{ByteCopy as _, ByteReads as _};\n")
+    // **The prelude's method traits** (Part I 1.3): a trait method such as
+    // `d.in_nanos()` or `x.low_bits(n)` needs its trait in scope.
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::time::{DurationExt as _, DurationIn as _, InstantSince as _};\n")
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::num::LowBits as _;\n")
+    rust.push_str("#[allow(unused_imports)]\nuse nikaia_std::list::ListExt as _;\n")
+    imports.sort()
+    for import in imports {
+        rust.push_str("#[allow(unused_imports)]\n")
+        rust.push_str(import)
+        rust.push_str("\n")
+    }
+    rust.push_str("\n")
+    for (_, one) in modules {
+        rust.push_str(one)
+    }
+    for (_, one) in facades {
+        rust.push_str(one)
+    }
+    let mut package: Vec[(String, String)] = [(SYSROOT_TOOLS_PACKAGE.clone(), rust)]
+    for entry in files.drain() {
+        package.push(entry)
+    }
+    return package
+}

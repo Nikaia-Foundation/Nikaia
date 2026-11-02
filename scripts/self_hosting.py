@@ -63,6 +63,7 @@ COMPILER_NIKA = {
     "project_settings.nika": "project: the build settings' words, what `--refuted-claims`, `--unproved-claims`, `--optimization` and `artifact` may say, the cache key of a build, the CPU level's Cargo configuration and RUSTFLAGS, the panic strategy (P1)",
     "project_tests.nika": "project: the test runner's discovery of output tests and test programs, what they expect, the refusal test, the verdict line (P3a)",
     "sysroot_cache.nika": "sysroot: the sysroot's paths, the CPU levels and native's key, the tools package as files, lower-std's cache keys and entries (S2)",
+    "sysroot_package.nika": "sysroot: the tools package assembled from the lowered files: the refusals of a file, its interface without bodies, pub(crate) on the items another module calls, each file's facade and the index (S1)",
     "types.nika": "types: a name declared twice, a bound naming no trait, a type nothing declares (0.0.354)",
     "views.nika": "views: where a naked view parameter's view ends up, NK2302 and the buffer the emitter names (0.0.355)",
     "render.nika": "diagnostics: a finding laid out on the lines it is about, each place underlined, and NK2202's message (0.0.356, 0.0.358), a relayed rustc message, laid out (0.0.748)",

@@ -1929,6 +1929,14 @@ mod sysroot_cache_lowered {
 #[allow(unused_imports)]
 pub use sysroot_cache_lowered::*;
 
+mod sysroot_package_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sysroot_package.rs");
+}
+#[allow(unused_imports)]
+pub use sysroot_package_lowered::*;
+
 mod template_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2914,6 +2922,10 @@ pub mod sync {
 pub mod sysroot_cache {
     #[allow(unused_imports)]
     pub use super::{SysrootHost, sysroot_std_dir, sysroot_tools_dir, sysroot_runtime_dir, sysroot_std_modules, sysroot_tool_modules, sysroot_nika_in, sysroot_cpu_levels, sysroot_native_cpu, sysroot_interface, sysroot_file_key, sysroot_committed, sysroot_inlined, sysroot_contains, sysroot_drift, sysroot_stale, sysroot_pack, sysroot_unpack, sysroot_lowered_key, sysroot_lowered_get, sysroot_lowered_put};
+}
+pub mod sysroot_package {
+    #[allow(unused_imports)]
+    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_without_bodies, sysroot_package_shared, sysroot_package_facade, sysroot_package_assemble};
 }
 pub mod template {
     #[allow(unused_imports)]

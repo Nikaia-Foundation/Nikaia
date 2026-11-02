@@ -232,6 +232,9 @@ pub mod runtime {
 /// **And `map_clone`**: `.map(fn(x) { x.clone() })` lowers as written, the
 /// house style of `tools/*.nika` (P5d's `project_check_check`).
 ///
+/// **And `needless_as_bytes`**: `text.bytes.len()` lowers as
+/// `text.as_bytes().len()` (`sysroot_package.nika`, S1).
+///
 /// **And `map_identity`**: `.map(fn(w) { w.to_string() })` into a list the
 /// tiers decide is of views lowers its body to `w` (`view_changes.nika`'s
 /// `vc_part_of`, #942).
@@ -282,6 +285,7 @@ pub mod runtime {
     clippy::needless_borrows_for_generic_args,
     clippy::manual_ok_err,
     clippy::map_clone,
+    clippy::needless_as_bytes,
     clippy::while_let_loop,
     unreachable_patterns
 )]
