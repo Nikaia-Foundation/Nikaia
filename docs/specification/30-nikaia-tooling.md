@@ -1296,12 +1296,14 @@ encoding — the bytes as they are on Unix, WTF-8 on Windows, UTF-8 where names 
 stands wherever a `Path` is asked, as a view without a copy, so a literal or a `String` is a path.
 A `Path` is made from text, by the operating system (`walk`, `read_dir`, a program's arguments,
 the environment) or by the operations on one: `==` against a path or text, `starts_with`,
-`ends_with`, `file_name`, `extension`, `with_extension`, `parent`, `join` and `strip_prefix`,
+`ends_with`, `file_name`, `extension`, `with_extension`, `parent`, `join`, `strip_prefix` and `parts`,
 each handing back a `Path`. Paths have an order, so a `Path` is a key of an ordered map or set
 (`BTreeSet[fs::Path]`, `BTreeMap[(fs::Path?, i64), T]`) and of a hash map: whole parts are
 compared one after the other, each by its bytes, which is the order `==` agrees with
 ([ADR-319](adr/adr-319.md) D9). `p.strip_prefix(base)` is the rest of `p` after the whole parts of
-`base`, or `null` where they do not lead it; it reads no file system. `fs::canonical(path, root)`
+`base`, or `null` where they do not lead it; it reads no file system. `p.parts()` is the `Vec[Path]` of
+the whole parts in order, the root first where there is one, `..` as written and `.` only where it leads; joined again they
+make a name `==` to `p`, and it reads no file system either (ADR-319 D10). `fs::canonical(path, root)`
 is the absolute name with every link, `.` and `..` resolved; it throws `NotFound` for a name that
 does not exist and, under `Dir(store)`, `Outside` where the resolved name leaves the store. There is no constructor from arbitrary bytes, so no call fails for a name's encoding. An
 `f"…"` builds a `Path` where its use asks for one (Part I 2.5). `p.to_text()` gives the
