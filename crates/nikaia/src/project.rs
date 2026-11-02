@@ -66,33 +66,6 @@ pub const ENTRY: &str = "src/main.nika";
 pub const WRAPPER_MARKER: &str = "NIKAIA_RUSTC_WRAPPER";
 // The switches' variables (`TARGET_VAR` .. `CPU_VAR`) are
 // `project_settings.nika`'s, which writes and reads them.
-const GEN_DIR_VAR: &str = "NIKAIA_GEN_DIR";
-/// What the program's crate name carries beyond its package's in the shared
-/// target directory (#495), for the wrapper to take off again.
-const PROGRAM_TAG_VAR: &str = "NIKAIA_PROGRAM_TAG";
-const NO_CACHE_VAR: &str = "NIKAIA_NO_CACHE";
-/// **The file a loose `nikaia run` was given**, for the wrapper to name the
-/// entry by (#510): it lowers the copy in the cache, and a panic's location is
-/// written then.
-const SHOWN_AS_VAR: &str = "NIKAIA_SHOWN_AS";
-
-/// How `--allow-read-from-list` reaches the `rustc` wrapper
-/// ([ADR-310](../../docs/specification/adr/adr-310.md) D5, D9).
-///
-/// The wrapper is a **second process**, started by Cargo, and it lowers the
-/// same file a second time — so it has to be told the same list or the two
-/// halves would disagree about which files this build may read. The value is
-/// an absolute path, because the wrapper runs in a directory Cargo chose.
-///
-/// **And it is how D6 holds.** Every member of the workspace is lowered under
-/// one environment, so a dependency's `asset("…")` is checked against the list
-/// of the build that is running rather than against anything the dependency
-/// ships.
-const READS_VAR: &str = "NIKAIA_ALLOW_READ_FROM_LIST";
-/// **The system libraries' linker flags**, as the build formed them from
-/// `pkg-config` (Part III 13.4, ADR-324 D3, D4), one per `\u{1f}`-separated
-/// field: handed to `rustc` for the program and nothing else.
-const LINK_VAR: &str = "NIKAIA_LINK_FLAGS";
 
 /// A file the wrapper appends one line to per `rustc` it is handed: the crate
 /// Cargo named, and whether this compiler lowered it or passed it through.
