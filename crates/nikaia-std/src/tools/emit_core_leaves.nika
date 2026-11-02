@@ -381,7 +381,10 @@ impl EmitState {
                     return
                 }
                 if !emit_leaf_has_holes(parts) {
-                    out.push(f"\"{format_of(parts)}\".to_string()")
+                    // No `format!` around it, so the doubled braces of the
+                    // source are written once (#1099).
+                    let text = format_of(parts).replace("{{", "{").replace("}}", "}")
+                    out.push(f"\"{text}\".to_string()")
                     return
                 }
                 out.push("format!(")

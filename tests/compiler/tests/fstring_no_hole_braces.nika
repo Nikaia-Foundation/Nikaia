@@ -1,0 +1,8 @@
+fn main() {
+    let n = f"a {{ b }}".len()
+    println(n)
+    println(f"a {{ b }}".clone())
+    println(f"{{}}".len())
+    println(f"say \"hi\" \\ {{x}}".clone())
+    println(f"say \"hi\" \\ {{x}}".len())
+}
