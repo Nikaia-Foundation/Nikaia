@@ -181,10 +181,13 @@ slice takes a driver together with the crossings only it calls.
 
 **The parser.** `parser/mod.rs` holds the compiler's grammar as one
 `grammar!` block over `winnow-grammar` (about 390 rules) plus helpers. #557
-steps 1-3 (the grammar language features it needs) are done; how the rest is
-handled (a port in chunks into `tools/parser_grammar.nika`, each compared on
-every `tests/compiler` program, or another way) is the owner's decision in
-#1188. Decided here (architect, within ADR-339 and ADR-294 D7): the
+steps 1-3 (the grammar language features it needs) are done. The rest is
+ported to Nikaia (owner, 2026-11-02, #1188): first a check whether the Rust
+block can call rules of the lowered Nikaia grammar, so the switch goes chunk
+by chunk; then the helpers and the actions' logic move (about 680 lines);
+then the rules in chunks into `tools/parser_grammar.nika`, each compared on
+every `tests/compiler` and `tests/errors` program; the last commit removes
+the `grammar!` block (#557 steps 4-5). Decided here (architect, within ADR-339 and ADR-294 D7): the
 compiler's own grammar runs over the source as `Bytes`, so `span(p)` gives
 the `Span` of two `u32` the span table needs; the text form (`text::Match`,
 `text::Pos`) waits for #743 and is not on this path.
@@ -393,4 +396,4 @@ becomes the only move lane until the converter repair lands.
   missing calls (a child with the terminal, sha256, environment variables, a
   file lock, file times and identity) are added to `std` as thin new entries
   (#920, #922); nothing existing changes.
-* **The parser** (`parser/mod.rs`): #1188.
+* **The parser** (`parser/mod.rs`): ported to Nikaia, helpers first (#1188, #557).
