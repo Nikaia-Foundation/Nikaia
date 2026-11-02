@@ -1,0 +1,308 @@
+// crates/nikaia-std/src/tools/parser_grammar.nika
+//
+// **The compiler's grammar, in Nikaia** (#557 step 4c). The `grammar!` block
+// of `crates/nikaia/src/parser/mod.rs` moves here a chunk at a time; this
+// chunk is its lexical (UPPERCASE) rules: trivia, words and literals. The
+// Rust block stays what the compiler parses with until the syntactic rules
+// follow; nothing here calls it.
+//
+// **What the Rust grammar needed from outside, and how this one says it**
+// (ADR-339):
+//
+// * `same_line` and `here` are built-ins of the grammar language (D1, D2):
+//   the lowering keeps the line breaks the trivia ran over, so no rule here
+//   records them. One difference from the Rust `Trivia`: a line break inside
+//   a block comment counts as one here.
+// * A `///` doc is an ordinary rule (D4): `WS` skips `//` and `////` but not
+//   `///`, so a doc where no rule asks for one is a parse error.
+// * A span ends at the last element's end (ADR-383): the generator skips
+//   trivia before an element and never after one, so no trailing trivia is
+//   cut off afterwards.
+// * The grammar has no state (D3), so `WS` collects no comments: the comment
+//   list of ADR-337 D2 is to be a lexical scan of its own over `COMMENT`,
+//   `BLOCK_COMMENT` and the literals (so a `//` inside a string is text),
+//   each comment a `span`; it comes with the literal rules.
+
+// One token of the `tokens` scan: what it is and where it starts.
+pub struct PgToken {
+    pub kind: PgKind,
+    pub start: u32,
+    // A line break stands before it
+    // (ADR-135 D3).
+    pub broke: bool,
+}
+
+pub enum PgKind {
+    // A word only some places read as a keyword: `entry`, `fold`, `type`.
+    Keyword(String),
+    // A word no name may be (`RESERVED`).
+    Reserved(String),
+    Name(String),
+    Underscore,
+    // A `///` run, its lines joined.
+    Doc(String),
+    Other(String),
+}
+
+grammar ParserGrammar {
+
+    // ---- the scan ------------------------------------------------------
+
+    // Every token of a source, trivia skipped: what a test reads the rules
+    // through, until the syntactic rules come.
+    entry rule tokens -> Vec[PgToken] = ts:token* eof -> { ts }
+
+    rule token -> PgToken = b:BREAK at:here k:kind -> { PgToken { kind: k, start: at, broke: b } }
+
+    rule BREAK -> bool = same_line -> { false } | "" -> { true }
+
+    rule kind -> PgKind =
+          d:docs -> { PgKind::Doc(d) }
+        | w:text(RESERVED) -> { PgKind::Reserved(w.clone()) }
+        | w:text(KEYWORD) -> { PgKind::Keyword(w.clone()) }
+        | UNDERSCORE -> { PgKind::Underscore }
+        | w:text(NAME) -> { PgKind::Name(w.clone()) }
+        | c:text(any) -> { PgKind::Other(c.clone()) }
+
+    // ---- trivia (ADR-135 D3, ADR-307, ADR-339 D4) -----------------------
+
+    rule WSE = multispace1 -> { }
+    rule WS = (WSE | COMMENT | BLOCK_COMMENT)* -> { }
+
+    // `//` and `////` to the line's end; `///` is a doc and not trivia.
+    rule COMMENT =
+          "////" until(line_ending) -> { }
+        | "//" not("/") until(line_ending) -> { }
+
+    // `/* … */`, and it nests (ADR-307 D1, D2): `BLOCK_INNER` tries the
+    // nested comment first, and the cut puts an unclosed one's error at
+    // its opening.
+    rule BLOCK_COMMENT # "block comment" = "/*" => BLOCK_INNER* "*/" -> { }
+
+    rule BLOCK_INNER =
+          BLOCK_COMMENT -> { }
+        | not("*/") any -> { }
+
+    // A `///` line, without the one space after the slashes.
+    rule DOC_LINE -> String = "///" not("/") body:until(line_ending) -> { (body.strip_prefix(" ") ?? body).clone() }
+
+    // A run of doc lines; comments and blank lines between them do not
+    // end it.
+    rule docs -> String = lines:DOC_LINE+ -> { lines.join("\n") }
+
+    // ---- words -----------------------------------------------------------
+
+    rule KEYWORD =
+          KW_AS -> { }
+        | KW_ASYNC -> { }
+        | KW_BOUNDARY -> { }
+        | KW_ENTRY -> { }
+        | KW_BREAK -> { }
+        | KW_CATCH -> { }
+        | KW_COMPTIME -> { }
+        | KW_TEST -> { }
+        | KW_CONTINUE -> { }
+        | KW_DSL -> { }
+        | KW_ELSE -> { }
+        | KW_ENUM -> { }
+        | KW_EXTERN -> { }
+        | KW_FALSE -> { }
+        | KW_FN -> { }
+        | KW_FOLD -> { }
+        | KW_FOR -> { }
+        | KW_FROM -> { }
+        | KW_GRAMMAR -> { }
+        | KW_IF -> { }
+        | KW_IMPL -> { }
+        | KW_IN -> { }
+        | KW_LET -> { }
+        | KW_MATCH -> { }
+        | KW_MUT -> { }
+        | KW_NULL -> { }
+        | KW_OVERLAP -> { }
+        | KW_PAR_FOLD -> { }
+        | KW_PUB -> { }
+        | KW_RETURN -> { }
+        | KW_RULE -> { }
+        | KW_SELECT -> { }
+        | KW_SELF -> { }
+        | KW_SPAWN -> { }
+        | KW_STRUCT -> { }
+        | KW_SYNC -> { }
+        | KW_THROW -> { }
+        | KW_THROWS -> { }
+        | KW_TRAIT -> { }
+        | KW_TRUE -> { }
+        | KW_UNCHECKED -> { }
+        | KW_UNSAFE -> { }
+        | KW_REF -> { }
+        | KW_OPAQUE -> { }
+        | KW_TYPE -> { }
+        | KW_RELEASED -> { }
+        | KW_BY -> { }
+        | KW_LIBRARY -> { }
+        | KW_USE -> { }
+        | KW_WHILE -> { }
+        | KW_WITH -> { }
+
+    rule KW_AS = "as" not(ident) -> { }
+    rule KW_ASYNC = "async" not(ident) -> { }
+    rule KW_BOUNDARY = "boundary" not(ident) -> { }
+    rule KW_ENTRY = "entry" not(ident) -> { }
+    rule KW_BREAK = "break" not(ident) -> { }
+    rule KW_CATCH = "catch" not(ident) -> { }
+    rule KW_COMPTIME = "comptime" not(ident) -> { }
+    rule KW_TEST = "test" not(ident) -> { }
+    rule KW_CONTINUE = "continue" not(ident) -> { }
+    rule KW_DSL = "dsl" not(ident) -> { }
+    rule KW_ELSE = "else" not(ident) -> { }
+    rule KW_ENUM = "enum" not(ident) -> { }
+    rule KW_EXTERN = "extern" not(ident) -> { }
+    rule KW_FALSE = "false" not(ident) -> { }
+    rule KW_FN = "fn" not(ident) -> { }
+    rule KW_FOLD = "fold" not(ident) -> { }
+    rule KW_FOR = "for" not(ident) -> { }
+    rule KW_FROM = "from" not(ident) -> { }
+    rule KW_GRAMMAR = "grammar" not(ident) -> { }
+    rule KW_IF = "if" not(ident) -> { }
+    rule KW_IMPL = "impl" not(ident) -> { }
+    rule KW_IN = "in" not(ident) -> { }
+    rule KW_LET = "let" not(ident) -> { }
+    rule KW_MATCH = "match" not(ident) -> { }
+    rule KW_MUT = "mut" not(ident) -> { }
+    rule KW_NULL = "null" not(ident) -> { }
+    rule KW_OVERLAP = "overlap" not(ident) -> { }
+    rule KW_PAR_FOLD = "par_fold" not(ident) -> { }
+    rule KW_PUB = "pub" not(ident) -> { }
+    rule KW_RETURN = "return" not(ident) -> { }
+    rule KW_RULE = "rule" not(ident) -> { }
+    rule KW_SELECT = "select" not(ident) -> { }
+    rule KW_SELF = "self" not(ident) -> { }
+    rule KW_SPAWN = "spawn" not(ident) -> { }
+    rule KW_STRUCT = "struct" not(ident) -> { }
+    rule KW_SYNC = "sync" not(ident) -> { }
+    rule KW_THROW = "throw" not(ident) -> { }
+    rule KW_THROWS = "throws" not(ident) -> { }
+    rule KW_TRAIT = "trait" not(ident) -> { }
+    rule KW_TRUE = "true" not(ident) -> { }
+    rule KW_UNCHECKED = "unchecked" not(ident) -> { }
+    rule KW_UNSAFE = "unsafe" not(ident) -> { }
+    rule KW_REF = "ref" not(ident) -> { }
+    rule KW_OPAQUE = "opaque" not(ident) -> { }
+    rule KW_TYPE = "type" not(ident) -> { }
+    rule KW_RELEASED = "released" not(ident) -> { }
+    rule KW_BY = "by" not(ident) -> { }
+    rule KW_LIBRARY = "library" not(ident) -> { }
+    rule KW_USE = "use" not(ident) -> { }
+    rule KW_WHILE = "while" not(ident) -> { }
+    rule KW_WITH = "with" not(ident) -> { }
+
+    // The words no name may be, in three groups of at most 14.
+    rule RESERVED -> u8 =
+          w:RESERVED_A -> { w }
+        | w:RESERVED_B -> { w }
+        | w:RESERVED_C -> { w }
+
+    rule RESERVED_A -> u8 =
+          KW_AS -> { 0 }
+        | KW_REF -> { 0 }
+        | KW_CATCH -> { 0 }
+        | KW_DSL -> { 0 }
+        | KW_ELSE -> { 0 }
+        | KW_ENUM -> { 0 }
+        | KW_FALSE -> { 0 }
+        | KW_FN -> { 0 }
+        | KW_FOR -> { 0 }
+        | KW_GRAMMAR -> { 0 }
+        | KW_IF -> { 0 }
+        | KW_IMPL -> { 0 }
+        | KW_IN -> { 0 }
+        | KW_LET -> { 0 }
+
+    rule RESERVED_B -> u8 =
+          KW_MATCH -> { 0 }
+        | KW_MUT -> { 0 }
+        | KW_NULL -> { 0 }
+        | KW_OVERLAP -> { 0 }
+        | KW_PUB -> { 0 }
+        | KW_RETURN -> { 0 }
+        | KW_SPAWN -> { 0 }
+        | KW_STRUCT -> { 0 }
+        | KW_SYNC -> { 0 }
+        | KW_THROW -> { 0 }
+        | KW_THROWS -> { 0 }
+        | KW_TRUE -> { 0 }
+        | KW_USE -> { 0 }
+        | KW_WHILE -> { 0 }
+
+    rule RESERVED_C -> u8 =
+          KW_BREAK -> { 0 }
+        | KW_COMPTIME -> { 0 }
+        | KW_CONTINUE -> { 0 }
+        | KW_TRAIT -> { 0 }
+        | KW_WITH -> { 0 }
+        | KW_EXTERN -> { 0 }
+        | KW_UNSAFE -> { 0 }
+        | KW_SELECT -> { 0 }
+        | KW_TEST -> { 0 }
+        | KW_ASYNC -> { 0 }
+
+    // `_name`, `_0` and the `_000` of `1_000` stay names: a bare `_` is one
+    // not followed by an identifier or a digit.
+    rule NAME -> winnow_grammar::Symbol = not(digit) not(RESERVED) not(UNDERSCORE) n:ident -> { n }
+
+    rule UNDERSCORE = "_" not(raw_ident) not(digit) -> { }
+}
+
+// **The scan as text**, for the tests and for comparing with the Rust
+// grammar: each token as `kind word@start`, a `\n` before one a line break
+// stands in front of, or the refusal.
+pub fn pg_render(source: String) -> String sync {
+    let input = Bytes(source.bytes().collect())
+    let ts = ParserGrammar::tokens(input) catch {
+        return f"refused: {error}"
+    }
+    let mut parts: Vec[String] = Vec()
+    for t in ts {
+        let b = if t.broke { "\\n" } else { "" }
+        parts.push(f"{b}{pg_kind_text(t.kind)}@{t.start}")
+    }
+    return parts.join(" | ")
+}
+
+// **The scan counted**, for a whole program: how many tokens of each kind,
+// and how many stand after a line break.
+pub fn pg_count(source: String) -> String sync {
+    let input = Bytes(source.bytes().collect())
+    let ts = ParserGrammar::tokens(input) catch {
+        return f"refused: {error}"
+    }
+    let mut words = 0
+    let mut names = 0
+    let mut docs = 0
+    let mut other = 0
+    let mut breaks = 0
+    for t in ts {
+        if t.broke { breaks += 1 }
+        match t.kind {
+            PgKind::Keyword(_) => { words += 1 }
+            PgKind::Reserved(_) => { words += 1 }
+            PgKind::Name(_) => { names += 1 }
+            PgKind::Underscore => { names += 1 }
+            PgKind::Doc(_) => { docs += 1 }
+            PgKind::Other(_) => { other += 1 }
+        }
+    }
+    return f"{words} words, {names} names, {docs} docs, {other} other, {breaks} after a line break"
+}
+
+fn pg_kind_text(kind: ref PgKind) -> String {
+    return match kind {
+        PgKind::Keyword(w) => f"kw {w}",
+        PgKind::Reserved(w) => f"res {w}",
+        PgKind::Name(w) => f"name {w}",
+        PgKind::Underscore => "_",
+        PgKind::Doc(d) => f"doc {d.replace("\n", "\\n")}",
+        PgKind::Other(c) => f"other {c}",
+    }
+}

@@ -1,0 +1,18 @@
+== case1.txt
+res as@0 | res ref@3 | res catch@7 | res dsl@13 | res else@17 | res enum@22 | res false@27 | res fn@33 | res for@36 | res grammar@40 | res if@48 | res impl@51 | res in@56 | res let@59
+== case2.txt
+res match@0 | res mut@6 | res null@10 | res overlap@15 | res pub@23 | res return@27 | res spawn@34 | res struct@40 | res sync@47 | res throw@52 | res throws@58 | res true@65 | res use@70 | res while@74
+== case3.txt
+res break@0 | res comptime@6 | res continue@15 | res trait@24 | res with@30 | res extern@35 | res unsafe@42 | res select@49 | res test@56 | res async@61
+== case4.txt
+kw boundary@0 | kw entry@9 | kw fold@15 | kw from@20 | kw par_fold@25 | kw rule@34 | kw self@39 | kw unchecked@44 | kw opaque@54 | kw type@61 | kw released@66 | kw by@75 | kw library@78
+== case5.txt
+name asx@0 | name fnord@4 | name iffy@10 | name let_@15 | name _let@20 | name in2@25 | name self_@29
+== case6.txt
+_@0 | name _x@2 | name _0@5 | other 1@8 | name _000@9 | name __@14 | _@17 | name x@19
+== B1.nika
+3 words, 3 names, 0 docs, 7 other, 3 after a line break
+== gate_full_dry_run.nika
+40 words, 368 names, 0 docs, 742 other, 51 after a line break
+== grammar_failing_action_in_alternative.nika
+36 words, 101 names, 0 docs, 253 other, 39 after a line break

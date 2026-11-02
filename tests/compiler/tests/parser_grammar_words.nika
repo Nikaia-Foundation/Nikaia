@@ -1,0 +1,67 @@
+// The words of `tools/parser_grammar.nika` (#557 step 4c), read through its
+// `tokens` scan: every keyword, the reserved words no name may be, names, and
+// the bare `_`. The grammar file is copied beside a small driver and run.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// Each argument a file: a whole program counted, any other input shown
+// token by token.
+fn driver() -> String {
+    let lines: Vec[String] = [
+        f"fn main() throws {{",
+        f"    let mut first = true",
+        f"    for a in cli::args() {{",
+        f"        if first {{ first = false; continue }}",
+        f"        println(f\"== {{a}}\")",
+        f"        let s = fs::read_to_string(a.clone(), fs::Root::Anywhere)",
+        f"        if a.ends_with(\".nika\") {{ println(pg_count(s)) }} else {{ println(pg_render(s)) }}",
+        f"    }}",
+        f"}}",
+    ]
+    return lines.join("\n")
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let rules = fs::read_to_string(f"{repo}/crates/nikaia-std/src/tools/parser_grammar.nika", fs::Root::Anywhere)
+    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, f"use std::cli\nuse std::fs\n{rules}\n{driver()}\n")
+    let cases: Vec[String] = [
+        "as ref catch dsl else enum false fn for grammar if impl in let",
+        "match mut null overlap pub return spawn struct sync throw throws true use while",
+        "break comptime continue trait with extern unsafe select test async",
+        "boundary entry fold from par_fold rule self unchecked opaque type released by library",
+        "asx fnord iffy let_ _let in2 self_",
+        "_ _x _0 1_000 __ _ x",
+    ]
+    let mut args: Vec[String] = ["run", "main.nika", "--"]
+    let mut i = 0
+    for c in cases {
+        i += 1
+        fs::write(f"{tmp}/case{i}.txt", fs::Root::Anywhere, c)
+        args.push(f"case{i}.txt")
+    }
+    for p in ["tests/errors/B1.nika", "tests/compiler/tests/gate_full_dry_run.nika", "tests/compiler/tests/grammar_failing_action_in_alternative.nika"] {
+        let name = p.split("/").last() ?? p
+        fs::write(f"{tmp}/{name}", fs::Root::Anywhere, fs::read_to_string(f"{repo}/{p}", fs::Root::Anywhere))
+        args.push(name.clone())
+    }
+    let out = process::run(nikaia, args; dir: tmp)
+    println(out.stdout.trim())
+    process::run("rm", ["-rf", tmp])
+}

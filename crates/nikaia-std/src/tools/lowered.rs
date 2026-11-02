@@ -1699,6 +1699,14 @@ mod parsed_view_lowered {
 #[allow(unused_imports)]
 pub use parsed_view_lowered::*;
 
+mod parser_grammar_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/parser_grammar.rs");
+}
+#[allow(unused_imports)]
+pub use parser_grammar_lowered::*;
+
 mod parser_leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2870,6 +2878,10 @@ pub mod parsed_tree {
 pub mod parsed_view {
     #[allow(unused_imports)]
     pub use super::{ParsedView};
+}
+pub mod parser_grammar {
+    #[allow(unused_imports)]
+    pub use super::{PgToken, PgKind, ParserGrammar, pg_render, pg_count};
 }
 pub mod parser_leaves {
     #[allow(unused_imports)]
