@@ -17,6 +17,8 @@ use nikaia_std::num::LowBits as _;
 #[allow(unused_imports)]
 use nikaia_std::list::ListExt as _;
 #[allow(unused_imports)]
+use nikaia_std::text::TextNormalized as _;
+#[allow(unused_imports)]
 use nikaia_std::text;
 
 mod http1_lowered {

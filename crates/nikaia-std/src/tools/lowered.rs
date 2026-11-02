@@ -2587,7 +2587,10 @@ pub mod emit_core_below {
     #[allow(unused_imports)]
     pub use super::{EmitHeldFound, emit_held_in, emit_filled_at_once, emit_resize_args, emit_branch_values};
 }
-pub mod emit_core_calls {}
+pub mod emit_core_calls {
+    #[allow(unused_imports)]
+    pub use super::{emit_tuple_part_copies};
+}
 pub mod emit_core_flow {}
 pub mod emit_core_leaves {
     #[allow(unused_imports)]
