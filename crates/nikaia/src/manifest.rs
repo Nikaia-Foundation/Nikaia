@@ -273,6 +273,10 @@ fn dependency_of(declared: &decide::ManifestDependency) -> Dependency {
 mod tests {
     use super::*;
 
+    // The other tests of this module moved to `tools/manifest.nika` (ADR-294,
+    // #125). These read `toml::Value`s, a flag, or a tuple with a nullable slot
+    // that a list literal cannot yet lower.
+
     #[test]
     fn a_flag_beats_the_manifest_and_the_manifest_beats_the_default() {
         let manifest = Manifest::parse("[build]\ntarget = \"wasm32-unknown\"\n").expect("parses");
@@ -289,63 +293,6 @@ mod tests {
             "effects",
             "a key the manifest does not carry falls through to the default"
         );
-    }
-
-    /// No manifest is the single-file case, not a failure.
-    #[test]
-    fn a_manifest_without_a_build_table_decides_nothing() {
-        let manifest = Manifest::parse("[package]\nname = \"x\"\n").expect("parses");
-        assert_eq!(
-            manifest.setting("target", None, "x86_64-linux"),
-            "x86_64-linux"
-        );
-        assert_eq!(manifest.setting("ordering", None, "effects"), "effects");
-        assert_eq!(manifest.package_name(), Some("x"));
-    }
-
-    /// The mistake this exists for: the switch is spelled with a hyphen in the
-    /// manifest and an underscore on the CLI, and a silently ignored key would
-    /// leave the build at a default the author thought they had changed.
-    #[test]
-    fn an_unknown_key_is_named_rather_than_ignored() {
-        let error = Manifest::parse("[build]\nuser_parallelism = \"yes\"\n")
-            .expect_err("an unknown key is refused");
-        let text = format!("{error:#}");
-        assert!(text.contains("user_parallelism"), "{text}");
-        assert!(text.contains("user-parallelism"), "{text}");
-    }
-
-    /// `[build.x86_64-linux]` is codegen, not a switch. It has to survive, and
-    /// since ADR-002 D1 it has to arrive somewhere: it becomes a Cargo profile.
-    #[test]
-    fn a_per_target_table_is_not_a_switch() {
-        let manifest = Manifest::parse(
-            "[build]\nuser-parallelism = \"yes\"\n\n[build.x86_64-linux]\nopt-level = 3\nlto = true\nincremental = false\ndebug = 2\n",
-        )
-        .expect("parses");
-        assert_eq!(manifest.setting("user-parallelism", None, "no"), "yes");
-
-        let codegen = manifest.codegen_for("x86_64-linux");
-        assert_eq!(codegen["opt-level"].as_integer(), Some(3));
-        assert_eq!(codegen["lto"].as_bool(), Some(true));
-        assert_eq!(codegen["incremental"].as_bool(), Some(false));
-        assert_eq!(codegen["debug"].as_integer(), Some(2));
-        assert!(
-            manifest.codegen_for("wasm32-unknown").is_empty(),
-            "a machine the manifest says nothing about carries no codegen"
-        );
-    }
-
-    /// The same rule `[build]` has, for the same reason: a key nothing reads
-    /// leaves a build at a setting its author believed they had changed.
-    #[test]
-    fn an_unknown_codegen_key_is_named_rather_than_ignored() {
-        let error = Manifest::parse("[build.x86_64-linux]\nopt_level = 3\n")
-            .expect_err("an unknown key is refused");
-        let text = format!("{error:#}");
-        assert!(text.contains("opt_level"), "{text}");
-        assert!(text.contains("opt-level"), "{text}");
-        assert!(text.contains("codegen-units"), "{text}");
     }
 
     /// ADR-002 D6: `codegen-units` is a whole number from 1, and anything else
@@ -367,15 +314,6 @@ mod tests {
             assert!(text.contains("whole number from 1"), "{written}: {text}");
             assert!(text.contains(written), "{written}: {text}");
         }
-    }
-
-    /// `[build.x86_65-linux]` is a typo, and the codegen in it would apply to
-    /// nothing at all.
-    #[test]
-    fn a_per_target_table_for_no_machine_is_refused() {
-        let error = Manifest::parse("[build.x86_65-linux]\nopt-level = 3\n")
-            .expect_err("an unknown machine is refused");
-        assert!(format!("{error:#}").contains("x86_64-linux"), "{error:#}");
     }
 
     /// Part III 13.3's two shapes. `type = "rust"` says crates.io, and the
@@ -405,108 +343,5 @@ mod tests {
             manifest.dependencies()["http-server"],
             Dependency::Nikaia(_)
         ));
-    }
-
-    /// A `type` nothing implements is refused rather than guessed at.
-    #[test]
-    fn a_dependency_naming_no_ecosystem_is_refused() {
-        let error = Manifest::parse("[dependencies]\nx = { type = \"c\", version = \"1\" }\n")
-            .expect_err("an unknown ecosystem is refused");
-        assert!(format!("{error:#}").contains("rust"), "{error:#}");
-    }
-
-    /// A `type` that is not a word names no ecosystem either. Before the
-    /// decision moved to `tools/manifest.nika` (ADR-294), `type = 1` was read
-    /// as no `type` at all, and the entry passed as a Nikaia package with its
-    /// marker silently ignored.
-    #[test]
-    fn a_dependency_type_that_is_not_a_word_is_refused() {
-        let error = Manifest::parse("[dependencies]\nx = { type = 1, path = \"../x\" }\n")
-            .expect_err("a type that is no word is refused");
-        let said = format!("{error:#}");
-        assert!(said.contains("`x`"), "{said}");
-        assert!(said.contains("isn't a kind of dependency"), "{said}");
-    }
-
-    /// A Nikaia package by path, and the name Cargo gives a crate key.
-    #[test]
-    fn a_path_dependency_is_a_path_and_a_crate_key_is_underscored() {
-        let manifest = Manifest::parse(
-            "[dependencies]\nhttp = { path = \"../http\" }\nhyper-shim = { type = \"rust\", version = \"1\" }\n",
-        )
-        .expect("parses");
-        assert_eq!(
-            manifest.dependencies()["http"],
-            Dependency::Path(PathBuf::from("../http"))
-        );
-        assert!(manifest.foreign_crates().contains("hyper_shim"));
-    }
-
-    /// ADR-303 D5 moved it to the runtime configuration file. It is still
-    /// accepted here - refusing it would fail a manifest written to the
-    /// specification that documented it - and the note says where it went.
-    #[test]
-    fn the_cleanup_deadline_is_accepted_and_says_where_it_went() {
-        let manifest = Manifest::parse("[build]\ncleanup-deadline = \"30s\"\n").expect("parses");
-        let note = manifest
-            .notes()
-            .first()
-            .expect("a moved key leaves a note rather than failing the build");
-        assert!(note.contains("cleanup-deadline"), "{note}");
-        assert!(note.contains("nikaia-runtime.toml"), "{note}");
-        assert!(note.contains("no longer reads this key"), "{note}");
-
-        // …and nothing reads it from here any more, so a later reader cannot
-        // resolve it out of the wrong file.
-        assert_eq!(
-            manifest.setting("cleanup-deadline", None, "unread"),
-            "unread"
-        );
-    }
-
-    /// A manifest that says nothing about a moved key has nothing to report,
-    /// so an ordinary build prints no note at all.
-    #[test]
-    fn a_manifest_without_a_moved_key_has_nothing_to_say() {
-        let manifest = Manifest::parse("[build]\ntarget = \"x86_64-linux\"\n").expect("parses");
-        assert!(manifest.notes().is_empty());
-    }
-
-    /// A **withdrawn** key fails the build, and in its own words.
-    ///
-    /// The difference from the moved key above is the whole of why there are
-    /// two lists ([ADR-292](../../../docs/specification/adr/adr-292.md) D7):
-    /// `cleanup-deadline` still decides something somewhere else, so the
-    /// manifest keeps working and says where to look, while `ordering` decides
-    /// nothing anywhere — and a build that ignored it quietly would run a
-    /// program that differs from the file describing it.
-    ///
-    /// It is also not reported as a typo, which is what removing it from
-    /// `KNOWN` alone would have done: somebody who writes `ordering` meant it,
-    /// and "expected one of: …" answers a question they did not ask.
-    #[test]
-    fn a_withdrawn_key_is_refused_saying_what_replaced_it() {
-        let error = Manifest::parse("[build]\nordering = \"strict\"\n")
-            .expect_err("a withdrawn key fails the build");
-        let said = format!("{error:#}");
-        assert!(said.contains("`ordering`"), "{said}");
-        assert!(said.contains("no longer supported"), "{said}");
-        assert!(
-            said.contains("in the order they are written"),
-            "why: {said}"
-        );
-        assert!(said.contains("overlap"), "the way out is named: {said}");
-        assert!(
-            !said.contains("expected one of"),
-            "not reported as a typo: {said}"
-        );
-    }
-
-    /// A bare `no` is TOML's boolean, and the reason it is wrong belongs to the
-    /// switch's own parser rather than to a type error here.
-    #[test]
-    fn a_non_string_reaches_the_switch_that_can_explain_it() {
-        let manifest = Manifest::parse("[build]\nuser-parallelism = false\n").expect("parses");
-        assert_eq!(manifest.setting("user-parallelism", None, "no"), "false");
     }
 }

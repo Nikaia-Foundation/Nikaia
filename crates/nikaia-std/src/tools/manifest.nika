@@ -427,3 +427,169 @@ fn manifest_dependencies(items: ref Vec[ManifestItem]) -> collections::BTreeMap[
     }
     return out
 }
+
+// --- Tests moved from the compiler's `manifest` (ADR-294, #125) ---
+
+pub fn manifest_test_table(section: String, name: String, machine: bool) -> ManifestItem {
+    return ManifestItem { section: section, name: name, key: "", table: true, text: "", word: null, integer: null, machine: machine }
+}
+
+pub fn manifest_test_word(section: String, name: String, key: String, word: String) -> ManifestItem {
+    return ManifestItem { section: section, name: name, key: key, table: false, text: f"\"{word}\"", word: word, integer: null, machine: false }
+}
+
+pub fn manifest_test_value(section: String, name: String, key: String, text: String, integer: i64?) -> ManifestItem {
+    return ManifestItem { section: section, name: name, key: key, table: false, text: text, word: null, integer: integer, machine: false }
+}
+
+// What parsing the items refuses with, or nothing where they parse.
+pub fn manifest_test_refusal(items: ref Vec[ManifestItem]) -> String {
+    let parsed = manifest_parse(items) catch {
+        return f"{error}"
+    }
+    return f"parsed {parsed.version}"
+}
+
+/// No manifest is the single-file case, not a failure.
+test "a manifest without a build table decides nothing" {
+    let items = [manifest_test_table("package", "", false), manifest_test_word("package", "name", "", "x")]
+    let manifest = manifest_parse(items) catch {
+        assert(false)
+        return
+    }
+    assert(manifest.build.is_empty())
+    assert(manifest.notes.is_empty())
+    assert((manifest.name ?? "") == "x")
+}
+
+/// The mistake this exists for: the switch is spelled with a hyphen in the
+/// manifest and an underscore on the CLI.
+test "an unknown key is named rather than ignored" {
+    let items = [manifest_test_table("build", "", false), manifest_test_word("build", "user_parallelism", "", "yes")]
+    let said = manifest_test_refusal(items)
+    assert(said.contains("user_parallelism"))
+    assert(said.contains("user-parallelism"))
+}
+
+/// `[build.x86_64-linux]` is codegen, not a switch; it has to survive.
+test "a per-target table is not a switch" {
+    let items = [
+        manifest_test_table("build", "", false),
+        manifest_test_word("build", "user-parallelism", "", "yes"),
+        manifest_test_table("build", "x86_64-linux", true),
+        manifest_test_value("build", "x86_64-linux", "opt-level", "3", 3),
+        manifest_test_value("build", "x86_64-linux", "lto", "true", null),
+        manifest_test_value("build", "x86_64-linux", "incremental", "false", null),
+        manifest_test_value("build", "x86_64-linux", "debug", "2", 2),
+    ]
+    let manifest = manifest_parse(items) catch {
+        assert(false)
+        return
+    }
+    assert((manifest.build["user-parallelism"] ?? "") == "yes")
+    let codegen = manifest.codegen["x86_64-linux"]?.clone() ?? collections::BTreeMap()
+    assert((codegen["opt-level"] ?? "") == "3")
+    assert((codegen["lto"] ?? "") == "true")
+    assert((codegen["incremental"] ?? "") == "false")
+    assert((codegen["debug"] ?? "") == "2")
+    // A machine the manifest says nothing about carries no codegen.
+    assert(manifest.codegen["wasm32-unknown"] == null)
+}
+
+/// The same rule `[build]` has, for the same reason.
+test "an unknown codegen key is named rather than ignored" {
+    let items = [manifest_test_table("build", "x86_64-linux", true), manifest_test_value("build", "x86_64-linux", "opt_level", "3", 3)]
+    let said = manifest_test_refusal(items)
+    assert(said.contains("opt_level"))
+    assert(said.contains("opt-level"))
+    assert(said.contains("codegen-units"))
+}
+
+/// `[build.x86_65-linux]` is a typo, and the codegen in it would apply to
+/// nothing at all.
+test "a per-target table for no machine is refused" {
+    let items = [manifest_test_table("build", "x86_65-linux", false), manifest_test_value("build", "x86_65-linux", "opt-level", "3", 3)]
+    assert(manifest_test_refusal(items).contains("x86_64-linux"))
+}
+
+/// A `type` nothing implements is refused rather than guessed at.
+test "a dependency naming no ecosystem is refused" {
+    let items = [manifest_test_table("dependencies", "x", false), manifest_test_word("dependencies", "x", "type", "c"), manifest_test_word("dependencies", "x", "version", "1")]
+    assert(manifest_test_refusal(items).contains("rust"))
+}
+
+/// A `type` that is not a word names no ecosystem either.
+test "a dependency type that is not a word is refused" {
+    let items = [manifest_test_table("dependencies", "x", false), manifest_test_value("dependencies", "x", "type", "1", 1), manifest_test_word("dependencies", "x", "path", "../x")]
+    let said = manifest_test_refusal(items)
+    assert(said.contains("`x`"))
+    assert(said.contains("isn't a kind of dependency"))
+}
+
+/// A Nikaia package by path, and the name Cargo gives a crate key.
+test "a path dependency is a path and a crate key is underscored" {
+    let items = [
+        manifest_test_table("dependencies", "http", false),
+        manifest_test_word("dependencies", "http", "path", "../http"),
+        manifest_test_table("dependencies", "hyper-shim", false),
+        manifest_test_word("dependencies", "hyper-shim", "type", "rust"),
+        manifest_test_word("dependencies", "hyper-shim", "version", "1"),
+    ]
+    let manifest = manifest_parse(items) catch {
+        assert(false)
+        return
+    }
+    let http = manifest.dependencies["http"]
+    assert((http?.path ?? "") == "../http")
+    assert(manifest_foreign_crates(manifest).contains("hyper_shim"))
+}
+
+/// ADR-303 D5 moved it to the runtime configuration file. It is still
+/// accepted, and the note says where it went.
+test "the cleanup deadline is accepted and says where it went" {
+    let items = [manifest_test_table("build", "", false), manifest_test_word("build", "cleanup-deadline", "", "30s")]
+    let manifest = manifest_parse(items) catch {
+        assert(false)
+        return
+    }
+    assert(manifest.notes.len() == 1)
+    let note = manifest.notes[0]
+    assert(note.contains("cleanup-deadline"))
+    assert(note.contains("nikaia-runtime.toml"))
+    assert(note.contains("no longer reads this key"))
+    // Nothing reads it from here any more.
+    assert(manifest.build["cleanup-deadline"] == null)
+}
+
+/// A manifest that says nothing about a moved key has nothing to report.
+test "a manifest without a moved key has nothing to say" {
+    let items = [manifest_test_table("build", "", false), manifest_test_word("build", "target", "", "x86_64-linux")]
+    let manifest = manifest_parse(items) catch {
+        assert(false)
+        return
+    }
+    assert(manifest.notes.is_empty())
+}
+
+/// A **withdrawn** key fails the build, in its own words, and is not reported
+/// as a typo (ADR-292 D7).
+test "a withdrawn key is refused saying what replaced it" {
+    let items = [manifest_test_table("build", "", false), manifest_test_word("build", "ordering", "", "strict")]
+    let said = manifest_test_refusal(items)
+    assert(said.contains("`ordering`"))
+    assert(said.contains("no longer supported"))
+    assert(said.contains("in the order they are written"))
+    assert(said.contains("overlap"))
+    assert(!said.contains("expected one of"))
+}
+
+/// A bare `no` is TOML's boolean; the reason it is wrong belongs to the
+/// switch's own parser.
+test "a non string reaches the switch that can explain it" {
+    let items = [manifest_test_table("build", "", false), manifest_test_value("build", "user-parallelism", "", "false", null)]
+    let manifest = manifest_parse(items) catch {
+        assert(false)
+        return
+    }
+    assert((manifest.build["user-parallelism"] ?? "") == "false")
+}

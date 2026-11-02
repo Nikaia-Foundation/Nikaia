@@ -234,3 +234,216 @@ pub(crate) fn manifest_dependencies(items: &[ManifestItem]) -> Result<collection
     Ok(out)
 }
 
+pub fn manifest_test_table(section: String, name: String, machine: bool) -> ManifestItem { ManifestItem { section, name, key: String::from(""), table: true, text: String::from(""), word: None, integer: None, machine } }
+
+pub fn manifest_test_word(section: String, name: String, key: String, word: String) -> ManifestItem { ManifestItem { section, name, key, table: false, text: format!("\"{}\"", word), word: Some(word), integer: None, machine: false } }
+
+pub fn manifest_test_value(section: String, name: String, key: String, text: String, integer: Option<i64>) -> ManifestItem { ManifestItem { section, name, key, table: false, text, word: None, integer, machine: false } }
+
+pub fn manifest_test_refusal(items: &[ManifestItem]) -> String {
+    let parsed = match manifest_parse(items) {
+        Ok(value) => value,
+        Err(error) => {
+            let (error, __nikaia_site) = error.split();
+            return format!("{}", error);
+        },
+    };
+    format!("parsed {}", parsed.version)
+}
+
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("package"), String::from(""), false), manifest_test_word(String::from("package"), String::from("name"), String::from(""), String::from("x"))];
+    let manifest = match manifest_parse(&items) {
+        Ok(value) => value,
+        Err(_error) => {
+            if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+            return Ok(());
+        },
+    };
+    if !(manifest.build.is_empty()) { nikaia_std::abort::assertion_failed("assert(manifest.build.is_empty())", None, &[]) };
+    if !(manifest.notes.is_empty()) { nikaia_std::abort::assertion_failed("assert(manifest.notes.is_empty())", None, &[]) };
+    if !(nikaia_std::index::or(manifest.name.as_deref(), || "") == "x") { nikaia_std::abort::assertion_failed("assert((manifest.name ?? \"\") == \"x\")", None, &[("manifest.name ?? \"\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(manifest.name.as_deref(), || "")))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("user_parallelism"), String::from(""), String::from("yes"))];
+    let said = manifest_test_refusal(&items);
+    if !(said.contains("user_parallelism")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"user_parallelism\"))", None, &[]) };
+    if !(said.contains("user-parallelism")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"user-parallelism\"))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("user-parallelism"), String::from(""), String::from("yes")), manifest_test_table(String::from("build"), String::from("x86_64-linux"), true), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("opt-level"), String::from("3"), Some(3)), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("lto"), String::from("true"), None), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("incremental"), String::from("false"), None), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("debug"), String::from("2"), Some(2))];
+    let manifest = match manifest_parse(&items) {
+        Ok(value) => value,
+        Err(_error) => {
+            if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+            return Ok(());
+        },
+    };
+    if !(nikaia_std::index::or(*nikaia_std::index::get(&manifest.build, "user-parallelism"), || "") == "yes") { nikaia_std::abort::assertion_failed("assert((manifest.build[\"user-parallelism\"] ?? \"\") == \"yes\")", None, &[("manifest.build[\"user-parallelism\"] ?? \"\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(*nikaia_std::index::get(&manifest.build, "user-parallelism"), || "")))).shown()), ]) };
+    let codegen = nikaia_std::index::or(match *nikaia_std::index::get(&manifest.codegen, "x86_64-linux") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeMap::new().into());
+    if !(nikaia_std::index::or(*nikaia_std::index::get(&codegen, "opt-level"), || "") == "3") { nikaia_std::abort::assertion_failed("assert((codegen[\"opt-level\"] ?? \"\") == \"3\")", None, &[("codegen[\"opt-level\"] ?? \"\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(*nikaia_std::index::get(&codegen, "opt-level"), || "")))).shown()), ]) };
+    if !(nikaia_std::index::or(*nikaia_std::index::get(&codegen, "lto"), || "") == "true") { nikaia_std::abort::assertion_failed("assert((codegen[\"lto\"] ?? \"\") == \"true\")", None, &[("codegen[\"lto\"] ?? \"\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(*nikaia_std::index::get(&codegen, "lto"), || "")))).shown()), ]) };
+    if !(nikaia_std::index::or(*nikaia_std::index::get(&codegen, "incremental"), || "") == "false") { nikaia_std::abort::assertion_failed("assert((codegen[\"incremental\"] ?? \"\") == \"false\")", None, &[("codegen[\"incremental\"] ?? \"\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(*nikaia_std::index::get(&codegen, "incremental"), || "")))).shown()), ]) };
+    if !(nikaia_std::index::or(*nikaia_std::index::get(&codegen, "debug"), || "") == "2") { nikaia_std::abort::assertion_failed("assert((codegen[\"debug\"] ?? \"\") == \"2\")", None, &[("codegen[\"debug\"] ?? \"\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(*nikaia_std::index::get(&codegen, "debug"), || "")))).shown()), ]) };
+    if !((*nikaia_std::index::get(&manifest.codegen, "wasm32-unknown")).is_none()) { nikaia_std::abort::assertion_failed("assert(manifest.codegen[\"wasm32-unknown\"] == null)", None, &[("manifest.codegen[\"wasm32-unknown\"]", (&&nikaia_std::abort::Operand(&(*nikaia_std::index::get(&manifest.codegen, "wasm32-unknown")))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("build"), String::from("x86_64-linux"), true), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("opt_level"), String::from("3"), Some(3))];
+    let said = manifest_test_refusal(&items);
+    if !(said.contains("opt_level")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"opt_level\"))", None, &[]) };
+    if !(said.contains("opt-level")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"opt-level\"))", None, &[]) };
+    if !(said.contains("codegen-units")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"codegen-units\"))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("build"), String::from("x86_65-linux"), false), manifest_test_value(String::from("build"), String::from("x86_65-linux"), String::from("opt-level"), String::from("3"), Some(3))];
+    if !(manifest_test_refusal(&items).contains("x86_64-linux")) { nikaia_std::abort::assertion_failed("assert(manifest_test_refusal(items).contains(\"x86_64-linux\"))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("dependencies"), String::from("x"), false), manifest_test_word(String::from("dependencies"), String::from("x"), String::from("type"), String::from("c")), manifest_test_word(String::from("dependencies"), String::from("x"), String::from("version"), String::from("1"))];
+    if !(manifest_test_refusal(&items).contains("rust")) { nikaia_std::abort::assertion_failed("assert(manifest_test_refusal(items).contains(\"rust\"))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("dependencies"), String::from("x"), false), manifest_test_value(String::from("dependencies"), String::from("x"), String::from("type"), String::from("1"), Some(1)), manifest_test_word(String::from("dependencies"), String::from("x"), String::from("path"), String::from("../x"))];
+    let said = manifest_test_refusal(&items);
+    if !(said.contains("`x`")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"`x`\"))", None, &[]) };
+    if !(said.contains("isn't a kind of dependency")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"isn't a kind of dependency\"))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("dependencies"), String::from("http"), false), manifest_test_word(String::from("dependencies"), String::from("http"), String::from("path"), String::from("../http")), manifest_test_table(String::from("dependencies"), String::from("hyper-shim"), false), manifest_test_word(String::from("dependencies"), String::from("hyper-shim"), String::from("type"), String::from("rust")), manifest_test_word(String::from("dependencies"), String::from("hyper-shim"), String::from("version"), String::from("1"))];
+    let manifest = match manifest_parse(&items) {
+        Ok(value) => value,
+        Err(_error) => {
+            if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+            return Ok(());
+        },
+    };
+    let http = *nikaia_std::index::get(&manifest.dependencies, "http");
+    if !(nikaia_std::index::or(http.as_ref().and_then(|__nikaia_it| __nikaia_it.path.as_deref()), || "") == "../http") { nikaia_std::abort::assertion_failed("assert((http?.path ?? \"\") == \"../http\")", None, &[("http?.path ?? \"\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(http.as_ref().and_then(|__nikaia_it| __nikaia_it.path.as_deref()), || "")))).shown()), ]) };
+    if !(manifest_foreign_crates(&manifest).contains("hyper_shim")) { nikaia_std::abort::assertion_failed("assert(manifest_foreign_crates(manifest).contains(\"hyper_shim\"))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("cleanup-deadline"), String::from(""), String::from("30s"))];
+    let manifest = match manifest_parse(&items) {
+        Ok(value) => value,
+        Err(_error) => {
+            if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+            return Ok(());
+        },
+    };
+    if !(manifest.notes.len() == 1) { nikaia_std::abort::assertion_failed("assert(manifest.notes.len() == 1)", None, &[("manifest.notes.len()", (&&nikaia_std::abort::Operand(&(manifest.notes.len() as i64))).shown()), ]) };
+    let note = nikaia_std::index::get(&manifest.notes, 0);
+    if !(note.contains("cleanup-deadline")) { nikaia_std::abort::assertion_failed("assert(note.contains(\"cleanup-deadline\"))", None, &[]) };
+    if !(note.contains("nikaia-runtime.toml")) { nikaia_std::abort::assertion_failed("assert(note.contains(\"nikaia-runtime.toml\"))", None, &[]) };
+    if !(note.contains("no longer reads this key")) { nikaia_std::abort::assertion_failed("assert(note.contains(\"no longer reads this key\"))", None, &[]) };
+    if !((*nikaia_std::index::get(&manifest.build, "cleanup-deadline")).is_none()) { nikaia_std::abort::assertion_failed("assert(manifest.build[\"cleanup-deadline\"] == null)", None, &[("manifest.build[\"cleanup-deadline\"]", (&&nikaia_std::abort::Operand(&(*nikaia_std::index::get(&manifest.build, "cleanup-deadline")))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_9() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("target"), String::from(""), String::from("x86_64-linux"))];
+    let manifest = match manifest_parse(&items) {
+        Ok(value) => value,
+        Err(_error) => {
+            if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+            return Ok(());
+        },
+    };
+    if !(manifest.notes.is_empty()) { nikaia_std::abort::assertion_failed("assert(manifest.notes.is_empty())", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_10() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("ordering"), String::from(""), String::from("strict"))];
+    let said = manifest_test_refusal(&items);
+    if !(said.contains("`ordering`")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"`ordering`\"))", None, &[]) };
+    if !(said.contains("no longer supported")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"no longer supported\"))", None, &[]) };
+    if !(said.contains("in the order they are written")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"in the order they are written\"))", None, &[]) };
+    if !(said.contains("overlap")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"overlap\"))", None, &[]) };
+    if !(!said.contains("expected one of")) { nikaia_std::abort::assertion_failed("assert(!said.contains(\"expected one of\"))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_11() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_value(String::from("build"), String::from("user-parallelism"), String::from(""), String::from("false"), None)];
+    let manifest = match manifest_parse(&items) {
+        Ok(value) => value,
+        Err(_error) => {
+            if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+            return Ok(());
+        },
+    };
+    if !(nikaia_std::index::or(*nikaia_std::index::get(&manifest.build, "user-parallelism"), || "") == "false") { nikaia_std::abort::assertion_failed("assert((manifest.build[\"user-parallelism\"] ?? \"\") == \"false\")", None, &[("manifest.build[\"user-parallelism\"] ?? \"\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(*nikaia_std::index::get(&manifest.build, "user-parallelism"), || "")))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn a_manifest_without_a_build_table_decides_nothing() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn an_unknown_key_is_named_rather_than_ignored() {
+        super::__nikaia_test_1().unwrap()
+    }
+    #[test]
+    fn a_per_target_table_is_not_a_switch() {
+        super::__nikaia_test_2().unwrap()
+    }
+    #[test]
+    fn an_unknown_codegen_key_is_named_rather_than_ignored() {
+        super::__nikaia_test_3().unwrap()
+    }
+    #[test]
+    fn a_per_target_table_for_no_machine_is_refused() {
+        super::__nikaia_test_4().unwrap()
+    }
+    #[test]
+    fn a_dependency_naming_no_ecosystem_is_refused() {
+        super::__nikaia_test_5().unwrap()
+    }
+    #[test]
+    fn a_dependency_type_that_is_not_a_word_is_refused() {
+        super::__nikaia_test_6().unwrap()
+    }
+    #[test]
+    fn a_path_dependency_is_a_path_and_a_crate_key_is_underscored() {
+        super::__nikaia_test_7().unwrap()
+    }
+    #[test]
+    fn the_cleanup_deadline_is_accepted_and_says_where_it_went() {
+        super::__nikaia_test_8().unwrap()
+    }
+    #[test]
+    fn a_manifest_without_a_moved_key_has_nothing_to_say() {
+        super::__nikaia_test_9().unwrap()
+    }
+    #[test]
+    fn a_withdrawn_key_is_refused_saying_what_replaced_it() {
+        super::__nikaia_test_10().unwrap()
+    }
+    #[test]
+    fn a_non_string_reaches_the_switch_that_can_explain_it() {
+        super::__nikaia_test_11().unwrap()
+    }
+}
