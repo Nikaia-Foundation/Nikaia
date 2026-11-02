@@ -3,7 +3,7 @@
 // **What a declared `String` is below, decided by what flows into it**
 // (ADR-282) - the walk the compiler's `text_tiers` runs over a whole program
 // and the tiers it decides, moved from Rust (ADR-294, #125). What stays in
-// Rust is writing the answer into the syntax tree, which this reads.
+// Rust is wrapping a value handed into a mixed position (`wrap_item`).
 //
 // A **position** is every place a program declares `String`: a struct's
 // field, a function's result, a function's parameter, an annotated `let` -
@@ -6344,4 +6344,469 @@ fn same_adopted(a: ref collections::BTreeMap[i64, Declaring], b: ref collections
 
 fn no_path() -> Vec[i64] {
     return []
+}
+
+// --- Writing the answer into the program -----------------------------------
+//
+// Moved from `text_tiers.rs` (`rewrite`, `mark`, `annotate_item`,
+// `annotate_adopted`, `mark_let_item`, `said`, `views`; ADR-294, #125). What
+// stays in Rust is wrapping a value handed into a mixed position, which
+// replaces a node by one that holds it.
+
+/// What writing the tiers into the program leaves to say: each position that
+/// is not text of its own, in the words of `--text-tiers`, and those made a
+/// view as a whole, in the words `--tethers` uses (`owner_word`).
+pub struct TierWritten {
+    pub said: Vec[String],
+    pub views: collections::BTreeSet[String],
+}
+
+/// A position as a key that sorts as the positions are written out: by who
+/// declares it - a field, a result, a parameter, a `let`, a variant's payload,
+/// each by its names and place - then by the path inside the declared type.
+fn tw_key(owner: ref TextOwner, path: ref Vec[i64]) -> (i64, String, String, i64, Vec[i64]) {
+    let empty: String = ""
+    return match owner {
+        TextOwner::Field(of, field) => (0, of.clone(), field.clone(), 0, path.clone()),
+        TextOwner::Returned(key) => (1, key.clone(), empty.clone(), 0, path.clone()),
+        TextOwner::Param(key, at) => (2, key.clone(), empty.clone(), at, path.clone()),
+        TextOwner::Let(at) => (3, empty.clone(), empty.clone(), at, path.clone()),
+        TextOwner::Variant(of, variant, at) => (4, of.clone(), variant.clone(), at, path.clone()),
+    }
+}
+
+/// The tiers decided, by position, and **an empty list linked to where it
+/// goes declared as that position** (ADR-282 D16): the `let` takes the tiers
+/// inside the position it goes into.
+fn tw_tiers(decided: ref TextTiers) -> collections::BTreeMap[(i64, String, String, i64, Vec[i64]), Tier] {
+    let mut tiers: collections::BTreeMap[(i64, String, String, i64, Vec[i64]), Tier] = collections::BTreeMap()
+    for (position, tier) in decided.tiers {
+        tiers.insert(tw_key(position.owner, position.path), tier)
+    }
+    for (at, target) in decided.adopted {
+        let owner = tw_key(target.owner, no_path())
+        let mut inherited: Vec[(Vec[i64], Tier)] = []
+        for (key, tier) in tiers {
+            if key.0 == owner.0 && key.1 == owner.1 && key.2 == owner.2 && key.3 == owner.3 {
+                inherited.push((key.4.clone(), tier))
+            }
+        }
+        for (path, tier) in inherited {
+            tiers.insert(tw_key(TextOwner::Let(at), path), tier)
+        }
+    }
+    return tiers
+}
+
+/// The tier on the type, `path` from `from` on leading to the declared
+/// `String` inside it.
+fn tw_mark(mut ty: Type, path: ref Vec[i64], from: i64, tier: Tier) {
+    if from >= path.len() {
+        match tier {
+            Tier::Owned => {},
+            Tier::View => {
+                ty.is_view = true
+            },
+            Tier::Mixed => {
+                ty.is_view = true
+                ty.either = true
+            },
+            Tier::Lasting => {
+                ty.is_view = true
+                ty.lasting = true
+            },
+        }
+        return
+    }
+    let mut arg = ty.generics.get(path[from]) ?? return
+    tw_mark(arg, path, from + 1, tier)
+}
+
+fn tw_mark_maybe(mut ty: Type?, path: ref Vec[i64], tier: Tier) {
+    if ty != null {
+        tw_mark(ty, path, 0, tier)
+    }
+}
+
+/// What the `let`s of the program are declared with: a name bound to a
+/// literal and kept where text of its own is wanted is declared `String`
+/// (ADR-282 D17, the type `text`), an empty list linked to a position is
+/// declared as that position (D16), and the tiers of each annotated `let`.
+struct TwLets {
+    lets: collections::BTreeSet[i64],
+    text: Type?,
+    adopted: collections::BTreeMap[i64, Type],
+    marks: Vec[(i64, Vec[i64], Tier)],
+}
+
+fn tw_declare(mut ty: Type?, at: i64, job: ref TwLets) {
+    if ty == null && job.lets.contains(at) && job.text != null {
+        ty = job.text?.clone()
+    }
+    if ty == null && job.adopted.contains_key(at) {
+        ty = job.adopted.get(at)?.clone()
+    }
+    for (wanted, path, tier) in job.marks {
+        if wanted == at {
+            tw_mark_maybe(ty, path, tier)
+        }
+    }
+}
+
+fn tw_lets_item(mut item: Item, job: ref TwLets) {
+    match item {
+        Item::Fn { body, .. } => tw_lets_block(body, job),
+        Item::Test { body, .. } => tw_lets_block(body, job),
+        Item::Bench { body, .. } => tw_lets_block(body, job),
+        Item::Impl { methods, .. } => {
+            for mut method in methods {
+                tw_lets_item(method.node, job)
+            }
+        },
+        else => {},
+    }
+}
+
+fn tw_lets_block(mut block: Block, job: ref TwLets) {
+    for mut stmt in block.stmts {
+        tw_lets_stmt(stmt.node, stmt.span.start as i64, job)
+    }
+}
+
+fn tw_lets_stmt(mut stmt: Stmt, at: i64, job: ref TwLets) {
+    match stmt {
+        Stmt::Let { ty, value, .. } => {
+            tw_lets_expr(value, job)
+            tw_declare(ty, at, job)
+        },
+        Stmt::Assign { target, value, .. } => {
+            tw_lets_expr(target, job)
+            tw_lets_expr(value, job)
+        },
+        Stmt::For { iter, body, .. } => {
+            tw_lets_expr(iter, job)
+            tw_lets_block(body, job)
+        },
+        Stmt::While { cond, body } => {
+            tw_lets_expr(cond, job)
+            tw_lets_block(body, job)
+        },
+        Stmt::Return(value) => tw_lets_maybe(value, job),
+        Stmt::Expr(value) => tw_lets_expr(value, job),
+        else => {},
+    }
+}
+
+fn tw_lets_maybe(mut expr: Expr?, job: ref TwLets) {
+    if expr != null {
+        tw_lets_expr(expr, job)
+    }
+}
+
+fn tw_lets_else(mut block: Block?, job: ref TwLets) {
+    if block != null {
+        tw_lets_block(block, job)
+    }
+}
+
+fn tw_lets_all(mut all: Vec[Expr], job: ref TwLets) {
+    for mut each in all {
+        tw_lets_expr(each, job)
+    }
+}
+
+fn tw_lets_config(mut config: Vec[ConfigArg], job: ref TwLets) {
+    for mut option in config {
+        tw_lets_expr(option.value, job)
+    }
+}
+
+fn tw_lets_fields(mut fields: Vec[FieldInit], job: ref TwLets) {
+    for mut field in fields {
+        tw_lets_maybe(field.value, job)
+    }
+}
+
+fn tw_lets_expr(mut expr: Expr, job: ref TwLets) {
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            tw_lets_expr(func, job)
+            tw_lets_all(args, job)
+            tw_lets_config(config, job)
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            tw_lets_expr(receiver, job)
+            tw_lets_all(args, job)
+            tw_lets_config(config, job)
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            tw_lets_expr(receiver, job)
+            tw_lets_all(args, job)
+            tw_lets_config(config, job)
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            tw_lets_expr(lhs, job)
+            tw_lets_expr(rhs, job)
+        },
+        Expr::Unary { expr: inner, .. } => tw_lets_expr(inner, job),
+        Expr::Try(inner, _) => tw_lets_expr(inner, job),
+        Expr::Throw(inner, _) => tw_lets_expr(inner, job),
+        Expr::Cast { expr: inner, .. } => tw_lets_expr(inner, job),
+        Expr::Return(value, _) => tw_lets_maybe(value, job),
+        Expr::Field { base, .. } => tw_lets_expr(base, job),
+        Expr::SafeField { base, .. } => tw_lets_expr(base, job),
+        Expr::Index { base, index, .. } => {
+            tw_lets_expr(base, job)
+            tw_lets_expr(index, job)
+        },
+        Expr::Range { start, end, .. } => {
+            tw_lets_expr(start, job)
+            tw_lets_expr(end, job)
+        },
+        Expr::Tuple(items, _) => tw_lets_all(items, job),
+        Expr::ListLit { items, .. } => tw_lets_all(items, job),
+        Expr::ListRepeat { value, count, .. } => {
+            tw_lets_expr(value, job)
+            tw_lets_expr(count, job)
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            tw_lets_expr(value, job)
+            tw_lets_expr(fallback, job)
+        },
+        Expr::TryCatch { expr: inner, handler, .. } => {
+            tw_lets_expr(inner, job)
+            tw_lets_block(handler, job)
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            tw_lets_expr(cond, job)
+            tw_lets_block(then_branch, job)
+            tw_lets_else(else_branch, job)
+        },
+        Expr::Match { value, arms, .. } => {
+            tw_lets_expr(value, job)
+            for mut arm in arms {
+                tw_lets_maybe(arm.guard, job)
+                tw_lets_expr(arm.body, job)
+            }
+        },
+        Expr::StructLit { fields, .. } => tw_lets_fields(fields, job),
+        Expr::With { base, fields, .. } => {
+            tw_lets_expr(base, job)
+            tw_lets_fields(fields, job)
+        },
+        Expr::Block(block, _) => tw_lets_block(block, job),
+        Expr::Unsafe(block, _) => tw_lets_block(block, job),
+        Expr::Overlap(block, _) => tw_lets_block(block, job),
+        Expr::Closure { body, .. } => tw_lets_block(body, job),
+        Expr::Spawn { body, .. } => tw_lets_expr(body, job),
+        else => {},
+    }
+}
+
+/// A function's name as the walk keys it: a function without one is `new`.
+fn tw_fn_name(item: ref Item, words: ref winnow_grammar::InternerContext) -> String {
+    return match item {
+        Item::Fn { name, .. } => match name {
+            null => "new",
+            n => words.resolve(n).clone(),
+        },
+        else => "",
+    }
+}
+
+/// A struct's field `field`, the first so named.
+fn tw_mark_field(mut item: Item, words: ref winnow_grammar::InternerContext, of: ref String, field: ref String, path: ref Vec[i64], tier: Tier) {
+    match item {
+        Item::Struct { name, fields, .. } => {
+            if words.resolve(name) != of {
+                return
+            }
+            let j = fields.iter().position(fn(f) { words.resolve(f.name) == field }) ?? return
+            let mut declared = fields.get(j) ?? return
+            tw_mark(declared.ty, path, 0, tier)
+        },
+        else => {},
+    }
+}
+
+/// What a function hands back (`returned`), or its parameter `at`.
+fn tw_mark_fn(mut item: Item, returned: bool, at: i64, path: ref Vec[i64], tier: Tier) {
+    match item {
+        Item::Fn { args, ret_type, .. } => {
+            if returned {
+                tw_mark_maybe(ret_type, path, tier)
+            } else {
+                let mut arg = args.get(at) ?? return
+                tw_mark(arg.ty, path, 0, tier)
+            }
+        },
+        else => {},
+    }
+}
+
+/// A function `own` declares, or the method `own` of the impl of `target`
+/// (the first so named), its result or its parameter `at`.
+fn tw_mark_callable(mut item: Item, words: ref winnow_grammar::InternerContext, target: ref String?, own: ref String, returned: bool, at: i64, path: ref Vec[i64], tier: Tier) {
+    if target == null {
+        if tw_fn_name(item, words) == own {
+            tw_mark_fn(item, returned, at, path, tier)
+        }
+        return
+    }
+    let wanted: String = target?.clone() ?? ""
+    match item {
+        Item::Impl { target: of, methods, .. } => {
+            if words.resolve(of.name) != wanted {
+                return
+            }
+            let j = methods.iter().position(fn(m) { tw_fn_name(m.node, words) == own }) ?? return
+            let mut method = methods.get(j) ?? return
+            tw_mark_fn(method.node, returned, at, path, tier)
+        },
+        else => {},
+    }
+}
+
+/// A grammar's rule `j`, what it hands back.
+fn tw_mark_rule(mut item: Item, j: i64, path: ref Vec[i64], tier: Tier) {
+    match item {
+        Item::Grammar(def) => {
+            let mut rule = def.rules.get(j) ?? return
+            tw_mark_maybe(rule.ret_type, path, tier)
+        },
+        else => {},
+    }
+}
+
+/// What the variant `variant` of the enum `of` carries at `at`.
+fn tw_mark_variant(mut item: Item, words: ref winnow_grammar::InternerContext, of: ref String, variant: ref String, at: i64, path: ref Vec[i64], tier: Tier) {
+    match item {
+        Item::Enum { name, variants, .. } => {
+            if words.resolve(name) != of {
+                return
+            }
+            for mut v in variants {
+                if words.resolve(v.name) == variant {
+                    tw_mark_payload(v.fields, at, path, tier)
+                }
+            }
+        },
+        else => {},
+    }
+}
+
+fn tw_mark_payload(mut fields: VariantFields, at: i64, path: ref Vec[i64], tier: Tier) {
+    match fields {
+        VariantFields::Tuple(parts) => {
+            let mut part = parts.get(at) ?? return
+            tw_mark(part, path, 0, tier)
+        },
+        else => {},
+    }
+}
+
+/// **Decide nothing, write what was decided into the types** (ADR-282), so
+/// that every later reader of the program reads one answer: the `let`s
+/// declared (D16, D17), and each position's tier on its declared type.
+pub fn tier_write(mut program: Program, words: ref winnow_grammar::InternerContext, decided: ref TextTiers, text: Type?) -> TierWritten {
+    let tiers = tw_tiers(decided)
+    // A grammar's rules, by `G::rule`, as the walk keys their results.
+    let mut rule_keys: collections::BTreeMap[String, (i64, i64)] = collections::BTreeMap()
+    let mut i = 0
+    for item in program.items {
+        match item.node {
+            Item::Grammar(def) => {
+                let mut j = 0
+                for rule in def.rules {
+                    rule_keys.insert(f"{words.resolve(def.name)}::{words.resolve(rule.name)}", (i, j))
+                    j += 1
+                }
+            },
+            else => {},
+        }
+        i += 1
+    }
+    let mut marks: Vec[(i64, Vec[i64], Tier)] = []
+    for (key, tier) in tiers {
+        if key.0 == 3 {
+            marks.push((key.3, key.4.clone(), tier))
+        }
+    }
+    let mut adopted: collections::BTreeMap[i64, Type] = collections::BTreeMap()
+    for (at, target) in decided.adopted {
+        adopted.insert(at, target.ty.clone())
+    }
+    let job = TwLets { lets: decided.lets.clone(), text: text, adopted: adopted, marks: marks }
+    for mut item in program.items {
+        tw_lets_item(item.node, job)
+    }
+    for (key, tier) in tiers {
+        if key.0 == 0 {
+            for mut item in program.items {
+                tw_mark_field(item.node, words, key.1, key.2, key.4, tier)
+            }
+        } else if key.0 == 1 && rule_keys.contains_key(key.1) {
+            let (at, j) = rule_keys.get(key.1) ?? continue
+            let mut item = program.items.get(at) ?? continue
+            tw_mark_rule(item.node, j, key.4, tier)
+        } else if key.0 == 1 || key.0 == 2 {
+            let mut target: String? = null
+            let mut own = key.1.clone()
+            match key.1.rsplit_once("::") {
+                null => {},
+                (t, o) => {
+                    target = t.clone()
+                    own = o.clone()
+                },
+            }
+            for mut item in program.items {
+                tw_mark_callable(item.node, words, target, own, key.0 == 1, key.3, key.4, tier)
+            }
+        } else if key.0 == 4 {
+            for mut item in program.items {
+                tw_mark_variant(item.node, words, key.1, key.2, key.3, key.4, tier)
+            }
+        }
+    }
+    return TierWritten { said: tw_said(tiers), views: tw_views(tiers) }
+}
+
+/// The positions made a view as a whole, by the walk's word for each.
+fn tw_views(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64]), Tier]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for (key, tier) in tiers {
+        if key.4.len() == 0 && !owned_tier(tier) {
+            out.insert(match key.0 {
+                0 => f"field {key.1} {key.2}",
+                1 => f"result {key.1}",
+                2 => f"param {key.1} {key.3}",
+                3 => f"let {key.3}",
+                else => f"variant {key.1} {key.2} {key.3}",
+            })
+        }
+    }
+    return out
+}
+
+/// Each position that is not text of its own, said.
+fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64]), Tier]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for (key, tier) in tiers {
+        let what: String = match tier {
+            Tier::View => "a view: only views and literals flow into it",
+            Tier::Lasting => "a view of the program's own text: only literals flow into it, and none is copied",
+            Tier::Mixed => "a view or text of its own, per value: both flow into it, and each is kept as it is",
+            Tier::Owned => continue,
+        }
+        let place: String = match key.0 {
+            0 => f"`{key.1}.{key.2}`",
+            1 => f"what `{key.1}` hands back",
+            2 => f"parameter {key.3 + 1} of `{key.1}`",
+            3 => "a `let`",
+            else => f"what `{key.1}::{key.2}` carries at {key.3 + 1}",
+        }
+        let inside: String = if key.4.len() == 0 { "" } else { " (its elements)" }
+        out.push(f"{place}{inside} is {what}")
+    }
+    return out
 }

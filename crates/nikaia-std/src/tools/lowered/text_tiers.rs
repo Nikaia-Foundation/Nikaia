@@ -4670,3 +4670,403 @@ pub(crate) fn same_adopted(a: &collections::BTreeMap<i64, Declaring>, b: &collec
 
 pub(crate) fn no_path() -> Vec<i64> { vec![] }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TierWritten {
+    pub said: Vec<String>,
+    pub views: collections::BTreeSet<String>,
+}
+
+pub(crate) fn tw_key(owner: &TextOwner, path: &[i64]) -> (i64, String, String, i64, Vec<i64>) {
+    let empty: &'static str = "";
+    match owner {
+        TextOwner::Field(of, field) => (0, of.to_string(), field.to_string(), 0, path.to_owned()),
+        TextOwner::Returned(key) => (1, key.to_string(), empty.to_string(), 0, path.to_owned()),
+        TextOwner::Param(key, at) => { let at = *at; (2, key.to_string(), empty.to_string(), at, path.to_owned()) },
+        TextOwner::Let(at) => { let at = *at; (3, empty.to_string(), empty.to_string(), at, path.to_owned()) },
+        TextOwner::Variant(of, variant, at) => { let at = *at; (4, of.to_string(), variant.to_string(), at, path.to_owned()) },
+    }
+}
+
+pub(crate) fn tw_tiers(decided: &TextTiers) -> collections::BTreeMap<(i64, String, String, i64, Vec<i64>), Tier> {
+    let mut tiers: collections::BTreeMap<(i64, String, String, i64, Vec<i64>), Tier> = collections::BTreeMap::new();
+    for (position, tier) in decided.tiers.iter() {
+        let tier = *tier;
+        tiers.insert(tw_key(&position.owner, &position.path), tier);
+    }
+    for (at, target) in decided.adopted.iter() {
+        let at = nikaia_std::num::value(at);
+        let owner = tw_key(&target.owner, &no_path());
+        let mut inherited: Vec<(Vec<i64>, Tier)> = vec![];
+        for (key, tier) in tiers.iter() {
+            let tier = *tier;
+            if key.0 == owner.0 && key.1 == owner.1 && key.2 == owner.2 && key.3 == owner.3 { inherited.push((key.4.to_owned(), tier)); }
+        }
+        for (path, tier) in inherited.iter() {
+            let tier = *tier;
+            tiers.insert(tw_key(&TextOwner::Let(at), path), tier);
+        }
+    }
+    tiers
+}
+
+pub(crate) fn tw_mark(ty: &mut Type, path: &[i64], from: i64, tier: Tier) {
+    if from >= path.len() as i64 {
+        match tier {
+            Tier::Owned => { },
+            Tier::View => { ty.is_view = true; },
+            Tier::Mixed => {
+                ty.is_view = true;
+                ty.either = true;
+            },
+            Tier::Lasting => {
+                ty.is_view = true;
+                ty.lasting = true;
+            },
+        }
+        return;
+    }
+    let arg = match ty.generics.get_mut(nikaia_std::count::of(*nikaia_std::index::get(&path, nikaia_std::index::at(from)))) { Some(__nikaia_value) => __nikaia_value, None => return };
+    tw_mark(&mut *arg, path, from + 1, tier);
+}
+
+pub(crate) fn tw_mark_maybe(ty: &mut Option<Type>, path: &[i64], tier: Tier) { if ty.is_some() { tw_mark(ty.as_mut().unwrap(), path, 0, tier); } }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TwLets {
+    pub(crate) lets: collections::BTreeSet<i64>,
+    pub(crate) text: Option<Type>,
+    pub(crate) adopted: collections::BTreeMap<i64, Type>,
+    pub(crate) marks: Vec<(i64, Vec<i64>, Tier)>,
+}
+
+pub(crate) fn tw_declare(ty: &mut Option<Type>, at: i64, job: &TwLets) {
+    if ty.is_none() && job.lets.contains(&at) && job.text.is_some() {
+        *ty = match job.text.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+    }
+    if ty.is_none() && job.adopted.contains_key(&at) {
+        *ty = match job.adopted.get(&at) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+    }
+    for (wanted, path, tier) in job.marks.iter() {
+        let wanted = nikaia_std::num::value(wanted);let tier = *tier;
+        if wanted == at { tw_mark_maybe(ty, path, tier); }
+    }
+}
+
+pub(crate) fn tw_lets_item(item: &mut Item, job: &TwLets) {
+    match item {
+        Item::Fn { body, .. } => { tw_lets_block(&mut *body, job); },
+        Item::Test { body, .. } => { tw_lets_block(&mut *body, job); },
+        Item::Bench { body, .. } => { tw_lets_block(&mut *body, job); },
+        Item::Impl { methods, .. } => { for method in methods.iter_mut() { tw_lets_item(&mut (*method).node, job); } },
+        _ => { },
+    }
+}
+
+pub(crate) fn tw_lets_block(block: &mut Block, job: &TwLets) { for stmt in block.stmts.iter_mut() { ({ let __nikaia_arg1 = (*stmt).span.start as i64; tw_lets_stmt(&mut (*stmt).node, __nikaia_arg1, job) }); } }
+
+pub(crate) fn tw_lets_stmt(stmt: &mut Stmt, at: i64, job: &TwLets) {
+    match stmt {
+        Stmt::Let { ty, value, .. } => {
+            tw_lets_expr(&mut *value, job);
+            tw_declare(&mut *ty, at, job);
+        },
+        Stmt::Assign { target, value, .. } => {
+            tw_lets_expr(&mut *target, job);
+            tw_lets_expr(&mut *value, job);
+        },
+        Stmt::For { iter, body, .. } => {
+            tw_lets_expr(&mut *iter, job);
+            tw_lets_block(&mut *body, job);
+        },
+        Stmt::While { cond, body } => {
+            tw_lets_expr(&mut *cond, job);
+            tw_lets_block(&mut *body, job);
+        },
+        Stmt::Return(value) => { tw_lets_maybe(&mut *value, job); },
+        Stmt::Expr(value) => { tw_lets_expr(&mut *value, job); },
+        _ => { },
+    }
+}
+
+pub(crate) fn tw_lets_maybe(expr: &mut Option<Expr>, job: &TwLets) { if expr.is_some() { tw_lets_expr(expr.as_mut().unwrap(), job); } }
+
+pub(crate) fn tw_lets_else(block: &mut Option<Block>, job: &TwLets) { if block.is_some() { tw_lets_block(block.as_mut().unwrap(), job); } }
+
+pub(crate) fn tw_lets_all(all: &mut Vec<Expr>, job: &TwLets) { for each in all.iter_mut() { tw_lets_expr(&mut *each, job); } }
+
+pub(crate) fn tw_lets_config(config: &mut Vec<ConfigArg>, job: &TwLets) { for option in config.iter_mut() { tw_lets_expr(&mut (*option).value, job); } }
+
+pub(crate) fn tw_lets_fields(fields: &mut Vec<FieldInit>, job: &TwLets) { for field in fields.iter_mut() { tw_lets_maybe(&mut (*field).value, job); } }
+
+pub(crate) fn tw_lets_expr(expr: &mut Expr, job: &TwLets) {
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            tw_lets_expr(&mut *func, job);
+            tw_lets_all(&mut *args, job);
+            tw_lets_config(&mut *config, job);
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            tw_lets_expr(&mut *receiver, job);
+            tw_lets_all(&mut *args, job);
+            tw_lets_config(&mut *config, job);
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            tw_lets_expr(&mut *receiver, job);
+            tw_lets_all(&mut *args, job);
+            tw_lets_config(&mut *config, job);
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            tw_lets_expr(&mut *lhs, job);
+            tw_lets_expr(&mut *rhs, job);
+        },
+        Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
+        Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); tw_lets_maybe(&mut *value, job); },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); tw_lets_expr(&mut *base, job); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); tw_lets_expr(&mut *base, job); },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            tw_lets_expr(&mut *base, job);
+            tw_lets_expr(&mut *index, job);
+        },
+        Expr::Range { start, end, .. } => {
+            let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
+            tw_lets_expr(&mut *start, job);
+            tw_lets_expr(&mut *end, job);
+        },
+        Expr::Tuple(items, _) => { tw_lets_all(&mut *items, job); },
+        Expr::ListLit { items, .. } => { tw_lets_all(&mut *items, job); },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            tw_lets_expr(&mut *value, job);
+            tw_lets_expr(&mut *count, job);
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            tw_lets_expr(&mut *value, job);
+            tw_lets_expr(&mut *fallback, job);
+        },
+        Expr::TryCatch { expr: inner, handler, .. } => {
+            let inner = nikaia_std::boxed::open(inner);
+            tw_lets_expr(&mut *inner, job);
+            tw_lets_block(&mut *handler, job);
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            tw_lets_expr(&mut *cond, job);
+            tw_lets_block(&mut *then_branch, job);
+            tw_lets_else(&mut *else_branch, job);
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            tw_lets_expr(&mut *value, job);
+            for arm in arms.iter_mut() {
+                tw_lets_maybe(&mut (*arm).guard, job);
+                tw_lets_expr(&mut (*arm).body, job);
+            }
+        },
+        Expr::StructLit { fields, .. } => { tw_lets_fields(&mut *fields, job); },
+        Expr::With { base, fields, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            tw_lets_expr(&mut *base, job);
+            tw_lets_fields(&mut *fields, job);
+        },
+        Expr::Block(block, _) => { tw_lets_block(&mut *block, job); },
+        Expr::Unsafe(block, _) => { tw_lets_block(&mut *block, job); },
+        Expr::Overlap(block, _) => { tw_lets_block(&mut *block, job); },
+        Expr::Closure { body, .. } => { tw_lets_block(&mut *body, job); },
+        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); tw_lets_expr(&mut *body, job); },
+        _ => { },
+    }
+}
+
+pub(crate) fn tw_fn_name(item: &Item, words: &winnow_grammar::InternerContext) -> String {
+    match item {
+        Item::Fn { name, .. } => { let name = *name; match name {
+            None => String::from("new"),
+            Some(n) => words.resolve(n).to_string(),
+        } },
+        _ => String::from(""),
+    }
+}
+
+pub(crate) fn tw_mark_field(item: &mut Item, words: &winnow_grammar::InternerContext, of: &str, field: &str, path: &[i64], tier: Tier) {
+    match item {
+        Item::Struct { name, fields, .. } => {
+            let name = *name;
+            if words.resolve(name) != of { return; }
+            let j = match fields.iter().position(|f| { words.resolve(f.name) == field }) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let declared = match fields.get_mut(nikaia_std::count::of(j)) { Some(__nikaia_value) => __nikaia_value, None => return };
+            tw_mark(&mut declared.ty, path, 0, tier);
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn tw_mark_fn(item: &mut Item, returned: bool, at: i64, path: &[i64], tier: Tier) {
+    match item {
+        Item::Fn { args, ret_type, .. } => {
+            if returned { tw_mark_maybe(&mut *ret_type, path, tier); } else {
+                let arg = match args.get_mut(nikaia_std::count::of(at)) { Some(__nikaia_value) => __nikaia_value, None => return };
+                tw_mark(&mut arg.ty, path, 0, tier);
+            }
+        },
+        _ => { },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tw_mark_callable(item: &mut Item, words: &winnow_grammar::InternerContext, target: Option<&str>, own: &str, returned: bool, at: i64, path: &[i64], tier: Tier) {
+    if target.is_none() {
+        if tw_fn_name(&item, words) == own { tw_mark_fn(item, returned, at, path, tier); }
+        return;
+    }
+    let wanted: String = nikaia_std::index::or(match target {
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        None => None,
+    }, || "".into());
+    match item {
+        Item::Impl { target: of, methods, .. } => {
+            if words.resolve(of.name) != wanted { return; }
+            let j = match methods.iter().position(|m| { tw_fn_name(&m.node, words) == own }).map(|at| at as i64) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let method = match methods.get_mut(nikaia_std::count::of(j)) { Some(__nikaia_value) => __nikaia_value, None => return };
+            tw_mark_fn(&mut method.node, returned, at, path, tier);
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn tw_mark_rule(item: &mut Item, j: i64, path: &[i64], tier: Tier) {
+    match item {
+        Item::Grammar(def) => {
+            let rule = match def.rules.get_mut(nikaia_std::count::of(j)) { Some(__nikaia_value) => __nikaia_value, None => return };
+            tw_mark_maybe(&mut rule.ret_type, path, tier);
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn tw_mark_variant(item: &mut Item, words: &winnow_grammar::InternerContext, of: &str, variant: &str, at: i64, path: &[i64], tier: Tier) {
+    match item {
+        Item::Enum { name, variants, .. } => {
+            let name = *name;
+            if words.resolve(name) != of { return; }
+            for v in variants.iter_mut() { if words.resolve((*v).name) == variant { tw_mark_payload(&mut (*v).fields, at, path, tier); } }
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn tw_mark_payload(fields: &mut VariantFields, at: i64, path: &[i64], tier: Tier) {
+    match fields {
+        VariantFields::Tuple(parts) => {
+            let part = match parts.get_mut(nikaia_std::count::of(at)) { Some(__nikaia_value) => __nikaia_value, None => return };
+            tw_mark(&mut *part, path, 0, tier);
+        },
+        _ => { },
+    }
+}
+
+pub fn tier_write(program: &mut Program, words: &winnow_grammar::InternerContext, decided: &TextTiers, text: Option<Type>) -> TierWritten {
+    let tiers = tw_tiers(decided);
+    let mut rule_keys: collections::BTreeMap<String, (i64, i64)> = collections::BTreeMap::new();
+    let mut i = 0;
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Grammar(def) => {
+                let mut j = 0;
+                for rule in def.rules.iter() {
+                    rule_keys.insert(format!("{}::{}", words.resolve(def.name), words.resolve(rule.name)), (i, j));
+                    j += 1;
+                }
+            },
+            _ => { },
+        }
+        i += 1;
+    }
+    let mut marks: Vec<(i64, Vec<i64>, Tier)> = vec![];
+    for (key, tier) in tiers.iter() {
+        let tier = *tier;
+        if key.0 == 3 { marks.push((key.3, key.4.to_owned(), tier)); }
+    }
+    let mut adopted: collections::BTreeMap<i64, Type> = collections::BTreeMap::new();
+    for (at, target) in decided.adopted.iter() {
+        let at = nikaia_std::num::value(at);
+        adopted.insert(at, target.ty.clone());
+    }
+    let job = TwLets { lets: decided.lets.to_owned(), text, adopted, marks };
+    for item in program.items.iter_mut() { tw_lets_item(&mut (*item).node, &job); }
+    for (key, tier) in tiers.iter() {
+        let tier = *tier;
+        if key.0 == 0 { for item in program.items.iter_mut() { tw_mark_field(&mut (*item).node, words, &key.1, &key.2, &key.4, tier); } } else if key.0 == 1 && rule_keys.contains_key(&key.1) {
+            let (at, j) = match rule_keys.get(&key.1) { Some(__nikaia_value) => __nikaia_value, None => continue }; let at = nikaia_std::num::value(at); let j = nikaia_std::num::value(j);
+            let item = match program.items.get_mut(nikaia_std::count::of(at)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            tw_mark_rule(&mut item.node, j, &key.4, tier);
+        } else if key.0 == 1 || key.0 == 2 {
+            let mut target: Option<String> = None;
+            let mut own = key.1.to_string();
+            match key.1.rsplit_once("::") {
+                None => { },
+                Some((t, o)) => {
+                    target = Some(t.to_string());
+                    own = o.to_string();
+                },
+            }
+            for item in program.items.iter_mut() { tw_mark_callable(&mut (*item).node, words, (target).as_deref(), &own, key.0 == 1, key.3, &key.4, tier); }
+        } else if key.0 == 4 { for item in program.items.iter_mut() { tw_mark_variant(&mut (*item).node, words, &key.1, &key.2, key.3, &key.4, tier); } }
+    }
+    TierWritten { said: tw_said(&tiers), views: tw_views(&tiers) }
+}
+
+pub(crate) fn tw_views(tiers: &collections::BTreeMap<(i64, String, String, i64, Vec<i64>), Tier>) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (key, tier) in tiers.iter() {
+        let tier = *tier;
+        if key.4.is_empty() && !owned_tier(tier) {
+            out.insert(match key.0 {
+                0 => format!("field {} {}", key.1, key.2),
+                1 => format!("result {}", key.1),
+                2 => format!("param {} {}", key.1, key.3),
+                3 => format!("let {}", key.3),
+                _ => format!("variant {} {} {}", key.1, key.2, key.3),
+            });
+        }
+    }
+    out
+}
+
+pub(crate) fn tw_said(tiers: &collections::BTreeMap<(i64, String, String, i64, Vec<i64>), Tier>) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for (key, tier) in tiers.iter() {
+        let tier = *tier;
+        let what: &'static str = match tier {
+            Tier::View => "a view: only views and literals flow into it",
+            Tier::Lasting => "a view of the program's own text: only literals flow into it, and none is copied",
+            Tier::Mixed => "a view or text of its own, per value: both flow into it, and each is kept as it is",
+            Tier::Owned => continue,
+        };
+        let place: String = match key.0 {
+            0 => format!("`{}.{}`", key.1, key.2),
+            1 => format!("what `{}` hands back", key.1),
+            2 => format!("parameter {} of `{}`", key.3 + 1, key.1),
+            3 => String::from("a `let`"),
+            _ => format!("what `{}::{}` carries at {}", key.1, key.2, key.3 + 1),
+        };
+        let inside: &'static str = if key.4.is_empty() { "" } else { " (its elements)" };
+        out.push(format!("{}{} is {}", place, inside, what));
+    }
+    out
+}
+
