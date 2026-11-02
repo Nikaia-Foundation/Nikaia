@@ -140,6 +140,11 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   run `lower-std` after building and commit the diff. It reports every refusal
   of a file, in file order, as `nikaia check` does: fix them all before the next
   cycle.
+* **A binary built in a private `git archive` copy** with the shared target dir
+  replaces `target/fast/nikaia`, and that binary looks for `std` in the copy.
+  Once the copy is deleted, `nikaia run`, `test` and `lower-std` fail with
+  "failed to read `.../crates/nikaia-std/Cargo.toml`". Set
+  `NIKAIA_SYSROOT=/home/user/Nikaia/crates` for every call of the shared binary.
 * **Reproduce a lowering defect in seconds**, not with a cargo build:
   `target/fast/nikaia lower f.nika` or `nikaia run f.nika`. A defect that shows
   only in `tools/*.nika` needs a throwaway probe function in a tools file and
