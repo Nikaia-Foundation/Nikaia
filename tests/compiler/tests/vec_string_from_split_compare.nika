@@ -1,0 +1,12 @@
+// #1189: an element of a `Vec[String]` collected from `split_whitespace`
+// is a view of text, read by `get` and compared with text.
+
+fn names_the_crate(line: String, word: String) -> bool {
+	let words: Vec[String] = line.split_whitespace().collect()
+	let first = words.get(0) ?? return false
+	return first == word
+}
+
+fn main() {
+	println(f"{names_the_crate("serde 1.0.200", "serde")}")
+}

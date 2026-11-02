@@ -323,6 +323,16 @@ pub(crate) fn check_core_method_summed(name: &str, on: &Ty, value: &Ty) -> Strin
     }
 }
 
+pub(crate) fn check_core_method_views_of_text(on: &Ty) -> bool {
+    match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name);
+            (base == "Vec" || base == "List") && args.len() == 1 && (*nikaia_std::index::get(&args, 0)).is_a_view() && is_text_type(nikaia_std::index::get(&args, 0))
+        },
+        _ => false,
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
@@ -482,7 +492,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         match value {
             Ty::Nullable(ref inner) => {
                 let inner = nikaia_std::boxed::open(inner);
-                if a_copy_by_value(inner) { let added = state.facts.copied_walks.insert(id_of(expr) as i64); } else if check_core_method_a_tuple(inner) { let lent = state.flow.lent_list_reads.insert(id_of(expr) as i64); }
+                if a_copy_by_value(inner) || check_core_method_views_of_text(&on) { let added = state.facts.copied_walks.insert(id_of(expr) as i64); } else if check_core_method_a_tuple(inner) { let lent = state.flow.lent_list_reads.insert(id_of(expr) as i64); }
             },
             _ => { },
         }

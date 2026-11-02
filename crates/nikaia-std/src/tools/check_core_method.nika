@@ -453,6 +453,18 @@ fn check_core_method_summed(name: ref String, on: ref Ty, value: ref Ty) -> Stri
     }
 }
 
+/// Whether `on` is a list of views of text: `Vec[ref String]`, `&[&str]`
+/// below.
+fn check_core_method_views_of_text(on: ref Ty) -> bool {
+    return match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name)
+            (base == "Vec" || base == "List") && args.len() == 1 && args[0].is_a_view() && is_text_type(args[0])
+        },
+        else => false,
+    }
+}
+
 fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, on: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], written: ref String, span: ref Span) -> Ty sync {
     let name: String = f"{world.words.resolve(method)}"
     // **A `set` given a stamped value** (D4): the receiver's name, carried.
@@ -669,7 +681,10 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if key == "Vec::get" || key == "Vec::first" || key == "Vec::last" {
         match value {
             Ty::Nullable(inner) => {
-                if a_copy_by_value(inner) {
+                // **So is an element that is a view of text** (#1189): a
+                // `Vec[ref String]` hands `&&str` out, which compares with
+                // no text, and the `&str` it holds copies.
+                if a_copy_by_value(inner) || check_core_method_views_of_text(on) {
                     let added = state.facts.copied_walks.insert(id_of(expr) as i64)
                 } else if check_core_method_a_tuple(inner) {
                     let lent = state.flow.lent_list_reads.insert(id_of(expr) as i64)
