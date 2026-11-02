@@ -94,20 +94,19 @@ impl EmitState {
         let mut out: collections::BTreeMap[Vec[String], String] = collections::BTreeMap()
         for key in self.own_contracts.functions.keys() {
             let contract = self.own_contracts.functions.get(key) ?? continue
-            let members = contract.fails_with
-            if members.len() < 2 {
+            if contract.fails_with.len() < 2 {
                 continue
             }
             // One member this compiler cannot name is the whole set unnamed: a
             // sum with a hole in it is the box by another spelling.
             let mut all_named = true
-            for member in members {
+            for member in contract.fails_with {
                 if self.name_of_error(world, member) == 0 {
                     all_named = false
                 }
             }
             if all_named {
-                out.insert(members.clone(), sum_name(members))
+                out.insert(contract.fails_with.clone(), sum_name(contract.fails_with))
             }
         }
         return out

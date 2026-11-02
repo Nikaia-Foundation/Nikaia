@@ -1,0 +1,3 @@
+/// An entry declared in its own file, read out of a map by
+/// `src/lookup_beside.nika` (#1183).
+pub struct Shelved { pub n: i64, pub s: String }

@@ -669,10 +669,13 @@ fn check_core_stmt_an_element_read(state: ref CheckState, world: ref CheckWorld,
 
 /// A struct of the program, which a read lends (ADR-279 D8) and which is the
 /// reference below already. One that copies is a view too: where a `C` is
-/// wanted, the view is copied out (ADR-387 D1, #1107).
+/// wanted, the view is copied out (ADR-387 D1, #1107). **A struct another
+/// file of the package declares is one too** (ADR-286 D1, #1183): each file
+/// answers alike, so `m[k] ?? return null` handed back as a `ref C` is not
+/// owned because `C` is declared one file over.
 fn check_core_stmt_a_lent_struct(state: ref CheckState, ty: ref Ty) -> bool sync {
     return match ty {
-        Ty::Named { name, args, view } => !view && args.len() == 0 && state.structs.contains_key(name),
+        Ty::Named { name, args, view } => !view && args.len() == 0 && (state.structs.contains_key(name) || (state.parts_beside.contains_key(name) && !state.enums.contains_key(name))),
         else => false,
     }
 }

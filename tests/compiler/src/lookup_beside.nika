@@ -1,0 +1,23 @@
+use std::collections
+
+/// A map of a struct another file declares (`src/entry_beside.nika`).
+pub struct Shelf { pub entries: collections::BTreeMap[String, Shelved] }
+
+/// The entry read past a jump is a view of the map's element, handed back
+/// as the `ref Shelved` declared, as it is for a struct of this file (#1183).
+pub fn shelved_with_name(shelf: ref Shelf, name: String) -> (String, ref Shelved)? sync {
+	let entry = shelf.entries[name] ?? return null
+	return (name.clone(), entry)
+}
+
+pub fn shelved(shelf: ref Shelf, name: String) -> ref Shelved? sync {
+	let entry = shelf.entries[name] ?? return null
+	return entry
+}
+
+/// What the two lookups hand back, read where the package reads them.
+pub fn shelved_shown(shelf: ref Shelf, name: String) -> String {
+	let found = shelved_with_name(shelf, name) ?? return "none"
+	let entry = shelved(shelf, name) ?? return "none"
+	return f"{found.0} {found.1.n} {found.1.s} {entry.s}"
+}

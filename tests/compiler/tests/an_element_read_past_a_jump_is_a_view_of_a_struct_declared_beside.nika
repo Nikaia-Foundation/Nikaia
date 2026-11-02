@@ -1,0 +1,14 @@
+use std::collections
+use compiler_tests
+
+/// A map read past a jump, of a struct another file of the package declares,
+/// is handed back as the `ref` the function declares (#1183, ADR-286 D1):
+/// `src/lookup_beside.nika` reads `Shelved` of `src/entry_beside.nika`.
+fn main() {
+	let mut entries: collections::BTreeMap[String, compiler_tests::Shelved] = collections::BTreeMap()
+	entries.insert("a", compiler_tests::Shelved { n: 3, s: "xy" })
+	let shelf = compiler_tests::Shelf { entries: entries }
+	println(compiler_tests::shelved_shown(shelf, "a"))
+	println(compiler_tests::shelved_shown(shelf, "b"))
+	println(f"{compiler_tests::shelved(shelf, "b") == null}")
+}
