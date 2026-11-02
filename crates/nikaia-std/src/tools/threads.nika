@@ -356,3 +356,15 @@ pub fn held_across_a_pause(bound: ref Vec[(String, i64)], pauses: ref Vec[i64], 
     }
     return out
 }
+
+/// The worst of several answers, as the walk joins them: a refusal beats
+/// an undecided answer, which beats `May`.
+test "the worst of several answers is the one a reader can act on" {
+    let answers: Vec[Crossing] = [Crossing::May, Crossing::Undecided { part: "?" }, Crossing::MayNot { part: "Locked[i64]", at: null, why: Refusal::Lock }, Crossing::May]
+    let mut worst = Crossing::May
+    for answer in answers.drain() {
+        worst = worst_of(worst, answer)
+    }
+    assert(!worst.may())
+    assert((worst.refused_part() ?? "") == "Locked[i64]")
+}

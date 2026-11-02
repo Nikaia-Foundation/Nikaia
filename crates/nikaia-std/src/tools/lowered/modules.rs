@@ -329,6 +329,31 @@ pub fn modules_tests_as_functions(items: &mut Vec<Spanned<Item>>, source: &str, 
     tests
 }
 
+pub fn modules_test_wrappers(titles: &[String], first: i64) -> String {
+    let mut text: String = String::from("\n#[cfg(test)]\nmod nikaia_tests {\n");
+    let mut k = first;
+    for title in titles.iter() {
+        let mut slug: String = String::from("");
+        let mut gap = false;
+        for b in title.bytes() {
+            let c = b as i64;
+            if c >= 48 && c <= 57 || c >= 97 && c <= 122 {
+                if gap && !slug.is_empty() { slug.push_str("_"); }
+                gap = false;
+                slug.push_str(&format!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char));
+            } else if c >= 65 && c <= 90 {
+                if gap && !slug.is_empty() { slug.push_str("_"); }
+                gap = false;
+                slug.push_str(&format!("{}", (u8::try_from(c + 32).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char));
+            } else { gap = true; }
+        }
+        text.push_str(&format!("    #[test]\n    fn {}() {{\n        super::{}().unwrap()\n    }}\n", slug, test_function(k)));
+        k += 1;
+    }
+    text.push_str("}\n");
+    text
+}
+
 pub(crate) fn modules_line_of(source: &str, at: i64) -> i64 {
     let mut line: i64 = 1;
     let mut seen: i64 = 0;

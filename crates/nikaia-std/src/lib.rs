@@ -318,6 +318,11 @@ pub mod tools {
     #[allow(unused_imports)]
     use crate::text::TextQuoted;
 
+    /// How a false `assert` of a `test` block prints its operands (#1147): the
+    /// lowering writes `.shown()`, and a tool has no prelude to bring it.
+    #[allow(unused_imports)]
+    use crate::abort::{ShownByDebug as _, ShownByNothing as _};
+
     /// `seq.join(", ")`, a sequence's elements as one text: a program gets
     /// `Join` from its prelude, a tool has none.
     #[allow(unused_imports)]

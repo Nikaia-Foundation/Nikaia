@@ -228,3 +228,20 @@ pub fn held_across_a_pause(bound: &[(String, i64)], pauses: &[i64], named: &coll
     out
 }
 
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let answers: Vec<Crossing> = vec![Crossing::May, Crossing::Undecided { part: String::from("?") }, Crossing::MayNot { part: String::from("Locked[i64]"), at: None, why: Refusal::Lock }, Crossing::May];
+    let mut worst = Crossing::May;
+    for answer in answers.into_iter() { worst = worst_of(worst, answer); }
+    if !(!worst.may()) { nikaia_std::abort::assertion_failed("assert(!worst.may())", None, &[]) };
+    if !(nikaia_std::index::or(worst.refused_part(), || "".into()) == "Locked[i64]") { nikaia_std::abort::assertion_failed("assert((worst.refused_part() ?? \"\") == \"Locked[i64]\")", None, &[("worst.refused_part() ?? \"\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(worst.refused_part(), || "".into())))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn the_worst_of_several_answers_is_the_one_a_reader_can_act_on() {
+        super::__nikaia_test_0().unwrap()
+    }
+}

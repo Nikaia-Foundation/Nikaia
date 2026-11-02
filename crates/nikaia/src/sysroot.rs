@@ -658,12 +658,34 @@ fn lower_tools_files_cached(
         }
         let checking = started.elapsed();
         let facts = facts_reusable.then_some(checked.facts);
+        // **A file's `test` blocks** (#1147): lowered as functions
+        // (`modules_tests_as_functions`) with the `#[cfg(test)]` module that
+        // runs them (`modules_test_wrappers`). The file is parsed again for
+        // it, and the facts of the first check belong to the first parse.
+        let (tests, facts) =
+            if nikaia_std::tools::modules::modules_test_count(&unit.program.items) > 0 {
+                (Some(with_tests_as_functions(path, &parsed)), None)
+            } else {
+                (None, facts)
+            };
+        let (unit, wrappers) = match &tests {
+            Some(Ok((again, wrappers))) => (again, wrappers.as_str()),
+            _ => (unit, ""),
+        };
+        if let Some(Err(e)) = &tests {
+            return (
+                Err(anyhow::anyhow!("{}: {e}", path.display())),
+                started.elapsed(),
+                std::time::Duration::ZERO,
+            );
+        }
         let lowered = crate::emit::emit_std_items_against_at(
             unit, &beside, &own, &described, build, provenance, facts,
         )
         .map(|lowered| {
-            cache.put(key.as_deref(), &lowered.rust);
-            (lowered.rust, false)
+            let rust = format!("{}{wrappers}", lowered.rust);
+            cache.put(key.as_deref(), &rust);
+            (rust, false)
         })
         .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()));
         (lowered, checking, started.elapsed() - checking)
@@ -699,6 +721,29 @@ fn lower_tools_files_cached(
     timer.lap("assemble");
     timer.report();
     Ok(Package { files })
+}
+
+/// The file at `path` parsed again with its `test` blocks as functions, and
+/// the text of the `#[cfg(test)]` module that runs them.
+fn with_tests_as_functions(
+    path: &Path,
+    all: &[crate::parser::Parsed],
+) -> Result<(crate::parser::Parsed, String)> {
+    let source = std::fs::read_to_string(path)?;
+    let mut again = crate::parser::parse_unrefined(&source).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let read: Vec<&crate::parser::Parsed> = all.iter().collect();
+    let beside = crate::text_tiers::beside_fields(&read);
+    crate::text_tiers::refine_with(&mut again, &beside);
+    let interner = &again.interner;
+    let found = nikaia_std::tools::modules::modules_tests_as_functions(
+        &mut again.program.items,
+        &source,
+        0,
+        &|text| interner.intern_string(text),
+    );
+    let titles: Vec<String> = found.into_iter().map(|(title, _)| title).collect();
+    let wrappers = nikaia_std::tools::modules::modules_test_wrappers(&titles, 0);
+    Ok((again, wrappers))
 }
 
 /// **A package as `lower-std` writes it** (#667 step 4): the index
