@@ -374,6 +374,14 @@ impl CheckState {
             let added = self.facts.lookup_keys.insert(node)
             return
         }
+        // **A lambda's text item a walk lends is a reference already** (#1190):
+        // `filter` after a `map` hands `&String` below, whatever its type
+        // says, so a map or a set keyed by text looks it up as the `str` it
+        // holds, where a `&` would make it `&&String`.
+        if names_text(ty) && check_reads_keyed_by_text(on) && check_core_ops_lent_text_item(self, world, given) {
+            self.facts.map_keys.insert((node, false), FactKeyForm::Viewed)
+            return
+        }
         let added = self.facts.lent_args.insert(node)
     }
 
@@ -487,6 +495,18 @@ impl CheckState {
         } else {
             self.facts.narrowing_casts.insert(at, FactNarrowing::Integer)
         }
+    }
+}
+
+/// Whether `on` is a map or a set whose keys are text, of its own or views.
+fn check_reads_keyed_by_text(on: ref Ty) -> bool sync {
+    return match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name)
+            let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set"
+            keyed && args.len() > 0 && names_text(args[0])
+        },
+        else => false,
     }
 }
 

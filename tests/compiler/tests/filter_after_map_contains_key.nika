@@ -1,0 +1,22 @@
+// #1190: a `filter` after a `map` hands its lambda a reference to the item,
+// looked up in a map keyed by text of its own.
+use std::collections
+
+struct Ledger {
+	functions: collections::BTreeMap[String, i64],
+}
+
+fn unanswered(names: Vec[String], ledger: ref Ledger, word: String) -> Vec[String] {
+	return names.iter().map(fn(name) { f"{word}::{name}" }).filter(fn(name) {
+		!ledger.functions.contains_key(name)
+	}).collect()
+}
+
+fn main() {
+	let mut ledger = Ledger { functions: collections::BTreeMap() }
+	ledger.functions.insert(f"c::{"a"}", 1)
+	let names: Vec[String] = ["a", "b"]
+	for name in unanswered(names, ledger, "c") {
+		println(name)
+	}
+}

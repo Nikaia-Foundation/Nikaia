@@ -239,6 +239,10 @@ impl CheckState {
             let added = self.facts.lookup_keys.insert(node);
             return;
         }
+        if names_text(&ty) && check_reads_keyed_by_text(on) && check_core_ops_lent_text_item(self, world, &given) {
+            self.facts.map_keys.insert((node, false), FactKeyForm::Viewed);
+            return;
+        }
         let added = self.facts.lent_args.insert(node);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -315,6 +319,19 @@ impl CheckState {
         let checked = check_numeric(&from_name) && check_numeric(&into_name) && !always_fits;
         let at = operand;
         if !checked { let added = self.flow.widening_casts.insert(at); } else if from_a_float { self.facts.narrowing_casts.insert(at, FactNarrowing::FromFloat); } else { self.facts.narrowing_casts.insert(at, FactNarrowing::Integer); }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_reads_keyed_by_text(on: &Ty) -> bool {
+    match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name);
+            let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set";
+            keyed && !args.is_empty() && names_text(nikaia_std::index::get(&args, 0))
+        },
+        _ => false,
     }
 }
 
