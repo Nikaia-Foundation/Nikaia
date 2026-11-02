@@ -2551,7 +2551,7 @@ pub mod declared {
 }
 pub mod describe {
     #[allow(unused_imports)]
-    pub use super::{Drafted, drafted};
+    pub use super::{Drafted, drafted, DescribeHost, describe_adopt_refusal, describe_descriptions_digest, describe_names_the_program_writes};
 }
 pub mod diagnostics {
     #[allow(unused_imports)]

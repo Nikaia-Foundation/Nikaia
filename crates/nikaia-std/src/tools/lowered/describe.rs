@@ -74,3 +74,90 @@ pub(crate) fn contract_of(function: &Function, crate_word: &str, types: &collect
     contract(&written, crate_word, types, mentioned)
 }
 
+pub trait DescribeHost {
+    fn qualified_names(&self, text: &str) -> Option<Vec<String>>;
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::path::Path, derived: &std::path::Path, described: Option<String>, version: &str, ledger: &Ledger, files: &collections::BTreeMap<String, String>) -> Option<String> {
+    match described {
+        None => { return Some(format!("`{}`'s shipped {} doesn't say which crate and version it describes. Its header needs the line `# crate: {} {}`.", declared, nikaia_std::fs::path::display(&(shipped)), crate_word, version)); },
+        Some(ref said) => { if said != version { return Some(format!("`{}`'s shipped {} describes version {}, and the crate is {}. A description is reviewed for one version: review it again in the crate.", declared, nikaia_std::fs::path::display(&(shipped)), said, version)); } },
+    }
+    if ledger.sources.is_empty() { return Some(format!("`{}`'s shipped {} has no `[sources]` in {} beside it, so nothing says which sources it was reviewed against.", declared, nikaia_std::fs::path::display(&(shipped)), nikaia_std::fs::path::display(&(derived)))); }
+    let now: collections::BTreeMap<String, String> = files.iter().map(|entry| { (entry.0.to_string(), hash::sha256_hex(&entry.1.bytes().collect::<Vec<_>>())) }).collect();
+    let all: collections::BTreeSet<String> = now.keys().chain(ledger.sources.keys()).map(|x| { x.to_string() }).collect();
+    let moved: Vec<String> = all.iter().filter(|&file| { now.get(file) != ledger.sources.get(file) }).map(|x| { x.to_string() }).collect::<Vec<_>>();
+    let first = match moved.first() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let more = match moved.len() as i64 {
+        1 => String::from(""),
+        2 => String::from(" and 1 more file"),
+        _ => format!(" and {} more files", moved.len() as i64 - 1),
+    };
+    Some(format!("`{}` has changed since its shipped description was reviewed: `{}`{} changed since.\nA description is written by a person, so the crate's nikaia.contracts has to be reviewed again, not just regenerated.", declared, first, more))
+}
+
+pub async fn describe_descriptions_digest(directory: &std::path::Path) -> String {
+    let names = match fs::read_dir(directory, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { return String::from(""); },
+    };
+    let files: Vec<fs::Path> = names.iter().filter(|&name| {
+        nikaia_std::index::or(match nikaia_std::fs::path::extension(&(name)).as_ref() {
+            Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
+            None => None,
+        }, || "".into()) == "contracts"
+    }).cloned().collect::<Vec<_>>();
+    if files.is_empty() { return String::from(""); }
+    let mut all: String = String::from("");
+    for name in files.iter() {
+        let text = match fs::read_to_string(&nikaia_std::fs::path::join(&(directory), name), &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { String::from("") },
+        };
+        all.push_str(&nikaia_std::fs::path::text_of(&(name)));
+        all.push_str("\0");
+        all.push_str(&hash::sha256_hex(&text.bytes().collect::<Vec<_>>()));
+        all.push_str("\0");
+    }
+    hash::sha256_hex(&all.bytes().collect::<Vec<_>>())
+}
+
+pub async fn describe_names_the_program_writes<H: DescribeHost>(root: &std::path::Path, crate_word: &str, contracts: &str, host: &H) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut pending: Vec<fs::Path> = vec![nikaia_std::fs::path::clone(&(root))];
+    loop {
+        let directory = match pending.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        let names = match fs::read_dir(&directory, &fs::Root::Anywhere) {
+            Ok(value) => value,
+            Err(_error) => { continue; },
+        };
+        for name in names.iter() {
+            let path = nikaia_std::fs::path::join(&(directory), name);
+            let meta = match fs::metadata(&path, &fs::Root::Anywhere) {
+                Ok(value) => value,
+                Err(_error) => { continue; },
+            };
+            if meta.is_dir() {
+                let word = nikaia_std::fs::path::text_of(&(name));
+                if word != "target" && word != contracts { pending.push(path); }
+                continue;
+            }
+            if nikaia_std::index::or(match nikaia_std::fs::path::extension(&(path)).as_ref() {
+                Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
+                None => None,
+            }, || "".into()) != "nika" { continue; }
+            let text = match fs::read_to_string(&path, &fs::Root::Anywhere).await {
+                Ok(value) => value,
+                Err(_error) => { continue; },
+            };
+            let written = match host.qualified_names(&text) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            for qualified in written.iter() {
+                let rest = match qualified.strip_prefix(&format!("{}::", crate_word)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                out.insert(rest.to_string());
+            }
+        }
+    }
+    out
+}
+

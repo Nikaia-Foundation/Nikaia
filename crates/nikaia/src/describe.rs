@@ -72,6 +72,8 @@ use anyhow::{Context, Result, bail};
 
 use crate::contracts::{Ledger, Notes};
 
+use nikaia_std::rt::exec::block_on;
+use nikaia_std::tools::describe::{self, DescribeHost};
 use nikaia_std::tools::surface;
 
 /// What a run of the command did, for the line it prints.
@@ -159,57 +161,21 @@ fn adopt(root: &Path, crate_word: &str) -> Result<Option<Described>> {
         let mut words = line.split_whitespace();
         (words.next() == Some(crate_word)).then(|| words.next().unwrap_or("?").to_string())
     });
-    match described {
-        Some(version) if version == sources.version => {}
-        Some(version) => bail!(
-            "`{declared}`'s shipped {} describes version {version}, and the crate is \
-             {}. A description is reviewed for one version: review it again in the crate.",
-            shipped.display(),
-            sources.version
-        ),
-        None => bail!(
-            "`{declared}`'s shipped {} doesn't say which crate and version it describes. \
-             Its header needs the line `# crate: {crate_word} {}`.",
-            shipped.display(),
-            sources.version
-        ),
-    }
+    // **The checks are Nikaia's** (`tools/describe.nika`, #125): the version
+    // the header names, the `[sources]` beside it and their hashes against the
+    // crate's own.
     let derived = crate::contracts::derived_path(&shipped);
-    if ledger.sources.is_empty() {
-        bail!(
-            "`{declared}`'s shipped {} has no `[sources]` in {} beside it, so nothing says \
-             which sources it was reviewed against.",
-            shipped.display(),
-            derived.display()
-        );
-    }
-    let now: BTreeMap<String, String> = sources
-        .files
-        .iter()
-        .map(|(file, text)| {
-            (
-                file.clone(),
-                orchestrator::cache::sha256_hex(text.as_bytes()),
-            )
-        })
-        .collect();
-    let moved: Vec<&String> = now
-        .keys()
-        .chain(ledger.sources.keys())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .filter(|file| now.get(*file) != ledger.sources.get(*file))
-        .collect();
-    if let Some(first) = moved.first() {
-        bail!(
-            "`{declared}` has changed since its shipped description was reviewed: `{first}`{} \
-             changed since.\nA description is written by a person, so the crate's {SHIPPED} \
-             has to be reviewed again, not just regenerated.",
-            match moved.len() {
-                1 => String::new(),
-                n => format!(" and {} more file{}", n - 1, if n == 2 { "" } else { "s" }),
-            }
-        );
+    if let Some(refusal) = describe::describe_adopt_refusal(
+        &declared,
+        crate_word,
+        &shipped,
+        &derived,
+        described,
+        &sources.version,
+        &ledger,
+        &sources.files,
+    ) {
+        bail!("{refusal}");
     }
 
     let directory = root.join(crate::project::CONTRACTS);
@@ -268,7 +234,7 @@ pub fn draft(root: &Path, crate_word: &str) -> Result<(Ledger, Described)> {
     // #125): the entries, the types they name and what the describer saw and
     // did not claim ([ADR-290](../../docs/specification/adr/adr-290.md) D8,
     // D10). The header is this file's.
-    let drafted = nikaia_std::tools::describe::drafted(&surface, crate_word, &wanted);
+    let drafted = describe::drafted(&surface, crate_word, &wanted);
     let mut ledger = Ledger::empty();
     ledger.inference = "described-from-signatures".to_string();
     ledger.sources = hashes;
@@ -412,34 +378,9 @@ fn crate_sources(root: &Path, value: &toml::Value, crate_word: &str, key: &str) 
 /// a claim was seen, because a refused build records nothing, while one that
 /// *added* a claim hit an entry recorded before the word was there.
 pub fn descriptions_digest(root: &Path) -> String {
-    let directory = root.join(crate::project::CONTRACTS);
-    let Ok(entries) = std::fs::read_dir(&directory) else {
-        return String::new();
-    };
-    let mut files: Vec<PathBuf> = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().and_then(|e| e.to_str()) == Some("contracts"))
-        .collect();
-    if files.is_empty() {
-        return String::new();
-    }
-    // ADR-005 D8: a directory listing is never consumed in filesystem order
-    // where the output depends on it, and this output is a cache key.
-    files.sort();
-    let mut all = String::new();
-    for path in files {
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let text = std::fs::read_to_string(&path).unwrap_or_default();
-        all.push_str(&name);
-        all.push('\0');
-        all.push_str(&orchestrator::cache::sha256_hex(text.as_bytes()));
-        all.push('\0');
-    }
-    orchestrator::cache::sha256_hex(all.as_bytes())
+    block_on(describe::describe_descriptions_digest(
+        &root.join(crate::project::CONTRACTS),
+    ))
 }
 
 /// **Where a described crate's sources are**, for a reader other than the
@@ -494,41 +435,27 @@ fn cargo_version(crate_root: &Path) -> Option<String> {
 /// runs: what the refusal asks is which crates a program reaches into, and this
 /// asks which names of one — the same walk, read one segment further.
 fn names_the_program_writes(root: &Path, crate_word: &str) -> Result<BTreeSet<String>> {
-    let mut out = BTreeSet::new();
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(directory) = pending.pop() {
-        let Ok(entries) = std::fs::read_dir(&directory) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                // `target/` is the build's own and holds nothing a program
-                // wrote; `contracts/` holds this command's own output.
-                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if name != "target" && name != crate::project::CONTRACTS {
-                    pending.push(path);
-                }
-                continue;
-            }
-            if path.extension().and_then(|e| e.to_str()) != Some("nika") {
-                continue;
-            }
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            let Ok(parsed) = crate::parser::parse_to_ast(&text) else {
-                // A file that does not parse is the build's to report, not
-                // this command's: it would be the same message twice.
-                continue;
-            };
-            for name in crate::foreign::qualified_names(&parsed).keys() {
-                let Some(rest) = name.strip_prefix(&format!("{crate_word}::")) else {
-                    continue;
-                };
-                out.insert(rest.to_string());
-            }
-        }
+    // **The walk is Nikaia's** (`tools/describe.nika`, #125); the parser and
+    // the names it writes are this crate's.
+    Ok(block_on(describe::describe_names_the_program_writes(
+        root,
+        crate_word,
+        crate::project::CONTRACTS,
+        &Host,
+    )))
+}
+
+/// **What `tools/describe.nika` asks of the compiler**: the names a `.nika`
+/// text writes, read by the parser and `foreign::qualified_names`.
+struct Host;
+
+impl DescribeHost for Host {
+    fn qualified_names(&self, text: &str) -> Option<Vec<String>> {
+        let parsed = crate::parser::parse_to_ast(text).ok()?;
+        Some(
+            crate::foreign::qualified_names(&parsed)
+                .into_keys()
+                .collect(),
+        )
     }
-    Ok(out)
 }

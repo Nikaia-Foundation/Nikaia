@@ -7,6 +7,8 @@
 // `tools/rust.nika` and `tools/surface.nika` already.
 
 use std::collections
+use std::fs
+use std::hash
 
 /// What a description holds, before the header goes on it.
 pub struct Drafted {
@@ -122,4 +124,105 @@ fn contract_of(function: ref Function, crate_word: ref String, types: ref collec
         parameters: function.parameters.clone(),
     }
     return contract(written, crate_word, types, mentioned)
+}
+
+/// What `describe_names_the_program_writes` asks of the compiler: the parser
+/// and the walk `NK2504` runs are Rust's.
+pub trait DescribeHost {
+    /// The qualified names a `.nika` text writes (`foreign::qualified_names`),
+    /// `null` where the text does not parse.
+    fn qualified_names(ref self, text: ref String) -> Vec[String]? sync
+}
+
+/// **Why a crate's shipped ledger is refused** (ADR-290 D22, D5), `null`
+/// where it describes the crate as it is now: `described` is the version its
+/// `# crate:` line names for `crate_word`, `version` the crate's, `files` the
+/// crate's sources by their path in it.
+///
+/// A ledger that names another version than the crate's, or whose recorded
+/// sources hash differently from the crate's own, describes code that is no
+/// longer there, and is refused rather than believed.
+pub fn describe_adopt_refusal(declared: String, crate_word: String, shipped: ref fs::Path, derived: ref fs::Path, described: String?, version: String, ledger: ref Ledger, files: ref collections::BTreeMap[String, String]) -> String? {
+    match described {
+        null => return f"`{declared}`'s shipped {shipped.display()} doesn't say which crate and version it describes. Its header needs the line `# crate: {crate_word} {version}`.",
+        said => {
+            if said != version {
+                return f"`{declared}`'s shipped {shipped.display()} describes version {said}, and the crate is {version}. A description is reviewed for one version: review it again in the crate."
+            }
+        },
+    }
+    if ledger.sources.is_empty() {
+        return f"`{declared}`'s shipped {shipped.display()} has no `[sources]` in {derived.display()} beside it, so nothing says which sources it was reviewed against."
+    }
+    let now: collections::BTreeMap[String, String] = files.iter().map(fn(entry) { (entry.0.clone(), hash::sha256_hex(entry.1.bytes().collect())) }).collect()
+    let all: collections::BTreeSet[String] = now.keys().chain(ledger.sources.keys()).map(fn(x) { x.clone() }).collect()
+    let moved: Vec[String] = all.iter().filter(fn(file) { now.get(file) != ledger.sources.get(file) }).map(fn(x) { x.clone() }).collect()
+    let first = moved.first() ?? return null
+    let more = match moved.len() {
+        1 => "",
+        2 => " and 1 more file",
+        else => f" and {moved.len() - 1} more files",
+    }
+    return f"`{declared}` has changed since its shipped description was reviewed: `{first}`{more} changed since.\nA description is written by a person, so the crate's nikaia.contracts has to be reviewed again, not just regenerated."
+}
+
+/// **Every description this build reads, as one digest**, for the cache key
+/// ([ADR-290](../../../docs/specification/adr/adr-290.md) D5,
+/// [ADR-021](../../../docs/specification/adr/adr-021.md) D7): each
+/// `*.contracts` in `directory`, its name and the SHA-256 of its text.
+///
+/// Empty where there is none. The names come in byte order (ADR-005 D8: this
+/// output is a cache key), and a file that cannot be read hashes as empty.
+pub fn describe_descriptions_digest(directory: ref fs::Path) -> String {
+    let names = fs::read_dir(directory, fs::Root::Anywhere) catch { return "" }
+    let files: Vec[fs::Path] = names.iter().filter(fn(name) { (name.extension()?.text_of() ?? "") == "contracts" }).cloned().collect()
+    if files.is_empty() {
+        return ""
+    }
+    let mut all = ""
+    for name in files {
+        let text = fs::read_to_string(directory.join(name), fs::Root::Anywhere) catch { "" }
+        all.push_str(name.text_of())
+        all.push_str("\0")
+        all.push_str(hash::sha256_hex(text.bytes().collect()))
+        all.push_str("\0")
+    }
+    return hash::sha256_hex(all.bytes().collect())
+}
+
+/// **The names of `crate_word` every `.nika` under `root` writes**, without
+/// the crate word in front: the walk `NK2504` runs, read one segment further.
+///
+/// `target/` is the build's own and `contracts` (the directory named so) holds
+/// this command's own output: neither is walked. A directory or a file that
+/// cannot be read is left out, and so is a file that does not parse: that is
+/// the build's to report, not this command's.
+pub fn describe_names_the_program_writes[H: DescribeHost](root: ref fs::Path, crate_word: String, contracts: String, host: ref H) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut pending: Vec[fs::Path] = [root.clone()]
+    while true {
+        let directory = pending.pop() ?? break
+        let names = fs::read_dir(directory, fs::Root::Anywhere) catch { continue }
+        for name in names {
+            let path = directory.join(name)
+            let meta = fs::metadata(path, fs::Root::Anywhere) catch { continue }
+            if meta.is_dir() {
+                let word = name.text_of()
+                if word != "target" && word != contracts {
+                    pending.push(path)
+                }
+                continue
+            }
+            if (path.extension()?.text_of() ?? "") != "nika" {
+                continue
+            }
+            let text = fs::read_to_string(path, fs::Root::Anywhere) catch { continue }
+            let written = host.qualified_names(text) ?? continue
+            for qualified in written {
+                let rest = qualified.strip_prefix(f"{crate_word}::") ?? continue
+                out.insert(rest.clone())
+            }
+        }
+    }
+    return out
 }
