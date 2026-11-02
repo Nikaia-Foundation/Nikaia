@@ -5,8 +5,11 @@
 //
 // **The parser's combinators are instantiated deeper than rustc's default
 // limit of 128 allows** since the ledger inference and the bounds walk read
-// conditions back through `parse_to_ast` (ADR-314 D3).
-#![recursion_limit = "256"]
+// conditions back through `parse_to_ast` (ADR-314 D3). At the `dev` profile
+// (`opt-level = 1`) rustc 1.97 needs more than 256 for the grammar's closure
+// (`parser/mod.rs`); the depth is finite (512 builds), so this is a limit, not
+// a cycle: release and `fast` build at 256 too.
+#![recursion_limit = "512"]
 
 pub mod assets;
 pub mod ast;
