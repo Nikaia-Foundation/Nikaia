@@ -658,3 +658,639 @@ pub fn tr_declared_rules(words: &winnow_grammar::InternerContext, items: &[Spann
     out
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum TrJob {
+    Leaving { checked: TrRuled, kept: TrRuled, type_name: String, base: Expr, in_lambdas: collections::BTreeSet<u32> },
+    Literals,
+    Fields { binding: winnow_grammar::Symbol, values: collections::BTreeMap<String, Expr> },
+    Dropping { changed: collections::BTreeSet<String> },
+}
+
+pub(crate) fn tr_at(spans: &collections::BTreeMap<u32, Span>, id: u32, span: &Span) -> Span {
+    let found = match spans.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return tr_span(span) };
+    tr_span(&found)
+}
+
+pub fn tr_expand(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, items: &mut Vec<Spanned<Item>>, spans: &collections::BTreeMap<u32, Span>) -> Option<TrRefusal> {
+    let found = tr_collect(words, intern, renew, &items);
+    if found.refusal.is_some() { return std::convert::identity(found.refusal); }
+    let ruled = &found.ruled;
+    if ruled.is_empty() { return None; }
+    let fields: collections::BTreeMap<String, collections::BTreeSet<String>> = ruled.iter().map(|pair| { (pair.0.to_string(), pair.1.fields.to_owned()) }).collect();
+    let mut changed = tr_changed_outside(words, &fields, &items);
+    changed.extend(tr_fails_changed(words, &ruled, &items));
+    let own = tr_methods_of(words, &items);
+    for item in items.iter_mut() { tr_rewrite_item(words, intern, renew, &ruled, &changed, &own, spans, &mut *item); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_rewrite_item(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, changed: &collections::BTreeSet<String>, own: &collections::BTreeMap<String, TrMethods>, spans: &collections::BTreeMap<u32, Span>, item: &mut Spanned<Item>) {
+    let span = tr_span(&item.span);
+    match item.node {
+        Item::Impl { ref target, ref mut methods, .. } => {
+            let owner: Option<String> = Some(words.resolve(target.name).to_string());
+            for method in methods.iter_mut() {
+                let at = tr_span(&(*method).span);
+                tr_rewrite_fn(words, intern, renew, ruled, changed, own, spans, &mut (*method).node, (owner).as_deref(), &at);
+            }
+        },
+        _ => { tr_rewrite_fn(words, intern, renew, ruled, changed, own, spans, &mut item.node, None, &span); },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_rewrite_fn(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, changed: &collections::BTreeSet<String>, own: &collections::BTreeMap<String, TrMethods>, spans: &collections::BTreeMap<u32, Span>, item: &mut Item, owner: Option<&str>, span: &Span) {
+    match item {
+        Item::Fn { receiver, args, ret_type, body, .. } => { tr_rewrite_body(words, intern, renew, ruled, changed, own, spans, (receiver).as_ref(), args, ret_type.is_some(), &mut *body, owner, span); },
+        Item::Test { body, .. } => { tr_rewrite_body(words, intern, renew, ruled, changed, own, spans, None, &vec![], false, &mut *body, owner, span); },
+        Item::Bench { body, .. } => { tr_rewrite_body(words, intern, renew, ruled, changed, own, spans, None, &vec![], false, &mut *body, owner, span); },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_rewrite_body(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, changed: &collections::BTreeSet<String>, own: &collections::BTreeMap<String, TrMethods>, spans: &collections::BTreeMap<u32, Span>, receiver: Option<&Receiver>, args: &[FnArg], returns: bool, body: &mut Block, owner: Option<&str>, span: &Span) {
+    tr_check_literals(words, intern, renew, ruled, spans, body, span);
+    let type_name: String = nikaia_std::index::or(match owner {
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        None => None,
+    }, || "".into());
+    let has_self = receiver.is_some() && ruled.contains_key(&type_name);
+    let changes_self = has_self && nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
+    let kept_as_fact = has_self && !changed.contains(&type_name);
+    let methods: TrMethods = nikaia_std::index::or(match own.get(&type_name) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || TrMethods { all: collections::BTreeSet::new(), changing: collections::BTreeSet::new() });
+    let no_rules = TrRuled { fields: collections::BTreeSet::new(), rules: vec![], binding: intern("self") };
+    let rules: &TrRuled = nikaia_std::index::or(ruled.get(&type_name), || &no_rules);
+    let taken: Vec<bool> = rules.rules.iter().map(|rule| { !changed.contains(&type_name) && tr_kept_by(words, &rule.claim, &rules.fields, &methods.all, &body) }).collect::<Vec<_>>();
+    let others: Vec<bool> = taken.iter().copied().map(|t| { !t }).collect::<Vec<_>>();
+    let kept = tr_part(rules, &taken);
+    let checked = tr_part(rules, &others);
+    if kept_as_fact { tr_given_after_calls(words, intern, renew, rules, &type_name, &methods.changing, body); }
+    if changes_self {
+        let base = Expr::Variable(intern("self"), node_id::NodeId::fresh());
+        let mut in_lambdas: collections::BTreeSet<u32> = collections::BTreeSet::new();
+        for expr in tr_in_block(&body, false) {
+            match expr {
+                Expr::Closure { body: inner, .. } => { in_lambdas.extend(tr_in_block(inner, false).iter().filter_map(|e| { tr_leaving_id(e) })); },
+                _ => { },
+            }
+        }
+        let leaving = TrJob::Leaving { checked: checked.clone(), kept: kept.clone(), type_name: type_name.to_string(), base: base.clone(), in_lambdas };
+        tr_walk_block(body, words, intern, renew, ruled, spans, span, &leaving);
+        tr_before_returns(words, intern, renew, &checked, &type_name, &base, false, body);
+        tr_before_returns(words, intern, renew, &kept, &type_name, &base, true, body);
+        let falls_through = match body.stmts.last() {
+            None => true,
+            Some(ref last) => !matches!(last.node, Stmt::Return(_)),
+        };
+        if !returns && falls_through {
+            let at = match body.stmts.last() {
+                None => tr_span(span),
+                Some(ref last) => tr_span(&last.span),
+            };
+            let end = Span { start: at.end, end: at.end };
+            body.stmts.extend(tr_leaving_asserts(words, intern, renew, &checked, &kept, &type_name, &base, end));
+        }
+    }
+    let mut given: Vec<Spanned<Stmt>> = vec![];
+    let entry = Span { start: span.start, end: span.start };
+    if kept_as_fact {
+        let base = Expr::Variable(intern("self"), node_id::NodeId::fresh());
+        given.extend(tr_asserts(words, intern, renew, rules, &type_name, &base, &entry, true));
+    }
+    for arg in args.iter() {
+        let named = words.resolve(arg.ty.name).to_string();
+        let of_arg = match ruled.get(&named) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if changed.contains(&named) || !arg.ty.generics.is_empty() || arg.ty.is_tuple { continue; }
+        let base = Expr::Variable(arg.name, node_id::NodeId::fresh());
+        given.extend(tr_asserts(words, intern, renew, of_arg, &named, &base, &entry, true));
+    }
+    if !given.is_empty() {
+        given.extend(body.stmts.drain(..));
+        body.stmts = given;
+    }
+}
+
+pub(crate) fn tr_leaving_id(e: &Expr) -> Option<u32> {
+    match e {
+        Expr::Return(_, id) => { let id = *id; Some(id.get()) },
+        Expr::Throw(_, id) => { let id = *id; Some(id.get()) },
+        _ => None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_leaving_asserts(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, checked: &TrRuled, kept: &TrRuled, type_name: &str, base: &Expr, at: Span) -> Vec<Spanned<Stmt>> {
+    let mut out = tr_asserts_as(words, intern, renew, checked, type_name, base, &at, false, true);
+    out.extend(tr_asserts_as(words, intern, renew, kept, type_name, base, &at, true, true));
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn tr_check_literals(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, body: &mut Block, span: &Span) { tr_walk_block(body, words, intern, renew, ruled, spans, span, &TrJob::Literals); }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn tr_check_literals_in(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, items: &mut Vec<Spanned<Item>>) {
+    for item in items.iter_mut() {
+        let span = tr_span(&(*item).span);
+        tr_literals_in_item(words, intern, renew, ruled, spans, &mut (*item).node, &span);
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_literals_in_item(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, item: &mut Item, span: &Span) {
+    match item {
+        Item::Impl { methods, .. } => {
+            for method in methods.iter_mut() {
+                let at = tr_span(&(*method).span);
+                tr_literals_in_item(words, intern, renew, ruled, spans, &mut (*method).node, &at);
+            }
+        },
+        Item::Fn { body, .. } => { tr_check_literals(words, &intern, &renew, ruled, spans, &mut *body, span); },
+        Item::Test { body, .. } => { tr_check_literals(words, &intern, &renew, ruled, spans, &mut *body, span); },
+        Item::Bench { body, .. } => { tr_check_literals(words, &intern, &renew, ruled, spans, &mut *body, span); },
+        _ => { },
+    }
+}
+
+pub(crate) fn tr_plain_fields(fields: &[FieldInit], words: &winnow_grammar::InternerContext) -> Option<collections::BTreeMap<String, Expr>> {
+    let mut out: collections::BTreeMap<String, Expr> = collections::BTreeMap::new();
+    for field in fields.iter() {
+        let value: Expr = match &field.value {
+            None => Expr::Variable(field.name, node_id::NodeId::fresh()),
+            Some(given) => match given {
+                Expr::Variable(..) | Expr::LitInt { .. } | Expr::LitBool(..) | Expr::LitChar(..) | Expr::LitFloat(..) => given.clone(),
+                _ => return None,
+            },
+        };
+        out.insert(words.resolve(field.name).to_string(), value);
+    }
+    Some(out)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_checked_literal(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, rules: &TrRuled, type_name: &str, literal: Expr, values: Option<collections::BTreeMap<String, Expr>>, at: Span) -> Vec<Spanned<Stmt>> {
+    let binding = Expr::Variable(rules.binding, node_id::NodeId::fresh());
+    let checks = tr_asserts(words, &intern, &renew, rules, type_name, &binding, &at, false);
+    match values {
+        None => {
+            let mut stmts: Vec<Spanned<Stmt>> = vec![Spanned::new(Stmt::Let { names: vec![rules.binding], shape: vec![], mutable: false, ty: None, value: literal }, tr_span(&at))];
+            stmts.extend(checks);
+            stmts.push(Spanned::new(Stmt::Expr(Expr::Variable(rules.binding, node_id::NodeId::fresh())), tr_span(&at)));
+            return stmts;
+        },
+        Some(plain) => {
+            let mut block = Block { stmts: checks };
+            let job = TrJob::Fields { binding: rules.binding, values: plain };
+            tr_walk_block(&mut block, words, &intern, &renew, ruled, spans, span, &job);
+            block.stmts.push(Spanned::new(Stmt::Expr(literal), tr_span(&at)));
+            return block.stmts;
+        },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_before_returns(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, rules: &TrRuled, type_name: &str, base: &Expr, given: bool, block: &mut Block) {
+    let mut out: Vec<Spanned<Stmt>> = vec![];
+    for mut stmt in block.stmts.drain(..) {
+        if tr_returns_in(words, &intern, &renew, rules, type_name, base, given, &mut stmt.node) { out.extend(tr_asserts_as(words, &intern, &renew, rules, type_name, base, &stmt.span, given, true)); }
+        out.push(stmt);
+    }
+    block.stmts = out;
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_returns_in(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, rules: &TrRuled, type_name: &str, base: &Expr, given: bool, stmt: &mut Stmt) -> bool {
+    match stmt {
+        Stmt::Return(_) => { return true; },
+        Stmt::For { body, .. } => { tr_before_returns(words, &intern, &renew, rules, type_name, base, given, &mut *body); },
+        Stmt::While { body, .. } => { tr_before_returns(words, &intern, &renew, rules, type_name, base, given, &mut *body); },
+        Stmt::Let { value, .. } => { tr_nested_returns(words, &intern, &renew, rules, type_name, base, given, &mut *value); },
+        Stmt::Expr(value) => { tr_nested_returns(words, &intern, &renew, rules, type_name, base, given, &mut *value); },
+        _ => { },
+    }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_nested_returns(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, rules: &TrRuled, type_name: &str, base: &Expr, given: bool, expr: &mut Expr) {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            tr_before_returns(words, &intern, &renew, rules, type_name, base, given, &mut *then_branch);
+            tr_returns_in_else(words, &intern, &renew, rules, type_name, base, given, &mut *else_branch);
+        },
+        Expr::Block(block, _) => { tr_before_returns(words, &intern, &renew, rules, type_name, base, given, &mut *block); },
+        Expr::Unsafe(block, _) => { tr_before_returns(words, &intern, &renew, rules, type_name, base, given, &mut *block); },
+        Expr::Match { arms, .. } => { for arm in arms.iter_mut() { tr_nested_returns(words, intern, renew, rules, type_name, base, given, &mut (*arm).body); } },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_returns_in_else(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, rules: &TrRuled, type_name: &str, base: &Expr, given: bool, block: &mut Option<Block>) { if block.is_some() { tr_before_returns(words, &intern, &renew, rules, type_name, base, given, block.as_mut().unwrap()); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_given_after_calls(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, rules: &TrRuled, type_name: &str, changing: &collections::BTreeSet<String>, block: &mut Block) {
+    let mut out: Vec<Spanned<Stmt>> = vec![];
+    for mut stmt in block.stmts.drain(..) {
+        let called = tr_calls_in(words, &intern, &renew, rules, type_name, changing, &mut stmt.node);
+        let at = tr_span(&stmt.span);
+        out.push(stmt);
+        if called {
+            let base = Expr::Variable(intern("self"), node_id::NodeId::fresh());
+            out.extend(tr_asserts(words, &intern, &renew, rules, type_name, &base, &at, true));
+        }
+    }
+    block.stmts = out;
+}
+
+pub(crate) fn tr_calls_in(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, rules: &TrRuled, type_name: &str, changing: &collections::BTreeSet<String>, stmt: &mut Stmt) -> bool {
+    match stmt {
+        Stmt::For { body, .. } => { tr_given_after_calls(words, &intern, &renew, rules, type_name, changing, &mut *body); },
+        Stmt::While { body, .. } => { tr_given_after_calls(words, &intern, &renew, rules, type_name, changing, &mut *body); },
+        Stmt::Let { value, .. } => {
+            tr_nested_given(words, &intern, &renew, rules, type_name, changing, &mut *value);
+            return tr_changes_self(&value, words, changing);
+        },
+        Stmt::Expr(value) => {
+            tr_nested_given(words, &intern, &renew, rules, type_name, changing, &mut *value);
+            return tr_changes_self(&value, words, changing);
+        },
+        Stmt::Assign { target, value, .. } => {
+            let a_name = matches!(target, Expr::Variable(..));
+            return a_name && !tr_is_self(target, words) && tr_changes_self(value, words, changing);
+        },
+        _ => { },
+    }
+    false
+}
+
+pub(crate) fn tr_changes_self(e: &Expr, words: &winnow_grammar::InternerContext, changing: &collections::BTreeSet<String>) -> bool {
+    match e {
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; tr_is_self(receiver, words) && changing.contains(words.resolve(method)) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_nested_given(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, rules: &TrRuled, type_name: &str, changing: &collections::BTreeSet<String>, expr: &mut Expr) {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            tr_given_after_calls(words, &intern, &renew, rules, type_name, changing, &mut *then_branch);
+            tr_given_in_else(words, &intern, &renew, rules, type_name, changing, &mut *else_branch);
+        },
+        Expr::Block(block, _) => { tr_given_after_calls(words, &intern, &renew, rules, type_name, changing, &mut *block); },
+        Expr::Unsafe(block, _) => { tr_given_after_calls(words, &intern, &renew, rules, type_name, changing, &mut *block); },
+        Expr::Match { arms, .. } => { for arm in arms.iter_mut() { tr_nested_given(words, intern, renew, rules, type_name, changing, &mut (*arm).body); } },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_given_in_else(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, rules: &TrRuled, type_name: &str, changing: &collections::BTreeSet<String>, block: &mut Option<Block>) { if block.is_some() { tr_given_after_calls(words, &intern, &renew, rules, type_name, changing, block.as_mut().unwrap()); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn tr_drop_given(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, changed: &collections::BTreeSet<String>, items: &mut Vec<Spanned<Item>>) { for item in items.iter_mut() { tr_drop_given_in_item(words, intern, renew, changed, &mut (*item).node); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_drop_given_in_item(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, changed: &collections::BTreeSet<String>, item: &mut Item) {
+    match item {
+        Item::Impl { methods, .. } => { for method in methods.iter_mut() { tr_drop_given_in_item(words, intern, renew, changed, &mut (*method).node); } },
+        Item::Fn { body, .. } => { tr_drop_given_in(words, &intern, &renew, changed, &mut *body); },
+        Item::Test { body, .. } => { tr_drop_given_in(words, &intern, &renew, changed, &mut *body); },
+        Item::Bench { body, .. } => { tr_drop_given_in(words, &intern, &renew, changed, &mut *body); },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_drop_given_in(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, changed: &collections::BTreeSet<String>, body: &mut Block) {
+    tr_drop_in(body, words, changed);
+    let ruled: collections::BTreeMap<String, TrRuled> = collections::BTreeMap::new();
+    let spans: collections::BTreeMap<u32, Span> = collections::BTreeMap::new();
+    let job = TrJob::Dropping { changed: changed.to_owned() };
+    tr_walk_block(body, words, intern, renew, &ruled, &spans, &Span { start: 0, end: 0 }, &job);
+}
+
+pub(crate) fn tr_given_of(arg: &ConfigArg, words: &winnow_grammar::InternerContext, changed: &collections::BTreeSet<String>) -> bool {
+    if words.resolve(arg.name) != tr_given() { return false; }
+    match &arg.value {
+        Expr::LitStr { text, .. } => changed.contains(text),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_drop_in(block: &mut Block, words: &winnow_grammar::InternerContext, changed: &collections::BTreeSet<String>) {
+    let mut kept: Vec<Spanned<Stmt>> = vec![];
+    for mut stmt in block.stmts.drain(..) { if !tr_drops(&mut stmt.node, words, changed) { kept.push(stmt); } }
+    block.stmts = kept;
+}
+
+pub(crate) fn tr_drops(stmt: &mut Stmt, words: &winnow_grammar::InternerContext, changed: &collections::BTreeSet<String>) -> bool {
+    match stmt {
+        Stmt::Expr(Expr::Call { config, .. }) => {
+            if !config.iter().any(|arg| { tr_given_of(arg, words, changed) }) { return false; }
+            if config.iter().any(|arg| { words.resolve(arg.name) == "message" }) {
+                config.retain(|arg| { !tr_given_of(arg, words, changed) });
+                return false;
+            }
+            return true;
+        },
+        _ => return false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_drop_in_else(block: &mut Option<Block>, words: &winnow_grammar::InternerContext, changed: &collections::BTreeSet<String>) { if block.is_some() { tr_drop_in(block.as_mut().unwrap(), words, changed); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_walk_block(block: &mut Block, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, job: &TrJob) { for stmt in block.stmts.iter_mut() { tr_walk_stmt(&mut (*stmt).node, words, &intern, &renew, ruled, spans, span, job); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_walk_stmt(stmt: &mut Stmt, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, job: &TrJob) {
+    match stmt {
+        Stmt::Let { value, .. } => { tr_walk_expr(&mut *value, words, &intern, &renew, ruled, spans, span, job); },
+        Stmt::Assign { target, value, .. } => {
+            tr_walk_expr(&mut *target, words, &intern, &renew, ruled, spans, span, job);
+            tr_walk_expr(&mut *value, words, &intern, &renew, ruled, spans, span, job);
+        },
+        Stmt::For { iter, body, .. } => {
+            tr_walk_expr(&mut *iter, words, &intern, &renew, ruled, spans, span, job);
+            tr_walk_block(&mut *body, words, &intern, &renew, ruled, spans, span, job);
+            tr_drop_from(&mut *body, words, job);
+        },
+        Stmt::While { cond, body } => {
+            tr_walk_expr(&mut *cond, words, &intern, &renew, ruled, spans, span, job);
+            tr_walk_block(&mut *body, words, &intern, &renew, ruled, spans, span, job);
+            tr_drop_from(&mut *body, words, job);
+        },
+        Stmt::Return(value) => { tr_walk_maybe(&mut *value, words, &intern, &renew, ruled, spans, span, job); },
+        Stmt::Expr(value) => { tr_walk_expr(&mut *value, words, &intern, &renew, ruled, spans, span, job); },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_walk_maybe(expr: &mut Option<Expr>, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, job: &TrJob) { if expr.is_some() { tr_walk_expr(expr.as_mut().unwrap(), words, &intern, &renew, ruled, spans, span, job); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_walk_else(block: &mut Option<Block>, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, job: &TrJob) { if block.is_some() { tr_walk_block(block.as_mut().unwrap(), words, &intern, &renew, ruled, spans, span, job); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_walk_all(all: &mut Vec<Expr>, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, job: &TrJob) { for each in all.iter_mut() { tr_walk_expr(&mut *each, words, &intern, &renew, ruled, spans, span, job); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_walk_config(config: &mut Vec<ConfigArg>, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, job: &TrJob) { for option in config.iter_mut() { tr_walk_expr(&mut (*option).value, words, &intern, &renew, ruled, spans, span, job); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_walk_fields(fields: &mut Vec<FieldInit>, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, job: &TrJob) { for field in fields.iter_mut() { tr_walk_maybe(&mut (*field).value, words, &intern, &renew, ruled, spans, span, job); } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_walk_expr(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, job: &TrJob) {
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            tr_walk_expr(&mut *func, words, intern, renew, ruled, spans, span, job);
+            tr_walk_all(&mut *args, words, &intern, &renew, ruled, spans, span, job);
+            tr_walk_config(&mut *config, words, &intern, &renew, ruled, spans, span, job);
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            tr_walk_expr(&mut *receiver, words, intern, renew, ruled, spans, span, job);
+            tr_walk_all(&mut *args, words, &intern, &renew, ruled, spans, span, job);
+            tr_walk_config(&mut *config, words, &intern, &renew, ruled, spans, span, job);
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            tr_walk_expr(&mut *receiver, words, intern, renew, ruled, spans, span, job);
+            tr_walk_all(&mut *args, words, &intern, &renew, ruled, spans, span, job);
+            tr_walk_config(&mut *config, words, &intern, &renew, ruled, spans, span, job);
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            tr_walk_expr(&mut *lhs, words, intern, renew, ruled, spans, span, job);
+            tr_walk_expr(&mut *rhs, words, intern, renew, ruled, spans, span, job);
+        },
+        Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job); },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job); },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job); },
+        Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job); },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); tr_walk_maybe(&mut *value, words, &intern, &renew, ruled, spans, span, job); },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); tr_walk_expr(&mut *base, words, intern, renew, ruled, spans, span, job); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); tr_walk_expr(&mut *base, words, intern, renew, ruled, spans, span, job); },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            tr_walk_expr(&mut *base, words, intern, renew, ruled, spans, span, job);
+            tr_walk_expr(&mut *index, words, intern, renew, ruled, spans, span, job);
+        },
+        Expr::Range { start, end, .. } => {
+            let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
+            tr_walk_expr(&mut *start, words, intern, renew, ruled, spans, span, job);
+            tr_walk_expr(&mut *end, words, intern, renew, ruled, spans, span, job);
+        },
+        Expr::Tuple(items, _) => { tr_walk_all(&mut *items, words, &intern, &renew, ruled, spans, span, job); },
+        Expr::ListLit { items, .. } => { tr_walk_all(&mut *items, words, &intern, &renew, ruled, spans, span, job); },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            tr_walk_expr(&mut *value, words, intern, renew, ruled, spans, span, job);
+            tr_walk_expr(&mut *count, words, intern, renew, ruled, spans, span, job);
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            tr_walk_expr(&mut *value, words, intern, renew, ruled, spans, span, job);
+            tr_walk_expr(&mut *fallback, words, intern, renew, ruled, spans, span, job);
+        },
+        Expr::TryCatch { expr: inner, handler, .. } => {
+            let inner = nikaia_std::boxed::open(inner);
+            tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job);
+            tr_walk_block(&mut *handler, words, &intern, &renew, ruled, spans, span, job);
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            tr_walk_expr(&mut *cond, words, intern, renew, ruled, spans, span, job);
+            tr_walk_block(&mut *then_branch, words, &intern, &renew, ruled, spans, span, job);
+            tr_walk_else(&mut *else_branch, words, &intern, &renew, ruled, spans, span, job);
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            tr_walk_expr(&mut *value, words, intern, renew, ruled, spans, span, job);
+            for arm in arms.iter_mut() {
+                tr_walk_maybe(&mut (*arm).guard, words, &intern, &renew, ruled, spans, span, job);
+                tr_walk_expr(&mut (*arm).body, words, intern, renew, ruled, spans, span, job);
+            }
+        },
+        Expr::StructLit { fields, .. } => { tr_walk_fields(&mut *fields, words, &intern, &renew, ruled, spans, span, job); },
+        Expr::With { base, fields, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            tr_walk_expr(&mut *base, words, intern, renew, ruled, spans, span, job);
+            tr_walk_fields(&mut *fields, words, &intern, &renew, ruled, spans, span, job);
+        },
+        Expr::Block(block, _) => { tr_walk_block(&mut *block, words, &intern, &renew, ruled, spans, span, job); },
+        Expr::Unsafe(block, _) => { tr_walk_block(&mut *block, words, &intern, &renew, ruled, spans, span, job); },
+        Expr::Overlap(block, _) => { tr_walk_block(&mut *block, words, &intern, &renew, ruled, spans, span, job); },
+        Expr::Closure { body, .. } => { tr_walk_block(&mut *body, words, &intern, &renew, ruled, spans, span, job); },
+        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); tr_walk_expr(&mut *body, words, intern, renew, ruled, spans, span, job); },
+        _ => { },
+    }
+    tr_visit(expr, words, &intern, &renew, ruled, spans, span, job);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_visit(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, job: &TrJob) {
+    match job {
+        TrJob::Leaving { checked, kept, type_name, base, in_lambdas } => { tr_leaving(expr, words, &intern, &renew, spans, span, checked, kept, type_name, base, in_lambdas); },
+        TrJob::Literals => { tr_literal(expr, words, &intern, &renew, ruled, spans, span); },
+        TrJob::Fields { binding, values } => { let binding = *binding; tr_field_read(expr, words, &renew, &binding, values); },
+        TrJob::Dropping { changed } => { tr_drop_nested(expr, words, changed); },
+    }
+}
+
+pub(crate) fn tr_leaves(e: &Expr, words: &winnow_grammar::InternerContext, in_lambdas: &collections::BTreeSet<u32>) -> bool {
+    match e {
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); tr_is_self(receiver, words) },
+        Expr::Call { args, .. } => args.iter().any(|a| { tr_is_self(a, words) }),
+        Expr::Return(_, id) => { let id = *id; !in_lambdas.contains(&id.get()) },
+        Expr::Throw(_, id) => { let id = *id; !in_lambdas.contains(&id.get()) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tr_leaving(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, spans: &collections::BTreeMap<u32, Span>, span: &Span, checked: &TrRuled, kept: &TrRuled, type_name: &str, base: &Expr, in_lambdas: &collections::BTreeSet<u32>) {
+    if !tr_leaves(&expr, words, in_lambdas) { return; }
+    let at = tr_at(spans, id_of(&expr), span);
+    let mut stmts = tr_leaving_asserts(words, intern, renew, checked, kept, type_name, base, tr_span(&at));
+    match expr {
+        Expr::MethodCall { .. } => {
+            let Expr::MethodCall { receiver, method, args, config, id } = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let receiver = nikaia_std::boxed::open(receiver);
+            stmts.push(Spanned::new(Stmt::Expr(Expr::MethodCall { receiver: Box::new(receiver), method, args, config, id }), at));
+            *expr = Expr::Block(Block { stmts }, node_id::NodeId::fresh());
+        },
+        Expr::Call { .. } => {
+            let Expr::Call { func, args, config, id } = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let func = nikaia_std::boxed::open(func);
+            stmts.push(Spanned::new(Stmt::Expr(Expr::Call { func: Box::new(func), args, config, id }), at));
+            *expr = Expr::Block(Block { stmts }, node_id::NodeId::fresh());
+        },
+        Expr::Return(_, _) => {
+            let Expr::Return(value, id) = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let value = nikaia_std::boxed::open(value);
+            stmts.push(Spanned::new(Stmt::Expr(Expr::Return(Box::new(value), id)), at));
+            *expr = Expr::Block(Block { stmts }, node_id::NodeId::fresh());
+        },
+        Expr::Throw(_, _) => {
+            let Expr::Throw(value, id) = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let value = nikaia_std::boxed::open(value);
+            stmts.push(Spanned::new(Stmt::Expr(Expr::Throw(Box::new(value), id)), at));
+            *expr = Expr::Block(Block { stmts }, node_id::NodeId::fresh());
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_literal(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span) {
+    let type_name: String = match expr {
+        Expr::StructLit { name, .. } => { let name = *name; words.resolve(name).to_string() },
+        _ => return,
+    };
+    let rules = match ruled.get(&type_name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let at = tr_at(spans, id_of(&expr), span);
+    let values = match expr {
+        Expr::StructLit { fields, .. } => tr_plain_fields(fields, words),
+        _ => None,
+    };
+    match expr {
+        Expr::StructLit { .. } => {
+            let Expr::StructLit { name, fields, id } = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") };
+            let literal = Expr::StructLit { name, fields, id };
+            *expr = Expr::Block(Block { stmts: tr_checked_literal(words, &intern, &renew, ruled, spans, span, rules, &type_name, literal, values, at) }, node_id::NodeId::fresh());
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_field_read(expr: &mut Expr, words: &winnow_grammar::InternerContext, renew: &impl Fn(&Expr) -> Expr, binding: &winnow_grammar::Symbol, values: &collections::BTreeMap<String, Expr>) {
+    let field: String = match expr {
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; match base {
+            Expr::Variable(b, _) => { let b = *b; if b == *binding { words.resolve(name).to_string() } else { return; } },
+            _ => return,
+        } },
+        _ => return,
+    };
+    let value = match values.get(&field) { Some(__nikaia_value) => __nikaia_value, None => return };
+    *expr = tr_renumbered(&value, renew);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_drop_nested(expr: &mut Expr, words: &winnow_grammar::InternerContext, changed: &collections::BTreeSet<String>) {
+    match expr {
+        Expr::Block(block, _) => { tr_drop_in(&mut *block, words, changed); },
+        Expr::Unsafe(block, _) => { tr_drop_in(&mut *block, words, changed); },
+        Expr::Closure { body, .. } => { tr_drop_in(&mut *body, words, changed); },
+        Expr::If { then_branch, else_branch, .. } => {
+            tr_drop_in(&mut *then_branch, words, changed);
+            tr_drop_in_else(&mut *else_branch, words, changed);
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn tr_drop_from(block: &mut Block, words: &winnow_grammar::InternerContext, job: &TrJob) {
+    match job {
+        TrJob::Dropping { changed } => { tr_drop_in(block, words, changed); },
+        _ => { },
+    }
+}
+

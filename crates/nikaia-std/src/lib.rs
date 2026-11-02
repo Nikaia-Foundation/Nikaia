@@ -285,6 +285,7 @@ pub mod runtime {
     clippy::needless_borrows_for_generic_args,
     clippy::manual_ok_err,
     clippy::map_clone,
+    clippy::extend_with_drain,
     clippy::needless_as_bytes,
     clippy::while_let_loop,
     unreachable_patterns

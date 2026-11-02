@@ -2973,7 +2973,7 @@ pub mod ty {
 }
 pub mod type_rules {
     #[allow(unused_imports)]
-    pub use super::{tr_given, TrRule, TrRuled, TrRefusal, TrFound, TrMethods, TrDeclared, tr_binding_of, tr_a_rule, tr_renumbered, tr_on, tr_asserts_as, tr_asserts, tr_part, tr_collect, tr_methods_of, tr_fails_changed, tr_changed_outside, tr_built_elsewhere, tr_reads, tr_kept_by, tr_declared_rules};
+    pub use super::{tr_given, TrRule, TrRuled, TrRefusal, TrFound, TrMethods, TrDeclared, tr_binding_of, tr_a_rule, tr_renumbered, tr_on, tr_asserts_as, tr_asserts, tr_part, tr_collect, tr_methods_of, tr_fails_changed, tr_changed_outside, tr_built_elsewhere, tr_reads, tr_kept_by, tr_declared_rules, tr_expand, tr_check_literals, tr_check_literals_in, tr_drop_given};
 }
 pub mod types {
     #[allow(unused_imports)]
