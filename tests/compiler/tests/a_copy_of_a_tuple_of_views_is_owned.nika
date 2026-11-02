@@ -1,0 +1,41 @@
+// A copy of a tuple whose parts are views is a tuple of its own (ADR-293 D24,
+// #1184): a map filled with literals only holds static text (ADR-282 D29), and
+// `clone` of a part read from it hands back owned parts.
+use std::collections
+
+struct Facts {
+    values: collections::BTreeMap[i64, (String, String)],
+    counted: collections::BTreeMap[i64, (String, i64)],
+}
+
+impl Facts {
+    fn value_at(ref self, at: i64) -> (String, String)? {
+        let found = self.values.get(at) ?? return null
+        return found.clone()
+    }
+
+    fn reached_at(ref self, at: i64) -> (String, String)? {
+        return self.values.get(at)?.clone()
+    }
+
+    fn count_at(ref self, at: i64) -> (String, i64)? {
+        let found = self.counted.get(at) ?? return null
+        return found.clone()
+    }
+}
+
+fn main() {
+    let mut values: collections::BTreeMap[i64, (String, String)] = collections::BTreeMap()
+    values.insert(1, ("a", "b"))
+    let mut counted: collections::BTreeMap[i64, (String, i64)] = collections::BTreeMap()
+    counted.insert(1, ("c", 3))
+    let facts = Facts { values: values, counted: counted }
+    let (a, b) = facts.value_at(1) ?? ("-", "-")
+    println(f"{a} {b}")
+    let (c, d) = facts.reached_at(1) ?? ("-", "-")
+    println(f"{c} {d}")
+    let (e, n) = facts.count_at(1) ?? ("-", 0)
+    println(f"{e} {n}")
+    let (f, g) = facts.value_at(2) ?? ("-", "-")
+    println(f"{f} {g}")
+}

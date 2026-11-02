@@ -179,6 +179,10 @@ pub struct CheckFacts {
     /// through `?.`, the receiver is a reference to the text, which may itself
     /// be a view (ADR-282 D29), and only `to_string` copies both.
     pub text_copies: collections::BTreeSet[i64],
+    /// **A copy of a tuple with view parts is owned** (ADR-293 D24, #1184),
+    /// by the receiver's id: each part's copy, `to_string` for text,
+    /// `to_owned` for another view and `clone` for an owned part.
+    pub tuple_copies: collections::BTreeMap[i64, Vec[String]],
     /// Reads of a field declared `String` that holds static text (ADR-282
     /// D29), by the read's id: typed as the view it is below, said as the
     /// `String` the program wrote.
@@ -547,6 +551,7 @@ impl CheckFacts {
             copied_slots: collections::BTreeSet(),
             owned_copies: collections::BTreeSet(),
             text_copies: collections::BTreeSet(),
+            tuple_copies: collections::BTreeMap(),
             static_field_reads: collections::BTreeSet(),
             text_as_is: collections::BTreeSet(),
             lent_coalesces: collections::BTreeMap(),

@@ -1022,6 +1022,20 @@ impl EmitState {
             out.push(".iter().map(|item| item.to_string()))")
             return
         }
+        // **A copy of a tuple with view parts is owned** (ADR-293 D24,
+        // #1184): each part copied by its own word, as the checker said.
+        if name == "clone" && args.len() == 0 && receiver != null {
+            let on = receiver ?? return
+            let parts: Vec[String] = self.facts.tuple_copies[node_key(on)]?.clone() ?? []
+            if parts.len() > 0 {
+                out.push("{ let __nikaia_tuple = &(")
+                self.emit_core_postfix_base(world, walk, out, host, on, depth, flow, scope)
+                out.push("); ")
+                out.push(emit_tuple_part_copies(parts))
+                out.push(" }")
+                return
+            }
+        }
         let mut copies = walk.reached_copy
         // **A copy of bytes reached through `?.`** (#913) is a `Bytes` of its
         // own as well: the chain's `match` bound the receiver, whose node the
@@ -1562,4 +1576,15 @@ fn emit_pure_place(expr: ref Expr) -> bool {
         Expr::Index { base, index, .. } => emit_pure_place(base) && !made_in_the_call(index),
         else => false,
     }
+}
+
+/// The copy of a tuple bound as `__nikaia_tuple`, part by part with the words
+/// the checker chose (`tuple_copies`, ADR-293 D24, #1184): `(t.0.to_string(),
+/// t.1.clone())`.
+pub fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
+    let copies: Vec[String] = parts.iter().enumerate().map(fn((i, word)) { f"__nikaia_tuple.{i}.{word}()" }).collect()
+    if copies.len() == 1 {
+        return f"({copies[0]},)"
+    }
+    return f"({copies.join(", ")})"
 }

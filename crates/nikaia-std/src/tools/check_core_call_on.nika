@@ -164,6 +164,47 @@ fn check_core_call_on_copied(on: ref Ty) -> Ty? {
     return null
 }
 
+/// How each part of a tuple with a view part is copied: `to_string` for
+/// text, `to_owned` for another view, `clone` for an owned part; empty where
+/// no part is a view (ADR-293 D24, #1184).
+fn check_core_call_on_part_copies(on: ref Ty) -> Vec[String] {
+    let mut copies: Vec[String] = []
+    let mut viewed = false
+    match on {
+        Ty::Tuple(parts) => {
+            for part in parts {
+                match part {
+                    Ty::Named { view, .. } => {
+                        if !view {
+                            copies.push("clone")
+                        } else if part.owned().text() == "String" {
+                            viewed = true
+                            copies.push("to_string")
+                        } else {
+                            viewed = true
+                            copies.push("to_owned")
+                        }
+                    },
+                    else => copies.push("clone"),
+                }
+            }
+        },
+        else => {}
+    }
+    if !viewed {
+        return []
+    }
+    return copies
+}
+
+/// A tuple whose view parts are owned: what its copy is (ADR-293 D24).
+fn check_core_call_on_owned_parts(on: ref Ty) -> Ty {
+    return match on {
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(fn(part) { part.owned() }).collect()),
+        else => on.clone(),
+    }
+}
+
 /// A declared type's own copy: the type itself, owned.
 fn check_core_call_on_owned(on: ref Ty) -> Ty {
     return match on {
@@ -1255,6 +1296,13 @@ pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckW
     // **A copy of a number, a `bool`, a `char` or a tuple is the derived one.**
     if entry == "clone" && args.len() == 0 {
         let copied: Ty? = check_core_call_on_copied(on)
+        // **A copy of a tuple with view parts is owned** (ADR-293 D24,
+        // #1184): each view part is copied, as a view's own copy is.
+        let parts: Vec[String] = check_core_call_on_part_copies(on)
+        if parts.len() > 0 {
+            state.facts.tuple_copies.insert(id_of(receiver) as i64, parts)
+            return check_core_call_on_owned_parts(on)
+        }
         if copied != null {
             return copied ?? Ty::Unknown
         }

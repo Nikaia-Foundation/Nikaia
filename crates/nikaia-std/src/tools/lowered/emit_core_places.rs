@@ -89,7 +89,16 @@ impl EmitState {
         walk.reached_copy = copy;
         let text_copy = copy && self.facts.text_copies.contains(&node_key(receiver)) && args.is_empty() && world.words.resolve(method) == "clone";
         let mut done = false;
-        if text_copy {
+        let parts: Vec<String> = nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.tuple_copies, &(node_key(receiver))) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into());
+        if !parts.is_empty() && args.is_empty() && world.words.resolve(method) == "clone" {
+            out.push("{ let __nikaia_tuple = &__nikaia_it; ");
+            out.push(&emit_tuple_part_copies(&parts));
+            out.push(" }");
+            done = true;
+        } else if text_copy {
             out.push("__nikaia_it.to_string()");
             done = true;
         } else { done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)?; }

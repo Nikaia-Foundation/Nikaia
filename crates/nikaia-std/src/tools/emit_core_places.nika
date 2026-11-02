@@ -173,7 +173,15 @@ impl EmitState {
         // `to_owned` would copy the reference.
         let text_copy = copy && self.facts.text_copies.contains(node_key(receiver)) && args.len() == 0 && world.words.resolve(method) == "clone"
         let mut done = false
-        if text_copy {
+        // **A copy of a tuple with view parts reached** is owned part by
+        // part, as the plain call's is (ADR-293 D24, #1184).
+        let parts: Vec[String] = self.facts.tuple_copies[node_key(receiver)]?.clone() ?? []
+        if parts.len() > 0 && args.len() == 0 && world.words.resolve(method) == "clone" {
+            out.push("{ let __nikaia_tuple = &__nikaia_it; ")
+            out.push(emit_tuple_part_copies(parts))
+            out.push(" }")
+            done = true
+        } else if text_copy {
             out.push("__nikaia_it.to_string()")
             done = true
         } else {

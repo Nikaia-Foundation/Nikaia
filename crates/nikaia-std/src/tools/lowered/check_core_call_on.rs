@@ -123,6 +123,40 @@ pub(crate) fn check_core_call_on_copied(on: &Ty) -> Option<Ty> {
     None
 }
 
+pub(crate) fn check_core_call_on_part_copies(on: &Ty) -> Vec<String> {
+    let mut copies: Vec<String> = vec![];
+    let mut viewed = false;
+    match on {
+        Ty::Tuple(parts) => {
+            for part in parts.iter() {
+                match part {
+                    Ty::Named { view, .. } => {
+                        let view = *view;
+                        if !view { copies.push(String::from("clone")); } else if part.owned().text() == "String" {
+                            viewed = true;
+                            copies.push(String::from("to_string"));
+                        } else {
+                            viewed = true;
+                            copies.push(String::from("to_owned"));
+                        }
+                    },
+                    _ => { copies.push(String::from("clone")); },
+                }
+            }
+        },
+        _ => { },
+    }
+    if !viewed { return vec![]; }
+    copies
+}
+
+pub(crate) fn check_core_call_on_owned_parts(on: &Ty) -> Ty {
+    match on {
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|part| { part.owned() }).collect::<Vec<_>>()),
+        _ => on.clone(),
+    }
+}
+
 pub(crate) fn check_core_call_on_owned(on: &Ty) -> Ty {
     match on {
         Ty::Named { name, args, .. } => Ty::Named { name: name.to_string(), args: args.to_owned(), view: false },
@@ -948,6 +982,11 @@ pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     let type_name = check_core_call_on_type_name(&on);
     if entry == "clone" && args.is_empty() {
         let copied: Option<Ty> = check_core_call_on_copied(&on);
+        let parts: Vec<String> = check_core_call_on_part_copies(&on);
+        if !parts.is_empty() {
+            state.facts.tuple_copies.insert(id_of(receiver) as i64, parts);
+            return check_core_call_on_owned_parts(&on);
+        }
         if copied.is_some() { return nikaia_std::index::or(copied, || Ty::Unknown); }
     }
     if on.is_unknown() && state.open_number_typed(world, receiver) {

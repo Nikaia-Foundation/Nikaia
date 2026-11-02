@@ -702,6 +702,21 @@ impl EmitState {
             out.push(".iter().map(|item| item.to_string()))");
             return Ok(());
         }
+        if name == "clone" && args.is_empty() && receiver.is_some() {
+            let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            let parts: Vec<String> = nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.tuple_copies, &(node_key(on))) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into());
+            if !parts.is_empty() {
+                out.push("{ let __nikaia_tuple = &(");
+                self.emit_core_postfix_base(world, walk, out, host, on, depth, flow, scope)?;
+                out.push("); ");
+                out.push(&emit_tuple_part_copies(&parts));
+                out.push(" }");
+                return Ok(());
+            }
+        }
         let mut copies = walk.reached_copy;
         let mut byte_copy = receiver.is_none() && walk.reached_copy && self.facts.byte_copies.contains(&on_node);
         if receiver.is_some() {
@@ -1033,5 +1048,14 @@ pub(crate) fn emit_pure_place(expr: &Expr) -> bool {
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); emit_pure_place(base) && !made_in_the_call(index) },
         _ => false,
     }
+}
+
+pub fn emit_tuple_part_copies(parts: &[String]) -> String {
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple77257| {
+        let (i, word) = __nikaia_tuple77257;
+        format!("__nikaia_tuple.{}.{}()", i, word)
+    }).collect::<Vec<_>>();
+    if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }
+    format!("({})", copies.join(", "))
 }
 
