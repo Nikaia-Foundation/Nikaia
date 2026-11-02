@@ -203,7 +203,7 @@ pub(crate) fn holds_touch(touches: &[Touch], touch: &Touch) -> bool {
     false
 }
 
-pub(crate) fn touch_test_reached(kind: String, named: Option<String>, write: bool) -> Reached { Reached { kind, named, unknown: false, write } }
+pub fn touch_test_reached(kind: String, named: Option<String>, write: bool) -> Reached { Reached { kind, named, unknown: false, write } }
 
 pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
     for written in ["file(path) read", "file(path) write", "stdout write", "stderr write", "args read"] {

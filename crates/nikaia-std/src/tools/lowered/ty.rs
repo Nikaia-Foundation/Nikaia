@@ -1227,15 +1227,15 @@ pub fn method_keys(index: &MethodIndex, method: &str) -> Vec<String> {
     out
 }
 
-pub(crate) fn ty_test_bound(pattern: &str, actual: &str) -> collections::BTreeMap<String, Ty> {
+pub fn ty_test_bound(pattern: &str, actual: &str) -> collections::BTreeMap<String, Ty> {
     let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     bind(&parse(pattern), &parse(actual), &mut out);
     out
 }
 
-pub(crate) fn ty_test_view(name: String) -> Ty { Ty::Named { name, args: vec![], view: true } }
+pub fn ty_test_view(name: String) -> Ty { Ty::Named { name, args: vec![], view: true } }
 
-pub(crate) fn ty_test_name(name: String) -> Ty { Ty::Named { name, args: vec![], view: false } }
+pub fn ty_test_name(name: String) -> Ty { Ty::Named { name, args: vec![], view: false } }
 
 pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
     for written in ["i32", "ref String", "String", "Vec[Row]", "HashMap[ref String, Stats]", "(Op, i64)", "Vec[(ref String, i64)]", "?"] {
