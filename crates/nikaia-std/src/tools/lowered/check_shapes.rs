@@ -17,6 +17,19 @@ pub fn roots_in_a_binding(expr: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn shapes_lends_from_a_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall { receiver, method, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = world.words.resolve(method);
+            (name == "get" || name == "first" || name == "last") && roots_in_a_binding(receiver)
+        },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn shapes_is_null(pattern: &MatchPattern) -> bool {
     match pattern {
         MatchPattern::Literal(literal) => matches!(literal, Expr::LitNull(_)),

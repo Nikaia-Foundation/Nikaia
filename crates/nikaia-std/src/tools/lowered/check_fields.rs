@@ -49,12 +49,12 @@ impl CheckState {
         }
         let declared = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         self.field_is_reachable(&ty, &declared, span);
-        self.a_safe_reach(base, &declared.ty)
+        self.a_safe_reach(world, base, &declared.ty)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_safe_reach(&mut self, base: &Expr, held_ty: &Ty) -> Ty {
-        let place = roots_in_a_binding(base);
+    pub fn a_safe_reach(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr, held_ty: &Ty) -> Ty {
+        let place = roots_in_a_binding(base) || shapes_lends_from_a_binding(world, base);
         let key = fact_key(base);
         match held_ty {
             Ty::Nullable(held) => {

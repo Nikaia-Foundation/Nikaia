@@ -261,7 +261,7 @@ impl EmitState {
         let copies = self.facts.copied_reaches.contains(&node_key(base));
         let viewed = self.facts.viewed_reaches.contains_key(&node_key(base));
         let mut lent: &'static str = "";
-        if copies || viewed { lent = ".as_ref()"; }
+        if (copies || viewed) && !emit_place_already_lent(world, base) { lent = ".as_ref()"; }
         let mut place = format!("__nikaia_it.{}", field);
         if self.facts.boxed_reads.contains(&node_key(node)) { place = format!("(*__nikaia_it.{})", field); }
         let reach = self.emit_place_reach(base, &place, flattens);

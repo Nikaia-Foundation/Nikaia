@@ -2466,7 +2466,7 @@ pub mod check_send {
 }
 pub mod check_shapes {
     #[allow(unused_imports)]
-    pub use super::{roots_in_a_binding, shapes_is_null, shapes_has_a_null_arm, shapes_is_otherwise, catches_everything, plainly_a_value, an_element_beneath, rust_constant_type, element_below, slice_element, is_fixed, is_growable, constructed};
+    pub use super::{roots_in_a_binding, shapes_lends_from_a_binding, shapes_is_null, shapes_has_a_null_arm, shapes_is_otherwise, catches_everything, plainly_a_value, an_element_beneath, rust_constant_type, element_below, slice_element, is_fixed, is_growable, constructed};
 }
 pub mod check_simd {
     #[allow(unused_imports)]

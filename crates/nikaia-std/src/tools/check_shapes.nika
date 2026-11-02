@@ -31,6 +31,20 @@ pub fn roots_in_a_binding(expr: ref Expr) -> bool sync {
     }
 }
 
+/// **Whether a read lends what it finds out of a binding** (#1194): `get`,
+/// `first` and `last` answer an `Option<&T>` into their receiver, so a member
+/// reached through one off a binding is a part of that binding, as through
+/// `m[k]`. The names are the emitter's `emit_place_already_lent`.
+pub fn shapes_lends_from_a_binding(world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::MethodCall { receiver, method, .. } => {
+            let name = world.words.resolve(method)
+            (name == "get" || name == "first" || name == "last") && roots_in_a_binding(receiver)
+        },
+        else => false,
+    }
+}
+
 /// Whether a pattern matches every value of its type
 /// ([ADR-291](../../docs/specification/adr/adr-291.md) D10,
 /// [ADR-291](../../docs/specification/adr/adr-291.md) D16).

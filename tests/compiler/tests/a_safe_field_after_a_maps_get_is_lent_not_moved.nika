@@ -1,0 +1,61 @@
+// `m.get(k)?.field` reads a member of a value the map keeps (#1194): like
+// `m[k]?.field` it lends the member out of the map, never moves it, whether
+// the member is a `T?` (flattened), text, a number or a struct; so do
+// `first()` and `last()` of a list.
+use std::collections
+
+struct Place {
+    city: String,
+}
+
+struct Dep {
+    name: String,
+    path: String?,
+    count: i64,
+    place: Place,
+}
+
+fn dep(name: String, at: String?, count: i64) -> Dep {
+    return Dep { name: f"{name}", path: at?.clone(), count: count, place: Place { city: f"{name}-town" } }
+}
+
+fn path_of(m: ref collections::BTreeMap[String, Dep], key: String) -> String {
+    let p = m.get(key)?.path ?? return "none"
+    return f"at {p}"
+}
+
+fn name_of(m: ref collections::BTreeMap[String, Dep], key: String) -> String {
+    let n = m.get(key)?.name ?? return "nobody"
+    return n.clone()
+}
+
+fn count_of(m: ref collections::BTreeMap[String, Dep], key: String) -> i64 {
+    return m.get(key)?.count ?? 0
+}
+
+fn city_of(m: ref collections::BTreeMap[String, Dep], key: String) -> String {
+    let place = m.get(key)?.place ?? return "nowhere"
+    return place.city.clone()
+}
+
+fn ends(deps: ref Vec[Dep]) -> String {
+    let first = deps.first()?.name ?? return "empty"
+    let last = deps.last()?.path ?? return f"{first} to none"
+    return f"{first} to {last}"
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, Dep] = collections::BTreeMap()
+    m.insert("a", dep("a", "a/y", 2))
+    m.insert("b", dep("b", null, 3))
+    for key in ["a", "b", "c"] {
+        println(f"{key}: {path_of(m, key)} {name_of(m, key)} {count_of(m, key)} {city_of(m, key)}")
+    }
+    let mut deps: Vec[Dep] = []
+    println(ends(deps))
+    deps.push(dep("x", "x/1", 1))
+    deps.push(dep("y", null, 1))
+    println(ends(deps))
+    deps.push(dep("z", "z/3", 1))
+    println(ends(deps))
+}

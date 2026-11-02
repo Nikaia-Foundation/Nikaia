@@ -232,7 +232,7 @@ pub fn describe_crate_root(root: &std::path::Path, manifest: &ManifestFile, crat
         Ok(value) => value,
         Err(_error) => { return None; },
     };
-    let declared = match (*nikaia_std::index::get(&manifest.dependencies, &key)).as_ref().and_then(|__nikaia_it| __nikaia_it.path.as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let declared = match manifest.dependencies.get(&key).and_then(|__nikaia_it| __nikaia_it.path.as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let at = describe_without_dots(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&(declared))));
     if !describe_is_dir(&at) { return None; }
     Some(at)

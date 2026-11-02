@@ -337,7 +337,7 @@ pub fn describe_crate_sources[H: DescribeHost](root: ref fs::Path, version: Stri
 /// each an absence rather than a difference (ADR-281 D34).
 pub fn describe_crate_root(root: ref fs::Path, manifest: ref ManifestFile, crate_word: String) -> fs::Path? {
     let key = describe_rust_dependency(manifest, crate_word) catch { return null }
-    let declared = manifest.dependencies[key]?.path ?? return null
+    let declared = manifest.dependencies.get(key)?.path ?? return null
     let at = describe_without_dots(root.join(declared))
     if !describe_is_dir(at) {
         return null

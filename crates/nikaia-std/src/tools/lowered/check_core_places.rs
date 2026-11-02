@@ -198,7 +198,7 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
                     Ty::Tuple(ref parts) => {
                         let part = check_core_places_tuple_part(state, parts, &field, span);
                         if part.is_unknown() { return Ty::Unknown; }
-                        return state.a_safe_reach(base, &part);
+                        return state.a_safe_reach(world, base, &part);
                     },
                     _ => { },
                 }

@@ -405,8 +405,9 @@ impl EmitState {
         // view *into* the receiver.
         let copies = self.facts.copied_reaches.contains(node_key(base))
         let viewed = self.facts.viewed_reaches.contains_key(node_key(base))
+        // A read that already lends (`get`, D36) is not lent once more.
         let mut lent: String = ""
-        if copies || viewed {
+        if (copies || viewed) && !emit_place_already_lent(world, base) {
             lent = ".as_ref()"
         }
         // **A boxed field is reached through its box** (ADR-246 D2).
