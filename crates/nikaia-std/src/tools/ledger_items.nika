@@ -641,13 +641,16 @@ fn ledger_computed_default[H: LedgerInferHost](view: ref ParsedView, computed: r
         let default = field.default ?? return null
         return host.computed_literal(computed.unit, computed.option, default.value, written_ty(view.words, view.aliases, field.ty))
     }
-    let m = computed.method ?? return ledger_option_default(view, computed, item.node, host)
-    let methods = match item.node {
-        Item::Impl { methods, .. } => methods,
-        else => return null,
+    return match computed.method {
+        null => ledger_option_default(view, computed, item.node, host),
+        m => match item.node {
+            Item::Impl { methods, .. } => {
+                let method = methods.get(m) ?? return null
+                ledger_option_default(view, computed, method.node, host)
+            },
+            else => null,
+        },
     }
-    let method = methods.get(m) ?? return null
-    return ledger_option_default(view, computed, method.node, host)
 }
 
 /// The default of `function`'s option `computed.at`, computed as its declared

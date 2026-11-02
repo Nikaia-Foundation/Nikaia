@@ -1,0 +1,50 @@
+// #1166: a `match` on a field reached through a view, nested in an arm of
+// another `match`, is written `match &item.node`; its arm binds `methods`
+// by reference already, so the lowering writes no `ref` (Rust refuses one).
+struct Spanned[T] {
+    node: T,
+    at: i64,
+}
+
+enum Item {
+    Fn { name: String, config: Vec[i64] },
+    Impl { name: String, methods: Vec[Spanned[Item]] },
+}
+
+struct Unit {
+    items: Vec[Spanned[Item]],
+}
+
+struct At {
+    item: i64,
+    method: i64?,
+}
+
+fn option_of(function: ref Item) -> i64? {
+    let config = match function {
+        Item::Fn { config, .. } => config,
+        else => return null,
+    }
+    return config.get(0)
+}
+
+fn computed(view: ref Unit, at: ref At) -> i64? {
+    let item = view.items.get(at.item) ?? return null
+    return match at.method {
+        null => option_of(item.node),
+        m => match item.node {
+            Item::Impl { methods, .. } => {
+                let method = methods.get(m) ?? return null
+                option_of(method.node)
+            },
+            else => null,
+        },
+    }
+}
+
+fn main() {
+    let f = Spanned { node: Item::Fn { name: "f", config: [7] }, at: 0 }
+    let u = Unit { items: [Spanned { node: Item::Impl { name: "i", methods: [f] }, at: 1 }] }
+    println(f"{computed(u, At { item: 0, method: 0 }) ?? -1}")
+    println(f"{computed(u, At { item: 0, method: null }) ?? -1}")
+}

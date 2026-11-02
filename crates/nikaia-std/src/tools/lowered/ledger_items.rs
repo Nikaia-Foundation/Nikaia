@@ -400,13 +400,16 @@ pub(crate) fn ledger_computed_default<H: LedgerInferHost>(view: &ParsedView<'_, 
         let default = match field.default.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         return host.computed_literal(computed.unit, &computed.option, &default.value, &written_ty(view.words, view.aliases, &field.ty));
     }
-    let m = match computed.method { Some(__nikaia_value) => __nikaia_value, None => return ledger_option_default(view, computed, &item.node, host) };
-    let methods = match &item.node {
-        Item::Impl { methods, .. } => methods,
-        _ => return None,
-    };
-    let method = match methods.get(nikaia_std::count::of(m)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    ledger_option_default(view, computed, &method.node, host)
+    match computed.method {
+        None => ledger_option_default(view, computed, &item.node, host),
+        Some(m) => match &item.node {
+            Item::Impl { methods, .. } => {
+                let method = match methods.get(nikaia_std::count::of(m)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                ledger_option_default(view, computed, &method.node, host)
+            },
+            _ => None,
+        },
+    }
 }
 
 pub(crate) fn ledger_option_default<H: LedgerInferHost>(view: &ParsedView<'_, '_, '_, '_, '_, '_>, computed: &ComputedAt, function: &Item, host: &H) -> Option<String> {

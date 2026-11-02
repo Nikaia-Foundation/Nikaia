@@ -1077,7 +1077,8 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     let ty = check_core_flow_guarded_body(state, world, host, (arm.guard).as_ref(), &arm.body, span);
     let name = check_core_flow_variable(world, value);
     let a_map_read = state.flow.map_read_sites.contains(&(id_of(value) as i64));
-    let by_reference = through_the_reference || a_list || a_map_read || listed || name != "" && (on.is_a_view() || state.got_past_a_jump.contains(&name));
+    let lent_subject = state.facts.lent_scrutinees.contains(&(id_of(value) as i64)) && !state.facts.text_scrutinees.contains(&(id_of(value) as i64));
+    let by_reference = through_the_reference || a_list || a_map_read || listed || lent_subject || name != "" && (on.is_a_view() || state.got_past_a_jump.contains(&name));
     check_core_flow_lent_parts(state, world, host, &arm.body, &parts, handed_from, changed_from, by_reference, a_list);
     check_core_flow_unlend_views(state, world, &arm.pattern, typed, &arm.body);
     let leaves = state.exits(world, &arm.body);
