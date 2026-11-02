@@ -1,0 +1,5 @@
+fn main() {
+    let b: u8 = 7
+    let w = u64::from(b)
+    println(f"{w}")
+}

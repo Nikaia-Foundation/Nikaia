@@ -5,7 +5,7 @@ pub(crate) fn check_counts_first(key: &str) -> bool { key == "Seq::take" || key 
 
 pub(crate) fn check_counts_second(key: &str) -> bool { key == "Vec::swap" }
 
-pub(crate) fn check_numeric(name: &str) -> bool { name == "i32" || name == "i64" || name == "f32" || name == "f64" || name == "u8" || name == "u32" || name == "u64" }
+pub fn check_numeric(name: &str) -> bool { name == "i32" || name == "i64" || name == "f32" || name == "f64" || name == "u8" || name == "u32" || name == "u64" }
 
 pub(crate) fn check_owned_text(ty: &Ty) -> bool {
     match ty {

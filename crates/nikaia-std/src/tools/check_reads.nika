@@ -21,7 +21,7 @@ fn check_counts_second(key: ref String) -> bool {
 }
 
 /// The integer and floating-point types a cast goes between.
-fn check_numeric(name: ref String) -> bool {
+pub fn check_numeric(name: ref String) -> bool {
     return name == "i32" || name == "i64" || name == "f32" || name == "f64" || name == "u8" || name == "u32" || name == "u64"
 }
 

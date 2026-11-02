@@ -1,0 +1,9 @@
+error[NK1245]: The compiler can't tell what type `u64::from(b)` is.
+  --> tests/a_number_type_is_not_a_module_to_use.nika:3:5
+   |
+ 3 |     let w = u64::from(b)
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.
+   = help: Write the type down where the value is made, such as `let x: T = …`, or pass it to a parameter that declares one.
+1 type error

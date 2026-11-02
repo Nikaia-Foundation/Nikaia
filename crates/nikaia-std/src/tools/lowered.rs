@@ -2432,7 +2432,10 @@ pub mod check_program {
     #[allow(unused_imports)]
     pub use super::{check_program_program, check_program_instantiations_beside, check_program_unroll, check_program_reached};
 }
-pub mod check_reads {}
+pub mod check_reads {
+    #[allow(unused_imports)]
+    pub use super::{check_numeric};
+}
 pub mod check_references {
     #[allow(unused_imports)]
     pub use super::{check_gives_back, check_gives_back_parts};

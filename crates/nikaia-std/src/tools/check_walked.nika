@@ -231,9 +231,10 @@ pub fn check_walked_seed(mut state: CheckState, world: ref CheckWorld) sync {
         check_walked_prefix_into(key, prefixes)
     }
     for prefix in prefixes {
-        // `scalar` is a type the language has, not a module: `scalar::from`
-        // is reached without a `use` (Part I 2.2, #1003).
-        if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(f"{prefix}::new") && prefix != "scalar" {
+        // `scalar` and the number types are types the language has, not
+        // modules: `scalar::from` and `u64::MAX` are reached without a `use`
+        // (Part I 2.2, #1003), and `use std::u64` is `NK1156`'s (#1186).
+        if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(f"{prefix}::new") && prefix != "scalar" && !check_numeric(prefix) {
             state.std_modules.insert(prefix.clone())
         }
     }
