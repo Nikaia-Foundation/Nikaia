@@ -517,7 +517,7 @@ Nikaia grammars serve tooling that reads large inputs.
 **Zero-Copy Parsing**
 A Nikaia parser never copies the source text. A grammar picks per rule between two mechanisms:
 
-*Identifiers and keywords are interned symbols.* The parser **interns** an identifier: each distinct spelling is stored once in a shared table, and the parser yields a small `Symbol` handle. Comparing two identifiers is an integer comparison.
+*Identifiers and keywords are interned symbols.* The parser **interns** an identifier: each distinct spelling is stored once in a shared table, and the parser yields a small `Symbol` handle. Comparing two identifiers is an integer comparison. The table is the caller's: an entry whose grammar interns takes it after its input, `G::file(source; words: table)`, and `table.resolve(sym)` reads a symbol's text after the call; an entry whose result can hold a symbol is refused without it (`NK1330`, ADR-388).
 
 *Bulk text is a tethered slice.* String literals, comments, doc text and DSL bodies are not interned. The parser yields **slices** into the original buffer. Whether a slice stays a plain reference or becomes a **tether**, the source buffer moved into a keep and the slice a plain reference, follows Part I 6.6: transient is a borrow, escaping is a tether. A token that lives and dies inside the scope holding the source text costs nothing. A token that outlives that scope is tethered automatically. An AST handed back to a caller keeps its source alive; the caller's frame keeps the buffer, and no token carries a handle.
 
