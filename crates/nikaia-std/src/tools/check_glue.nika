@@ -1,0 +1,40 @@
+// crates/nikaia-std/src/tools/check_glue.nika
+//
+// **What `check/mod.rs` decided itself** (ADR-294, #125, M17): the pieces of
+// the checker's entry module that are logic rather than glue over the Rust
+// handles (`Parsed`, `Checked`, the process). The Rust adapter keeps the
+// handles and calls these.
+
+use std::text
+
+/// **A `'…'` as the language below writes it** (ADR-320 D8): as written
+/// where it is one scalar, and the one scalar NFC composes it to, as
+/// `'\u{…}'`, where it is several - the checker has said `NK1213` there, and
+/// refused (`NK1212`) every literal of several that composes to more than one.
+/// `char_of` is the host's reading of a code point (`build_time::char_of`).
+pub fn check_char_literal(written: String, char_of: fn(i64) -> scalar? sync) -> String {
+    let value = decoded(written, char_of) ?? return f"'{written}'"
+    if value.chars().count() <= 1 {
+        return f"'{written}'"
+    }
+    let composed = value.normalized(text::Form::Nfc)
+    return match composed.chars().next() {
+        null => f"'{written}'",
+        one => f"'\\u{{{one as u32:x}}}'",
+    }
+}
+
+/// **The name an accepted program is dumped under** (#705):
+/// `<binary>-<hash>.nika`, the hash the source's (FNV-1a, 64 bits), so the
+/// same program checked twice is one file; `null` where nothing is written:
+/// a file of a program of several (it needs its project) and a program the
+/// check refused.
+pub fn check_accepted_dump_name(binary: String, source: String, in_a_package: bool, findings: ref Vec[CheckFinding]) -> String? {
+    if in_a_package || findings.iter().any(fn(f) { f.severity == CheckSeverity::Error }) {
+        return null
+    }
+    let seed: u64 = 0xcbf29ce484222325
+    let prime: u64 = 0x100000001b3
+    let hash = source.bytes().fold(seed, fn(h, b) { (h ^ b as u64).wrapping_mul(prime) })
+    return f"{binary}-{hash:016x}.nika"
+}

@@ -246,14 +246,6 @@ fn dump_accepted(parsed: &Parsed, checked: &Checked) {
     let (Some(dir), Some(source)) = (accepted_dump_dir(), parsed.dumped_source.as_deref()) else {
         return;
     };
-    if parsed.package.is_some()
-        || checked
-            .findings
-            .iter()
-            .any(|f| f.severity == Severity::Error)
-    {
-        return;
-    }
     let binary = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.file_stem().map(|s| s.to_string_lossy().into_owned()))
@@ -263,10 +255,16 @@ fn dump_accepted(parsed: &Parsed, checked: &Checked) {
         Some((name, hash)) if hash.chars().all(|c| c.is_ascii_hexdigit()) => name.to_string(),
         _ => binary,
     };
-    let hash = source.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    });
-    let path = dir.join(format!("{binary}-{hash:016x}.nika"));
+    // The name, or none (`tools/check_glue.nika`).
+    let Some(name) = nikaia_std::tools::check_glue::check_accepted_dump_name(
+        &binary,
+        source,
+        parsed.package.is_some(),
+        &checked.findings,
+    ) else {
+        return;
+    };
+    let path = dir.join(name);
     if !path.exists() {
         let _ = std::fs::create_dir_all(dir);
         let _ = std::fs::write(path, source);
@@ -675,17 +673,7 @@ pub use nikaia_std::tools::check_walked::CheckMultiLock as MultiLock;
 /// `'\u{…}'`, where it is several - the checker has said `NK1213` there, and
 /// refused (`NK1212`) every literal of several that composes to more than one.
 pub fn char_literal(written: &str) -> String {
-    let Some(value) = crate::build_time::decoded(written) else {
-        return format!("'{written}'");
-    };
-    if value.chars().count() <= 1 {
-        return format!("'{written}'");
-    }
-    let composed = nikaia_std::text::normalized(&value, nikaia_std::text::Form::Nfc);
-    match composed.chars().next() {
-        Some(one) => format!("'\\u{{{:x}}}'", one as u32),
-        None => format!("'{written}'"),
-    }
+    nikaia_std::tools::check_glue::check_char_literal(written, &crate::build_time::char_of)
 }
 
 pub fn value_node(expr: &Expr) -> i64 {

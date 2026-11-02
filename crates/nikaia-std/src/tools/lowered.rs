@@ -531,6 +531,14 @@ mod check_function_lowered {
 #[allow(unused_imports)]
 pub use check_function_lowered::*;
 
+mod check_glue_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/check_glue.rs");
+}
+#[allow(unused_imports)]
+pub use check_glue_lowered::*;
+
 mod check_grammar_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2339,6 +2347,10 @@ pub mod check_flow {
 pub mod check_function {
     #[allow(unused_imports)]
     pub use super::{check_function_grown_text, check_function_mixed_text, check_function_grammar, check_function_wrap_tail, check_function_function};
+}
+pub mod check_glue {
+    #[allow(unused_imports)]
+    pub use super::{check_char_literal, check_accepted_dump_name};
 }
 pub mod check_grammar {
     #[allow(unused_imports)]
