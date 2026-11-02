@@ -1,0 +1,27 @@
+// `p.parts()` hands out the whole parts of a name in order (ADR-319 D10): the
+// root first where there is one, `..` as written, `.` only where it leads,
+// empty parts and a `.` inside dropped; joined again they give a name `==` to
+// `p`. It reads no file system.
+use std::fs
+
+fn shown(name: ref fs::Path) -> String {
+    let parts = name.parts()
+    let mut joined: fs::Path = ""
+    let mut out = ""
+    for part in parts {
+        out.push_str(f"[{part.display()}]")
+        joined = joined.join(part)
+    }
+    return f"{name.display()}: {parts.len()} {out} {joined == name}"
+}
+
+fn main() {
+    println(shown("/a/b"))
+    println(shown("a/./b"))
+    println(shown("./a"))
+    println(shown("a/../b"))
+    println(shown("a//b"))
+    println(shown(""))
+    println(shown("/"))
+    println(shown("../a/"))
+}

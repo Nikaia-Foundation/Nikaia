@@ -1,0 +1,8 @@
+/a/b: 3 [/][a][b] true
+a/./b: 2 [a][b] true
+./a: 2 [.][a] true
+a/../b: 3 [a][..][b] true
+a//b: 2 [a][b] true
+: 0  true
+/: 1 [/] true
+../a/: 2 [..][a] true

@@ -4469,6 +4469,16 @@ sync = true
 touches = []
 signature = "(self: ref fs::Path, base: ref fs::Path) -> fs::Path?"
 
+# The whole parts of the name in order (ADR-319 D10): the root (Windows: the
+# prefix) first where there is one, `..` as written, `.` only where it leads,
+# empty parts dropped. Joined again they give a name `==` to `self`. It reads
+# no file system.
+[fn."fs::Path::parts"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref fs::Path) -> Vec[fs::Path]"
+
 # A copy of the name, owned by whoever asked for it: how a lent name is kept
 # beyond the call that lent it.
 [fn."fs::Path::clone"]
