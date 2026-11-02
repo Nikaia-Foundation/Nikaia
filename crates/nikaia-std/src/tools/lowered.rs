@@ -97,6 +97,14 @@ mod bounds_reasons_lowered {
 #[allow(unused_imports)]
 pub use bounds_reasons_lowered::*;
 
+mod bounds_report_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/bounds_report.rs");
+}
+#[allow(unused_imports)]
+pub use bounds_report_lowered::*;
+
 mod bounds_shape_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2096,6 +2104,10 @@ pub mod bounds_matched {
 pub mod bounds_reasons {
     #[allow(unused_imports)]
     pub use super::{blocked_index, blocked_operation};
+}
+pub mod bounds_report {
+    #[allow(unused_imports)]
+    pub use super::{BoundsReportFacts, bounds_report_checked};
 }
 pub mod bounds_shape {
     #[allow(unused_imports)]

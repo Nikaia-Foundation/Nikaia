@@ -1,0 +1,279 @@
+// crates/nikaia-std/src/tools/bounds_report.nika
+//
+// **The `--bounds` report's walk** (ADR-306, #389), moved from the compiler's
+// `bounds_report` (ADR-294, #125): every index into a list and every `+`, `-`
+// and `*` the optimizations of ADR-306 may drop the check of, and what became
+// of each. The reason a check stayed is `bounds_reasons.nika`; what is proved
+// is handed in as sets of nodes, built by the compiler.
+
+use std::collections
+
+/// **What the check and the proof say about one file**, read once: the lists
+/// whose index is a candidate, the operations and negations with their types,
+/// and the three sets of nodes the walk proved.
+pub struct BoundsReportFacts {
+    pub lists: collections::BTreeSet[i64],
+    pub arithmetic: collections::BTreeMap[i64, String],
+    pub negations: collections::BTreeMap[i64, String],
+    pub proven_indices: collections::BTreeSet[i64],
+    pub proven_arithmetic: collections::BTreeSet[i64],
+    pub proven_negations: collections::BTreeSet[i64],
+}
+
+/// One site a check stands at.
+struct BoundsReportSite {
+    line: i64,
+    /// The site as written, near enough (`written_expression`).
+    text: String,
+    index: bool,
+    proved: bool,
+    /// Why it was not, where it was not.
+    blocked: String?,
+}
+
+struct BoundsReportWalk {
+    /// Index nodes already listed: an index read in a statement is listed once.
+    seen: collections::BTreeSet[i64],
+    sites: Vec[BoundsReportSite],
+}
+
+/// The report, for one file, over a check the caller ran. What is proved does
+/// not depend on what the build drops (ADR-306 D14); the first line says
+/// whether this build writes it without its check.
+pub fn bounds_report_checked(program: ref Program, words: ref winnow_grammar::InternerContext, source: String, path: String, facts: ref BoundsReportFacts, bounds: BoundsChecks, overflow: OverflowChecks, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String {
+    let mut walk = BoundsReportWalk { seen: collections::BTreeSet(), sites: [] }
+    let none: Vec[FnArg] = []
+    for item in program.items {
+        match item.node {
+            Item::Fn { args, body, .. } => bounds_report_function(args, body, words, source, facts, holes_of, walk),
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { args, body, .. } => bounds_report_function(args, body, words, source, facts, holes_of, walk),
+                        else => {},
+                    }
+                }
+            },
+            // A grammar's actions are walked too (ADR-314 D1).
+            Item::Grammar(def) => {
+                for rule in def.rules {
+                    for alt in rule.alts {
+                        match alt.action {
+                            null => {},
+                            action => bounds_report_function(none, action, words, source, facts, holes_of, walk),
+                        }
+                        // And a fold's lambdas (ADR-367 D3).
+                        for spec in fb_folds(alt.pattern.node) {
+                            bounds_report_lambda(spec.init, none, words, source, facts, holes_of, walk)
+                            bounds_report_lambda(spec.step, none, words, source, facts, holes_of, walk)
+                            match spec.merge {
+                                null => {},
+                                merge => bounds_report_lambda(merge, none, words, source, facts, holes_of, walk),
+                            }
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    walk.sites.sort_by_key(fn(s) { s.line })
+    let indexes = walk.sites.iter().filter(fn(s) { s.index }).count()
+    let operations = walk.sites.len() - indexes
+    let proved_indexes = walk.sites.iter().filter(fn(s) { s.index && s.proved }).count()
+    let proved_operations = walk.sites.iter().filter(fn(s) { !s.index && s.proved }).count()
+    let mut out = f"bounds in {path}: {indexes} indexes, {proved_indexes} proved; {operations} operations, {proved_operations} proved - written without their check: indexes {bounds.name()}, operations {overflow.name()}\n"
+    let widest = walk.sites.iter().map(fn(s) { s.text.len() }).max() ?? 0
+    let width = widest.min(40)
+    for site in walk.sites {
+        let how = match site.proved {
+            true => "proved",
+            false => match site.blocked {
+                null => "checked",
+                why => f"checked: {why}",
+            },
+        }
+        let line = site.line.to_string()
+        out.push_str(f"  {bounds_report_spaces(line, 4)}{line}  {site.text}{bounds_report_spaces(site.text, width)}  {how}\n")
+    }
+    return out
+}
+
+/// The spaces that pad a text to `width`, by characters as Rust's `{:>4}` and
+/// `{:<width$}` count them.
+fn bounds_report_spaces(text: ref String, width: i64) -> String {
+    let count = text.scalars.count()
+    if count >= width {
+        return ""
+    }
+    return " ".repeat(width - count)
+}
+
+fn bounds_report_function(args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext, source: ref String, facts: ref BoundsReportFacts, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: BoundsReportWalk) {
+    bounds_report_block(body, args, body, words, source, facts, holes_of, walk)
+}
+
+fn bounds_report_lambda(lambda: ref Expr, args: ref Vec[FnArg], words: ref winnow_grammar::InternerContext, source: ref String, facts: ref BoundsReportFacts, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: BoundsReportWalk) {
+    match lambda {
+        Expr::Closure { body, .. } => bounds_report_function(args, body, words, source, facts, holes_of, walk),
+        else => {},
+    }
+}
+
+/// The line of a byte offset, counted from 1.
+fn bounds_report_line(source: ref String, at: i64) -> i64 {
+    let end = at.min(source.len())
+    return source.bytes[0..<end].iter().filter(fn(b) { b == 10 }).count() + 1
+}
+
+fn bounds_report_block(block: ref Block, args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext, source: ref String, facts: ref BoundsReportFacts, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: BoundsReportWalk) {
+    for stmt in block.stmts {
+        bounds_report_stmt(stmt.node, stmt.span, args, body, words, source, facts, holes_of, walk)
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            bounds_report_block(inner, args, body, words, source, facts, holes_of, walk)
+        }
+    }
+}
+
+/// Whether an operator is one the walk asks about: `+`, `-`, `*`.
+fn bounds_report_checked_op(op: BinaryOp) -> bool {
+    return match op {
+        BinaryOp::Add => true,
+        BinaryOp::Sub => true,
+        BinaryOp::Mul => true,
+        else => false,
+    }
+}
+
+fn bounds_report_symbol(op: BinaryOp) -> String {
+    return match op {
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        else => "*",
+    }
+}
+
+fn bounds_report_stmt(stmt: ref Stmt, span: ref Span, args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext, source: ref String, facts: ref BoundsReportFacts, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: BoundsReportWalk) {
+    let at = span.start as i64
+    let line = bounds_report_line(source, at)
+    // **A compound assignment is its operation** (ADR-306 D5a): keyed by the
+    // statement's first byte, where no operator of an expression stands.
+    match stmt {
+        Stmt::Assign { target, op, value } => {
+            let which = op ?? BinaryOp::Div
+            if bounds_report_checked_op(which) && facts.arithmetic.contains_key(at) {
+                let proved = facts.proven_arithmetic.contains(at)
+                let mut blocked: String? = null
+                if !proved {
+                    blocked = blocked_operation(which, target, value, args, body, words)
+                }
+                walk.sites.push(BoundsReportSite {
+                    line: line,
+                    text: f"{written_expression(words, target)} {bounds_report_symbol(which)}= {written_expression(words, value)}",
+                    index: false,
+                    proved: proved,
+                    blocked: blocked,
+                })
+            }
+        },
+        else => {},
+    }
+    for expr in bounds_report_roots(stmt) {
+        bounds_report_visit(expr, line, args, body, words, source, facts, holes_of, walk)
+    }
+}
+
+/// The expressions a statement holds directly, without the blocks inside it.
+fn bounds_report_roots(stmt: ref Stmt) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    match stmt {
+        Stmt::Let { value, .. } => out.push(value),
+        Stmt::Comptime { value, .. } => out.push(value),
+        Stmt::Assign { target, value, .. } => {
+            out.push(target)
+            out.push(value)
+        },
+        Stmt::For { iter, .. } => out.push(iter),
+        Stmt::While { cond, .. } => out.push(cond),
+        Stmt::Return(value) => {
+            match value {
+                null => {},
+                inner => out.push(inner),
+            }
+        },
+        Stmt::Break => {},
+        Stmt::Continue => {},
+        Stmt::Expr(inner) => out.push(inner),
+    }
+    return out
+}
+
+/// Each expression a statement holds, in preorder, and a literal's holes right
+/// after it (`contracts/sync.rs` `visit_expr`).
+fn bounds_report_visit(expr: ref Expr, line: i64, args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext, source: ref String, facts: ref BoundsReportFacts, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: BoundsReportWalk) {
+    bounds_report_site(expr, line, args, body, words, source, facts, walk)
+    if check_visit_has_holes(expr) {
+        for hole in holes_of(expr) {
+            bounds_report_visit(hole, line, args, body, words, source, facts, holes_of, walk)
+        }
+    }
+    for child in check_visit_children(expr) {
+        bounds_report_visit(child, line, args, body, words, source, facts, holes_of, walk)
+    }
+}
+
+fn bounds_report_site(expr: ref Expr, line: i64, args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext, source: ref String, facts: ref BoundsReportFacts, mut walk: BoundsReportWalk) {
+    match expr {
+        Expr::Index { base, index, .. } => {
+            let key = node_key(base)
+            if facts.lists.contains(key) && !walk.seen.contains(key) {
+                walk.seen.insert(key)
+                let proved = facts.proven_indices.contains(key)
+                let mut blocked: String? = null
+                if !proved {
+                    blocked = blocked_index(base, index, args, body, words)
+                }
+                walk.sites.push(BoundsReportSite { line: line, text: written_expression(words, expr), index: true, proved: proved, blocked: blocked })
+            }
+        },
+        // **A word read of a `Bytes`** (ADR-320 D12), a candidate as the cut it
+        // reads is: keyed by its receiver.
+        Expr::MethodCall { receiver, args: given, .. } => {
+            let key = node_key(receiver)
+            if given.len() == 1 && facts.lists.contains(key) && !walk.seen.contains(key) {
+                walk.seen.insert(key)
+                let proved = facts.proven_indices.contains(key)
+                let mut blocked: String? = null
+                if !proved {
+                    blocked = blocked_index(receiver, given[0], args, body, words)
+                }
+                walk.sites.push(BoundsReportSite { line: line, text: written_expression(words, expr), index: true, proved: proved, blocked: blocked })
+            }
+        },
+        Expr::Binary { op, lhs, rhs, span, .. } => {
+            let at = span.start as i64
+            if bounds_report_checked_op(op) && facts.arithmetic.contains_key(at) {
+                let proved = facts.proven_arithmetic.contains(at)
+                let mut blocked: String? = null
+                if !proved {
+                    blocked = blocked_operation(op, lhs, rhs, args, body, words)
+                }
+                walk.sites.push(BoundsReportSite { line: bounds_report_line(source, at), text: written_expression(words, expr), index: false, proved: proved, blocked: blocked })
+            }
+        },
+        // **A negation** (ADR-314 D5): it leaves its type only from the type's
+        // least value.
+        Expr::Unary { op, .. } => {
+            let key = node_key(expr)
+            if op == UnaryOp::Neg && facts.negations.contains_key(key) {
+                let proved = facts.proven_negations.contains(key)
+                let mut blocked: String? = null
+                if !proved {
+                    blocked = "no fact keeps it above its type's least value"
+                }
+                walk.sites.push(BoundsReportSite { line: line, text: written_expression(words, expr), index: false, proved: proved, blocked: blocked })
+            }
+        },
+        else => {},
+    }
+}
