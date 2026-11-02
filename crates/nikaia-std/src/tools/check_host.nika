@@ -782,6 +782,16 @@ impl CheckState {
         // Still lent, so a `ref T?` parameter opens the option the part is
         // (`.as_ref()`, #1029); only the `&` is left out, as in an expression
         // arm.
+        self.a_lent_part_is_a_reference_already(named)
+    }
+
+    /// **A lent part is a reference already**: no `&` is written in front of
+    /// it, as an argument (#456) or as the pattern of a text method (#1178,
+    /// D28's `owned_patterns`), where `&tag` would be a `&&String`.
+    fn a_lent_part_is_a_reference_already(ref mut self, named: ref collections::BTreeSet[i64]) sync {
+        for node in named {
+            self.facts.owned_patterns.remove(node)
+        }
         self.facts.views_handed_on.extend(named)
     }
 
@@ -789,13 +799,13 @@ impl CheckState {
     /// statements of its own to find its arguments by, so each argument that
     /// names a lent part is marked by its node.
     fn a_lent_part_in_an_expression_arm(ref mut self, world: ref CheckWorld, body: ref Expr, lent: ref collections::BTreeSet[String]) sync {
-        let mut named: Vec[i64] = []
+        let mut named: collections::BTreeSet[i64] = collections::BTreeSet()
         let mut bound_again = false
         for expr in visited_in_expr(body) {
             match expr {
                 Expr::Variable(name, _) => {
                     if lent.contains(world.words.resolve(name)) {
-                        named.push(node_key(expr))
+                        named.insert(node_key(expr))
                     }
                 },
                 Expr::Block(inner, _) => {
@@ -807,7 +817,7 @@ impl CheckState {
             }
         }
         if !bound_again {
-            self.facts.views_handed_on.extend(named)
+            self.a_lent_part_is_a_reference_already(named)
         }
     }
 }

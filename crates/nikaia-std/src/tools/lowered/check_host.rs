@@ -570,24 +570,33 @@ impl CheckState {
             }
         }
         if bound_again || named.is_empty() { return; }
+        self.a_lent_part_is_a_reference_already(&named);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_lent_part_is_a_reference_already(&mut self, named: &collections::BTreeSet<i64>) {
+        for node in named.iter() {
+            let node = nikaia_std::num::value(node);
+            self.facts.owned_patterns.remove(&node);
+        }
         self.facts.views_handed_on.extend(named);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_lent_part_in_an_expression_arm(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, lent: &collections::BTreeSet<String>) {
-        let mut named: Vec<i64> = vec![];
+        let mut named: collections::BTreeSet<i64> = collections::BTreeSet::new();
         let mut bound_again = false;
         for expr in visited_in_expr(body) {
             match expr {
                 Expr::Variable(name, _) => {
                     let name = *name;
-                    if lent.contains(world.words.resolve(name)) { named.push(node_key(expr)); }
+                    if lent.contains(world.words.resolve(name)) { named.insert(node_key(expr)); }
                 },
                 Expr::Block(inner, _) => { if lent_binds_again(world, inner, lent) { bound_again = true; } },
                 _ => { },
             }
         }
-        if !bound_again { self.facts.views_handed_on.extend(named); }
+        if !bound_again { self.a_lent_part_is_a_reference_already(&named); }
     }
 }
 

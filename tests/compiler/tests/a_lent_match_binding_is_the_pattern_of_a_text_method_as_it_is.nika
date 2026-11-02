@@ -1,0 +1,43 @@
+// Text a `match` over an owned option binds and only reads is a reference
+// already: as the pattern of a text method it goes as it is, with no `&` of
+// its own (#1178).
+use std::env
+
+fn tagged(name: String) -> String {
+    let name = match env::var("NIKAIA_TEST_NO_SUCH_VARIABLE_1178") {
+        null => name,
+        tag => name.strip_suffix(tag)?.clone() ?? name,
+    }
+    return name
+}
+
+fn owned(text: String) -> String? {
+    if text == "" {
+        return null
+    }
+    return text.clone()
+}
+
+fn kinds(name: String, given: String) -> String {
+    return match owned(given) {
+        null => "none",
+        tag => f"{name.ends_with(tag)} {name.starts_with(tag)} {name.contains(tag)}",
+    }
+}
+
+fn parts(name: String, given: String) {
+    match owned(given) {
+        null => println("none"),
+        tag => {
+            println(name.replace(tag, "+"))
+            println(name.strip_prefix(tag)?.clone() ?? "-")
+            println(f"{name.split(tag).count()}")
+        },
+    }
+}
+
+fn main() {
+    println(tagged("abc-x"))
+    println(kinds("-xab-x", "-x"))
+    parts("-xab-x", "-x")
+}
