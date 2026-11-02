@@ -2665,7 +2665,7 @@ pub mod grammar_decode {
 }
 pub mod grammar_run {
     #[allow(unused_imports)]
-    pub use super::{GrammarRunHost, grammar_run_compile_and_run};
+    pub use super::{GrammarRunHost, grammar_run_compile_and_run, GrammarDriverHost, grammar_run_driver, grammar_run_dump};
 }
 pub mod grammar_types {
     #[allow(unused_imports)]

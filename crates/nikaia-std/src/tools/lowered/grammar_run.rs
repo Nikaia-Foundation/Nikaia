@@ -75,3 +75,92 @@ pub(crate) async fn grammar_run_write_if_changed(path: &std::path::Path, text: &
     Ok(())
 }
 
+pub trait GrammarDriverHost {
+    fn lowered_own(&self) -> Result<String, Box<dyn std::error::Error>>;
+    fn beside(&self) -> i64;
+    fn lowered_beside(&self, index: i64) -> Result<String, Box<dyn std::error::Error>>;
+    fn dependency_modules(&self) -> Option<String>;
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn grammar_run_driver<H: GrammarDriverHost>(host: &H, names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger, result: &Ty, named: &str, rule: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let lowered = match host.lowered_own() {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::raise(CheckWall::DidNotBuild { detail: format!("lowering the grammar: {}", error) }, &"grammar_run_driver")) },
+    };
+    let mut out: String = nikaia_std::index::or(match lowered.split("\nfn main() {").next() {
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        None => None,
+    }, || lowered.to_string().into());
+    for index in 0..host.beside() {
+        let body = match host.lowered_beside(index) {
+            Ok(value) => value,
+            Err(error) => { return Err(nikaia_std::error::raise(CheckWall::DidNotBuild { detail: format!("lowering a file beside the grammar: {}", error) }, &"grammar_run_driver")) },
+        };
+        out.push_str(&body);
+        out.push_str("\n");
+    }
+    let modules = match host.dependency_modules() { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::raise(CheckWall::DidNotBuild { detail: String::from("lowering a dependency the grammar's actions call") }, &"grammar_run_driver")) };
+    out.push_str(&modules);
+    out.push_str(&gr_dump_helpers());
+    let mut dump: String = String::from("");
+    match grammar_run_dump(names, aliases, program, ledger, result, &mut dump) {
+        None => { },
+        Some(ref wall) => { return Err(nikaia_std::error::raise(wall.clone(), &"grammar_run_driver")); },
+    }
+    out.push_str(&gr_main(named, rule, &dump));
+    Ok(out)
+}
+
+pub fn grammar_run_dump(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger, result: &Ty, out: &mut String) -> Option<CheckWall> {
+    let shapes = grammar_run_shapes(names, aliases, program, ledger);
+    let refused = match dump(&shapes, result, "value", 1, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(CheckWall::NoCrossedForm { ty: refused.ty, because: refused.because })
+}
+
+pub(crate) fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger) -> Shapes {
+    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple8635| {
+        let (name, entry) = __nikaia_tuple8635;
+        grammar_run_constant(name, &entry.constant)
+    }).collect() };
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Enum { name, variants, .. } => {
+                let name = *name;
+                let shaped: Vec<VariantShape> = variants.iter().map(|held| { grammar_run_variant(names, aliases, held) }).collect::<Vec<_>>();
+                shapes.enums.entry(names.resolve(name).to_string()).or_insert(shaped);
+            },
+            Item::Struct { name, fields, .. } => {
+                let name = *name;
+                let shaped: Vec<FieldShape> = fields.iter().map(|field| { grammar_run_field(names, aliases, field) }).collect::<Vec<_>>();
+                shapes.structs.entry(names.resolve(name).to_string()).or_insert(shaped);
+            },
+            _ => { },
+        }
+    }
+    shapes
+}
+
+pub(crate) fn grammar_run_constant(name: &str, constant: &str) -> Option<(String, String)> {
+    let constructor = match constant.split('(').next() { Some(__nikaia_value) => __nikaia_value, None => return None }.trim();
+    if constructor.is_empty() { return None; }
+    Some((name.to_string(), constructor.to_string()))
+}
+
+pub(crate) fn grammar_run_variant(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, held: &EnumVariant) -> VariantShape {
+    let name = names.resolve(held.name).to_string();
+    match &held.fields {
+        VariantFields::Unit => VariantShape { name, carried: vec![], named: false },
+        VariantFields::Tuple(types) => VariantShape { name, carried: types.iter().map(|t| { written_ty(names, aliases, t) }).collect::<Vec<_>>(), named: false },
+        VariantFields::Named(fields) => VariantShape { name, carried: fields.iter().map(|f| { written_ty(names, aliases, &f.ty) }).collect::<Vec<_>>(), named: true },
+    }
+}
+
+pub(crate) fn grammar_run_field(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, field: &FieldDef) -> FieldShape {
+    let name = names.resolve(field.name);
+    let spelled = if is_reserved(name) { format!("r#{}", name) } else { name.to_string() };
+    FieldShape { name: name.to_string(), spelled, ty: written_ty(names, aliases, &field.ty) }
+}
+

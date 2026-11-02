@@ -36,9 +36,7 @@ use nikaia_std::tools::grammar_run::{GrammarRunHost, grammar_run_compile_and_run
 
 use crate::ast::Item;
 use crate::contracts::ty::Ty;
-use crate::contracts::ty::TyOps;
 use crate::parser::Parsed;
-use nikaia_std::tools::dump::{FieldShape, Shapes, VariantShape};
 
 /// Why a grammar could not be run, where the reason is this compiler's rather
 /// than the input's: declared in Nikaia (`tools/check_reports.nika`, ADR-294,
@@ -239,8 +237,9 @@ fn manifest(key: &str, program: &str) -> String {
     nikaia_std::tools::grammar_decode::gr_manifest(key, &dependencies)
 }
 
-/// The whole sub-program: the file's items without its `fn main` and without
-/// its item-level `comptime`s, then the dump, then a `main` that parses.
+/// The whole sub-program, written by `tools/grammar_run.nika`'s
+/// `grammar_run_driver` (#125): what stays here is choosing the files it
+/// lowers, which are the program's syntax, and lowering them.
 fn driver(parsed: &Parsed, ask: &Ask<'_>) -> Result<String, Wall> {
     let without_main_and_constants = |unit: &Parsed| {
         unit.keeping(|item| match item {
@@ -281,163 +280,122 @@ fn driver(parsed: &Parsed, ask: &Ask<'_>) -> Result<String, Wall> {
     let _ = crate::comptime_run::without_readers(&mut all, constants);
     let beside = all.split_off(1);
     let items = all.pop().expect("the grammar's own file");
-    let lowered = crate::emit::emit_program(&items, crate::emit::Build::default())
-        .map_err(|error| Wall::DidNotBuild {
-            detail: format!("lowering the grammar: {error:#}"),
-        })?
-        .rust;
-    // The generated `fn main` and its site table go with it: this program has
-    // its own entry point.
-    let body = lowered
-        .split("\nfn main() {")
-        .next()
-        .unwrap_or(&lowered)
-        .to_string();
-
-    let mut out = body;
-    if !beside.is_empty() {
-        use crate::contracts::LedgerOps;
-        let mut all: Vec<&Parsed> = vec![&items];
-        all.extend(beside.iter());
-        let ledger = crate::contracts::Ledger::infer_package(&all, crate::contracts::std_ledger());
-        let provenance =
-            crate::contracts::trust::analyse(parsed, crate::contracts::std_ledger()).provenance;
-        for unit in &beside {
-            let unit = &crate::comptime_run::without_foreign(unit, &ledger);
-            let body = crate::emit::emit_module_body_at(
-                unit,
-                &all,
-                crate::emit::Build::default(),
-                provenance,
-                &ledger,
-                &crate::contracts::Ledger::blank(),
-                false,
-                &crate::assets::Reads::none(),
-                None,
-            )
-            .map_err(|error| Wall::DidNotBuild {
-                detail: format!("lowering a file beside the grammar: {error:#}"),
-            })?;
-            out.push_str(&body.rust);
-            out.push('\n');
-        }
-    }
-    // **A dependency's functions, for the actions that call them** (D13).
-    // The grammar's own package is the program here, and the program's own
-    // files are not visible from a dependency's grammar.
     let others: Vec<&Parsed> = ask
         .units
         .iter()
         .copied()
         .filter(|u| u.package.is_some() && u.package != parsed.package)
         .collect();
-    let packages = crate::comptime_run::by_package(&others);
-    let provenance =
-        crate::contracts::trust::analyse(parsed, crate::contracts::std_ledger()).provenance;
-    out.push_str(
-        &crate::comptime_run::dependency_modules(
-            &others,
+    let host = Driver {
+        parsed,
+        items,
+        beside,
+        others,
+        ledger: std::cell::OnceCell::new(),
+    };
+    nikaia_std::tools::grammar_run::grammar_run_driver(
+        &host,
+        &parsed.interner,
+        &parsed.aliases,
+        &parsed.program,
+        crate::contracts::std_ledger(),
+        ask.result,
+        ask.grammar,
+        ask.rule,
+    )
+    // **Every refusal the driver throws is a `Wall`**, handed back as it was.
+    .map_err(|thrown| match nikaia_std::error::holds::<Wall>(&*thrown) {
+        true => nikaia_std::error::opened::<Wall>(thrown),
+        false => Wall::DidNotBuild {
+            detail: thrown.to_string(),
+        },
+    })
+}
+
+/// The files a grammar run's driver lowers: the grammar's own without its
+/// `main` and constants, the package's files beside it, and the dependencies.
+struct Driver<'a> {
+    parsed: &'a Parsed,
+    items: Parsed,
+    beside: Vec<Parsed>,
+    /// **A dependency's files, for the actions that call them** (D13). The
+    /// grammar's own package is the program here, and the program's own
+    /// files are not visible from a dependency's grammar.
+    others: Vec<&'a Parsed>,
+    /// The package's ledger over the grammar's file and those beside it,
+    /// inferred the first time a file beside it is lowered.
+    ledger: std::cell::OnceCell<crate::contracts::Ledger>,
+}
+
+impl nikaia_std::tools::grammar_run::GrammarDriverHost for Driver<'_> {
+    fn lowered_own(&self) -> Result<String, Box<dyn std::error::Error>> {
+        crate::emit::emit_program(&self.items, crate::emit::Build::default())
+            .map(|emitted| emitted.rust)
+            .map_err(|error| format!("{error:#}").into())
+    }
+
+    fn beside(&self) -> i64 {
+        i64::try_from(self.beside.len()).unwrap_or(i64::MAX)
+    }
+
+    fn lowered_beside(&self, index: i64) -> Result<String, Box<dyn std::error::Error>> {
+        use crate::contracts::LedgerOps;
+        let index = usize::try_from(index)?;
+        let mut all: Vec<&Parsed> = vec![&self.items];
+        all.extend(self.beside.iter());
+        let ledger = self.ledger.get_or_init(|| {
+            crate::contracts::Ledger::infer_package(&all, crate::contracts::std_ledger())
+        });
+        let provenance =
+            crate::contracts::trust::analyse(self.parsed, crate::contracts::std_ledger())
+                .provenance;
+        let unit = &crate::comptime_run::without_foreign(&self.beside[index], ledger);
+        crate::emit::emit_module_body_at(
+            unit,
+            &all,
+            crate::emit::Build::default(),
+            provenance,
+            ledger,
+            &crate::contracts::Ledger::blank(),
+            false,
+            &crate::assets::Reads::none(),
+            None,
+        )
+        .map(|body| body.rust)
+        .map_err(|error| format!("{error:#}").into())
+    }
+
+    fn dependency_modules(&self) -> Option<String> {
+        let packages = crate::comptime_run::by_package(&self.others);
+        let provenance =
+            crate::contracts::trust::analyse(self.parsed, crate::contracts::std_ledger())
+                .provenance;
+        crate::comptime_run::dependency_modules(
+            &self.others,
             &packages,
             crate::emit::Build::default(),
             provenance,
         )
-        .ok_or_else(|| Wall::DidNotBuild {
-            detail: "lowering a dependency the grammar's actions call".to_string(),
-        })?,
-    );
-    out.push_str(&nikaia_std::tools::grammar_decode::gr_dump_helpers());
-    let dump = dumper(parsed, ask.result)?;
-    out.push_str(&nikaia_std::tools::grammar_decode::gr_main(
-        ask.grammar,
-        ask.rule,
-        &dump,
-    ));
-    Ok(out)
+    }
 }
 
 /// **The dump, written inline**, from the declaration and not from the value,
 /// so a shape a `const` cannot hold is refused *before* a parser is compiled.
-/// **Written in Nikaia** (`tools/dump.nika`, #125); what stays here is reading
-/// the program's declarations into the shapes it walks.
+/// **Written in Nikaia** (`tools/dump.nika`, `tools/grammar_run.nika`, #125);
+/// what stays here is handing over the program's file and `std`'s ledger.
 pub(crate) fn dumper(parsed: &Parsed, result: &Ty) -> Result<String, Wall> {
     let mut out = String::new();
-    match nikaia_std::tools::dump::dump(&shapes(parsed), result, "value", 1, &mut out) {
+    match nikaia_std::tools::grammar_run::grammar_run_dump(
+        &parsed.interner,
+        &parsed.aliases,
+        &parsed.program,
+        crate::contracts::std_ledger(),
+        result,
+        &mut out,
+    ) {
         None => Ok(out),
-        Some(refused) => Err(Wall::NoCrossedForm {
-            ty: refused.ty,
-            because: refused.because,
-        }),
+        Some(wall) => Err(wall),
     }
-}
-
-/// The `enum`s and `struct`s this program declares, each by its name, with
-/// each field's name as Rust reads it; the first declaration of a name is the
-/// one read.
-fn shapes(parsed: &Parsed) -> Shapes {
-    let mut shapes = Shapes {
-        enums: Default::default(),
-        structs: Default::default(),
-        // **`std`'s types that cross through a constructor** (ADR-318 D5):
-        // the column is `std`'s, so its ledger is the one read.
-        constants: crate::contracts::std_ledger()
-            .types
-            .iter()
-            .filter_map(|(name, entry)| {
-                let constructor = entry.constant.split('(').next()?.trim();
-                (!constructor.is_empty()).then(|| (name.clone(), constructor.to_string()))
-            })
-            .collect(),
-    };
-    for item in &parsed.program.items {
-        match &item.node {
-            Item::Enum { name, variants, .. } => {
-                let variants = variants
-                    .iter()
-                    .map(|held| {
-                        let (carried, named) = match &held.fields {
-                            crate::ast::VariantFields::Unit => (Vec::new(), false),
-                            crate::ast::VariantFields::Tuple(types) => (
-                                types.iter().map(|t| Ty::from_ast(parsed, t)).collect(),
-                                false,
-                            ),
-                            crate::ast::VariantFields::Named(fields) => (
-                                fields.iter().map(|f| Ty::from_ast(parsed, &f.ty)).collect(),
-                                true,
-                            ),
-                        };
-                        VariantShape {
-                            name: parsed.text(held.name).to_string(),
-                            carried,
-                            named,
-                        }
-                    })
-                    .collect();
-                shapes
-                    .enums
-                    .entry(parsed.text(*name).to_string())
-                    .or_insert(variants);
-            }
-            Item::Struct { name, fields, .. } => {
-                let fields = fields
-                    .iter()
-                    .map(|field| {
-                        let name = parsed.text(field.name);
-                        FieldShape {
-                            name: name.to_string(),
-                            spelled: crate::emit::escaped(name).into_owned(),
-                            ty: Ty::from_ast(parsed, &field.ty),
-                        }
-                    })
-                    .collect();
-                shapes
-                    .structs
-                    .entry(parsed.text(*name).to_string())
-                    .or_insert(fields);
-            }
-            _ => {}
-        }
-    }
-    shapes
 }
 
 /// **Reading back what the sub-program wrote.**
