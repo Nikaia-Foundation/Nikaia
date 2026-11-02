@@ -12,46 +12,13 @@ pub use nikaia_std::tools::parse_errors::RESERVED_WORDS;
 /// What the grammar's actions build the tree with - the postfix steps and the folds of
 /// a head and its tails - is `tools/tree_build.nika`'s (ADR-294, #125).
 pub use nikaia_std::tools::tree_build::{
-    Postfix, counted_pattern, fold_binary, fold_postfix, grouped, guarded, params_of, split_mut,
-    unpacked,
+    Postfix, counted_pattern, flat_shape, fold_binary, fold_postfix, grouped, guarded, lambda,
+    params_of, split_mut, unpacked,
 };
-
-/// One name or a flat tuple keeps no shape (ADR-356): only a nested pattern
-/// carries one, so every reader that knew the flat form reads it unchanged.
-fn flat_shape((names, shape): (Vec<Symbol>, Vec<i64>)) -> (Vec<Symbol>, Vec<i64>) {
-    let tuples = shape.iter().filter(|w| **w > 0).count();
-    if tuples <= 1 {
-        (names, Vec::new())
-    } else {
-        (names, shape)
-    }
-}
 
 /// A lambda's parameter: written `mut`, its name, and - for a tuple pattern -
 /// the names and shape the pattern binds and where it stands (ADR-358).
 type LambdaParam = (bool, Symbol, Option<((Vec<Symbol>, Vec<i64>), ast::Span)>);
-
-/// A lambda from its parameters as written: a tuple pattern among them is a
-/// parameter under its hidden name, taken apart by a `let` first in the body
-/// (ADR-358 D5, `tools/tree_build.nika`'s `unpacked`).
-fn lambda(params: Vec<LambdaParam>, mut body: ast::Block) -> ast::Expr {
-    let mut plain = Vec::new();
-    let mut unpacks = Vec::new();
-    for (mutable, name, pattern) in params {
-        plain.push((mutable, name));
-        if let Some(((names, shape), span)) = pattern {
-            unpacks.push((name, names, shape, span));
-        }
-    }
-    unpacked(&mut body, &unpacks);
-    let (params, mutable) = split_mut(&plain);
-    ast::Expr::Closure {
-        params,
-        mutable,
-        body,
-        id: ast::NodeId::parsed(),
-    }
-}
 
 /// What the whitespace skip has seen: where it ended, whether it held a line
 /// break, and the run of `///` lines in it.
@@ -402,7 +369,7 @@ pub struct Parsed {
 impl Parsed {
     /// Where the expression `id` was written, if the parser made it.
     pub fn span_of(&self, id: u32) -> Option<ast::Span> {
-        self.expr_spans.get(&id).copied()
+        nikaia_std::tools::parsed_tree::parsed_span_of(&self.expr_spans, id)
     }
 
     /// One hole of a template, parsed into this file's interner
@@ -480,15 +447,7 @@ impl Parsed {
     /// **What a kept function's call is cached by**: the name, or the path
     /// joined with `::` ([`Parsed::kept_function_call`]).
     pub fn kept_function_text(&self, func: &ast::Expr) -> String {
-        match func {
-            ast::Expr::Path(segments, _) => segments
-                .iter()
-                .map(|s| self.text(*s))
-                .collect::<Vec<_>>()
-                .join("::"),
-            ast::Expr::Variable(name, _) => self.text(*name).to_string(),
-            other => unreachable!("a kept function is a name or a path, not {other:?}"),
-        }
+        nikaia_std::tools::parsed_tree::parsed_kept_function_text(func, &self.interner)
     }
 
     /// Every hole parsed so far, by the site and the text: what the emitter is
@@ -519,16 +478,18 @@ impl Parsed {
     /// ([`crate::grammar_run`]), which wants the types and the grammar and not
     /// the program's `fn main`.
     pub fn keeping(&self, keep: impl Fn(&ast::Item) -> bool) -> Parsed {
+        // The choosing is `tools/parsed_tree.nika`'s.
+        self.with_items(nikaia_std::tools::parsed_tree::parsed_kept_items(
+            &self.program.items,
+            &keep,
+        ))
+    }
+
+    /// The same file with `items` in place of its own: the interner, the
+    /// dictionaries and the spans travel with them, the caches start empty.
+    fn with_items(&self, items: Vec<ast::Spanned<ast::Item>>) -> Parsed {
         Parsed {
-            program: ast::Program {
-                items: self
-                    .program
-                    .items
-                    .iter()
-                    .filter(|item| keep(&item.node))
-                    .cloned()
-                    .collect(),
-            },
+            program: ast::Program { items },
             interner: self.interner.clone(),
             aliases: self.aliases.clone(),
             text_tiers: self.text_tiers.clone(),
@@ -568,25 +529,10 @@ impl Parsed {
     pub fn growing(&self) -> Parsed {
         // The rewriting of the types is `tools/parsed_tree.nika`'s.
         let vec = self.interner.intern_string("Vec");
-        Parsed {
-            program: ast::Program {
-                items: nikaia_std::tools::parsed_tree::grown_items(&self.program.items, vec),
-            },
-            interner: self.interner.clone(),
-            aliases: self.aliases.clone(),
-            text_tiers: self.text_tiers.clone(),
-            text_views: self.text_views.clone(),
-            package: self.package.clone(),
-            hole_wraps: self.hole_wraps.clone(),
-            viewed_arms: self.viewed_arms.clone(),
-            refused_moves: self.refused_moves.clone(),
-            holes: Default::default(),
-            kept_calls: Default::default(),
-            next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
-            expr_spans: self.expr_spans.clone(),
-            comments: self.comments.clone(),
-            dumped_source: None,
-        }
+        self.with_items(nikaia_std::tools::parsed_tree::grown_items(
+            &self.program.items,
+            vec,
+        ))
     }
 
     /// Resolve an identifier back to its text.
@@ -854,71 +800,19 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
 /// later reader sees a rule that takes types. A value in the brackets is
 /// `NK1230`, as a value where a type belongs is.
 fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
-    use nikaia_std::tools::grammar_types as types;
-    let generic = types::grammar_types_generic(&parsed.program.items);
-    if generic.rules.is_empty() && !generic.chooses {
-        return Ok(());
-    }
     let interner = parsed.interner.clone();
-    let intern = |text: &str| interner.intern_string(text);
-    let mut calls: Vec<types::GrammarTypesCall> = Vec::new();
-    let mut call_ids: Vec<u32> = Vec::new();
-    let mut refused: Option<(u32, String)> = None;
-    let mut items = std::mem::take(&mut parsed.program.items);
-    for item in &mut items {
-        crate::text_tiers::each_block(&mut item.node, &mut |block| {
-            crate::text_tiers::visit_block_mut(
-                block,
-                &mut |expr| {
-                    let call_id = ast::id_of(expr);
-                    let Some(asked) =
-                        types::grammar_types_asked(expr, &generic.rules, &interner, &intern)
-                    else {
-                        return;
-                    };
-                    let (Some(call), Some(to)) = (asked.call, asked.func) else {
-                        refused.get_or_insert((asked.refused, asked.callee));
-                        return;
-                    };
-                    if let ast::Expr::Call { func, .. } = expr {
-                        **func = to;
-                    }
-                    call_ids.push(call_id);
-                    calls.push(call);
-                },
-                &mut |_, _| {},
-            )
-        });
-    }
-    if let Some((id, callee)) = refused {
-        parsed.program.items = items;
-        let span = parsed
-            .expr_spans
-            .get(&id)
-            .copied()
-            .unwrap_or_else(|| ast::Span::new(0, 0));
-        return Err(a_types_refusal(types::grammar_types_value_refused(
-            &callee, &span,
-        )));
-    }
-    let put = |block: &ast::Block, bound: &std::collections::BTreeMap<String, ast::Type>| {
-        put_rule_types(&interner, block, bound)
-    };
-    let expanded = types::grammar_types_expand(&mut items, &calls, &interner, &intern, &put);
+    let items = std::mem::take(&mut parsed.program.items);
+    let expanded = nikaia_std::tools::grammar_types::grammar_types_whole(
+        items,
+        &parsed.expr_spans,
+        &interner,
+        &|text| interner.intern_string(text),
+    );
     parsed.program.items = expanded.items;
-    let Some(mut first) = expanded.refused.into_iter().next() else {
-        return Ok(());
-    };
-    // A refusal stands at the call that asked for the copy; one no call
-    // asked for, at the pattern it is about.
-    if let Some(span) = usize::try_from(first.call)
-        .ok()
-        .and_then(|at| call_ids.get(at))
-        .and_then(|id| parsed.expr_spans.get(id).copied())
-    {
-        first.span = span;
+    match expanded.refused.into_iter().next() {
+        Some(first) => Err(a_types_refusal(first)),
+        None => Ok(()),
     }
-    Err(a_types_refusal(first))
 }
 
 /// A refusal of the copying (`tools/grammar_types.nika`), as the compiler's.
@@ -926,46 +820,6 @@ fn a_types_refusal(
     refusal: nikaia_std::tools::grammar_types::GrammarTypesRefusal,
 ) -> anyhow::Error {
     refused(nikaia_std::tools::parse_findings::parse_findings_types_refusal(refusal))
-}
-
-/// **A copy's actions, guards and bounds with the rule's type parameters
-/// put in** (ADR-grammar-2 D1): a type written in them (`d as T`,
-/// `let x: T`), and a parameter standing as a value's head (`T::kind`,
-/// `T::from(…)`), names the type the copy is for.
-fn put_rule_types(
-    interner: &winnow_grammar::InternerContext,
-    block: &ast::Block,
-    bound: &std::collections::BTreeMap<String, ast::Type>,
-) -> ast::Block {
-    use nikaia_std::tools::grammar_types::{grammar_types_plain, grammar_types_put};
-    let mut copy = block.clone();
-    crate::text_tiers::visit_block_mut(
-        &mut copy,
-        &mut |expr| match expr {
-            ast::Expr::Cast { ty, .. } => *ty = grammar_types_put(ty, bound, interner),
-            ast::Expr::Variable(name, _) => {
-                if let Some(to) = grammar_types_plain(*name, bound, interner) {
-                    *name = to;
-                }
-            }
-            ast::Expr::Path(segments, _) => {
-                if let Some(to) = segments
-                    .first()
-                    .and_then(|head| grammar_types_plain(*head, bound, interner))
-                {
-                    segments[0] = to;
-                }
-            }
-            _ => {}
-        },
-        &mut |stmt, _| match stmt {
-            ast::Stmt::Let { ty: Some(ty), .. } | ast::Stmt::Comptime { ty: Some(ty), .. } => {
-                *ty = grammar_types_put(ty, bound, interner);
-            }
-            _ => {}
-        },
-    );
-    copy
 }
 
 /// The refusal a parse error travels as: the finding for whoever has the path
@@ -2932,7 +2786,7 @@ grammar! {
         // Kap 5.2/5.3: a lambda, with its arguments named or implicit.
         rule closure_expr -> Expr =
             KW_FN "(" params:closure_params? ")" body:block
-            -> { lambda(params.unwrap_or_default(), body) }
+            -> { lambda(&params.unwrap_or_default(), body) }
           // `fn { … }` takes **no arguments**, and used to take however many of
           // `a`, `b`, `c` its body mentioned (ADR-277 withdrew that). A body that
           // reaches for one of the three is now a body naming something nothing
@@ -3315,7 +3169,7 @@ grammar! {
         // still wins at a `fn:`, because neither arm above it can match a colon.
         rule trailing_lambda -> Expr =
             KW_FN "(" params:closure_params? ")" body:block -> {
-                lambda(params.unwrap_or_default(), body)
+                lambda(&params.unwrap_or_default(), body)
             }
           | KW_FN body:block -> {
                 Expr::Closure { params: Vec::new(), mutable: Vec::new(), body, id: NodeId::parsed() }

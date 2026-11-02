@@ -73,3 +73,18 @@ pub(crate) fn grown_variant(fields: &VariantFields, vec: winnow_grammar::Symbol)
     }
 }
 
+pub fn parsed_span_of(spans: &collections::BTreeMap<u32, Span>, id: u32) -> Option<Span> {
+    let span = match spans.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(span.clone())
+}
+
+pub fn parsed_kept_function_text(func: &Expr, words: &winnow_grammar::InternerContext) -> String {
+    match func {
+        Expr::Path(segments, _) => segments.iter().map(|s| { words.resolve(*s).to_string() }).collect::<Vec<_>>().join("::"),
+        Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_string() },
+        _ => panic("a kept function is a name or a path"),
+    }
+}
+
+pub fn parsed_kept_items(items: &[Spanned<Item>], keep: &impl Fn(&Item) -> bool) -> Vec<Spanned<Item>> { items.iter().filter(|&item| { keep(&item.node) }).map(|item| { item.clone() }).collect::<Vec<_>>() }
+

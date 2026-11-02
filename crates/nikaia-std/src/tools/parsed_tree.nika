@@ -3,8 +3,10 @@
 // **What the compiler asks of a parsed file's items**, beside the grammar that
 // read it: the aliases its `use` items declare (ADR-286 D12), and the file
 // with every `&[T]` in its declared types written back as the `Vec[T]` it is
-// a view of, for the sub-program a grammar run compiles (ADR-179 D3). Moved
-// from the compiler's `parser` (ADR-294, #125).
+// a view of, for the sub-program a grammar run compiles (ADR-179 D3); and
+// what `Parsed`'s methods answer from them: where an expression was written,
+// the text a kept function's call is cached by, and the items a sub-project
+// keeps. Moved from the compiler's `parser` (ADR-294, #125).
 
 use std::collections
 
@@ -95,4 +97,29 @@ fn grown_variant(fields: ref VariantFields, vec: winnow_grammar::Symbol) -> Vari
         },
         VariantFields::Named(named) => return VariantFields::Named(grown_fields(named, vec)),
     }
+}
+
+/// **Where the expression `id` was written**, if the parser made it: the
+/// file's table of spans by id number (#107, ADR-340). A node the compiler
+/// built has none.
+pub fn parsed_span_of(spans: ref collections::BTreeMap[u32, Span], id: u32) -> Span? {
+    let span = spans.get(id) ?? return null
+    return span.clone()
+}
+
+/// **What a kept function's call is cached by**: the name, or the path
+/// joined with `::`. A kept function is a name or a path, nothing else.
+pub fn parsed_kept_function_text(func: ref Expr, words: ref winnow_grammar::InternerContext) -> String {
+    return match func {
+        Expr::Path(segments, _) => segments.iter().map(fn(s) { words.resolve(s).clone() }).collect().join("::"),
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        else => panic("a kept function is a name or a path"),
+    }
+}
+
+/// **The items `keep` says yes to**, in their order: the same file with
+/// only those (the sub-project a grammar run compiles wants the types and
+/// the grammar, not the program's `fn main`).
+pub fn parsed_kept_items(items: ref Vec[Spanned[Item]], keep: fn(ref Item) -> bool sync) -> Vec[Spanned[Item]] {
+    return items.iter().filter(fn(item) { keep(item.node) }).map(fn(item) { item.clone() }).collect()
 }

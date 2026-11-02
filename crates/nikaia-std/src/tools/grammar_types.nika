@@ -16,7 +16,7 @@
 // call that led there (`NK1250`), a `match` on anything but a kind is
 // `NK1310`, and a bound on a rule's type parameter is checked at that call
 // (`NK1164`). Inside each copy the type parameters are put in in the actions,
-// guards and bounds too, by the host's walk (`put`).
+// guards and bounds too (`grammar_types_put_block`).
 
 use std::collections
 
@@ -104,7 +104,7 @@ struct GrammarTypesWork {
 /// **The items with each grammar's rules that take types replaced by the
 /// copies `calls` reach**, and each `match` on a kind by the arm its copy's
 /// type takes. A grammar with neither is returned as it was.
-pub fn grammar_types_expand(mut items: Vec[Spanned[Item]], calls: ref Vec[GrammarTypesCall], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync) -> GrammarTypesExpanded {
+fn grammar_types_expand(mut items: Vec[Spanned[Item]], calls: ref Vec[GrammarTypesCall], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarTypesExpanded {
     let none: Vec[String] = []
     let mut work = GrammarTypesWork { queue: [], refused: [], shapes: collections::BTreeMap(), traits: collections::BTreeSet(), impls: collections::BTreeSet(), structs: collections::BTreeMap(), from: -1, path: none }
     for item in items {
@@ -133,7 +133,7 @@ pub fn grammar_types_expand(mut items: Vec[Spanned[Item]], calls: ref Vec[Gramma
         let mut kept = item.clone()
         match item.node {
             Item::Grammar(def) => {
-                kept.node = Item::Grammar(grammar_types_def(def, calls, words, intern, put, work))
+                kept.node = Item::Grammar(grammar_types_def(def, calls, words, intern, work))
             },
             else => {},
         }
@@ -218,7 +218,7 @@ fn grammar_types_called(words: ref winnow_grammar::InternerContext, rule: ref St
     return f"{rule}[{spelled.join(", ")}]"
 }
 
-fn grammar_types_def(def: ref GrammarDef, calls: ref Vec[GrammarTypesCall], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> GrammarDef {
+fn grammar_types_def(def: ref GrammarDef, calls: ref Vec[GrammarTypesCall], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut work: GrammarTypesWork) -> GrammarDef {
     let mut generic: collections::BTreeMap[String, GrammarRule] = collections::BTreeMap()
     for rule in def.rules {
         if rule.generics.len() > 0 {
@@ -246,7 +246,7 @@ fn grammar_types_def(def: ref GrammarDef, calls: ref Vec[GrammarTypesCall], word
         if rule.generics.len() == 0 {
             work.from = -1
             work.path = [f"{words.resolve(rule.name)}"]
-            rules.push(grammar_types_rule(rule, none, rule.name, generic, owner, words, intern, put, work))
+            rules.push(grammar_types_rule(rule, none, rule.name, generic, owner, words, intern, work))
         }
     }
     let mut done: collections::BTreeSet[String] = collections::BTreeSet()
@@ -273,7 +273,7 @@ fn grammar_types_def(def: ref GrammarDef, calls: ref Vec[GrammarTypesCall], word
             }
             index += 1
         }
-        rules.push(grammar_types_rule(rule, bound, intern(copy), generic, owner, words, intern, put, work))
+        rules.push(grammar_types_rule(rule, bound, intern(copy), generic, owner, words, intern, work))
     }
     let mut expanded = def.clone()
     expanded.rules = rules
@@ -356,7 +356,7 @@ fn grammar_types_parts(ty: ref Type, kind: ref String) -> Vec[Type] {
 }
 
 /// One rule with the types `bound` says put in, under the name `name`.
-fn grammar_types_rule(rule: ref GrammarRule, bound: ref collections::BTreeMap[String, Type], name: winnow_grammar::Symbol, generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> GrammarRule {
+fn grammar_types_rule(rule: ref GrammarRule, bound: ref collections::BTreeMap[String, Type], name: winnow_grammar::Symbol, generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut work: GrammarTypesWork) -> GrammarRule {
     let mut copy = rule.clone()
     copy.name = name
     copy.generics = []
@@ -378,28 +378,28 @@ fn grammar_types_rule(rule: ref GrammarRule, bound: ref collections::BTreeMap[St
         config.push(c)
     }
     copy.config = config
-    copy.alts = grammar_types_alts(rule.alts, bound, f"{words.resolve(rule.name)}", generic, owner, words, intern, put, work)
+    copy.alts = grammar_types_alts(rule.alts, bound, f"{words.resolve(rule.name)}", generic, owner, words, intern, work)
     return copy
 }
 
 /// A rule's alternatives in a copy: a `match` on a kind gives the arm the
 /// type takes, every other alternative its pattern and action with the
 /// types put in.
-fn grammar_types_alts(alts: ref Vec[GrammarAlt], bound: ref collections::BTreeMap[String, Type], rule: ref String, generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> Vec[GrammarAlt] {
+fn grammar_types_alts(alts: ref Vec[GrammarAlt], bound: ref collections::BTreeMap[String, Type], rule: ref String, generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut work: GrammarTypesWork) -> Vec[GrammarAlt] {
     let mut out: Vec[GrammarAlt] = []
     for alt in alts {
         match alt.pattern.node {
             Pattern::Choose { value, arms } => {
-                for one in grammar_types_choose(value, arms, alt.pattern.span, bound, rule, generic, owner, words, intern, put, work) {
+                for one in grammar_types_choose(value, arms, alt.pattern.span, bound, rule, generic, owner, words, intern, work) {
                     out.push(one)
                 }
             },
             else => {
                 let mut a = alt.clone()
-                a.pattern = grammar_types_pattern(alt.pattern, bound, generic, owner, words, intern, put, work)
+                a.pattern = grammar_types_pattern(alt.pattern, bound, generic, owner, words, intern, work)
                 if bound.len() > 0 && alt.action != null {
                     let block: Block = alt.action?.clone() ?? Block { stmts: [] }
-                    a.action = put(block, bound)
+                    a.action = grammar_types_put_block(block, bound, words, intern)
                 }
                 out.push(a)
             },
@@ -412,7 +412,7 @@ fn grammar_types_alts(alts: ref Vec[GrammarAlt], bound: ref collections::BTreeMa
 /// the first whose kind is the type's, or `else`; its names stand for the
 /// type's parts. No arm, or an arm that is `refuse("why")`, is `NK1250` at
 /// the call; a value other than a type's `::kind` is `NK1310`.
-fn grammar_types_choose(value: ref Expr, arms: ref Vec[GrammarArm], span: ref Span, bound: ref collections::BTreeMap[String, Type], rule: ref String, generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> Vec[GrammarAlt] {
+fn grammar_types_choose(value: ref Expr, arms: ref Vec[GrammarArm], span: ref Span, bound: ref collections::BTreeMap[String, Type], rule: ref String, generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut work: GrammarTypesWork) -> Vec[GrammarAlt] {
     let none: Vec[GrammarAlt] = []
     let mut written: String = "this value"
     let mut subject: String = ""
@@ -470,7 +470,7 @@ fn grammar_types_choose(value: ref Expr, arms: ref Vec[GrammarArm], span: ref Sp
             grammar_types_refuse(work, "NK1250", span.clone(), f"`{entry}` can't read a `{spelled}`: {why}", f"The arm `{named}` of the `match` in `{rule}` refuses it with `refuse(…)` (ADR-grammar-2 D6){reached}.", "Call it with a type the grammar reads.")
             return none
         }
-        return grammar_types_alts(arm.alts, inner, rule, generic, owner, words, intern, put, work)
+        return grammar_types_alts(arm.alts, inner, rule, generic, owner, words, intern, work)
     }
     grammar_types_refuse(work, "NK1250", span.clone(), f"`{entry}` can't read a `{spelled}`: no arm of the `match` in `{rule}` takes `{kind}`.", f"`{rule}` chooses its pattern by `{written}` (ADR-grammar-2 D6){reached}.", f"Add an arm for `{kind}` to the `match` in `{rule}`, or call it with a type an arm takes.")
     return none
@@ -498,28 +498,21 @@ fn grammar_types_refused_why(alts: ref Vec[GrammarAlt], words: ref winnow_gramma
     return null
 }
 
-/// An expression of a pattern with the types put in, by the host's walk.
-fn grammar_types_put_expr(expr: ref Expr, span: ref Span, bound: ref collections::BTreeMap[String, Type], put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync) -> Expr {
+/// An expression of a pattern with the types put in (`grammar_types_put_block`).
+fn grammar_types_put_expr(expr: ref Expr, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Expr {
     if bound.len() == 0 {
         return expr.clone()
     }
-    let block = Block { stmts: [Spanned { node: Stmt::Expr(expr.clone()), span: span.clone(), doc: null, attributes: [] }] }
-    let done = put(block, bound)
-    if done.stmts.len() == 1 {
-        match done.stmts[0].node {
-            Stmt::Expr(e) => {
-                return e.clone()
-            },
-            else => {},
-        }
-    }
-    return expr.clone()
+    let mut copy = expr.clone()
+    let mut walk = grammar_types_putting(bound)
+    grammar_types_walk_expr(copy, words, intern, walk)
+    return copy
 }
 
-fn grammar_types_put_exprs(exprs: ref Vec[Expr], span: ref Span, bound: ref collections::BTreeMap[String, Type], put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync) -> Vec[Expr] {
+fn grammar_types_put_exprs(exprs: ref Vec[Expr], bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Vec[Expr] {
     let mut out: Vec[Expr] = []
     for expr in exprs {
-        out.push(grammar_types_put_expr(expr, span, bound, put))
+        out.push(grammar_types_put_expr(expr, bound, words, intern))
     }
     return out
 }
@@ -581,59 +574,59 @@ pub fn grammar_types_put(ty: ref Type, bound: ref collections::BTreeMap[String, 
     return copy
 }
 
-fn grammar_types_patterns(parts: ref Vec[Spanned[Pattern]], bound: ref collections::BTreeMap[String, Type], generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> Vec[Spanned[Pattern]] {
+fn grammar_types_patterns(parts: ref Vec[Spanned[Pattern]], bound: ref collections::BTreeMap[String, Type], generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut work: GrammarTypesWork) -> Vec[Spanned[Pattern]] {
     let mut out: Vec[Spanned[Pattern]] = []
     for part in parts {
-        out.push(grammar_types_pattern(part, bound, generic, owner, words, intern, put, work))
+        out.push(grammar_types_pattern(part, bound, generic, owner, words, intern, work))
     }
     return out
 }
 
 /// A pattern with the types put in, and each rule it hands types to,
 /// `Value[A]`, called by its copy's name, which is queued.
-fn grammar_types_pattern(pattern: ref Spanned[Pattern], bound: ref collections::BTreeMap[String, Type], generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, put: fn(ref Block, ref collections::BTreeMap[String, Type]) -> Block sync, mut work: GrammarTypesWork) -> Spanned[Pattern] {
+fn grammar_types_pattern(pattern: ref Spanned[Pattern], bound: ref collections::BTreeMap[String, Type], generic: ref collections::BTreeMap[String, GrammarRule], owner: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut work: GrammarTypesWork) -> Spanned[Pattern] {
     let mut copy = pattern.clone()
     match pattern.node {
         Pattern::Seq(parts) => {
-            copy.node = Pattern::Seq(grammar_types_patterns(parts, bound, generic, owner, words, intern, put, work))
+            copy.node = Pattern::Seq(grammar_types_patterns(parts, bound, generic, owner, words, intern, work))
         },
         Pattern::Choice(parts) => {
-            copy.node = Pattern::Choice(grammar_types_patterns(parts, bound, generic, owner, words, intern, put, work))
+            copy.node = Pattern::Choice(grammar_types_patterns(parts, bound, generic, owner, words, intern, work))
         },
         Pattern::Bind { name, pat } => {
-            copy.node = Pattern::Bind { name: name, pat: grammar_types_pattern(pat, bound, generic, owner, words, intern, put, work) }
+            copy.node = Pattern::Bind { name: name, pat: grammar_types_pattern(pat, bound, generic, owner, words, intern, work) }
         },
         Pattern::Repeat { pat, rep } => {
-            copy.node = Pattern::Repeat { pat: grammar_types_pattern(pat, bound, generic, owner, words, intern, put, work), rep: rep.clone() }
+            copy.node = Pattern::Repeat { pat: grammar_types_pattern(pat, bound, generic, owner, words, intern, work), rep: rep.clone() }
         },
         Pattern::Group(inner) => {
-            copy.node = Pattern::Group(grammar_types_pattern(inner, bound, generic, owner, words, intern, put, work))
+            copy.node = Pattern::Group(grammar_types_pattern(inner, bound, generic, owner, words, intern, work))
         },
         Pattern::Counted { pat, low, high, comma } => {
             let mut top: Expr? = null
             if high != null {
                 let given: Expr = high?.clone() ?? low.clone()
-                top = grammar_types_put_expr(given, pattern.span, bound, put)
+                top = grammar_types_put_expr(given, bound, words, intern)
             }
-            copy.node = Pattern::Counted { pat: grammar_types_pattern(pat, bound, generic, owner, words, intern, put, work), low: grammar_types_put_expr(low, pattern.span, bound, put), high: top, comma: comma }
+            copy.node = Pattern::Counted { pat: grammar_types_pattern(pat, bound, generic, owner, words, intern, work), low: grammar_types_put_expr(low, bound, words, intern), high: top, comma: comma }
         },
         Pattern::Guard { cond, expected } => {
-            copy.node = Pattern::Guard { cond: grammar_types_put_expr(cond, pattern.span, bound, put), expected: expected?.clone() }
+            copy.node = Pattern::Guard { cond: grammar_types_put_expr(cond, bound, words, intern), expected: expected?.clone() }
         },
         Pattern::Call { name, args, config } => {
             let mut config2: Vec[ConfigArg] = []
             for one in config {
-                config2.push(ConfigArg { name: one.name, value: grammar_types_put_expr(one.value, pattern.span, bound, put) })
+                config2.push(ConfigArg { name: one.name, value: grammar_types_put_expr(one.value, bound, words, intern) })
             }
-            copy.node = Pattern::Call { name: name, args: grammar_types_put_exprs(args, pattern.span, bound, put), config: config2 }
+            copy.node = Pattern::Call { name: name, args: grammar_types_put_exprs(args, bound, words, intern), config: config2 }
         },
         Pattern::Choose { .. } => {
             grammar_types_refuse(work, "NK1310", pattern.span.clone(), "A `match` on a kind stands as a rule's whole body or a whole alternative, not inside a pattern.", "A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-2 D2).", "Give the `match` a rule of its own, and call that rule here.")
         },
         Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
             let built = grammar_types_put(ty, bound, words)
-            let key2 = grammar_types_pattern(key, bound, generic, owner, words, intern, put, work)
-            let sep2 = grammar_types_pattern(sep, bound, generic, owner, words, intern, put, work)
+            let key2 = grammar_types_pattern(key, bound, generic, owner, words, intern, work)
+            let sep2 = grammar_types_pattern(sep, bound, generic, owner, words, intern, work)
             let members = grammar_types_members(built, value, pattern.span, generic, owner, words, intern, work)
             copy.node = Pattern::Members { ty: built, key: key2, value: value, sep: sep2, on_null: on_null, on_unknown: on_unknown, fields: members }
         },
@@ -642,7 +635,7 @@ fn grammar_types_pattern(pattern: ref Spanned[Pattern], bound: ref collections::
             for ty in generics {
                 types.push(grammar_types_put(ty, bound, words))
             }
-            let parts = grammar_types_patterns(args, bound, generic, owner, words, intern, put, work)
+            let parts = grammar_types_patterns(args, bound, generic, owner, words, intern, work)
             let called = words.resolve(name)
             if generic.contains_key(called) && types.len() > 0 {
                 let copied = grammar_types_copy_name(words, called, types)
@@ -820,4 +813,307 @@ pub fn grammar_types_plain(name: winnow_grammar::Symbol, bound: ref collections:
         return ty.name
     }
     return null
+}
+
+/// **Every call of a rule that takes types made the call of its copy, and the
+/// copies made** (ADR-grammar-2 D1): what the parser does right after the
+/// grammar. Each call `G::read[i64](input)` becomes `G::read__i64(input)`, and
+/// the rules are copied once per list of type arguments, so no later reader
+/// sees a rule that takes types. A value in the brackets is `NK1230`, as a
+/// value where a type belongs is; it and every other refusal stand at the
+/// call that asked for the copy (by `spans`, the file's spans by id), and one
+/// no call asked for at the pattern it is about. Only the first refusal is
+/// said; a program with no rule that takes types and no `match` on a kind
+/// comes back as it was.
+pub fn grammar_types_whole(items: Vec[Spanned[Item]], spans: ref collections::BTreeMap[u32, Span], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarTypesExpanded {
+    let generic = grammar_types_generic(items)
+    let mut all = items
+    if generic.rules.len() == 0 && !generic.chooses {
+        return GrammarTypesExpanded { items: all, refused: [] }
+    }
+    let mut walk = GrammarTypesWalk { putting: false, bound: collections::BTreeMap(), rules: generic.rules, calls: [], call_ids: [], refused_at: null, refused_callee: "" }
+    for mut item in all {
+        grammar_types_walk_item(item.node, words, intern, walk)
+    }
+    if walk.refused_at != null {
+        let at = parsed_span_of(spans, walk.refused_at ?? 0) ?? Span { start: 0, end: 0 }
+        return GrammarTypesExpanded { items: all, refused: [grammar_types_value_refused(walk.refused_callee, at)] }
+    }
+    let mut expanded = grammar_types_expand(all, walk.calls, words, intern)
+    if expanded.refused.len() > 0 {
+        grammar_types_placed(expanded.refused[0], walk.call_ids, spans)
+    }
+    return expanded
+}
+
+/// A refusal of the copying put at the call that asked for the copy, where a
+/// call did and the parser kept where it stands.
+fn grammar_types_placed(mut refusal: GrammarTypesRefusal, call_ids: ref Vec[u32], spans: ref collections::BTreeMap[u32, Span]) {
+    if refusal.call < 0 {
+        return
+    }
+    let id = call_ids.get(refusal.call) ?? return
+    refusal.span = parsed_span_of(spans, id) ?? return
+}
+
+/// **A copy's actions, guards and bounds with the rule's type parameters
+/// put in** (ADR-grammar-2 D1): a type written in them (`d as T`,
+/// `let x: T`), and a parameter standing as a value's head (`T::kind`,
+/// `T::from(…)`), names the type the copy is for.
+fn grammar_types_put_block(block: ref Block, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Block {
+    let mut copy = block.clone()
+    let mut walk = grammar_types_putting(bound)
+    grammar_types_walk_block(copy, words, intern, walk)
+    return copy
+}
+
+/// **What the walk over a program's code does at each expression, children
+/// before parents, and each statement after its parts**: put a copy's types
+/// in (`putting`, with the types each parameter is `bound` to), or read the
+/// calls of the rules that take types (`rules`), making each the call of its
+/// copy, with the copies asked for, the ids of their calls, and the first
+/// call whose brackets hold a value (its id and the callee as written).
+struct GrammarTypesWalk {
+    putting: bool,
+    bound: collections::BTreeMap[String, Type],
+    rules: collections::BTreeSet[(winnow_grammar::Symbol, winnow_grammar::Symbol)],
+    calls: Vec[GrammarTypesCall],
+    call_ids: Vec[u32],
+    refused_at: u32?,
+    refused_callee: String,
+}
+
+/// The walk that puts the types `bound` in.
+fn grammar_types_putting(bound: ref collections::BTreeMap[String, Type]) -> GrammarTypesWalk {
+    return GrammarTypesWalk { putting: true, bound: bound.clone(), rules: collections::BTreeSet(), calls: [], call_ids: [], refused_at: null, refused_callee: "" }
+}
+
+/// The blocks of an item: a function's, a test's, a bench's, each method's.
+fn grammar_types_walk_item(mut item: Item, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut walk: GrammarTypesWalk) {
+    match item {
+        Item::Fn { body, .. } => grammar_types_walk_block(body, words, intern, walk),
+        Item::Test { body, .. } => grammar_types_walk_block(body, words, intern, walk),
+        Item::Bench { body, .. } => grammar_types_walk_block(body, words, intern, walk),
+        Item::Impl { methods, .. } => {
+            for mut method in methods {
+                grammar_types_walk_item(method.node, words, intern, walk)
+            }
+        },
+        else => {},
+    }
+}
+
+fn grammar_types_walk_block(mut block: Block, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut walk: GrammarTypesWalk) {
+    for mut stmt in block.stmts {
+        grammar_types_walk_stmt(stmt.node, words, intern, walk)
+        grammar_types_visit_stmt(stmt.node, words, walk)
+    }
+}
+
+fn grammar_types_walk_stmt(mut stmt: Stmt, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut walk: GrammarTypesWalk) {
+    match stmt {
+        Stmt::Let { value, .. } => grammar_types_walk_expr(value, words, intern, walk),
+        Stmt::Assign { target, value, .. } => {
+            grammar_types_walk_expr(target, words, intern, walk)
+            grammar_types_walk_expr(value, words, intern, walk)
+        },
+        Stmt::For { iter, body, .. } => {
+            grammar_types_walk_expr(iter, words, intern, walk)
+            grammar_types_walk_block(body, words, intern, walk)
+        },
+        Stmt::While { cond, body } => {
+            grammar_types_walk_expr(cond, words, intern, walk)
+            grammar_types_walk_block(body, words, intern, walk)
+        },
+        Stmt::Return(value) => grammar_types_walk_maybe(value, words, intern, walk),
+        Stmt::Expr(value) => grammar_types_walk_expr(value, words, intern, walk),
+        else => {},
+    }
+}
+
+fn grammar_types_walk_maybe(mut expr: Expr?, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut walk: GrammarTypesWalk) {
+    if expr != null {
+        grammar_types_walk_expr(expr, words, intern, walk)
+    }
+}
+
+fn grammar_types_walk_else(mut block: Block?, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut walk: GrammarTypesWalk) {
+    if block != null {
+        grammar_types_walk_block(block, words, intern, walk)
+    }
+}
+
+fn grammar_types_walk_all(mut all: Vec[Expr], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut walk: GrammarTypesWalk) {
+    for mut each in all {
+        grammar_types_walk_expr(each, words, intern, walk)
+    }
+}
+
+fn grammar_types_walk_config(mut config: Vec[ConfigArg], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut walk: GrammarTypesWalk) {
+    for mut option in config {
+        grammar_types_walk_expr(option.value, words, intern, walk)
+    }
+}
+
+fn grammar_types_walk_fields(mut fields: Vec[FieldInit], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut walk: GrammarTypesWalk) {
+    for mut field in fields {
+        grammar_types_walk_maybe(field.value, words, intern, walk)
+    }
+}
+
+fn grammar_types_walk_expr(mut expr: Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut walk: GrammarTypesWalk) {
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            grammar_types_walk_expr(func, words, intern, walk)
+            grammar_types_walk_all(args, words, intern, walk)
+            grammar_types_walk_config(config, words, intern, walk)
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            grammar_types_walk_expr(receiver, words, intern, walk)
+            grammar_types_walk_all(args, words, intern, walk)
+            grammar_types_walk_config(config, words, intern, walk)
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            grammar_types_walk_expr(receiver, words, intern, walk)
+            grammar_types_walk_all(args, words, intern, walk)
+            grammar_types_walk_config(config, words, intern, walk)
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            grammar_types_walk_expr(lhs, words, intern, walk)
+            grammar_types_walk_expr(rhs, words, intern, walk)
+        },
+        Expr::Unary { expr: inner, .. } => grammar_types_walk_expr(inner, words, intern, walk),
+        Expr::Try(inner, _) => grammar_types_walk_expr(inner, words, intern, walk),
+        Expr::Throw(inner, _) => grammar_types_walk_expr(inner, words, intern, walk),
+        Expr::Cast { expr: inner, .. } => grammar_types_walk_expr(inner, words, intern, walk),
+        Expr::Return(value, _) => grammar_types_walk_maybe(value, words, intern, walk),
+        Expr::Field { base, .. } => grammar_types_walk_expr(base, words, intern, walk),
+        Expr::SafeField { base, .. } => grammar_types_walk_expr(base, words, intern, walk),
+        Expr::Index { base, index, .. } => {
+            grammar_types_walk_expr(base, words, intern, walk)
+            grammar_types_walk_expr(index, words, intern, walk)
+        },
+        Expr::Range { start, end, .. } => {
+            grammar_types_walk_expr(start, words, intern, walk)
+            grammar_types_walk_expr(end, words, intern, walk)
+        },
+        Expr::Tuple(items, _) => grammar_types_walk_all(items, words, intern, walk),
+        Expr::ListLit { items, .. } => grammar_types_walk_all(items, words, intern, walk),
+        Expr::ListRepeat { value, count, .. } => {
+            grammar_types_walk_expr(value, words, intern, walk)
+            grammar_types_walk_expr(count, words, intern, walk)
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            grammar_types_walk_expr(value, words, intern, walk)
+            grammar_types_walk_expr(fallback, words, intern, walk)
+        },
+        Expr::TryCatch { expr: inner, handler, .. } => {
+            grammar_types_walk_expr(inner, words, intern, walk)
+            grammar_types_walk_block(handler, words, intern, walk)
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            grammar_types_walk_expr(cond, words, intern, walk)
+            grammar_types_walk_block(then_branch, words, intern, walk)
+            grammar_types_walk_else(else_branch, words, intern, walk)
+        },
+        Expr::Match { value, arms, .. } => {
+            grammar_types_walk_expr(value, words, intern, walk)
+            for mut arm in arms {
+                grammar_types_walk_maybe(arm.guard, words, intern, walk)
+                grammar_types_walk_expr(arm.body, words, intern, walk)
+            }
+        },
+        Expr::StructLit { fields, .. } => grammar_types_walk_fields(fields, words, intern, walk),
+        Expr::With { base, fields, .. } => {
+            grammar_types_walk_expr(base, words, intern, walk)
+            grammar_types_walk_fields(fields, words, intern, walk)
+        },
+        Expr::Block(block, _) => grammar_types_walk_block(block, words, intern, walk),
+        Expr::Unsafe(block, _) => grammar_types_walk_block(block, words, intern, walk),
+        Expr::Overlap(block, _) => grammar_types_walk_block(block, words, intern, walk),
+        Expr::Closure { body, .. } => grammar_types_walk_block(body, words, intern, walk),
+        Expr::Spawn { body, .. } => grammar_types_walk_expr(body, words, intern, walk),
+        else => {},
+    }
+    if walk.putting {
+        grammar_types_put_in(expr, words, walk)
+    } else {
+        grammar_types_ask(expr, words, intern, walk)
+    }
+}
+
+/// A statement's written type with the copy's types put in.
+fn grammar_types_visit_stmt(mut stmt: Stmt, words: ref winnow_grammar::InternerContext, walk: ref GrammarTypesWalk) {
+    if !walk.putting {
+        return
+    }
+    match stmt {
+        Stmt::Let { ty, .. } => grammar_types_put_written(ty, walk.bound, words),
+        Stmt::Comptime { ty, .. } => grammar_types_put_written(ty, walk.bound, words),
+        else => {},
+    }
+}
+
+fn grammar_types_put_written(mut ty: Type?, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext) {
+    if ty != null {
+        ty = grammar_types_put(ty, bound, words)
+    }
+}
+
+/// An expression with the copy's types put in: the type of a cast, and a
+/// parameter standing as a name or as a path's head.
+fn grammar_types_put_in(mut expr: Expr, words: ref winnow_grammar::InternerContext, walk: ref GrammarTypesWalk) {
+    match expr {
+        Expr::Cast { expr: inner, ty, id } => {
+            expr = Expr::Cast { expr: inner, ty: grammar_types_put(ty, walk.bound, words), id: id }
+            return
+        },
+        else => {},
+    }
+    let to = grammar_types_head(expr, walk.bound, words) ?? return
+    match expr {
+        Expr::Variable(_, id) => {
+            expr = Expr::Variable(to, id)
+        },
+        Expr::Path(segments, id) => {
+            let mut put = segments.clone()
+            put[0] = to
+            expr = Expr::Path(put, id)
+        },
+        else => {},
+    }
+}
+
+/// The type a name, or a path's head, stands for in the copy, where it is
+/// one of the rule's type parameters.
+fn grammar_types_head(expr: ref Expr, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext) -> winnow_grammar::Symbol? {
+    return match expr {
+        Expr::Variable(name, _) => grammar_types_plain(name, bound, words),
+        Expr::Path(segments, _) => if segments.len() > 0 { grammar_types_plain(segments[0], bound, words) } else { null },
+        else => null,
+    }
+}
+
+/// A call of a rule that takes types made the call of its copy, the copy
+/// asked for kept; a call whose brackets hold a value kept as the first
+/// refusal, unless there is one.
+fn grammar_types_ask(mut expr: Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut walk: GrammarTypesWalk) {
+    let call_id = id_of(expr)
+    let asked = grammar_types_asked(expr, walk.rules, words, intern) ?? return
+    if asked.call == null || asked.func == null {
+        if walk.refused_at == null {
+            walk.refused_at = asked.refused
+            walk.refused_callee = asked.callee
+        }
+        return
+    }
+    let to = asked.func ?? return
+    match expr {
+        Expr::Call { args, config, id, .. } => {
+            expr = Expr::Call { func: to, args: args, config: config, id: id }
+        },
+        else => {},
+    }
+    walk.call_ids.push(call_id)
+    walk.calls.push(asked.call ?? return)
 }

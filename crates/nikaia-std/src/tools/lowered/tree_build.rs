@@ -31,6 +31,32 @@ pub fn unpacked(body: &mut Block, unpacks: &[(winnow_grammar::Symbol, Vec<winnow
     }
 }
 
+pub fn flat_shape(pattern: (Vec<winnow_grammar::Symbol>, Vec<i64>)) -> (Vec<winnow_grammar::Symbol>, Vec<i64>) {
+    let (names, shape) = pattern;
+    let tuples = shape.iter().copied().filter(|&w| { w > 0 }).count() as i64;
+    if tuples <= 1 { return (names, vec![]); }
+    (names, shape)
+}
+
+pub fn lambda(params: &[(bool, winnow_grammar::Symbol, Option<((Vec<winnow_grammar::Symbol>, Vec<i64>), Span)>)], body: Block) -> Expr {
+    let mut plain: Vec<(bool, winnow_grammar::Symbol)> = vec![];
+    let mut unpacks: Vec<(winnow_grammar::Symbol, Vec<winnow_grammar::Symbol>, Vec<i64>, Span)> = vec![];
+    for (mutable, name, pattern) in params.iter() {
+        let mutable = nikaia_std::num::value(mutable);let name = *name;
+        plain.push((mutable, name));
+        let found = match match pattern.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let ((names, shape), span) = found;
+        unpacks.push((name, names, shape, span));
+    }
+    let mut opened = body;
+    unpacked(&mut opened, &unpacks);
+    let (names, mutable) = split_mut(&plain);
+    Expr::Closure { params: names, mutable, body: opened, id: node_id::NodeId::parsed() }
+}
+
 pub fn params_of(receiver: Option<Receiver>, args: Vec<FnArg>, zone: Option<ConfigZone>) -> FnParams {
     if zone.is_none() { return FnParams { receiver, args, config: vec![], spread: None }; }
     match nikaia_std::index::or(zone, || ConfigZone::Options(vec![])) {

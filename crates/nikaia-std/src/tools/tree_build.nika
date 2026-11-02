@@ -58,6 +58,37 @@ pub fn unpacked(mut body: Block, unpacks: Vec[(winnow_grammar::Symbol, Vec[winno
     }
 }
 
+/// One name or a flat tuple keeps no shape (ADR-356): only a nested pattern
+/// carries one, so every reader that knew the flat form reads it unchanged.
+pub fn flat_shape(pattern: (Vec[winnow_grammar::Symbol], Vec[i64])) -> (Vec[winnow_grammar::Symbol], Vec[i64]) {
+    let (names, shape) = pattern
+    let tuples = shape.iter().filter(fn(w) { w > 0 }).count()
+    if tuples <= 1 {
+        return (names, [])
+    }
+    return (names, shape)
+}
+
+/// A lambda from its parameters as written: a tuple pattern among them is a
+/// parameter under its hidden name, taken apart by a `let` first in the body
+/// (ADR-358 D5, `unpacked`). Each parameter is whether it is written `mut`,
+/// its name, and - for a tuple pattern - the names and shape the pattern
+/// binds and where it stands (ADR-358).
+pub fn lambda(params: Vec[(bool, winnow_grammar::Symbol, ((Vec[winnow_grammar::Symbol], Vec[i64]), Span)?)], body: Block) -> Expr {
+    let mut plain: Vec[(bool, winnow_grammar::Symbol)] = []
+    let mut unpacks: Vec[(winnow_grammar::Symbol, Vec[winnow_grammar::Symbol], Vec[i64], Span)] = []
+    for (mutable, name, pattern) in params {
+        plain.push((mutable, name))
+        let found = pattern?.clone() ?? continue
+        let ((names, shape), span) = found
+        unpacks.push((name, names, shape, span))
+    }
+    let mut opened = body
+    unpacked(opened, unpacks)
+    let (names, mutable) = split_mut(plain)
+    return Expr::Closure { params: names, mutable: mutable, body: opened, id: node_id::NodeId::parsed() }
+}
+
 /// A declaration's parameters, with the config zone split into its two shapes.
 pub fn params_of(receiver: Receiver?, args: Vec[FnArg], zone: ConfigZone?) -> FnParams {
     if zone == null {

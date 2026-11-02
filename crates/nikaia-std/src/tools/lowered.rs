@@ -2745,7 +2745,7 @@ pub mod grammar_run {
 }
 pub mod grammar_types {
     #[allow(unused_imports)]
-    pub use super::{GrammarTypesCall, grammar_types_copy_name, GrammarTypesRefusal, GrammarTypesExpanded, grammar_types_expand, grammar_types_wanted, grammar_types_put, GrammarTypesGeneric, grammar_types_generic, GrammarTypesAsked, grammar_types_asked, grammar_types_written, grammar_types_value_refused, grammar_types_plain};
+    pub use super::{GrammarTypesCall, grammar_types_copy_name, GrammarTypesRefusal, GrammarTypesExpanded, grammar_types_wanted, grammar_types_put, GrammarTypesGeneric, grammar_types_generic, GrammarTypesAsked, grammar_types_asked, grammar_types_written, grammar_types_value_refused, grammar_types_plain, grammar_types_whole};
 }
 pub mod integers {
     #[allow(unused_imports)]
@@ -2865,7 +2865,7 @@ pub mod parse_numbers {
 }
 pub mod parsed_tree {
     #[allow(unused_imports)]
-    pub use super::{aliases_of, grown_items};
+    pub use super::{aliases_of, grown_items, parsed_span_of, parsed_kept_function_text, parsed_kept_items};
 }
 pub mod parsed_view {
     #[allow(unused_imports)]
@@ -3053,7 +3053,7 @@ pub mod traits {
 }
 pub mod tree_build {
     #[allow(unused_imports)]
-    pub use super::{Postfix, split_mut, unpacked, params_of, guarded, fold_binary, grouped, fold_postfix, counted_pattern};
+    pub use super::{Postfix, split_mut, unpacked, flat_shape, lambda, params_of, guarded, fold_binary, grouped, fold_postfix, counted_pattern};
 }
 pub mod trust {
     #[allow(unused_imports)]
