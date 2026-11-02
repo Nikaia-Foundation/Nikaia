@@ -2559,7 +2559,7 @@ pub mod declared {
 }
 pub mod describe {
     #[allow(unused_imports)]
-    pub use super::{Drafted, drafted, DescribeHost, describe_adopt_refusal, describe_rust_dependency, describe_unanswered, describe_descriptions_digest, describe_names_the_program_writes, describe_without_dots, DescribeSources, describe_crate_sources};
+    pub use super::{Drafted, drafted, DescribeHost, describe_adopt_refusal, describe_rust_dependency, describe_unanswered, describe_descriptions_digest, describe_names_the_program_writes, describe_without_dots, DescribeSources, describe_crate_sources, describe_crate_root};
 }
 pub mod diagnostics {
     #[allow(unused_imports)]

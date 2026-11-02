@@ -227,6 +227,17 @@ pub async fn describe_crate_sources<H: DescribeHost>(root: &std::path::Path, ver
     Ok(DescribeSources { version: known, files })
 }
 
+pub fn describe_crate_root(root: &std::path::Path, manifest: &ManifestFile, crate_word: &str) -> Option<fs::Path> {
+    let key = match describe_rust_dependency(manifest, crate_word) {
+        Ok(value) => value,
+        Err(_error) => { return None; },
+    };
+    let declared = match (*nikaia_std::index::get(&manifest.dependencies, &key)).as_ref().and_then(|__nikaia_it| __nikaia_it.path.as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let at = describe_without_dots(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&(declared))));
+    if !describe_is_dir(&at) { return None; }
+    Some(at)
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn describe_is_dir(path: &std::path::Path) -> bool {

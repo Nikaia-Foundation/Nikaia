@@ -341,10 +341,7 @@ pub fn descriptions_digest(root: &Path) -> String {
 /// one ([ADR-281](../../docs/specification/adr/adr-281.md) D34).
 pub fn crate_root(root: &Path, crate_word: &str) -> Option<PathBuf> {
     let manifest = crate::manifest::Manifest::read(&root.join("nikaia.toml")).ok()?;
-    let (_, value) = rust_dependency(&manifest, crate_word).ok()?;
-    let declared = value.get("path").and_then(toml::Value::as_str)?;
-    let at = without_dots(&root.join(declared));
-    at.is_dir().then_some(at)
+    describe::describe_crate_root(root, manifest.file(), crate_word)
 }
 
 /// A path with its `.` and `..` components walked off, without asking the

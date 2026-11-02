@@ -330,6 +330,21 @@ pub fn describe_crate_sources[H: DescribeHost](root: ref fs::Path, version: Stri
     return DescribeSources { version: known, files: files }
 }
 
+/// **Where a described crate's sources are**, for a reader other than the
+/// describer: the hash rule compares what a description recorded against what
+/// is there now. `null` for what this cannot answer, a crate the manifest does
+/// not declare, one declared by version, one whose directory is not there:
+/// each an absence rather than a difference (ADR-281 D34).
+pub fn describe_crate_root(root: ref fs::Path, manifest: ref ManifestFile, crate_word: String) -> fs::Path? {
+    let key = describe_rust_dependency(manifest, crate_word) catch { return null }
+    let declared = manifest.dependencies[key]?.path ?? return null
+    let at = describe_without_dots(root.join(declared))
+    if !describe_is_dir(at) {
+        return null
+    }
+    return at
+}
+
 // Whether `path` names a directory, following links; `false` where it cannot
 // be read.
 fn describe_is_dir(path: ref fs::Path) -> bool sync {
