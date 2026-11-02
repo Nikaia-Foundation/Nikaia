@@ -97,6 +97,8 @@ pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::p
     Some(format!("`{}` has changed since its shipped description was reviewed: `{}`{} changed since.\nA description is written by a person, so the crate's nikaia.contracts has to be reviewed again, not just regenerated.", declared, first, more))
 }
 
+pub fn describe_unanswered(names: &collections::BTreeSet<String>, crate_word: &str, ledger: &Ledger) -> Vec<String> { names.iter().map(|name| { format!("{}::{}", crate_word, name) }).filter(|name| { !ledger.functions.contains_key(nikaia_std::index::as_text(&name)) && !ledger.types.contains_key(nikaia_std::index::as_text(&name)) }).collect::<Vec<_>>() }
+
 pub(crate) fn describe_header_version(text: &str, crate_word: &str) -> Option<String> {
     let line = match text.lines().find_map(|line| { line.strip_prefix("# crate: ") }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let words: Vec<&str> = line.split_whitespace().collect::<Vec<_>>();

@@ -165,6 +165,13 @@ pub fn describe_adopt_refusal(declared: String, crate_word: String, shipped: ref
     return f"`{declared}` has changed since its shipped description was reviewed: `{first}`{more} changed since.\nA description is written by a person, so the crate's nikaia.contracts has to be reviewed again, not just regenerated."
 }
 
+/// **What the program writes of `crate_word` that `ledger` does not answer**
+/// (ADR-290 D5): each of `names` as `crate::name`, in their order, where the
+/// ledger has neither a function nor a type of that name.
+pub fn describe_unanswered(names: ref collections::BTreeSet[String], crate_word: String, ledger: ref Ledger) -> Vec[String] {
+    return names.iter().map(fn(name) { f"{crate_word}::{name}" }).filter(fn(name) { !ledger.functions.contains_key(name) && !ledger.types.contains_key(name) }).collect()
+}
+
 // The version the first `# crate: ` line of a shipped ledger names, where it
 // names `crate_word` first; `?` where it names no version after it.
 fn describe_header_version(text: String, crate_word: String) -> String? {

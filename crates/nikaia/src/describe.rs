@@ -180,11 +180,11 @@ fn adopt(root: &Path, crate_word: &str) -> Result<Option<Described>> {
     let copy = crate::contracts::derived_path(&path);
     std::fs::copy(&derived, &copy).with_context(|| format!("{}", copy.display()))?;
 
-    let unanswered = names_the_program_writes(root, crate_word)?
-        .into_iter()
-        .map(|name| format!("{crate_word}::{name}"))
-        .filter(|name| !ledger.functions.contains_key(name) && !ledger.types.contains_key(name))
-        .collect();
+    let unanswered = describe::describe_unanswered(
+        &names_the_program_writes(root, crate_word)?,
+        crate_word,
+        &ledger,
+    );
     Ok(Some(Described {
         path,
         version: sources.version,
