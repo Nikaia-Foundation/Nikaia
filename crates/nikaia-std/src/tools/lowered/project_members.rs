@@ -276,3 +276,9 @@ pub async fn project_members_proofs_digest<H: ProjectMembersForeignHost>(root: &
 
 pub(crate) fn project_members_description_at<H: ProjectMembersForeignHost>(root: &std::path::Path, name: &str, host: &H) -> Option<Ledger> { host.read_beside(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("contracts")))), std::path::Path::new(&(format!("{}.contracts", name))))) }
 
+pub fn project_members_by_version(dependency: &str) -> String { format!("`{}` is a Nikaia package given by version, but there's no package registry yet.\nDepend on it by path: `{} = {{ path = \"../{}\" }}`. (A crate from crates.io is written `{} = {{ type = \"rust\", version = \"…\" }}`.)", dependency, dependency, dependency, dependency) }
+
+pub fn project_members_unnamed(root: &std::path::Path) -> String { format!("{}/nikaia.toml has no `[package] name`. Add one: every package needs a name.", nikaia_std::fs::path::display(&(root))) }
+
+pub fn project_members_project_unnamed() -> String { String::from("The project has no `[package] name`. Add one to `nikaia.toml`.") }
+

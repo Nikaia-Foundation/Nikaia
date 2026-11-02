@@ -568,3 +568,22 @@ pub fn project_members_proofs_digest[H: ProjectMembersForeignHost](root: ref fs:
 fn project_members_description_at[H: ProjectMembersForeignHost](root: ref fs::Path, name: String, host: ref H) -> Ledger? {
     return host.read_beside(root.join("contracts").join(f"{name}.contracts"))
 }
+
+/// **A Nikaia package given by version, refused**: a registry, a name space
+/// and a distribution format are all undecided
+/// ([ADR-002](../../../docs/specification/adr/adr-002.md) D1 §5); the two
+/// forms that work.
+pub fn project_members_by_version(dependency: String) -> String {
+    return f"`{dependency}` is a Nikaia package given by version, but there's no package registry yet.\nDepend on it by path: `{dependency} = {{ path = \"../{dependency}\" }}`. (A crate from crates.io is written `{dependency} = {{ type = \"rust\", version = \"…\" }}`.)"
+}
+
+/// The package at `root` names itself nowhere: its crate has no name.
+pub fn project_members_unnamed(root: ref fs::Path) -> String {
+    return f"{root.display()}/nikaia.toml has no `[package] name`. Add one: every package needs a name."
+}
+
+/// The project names itself nowhere: `nikaia.lock` cannot say whose
+/// versions it records.
+pub fn project_members_project_unnamed() -> String {
+    return "The project has no `[package] name`. Add one to `nikaia.toml`."
+}

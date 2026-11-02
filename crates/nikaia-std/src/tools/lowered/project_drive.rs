@@ -280,3 +280,5 @@ pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &st
     Ok(())
 }
 
+pub fn project_drive_backend_said(messages: &str) -> bool { messages.lines().any(|line| { line.contains("\"compiler-message\"") }) }
+

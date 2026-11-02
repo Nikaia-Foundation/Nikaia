@@ -489,3 +489,10 @@ pub fn project_check_explain[H: ProjectCheckExplainHost](host: ref H, comptime_a
         }
     }
 }
+
+/// **The per-unit reports a run asked for** (`Explain`'s switches), in the
+/// order they are printed in: overlaps, sharing, tethers, asserts, bounds,
+/// trust.
+pub fn project_check_explain_kinds(overlaps: bool, sharing: bool, tethers: bool, asserts: bool, bounds: bool, trust: bool) -> Vec[String] {
+    return [("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(fn((_, asked)) { asked }).map(fn((kind, _)) { kind.clone() }).collect()
+}

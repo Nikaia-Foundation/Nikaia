@@ -192,3 +192,13 @@ pub fn project_check_explain<H: ProjectCheckExplainHost>(host: &H, comptime_aske
     }
 }
 
+pub fn project_check_explain_kinds(overlaps: bool, sharing: bool, tethers: bool, asserts: bool, bounds: bool, trust: bool) -> Vec<String> {
+    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple26069| {
+        let (_, asked) = __nikaia_tuple26069; let asked = nikaia_std::num::value(asked);
+        asked
+    }).map(|__nikaia_tuple26099| {
+        let (kind, _) = __nikaia_tuple26099;
+        kind.to_string()
+    }).collect::<Vec<_>>()
+}
+

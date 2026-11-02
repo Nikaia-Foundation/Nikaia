@@ -508,3 +508,10 @@ fn project_drive_c_library[H: ProjectDriveHost](host: ref H, header: ref String,
     }
     println(f"library: {made.display()}")
 }
+
+/// **Whether Cargo's messages hold one of the compiler's** (a
+/// `"compiler-message"` line): only then is the program lowered again to
+/// place them.
+pub fn project_drive_backend_said(messages: String) -> bool {
+    return messages.lines().any(fn(line) { line.contains("\"compiler-message\"") })
+}

@@ -1607,13 +1607,20 @@ pub struct Explain {
 
 impl Explain {
     pub fn asked(&self) -> bool {
-        self.overlaps
-            || self.sharing
-            || self.tethers
-            || self.trust
-            || self.comptime
-            || self.asserts
-            || self.bounds
+        self.comptime || !self.kinds().is_empty()
+    }
+
+    /// The per-unit reports asked for, in the order they are printed in:
+    /// `project_check_explain_kinds`.
+    fn kinds(&self) -> Vec<String> {
+        project_check::project_check_explain_kinds(
+            self.overlaps,
+            self.sharing,
+            self.tethers,
+            self.asserts,
+            self.bounds,
+            self.trust,
+        )
     }
 }
 
@@ -1636,19 +1643,7 @@ pub fn explain(
     if !want.asked() {
         return Ok(());
     }
-    // The kinds in the order they are printed in, per unit.
-    let kinds: Vec<String> = [
-        ("overlaps", want.overlaps),
-        ("sharing", want.sharing),
-        ("tethers", want.tethers),
-        ("asserts", want.asserts),
-        ("bounds", want.bounds),
-        ("trust", want.trust),
-    ]
-    .into_iter()
-    .filter(|(_, asked)| *asked)
-    .map(|(kind, _)| kind.to_string())
-    .collect();
+    let kinds = want.kinds();
     let host = ExplainHost {
         program,
         settings,
@@ -1946,11 +1941,8 @@ impl Project {
                 // answer in the place it is hardest to review
                 // ([ADR-002](../../docs/specification/adr/adr-002.md) D1 §5).
                 Dependency::Nikaia(_) => refuse!(
-                    "`{dependency}` is a Nikaia package given by version, but there's no \
-                     package registry yet.\n\
-                     Depend on it by path: `{dependency} = {{ path = \"../{dependency}\" }}`. \
-                     (A crate from crates.io is written \
-                     `{dependency} = {{ type = \"rust\", version = \"…\" }}`.)"
+                    "{}",
+                    project_members::project_members_by_version(dependency)
                 ),
             }
         }
@@ -2052,13 +2044,7 @@ impl Project {
         let manifest = Manifest::read(&root.join("nikaia.toml"))?;
         Ok(manifest
             .package_name()
-            .ok_or_else(|| {
-                refused!(
-                    "{}/nikaia.toml has no `[package] name`. Add one: every package needs \
-                     a name.",
-                    root.display()
-                )
-            })?
+            .ok_or_else(|| refused!("{}", project_members::project_members_unnamed(root)))?
             .to_string())
     }
 
@@ -2152,10 +2138,7 @@ impl Project {
     /// a second one gives the same map (ADR-300), and this way the cost is paid
     /// only by a build the backend had something to say about.
     fn report(&self, messages: &str, allowlist: Option<&Path>) -> Result<()> {
-        if messages
-            .lines()
-            .all(|line| !line.contains("\"compiler-message\""))
-        {
+        if !project_drive::project_drive_backend_said(messages) {
             return Ok(());
         }
 
@@ -2266,9 +2249,10 @@ impl Project {
             return Ok(());
         }
 
-        let name = self.manifest.package_name().ok_or_else(|| {
-            refused!("The project has no `[package] name`. Add one to `nikaia.toml`.")
-        })?;
+        let name = self
+            .manifest
+            .package_name()
+            .ok_or_else(|| refused!("{}", project_members::project_members_project_unnamed()))?;
         let resolved = resolved_versions(&self.build_dir().join("Cargo.lock"), name)?;
 
         let mut lock = Lockfile::load(
