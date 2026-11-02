@@ -1,0 +1,30 @@
+// A part a `match` binds, handed on through a `??` that has nothing to
+// replace, is taken as it is handed on plainly: `out.push(p ?? return false)`
+// moves `p` into the list, and the arm binds it by value (#1176).
+struct P {
+    name: String,
+}
+
+fn find(n: i64) -> P? {
+    if n > 0 {
+        return P { name: f"p{n}" }
+    }
+    return null
+}
+
+fn keep(n: i64, mut out: Vec[P]) -> bool {
+    match find(n) {
+        null => return false,
+        p => {
+            out.push(p ?? return false)
+            return true
+        },
+    }
+}
+
+fn main() {
+    let mut out: Vec[P] = []
+    keep(1, out)
+    keep(0, out)
+    println(f"{out.len()} {out[0].name}")
+}

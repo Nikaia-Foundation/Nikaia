@@ -322,6 +322,13 @@ impl CheckState {
                 for each in arms.iter() { self.hands_over_read_at(world, &each.body, ty, to, span, read_at); }
                 return;
             },
+            Expr::Coalesce { value: left, .. } => {
+                let left = nikaia_std::boxed::open(left);
+                if self.facts.plain_reaches.contains(&node_key(value)) {
+                    self.hands_over_read_at(world, left, ty, to, span, read_at);
+                    return;
+                }
+            },
             _ => { },
         }
         if self.a_text_bytes_kept(world, value) { return; }

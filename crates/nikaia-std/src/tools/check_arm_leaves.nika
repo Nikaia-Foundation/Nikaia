@@ -506,6 +506,14 @@ impl CheckState {
                 }
                 return
             },
+            // **A `??` with nothing to replace is its left side** (#1176,
+            // ADR-279 D13): `out.push(p ?? return false)` hands over `p`.
+            Expr::Coalesce { value: left, .. } => {
+                if self.facts.plain_reaches.contains(node_key(value)) {
+                    self.hands_over_read_at(world, left, ty, to, span, read_at)
+                    return
+                }
+            },
             else => {},
         }
         if self.a_text_bytes_kept(world, value) {
