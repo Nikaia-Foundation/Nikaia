@@ -913,6 +913,14 @@ mod claim_names_lowered {
 #[allow(unused_imports)]
 pub use claim_names_lowered::*;
 
+mod cli_commands_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/cli_commands.rs");
+}
+#[allow(unused_imports)]
+pub use cli_commands_lowered::*;
+
 mod comptime_bundle_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2483,6 +2491,10 @@ pub mod check_words {
 pub mod claim_names {
     #[allow(unused_imports)]
     pub use super::{claim_names_in, is_a_parameter};
+}
+pub mod cli_commands {
+    #[allow(unused_imports)]
+    pub use super::{CliCommandsRefusal, CliTestHost, cli_commands_test, CliDescribed, cli_commands_describe_root, cli_commands_described, cli_commands_lowered, cli_commands_lowered_std, cli_commands_bind_refusal};
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]

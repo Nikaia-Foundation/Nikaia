@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use std::cell::RefCell;
 use std::path::PathBuf;
 
 use nikaia::emit;
@@ -12,6 +13,7 @@ use nikaia::manifest::Manifest;
 use nikaia::project::{self, Project, Settings};
 use nikaia::sysroot::{self, Sysroot};
 use nikaia::{diagnostics, interpreter, parser, refuse};
+use nikaia_std::tools::cli_commands::{self, CliCommandsRefusal};
 
 /// The Nikaia compiler: `nikaia build` for a project, `nikaia lower` for one
 /// file.
@@ -531,16 +533,14 @@ fn lower_to_rust(
         args.locked,
     )?;
 
-    println!(
-        "Lowered {} to {} (target: {}{})",
-        input.display(),
-        output_path.display(),
-        settings.words.target,
-        if lowered.reused {
-            ", lowering from cache"
-        } else {
-            ""
-        }
+    print!(
+        "{}",
+        cli_commands::cli_commands_lowered(
+            input,
+            &output_path,
+            &settings.words.target,
+            lowered.reused
+        )
     );
 
     Ok(())
@@ -553,15 +553,10 @@ fn lower_std(sysroot: Option<PathBuf>) -> Result<i32> {
         None => Sysroot::resolve(),
     };
     let changed = sysroot::lower_std(&sysroot)?;
-    if changed.is_empty() {
-        println!(
-            "{} is already what this compiler lowers its `.nika` sources to.",
-            sysroot.std_dir().display()
-        );
-    }
-    for path in &changed {
-        println!("Lowered to {}", path.display());
-    }
+    print!(
+        "{}",
+        cli_commands::cli_commands_lowered_std(&sysroot.std_dir(), &changed)
+    );
     Ok(0)
 }
 
@@ -608,98 +603,25 @@ fn describe(crate_name: &str, project: Option<PathBuf>) -> Result<i32> {
         Some(directory) => directory,
         None => std::env::current_dir().context("finding the working directory")?,
     };
-    // The same walk `nikaia lower` makes, from a directory rather than from a file:
-    // a crate is described for a **project**, because the project is what
-    // declares it (ADR-290 D1).
-    let start = start.canonicalize().unwrap_or(start);
-    let root = start
-        .ancestors()
-        .find(|dir| dir.join("nikaia.toml").is_file())
-        .map(std::path::Path::to_path_buf)
-        .with_context(|| {
-            format!(
-                "There's no `nikaia.toml` in {} or any folder above it. Run `nikaia \
-                 describe` inside the project that depends on the crate.",
-                start.display()
-            )
-        })?;
+    // The project and what is said are `cli_commands_describe_root` and
+    // `cli_commands_described` (`tools/cli_commands.nika`).
+    let root = cli_commands::cli_commands_describe_root(&start)
+        .map_err(|error| refusal(error.into(), &RefCell::new(None)))?;
     let written = nikaia::describe::describe(&root, crate_name)?;
-    if let Some(shipped) = &written.adopted {
-        println!(
-            "`{crate_name}` ships its reviewed description: adopted {}.",
-            shipped.display()
-        );
-    }
-    println!(
-        "Wrote {} for {crate_name} {}: {} function{}, {} type{}",
-        written.path.display(),
-        written.version,
-        written.functions,
-        match written.functions {
-            1 => "",
-            _ => "s",
-        },
-        written.types,
-        match written.types {
-            1 => "",
-            _ => "s",
-        },
+    let described = cli_commands::CliDescribed {
+        adopted: written.adopted,
+        path: written.path,
+        version: written.version,
+        functions: written.functions as i64,
+        types: written.types as i64,
+        unanswered: written.unanswered,
+        promises: !written.notes.about_the_crate.is_empty(),
+        proposed: written.notes.about_a_function.len() as i64,
+    };
+    print!(
+        "{}",
+        cli_commands::cli_commands_described(crate_name, &described)
     );
-    if !written.unanswered.is_empty() {
-        println!(
-            "\n{} name{} the program uses that no `pub` signature covers. Each is a `?` \n\
-             for you to fill in, or a name a macro wrote:",
-            written.unanswered.len(),
-            match written.unanswered.len() {
-                1 => "",
-                _ => "s",
-            }
-        );
-        for name in &written.unanswered {
-            println!("    {name}");
-        }
-    }
-    // **The two things the describer saw and did not claim**
-    // ([ADR-290](../../docs/specification/adr/adr-290.md) D8, D10). They are in
-    // the file as comments, where the reviewer meets them; they are said here
-    // too, because a person who runs a command reads what it printed and may
-    // not open the file at all.
-    if !written.notes.about_the_crate.is_empty() {
-        println!(
-            "\nThis crate makes a promise the compiler can't check, and the file says \n\
-             where. Check yourself whether the promise is true."
-        );
-    }
-    let proposed = written.notes.about_a_function.len();
-    if proposed > 0 {
-        println!(
-            "\n{proposed} entr{} {} something the signature doesn't say (a `Send` bound, \n\
-             or a call that reaches another thread), and the file asks beside {}: does \n\
-             this put what it's given on a thread? Answer it in the file.",
-            match proposed {
-                1 => "y",
-                _ => "ies",
-            },
-            match proposed {
-                1 => "carries",
-                _ => "carry",
-            },
-            match proposed {
-                1 => "it",
-                _ => "each",
-            },
-        );
-    }
-    match written.adopted {
-        Some(_) => println!(
-            "\nIt was reviewed where the crate is, for this version and these sources; \n\
-             commit it like code."
-        ),
-        None => println!(
-            "\nReview it before you commit it: what a signature can't say is written as \n\
-             the safe answer, and a mistake in it is only caught by you."
-        ),
-    }
     Ok(0)
 }
 
@@ -708,12 +630,8 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
     let (subcommand, directory, program_args) = match command {
         Command::Build { project } => ("build", project.clone(), Vec::new()),
         Command::Bind { language, project } => {
-            if language != "python" && language != "node" {
-                refuse!(
-                    "`nikaia bind {language}` is not built: `python` and `node` are (ADR-284 D26, \
-                     D28). JavaScript in a browser is served by the WebAssembly build, which is not \
-                     built yet."
-                );
+            if let Some(why) = cli_commands::cli_commands_bind_refusal(language) {
+                refuse!("{why}");
             }
             let start = match project {
                 Some(directory) => directory.clone(),
@@ -833,7 +751,9 @@ fn drive(args: &Cli, project: &Project, subcommand: &str, program_args: &[String
 
 /// `nikaia test` ([ADR-269](../../docs/specification/adr/adr-269.md) D1, D12,
 /// D8): the test build and the program, each once per setting asked for, then
-/// every test run against them.
+/// every test run against them. The steps are `cli_commands_test`
+/// (`tools/cli_commands.nika`); the project and the tests read from it stay
+/// here, behind `TestHost`.
 fn test_command(
     args: &Cli,
     directory: Option<PathBuf>,
@@ -855,80 +775,134 @@ fn test_command(
         args.refuted_claims.as_deref(),
         args.unproved_claims.as_deref(),
     )?;
-    let tests =
-        nikaia::modules::Program::read_for_tests(&project.entry(), &project.packages()?, true)?
-            .tests;
-    let outputs = project::output_tests(&project.root)?;
-    let program_tests = project::program_tests(&project.root)?;
-    if tests.is_empty() && outputs.is_empty() && program_tests.is_empty() {
-        println!(
-            "no tests: nothing in this package is a `test \"…\" {{ … }}` block, and \
-             `tests/` holds no `NAME.stdout` and no `NAME.out/`"
-        );
-        return Ok(0);
-    }
-    let settings: Vec<String> = match both_settings {
-        true => vec!["no".to_string(), "yes".to_string()],
-        false => vec![project.settings.words.user_parallelism.clone()],
-    };
-    // **Each binary is kept where the next build will not overwrite it**: the
-    // test build and the program land at the same path, and so do the two
-    // settings.
-    let kept = project.root.join("target").join("nikaia").join("tests");
-    std::fs::create_dir_all(&kept).context("making a place for the test builds")?;
-    let mut test_builds = Vec::new();
-    let mut programs = Vec::new();
-    for setting in &settings {
-        for (wanted, testing) in [(!tests.is_empty(), true), (!outputs.is_empty(), false)] {
-            if !wanted {
-                continue;
-            }
-            let mut built = Project::open(&start, args.target.as_deref(), Some(setting))?;
-            built.settings.words.tests = testing;
-            built.variant = Some(format!(
-                "{setting}-{}",
-                if testing { "tests" } else { "program" }
-            ));
-            built.settings.optimize(&args.optimization)?;
-            built.settings.choose_cpu(args.cpu.as_deref())?;
-            built.settings.refutations(
-                args.refuted_claims.as_deref(),
-                args.unproved_claims.as_deref(),
-            )?;
-            let (code, binary) = built.drive_to(
-                "build",
-                &[],
-                args.no_cache,
-                args.locked,
-                project::Explain::default(),
-                args.allow_read_from_list.as_deref(),
-            )?;
-            if code != 0 {
-                return Ok(code);
-            }
-            let Some(binary) = binary else {
-                anyhow::bail!("the build finished and named no program to run");
-            };
-            let name = format!("{}-{setting}", if testing { "tests" } else { "program" });
-            let copy = kept.join(name);
-            std::fs::copy(&binary, &copy)
-                .with_context(|| format!("keeping {}", binary.display()))?;
-            match testing {
-                true => test_builds.push((setting.clone(), copy)),
-                false => programs.push((setting.clone(), copy)),
-            }
-        }
-    }
-    project::run_tests(&project::Suite {
-        tests: &tests,
-        test_builds: &test_builds,
-        outputs: &outputs,
-        programs: &programs,
+    let host = TestHost {
+        args,
+        start: &start,
+        tests: nikaia::modules::Program::read_for_tests(
+            &project.entry(),
+            &project.packages()?,
+            true,
+        )?
+        .tests,
+        outputs: project::output_tests(&project.root)?,
+        program_tests: project::program_tests(&project.root)?,
         root: &project.root,
-        programs_of_their_own: &program_tests,
-        settings: &settings,
+        failed: RefCell::new(None),
+    };
+    let done = cli_commands::cli_commands_test(
+        &host,
+        &project.root,
+        &project.settings.words.user_parallelism,
+        !host.tests.is_empty(),
+        !host.outputs.is_empty(),
+        !host.program_tests.is_empty(),
+        both_settings,
         bless,
+    );
+    done.map_err(|error| refusal(error, &host.failed))
+}
+
+/// What a command written in Nikaia threw, as the error it was before the
+/// move: a refusal stays a refusal, a failure a plain error, a host step's
+/// error itself.
+fn refusal(
+    error: Box<dyn std::error::Error>,
+    failed: &RefCell<Option<anyhow::Error>>,
+) -> anyhow::Error {
+    let thrown = error
+        .downcast_ref::<nikaia_std::error::Raised>()
+        .and_then(|raised| raised.inner().downcast_ref::<CliCommandsRefusal>());
+    match thrown {
+        Some(CliCommandsRefusal::Refused(why)) => nikaia::refused!("{why}"),
+        Some(CliCommandsRefusal::Failed(why)) => anyhow::anyhow!("{why}"),
+        Some(CliCommandsRefusal::Host) | None => failed
+            .borrow_mut()
+            .take()
+            .unwrap_or_else(|| anyhow::anyhow!("{error}")),
+    }
+}
+
+/// `result` for the Nikaia side, its error kept in `failed` to be handed back.
+fn held<T>(
+    result: Result<T>,
+    failed: &RefCell<Option<anyhow::Error>>,
+) -> std::result::Result<T, Box<dyn std::error::Error>> {
+    result.map_err(|error| {
+        let said = format!("{error:#}");
+        *failed.borrow_mut() = Some(error);
+        said.into()
     })
+}
+
+/// What `cli_commands_test` asks of the compiler: the command line, the
+/// project's directory and the tests read from it.
+struct TestHost<'a> {
+    args: &'a Cli,
+    start: &'a std::path::Path,
+    tests: Vec<nikaia::modules::TestCase>,
+    outputs: Vec<project::OutputTest>,
+    program_tests: Vec<project::ProgramTest>,
+    root: &'a std::path::Path,
+    failed: RefCell<Option<anyhow::Error>>,
+}
+
+impl TestHost<'_> {
+    fn build_once(
+        &self,
+        setting: &str,
+        testing: bool,
+        variant: &str,
+    ) -> Result<(i32, Option<PathBuf>)> {
+        let args = self.args;
+        let mut built = Project::open(self.start, args.target.as_deref(), Some(setting))?;
+        built.settings.words.tests = testing;
+        built.variant = Some(variant.to_string());
+        built.settings.optimize(&args.optimization)?;
+        built.settings.choose_cpu(args.cpu.as_deref())?;
+        built.settings.refutations(
+            args.refuted_claims.as_deref(),
+            args.unproved_claims.as_deref(),
+        )?;
+        built.drive_to(
+            "build",
+            &[],
+            args.no_cache,
+            args.locked,
+            project::Explain::default(),
+            args.allow_read_from_list.as_deref(),
+        )
+    }
+}
+
+impl cli_commands::CliTestHost for TestHost<'_> {
+    fn build(
+        &self,
+        setting: &str,
+        testing: bool,
+        variant: &str,
+    ) -> std::result::Result<(i32, Option<PathBuf>), Box<dyn std::error::Error>> {
+        held(self.build_once(setting, testing, variant), &self.failed)
+    }
+
+    fn run_tests(
+        &self,
+        test_builds: &[(String, PathBuf)],
+        programs: &[(String, PathBuf)],
+        settings: &[String],
+        bless: bool,
+    ) -> std::result::Result<i32, Box<dyn std::error::Error>> {
+        let suite = project::Suite {
+            tests: &self.tests,
+            test_builds,
+            outputs: &self.outputs,
+            programs,
+            root: self.root,
+            programs_of_their_own: &self.program_tests,
+            settings,
+            bless,
+        };
+        held(project::run_tests(&suite), &self.failed)
+    }
 }
 
 /// What the manifest still accepts and the compiler no longer reads.

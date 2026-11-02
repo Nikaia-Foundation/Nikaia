@@ -1,0 +1,206 @@
+// crates/nikaia-std/src/tools/cli_commands.nika
+//
+// **The commands of `nikaia`'s command line**, for the compiler's
+// `main.rs`: `nikaia test`'s builds, one per setting and kind, and the run of
+// every test against them; the project `nikaia describe` works for and what
+// it says; what `lower` and `lower-std` say; the languages `bind` binds.
+// Moved from Rust (ADR-294, #125, M9). The parsed command line, the project,
+// its settings, the describer and the test runner stay Rust, behind
+// `CliTestHost` or as plain values; a refusal of a host step is kept there
+// and handed back unchanged.
+
+use std::fs
+
+/// Why a command stops.
+pub enum CliCommandsRefusal {
+    /// A host step failed: the host holds the error.
+    Host,
+    /// A statement about the program, in the words the compiler reports.
+    Refused(String),
+    /// A failure that is no statement about the program.
+    Failed(String),
+}
+
+impl Error for CliCommandsRefusal {
+    fn message(ref self) -> String {
+        return match self {
+            CliCommandsRefusal::Host => "a step of the command failed",
+            CliCommandsRefusal::Refused(why) => why.clone(),
+            CliCommandsRefusal::Failed(why) => why.clone(),
+        }
+    }
+}
+
+/// What `cli_commands_test` asks of the compiler (`main.rs`'s `TestHost`):
+/// it holds the project, the command line and the tests read from it.
+pub trait CliTestHost {
+    /// **Builds the package once**, at the `user_parallelism` `setting`, as
+    /// the test build (`testing`) or as the program, under the name
+    /// `variant`: the exit code and the binary it made.
+    fn build(ref self, setting: ref String, testing: bool, variant: ref String) -> (i32, fs::Path?) sync throws
+    /// Runs every test against the test builds and the programs, each a
+    /// setting and the binary kept for it: the exit code.
+    fn run_tests(ref self, test_builds: ref Vec[(String, fs::Path)], programs: ref Vec[(String, fs::Path)], settings: ref Vec[String], bless: bool) -> i32 sync throws
+}
+
+/// **`nikaia test`** ([ADR-269](../../../../docs/specification/adr/adr-269.md)
+/// D1, D12, D8): the test build and the program, each once per setting asked
+/// for, then every test run against them. `blocks`, `outputs` and `own` say
+/// whether the package has `test` blocks, `NAME.stdout` tests and test
+/// programs; `root` is the project's root, `user_parallelism` the setting a
+/// single run builds at.
+pub fn cli_commands_test[H: CliTestHost](host: ref H, root: ref fs::Path, user_parallelism: String, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool) -> i32 sync throws {
+    if !blocks && !outputs && !own {
+        println("no tests: nothing in this package is a `test \"…\" { … }` block, and `tests/` holds no `NAME.stdout` and no `NAME.out/`")
+        return 0
+    }
+    let settings: Vec[String] = match both_settings {
+        true => ["no", "yes"],
+        false => [user_parallelism.clone()],
+    }
+    // **Each binary is kept where the next build will not overwrite it**: the
+    // test build and the program land at the same path, and so do the two
+    // settings.
+    let kept = root.join("target").join("nikaia").join("tests")
+    fs::create_dir(kept, fs::Root::Anywhere; recursive: true) catch { throw CliCommandsRefusal::Failed(f"making a place for the test builds: {error}") }
+    let mut test_builds: Vec[(String, fs::Path)] = []
+    let mut programs: Vec[(String, fs::Path)] = []
+    for setting in settings {
+        for (wanted, testing) in [(blocks, true), (outputs, false)] {
+            if !wanted {
+                continue
+            }
+            let kind = match testing {
+                true => "tests",
+                false => "program",
+            }
+            let (code, binary) = host.build(setting, testing, f"{setting}-{kind}")
+            if code != 0 {
+                return code
+            }
+            let binary = binary ?? throw CliCommandsRefusal::Failed("the build finished and named no program to run")
+            let copy = kept.join(f"{kind}-{setting}")
+            fs::copy(binary, copy, fs::Root::Anywhere) catch { throw CliCommandsRefusal::Failed(f"keeping {binary.display()}: {error}") }
+            match testing {
+                true => test_builds.push((setting.clone(), copy)),
+                false => programs.push((setting.clone(), copy)),
+            }
+        }
+    }
+    return host.run_tests(test_builds, programs, settings, bless)
+}
+
+/// **What `nikaia describe` wrote** (`describe.rs`'s `Written`), as its
+/// message needs it.
+pub struct CliDescribed {
+    /// The reviewed description the crate ships, where it was adopted.
+    pub adopted: fs::Path?,
+    pub path: fs::Path,
+    pub version: String,
+    pub functions: i64,
+    pub types: i64,
+    /// The names the program uses that no `pub` signature covers.
+    pub unanswered: Vec[String],
+    /// Whether the crate makes a promise the compiler cannot check.
+    pub promises: bool,
+    /// How many entries carry what their signature does not say.
+    pub proposed: i64,
+}
+
+/// **The project `nikaia describe` describes a crate for** (ADR-290 D1):
+/// the nearest folder from `start` up that holds a `nikaia.toml`, the walk
+/// `nikaia lower` makes from a file.
+pub fn cli_commands_describe_root(start: fs::Path) -> fs::Path sync throws {
+    let start = fs::canonical(start, fs::Root::Anywhere) catch { start.clone() }
+    let mut at = start.clone()
+    while !cli_commands_is_file(at.join("nikaia.toml")) {
+        at = at.parent() ?? throw CliCommandsRefusal::Failed(f"There's no `nikaia.toml` in {start.display()} or any folder above it. Run `nikaia describe` inside the project that depends on the crate.")
+    }
+    return at
+}
+
+/// Whether `path` names a file.
+fn cli_commands_is_file(path: ref fs::Path) -> bool sync {
+    let meta = fs::metadata(path, fs::Root::Anywhere) catch { return false }
+    return meta.is_file()
+}
+
+/// **What `nikaia describe` says** ([ADR-290](../../../../docs/specification/adr/adr-290.md)
+/// D2): what a reviewer does next, which is the whole reason the command
+/// exists rather than the file appearing during a build. The two things the
+/// describer saw and did not claim (D8, D10) are in the file as comments and
+/// said here too, because a person who runs a command reads what it printed
+/// and may not open the file at all.
+pub fn cli_commands_described(crate_name: String, written: ref CliDescribed) -> String sync {
+    let mut said = ""
+    match written.adopted {
+        null => {}
+        shipped => {
+            said = said + f"`{crate_name}` ships its reviewed description: adopted {shipped.display()}.\n"
+        }
+    }
+    said = said + f"Wrote {written.path.display()} for {crate_name} {written.version}: {written.functions} function{cli_commands_plural(written.functions)}, {written.types} type{cli_commands_plural(written.types)}\n"
+    let unanswered = written.unanswered.len()
+    if unanswered > 0 {
+        said = said + f"\n{unanswered} name{cli_commands_plural(unanswered)} the program uses that no `pub` signature covers. Each is a `?` \nfor you to fill in, or a name a macro wrote:\n"
+        for name in written.unanswered {
+            said = said + f"    {name}\n"
+        }
+    }
+    if written.promises {
+        said = said + "\nThis crate makes a promise the compiler can't check, and the file says \nwhere. Check yourself whether the promise is true.\n"
+    }
+    let proposed = written.proposed
+    if proposed > 0 {
+        let (entries, carry, each) = match proposed {
+            1 => ("y", "carries", "it"),
+            else => ("ies", "carry", "each"),
+        }
+        said = said + f"\n{proposed} entr{entries} {carry} something the signature doesn't say (a `Send` bound, \nor a call that reaches another thread), and the file asks beside {each}: does \nthis put what it's given on a thread? Answer it in the file.\n"
+    }
+    said = said + match written.adopted {
+        null => "\nReview it before you commit it: what a signature can't say is written as \nthe safe answer, and a mistake in it is only caught by you.\n",
+        else => "\nIt was reviewed where the crate is, for this version and these sources; \ncommit it like code.\n",
+    }
+    return said
+}
+
+/// The plural ending of a count's noun: none for one, `s` else.
+fn cli_commands_plural(count: i64) -> String sync {
+    return match count {
+        1 => "",
+        else => "s",
+    }
+}
+
+/// **What `nikaia lower` says it did**: the file, where its Rust went, the
+/// target, and whether the lowering came from the cache.
+pub fn cli_commands_lowered(input: ref fs::Path, output: ref fs::Path, target: String, reused: bool) -> String sync {
+    let cached = match reused {
+        true => ", lowering from cache",
+        false => "",
+    }
+    return f"Lowered {input.display()} to {output.display()} (target: {target}{cached})\n"
+}
+
+/// **What `nikaia lower-std` says** (ADR-002 D4): each file it wrote, or
+/// that `std_dir` already was what this compiler lowers its sources to.
+pub fn cli_commands_lowered_std(std_dir: ref fs::Path, changed: ref Vec[fs::Path]) -> String sync {
+    let mut said = ""
+    if changed.is_empty() {
+        said = f"{std_dir.display()} is already what this compiler lowers its `.nika` sources to.\n"
+    }
+    for path in changed {
+        said = said + f"Lowered to {path.display()}\n"
+    }
+    return said
+}
+
+/// **The refusal of `nikaia bind LANGUAGE`** where no binding for it is
+/// built (ADR-284 D26, D28), or null.
+pub fn cli_commands_bind_refusal(language: String) -> String? sync {
+    if language == "python" || language == "node" {
+        return null
+    }
+    return f"`nikaia bind {language}` is not built: `python` and `node` are (ADR-284 D26, D28). JavaScript in a browser is served by the WebAssembly build, which is not built yet."
+}

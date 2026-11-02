@@ -56,6 +56,7 @@ COMPILER_NIKA = {
     "parse_notes.nika": "parser: a parse error's reading, the text half (0.0.347)",
     "diffs.nika": "project: what changed in a ledger, and an output test's difference (0.0.350)",
     "project_check.nika": "project: the refusal summary of check, the switches that make a finding a warning, the --locked texts (P2)",
+    "cli_commands.nika": "commands: `nikaia test`'s builds per setting and the run of its tests, the project `describe` works for and what it says, what `lower` and `lower-std` say, the languages `bind` binds (M9)",
     "project_drive.nika": "project: a build's and a run's steps, the members lowered in order, the gen files and switches, the toolchain refusals, the fast path, direct run or cargo run, the c-library outputs (P5c)",
     "project_write.nika": "project: the ledger and the proofs written, or under --locked compared (C1)",
     "project_lower.nika": "project: a lowering's steps, the cache hit's replay, the published contracts merged into the ledger, the notes (P5b)",
