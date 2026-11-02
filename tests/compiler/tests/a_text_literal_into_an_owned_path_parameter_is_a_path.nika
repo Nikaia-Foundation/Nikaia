@@ -1,0 +1,25 @@
+// A text literal stands wherever a `fs::Path` is asked (ADR-319 D2, #1195):
+// passed to a parameter declared as an owned `fs::Path`, one the function
+// only reads and one it keeps, as to a `ref fs::Path`. Text of its own handed
+// to the one it only reads is lent, and still there after the call.
+use std::fs
+
+fn count(p: fs::Path) -> i64 {
+    return p.parts().len() as i64
+}
+
+fn kept(p: fs::Path) -> fs::Path {
+    return p
+}
+
+fn lent(p: ref fs::Path) -> i64 {
+    return p.parts().len() as i64
+}
+
+fn main() {
+    println(f"{count("a/b")} {count("/x/y/z")}")
+    println(f"{kept("c/d").display()}")
+    println(f"{lent("e/f/g")}")
+    let own: String = f"h/{1}/i/j"
+    println(f"{count(own)} {count(f"k/{2}")} {own}")
+}

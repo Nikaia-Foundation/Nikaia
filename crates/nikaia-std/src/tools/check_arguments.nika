@@ -38,6 +38,14 @@ fn check_arguments_a_path(ty: ref Ty) -> bool sync {
     }
 }
 
+/// Whether a wrap makes text a `PathBuf` (`FactWrap::Path`, ADR-319 D2).
+fn check_arguments_made_a_path(wrap: ref FactWrap) -> bool sync {
+    return match wrap {
+        FactWrap::Path => true,
+        else => false,
+    }
+}
+
 fn check_arguments_a_choice(value: ref Expr) -> bool sync {
     return match value {
         Expr::If { .. } => true,
@@ -410,7 +418,13 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         if how != null {
             if given_here != null {
                 let value = given_here ?? continue
-                state.facts.nullable_args.insert(id_of(value) as i64, how ?? continue)
+                let wrap = how ?? continue
+                // **Text made a file's name for a parameter the callee only
+                // reads is lent as made** (ADR-319 D2, #1195): `&PathBuf::from(..)`.
+                if lent && !want.is_a_view() && check_arguments_made_a_path(wrap) {
+                    state.facts.lent_args.insert(id_of(value) as i64)
+                }
+                state.facts.nullable_args.insert(id_of(value) as i64, wrap)
             }
             continue
         }

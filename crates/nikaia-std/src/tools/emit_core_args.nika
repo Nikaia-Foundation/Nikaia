@@ -109,6 +109,16 @@ fn emit_arg_is_text_literal(arg: ref Expr) -> bool {
     }
 }
 
+/// Whether the argument at `node` is text made a `PathBuf` for its slot
+/// (`FactWrap::Path`, ADR-319 D2).
+fn emit_arg_made_a_path(wraps: ref collections::BTreeMap[i64, FactWrap], node: i64) -> bool {
+    let how = wraps.get(node) ?? return false
+    return match how {
+        FactWrap::Path => true,
+        else => false,
+    }
+}
+
 /// The key of an argument that names a function: a name, or a path as written.
 fn emit_arg_function_key(world: ref EmitWorld, arg: ref Expr) -> String? {
     return match arg {
@@ -382,8 +392,14 @@ impl EmitState {
         let count = wants_a_size && !only_literals(arg)
         // **The caller writes no `&`** (ADR-094 D1): where the callee reads this
         // argument rather than keeping it, the reference is the compiler's. A
-        // literal is a view already (ADR-282 D5).
+        // literal is a view already (ADR-282 D5). Text made a file's name for
+        // the call (ADR-319 D2, #1195) is lent as made, `&PathBuf::from(..)`,
+        // and made of a lent place, which the call only reads.
+        let lent_path = self.facts.lent_args.contains(node) && emit_arg_made_a_path(self.facts.nullable_args, node)
         let mut lend = self.facts.lent_args.contains(node) && !(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node))
+        if lent_path && !emit_arg_names_a_place(arg) {
+            lend = false
+        }
         // **And `&mut` for a parameter the callee declared `mut`** (D3).
         let change = self.facts.mut_args.contains(node)
         let duplicate = shares_a_handle || hands_on_kept
@@ -407,7 +423,7 @@ impl EmitState {
         // kept there (#1117) is a closure made there, not a place.
         let lent_option = lend && before == "Some(" && self.emit_arg_opening(callee, i) == ""
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(node_key(arg))
-        if lent_option {
+        if lent_option || lent_path {
             out.push("&")
         }
         out.push(before)

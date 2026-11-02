@@ -55,6 +55,11 @@ pub(crate) fn emit_arg_is_null(arg: &Expr) -> bool { matches!(arg, Expr::LitNull
 
 pub(crate) fn emit_arg_is_text_literal(arg: &Expr) -> bool { matches!(arg, Expr::LitStr { .. }) }
 
+pub(crate) fn emit_arg_made_a_path(wraps: &collections::BTreeMap<i64, FactWrap>, node: i64) -> bool {
+    let how = match wraps.get(&node) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    matches!(how, FactWrap::Path)
+}
+
 pub(crate) fn emit_arg_function_key(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Option<String> {
     match arg {
         Expr::Variable(name, _) => { let name = *name; Some(emit_text(world, name)) },
@@ -251,7 +256,9 @@ impl EmitState {
         let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node, arg);
         let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
         let count = wants_a_size && !only_literals(arg);
+        let lent_path = self.facts.lent_args.contains(&node) && emit_arg_made_a_path(&self.facts.nullable_args, node);
         let mut lend = self.facts.lent_args.contains(&node) && !(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node));
+        if lent_path && !emit_arg_names_a_place(arg) { lend = false; }
         let change = self.facts.mut_args.contains(&node);
         let duplicate = shares_a_handle || hands_on_kept;
         let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(&node) && !self.facts.kept_lambdas.contains_key(&node);
@@ -266,7 +273,7 @@ impl EmitState {
         let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(&node_key(arg));
         let lent_option = lend && before == "Some(" && self.emit_arg_opening(callee, i) == "";
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(&node_key(arg));
-        if lent_option { out.push("&"); }
+        if lent_option || lent_path { out.push("&"); }
         out.push(&before);
         if either { out.push("nikaia_std::either_text::either("); }
         let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, method_callee, i);

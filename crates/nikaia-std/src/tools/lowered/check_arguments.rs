@@ -28,6 +28,10 @@ pub(crate) fn check_arguments_a_path(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_arguments_made_a_path(wrap: &FactWrap) -> bool { matches!(wrap, FactWrap::Path) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_arguments_a_choice(value: &Expr) -> bool { matches!(value, Expr::If { .. } | Expr::Match { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -266,7 +270,9 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         if how.is_some() {
             if given_here.is_some() {
                 let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
-                state.facts.nullable_args.insert(id_of(value) as i64, match how { Some(__nikaia_value) => __nikaia_value, None => continue });
+                let wrap = match how { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if lent && !want.is_a_view() && check_arguments_made_a_path(&wrap) { state.facts.lent_args.insert(id_of(value) as i64); }
+                state.facts.nullable_args.insert(id_of(value) as i64, wrap);
             }
             continue;
         }
