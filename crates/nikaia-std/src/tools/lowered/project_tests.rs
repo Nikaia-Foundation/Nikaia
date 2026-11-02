@@ -409,3 +409,53 @@ pub async fn project_tests_bless(output: &OutputTest, outcomes: &[(String, Proje
     Ok(ProjectTestsBlessed::Written)
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProjectTestsFailed {
+    pub label: String,
+    pub outcomes: Vec<(String, ProjectTestsOutcome)>,
+    pub output: Option<OutputTest>,
+}
+
+pub trait ProjectTestsHost {
+    fn block_outcome(&self, binary: &std::path::Path, k: i64) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>>;
+    fn output_outcome(&self, binary: &std::path::Path, output: &OutputTest) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>>;
+    fn program_failures(&self, bless: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>>;
+}
+
+pub async fn project_tests_program_done(program: &ProgramTest, outcomes: Vec<(String, ProjectTestsOutcome)>, bless: bool) -> Result<Option<ProjectTestsFailed>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+    let label = project_tests_program_label(program);
+    if bless {
+        let blessed = project_tests_bless_program(program, &outcomes).await?;
+        if !project_tests_blessed_line(&label, &blessed) { return Ok(Some(ProjectTestsFailed { label, outcomes, output: None })); }
+        return Ok(None);
+    }
+    if !project_tests_verdict(&label, &outcomes) { return Ok(Some(ProjectTestsFailed { label, outcomes, output: None })); }
+    Ok(None)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>> {
+    let total = blocks.len() as i64 + outputs.len() as i64 + program_tests;
+    project_tests_running(total);
+    let mut failed: Vec<ProjectTestsFailed> = vec![];
+    for (k, (title, path, line)) in blocks.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        let mut outcomes: Vec<(String, ProjectTestsOutcome)> = vec![];
+        for (setting, binary) in test_builds.iter() { outcomes.push((setting.to_string(), host.block_outcome(binary, k)?)); }
+        let label = format!("test \"{}\" ({}:{})", title, shown_path(&path, root), line);
+        if !project_tests_verdict(&label, &outcomes) { failed.push(ProjectTestsFailed { label, outcomes, output: None }); }
+    }
+    for output in outputs.iter() {
+        let mut outcomes: Vec<(String, ProjectTestsOutcome)> = vec![];
+        for (setting, binary) in programs.iter() { outcomes.push((setting.to_string(), host.output_outcome(binary, output)?)); }
+        let label = project_tests_output_label(output);
+        if bless {
+            let blessed = project_tests_bless(output, &outcomes).await?;
+            if !project_tests_blessed_line(&label, &blessed) { failed.push(ProjectTestsFailed { label, outcomes, output: Some(output.clone()) }); }
+            continue;
+        }
+        if !project_tests_verdict(&label, &outcomes) { failed.push(ProjectTestsFailed { label, outcomes, output: Some(output.clone()) }); }
+    }
+    for program in host.program_failures(bless)? { failed.push(program); }
+    Ok(failed)
+}
+

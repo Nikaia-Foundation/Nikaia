@@ -2458,114 +2458,54 @@ pub struct Suite<'a> {
 
 /// **Run each test in a process and a directory of its own, and say how each
 /// went** ([ADR-269](../../docs/specification/adr/adr-269.md) D1, D12, D13;
-/// [ADR-247](../../docs/specification/adr/adr-247.md)).
-///
-/// A `test` block fails on an error that leaves it, a false `assert` or a
-/// `panic` - each of which ends its process unsuccessfully. An output test
-/// fails where the program does not end successfully, or prints anything but
-/// its `.stdout`, or leaves any file its `.out/` names other than byte for
-/// byte. At two settings either fails as well where the two outcomes differ,
-/// because the meaning of a program is the same at both (Part I 1.2) and a
-/// difference is a fault of this compiler. A failing test does not stop the
-/// others.
+/// [ADR-247](../../docs/specification/adr/adr-247.md)): the loop over the
+/// tests and settings is `project_tests_run` (`tools/project_tests.nika`),
+/// the runs stay here behind [`TestsHost`]. A failing test does not stop the
+/// others; the failures are reported here, a test's standard output read as
+/// UTF-8 lossily.
 pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
     let total = suite.tests.len() + suite.outputs.len() + suite.programs_of_their_own.len();
-    project_tests::project_tests_running(total as i64);
-    let mut failed: Vec<Failed<'_>> = Vec::new();
-    for (k, test) in suite.tests.iter().enumerate() {
-        let mut outcomes = Vec::new();
-        for (setting, binary) in suite.test_builds {
-            // In the package's directory, as Go's tests run in theirs, so a
-            // test reads what the package holds; what it writes goes under
-            // `fs::scratch()`, inside `own`.
-            let own = Sandbox::new()?;
-            let out = outcome_of(binary, &[k.to_string()], &[], suite.root, &own.0)?;
-            let ended_well = out.status.success();
-            outcomes.push((
-                setting.clone(),
-                Outcome {
-                    ended_well,
-                    passed: ended_well,
-                    stdout: out.stdout.into(),
-                    stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-                    files: Vec::new(),
-                    bounds: Vec::new(),
-                },
-            ));
+    let blocks: Vec<(String, PathBuf, i64)> = suite
+        .tests
+        .iter()
+        .map(|test| (test.title.clone(), test.path.clone(), test.line as i64))
+        .collect();
+    let host = TestsHost {
+        suite,
+        failed: RefCell::new(None),
+    };
+    let failed = match block_on(project_tests::project_tests_run(
+        &host,
+        &blocks,
+        suite.test_builds,
+        suite.outputs,
+        suite.programs,
+        suite.programs_of_their_own.len() as i64,
+        suite.root,
+        suite.bless,
+    )) {
+        Ok(failed) => failed,
+        Err(error) => {
+            return Err(host
+                .failed
+                .into_inner()
+                .unwrap_or_else(|| anyhow!("{error}")));
         }
-        let label = format!(
-            "test \"{}\" ({}:{})",
-            test.title,
-            project_tests::shown_path(&test.path, suite.root),
-            test.line
-        );
-        if !project_tests::project_tests_verdict(&label, &outcomes) {
-            failed.push((label, outcomes, None));
-        }
-    }
-    for output in suite.outputs {
-        let mut outcomes = Vec::new();
-        for (setting, binary) in suite.programs {
-            let own = Sandbox::new()?;
-            if let Some(inputs) = &output.inputs {
-                block_on(project_tests::copy_into(inputs, &own.0)).map_err(|e| anyhow!("{e}"))?;
-            }
-            let out = outcome_of(binary, &output.args, &output.stdin, &own.0, &own.0)?;
-            outcomes.push((
-                setting.clone(),
-                block_on(project_tests::project_tests_output_outcome(
-                    output,
-                    &own.0,
-                    out.status.success(),
-                    out.stdout.into(),
-                    String::from_utf8_lossy(&out.stderr).into_owned(),
-                )),
-            ));
-        }
-        let label = project_tests::project_tests_output_label(output);
-        if suite.bless {
-            let blessed = block_on(project_tests::project_tests_bless(output, &outcomes))
-                .map_err(|e| anyhow!("{e}"))?;
-            if !project_tests::project_tests_blessed_line(&label, &blessed) {
-                failed.push((label, outcomes, Some(output)));
-            }
-            continue;
-        }
-        if !project_tests::project_tests_verdict(&label, &outcomes) {
-            failed.push((label, outcomes, Some(output)));
-        }
-    }
-    run_program_tests(suite, |program, outcomes| {
-        let label = project_tests::project_tests_program_label(program);
-        if suite.bless {
-            let blessed = block_on(project_tests::project_tests_bless_program(
-                program, &outcomes,
-            ))
-            .map_err(|e| anyhow!("{e}"))?;
-            if !project_tests::project_tests_blessed_line(&label, &blessed) {
-                failed.push((label, outcomes, None));
-            }
-            return Ok(());
-        }
-        if !project_tests::project_tests_verdict(&label, &outcomes) {
-            failed.push((label, outcomes, None));
-        }
-        Ok(())
-    })?;
+    };
     if !failed.is_empty() {
         println!("\nfailures:");
-        for (label, outcomes, output) in &failed {
-            println!("\n--- {label}");
-            let agree = project_tests::project_tests_agree(outcomes);
+        for one in &failed {
+            println!("\n--- {}", one.label);
+            let agree = project_tests::project_tests_agree(&one.outcomes);
             let shown = match agree {
-                true => &outcomes[..1],
-                false => &outcomes[..],
+                true => &one.outcomes[..1],
+                false => &one.outcomes[..],
             };
             for (setting, outcome) in shown {
                 if !agree {
                     println!("at user-parallelism = {setting}:");
                 }
-                match output {
+                match &one.output {
                     Some(output) => project_tests::project_tests_explain_output(output, outcome),
                     None => {
                         print!("{}", String::from_utf8_lossy(&outcome.stdout));
@@ -2580,6 +2520,75 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
         total as i64,
         failed.len() as i64,
     ))
+}
+
+/// What `project_tests_run` asks of the compiler: the suite, and the error of
+/// a run that failed, kept to be handed back unchanged.
+struct TestsHost<'a> {
+    suite: &'a Suite<'a>,
+    failed: RefCell<Option<anyhow::Error>>,
+}
+
+impl TestsHost<'_> {
+    /// `result` for the Nikaia side, its error kept to be handed back.
+    fn held<T>(&self, result: Result<T>) -> HostResult<T> {
+        result.map_err(|error| {
+            let said = format!("{error:#}");
+            *self.failed.borrow_mut() = Some(error);
+            said.into()
+        })
+    }
+}
+
+impl project_tests::ProjectTestsHost for TestsHost<'_> {
+    fn block_outcome(&self, binary: &Path, k: i64) -> HostResult<Outcome> {
+        // In the package's directory, as Go's tests run in theirs, so a test
+        // reads what the package holds; what it writes goes under
+        // `fs::scratch()`, inside `own`.
+        self.held((|| {
+            let own = Sandbox::new()?;
+            let out = outcome_of(binary, &[k.to_string()], &[], self.suite.root, &own.0)?;
+            let ended_well = out.status.success();
+            Ok(Outcome {
+                ended_well,
+                passed: ended_well,
+                stdout: out.stdout.into(),
+                stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+                files: Vec::new(),
+                bounds: Vec::new(),
+            })
+        })())
+    }
+
+    fn output_outcome(&self, binary: &Path, output: &OutputTest) -> HostResult<Outcome> {
+        self.held((|| {
+            let own = Sandbox::new()?;
+            if let Some(inputs) = &output.inputs {
+                block_on(project_tests::copy_into(inputs, &own.0)).map_err(|e| anyhow!("{e}"))?;
+            }
+            let out = outcome_of(binary, &output.args, &output.stdin, &own.0, &own.0)?;
+            Ok(block_on(project_tests::project_tests_output_outcome(
+                output,
+                &own.0,
+                out.status.success(),
+                out.stdout.into(),
+                String::from_utf8_lossy(&out.stderr).into_owned(),
+            )))
+        })())
+    }
+
+    fn program_failures(&self, bless: bool) -> HostResult<Vec<project_tests::ProjectTestsFailed>> {
+        let mut failed = Vec::new();
+        let ran = run_program_tests(self.suite, |program, outcomes| {
+            let done = block_on(project_tests::project_tests_program_done(
+                program, outcomes, bless,
+            ))
+            .map_err(|e| anyhow!("{e}"))?;
+            failed.extend(done);
+            Ok(())
+        });
+        self.held(ran.map(|()| failed))
+    }
 }
 
 /// The variable that sets how many test programs build and run at once; `1`
@@ -2812,10 +2821,6 @@ fn empty_but(dir: &Path, keep: &str) -> Result<()> {
     }
     Ok(())
 }
-
-/// A test that failed: what it is called, what each setting did, and the
-/// output test it is, where it is one.
-type Failed<'a> = (String, Vec<(String, Outcome)>, Option<&'a OutputTest>);
 
 /// Run it, with the program's own arguments and every stream its own.
 ///

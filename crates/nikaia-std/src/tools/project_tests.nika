@@ -2,10 +2,12 @@
 // #125): what `crates/nikaia/src/project.rs` did to find a package's output
 // tests and test programs, to read what they expect, to say how a run went and
 // whether a test passed, to bless it and to explain a failure, moved.
-// `project.rs` keeps the loop of `run_tests` over the tests and settings, the
-// `Sandbox`, the process spawns (`outcome_of`, the compiler's own runs in
-// `run_program_test`) and the failures' report, and calls these; the three
-// structs are Nikaia's and `project.rs` re-exports them.
+// The loop of `run_tests` over the tests and settings is
+// `project_tests_run` (M8); `project.rs` keeps the `Sandbox`, the process
+// spawns (`outcome_of`, the compiler's own runs in `run_program_test`), the
+// workers of the test programs and the failures' report, behind
+// `ProjectTestsHost`; the structs are Nikaia's and `project.rs` re-exports
+// them.
 //
 // **What a test expects is `Bytes`**: a file is read as bytes and compared as
 // bytes, never as text that might not be (ADR-269 D22, ADR-247 D2).
@@ -548,4 +550,99 @@ pub fn project_tests_bless(output: ref OutputTest, outcomes: ref Vec[(String, Pr
         })
     }
     return ProjectTestsBlessed::Written
+}
+
+/// **A test that failed** (`run_tests`'s list): its line's label, what each
+/// setting did, and the output test it is, where it is one.
+pub struct ProjectTestsFailed {
+    pub label: String,
+    pub outcomes: Vec[(String, ProjectTestsOutcome)],
+    pub output: OutputTest?,
+}
+
+/// What `project_tests_run` asks of the compiler (`project.rs`'s
+/// `TestsHost`): each run of a built program in a sandbox of its own, and the
+/// test programs, which build and run on the host's workers. A refusal of a
+/// `throws` method is kept there and handed back unchanged.
+pub trait ProjectTestsHost {
+    /// Runs test block `k` with the test build `binary`, in the package's
+    /// directory: how it ended and what it printed.
+    fn block_outcome(ref self, binary: ref fs::Path, k: i64) -> ProjectTestsOutcome sync throws
+    /// Runs `output` with the program `binary`, its inputs copied into its
+    /// sandbox: what it did.
+    fn output_outcome(ref self, binary: ref fs::Path, output: ref OutputTest) -> ProjectTestsOutcome sync throws
+    /// Runs the test programs, each one's line said by
+    /// `project_tests_program_done` in the order of the programs; the ones
+    /// that failed.
+    fn program_failures(ref self, bless: bool) -> Vec[ProjectTestsFailed] sync throws
+}
+
+/// **One test program's line**, blessed where `bless` says: the failure,
+/// where it failed.
+pub fn project_tests_program_done(program: ref ProgramTest, outcomes: Vec[(String, ProjectTestsOutcome)], bless: bool) -> ProjectTestsFailed? throws {
+    let label = project_tests_program_label(program)
+    if bless {
+        let blessed = project_tests_bless_program(program, outcomes)
+        if !project_tests_blessed_line(label, blessed) {
+            return ProjectTestsFailed { label: label, outcomes: outcomes, output: null }
+        }
+        return null
+    }
+    if !project_tests_verdict(label, outcomes) {
+        return ProjectTestsFailed { label: label, outcomes: outcomes, output: null }
+    }
+    return null
+}
+
+/// **Run each test in a process and a directory of its own, and say how each
+/// went** ([ADR-269](../../../docs/specification/adr/adr-269.md) D1, D12, D13;
+/// [ADR-247](../../../docs/specification/adr/adr-247.md)): the `test` blocks
+/// (`blocks`, each its title, file and line) at each of `test_builds`, the
+/// output tests at each of `programs`, then the test programs: the ones that
+/// failed, for the failures' report, which stays Rust (a test's standard
+/// output is printed as UTF-8 read lossily, which `std` cannot say yet).
+///
+/// A `test` block fails on an error that leaves it, a false `assert` or a
+/// `panic` - each of which ends its process unsuccessfully. An output test
+/// fails where the program does not end successfully, or prints anything but
+/// its `.stdout`, or leaves any file its `.out/` names other than byte for
+/// byte. At two settings either fails as well where the two outcomes differ,
+/// because the meaning of a program is the same at both (Part I 1.2) and a
+/// difference is a fault of this compiler. A failing test does not stop the
+/// others.
+pub fn project_tests_run[H: ProjectTestsHost](host: ref H, blocks: ref Vec[(String, fs::Path, i64)], test_builds: ref Vec[(String, fs::Path)], outputs: ref Vec[OutputTest], programs: ref Vec[(String, fs::Path)], program_tests: i64, root: ref fs::Path, bless: bool) -> Vec[ProjectTestsFailed] throws {
+    let total = blocks.len() + outputs.len() + program_tests
+    project_tests_running(total)
+    let mut failed: Vec[ProjectTestsFailed] = []
+    for (k, (title, path, line)) in blocks.iter().enumerate() {
+        let mut outcomes: Vec[(String, ProjectTestsOutcome)] = []
+        for (setting, binary) in test_builds {
+            outcomes.push((setting.clone(), host.block_outcome(binary, k)))
+        }
+        let label = f"test \"{title}\" ({shown_path(path, root)}:{line})"
+        if !project_tests_verdict(label, outcomes) {
+            failed.push(ProjectTestsFailed { label: label, outcomes: outcomes, output: null })
+        }
+    }
+    for output in outputs {
+        let mut outcomes: Vec[(String, ProjectTestsOutcome)] = []
+        for (setting, binary) in programs {
+            outcomes.push((setting.clone(), host.output_outcome(binary, output)))
+        }
+        let label = project_tests_output_label(output)
+        if bless {
+            let blessed = project_tests_bless(output, outcomes)
+            if !project_tests_blessed_line(label, blessed) {
+                failed.push(ProjectTestsFailed { label: label, outcomes: outcomes, output: output.clone() })
+            }
+            continue
+        }
+        if !project_tests_verdict(label, outcomes) {
+            failed.push(ProjectTestsFailed { label: label, outcomes: outcomes, output: output.clone() })
+        }
+    }
+    for program in host.program_failures(bless) {
+        failed.push(program)
+    }
+    return failed
 }
