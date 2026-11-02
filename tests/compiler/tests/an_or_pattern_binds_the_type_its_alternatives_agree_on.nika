@@ -1,0 +1,18 @@
+// An or-pattern's name is typed where every alternative gives it one type
+// (ADR-291 D10, D22): `lines` below is a `Vec[String]` in both, so a call on
+// it is checked, and a wrong use of it is refused.
+enum Shape { Text { lines: Vec[String] }, Code { lines: Vec[String] }, Blank }
+
+fn count(shape: ref Shape) -> i64 {
+    return match shape {
+        Shape::Text { lines } | Shape::Code { lines } => lines.len(),
+        else => 0,
+    }
+}
+
+fn main() {
+    let a = Shape::Text { lines: ["x", "y"] }
+    let b = Shape::Code { lines: ["z"] }
+    let c = Shape::Blank
+    println(f"{count(a)} {count(b)} {count(c)}")
+}

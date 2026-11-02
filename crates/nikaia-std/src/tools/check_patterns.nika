@@ -9,10 +9,37 @@ use std::collections
 impl CheckState {
     /// **The types of the names an arm binds**, where the variant says them: a
     /// positional variant's parts in order, a variant with named fields by name.
-    /// Nested patterns are typed from their part; or-patterns are left untyped,
-    /// which leaves their names bound as they always were.
+    /// Nested patterns are typed from their part; an or-pattern's names are typed
+    /// where its alternatives agree.
     pub fn pattern_parts(ref self, world: ref CheckWorld, pattern: ref MatchPattern, on: ref Ty) -> collections::BTreeMap[String, Ty] sync {
         let mut out: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+        // **An or-pattern binds a name as the type every alternative gives
+        // it**: `Item::Test { body, .. } | Item::Bench { body, .. }` is typed
+        // where both bodies are one type, and left as it was where they
+        // differ or one alternative does not type the name (ADR-291 D22).
+        match pattern {
+            MatchPattern::Or(alternatives) => {
+                let mut first = true
+                for alternative in alternatives {
+                    let one = self.pattern_parts(world, alternative, on)
+                    if first {
+                        out = one
+                        first = false
+                        continue
+                    }
+                    let mut kept: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+                    for (name, ty) in out {
+                        let other: Ty = one.get(name)?.clone() ?? continue
+                        if other == ty {
+                            kept.insert(name.clone(), ty.clone())
+                        }
+                    }
+                    out = kept
+                }
+                return out
+            }
+            else => {}
+        }
         // **A bare name binds the whole value** (ADR-291 D1), as it does in the
         // language below: `other => other` is of the type matched, unless the
         // name is one of the type's own variants.

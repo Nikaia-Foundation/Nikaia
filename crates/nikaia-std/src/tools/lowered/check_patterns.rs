@@ -7,6 +7,30 @@ impl CheckState {
     pub fn pattern_parts(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty) -> collections::BTreeMap<String, Ty> {
         let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
         match pattern {
+            MatchPattern::Or(alternatives) => {
+                let mut first = true;
+                for alternative in alternatives.iter() {
+                    let one = self.pattern_parts(world, alternative, on);
+                    if first {
+                        out = one;
+                        first = false;
+                        continue;
+                    }
+                    let mut kept: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+                    for (name, ty) in out.iter() {
+                        let other: Ty = match match one.get(name) {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        } { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        if other == *ty { kept.insert(name.to_string(), ty.clone()); }
+                    }
+                    out = kept;
+                }
+                return out;
+            },
+            _ => { },
+        }
+        match pattern {
             MatchPattern::Path(one) => {
                 if one.len() == 1 && !on.is_unknown() {
                     let word = world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string();
