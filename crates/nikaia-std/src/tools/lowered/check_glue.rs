@@ -11,11 +11,18 @@ pub fn check_char_literal(written: &str, char_of: &impl Fn(i64) -> Option<scalar
     }
 }
 
-pub fn check_accepted_dump_name(binary: &str, source: &str, in_a_package: bool, findings: &[CheckFinding]) -> Option<String> {
+pub fn check_accepted_dump_name(binary: String, source: &str, in_a_package: bool, findings: &[CheckFinding]) -> Option<String> {
     if in_a_package || findings.iter().any(|f| { f.severity == CheckSeverity::Error }) { return None; }
+    let name = check_test_binary_name(binary);
     let seed: u64 = 14695981039346656037u64;
     let prime: u64 = 1099511628211u64;
     let hash = source.bytes().fold(seed, |h, b| { (h ^ b as u64).wrapping_mul(prime) });
-    Some(format!("{}-{:016x}.nika", binary, hash))
+    Some(format!("{}-{:016x}.nika", name, hash))
+}
+
+pub(crate) fn check_test_binary_name(binary: String) -> String {
+    let (name, hash) = match binary.rsplit_once("-") { Some(__nikaia_value) => __nikaia_value, None => return binary };
+    if hash.chars().all(|c| { c.is_ascii_hexdigit() }) { return name.to_string(); }
+    binary
 }
 

@@ -25,16 +25,29 @@ pub fn check_char_literal(written: String, char_of: fn(i64) -> scalar? sync) -> 
 }
 
 /// **The name an accepted program is dumped under** (#705):
-/// `<binary>-<hash>.nika`, the hash the source's (FNV-1a, 64 bits), so the
-/// same program checked twice is one file; `null` where nothing is written:
+/// `<binary>-<hash>.nika`, the binary's name without cargo's hash
+/// (`check_test_binary_name`) and the hash the source's (FNV-1a, 64 bits), so
+/// the same program checked twice is one file; `null` where nothing is written:
 /// a file of a program of several (it needs its project) and a program the
 /// check refused.
 pub fn check_accepted_dump_name(binary: String, source: String, in_a_package: bool, findings: ref Vec[CheckFinding]) -> String? {
     if in_a_package || findings.iter().any(fn(f) { f.severity == CheckSeverity::Error }) {
         return null
     }
+    let name = check_test_binary_name(binary)
     let seed: u64 = 0xcbf29ce484222325
     let prime: u64 = 0x100000001b3
     let hash = source.bytes().fold(seed, fn(h, b) { (h ^ b as u64).wrapping_mul(prime) })
-    return f"{binary}-{hash:016x}.nika"
+    return f"{name}-{hash:016x}.nika"
+}
+
+/// **A test binary's name as a reader knows it**: cargo names a test binary
+/// `<name>-<hash>`, the hash in hexadecimal digits; the part after the last
+/// `-` is dropped where it is one, and any other name is kept whole.
+fn check_test_binary_name(binary: String) -> String {
+    let (name, hash) = binary.rsplit_once("-") ?? return binary
+    if hash.scalars.all(fn(c) { c.is_ascii_hexdigit() }) {
+        return name.clone()
+    }
+    return binary
 }

@@ -1,0 +1,6 @@
+// `scalar.is_ascii_hexdigit()`: `0` to `9`, `a` to `f` and `A` to `F` (#1185).
+fn main() {
+    let hash = "0a1B2c3D4e5F6789"
+    println(f"{hash.scalars.all(fn(c) { c.is_ascii_hexdigit() })}")
+    println(f"{'g'.is_ascii_hexdigit()} {'G'.is_ascii_hexdigit()} {'-'.is_ascii_hexdigit()} {'f'.is_ascii_hexdigit()}")
+}

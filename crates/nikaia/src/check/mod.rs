@@ -250,14 +250,9 @@ fn dump_accepted(parsed: &Parsed, checked: &Checked) {
         .ok()
         .and_then(|exe| exe.file_stem().map(|s| s.to_string_lossy().into_owned()))
         .unwrap_or_default();
-    // A test binary is `<name>-<cargo's hash>`; the name is what a reader knows.
-    let binary = match binary.rsplit_once('-') {
-        Some((name, hash)) if hash.chars().all(|c| c.is_ascii_hexdigit()) => name.to_string(),
-        _ => binary,
-    };
-    // The name, or none (`tools/check_glue.nika`).
+    // The name, cargo's hash trimmed, or none (`tools/check_glue.nika`).
     let Some(name) = nikaia_std::tools::check_glue::check_accepted_dump_name(
-        &binary,
+        binary,
         source,
         parsed.package.is_some(),
         &checked.findings,
