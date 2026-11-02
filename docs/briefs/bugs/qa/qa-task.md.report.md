@@ -1,12 +1,14 @@
 Result: done
-Cause: 39375a17 (#1140): CI arm64 bootstrap_compiler, E0609 no field `in_place_bindings` on CheckFacts (check_core_flow.rs:1004); the commit used the #1139 field but check_facts.nika/.rs, which declare it, were left out of the commit.
-Fixed: added the `in_place_bindings` field and its empty() init to check_facts.nika and its lowered .rs (already in the working tree, nothing new written).
-Tests: cargo build -p nikaia-std green (was E0609); the full suite is the driver's.
-Found: none (emit_core_match/emit_core_leaves working-tree edits for #1139/#1099 belong to other agents, left untouched)
-Files: crates/nikaia-std/src/tools/check_facts.nika crates/nikaia-std/src/tools/lowered/check_facts.rs
-Commit: The CheckFacts field in_place_bindings that the committed flow check uses (the fix for #1140's build)
-Changelog: none
+Cause: 7189b7fc (S1) sysroot_package.nika: sequences::the_corpus_has_no_more_unanswered_method_calls_than_it_had, 16 against 14 - `Item::Test { body, .. } | Item::Bench { body, .. } => body` left `body` untyped (`block.stmts.is_empty()` and `.len()` unanswered); found by bisecting the file.
+Fixed: pattern_parts (check_patterns.nika) types an or-pattern's name as the type every alternative gives it, left untyped where they differ (ADR-291 D22); lower-std rerun.
+Tests: corpus-count test ok (14, no ceiling change); tests/compiler 549 ok incl. new an_or_pattern_binds_the_type_its_alternatives_agree_on; it sysroot:: 15 ok; cargo fmt; the ceiling test is the guard (the new program passes before the fix too).
+Found: debug `cargo build -p nikaia` hits the recursion limit in winnow-grammar rt.rs (release/fast build fine, CI is release); not touched, probe: `cargo build -p nikaia`.
+Files: crates/nikaia-std/src/tools/check_patterns.nika crates/nikaia-std/src/tools/lowered/check_patterns.rs tests/compiler/tests/an_or_pattern_binds_the_type_its_alternatives_agree_on.nika tests/compiler/tests/an_or_pattern_binds_the_type_its_alternatives_agree_on.stdout
+Commit: check: an or-pattern's names are typed where its alternatives agree (fix forward: corpus unanswered calls)
+Body: S1's sysroot_package.nika matched `Item::Test { body, .. } | Item::Bench { body, .. }`; an or-pattern's bindings were left untyped, so two method calls on `body` went unanswered and the corpus count rose to 16. The names are now typed where every alternative gives the same type; where they differ nothing changes. Count back at 14.
+Fixes: none
+Changelog: check: a name an or-pattern binds is typed where every alternative gives it the same type
 Attribution:
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
-Pushed: local 92fec4f3084aa57302d7afbe5c88fe2ce93fffd2
+Pushed: local 0647154f74622e093bdf08c01f5462572b2f3212
