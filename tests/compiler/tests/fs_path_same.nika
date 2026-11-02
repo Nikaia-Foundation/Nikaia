@@ -1,0 +1,16 @@
+// `==` on a `Path` compares whole parts, each by its bytes (ADR-319 D9):
+// `a//b`, `a/./b` and `a/b/` are the name `a/b`, against a name and against
+// text, as they sort together; `a/b` and `a/c`, `ab` and `a/b` are not.
+use std::fs
+
+fn main() {
+    let ab: fs::Path = "a/b"
+    let doubled: fs::Path = "a//b"
+    let dotted: fs::Path = "a/./b"
+    let trailing: fs::Path = "a/b/"
+    let other: fs::Path = "a/c"
+    let glued: fs::Path = "ab"
+    println(f"{doubled == ab} {dotted == ab} {trailing == ab}")
+    println(f"{doubled == "a/b"} {dotted == "a/b"}")
+    println(f"{other == ab} {glued == ab} {ab == "a/b/c"}")
+}

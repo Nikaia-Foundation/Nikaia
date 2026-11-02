@@ -72,15 +72,16 @@ pub mod path {
         p.join(part)
     }
 
-    /// **The same name, byte for byte** (ADR-319 D3), against a name or
-    /// against text. Rust's `Path` compares components, which would call
-    /// `a//b` and `a/b` one name.
+    /// **The same name, part by part** (ADR-319 D3, D9), against a name or
+    /// against text: whole parts are compared one after the other, each by
+    /// its bytes, so `a//b`, `a/./b` and `a/b` are one name, as they sort
+    /// together and as [`parts`] hands them out.
     pub fn same<A, B>(a: &A, b: &B) -> bool
     where
         A: AsRef<std::ffi::OsStr> + ?Sized,
         B: AsRef<std::ffi::OsStr> + ?Sized,
     {
-        a.as_ref().as_encoded_bytes() == b.as_ref().as_encoded_bytes()
+        FilePath::new(a.as_ref()) == FilePath::new(b.as_ref())
     }
 
     /// **An `f"…"` with a name in it, joined in the platform's encoding**
