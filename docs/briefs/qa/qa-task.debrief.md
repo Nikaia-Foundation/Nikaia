@@ -1,17 +1,20 @@
-1. **Time spent.** Most of it went on the shared-tree problem, not the failure itself. The cause was obvious from `qa-input.txt` on the first read. After that I had to work out how to commit only my own hunk of `self_hosting.py`. That file held another agent's uncommitted row, and `commit.nika` stages whole files. I built a clean `git archive` export of HEAD to compute the badge, then used `git apply --cached`.
+1. **Most time.** The two clippy rebuilds were the slowest steps, and the second one only showed that another agent's uncommitted `diagnostics/mod.rs` was failing. The commit script's refusal cost the most turns. It said "`sync.rs` is unchanged" when the real problem was my comma-separated `Files:` line. I misread that as a staging problem, unstaged the files, and reran the script.
 
 2. **Lookups the brief could have handed me.**
-   - What `badges.py` measures: it reads files, so the result depends on the working tree.
-   - Whether a row in `self_hosting.py` is needed for each new `.nika` file.
-   - That `commit.nika` adds whole files.
-   - That `nikaia` is not on PATH, and the binary is `target/release/nikaia`.
-   - I read `qa.md` only as far as its header, so I may have missed rules there.
+   - The brief points to `.claude/agents/qa.md`, which I never opened. I worked from the task and the system rules.
+   - `nikaia` is not on PATH, so I had to find `target/fast/nikaia`.
+   - The `Files:` format (space-separated, no commas) was not stated. I only found it by grepping an earlier report.
+   - How lowered test helpers are meant to be exported, `pub` or otherwise, was also not stated. I chose `pub` on my own and hand-edited the lowered `.rs` instead of regenerating it, because `lower-std` would have touched other agents' files.
 
 3. **Checks.**
-   - Useful: `badges.py --check` on the clean HEAD export, and `pre-push.nika`.
-   - Wasted: a stray `git diff --no-index /dev/null /dev/null`, and the first export attempt, which lacked `docs/specification`.
-   - Not run: clippy, and any Rust tests, because no Rust changed.
-   - The `version red` in pre-push is unexplained. I assumed it was the supervisor's and did not check.
-   - I committed before running pre-push. The first run failed with "command not found", so that ordering was a mistake.
+   - Useful: `cargo clippy --all-targets -- -D warnings`, `cargo test -p nikaia-std --features compiler --lib threads`, and `pre-push.nika`.
+   - Wasted: `rustfmt --check` on a single file without `--edition 2024` gave a false let-chains error. I should have used `cargo fmt --check`.
+   - Not run: I did not run `cargo fmt` on my edits.
+   - Not checked: the CI log came from `ci/briefs`, and I never confirmed that it matched the current HEAD.
 
-4. **Change.** Add a short note to `qa.md` or `builder.md`: "A badge or `self_hosting.py` fix is computed on a `git archive HEAD` export, because the shared tree has other agents' edits. When the file has foreign hunks, stage yours with `git apply --cached` and commit with plain `git commit`." Also add a flag to `commit.nika` that stages only already-staged files, and put the `nikaia` binary path in the brief.
+4. **One change.** Add a short "QA quick facts" block to the brief or `builder.md`:
+   - The `nikaia` binary path.
+   - The `Files:` line is space-separated.
+   - The commit script's "unchanged" refusal usually means a malformed `Files:` line.
+   - Run `cargo clippy` first, since the log's `error:` lines name the cause.
+   - If a dirty file belongs to another agent, report it and do not wait on it.

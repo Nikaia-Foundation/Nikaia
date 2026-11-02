@@ -1,7 +1,8 @@
 Result: done
-Cause: b016c7c8 (S2 bounds report) - bootstrap_compiler: `badges.py --check` red, self-hosted.svg out of date (bounds_report.nika had no row in scripts/self_hosting.py)
-Fixed: added the bounds_report.nika row and regenerated assets/badges/self-hosted.svg, both computed on a clean HEAD export
-Tests: badges.py --check on a HEAD export + the fix: green; pre-push.nika (staged): index, fmt, adr-refs, badges green, version red (supervisor's, not touched). Working-tree `badges.py --check` is red only because other agents' uncommitted edits shift the share
-Found: none. Note: the shared tree holds another agent's uncommitted `diagnostics.nika` row in self_hosting.py (file untracked); I committed only my hunk via `git apply --cached`, so `scripts/commit.nika` was not used (it adds the whole file). That row needs its own badge refresh when diagnostics.nika is committed
-Files: scripts/self_hosting.py assets/badges/self-hosted.svg
-Commit: self_hosting: bounds_report.nika's row and the badge (9fdba933)
+Cause: b016c7c8 bootstrap_compiler: unused imports `Block`, `Stmt` in contracts/sync.rs (clippy -D warnings); cb3c303b same step: nine test-only helpers of threads.nika lowered `pub(crate)`, dead in the lib build.
+Fixed: sync.rs imports only `Expr`; the nine helpers in threads.nika (and its lowered output) are `pub`, so they are reachable and not dead.
+Tests: cargo test -p nikaia-std --features compiler --lib threads: 13 passed; clippy --all-targets clean except another agent's uncommitted diagnostics/mod.rs:346 (then_some), not touched.
+Found: none (diagnostics/mod.rs:346 `then(|| ..)` lint is in another agent's unfinished file, escalate to supervisor).
+Files: crates/nikaia/src/contracts/sync.rs crates/nikaia-std/src/tools/threads.nika crates/nikaia-std/src/tools/lowered/threads.rs
+Commit: qa: clippy-clean sync.rs imports and threads.nika test helpers (the fix for the red bootstrap_compiler)
+Pushed: local 03fc5eca59600381c346ea1ed9498f4c15832fa1

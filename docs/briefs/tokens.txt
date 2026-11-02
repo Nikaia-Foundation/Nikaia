@@ -240,3 +240,4 @@
 /home/user/Nikaia/docs/briefs/c1c-ledger-lookup.md 442454 13
 /home/user/Nikaia/docs/briefs/s2-bounds-report.md 1914496 24
 /home/user/Nikaia/docs/briefs/qa/qa-task.md 348300 15
+/home/user/Nikaia/docs/briefs/qa/qa-task.md 596136 21
