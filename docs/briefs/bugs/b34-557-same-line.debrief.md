@@ -1,0 +1,12 @@
+1. **What cost the most:** research before the first edit, which used most of the turns before the context was summarised. I read winnow-grammar's source to check four things: that a `state` bound works with `input bytes`, how an `extern rule` resolves its function, the `rt::Input`/`Slice` types, and whether the `skip_trivia` memo keeps a recording `WS` correct when a parse backtracks. After that, two smaller costs: my first pass of edits to `grammar.rs` actually applied even though bash reported a quoting error, so the retry's assertion failed and confused me; and the brief's own-`WS` grammar would not compile at all, which took a few probes to trace to a separate defect.
+2. **What the brief could have handed me:**
+   - That rules in a grammar without a state are generic over `__WgS`, so entries can give every grammar a `LineBreaks` state without changing anything else.
+   - The extern-rule function signature (`fn<B: rt::Slice, S: StateOf<T>>(i: &mut rt::Input<B,S>)`), and that the text and bytes copies share one Rust module, so the functions need different names.
+   - Where `std`'s program-side Nikaia lives (`src/runtime/`, lowered by `lower-std`), as opposed to `tools/`.
+   - That `rule WS` needs an action (`-> { }`).
+   - That an inline choice whose alternatives give different values does not compile; this broke the brief's own test grammar.
+3. **Checks run:** fmt, clippy, the `grammar::` unit tests, two build cycles, a fixpoint check, the old binary on both new tests, tests/compiler with both settings, `it` filtered on `grammar`, and pre-push. Wasted ones:
+   - The first old-binary run failed in `nikaia-std`, not in the test, because `runtime` had not been lowered yet. It has to come after `lower-std`.
+   - A `nikaia run` straight on a test file was refused (not the project's entry point).
+   - An extra fixpoint build that changed nothing.
+4. **The one change that would save most:** have the brief check its own example code (test grammars, signatures) against the current binary before handing it over. Or builder.md could add a line: "probe each grammar in the brief on the old binary, without the new built-in, before the first edit." That would have caught the choice defect and the missing `WS` action at turn 5, not after the build. A short "winnow-grammar facts" section in `builder-facts.md` covering `state`, `extern rule`, `rt::Input` and the trivia memo would have saved most of the research.

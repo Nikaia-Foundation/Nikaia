@@ -38,3 +38,4 @@
 /home/user/Nikaia/docs/briefs/bugs/architect-task.md 825813 24
 /home/user/Nikaia/docs/briefs/bugs/qa/qa-task.md 1228744 32
 /home/user/Nikaia/docs/briefs/bugs/qa/qa-task.md 582130 17
+/home/user/Nikaia/docs/briefs/bugs/b34-557-same-line.md 560142 7
