@@ -1,0 +1,40 @@
+// A tuple a `std` map's `get` hands back past a jump (`let pair =
+// m.get(k) ?? return ..`) is bound as the reference `get` gives, with no `&`
+// of its own: `&match ..` would be a `&&(bool, bool)`, which `clone` does
+// not turn back into the tuple (the follow-up of #1176).
+use std::collections
+
+struct Facts {
+    values: collections::BTreeMap[i64, (String, String)],
+    pairs: collections::BTreeMap[i64, (bool, bool)],
+}
+
+impl Facts {
+    fn value_at(ref self, at: i64) -> (String, String)? {
+        let found = self.values.get(at) ?? return null
+        return (found.0.clone(), found.1.clone())
+    }
+
+    fn pair_at(ref self, at: i64) -> (bool, bool) {
+        let pair = self.pairs.get(at) ?? return (false, false)
+        return pair.clone()
+    }
+
+    fn written_at(ref self, at: i64) -> String {
+        let (below, written) = self.values.get(at) ?? return ""
+        return f"{below}={written}"
+    }
+}
+
+fn main() {
+    let mut values: collections::BTreeMap[i64, (String, String)] = collections::BTreeMap()
+    values.insert(1, ("a", "b"))
+    let mut pairs: collections::BTreeMap[i64, (bool, bool)] = collections::BTreeMap()
+    pairs.insert(1, (true, false))
+    let facts = Facts { values: values, pairs: pairs }
+    let (x, y) = facts.value_at(1) ?? ("-", "-")
+    let missing = facts.value_at(2) == null
+    let (p, q) = facts.pair_at(1)
+    let (r, _) = facts.pair_at(2)
+    println(f"{x}{y} {missing} {p} {q} {r} {facts.written_at(1)} [{facts.written_at(2)}]")
+}
