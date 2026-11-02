@@ -606,6 +606,15 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
             found = want.clone()
         }
     }
+    // **A local lent to a `ref T` field is a view of it** (#1152), as it is
+    // lent to a `ref T` parameter: `W { own: l }` is `W { own: ref l }`. Where
+    // the struct goes past the local is the keeps rules' question.
+    if value != null && !owned_text {
+        let v: ref Expr = value ?? return true
+        if state.facts.lent_fields.contains(id_of(v) as i64) && check_core_places_a_local_lent(state, world, v) && check_core_places_viewed_as(found, want) {
+            found = want.clone()
+        }
+    }
     let keeper = f"`{name}` keeps its `{field}` after this line"
     let how: FactWrap? = check_widened_slot(state, world, host, found, want, value, span)
     if how != null {
@@ -852,6 +861,24 @@ fn check_core_places_lent_field(want: ref Ty, given: ref Ty) -> bool sync {
         else => false,
     }
     return viewed && owned
+}
+
+/// Whether a field's value is a local of this body, or a field read off one
+/// (#1152): a place that lives on past the literal, so it can be lent.
+fn check_core_places_a_local_lent(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Variable(name, _) => state.binding(world.words.resolve(name)) != null,
+        Expr::Field { base, .. } => check_core_places_a_local_lent(state, world, base),
+        else => false,
+    }
+}
+
+/// Whether `want` is a view of exactly what `found` owns (#1152).
+fn check_core_places_viewed_as(found: ref Ty, want: ref Ty) -> bool sync {
+    return match want {
+        Ty::Named { name, args, view } => view && found == Ty::Named { name: name.clone(), args: args.clone(), view: false },
+        else => false,
+    }
 }
 
 /// **`xs[i]`, `m[k]` and `xs[a..<b]`** (ADR-293 D1, D3, D23; ADR-320 D7).

@@ -608,8 +608,9 @@ fn a_local_struct_keeps_a_view_only_where_it_leaves() {
 }
 
 /// #813: a view stored into a struct bound by a local `let` is kept only where
-/// that struct leaves; a call on it by `ref self` keeps nothing. Returned, handed
-/// to a call or into a task, it still keeps the view.
+/// that struct leaves; a call on it by `ref self` keeps nothing, nor does a free
+/// function that does not keep it (#1152). Returned, handed to a call that
+/// keeps it or into a task, it still keeps the view.
 #[test]
 fn a_view_in_a_local_struct_called_on_keeps_nothing() {
     let head = "struct W { k: i64 }\nstruct Held { pub ws: ref Vec[ref W] }\nstruct H { w: ref W, n: i64 }\n\nimpl H {\n    fn get(ref self) -> i64 { return self.w.k + self.n }\n}\n\n";
@@ -620,7 +621,7 @@ fn a_view_in_a_local_struct_called_on_keeps_nothing() {
     assert!(rust.contains("fn run"), "{rust}");
     for leaves in [
         "struct Outer { h: H }\n\nfn run(held: ref Held, at: i64) -> Outer {\n    let b = H { w: held.ws[at], n: 1 }\n    return Outer { h: b }\n}\n",
-        "fn keep(x: ref H) {}\n\nfn run(held: ref Held, at: i64) {\n    let b = H { w: held.ws[at], n: 1 }\n    keep(b)\n}\n",
+        "fn keep(x: H, mut into: Vec[H]) {\n    into.push(x)\n}\n\nfn run(held: ref Held, at: i64, mut into: Vec[H]) {\n    let b = H { w: held.ws[at], n: 1 }\n    keep(b, into)\n}\n",
         "fn run(held: ref Held, at: i64) {\n    let b = H { w: held.ws[at], n: 1 }\n    spawn fn { b.get() }\n}\n",
     ] {
         let source = format!("{head}{leaves}");

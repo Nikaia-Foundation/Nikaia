@@ -38,9 +38,24 @@ pub(crate) struct Unit {
     pub(crate) kept: collections::BTreeSet<String>,
     pub(crate) readonly: collections::BTreeSet<String>,
     pub(crate) owned_results: collections::BTreeSet<String>,
+    pub(crate) read_by_free: collections::BTreeSet<String>,
 }
 
-pub(crate) fn plain_unit(asked: &Asked<'_, '_, '_>, borrowing: collections::BTreeSet<String>, fields: collections::BTreeMap<String, Vec<(String, Type)>>) -> Unit { Unit { borrowing, fields, methods: collections::BTreeMap::new(), kept: collections::BTreeSet::new(), readonly: collections::BTreeSet::new(), owned_results: owned_result_methods(asked) } }
+pub(crate) fn plain_unit(asked: &Asked<'_, '_, '_>, borrowing: collections::BTreeSet<String>, fields: collections::BTreeMap<String, Vec<(String, Type)>>) -> Unit { Unit { borrowing, fields, methods: collections::BTreeMap::new(), kept: collections::BTreeSet::new(), readonly: collections::BTreeSet::new(), owned_results: owned_result_methods(asked), read_by_free: read_by_free_functions(asked) } }
+
+pub(crate) fn read_by_free_functions(asked: &Asked<'_, '_, '_>) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (key, contract) in asked.own.functions.iter() {
+        if key.contains("::") { continue; }
+        let signature = match match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if signature.takes_a_receiver() { continue; }
+        for i in 0..signature.params.len() as i64 { if !nikaia_std::list::contains(&contract.keeps, &nikaia_std::index::get(&signature.params, (i) as usize).0) { out.insert(format!("{}#{}", key, i)); } }
+    }
+    out
+}
 
 pub(crate) fn owned_result_methods(asked: &Asked<'_, '_, '_>) -> collections::BTreeSet<String> {
     let mut owned: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -661,7 +676,7 @@ pub(crate) fn views_a_local_struct(unit: &Unit, asked: &Asked<'_, '_, '_>, block
         _ => return false,
     };
     if names.len() != 1 { return false; }
-    let handed = struct_handed_back(asked.names, block, at, asked.names.resolve(*nikaia_std::index::get(&names, 0)), &literal, &unit.readonly);
+    let handed = struct_handed_back(asked.names, block, at, asked.names.resolve(*nikaia_std::index::get(&names, 0)), &literal, &unit.readonly, &unit.read_by_free);
     if handed == 0 { return true; }
     let result = match ours { Some(__nikaia_value) => __nikaia_value, None => return false };
     handed > 0 && result == literal
@@ -669,10 +684,10 @@ pub(crate) fn views_a_local_struct(unit: &Unit, asked: &Asked<'_, '_, '_>, block
 
 pub fn local_struct_handed_back(names: &winnow_grammar::InternerContext, block: &Block, at: i64, name: &str) -> i64 {
     let nowhere: collections::BTreeSet<String> = collections::BTreeSet::new();
-    struct_handed_back(names, block, at, name, "", &nowhere)
+    struct_handed_back(names, block, at, name, "", &nowhere, &nowhere)
 }
 
-pub(crate) fn struct_handed_back(names: &winnow_grammar::InternerContext, block: &Block, at: i64, name: &str, owner: &str, readonly: &collections::BTreeSet<String>) -> i64 {
+pub(crate) fn struct_handed_back(names: &winnow_grammar::InternerContext, block: &Block, at: i64, name: &str, owner: &str, readonly: &collections::BTreeSet<String>, read_by_free: &collections::BTreeSet<String>) -> i64 {
     let mut uses: i64 = 0;
     let mut through: i64 = 0;
     let mut handed: i64 = 0;
@@ -696,12 +711,31 @@ pub(crate) fn struct_handed_back(names: &winnow_grammar::InternerContext, block:
                     let receiver = nikaia_std::boxed::open(receiver); let method = *method;
                     if a_variable_named(names, receiver, name) && config.is_empty() && only_read_by(names, owner, method, args, readonly) { through += 1; }
                 },
+                Expr::Call { func, args, config, .. } => {
+                    let func = nikaia_std::boxed::open(func);
+                    if config.is_empty() { through += read_by_a_free_call(names, func, args, name, read_by_free); }
+                },
                 _ => { },
             }
         }
     }
     if uses != through + handed { return -1; }
     handed
+}
+
+pub(crate) fn read_by_a_free_call(names: &winnow_grammar::InternerContext, func: &Expr, args: &[Expr], name: &str, read_by_free: &collections::BTreeSet<String>) -> i64 {
+    let callee = match func {
+        Expr::Variable(n, _) => { let n = *n; names.resolve(n).to_string() },
+        _ => return 0,
+    };
+    let mut read: i64 = 0;
+    for i in 0..args.len() as i64 {
+        if a_variable_named(names, nikaia_std::index::get(&args, (i) as usize), name) {
+            if !read_by_free.contains(&format!("{}#{}", callee, i)) { return 0; }
+            read += 1;
+        }
+    }
+    read
 }
 
 pub(crate) fn only_read_by(names: &winnow_grammar::InternerContext, owner: &str, method: winnow_grammar::Symbol, args: &[Expr], readonly: &collections::BTreeSet<String>) -> bool {
@@ -1166,7 +1200,14 @@ pub(crate) fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span:
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             stores(unit, asked, func, span, &own_buffer, here);
-            stores_all(unit, asked, args, span, &own_buffer, here);
+            let callee = match func {
+                Expr::Variable(n, _) => { let n = *n; asked.names.resolve(n).to_string() },
+                _ => String::from(""),
+            };
+            for i in 0..args.len() as i64 {
+                let literal = matches!(*nikaia_std::index::get(&args, (i) as usize), Expr::StructLit { .. });
+                if literal && callee != "" && config.is_empty() && unit.read_by_free.contains(&format!("{}#{}", callee, i)) { descend(unit, asked, nikaia_std::index::get(&args, (i) as usize), span, own_buffer, here); } else { stores(unit, asked, nikaia_std::index::get(&args, (i) as usize), span, &own_buffer, here); }
+            }
             stores_config(unit, asked, config, span, &own_buffer, here);
         },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); stores(unit, asked, base, span, &own_buffer, here); },

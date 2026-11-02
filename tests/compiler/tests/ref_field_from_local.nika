@@ -1,0 +1,27 @@
+// A `ref T` field takes an owned local by lending it, as a `ref T` parameter
+// does, and a struct built from a `ref` parameter that never leaves the
+// function keeps nothing past the call (#1152).
+
+struct L { n: i64 }
+
+struct W { own: ref L, k: i64 }
+
+fn show(w: ref W) -> i64 {
+	return w.own.n + w.k
+}
+
+fn go(l: ref L) -> i64 {
+	let w = W { own: l, k: 1 }
+	return show(w)
+}
+
+fn passed(l: ref L) -> i64 {
+	return show(W { own: l, k: 2 })
+}
+
+fn main() {
+	let l = L { n: 3 }
+	let w = W { own: l, k: 1 }
+	println(f"{w.own.n} {w.k}")
+	println(f"{show(w)} {go(l)} {passed(l)} {l.n}")
+}

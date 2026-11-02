@@ -458,6 +458,10 @@ pub(crate) fn check_core_places_a_declared_field<H: CheckHost>(state: &mut Check
         let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
         if state.facts.lent_fields.contains(&(id_of(v) as i64)) { found = want.clone(); }
     }
+    if value.is_some() && !owned_text {
+        let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
+        if state.facts.lent_fields.contains(&(id_of(v) as i64)) && check_core_places_a_local_lent(&state, world, v) && check_core_places_viewed_as(&found, &want) { found = want.clone(); }
+    }
     let keeper = format!("`{}` keeps its `{}` after this line", name, field);
     let how: Option<FactWrap> = check_widened_slot(state, world, host, &found, &want, value, span);
     if how.is_some() {
@@ -644,6 +648,25 @@ pub(crate) fn check_core_places_lent_field(want: &Ty, given: &Ty) -> bool {
         _ => false,
     };
     viewed && owned
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_places_a_local_lent(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::Variable(name, _) => { let name = *name; state.binding(world.words.resolve(name)).is_some() },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); check_core_places_a_local_lent(state, world, base) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_places_viewed_as(found: &Ty, want: &Ty) -> bool {
+    match want {
+        Ty::Named { name, args, view } => { let view = *view; view && *found == Ty::Named { name: name.to_string(), args: args.to_owned(), view: false } },
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
