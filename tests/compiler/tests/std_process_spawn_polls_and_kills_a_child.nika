@@ -1,0 +1,33 @@
+// `process::spawn` starts a program and hands it back running (#1177):
+// `try_wait` polls it without waiting, `kill` ends it, and `wait` hands back
+// what it said, its output read lossily (a byte that is not UTF-8 becomes
+// U+FFFD instead of failing the wait).
+use std::process
+use std::time
+
+fn main() throws {
+    let mut quick = process::spawn("sh", ["-c", "printf 'out\\377\\n'; echo err >&2; exit 3"])
+    let output = quick.wait()
+    println(f"{output.code} {output.ok} {output.stdout.trim()} {output.stderr.trim()}")
+
+    let mut slow = process::spawn("sleep", ["30"])
+    match slow.try_wait() {
+        null => println("running")
+        code => println(f"ended {code}")
+    }
+    slow.kill()
+    let mut code = slow.try_wait()
+    while code == null {
+        time::sleep(10.millis())
+        code = slow.try_wait()
+    }
+    println(f"killed {code ?? 0}")
+    let ended = slow.wait()
+    println(f"{ended.ok} {ended.stdout.len()}")
+    slow.kill()
+
+    let missing = process::spawn("no-such-program-anywhere", []) catch {
+        println("not found")
+        return
+    }
+}

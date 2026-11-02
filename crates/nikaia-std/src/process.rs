@@ -426,6 +426,160 @@ fn runnable(candidate: &Path) -> bool {
     }
 }
 
+// **A program started and not yet waited for** (#1177): `spawn` starts it and
+// hands back a `Child` at once, the shape of Rust's `Command::spawn`, for a
+// caller that polls it (`try_wait`), gives up on it (`kill`) or says something
+// while it runs. Its two output streams are read to their end on threads of
+// their own from the start, so a child that writes much never blocks on a
+// full pipe while nobody waits; `wait` hands them back as text read lossily
+// (a byte that is not UTF-8 becomes U+FFFD), which is what a tool that only
+// shows another program's output wants.
+
+/// What `spawn` hands back: the child, the two threads reading its output,
+/// and how it ended once that is known.
+#[derive(Debug)]
+pub struct Child {
+    named: String,
+    started: Instant,
+    child: Option<std::process::Child>,
+    stdout: Option<std::thread::JoinHandle<Vec<u8>>>,
+    stderr: Option<std::thread::JoinHandle<Vec<u8>>>,
+    status: Option<std::process::ExitStatus>,
+}
+
+/// The pipe read to its end on a thread of its own; what could not be read
+/// is left out.
+fn drained<R: Read + Send + 'static>(pipe: Option<R>) -> std::thread::JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut held = Vec::new();
+        if let Some(mut pipe) = pipe {
+            let _ = pipe.read_to_end(&mut held);
+        }
+        held
+    })
+}
+
+/// Start `program` with `args` and hand it back running: its standard input
+/// closed, its standard output and standard error read on threads of their
+/// own. `program` is looked for on the caller's `PATH` as `run` looks for it
+/// (ADR-243 D6). It fails with `IoError::NotFound(program)` where nothing is
+/// there and `IoError::PermissionDenied(program)` where it may not be run.
+pub fn spawn(program: &str, args: Vec<String>) -> Result<Child, IoError> {
+    let named = program.to_string();
+    let found = found_on_path(
+        program,
+        std::env::var_os("PATH").as_deref(),
+        std::env::var_os("PATHEXT").as_deref(),
+        cfg!(windows),
+    )
+    .ok_or_else(|| IoError::NotFound(PathBuf::from(&named)))?;
+    let started = Instant::now();
+    let mut child = Command::new(found)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| IoError::of(e, &named))?;
+    let stdout = Some(drained(child.stdout.take()));
+    let stderr = Some(drained(child.stderr.take()));
+    Ok(Child {
+        named,
+        started,
+        child: Some(child),
+        stdout,
+        stderr,
+        status: None,
+    })
+}
+
+/// An exit status as `Output::code` says it: the code, or `-1` where the
+/// program was ended by a signal (ADR-243 D2).
+fn code_of(status: std::process::ExitStatus) -> i64 {
+    status.code().map(i64::from).unwrap_or(-1)
+}
+
+impl Child {
+    /// The exit code where the program has ended, `-1` where a signal ended
+    /// it; nothing while it runs. It does not wait.
+    pub fn try_wait(&mut self) -> Result<Option<i32>, IoError> {
+        if self.status.is_none()
+            && let Some(child) = self.child.as_mut()
+        {
+            self.status = child.try_wait().map_err(|e| IoError::of(e, &self.named))?;
+        }
+        Ok(self.status.map(|status| status.code().unwrap_or(-1)))
+    }
+
+    /// End the program (SIGKILL on Unix). One that has ended already is no
+    /// failure.
+    pub fn kill(&mut self) -> Result<(), IoError> {
+        if self.status.is_some() {
+            return Ok(());
+        }
+        match self.child.as_mut() {
+            Some(child) => match child.kill() {
+                Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => Ok(()),
+                killed => killed.map_err(|e| IoError::of(e, &self.named)),
+            },
+            None => Ok(()),
+        }
+    }
+
+    /// Wait for the program to end and hand back what it said, its two
+    /// streams read lossily. The wait gives the thread up, as `run`'s does
+    /// (ADR-243 D3). The processor times and `max_rss_kib` are the child's
+    /// where this wait is the one that saw it end, zero and `null` where
+    /// `try_wait` saw it first.
+    pub async fn wait(&mut self) -> Result<Output, IoError> {
+        let named = self.named.clone();
+        let started = self.started;
+        let child = self.child.take();
+        let known = self.status;
+        let stdout = self.stdout.take();
+        let stderr = self.stderr.take();
+        let finished = crate::rt::io::beside(move || {
+            let stdout = stdout
+                .map(|t| t.join().unwrap_or_default())
+                .unwrap_or_default();
+            let stderr = stderr
+                .map(|t| t.join().unwrap_or_default())
+                .unwrap_or_default();
+            let waited = match (known, child) {
+                (None, Some(child)) => Some(child_usage::wait(child)?),
+                (_, Some(mut child)) => {
+                    child.wait()?;
+                    None
+                }
+                (_, None) => None,
+            };
+            Ok((stdout, stderr, waited, started.elapsed()))
+        })
+        .await
+        .map_err(|e| IoError::of(e, &named))?;
+        let (stdout, stderr, waited, elapsed) = finished;
+        let status = match (waited, known) {
+            (Some(waited), _) => waited.status,
+            (None, Some(status)) => status,
+            (None, None) => {
+                return Err(IoError::Other(format!("{named}: waited for twice")));
+            }
+        };
+        self.status = Some(status);
+        Ok(Output {
+            code: code_of(status),
+            ok: status.success(),
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            elapsed,
+            user_time: waited.map_or(Duration::ZERO, |w| w.user_time),
+            system_time: waited.map_or(Duration::ZERO, |w| w.system_time),
+            max_rss_kib: waited.and_then(|w| w.max_rss_kib),
+            timed_out: false,
+        })
+    }
+}
+
 // **`exit` throws `Exit`, a fatal error** ([ADR-345](../../../docs/specification/adr/adr-345.md)).
 //
 // It travels in the error channel like any error, so every frame it leaves

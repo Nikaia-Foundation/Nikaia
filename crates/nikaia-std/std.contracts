@@ -5273,6 +5273,53 @@ provenance = "untrusted"
 keeps = ["args"]
 signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured) -> process::Output"
 
+# A program started and not yet waited for (#1177): what `process::spawn`
+# hands back. Its two output streams are read to their end from the start, so
+# it never blocks on a full pipe while nobody waits.
+[type."process::Child"]
+pub = true
+crosses = true
+
+# Start a program and hand it back running, the shape of Rust's
+# `Command::spawn`: its standard input closed, its standard output and
+# standard error read on threads of their own. `program` is looked for on the
+# caller's `PATH` as `run` looks for it (ADR-243 D6). It fails where the
+# program cannot be started.
+[fn."process::spawn"]
+pub = true
+sync = true
+throws = ["io::IoError"]
+provenance = "untrusted"
+keeps = ["args"]
+signature = "(program: ref String, args: Vec[String]) -> process::Child"
+
+# The exit code where the program has ended, `-1` where a signal ended it;
+# nothing while it runs. It does not wait.
+[fn."process::Child::try_wait"]
+pub = true
+sync = true
+throws = ["io::IoError"]
+signature = "(mut self: ref process::Child) -> i32?"
+
+# End the program (SIGKILL on Unix). One that has ended already is no failure.
+[fn."process::Child::kill"]
+pub = true
+sync = true
+throws = ["io::IoError"]
+signature = "(mut self: ref process::Child)"
+
+# Wait for the program to end and hand back what it said: `stdout` and
+# `stderr` are its two streams read lossily, a byte that is not UTF-8 written
+# as U+FFFD, so a program's output never fails the wait. The wait gives the
+# thread up, as `run`'s does. `user_time`, `system_time` and `max_rss_kib`
+# are the child's where this wait saw it end, zero and `null` where
+# `try_wait` saw it first; `timed_out` is `false`.
+[fn."process::Child::wait"]
+pub = true
+throws = ["io::IoError"]
+provenance = "untrusted"
+signature = "(mut self: ref process::Child) -> process::Output"
+
 # Throw `process::Exit::Code(code)`, with `code` from 0 to 255: a fatal error
 # (ADR-345), which a `catch` takes only in an arm naming it. At the end of
 # `main` it ends the program with the code, after the cleanups and the tasks
