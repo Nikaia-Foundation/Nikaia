@@ -1,0 +1,52 @@
+// crates/nikaia-std/src/tools/contracts_core.nika
+//
+// **What the compiler's `contracts` module still did itself** - a ledger with
+// its header, a contract read back with the record beside it, the arguments
+// a call passes and the name a `sync` was taken from - moved from
+// `contracts/mod.rs` (ADR-294, #125). What stays Rust there is what holds a
+// parse or the checker: the passes' host and the build-time values.
+
+/// A ledger with a header and nothing in it: what a program of several files
+/// starts from before it absorbs its modules, and what an inference fills.
+pub fn contracts_headed(version: u32, toolchain: String, inference: String) -> Ledger sync {
+    let mut ledger = Ledger::blank()
+    ledger.version = version
+    ledger.toolchain = toolchain.clone()
+    ledger.inference = inference.clone()
+    return ledger
+}
+
+/// The contract `written` with the record `derived` beside it read in, where
+/// there is one (ADR-251 D1): the toolchain, the inference and the sources are
+/// the record's. **A contract with no record beside it has no sources**, which
+/// every reader of `sources` takes for *nothing recorded*, the fail-closed
+/// answer (ADR-100 D3). `null` where the contract itself does not read.
+pub fn contracts_read_beside(written: ref String, derived: String?) -> Ledger? sync {
+    let mut ledger = read(written) catch {
+        return null
+    }
+    let text = derived ?? return ledger
+    let record = read(text) catch {
+        return ledger
+    }
+    ledger.toolchain = record.toolchain
+    ledger.inference = record.inference
+    ledger.sources = record.sources
+    return ledger
+}
+
+/// The arguments a *call* passes: the parameters after a receiver.
+pub fn contracts_arguments(signature: ref Signature) -> ref Array[(String, Ty)] sync {
+    if signature.params.len() > 0 && signature.params[0].0 == "self" {
+        return signature.params[1..<signature.params.len()]
+    }
+    return signature.params
+}
+
+/// The name a `sync` was taken from, where it was taken from one.
+pub fn contracts_sync_from(claim: ref Sync) -> ref String? sync {
+    match claim {
+        Sync::From(name) => return name,
+        else => return null,
+    }
+}

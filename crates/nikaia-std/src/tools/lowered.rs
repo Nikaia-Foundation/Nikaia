@@ -953,6 +953,14 @@ mod contract_changes_lowered {
 #[allow(unused_imports)]
 pub use contract_changes_lowered::*;
 
+mod contracts_core_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/contracts_core.rs");
+}
+#[allow(unused_imports)]
+pub use contracts_core_lowered::*;
+
 mod crossing_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2511,6 +2519,10 @@ pub mod comptime_tree {
 pub mod contract_changes {
     #[allow(unused_imports)]
     pub use super::{changed_contracts};
+}
+pub mod contracts_core {
+    #[allow(unused_imports)]
+    pub use super::{contracts_headed, contracts_read_beside, contracts_arguments, contracts_sync_from};
 }
 pub mod crossing {
     #[allow(unused_imports)]

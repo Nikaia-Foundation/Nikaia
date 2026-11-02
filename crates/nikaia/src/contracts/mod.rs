@@ -64,10 +64,8 @@ pub trait SyncOps {
 
 impl SyncOps for Sync {
     fn from(&self) -> Option<&str> {
-        match self {
-            Sync::From(name) => Some(name),
-            _ => None,
-        }
+        // In Nikaia (`tools/contracts_core.nika`, #125).
+        nikaia_std::tools::contracts_core::contracts_sync_from(self)
     }
 }
 
@@ -127,10 +125,7 @@ pub trait SignatureOps: Sized {
 impl SignatureOps for Signature {
     /// The arguments a *call* passes, which is the parameters after a receiver.
     fn arguments(&self) -> &[(String, ty::Ty)] {
-        match self.params.first() {
-            Some((name, _)) if name == "self" => &self.params[1..],
-            _ => &self.params,
-        }
+        nikaia_std::tools::contracts_core::contracts_arguments(self)
     }
 
     /// Read one back from the text above.
@@ -196,12 +191,8 @@ impl LedgerOps for Ledger {
     /// A ledger with a header and nothing in it - what a program of several
     /// files starts from before it absorbs its modules.
     fn empty() -> Self {
-        Ledger {
-            version: VERSION,
-            toolchain: toolchain(),
-            inference: INFERENCE.to_string(),
-            ..Ledger::blank()
-        }
+        // In Nikaia (`tools/contracts_core.nika`, #125).
+        nikaia_std::tools::contracts_core::contracts_headed(VERSION, &toolchain(), INFERENCE)
     }
 
     fn infer(parsed: &Parsed) -> Self {
@@ -370,12 +361,7 @@ impl LedgerOps for Ledger {
         units: &[&Parsed],
         library: &Ledger,
     ) -> (Self, Vec<crate::check::Checked>, sync::Noted) {
-        let mut ledger = Ledger {
-            version: VERSION,
-            toolchain: toolchain(),
-            inference: INFERENCE.to_string(),
-            ..Ledger::blank()
-        };
+        let mut ledger = Self::empty();
         // **The order of the passes, in Nikaia** (`tools/ledger_items.nika`,
         // `ledger_infer_package`, ADR-294, #125): the item loop, the checker,
         // each derived column and the defaults. What holds a view is computed
@@ -461,16 +447,10 @@ impl LedgerOps for Ledger {
     /// reader of `sources` already takes for *nothing recorded*, the
     /// fail-closed answer (ADR-100 D3).
     fn read_beside(path: &std::path::Path) -> Option<Ledger> {
-        let mut ledger = Ledger::parse(&std::fs::read_to_string(path).ok()?).ok()?;
-        if let Some(derived) = std::fs::read_to_string(derived_path(path))
-            .ok()
-            .and_then(|text| Ledger::parse(&text).ok())
-        {
-            ledger.toolchain = derived.toolchain;
-            ledger.inference = derived.inference;
-            ledger.sources = derived.sources;
-        }
-        Some(ledger)
+        // The files are read here; what they say is `tools/contracts_core.nika`'s.
+        let written = std::fs::read_to_string(path).ok()?;
+        let derived = std::fs::read_to_string(derived_path(path)).ok();
+        nikaia_std::tools::contracts_core::contracts_read_beside(&written, derived)
     }
 
     /// The same file under a **description's** header

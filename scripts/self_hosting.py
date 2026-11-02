@@ -101,6 +101,7 @@ COMPILER_NIKA = {
     "ledger_items.nika": "contracts: what the ledger's item loop reads off a declaration - the types a file declares, an impl head's parameters, a literal, the entries of an extern block and a grammar, a build-time value as the literal both languages spell alike, and the ensures of an expression function (0.0.750)",
     "ledger_defaults.nika": "contracts: the value of one attribute (ADR-331 D6, D8) and the options whose default is an expression to evaluate (ADR-318 D1)",
     "ledger_ops.nika": "contracts: what a build does with a package's ledger as a whole - the entries it publishes, whether it may be believed against its sources, and taking it in under the names a caller writes (0.0.408)",
+    "contracts_core.nika": "contracts: a ledger with its header, a contract read back with the record beside it, a call's arguments and a `sync`'s source (M16)",
     "written.nika": "check: an expression or a pattern written back the way the source wrote it, for an `assert`'s failure and a refusal's quote (0.0.410)",
     "check_words.nika": "check: the words its refusals are made of - an article, a count, a list of names, the nearest spelling, the note on a word another language reserves - and which lookups lend their key (0.0.411)",
     "check_types.nika": "check: what it asks of one type by itself - whether it moves or copies, a view of it and what a view is of, what a hull holds and what goes into one, lists, collections and text, and the way out of a mismatch (0.0.412), and what a `for` binds (0.0.415)",
