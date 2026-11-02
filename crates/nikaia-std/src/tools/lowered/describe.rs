@@ -186,3 +186,16 @@ pub async fn describe_names_the_program_writes<H: DescribeHost>(root: &std::path
     out
 }
 
+pub fn describe_without_dots(path: &std::path::Path) -> fs::Path {
+    let mut out: fs::Path = std::path::PathBuf::from("");
+    for part in nikaia_std::fs::path::parts(&(path)) {
+        if nikaia_std::fs::path::same(&(part), &(".")) { continue; }
+        if nikaia_std::fs::path::same(&(part), &("..")) {
+            out = match nikaia_std::fs::path::parent(&(out)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            continue;
+        }
+        out = nikaia_std::fs::path::join(&(out), &part);
+    }
+    out
+}
+

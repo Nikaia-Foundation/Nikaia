@@ -270,3 +270,21 @@ pub fn describe_names_the_program_writes[H: DescribeHost](root: ref fs::Path, cr
     }
     return out
 }
+
+/// **A name with its `.` and `..` parts walked off**, without asking the file
+/// system whether any of it exists (ADR-319 D10): a `..` takes the part before
+/// it away, and one with nothing before it, or only the root, is dropped.
+pub fn describe_without_dots(path: ref fs::Path) -> fs::Path {
+    let mut out: fs::Path = ""
+    for part in path.parts() {
+        if part == "." {
+            continue
+        }
+        if part == ".." {
+            out = out.parent() ?? continue
+            continue
+        }
+        out = out.join(part)
+    }
+    return out
+}

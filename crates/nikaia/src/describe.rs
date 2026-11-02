@@ -376,19 +376,9 @@ pub fn crate_root(root: &Path, crate_word: &str) -> Option<PathBuf> {
 }
 
 /// A path with its `.` and `..` components walked off, without asking the
-/// filesystem whether any of it exists.
+/// filesystem whether any of it exists (`tools/describe.nika`, #125).
 fn without_dots(path: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for part in path.components() {
-        match part {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                out.pop();
-            }
-            other => out.push(other),
-        }
-    }
-    out
+    describe::describe_without_dots(path)
 }
 
 /// The crate's own version, from its `Cargo.toml`.
