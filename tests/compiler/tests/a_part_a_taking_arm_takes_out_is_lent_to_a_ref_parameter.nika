@@ -1,0 +1,43 @@
+// A part a taking arm takes out of a `mut` parameter is a value, not the
+// view it was bound as: handed to a `ref` parameter it is lent with its `&`.
+
+enum Kind {
+	Named(String),
+	Other,
+}
+
+enum Shape {
+	Cast { inner: String, ty: Kind },
+	Other,
+}
+
+fn longer(k: ref Kind) -> Kind {
+	return match k {
+		Kind::Named(n) => Kind::Named(n.clone() + "!"),
+		else => Kind::Other,
+	}
+}
+
+fn put(mut shape: Shape) {
+	match shape {
+		Shape::Cast { inner, ty } => {
+			shape = Shape::Cast { inner: inner, ty: longer(ty) }
+			return
+		},
+		else => {},
+	}
+}
+
+fn main() {
+	let mut s = Shape::Cast { inner: "a", ty: Kind::Named("b") }
+	put(s)
+	match s {
+		Shape::Cast { inner, ty } => {
+			match ty {
+				Kind::Named(n) => print(inner.clone() + n.clone()),
+				else => print("other"),
+			}
+		},
+		else => print("other"),
+	}
+}

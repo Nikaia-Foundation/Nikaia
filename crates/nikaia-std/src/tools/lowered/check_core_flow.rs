@@ -976,8 +976,30 @@ pub(crate) fn check_core_flow_arm_names_compared(state: &mut CheckState, arm: i6
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_flow_parts_handed_on_in_place(state: &mut CheckState, body: &Expr, in_place: &collections::BTreeSet<i64>) {
-    if state.facts.taking_arms.contains_key(&(id_of(body) as i64)) { return; }
+pub(crate) fn check_core_flow_parts_handed_on_in_place(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, in_place: &collections::BTreeSet<i64>) {
+    if state.facts.taking_arms.contains_key(&(id_of(body) as i64)) {
+        let frame = match match state.scope.last() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut taken: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for local in frame.iter() { if in_place.contains(&local.id) { taken.insert(local.name.to_string()); } }
+        for expr in visited_in_expr(body) {
+            let args = match expr {
+                Expr::Call { args, .. } => args.to_owned(),
+                Expr::MethodCall { args, .. } => args.to_owned(),
+                _ => continue,
+            };
+            for arg in args.iter() {
+                let named = match arg {
+                    Expr::Variable(name, _) => { let name = *name; taken.contains(world.words.resolve(name)) },
+                    _ => false,
+                };
+                if named && state.facts.views_handed_on.remove(&node_key(arg)) { state.facts.lent_args.insert(node_key(arg)); }
+            }
+        }
+        return;
+    }
     let mut handed: Vec<i64> = vec![];
     for (node, binding) in state.facts.mut_arg_bindings.iter() {
         let node = nikaia_std::num::value(node);let binding = nikaia_std::num::value(binding);
@@ -1085,7 +1107,7 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     state.a_branch_that_leaves(from, leaves, span);
     if mut_subject.is_some() {
         state.parts_taken_out_of_a_mut_parameter(world, nikaia_std::index::or(mut_subject, || ""), &arm.body, typed, &parts, handed_from, span.start as i64);
-        check_core_flow_parts_handed_on_in_place(state, &arm.body, &in_place);
+        check_core_flow_parts_handed_on_in_place(state, world, &arm.body, &in_place);
     }
     check_core_flow_changed_copies(state, &arm.body, changed_from, &in_place, mut_subject.is_some());
     if mut_subject.is_some() && !through_the_reference { check_core_flow_kept_in_place(state, &arm.body, &in_place); }
