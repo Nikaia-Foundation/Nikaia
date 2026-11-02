@@ -528,3 +528,120 @@ pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collecti
     copy
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GrammarTypesGeneric {
+    pub rules: collections::BTreeSet<(winnow_grammar::Symbol, winnow_grammar::Symbol)>,
+    pub chooses: bool,
+}
+
+pub fn grammar_types_generic(items: &[Spanned<Item>]) -> GrammarTypesGeneric {
+    let mut found = GrammarTypesGeneric { rules: collections::BTreeSet::new(), chooses: false };
+    for item in items.iter() {
+        match &item.node {
+            Item::Grammar(def) => {
+                for rule in def.rules.iter().filter(|&r| { !r.generics.is_empty() }) { found.rules.insert((def.name, rule.name)); }
+                found.chooses = grammar_types_wanted(def) || found.chooses;
+            },
+            _ => { },
+        }
+    }
+    found
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GrammarTypesAsked {
+    pub call: Option<GrammarTypesCall>,
+    pub func: Option<Expr>,
+    pub refused: u32,
+    pub callee: String,
+}
+
+pub fn grammar_types_asked(expr: &Expr, generic: &collections::BTreeSet<(winnow_grammar::Symbol, winnow_grammar::Symbol)>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<GrammarTypesAsked> {
+    match expr {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
+            Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match base {
+                Expr::Path(segments, _) => return grammar_types_asked_of(segments, index, generic, words, intern),
+                _ => return None,
+            } },
+            _ => return None,
+        } },
+        _ => return None,
+    }
+}
+
+pub(crate) fn grammar_types_asked_of(segments: &[winnow_grammar::Symbol], index: &Expr, generic: &collections::BTreeSet<(winnow_grammar::Symbol, winnow_grammar::Symbol)>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<GrammarTypesAsked> {
+    if segments.len() != 2 || !generic.contains(&(*nikaia_std::index::get(&segments, 0), *nikaia_std::index::get(&segments, 1))) { return None; }
+    let owner = *nikaia_std::index::get(&segments, 0);
+    let rule = *nikaia_std::index::get(&segments, 1);
+    let bracket = grammar_types_bracket(index, words, intern);
+    match bracket.value {
+        None => { },
+        Some(value) => {
+            let callee = format!("{}::{}", words.resolve(owner), words.resolve(rule));
+            return Some(GrammarTypesAsked { call: None, func: None, refused: value, callee });
+        },
+    }
+    let copy = grammar_types_copy_name(words, words.resolve(rule), &bracket.types);
+    let func = Expr::Path(vec![owner, intern(&copy)], fresh_id());
+    let call = GrammarTypesCall { owner, rule, types: bracket.types };
+    Some(GrammarTypesAsked { call: Some(call), func: Some(func), refused: 0, callee: String::from("") })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GrammarTypesBracket {
+    pub(crate) types: Vec<Type>,
+    pub(crate) value: Option<u32>,
+}
+
+pub(crate) fn grammar_types_bracket(index: &Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> GrammarTypesBracket {
+    let mut out = GrammarTypesBracket { types: vec![], value: None };
+    match index {
+        Expr::Tuple(parts, _) => { for part in parts.iter() { if !grammar_types_bracket_part(part, words, &intern, &mut out) { return out; } } },
+        _ => { grammar_types_bracket_part(index, words, &intern, &mut out); },
+    }
+    out
+}
+
+pub(crate) fn grammar_types_bracket_part(part: &Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, out: &mut GrammarTypesBracket) -> bool {
+    match grammar_types_written(part, words, &intern) {
+        None => {
+            out.value = Some(id_of(part));
+            return false;
+        },
+        Some(ty) => {
+            out.types.push(ty);
+            return true;
+        },
+    }
+}
+
+pub fn grammar_types_written(expr: &Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Type> {
+    match expr {
+        Expr::Variable(name, _) => { let name = *name; return Some(grammar_types_named(name, vec![])) },
+        Expr::Path(segments, _) => {
+            let spelled: Vec<String> = segments.iter().map(|s| { words.resolve(*s).to_string() }).collect::<Vec<_>>();
+            return Some(grammar_types_named(intern(&spelled.join("::")), vec![]));
+        },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            let outer = match grammar_types_written(base, words, intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let bracket = grammar_types_bracket(index, words, &intern);
+            match bracket.value {
+                None => return Some(grammar_types_named(outer.name, bracket.types)),
+                _ => return None,
+            }
+        },
+        _ => return None,
+    }
+}
+
+pub(crate) fn grammar_types_named(name: winnow_grammar::Symbol, generics: Vec<Type>) -> Type { Type { name, generics, is_view: false, is_tuple: false, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false } }
+
+pub fn grammar_types_value_refused(callee: &str, span: &Span) -> GrammarTypesRefusal { GrammarTypesRefusal { code: String::from("NK1230"), call: -1, span: span.clone(), message: format!("`{}` takes a type here, not a value.", callee), note: format!("`{}` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-2 D1).", callee), help: format!("Write the type: `{}[i64](…)`, not a value of it.", callee) } }
+
+pub fn grammar_types_plain(name: winnow_grammar::Symbol, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext) -> Option<winnow_grammar::Symbol> {
+    let ty = match bound.get(words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if ty.generics.is_empty() && !ty.is_nullable && !ty.is_tuple { return Some(ty.name); }
+    None
+}
+

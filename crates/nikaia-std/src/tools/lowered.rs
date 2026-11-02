@@ -2693,7 +2693,7 @@ pub mod grammar_run {
 }
 pub mod grammar_types {
     #[allow(unused_imports)]
-    pub use super::{GrammarTypesCall, grammar_types_copy_name, GrammarTypesRefusal, GrammarTypesExpanded, grammar_types_expand, grammar_types_wanted, grammar_types_put};
+    pub use super::{GrammarTypesCall, grammar_types_copy_name, GrammarTypesRefusal, GrammarTypesExpanded, grammar_types_expand, grammar_types_wanted, grammar_types_put, GrammarTypesGeneric, grammar_types_generic, GrammarTypesAsked, grammar_types_asked, grammar_types_written, grammar_types_value_refused, grammar_types_plain};
 }
 pub mod integers {
     #[allow(unused_imports)]

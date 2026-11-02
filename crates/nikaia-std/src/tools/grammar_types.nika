@@ -658,3 +658,166 @@ fn grammar_types_pattern(pattern: ref Spanned[Pattern], bound: ref collections::
     }
     return copy
 }
+
+/// **The rules that take types, and whether a rule chooses**: what the
+/// parser's host asks before it walks the program for the calls of a rule
+/// that takes types (ADR-grammar-2 D1-D3). Neither, and nothing is copied.
+pub struct GrammarTypesGeneric {
+    pub rules: collections::BTreeSet[(winnow_grammar::Symbol, winnow_grammar::Symbol)],
+    pub chooses: bool,
+}
+
+/// Each grammar's rules that take types, by grammar and rule, and whether a
+/// `match` on a kind or a `members[S]` asks for the copying too, also in a
+/// rule that takes no types (ADR-grammar-2 D2, D3).
+pub fn grammar_types_generic(items: ref Vec[Spanned[Item]]) -> GrammarTypesGeneric {
+    let mut found = GrammarTypesGeneric { rules: collections::BTreeSet(), chooses: false }
+    for item in items {
+        match item.node {
+            Item::Grammar(def) => {
+                for rule in def.rules.iter().filter(fn(r) { r.generics.len() > 0 }) {
+                    found.rules.insert((def.name, rule.name))
+                }
+                found.chooses = grammar_types_wanted(def) || found.chooses
+            },
+            else => {},
+        }
+    }
+    return found
+}
+
+/// **What one call of a rule that takes types asks for**: the copy and the
+/// callee the call takes instead (`G::read__i64`), or, where its brackets
+/// hold a value, that part and the callee as written (`NK1230`).
+pub struct GrammarTypesAsked {
+    pub call: GrammarTypesCall?,
+    pub func: Expr?,
+    pub refused: u32,
+    pub callee: String,
+}
+
+/// **A call `G::read[i64](input)` of a rule in `generic`**, read off the
+/// expression: what it asks for, or nothing for any other expression.
+pub fn grammar_types_asked(expr: ref Expr, generic: ref collections::BTreeSet[(winnow_grammar::Symbol, winnow_grammar::Symbol)], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarTypesAsked? {
+    match expr {
+        Expr::Call { func, .. } => match func {
+            Expr::Index { base, index, .. } => match base {
+                Expr::Path(segments, _) => return grammar_types_asked_of(segments, index, generic, words, intern),
+                else => return null,
+            },
+            else => return null,
+        },
+        else => return null,
+    }
+}
+
+/// The call of `segments` with the brackets `index`, where `segments` names
+/// a rule of `generic`.
+fn grammar_types_asked_of(segments: ref Vec[winnow_grammar::Symbol], index: ref Expr, generic: ref collections::BTreeSet[(winnow_grammar::Symbol, winnow_grammar::Symbol)], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarTypesAsked? {
+    if segments.len() != 2 || !generic.contains((segments[0], segments[1])) {
+        return null
+    }
+    let owner = segments[0]
+    let rule = segments[1]
+    let bracket = grammar_types_bracket(index, words, intern)
+    match bracket.value {
+        null => {},
+        value => {
+            let callee = f"{words.resolve(owner)}::{words.resolve(rule)}"
+            return GrammarTypesAsked { call: null, func: null, refused: value ?? 0, callee: callee }
+        },
+    }
+    let copy = grammar_types_copy_name(words, words.resolve(rule), bracket.types)
+    let func = Expr::Path([owner, intern(copy)], fresh_id())
+    let call = GrammarTypesCall { owner: owner, rule: rule, types: bracket.types }
+    return GrammarTypesAsked { call: call, func: func, refused: 0, callee: "" }
+}
+
+/// The types a call's brackets write, one per part, or the first part that
+/// is a value and not a type (by its id).
+struct GrammarTypesBracket {
+    types: Vec[Type],
+    value: u32?,
+}
+
+/// The parts of the brackets `index` (`[i64]`, `[K, V]`) read as types.
+fn grammar_types_bracket(index: ref Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> GrammarTypesBracket {
+    let mut out = GrammarTypesBracket { types: [], value: null }
+    match index {
+        Expr::Tuple(parts, _) => {
+            for part in parts {
+                if !grammar_types_bracket_part(part, words, intern, out) {
+                    return out
+                }
+            }
+        },
+        else => {
+            grammar_types_bracket_part(index, words, intern, out)
+        },
+    }
+    return out
+}
+
+/// One part of the brackets: its type kept, or the part named as a value.
+fn grammar_types_bracket_part(part: ref Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, mut out: GrammarTypesBracket) -> bool {
+    match grammar_types_written(part, words, intern) {
+        null => {
+            out.value = id_of(part)
+            return false
+        },
+        ty => {
+            out.types.push(ty)
+            return true
+        },
+    }
+}
+
+/// **The type a call's brackets write where an expression stands for it**:
+/// `i64`, `json::Value`, `Vec[i64]`; nothing for a value.
+pub fn grammar_types_written(expr: ref Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Type? {
+    match expr {
+        Expr::Variable(name, _) => return grammar_types_named(name, []),
+        Expr::Path(segments, _) => {
+            let spelled: Vec[String] = segments.iter().map(fn(s) { words.resolve(s).clone() }).collect()
+            return grammar_types_named(intern(spelled.join("::")), [])
+        },
+        Expr::Index { base, index, .. } => {
+            let outer = grammar_types_written(base, words, intern) ?? return null
+            let bracket = grammar_types_bracket(index, words, intern)
+            match bracket.value {
+                null => return grammar_types_named(outer.name, bracket.types),
+                else => return null,
+            }
+        },
+        else => return null,
+    }
+}
+
+/// A plain type of the name `name` and the type arguments `generics`.
+fn grammar_types_named(name: winnow_grammar::Symbol, generics: Vec[Type]) -> Type {
+    return Type { name: name, generics: generics, is_view: false, is_tuple: false, is_nullable: false, code: null, count: null, is_mut: false, is_slice: false, either: false, lasting: false }
+}
+
+/// **A value in a rule's brackets** (`NK1230`, ADR-grammar-2 D1), said at
+/// `span`, the part that is a value: a rule that takes types takes them as a
+/// function's type parameters are written.
+pub fn grammar_types_value_refused(callee: ref String, span: ref Span) -> GrammarTypesRefusal {
+    return GrammarTypesRefusal {
+        code: "NK1230",
+        call: -1,
+        span: span.clone(),
+        message: f"`{callee}` takes a type here, not a value.",
+        note: f"`{callee}` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-2 D1).",
+        help: f"Write the type: `{callee}[i64](…)`, not a value of it.",
+    }
+}
+
+/// **The type a rule's type parameter `name` stands for in a copy**, where
+/// it is put as a value's head (`T::kind`, `T::from(…)`): a plain type only.
+pub fn grammar_types_plain(name: winnow_grammar::Symbol, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext) -> winnow_grammar::Symbol? {
+    let ty = bound.get(words.resolve(name)) ?? return null
+    if ty.generics.len() == 0 && !ty.is_nullable && !ty.is_tuple {
+        return ty.name
+    }
+    return null
+}

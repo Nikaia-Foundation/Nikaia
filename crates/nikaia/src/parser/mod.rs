@@ -892,25 +892,14 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
 /// later reader sees a rule that takes types. A value in the brackets is
 /// `NK1230`, as a value where a type belongs is.
 fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
-    use std::collections::BTreeSet;
-    let mut generic: BTreeSet<(Symbol, Symbol)> = BTreeSet::new();
-    let mut chooses = false;
-    for item in &parsed.program.items {
-        if let ast::Item::Grammar(def) = &item.node {
-            for rule in def.rules.iter().filter(|r| !r.generics.is_empty()) {
-                generic.insert((def.name, rule.name));
-            }
-            // ADR-grammar-2 D2, D3: a `match` on a kind and a `members[S]`
-            // are resolved by the copying too, also in a rule that takes no
-            // types.
-            chooses |= nikaia_std::tools::grammar_types::grammar_types_wanted(def);
-        }
-    }
-    if generic.is_empty() && !chooses {
+    use nikaia_std::tools::grammar_types as types;
+    let generic = types::grammar_types_generic(&parsed.program.items);
+    if generic.rules.is_empty() && !generic.chooses {
         return Ok(());
     }
     let interner = parsed.interner.clone();
-    let mut calls: Vec<nikaia_std::tools::grammar_types::GrammarTypesCall> = Vec::new();
+    let intern = |text: &str| interner.intern_string(text);
+    let mut calls: Vec<types::GrammarTypesCall> = Vec::new();
     let mut call_ids: Vec<u32> = Vec::new();
     let mut refused: Option<(u32, String)> = None;
     let mut items = std::mem::take(&mut parsed.program.items);
@@ -920,55 +909,20 @@ fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
                 block,
                 &mut |expr| {
                     let call_id = ast::id_of(expr);
-                    let ast::Expr::Call { func, .. } = expr else {
+                    let Some(asked) =
+                        types::grammar_types_asked(expr, &generic.rules, &interner, &intern)
+                    else {
                         return;
                     };
-                    let ast::Expr::Index { base, index, .. } = &**func else {
+                    let (Some(call), Some(to)) = (asked.call, asked.func) else {
+                        refused.get_or_insert((asked.refused, asked.callee));
                         return;
                     };
-                    let ast::Expr::Path(segments, _) = &**base else {
-                        return;
-                    };
-                    let [owner, rule] = segments.as_slice() else {
-                        return;
-                    };
-                    if !generic.contains(&(*owner, *rule)) {
-                        return;
+                    if let ast::Expr::Call { func, .. } = expr {
+                        **func = to;
                     }
-                    let written = match &**index {
-                        ast::Expr::Tuple(parts, _) => parts.iter().collect::<Vec<_>>(),
-                        one => vec![one],
-                    };
-                    let mut types = Vec::new();
-                    for part in written {
-                        match type_written(&interner, part) {
-                            Some(ty) => types.push(ty),
-                            None => {
-                                if refused.is_none() {
-                                    let callee = format!(
-                                        "{}::{}",
-                                        interner.resolve(*owner),
-                                        interner.resolve(*rule)
-                                    );
-                                    refused = Some((ast::id_of(part), callee));
-                                }
-                                return;
-                            }
-                        }
-                    }
-                    let copy = nikaia_std::tools::grammar_types::grammar_types_copy_name(
-                        &interner,
-                        interner.resolve(*rule),
-                        &types,
-                    );
                     call_ids.push(call_id);
-                    calls.push(nikaia_std::tools::grammar_types::GrammarTypesCall {
-                        owner: *owner,
-                        rule: *rule,
-                        types,
-                    });
-                    let path = vec![*owner, interner.intern_string(&copy)];
-                    **func = ast::Expr::Path(path, ast::NodeId::fresh());
+                    calls.push(call);
                 },
                 &mut |_, _| {},
             )
@@ -981,55 +935,42 @@ fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
             .get(&id)
             .copied()
             .unwrap_or_else(|| ast::Span::new(0, 0));
-        let message = format!("`{callee}` takes a type here, not a value.");
-        let finding = crate::check::Finding {
-            severity: crate::check::Severity::Error,
-            span,
-            code: "NK1230".to_string(),
-            message: message.clone(),
-            notes: vec![format!(
-                "`{callee}` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-2 D1)."
-            )],
-            help: Some(format!(
-                "Write the type: `{callee}[i64](…)`, not a value of it."
-            )),
-            labels: vec![crate::check::Label {
-                span,
-                word: String::new(),
-                text: String::new(),
-                main: true,
-            }],
-        };
-        return Err(crate::diagnostics::refuse_finding(
-            finding,
-            format!("NK1230: {message}"),
-        ));
+        return Err(a_types_refusal(types::grammar_types_value_refused(
+            &callee, &span,
+        )));
     }
-    let intern = |text: &str| interner.intern_string(text);
     let put = |block: &ast::Block, bound: &std::collections::BTreeMap<String, ast::Type>| {
         put_rule_types(&interner, block, bound)
     };
-    let expanded = nikaia_std::tools::grammar_types::grammar_types_expand(
-        &mut items, &calls, &interner, &intern, &put,
-    );
+    let expanded = types::grammar_types_expand(&mut items, &calls, &interner, &intern, &put);
     parsed.program.items = expanded.items;
-    let Some(first) = expanded.refused.into_iter().next() else {
+    let Some(mut first) = expanded.refused.into_iter().next() else {
         return Ok(());
     };
     // A refusal stands at the call that asked for the copy; one no call
     // asked for, at the pattern it is about.
-    let span = usize::try_from(first.call)
+    if let Some(span) = usize::try_from(first.call)
         .ok()
         .and_then(|at| call_ids.get(at))
         .and_then(|id| parsed.expr_spans.get(id).copied())
-        .unwrap_or_else(|| ast::Span::new(first.span.start as usize, first.span.end as usize));
+    {
+        first.span = span;
+    }
+    Err(a_types_refusal(first))
+}
+
+/// A refusal of the copying (`tools/grammar_types.nika`), as the compiler's.
+fn a_types_refusal(
+    refusal: nikaia_std::tools::grammar_types::GrammarTypesRefusal,
+) -> anyhow::Error {
+    let span = refusal.span;
     let finding = crate::check::Finding {
         severity: crate::check::Severity::Error,
         span,
-        code: first.code.clone(),
-        message: first.message.clone(),
-        notes: vec![first.note],
-        help: Some(first.help),
+        code: refusal.code.clone(),
+        message: refusal.message.clone(),
+        notes: vec![refusal.note],
+        help: Some(refusal.help),
         labels: vec![crate::check::Label {
             span,
             word: String::new(),
@@ -1037,10 +978,7 @@ fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
             main: true,
         }],
     };
-    Err(crate::diagnostics::refuse_finding(
-        finding,
-        format!("{}: {}", first.code, first.message),
-    ))
+    crate::diagnostics::refuse_finding(finding, format!("{}: {}", refusal.code, refusal.message))
 }
 
 /// **A copy's actions, guards and bounds with the rule's type parameters
@@ -1052,24 +990,22 @@ fn put_rule_types(
     block: &ast::Block,
     bound: &std::collections::BTreeMap<String, ast::Type>,
 ) -> ast::Block {
-    use nikaia_std::tools::grammar_types::grammar_types_put;
+    use nikaia_std::tools::grammar_types::{grammar_types_plain, grammar_types_put};
     let mut copy = block.clone();
-    let plain = |name: Symbol| -> Option<Symbol> {
-        let ty = bound.get(interner.resolve(name))?;
-        let simple = ty.generics.is_empty() && !ty.is_nullable && !ty.is_tuple;
-        simple.then_some(ty.name)
-    };
     crate::text_tiers::visit_block_mut(
         &mut copy,
         &mut |expr| match expr {
             ast::Expr::Cast { ty, .. } => *ty = grammar_types_put(ty, bound, interner),
             ast::Expr::Variable(name, _) => {
-                if let Some(to) = plain(*name) {
+                if let Some(to) = grammar_types_plain(*name, bound, interner) {
                     *name = to;
                 }
             }
             ast::Expr::Path(segments, _) => {
-                if let Some(to) = segments.first().and_then(|head| plain(*head)) {
+                if let Some(to) = segments
+                    .first()
+                    .and_then(|head| grammar_types_plain(*head, bound, interner))
+                {
                     segments[0] = to;
                 }
             }
@@ -1083,48 +1019,6 @@ fn put_rule_types(
         },
     );
     copy
-}
-
-/// The type a call's brackets write where an expression stands for it:
-/// `i64`, `json::Value`, `Vec[i64]`; nothing for a value.
-fn type_written(interner: &winnow_grammar::InternerContext, expr: &ast::Expr) -> Option<ast::Type> {
-    let named = |name: Symbol, generics: Vec<ast::Type>| ast::Type {
-        name,
-        generics,
-        is_view: false,
-        is_tuple: false,
-        is_nullable: false,
-        code: Box::new(None),
-        count: None,
-        is_mut: false,
-        is_slice: false,
-        either: false,
-        lasting: false,
-    };
-    match expr {
-        ast::Expr::Variable(name, _) => Some(named(*name, Vec::new())),
-        ast::Expr::Path(segments, _) => {
-            let joined = segments
-                .iter()
-                .map(|s| interner.resolve(*s).to_string())
-                .collect::<Vec<_>>()
-                .join("::");
-            Some(named(interner.intern_string(&joined), Vec::new()))
-        }
-        ast::Expr::Index { base, index, .. } => {
-            let outer = type_written(interner, base)?;
-            let parts = match &**index {
-                ast::Expr::Tuple(parts, _) => parts.iter().collect::<Vec<_>>(),
-                one => vec![one],
-            };
-            let generics = parts
-                .into_iter()
-                .map(|p| type_written(interner, p))
-                .collect::<Option<Vec<_>>>()?;
-            Some(named(outer.name, generics))
-        }
-        _ => None,
-    }
 }
 
 fn a_parse_finding(
