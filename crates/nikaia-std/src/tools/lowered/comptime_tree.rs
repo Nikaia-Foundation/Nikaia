@@ -233,6 +233,46 @@ pub fn comptime_constants_of(items: &[Spanned<Item>], words: &winnow_grammar::In
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn comptime_readers_dropped(count: i64, absent: collections::BTreeSet<String>, drop: &impl Fn(i64, &collections::BTreeSet<String>) -> Vec<String>) -> collections::BTreeSet<String> {
+    let mut gone = absent;
+    loop {
+        let before = gone.len() as i64;
+        for at in 0..count {
+            let dropped = drop(at, &gone);
+            gone.extend(dropped);
+        }
+        if (gone.len() as i64) == before { return gone; }
+    }
+}
+
+pub fn comptime_value_fn_names(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+    let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { name, body, .. } => {
+                let name = *name;
+                if name.is_some() && a_symbols_text(words, std::convert::identity(name)) == VALUE_FN { names_in_block(body, words, &mut named); }
+            },
+            _ => { },
+        }
+    }
+    named
+}
+
+pub fn comptime_declared_of(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> Vec<ComptimeDeclared> {
+    items.iter().filter_map(|item| {
+        match &item.node {
+            Item::Comptime { name, ty, value, .. } => { let name = *name; Some(ComptimeDeclared { name: words.resolve(name).to_string(), ty: match ty {
+                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                None => None,
+            }, value: value.clone() }) },
+            _ => None,
+        }
+    }).collect::<Vec<_>>()
+}
+
 pub fn comptime_as_built(ty: Ty) -> Ty {
     match ty {
         Ty::Named { ref name, args, .. } if name == "str" => Ty::Named { name: String::from("String"), args, view: false },
@@ -537,7 +577,7 @@ pub trait ComptimeComputeHost {
     fn undeclared_callee(&self, here: i64, value: &Expr) -> Option<String>;
     fn constants_of_files(&self) -> collections::BTreeSet<String>;
     fn constants_of_units(&self, units: &[i64]) -> collections::BTreeSet<String>;
-    fn without_readers(&self, units: &[i64], absent: collections::BTreeSet<String>) -> collections::BTreeSet<String>;
+    fn drop_readers(&self, unit: i64, gone: &collections::BTreeSet<String>) -> Vec<String>;
     fn value_fn_names(&self, unit: i64) -> collections::BTreeSet<String>;
     fn unit_package(&self, unit: i64) -> Option<String>;
     fn by_package(&self, units: &[i64]) -> collections::BTreeMap<String, Ledger>;
@@ -586,7 +626,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     let carried = host.constants_of_units(&units);
     let declared = host.constants_of_files();
     let absent: collections::BTreeSet<String> = declared.difference(&carried).map(|s| { s.to_string() }).collect();
-    let gone = host.without_readers(&units, absent.to_owned());
+    let gone = comptime_readers_dropped(units.len() as i64, absent.to_owned(), &|at, gone| { host.drop_readers(*nikaia_std::index::get(&units, nikaia_std::index::at(at)), gone) });
     let left_out: collections::BTreeSet<String> = gone.difference(&absent).map(|s| { s.to_string() }).collect();
     let named = host.value_fn_names(*nikaia_std::index::get(&units, nikaia_std::index::at(here)));
     if named.iter().any(|name| { left_out.contains(name) || absent.contains(name) && known(name).is_none() }) {

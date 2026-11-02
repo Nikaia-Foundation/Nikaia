@@ -316,6 +316,51 @@ pub fn comptime_constants_of(items: ref Vec[Spanned[Item]], words: ref winnow_gr
     }
 }
 
+/// **Without what reads a constant the sub-program does not hold** (#528,
+/// #529): `drop` takes the readers of `gone` out of unit `at`
+/// (`comptime_drop_readers`) and names what went. What goes is followed
+/// through: a function that calls a dropped one goes too, so the `count`
+/// units are gone over until nothing more goes. What went is handed back.
+pub fn comptime_readers_dropped(count: i64, absent: collections::BTreeSet[String], drop: fn(i64, ref collections::BTreeSet[String]) -> Vec[String] sync) -> collections::BTreeSet[String] sync {
+    let mut gone = absent
+    while true {
+        let before = gone.len()
+        for at in 0..<count {
+            let dropped = drop(at, gone)
+            gone.extend(dropped)
+        }
+        if gone.len() == before {
+            return gone
+        }
+    }
+}
+
+/// The names the value function of a unit's `items` reads.
+pub fn comptime_value_fn_names(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in items {
+        match item.node {
+            Item::Fn { name, body, .. } => {
+                if name != null && a_symbols_text(words, name) == VALUE_FN {
+                    names_in_block(body, words, named)
+                }
+            },
+            else => {},
+        }
+    }
+    return named
+}
+
+/// The `comptime`s `items` declare, in order.
+pub fn comptime_declared_of(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext) -> Vec[ComptimeDeclared] {
+    return items.iter().filter_map(fn(item) {
+        match item.node {
+            Item::Comptime { name, ty, value, .. } => ComptimeDeclared { name: words.resolve(name).clone(), ty: ty?.clone(), value: value.clone() },
+            else => null,
+        }
+    }).collect()
+}
+
 /// **A default's type as its run builds it** (#468): the value a view
 /// views - `ref String`'s `String` - which the run hands back, and which is
 /// written into the ledger the same way.
@@ -741,10 +786,11 @@ pub trait ComptimeComputeHost {
     fn constants_of_files(ref self) -> collections::BTreeSet[String] sync
     /// Every `comptime` the units declare.
     fn constants_of_units(ref self, units: ref Vec[i64]) -> collections::BTreeSet[String] sync
-    /// The units without what reads a name of `absent`, followed through
+    /// Unit `unit` without what reads a name of `gone`
     /// (`comptime_drop_readers`); what went.
-    fn without_readers(ref self, units: ref Vec[i64], absent: collections::BTreeSet[String]) -> collections::BTreeSet[String] sync
-    /// The names the value function of unit `unit` reads.
+    fn drop_readers(ref self, unit: i64, gone: ref collections::BTreeSet[String]) -> Vec[String] sync
+    /// The names the value function of unit `unit` reads
+    /// (`comptime_value_fn_names`).
     fn value_fn_names(ref self, unit: i64) -> collections::BTreeSet[String] sync
     /// The package unit `unit` belongs to: `null` for the program's own.
     fn unit_package(ref self, unit: i64) -> String? sync
@@ -770,7 +816,7 @@ pub trait ComptimeComputeHost {
     fn is_ahead(ref self, name: ref String) -> bool sync
     /// `bound` no longer worked out ahead.
     fn leave_ahead(ref self, bound: ref String) sync
-    /// The `comptime`s file `at` declares, in order.
+    /// The `comptime`s file `at` declares, in order (`comptime_declared_of`).
     fn comptimes_of(ref self, at: i64) -> Vec[ComptimeDeclared] sync
     /// `value` of file `at` folded as literals, with `known` for the constants.
     fn folded(ref self, at: i64, value: ref Expr, known: fn(ref String) -> BuildValue? sync) -> BuildValue? sync
@@ -817,7 +863,7 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
     let carried = host.constants_of_units(units)
     let declared = host.constants_of_files()
     let absent: collections::BTreeSet[String] = declared.difference(carried).map(fn(s) { s.clone() }).collect()
-    let gone = host.without_readers(units, absent.clone())
+    let gone = comptime_readers_dropped(units.len(), absent.clone(), fn(at, gone) { host.drop_readers(units[at], gone) })
     let left_out: collections::BTreeSet[String] = gone.difference(absent).map(fn(s) { s.clone() }).collect()
     // **A value that reads what went** - a constant not worked out yet (one
     // that is, it holds as a `let`), or a function that reads one - has it

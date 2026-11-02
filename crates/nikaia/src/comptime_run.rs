@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use crate::ast::{Expr, Item};
+use crate::ast::Expr;
 use crate::build_time::Value;
 use crate::contracts::ty::Ty;
 use crate::grammar_run::Wall;
@@ -90,27 +90,21 @@ pub(crate) fn unit_without_its_constants(
 }
 
 /// **Without what reads a constant the sub-program does not hold** (#528,
-/// #529; `comptime_drop_readers`, one file at a time). What goes is followed
-/// through: a function that calls a dropped one goes too, so the files are
-/// gone over until nothing more goes. What went is handed back.
+/// #529; `comptime_readers_dropped`, followed through over the files). What
+/// went is handed back.
 pub(crate) fn without_readers(units: &mut [Parsed], absent: BTreeSet<String>) -> BTreeSet<String> {
-    readers_dropped(&mut units.iter_mut().collect::<Vec<_>>(), absent)
+    let units = RefCell::new(units);
+    tree::comptime_readers_dropped(units.borrow().len() as i64, absent, &|at: i64,
+                                                                          gone: &BTreeSet<
+        String,
+    >| {
+        drop_readers(&mut units.borrow_mut()[at as usize], gone)
+    })
 }
 
-/// `without_readers` over units held apart (`ComputeHost::without_readers`).
-fn readers_dropped(units: &mut [&mut Parsed], absent: BTreeSet<String>) -> BTreeSet<String> {
-    let mut gone = absent;
-    loop {
-        let before = gone.len();
-        for unit in units.iter_mut() {
-            let dropped =
-                tree::comptime_drop_readers(&mut unit.program.items, &unit.interner, &gone);
-            gone.extend(dropped);
-        }
-        if gone.len() == before {
-            return gone;
-        }
-    }
+/// `unit` without what reads a name of `gone` (`comptime_drop_readers`).
+fn drop_readers(unit: &mut Parsed, gone: &BTreeSet<String>) -> Vec<String> {
+    tree::comptime_drop_readers(&mut unit.program.items, &unit.interner, gone)
 }
 
 /// Every `comptime` the files declare, by name.
@@ -388,32 +382,14 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         constants_of(units.iter().map(|&at| &held[at as usize]))
     }
 
-    fn without_readers(&self, units: &[i64], absent: BTreeSet<String>) -> BTreeSet<String> {
-        let mut held = self.units.borrow_mut();
-        let mut slots: Vec<Option<&mut Parsed>> = held.iter_mut().map(Some).collect();
-        let mut picked: Vec<&mut Parsed> = units
-            .iter()
-            .map(|&at| slots[at as usize].take().expect("each unit once"))
-            .collect();
-        readers_dropped(&mut picked, absent)
+    fn drop_readers(&self, unit: i64, gone: &BTreeSet<String>) -> Vec<String> {
+        drop_readers(&mut self.units.borrow_mut()[unit as usize], gone)
     }
 
     fn value_fn_names(&self, unit: i64) -> BTreeSet<String> {
         let held = self.units.borrow();
         let unit = &held[unit as usize];
-        let mut named = BTreeSet::new();
-        for item in &unit.program.items {
-            if let Item::Fn {
-                name: Some(name),
-                body,
-                ..
-            } = &item.node
-                && unit.text(*name) == VALUE_FN
-            {
-                nikaia_std::tools::names::names_in_block(body, &unit.interner, &mut named);
-            }
-        }
-        named
+        tree::comptime_value_fn_names(&unit.program.items, &unit.interner)
     }
 
     fn unit_package(&self, unit: i64) -> Option<String> {
@@ -524,20 +500,7 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
 
     fn comptimes_of(&self, at: i64) -> Vec<tree::ComptimeDeclared> {
         let file = self.files[at as usize];
-        file.program
-            .items
-            .iter()
-            .filter_map(|item| match &item.node {
-                Item::Comptime {
-                    name, ty, value, ..
-                } => Some(tree::ComptimeDeclared {
-                    name: file.text(*name).to_string(),
-                    ty: ty.clone(),
-                    value: value.clone(),
-                }),
-                _ => None,
-            })
-            .collect()
+        tree::comptime_declared_of(&file.program.items, &file.interner)
     }
 
     fn folded(
