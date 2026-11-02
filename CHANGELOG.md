@@ -8,6 +8,49 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1341] — 2026-11-02
+
+**; text_tiers: .to_string() of an owned or number local stays owned (ADR-282 D8) (#1005); std: every set has iter() (ADR-collections-2 D3) (#1006); check, emit: sum() names its result type (#1007); ; ; ; check: a lambda typed -> T? wraps its non-null arms in Some (#1017); ; checker: a let that shadows a fn parameter is not the lent parameter (Fixes #1023); check: a fn parameter lent to a kept position is refused with NK2101 (#1024); keeps: a parameter a kept lambda names is kept (#1025); ; ; ; keeps: a lambda handed out keeps the fn parameters it names (#1034); ; buffers: a tuple result with a view part keeps the argument made in the call (Fixes #1036); ; ; emit: an untyped let lambda run by a parameter that may pause is an async closure (#1046); ; ; ; check: a map's read as the fallback of `??` beside an owned `T?` is copied or refused (ADR-293 D15) (#995); ; ; contracts: the stored-code fold moves into ledger_items.nika; the dead LedgerOps::candidates goes (C1b); contracts: keeps' inference moves into keeps.nika (K4); ; type_rules: chunk 2 (expand, literals, given) moves into type_rules.nika (R-3); Parts taken out of a mut parameter, and a narrowed mut option, change in place; A part handed to a mut parameter is lent, not given away; Remove the architect role: the supervisor writes the briefs, the driver stops for it; sysroot: the tools package is assembled in sysroot_package.nika (S1); std: Entry::or_default and Seq::cloned (Fixes #1082); std: process::run takes stdin, stdout and stderr options (Fixes #920); ; std: fs::Metadata::modified, links, file_id and time::since_epoch**
+- check: arms that differ only where one is not yet known meet at the known type; a match over a tuple of views binds the parts inside each view by reference and copies numbers and bools out
+- `.to_string()` of a local holding text of its own or a number is owned text again, so a `-> String` function may return it (ADR-282 D8, #1005).
+- `std` gains `iter()` on `collections::BTreeSet` (smallest first) and `collections::HashSet` (no order), lending the elements one at a time.
+- sum() of a sequence of typed numbers (v.iter().sum() with v: Vec[i64]) names its result type, so a program rustc refused with "type annotations needed" now runs.
+- Programs that hand a callback through a trait method now run: an impl's method keeps the fn parameters its trait method keeps (#1008).
+- A callback handed through a trait method borrows its captures when no impl in the trait's package keeps it (ADR-277 D17).
+- NK1264 refuses an impl of another package's trait that keeps a parameter the trait method's `keeps` column runs; NK1265 warns when a `pub` trait method's column changes, naming the impl (ADR-277 D17, #1012).
+- A lambda whose declared result is optional widens a non-optional tail into `Some`, as a function does (#1017).
+- A function value read from a list by index is a copy that shares the closure, as Part I says, instead of a lowering rustc refused.
+- A let lambda that shadows a fn parameter is lent with & when handed on (#1023).
+- A `String` parameter captured by a lambda a callee keeps and used afterwards is refused with `NK2101`, no longer by rustc (#1024).
+- A lent parameter a lambda names, handed to a position the callee keeps, is now kept (owned) instead of reaching rustc as a lifetime error (#1025).
+- A pausing lambda kept under a declared fn type whose result is an integer type, or an optional of one, hands back that type's literals; a part a match binds, handed from a block arm to a ref T? parameter, is lent inside its option.
+- A function value copied from a name, a field or a tuple part shares its closure, as Part I says, instead of a lowering rustc refused.
+- A lambda kept in a `let` or a field that calls a function value it captures now shares that value's closure. Before, rustc refused the lowering.
+- A function that hands out a lambda capturing one of its `fn` parameters (returned, assigned, or put in a struct, list or tuple) keeps that parameter, instead of a lowering rustc refused.
+- A function value handed back out of a borrowed struct (`return h.f` over `h: ref H`) is a copy that shares its closure, no longer refused NK1131.
+- A function returning a tuple with a view of an argument made in the call keeps that argument, instead of rustc's "temporary value dropped while borrowed".
+- A lambda named by an untyped `let` and handed where a function value is kept is kept, instead of a lowering rustc refused.
+- An untyped lambda bound by `let` and put into a function field no longer makes a call through the field refused NK2605.
+- An untyped lambda bound by `let` and handed to a function parameter that may pause now lowers as an `async` closure instead of being refused by rustc.
+- Types as arguments: `fn schema[T](T)` takes a type where the parameter list holds one, `schema(User)`, and a call fills it from a type, a type parameter, `field.ty` or an arm's binding; a value there is NK1230 (ADR-330 D1); and `pick[User](1)` fills a function's type parameters in order; `warning[NK1233]` (naming #514) only where a value argument already says the type, `id[i64](3)` (ADR-330 D9, ADR-grammar-2 D11)
+- A list of number lists written without a type (`[[1, 2], [3]]`) has one open number for its innermost elements: its uses through an index or a walk type it, and the program builds where it fell back to `i32` in rustc or was refused with NK1245 (ADR-285 D34, #938).
+- The NK2104 note for stdout against stderr no longer sends the reader to the removed `seq`.
+- A map's read as the fallback of `??` beside an owned `T?` is copied out where the value copies and refused with `?.clone()` otherwise, instead of reaching rustc (#995).
+- A map of literal text handed back as `String?` (`return m.get(k)`, `return m[k]`, or through a `let`) copies the read out instead of reaching rustc (#996).
+- A lambda bound by `let` without types takes its parameter types from the first call it is handed to, and a map read as its last value is copied out.
+- The stored-code fold of the contracts ledger is written in Nikaia; the unused LedgerOps::candidates is removed.
+- keeps inference (infer, the impls' own column, the per-function walk's driver) is written in Nikaia, `tools/keeps.nika`, behind a `KeepsHost`.
+- none (self-hosting move, no language change)
+- type_rules.rs: expand, literal check and given-drop now live in type_rules.nika
+- Fixed: parts a taking arm takes out of a `mut` parameter, and a narrowed `mut` option, can be handed on `mut` and changed in place.
+- Fixed: a part of a `for mut` element handed to a `mut` parameter is lent to it, not given away, wherever its type is declared.
+- The architect role is removed: the supervisor writes the briefs and decides obvious language gaps, and the driver stops for it on CUT, RED and BATCH DONE.
+- The toolchain's package assembly (refusals, interface without bodies, pub(crate), facades, index) is written in Nikaia (sysroot_package.nika)
+- `std`: `m.entry(k).or_default()` puts in the value `V()` makes (a collection, `String`, a number, `bool`, a struct of defaults; another `V` is NK1102), and `xs.iter().cloned()` hands on a copy of each element (ADR-384).
+- std::process::run gains stdin: process::Input = Closed (Inherited, Text(String), written while the output is read, a child that stops reading is no failure), stdout: and stderr: process::Stream = Captured (Inherited goes to the caller's stream, "" in Output) (ADR-243 D10, #920)
+- std: `hash::sha256_hex(data)` is the SHA-256 digest in lowercase hex; `env::var(name)` reads an environment variable (null when unset, empty or not Unicode) and `env::temp_dir()` names the temporary directory (#922 steps 1-2)
+- std: `fs::Metadata::modified()`, `links()` and `file_id()`, and `time::since_epoch()`, the wall clock to compare a file's time with (#922, ADR-319, ADR-368)
+
 ## [0.0.1340] — 2026-11-01
 
 **a taking arm over an enum of another file; a number bound under a match on a part held in place (#125)**
