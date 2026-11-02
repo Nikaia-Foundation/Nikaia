@@ -288,6 +288,7 @@ pub mod runtime {
     clippy::extend_with_drain,
     clippy::needless_as_bytes,
     clippy::while_let_loop,
+    clippy::iter_cloned_collect,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):

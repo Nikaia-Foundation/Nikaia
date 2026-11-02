@@ -2406,8 +2406,7 @@ pub struct Suite<'a> {
 /// [ADR-247](../../docs/specification/adr/adr-247.md)): the loop over the
 /// tests and settings is `project_tests_run` (`tools/project_tests.nika`),
 /// the runs stay here behind [`TestsHost`]. A failing test does not stop the
-/// others; the failures are reported here, a test's standard output read as
-/// UTF-8 lossily.
+/// others; the failures are reported by `project_tests_report_failures`.
 pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
     let total = suite.tests.len() + suite.outputs.len() + suite.programs_of_their_own.len();
     let blocks: Vec<(String, PathBuf, i64)> = suite
@@ -2437,30 +2436,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                 .unwrap_or_else(|| anyhow!("{error}")));
         }
     };
-    if !failed.is_empty() {
-        println!("\nfailures:");
-        for one in &failed {
-            println!("\n--- {}", one.label);
-            let agree = project_tests::project_tests_agree(&one.outcomes);
-            let shown = match agree {
-                true => &one.outcomes[..1],
-                false => &one.outcomes[..],
-            };
-            for (setting, outcome) in shown {
-                if !agree {
-                    println!("at user-parallelism = {setting}:");
-                }
-                match &one.output {
-                    Some(output) => project_tests::project_tests_explain_output(output, outcome),
-                    None => {
-                        print!("{}", String::from_utf8_lossy(&outcome.stdout));
-                        project_tests::project_tests_explain_bounds(outcome);
-                    }
-                }
-                eprint!("{}", outcome.stderr);
-            }
-        }
-    }
+    project_tests::project_tests_report_failures(&failed);
     Ok(project_tests::project_tests_result(
         total as i64,
         failed.len() as i64,
@@ -2617,154 +2593,121 @@ pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
     block_on(project_tests::program_tests(root)).map_err(|e| anyhow!("{e}"))
 }
 
-/// **Build and run one test program** in a package of its own, in a directory
-/// of its own: the package it tests is its dependency, so `use` reaches it. A
-/// refusal is the outcome (`ended_well` false, `stderr` the message with the
-/// path written `tests/NAME.nika`); a program that builds is run there.
-///
-/// **The directory, `own`, is kept for the next program at this setting**,
-/// with only the package's `target/` left in it: the package then stays at
-/// one path, so Cargo finds the tested package it depends on built and
-/// compiles only the program, where a new path each time made it compile the
-/// tested package again for every program. What the program sees is what a
-/// new directory held: `project/` with the manifest and `src/main.nika`, and
-/// no ledger, lock or file a program before it left.
-///
-/// **The built program is run directly**, not through a second `nikaia run`:
-/// that one would build again only to find nothing changed, and then do what
-/// is done here - start the binary in the same directory, with the same
-/// variables and no standard input, as a child of this process (its own
-/// process replaced by the program, #281). What the run wrote before the
-/// program started, the build's warnings, is the build's standard error with
-/// Cargo kept quiet as `run` keeps it (`CARGO_TERM_QUIET`).
+/// **Build and run one test program** in its own package and directory,
+/// `own` kept for the next program at this setting:
+/// `project_tests_program_test` (`tools/project_tests.nika`), the processes
+/// it starts behind [`ProgramHost`].
 fn run_program_test(test: &ProgramTest, root: &Path, setting: &str, own: &Path) -> Result<Outcome> {
-    let project = own.join("project");
-    empty_but(own, "project")?;
-    empty_but(&project, "target")?;
-    std::fs::create_dir_all(project.join("src"))?;
-    let source = test.dir.join(format!("{}.nika", test.name));
-    std::fs::copy(&source, project.join(ENTRY))
-        .with_context(|| format!("copying {}", source.display()))?;
-    let dependency = match Manifest::read(&root.join("nikaia.toml"))?.package_name() {
-        Some(name) => format!(
-            "\n[dependencies]\n{name} = {{ path = {:?} }}\n",
-            canonical(root)
-        ),
-        None => String::new(),
+    let host = ProgramHost {
+        exe: std::env::current_exe().context("finding this compiler")?,
+        failed: RefCell::new(None),
     };
-    std::fs::write(
-        project.join("nikaia.toml"),
-        format!("[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{dependency}"),
-    )?;
-    let exe = std::env::current_exe().context("finding this compiler")?;
-    let run = |verb: &str, scratch: &Path| -> Result<std::process::Output> {
-        let mut command = std::process::Command::new(&exe);
-        command
-            .args([verb, "--user-parallelism", setting, "--project"])
-            .arg(&project)
-            .current_dir(own)
-            .env(nikaia_std::fs::TEST_DIR_VAR, scratch)
-            .env_remove("CARGO_TARGET_DIR")
-            .stdin(std::process::Stdio::null());
-        if verb == "build" {
-            command.env("CARGO_TERM_QUIET", "true");
-        }
-        command
-            .output()
-            .with_context(|| format!("running {}", exe.display()))
-    };
-    let entry = project.join(ENTRY);
-    let written = format!("tests/{}.nika", test.name);
-    let relocate = |bytes: &[u8]| -> String {
-        String::from_utf8_lossy(bytes)
-            .replace(&entry.display().to_string(), &written)
-            .replace(&canonical(&entry).display().to_string(), &written)
-    };
-    // **The `--bounds` reports a `.bounds` or `.loops.bounds` expects**
-    // (#1069), as `check --bounds` computes them for the program; what is
-    // proved does not depend on the build's settings (ADR-306 D14).
-    let bounds = |through_loops: bool, wanted: bool| -> Result<String> {
-        if !wanted {
-            return Ok(String::new());
-        }
-        let level = match through_loops {
-            true => "prove-through-loops:on",
-            false => "prove-through-loops:off",
-        };
-        let out = std::process::Command::new(&exe)
-            .args(["check", "--bounds", "--optimization", level])
-            .arg(&entry)
+    match block_on(project_tests::project_tests_program_test(
+        &host, test, root, setting, own,
+    )) {
+        Ok(outcome) => Ok(outcome),
+        Err(error) => Err(host
+            .failed
+            .into_inner()
+            .unwrap_or_else(|| anyhow!("{error}"))),
+    }
+}
+
+/// What `project_tests_program_test` asks of the compiler: this compiler's
+/// path, and the error of a run that failed, kept to be handed back unchanged.
+struct ProgramHost {
+    exe: PathBuf,
+    failed: RefCell<Option<anyhow::Error>>,
+}
+
+impl ProgramHost {
+    /// `result` for the Nikaia side, its error kept to be handed back.
+    fn held<T>(&self, result: Result<T>) -> HostResult<T> {
+        result.map_err(|error| {
+            let said = format!("{error:#}");
+            *self.failed.borrow_mut() = Some(error);
+            said.into()
+        })
+    }
+
+    /// `program` run in `own` with no standard input and no
+    /// `CARGO_TARGET_DIR`, as `command` has it set up.
+    fn ran(
+        &self,
+        program: &Path,
+        mut command: std::process::Command,
+        own: &Path,
+    ) -> Result<project_tests::ProjectTestsRan> {
+        let out = command
             .current_dir(own)
             .env_remove("CARGO_TARGET_DIR")
             .stdin(std::process::Stdio::null())
             .output()
-            .with_context(|| format!("running {}", exe.display()))?;
-        Ok(relocate(&out.stdout))
-    };
-    let off = bounds(false, test.bounds.is_some())?;
-    let on = bounds(true, test.loops_bounds.is_some())?;
-    let reported = |outcome: Outcome| -> Outcome {
-        project_tests::project_tests_bounds_outcome(test, &outcome, &off, &on)
-    };
-    let built = run("build", own)?;
-    if !built.status.success() {
-        return Ok(reported(project_tests::project_tests_refused_outcome(
-            test,
-            &relocate(&built.stderr),
-        )));
+            .with_context(|| format!("running {}", program.display()))?;
+        Ok(project_tests::ProjectTestsRan {
+            ended_well: out.status.success(),
+            stdout: out.stdout.into(),
+            stderr: out.stderr.into(),
+        })
     }
-    // `project_settings_own_copy`'s place for the program, with no variant.
-    let binary = project
-        .join("target")
-        .join("nikaia")
-        .join("bin")
-        .join(format!("program_test{}", std::env::consts::EXE_SUFFIX));
-    let (out, said) = match binary.is_file() {
-        true => {
-            let out = std::process::Command::new(&binary)
-                .current_dir(own)
-                .env(nikaia_std::fs::TEST_DIR_VAR, own)
-                .env_remove("CARGO_TARGET_DIR")
-                .stdin(std::process::Stdio::null())
-                .output()
-                .with_context(|| format!("running {}", binary.display()))?;
-            let mut said = built.stderr;
-            said.extend_from_slice(&out.stderr);
-            (out, said)
-        }
-        // Where the program is not where it is expected, `nikaia run` finds it.
-        false => {
-            let out = run("run", own)?;
-            let said = out.stderr.clone();
-            (out, said)
-        }
-    };
-    Ok(reported(project_tests::project_tests_ran_outcome(
-        test,
-        out.status.success(),
-        out.stdout.into(),
-        relocate(&said),
-    )))
 }
 
-/// Remove everything in `dir` but the entry named `keep`.
-fn empty_but(dir: &Path, keep: &str) -> Result<()> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return Ok(());
-    };
-    for entry in entries {
-        let entry = entry?;
-        if entry.file_name() == keep {
-            continue;
-        }
-        let path = entry.path();
-        match entry.file_type()?.is_dir() {
-            true => std::fs::remove_dir_all(&path),
-            false => std::fs::remove_file(&path),
-        }
-        .with_context(|| format!("emptying {}", path.display()))?;
+impl project_tests::ProjectTestsProgramHost for ProgramHost {
+    fn package_name(&self, root: &Path) -> HostResult<Option<String>> {
+        self.held(
+            Manifest::read(&root.join("nikaia.toml"))
+                .map(|manifest| manifest.package_name().map(str::to_string)),
+        )
     }
-    Ok(())
+
+    fn compiler(
+        &self,
+        verb: &str,
+        setting: &str,
+        project: &Path,
+        own: &Path,
+    ) -> HostResult<project_tests::ProjectTestsRan> {
+        let mut command = std::process::Command::new(&self.exe);
+        command
+            .args([verb, "--user-parallelism", setting, "--project"])
+            .arg(project)
+            .env(nikaia_std::fs::TEST_DIR_VAR, own);
+        if verb == "build" {
+            command.env("CARGO_TERM_QUIET", "true");
+        }
+        self.held(self.ran(&self.exe, command, own))
+    }
+
+    fn bounds(
+        &self,
+        level: &str,
+        entry: &Path,
+        own: &Path,
+    ) -> HostResult<nikaia_std::bytes::Bytes> {
+        let mut command = std::process::Command::new(&self.exe);
+        command
+            .args(["check", "--bounds", "--optimization", level])
+            .arg(entry);
+        self.held(self.ran(&self.exe, command, own).map(|out| out.stdout))
+    }
+
+    fn built(
+        &self,
+        project: &Path,
+        own: &Path,
+    ) -> HostResult<Option<project_tests::ProjectTestsRan>> {
+        let binary = project
+            .join("target")
+            .join("nikaia")
+            .join("bin")
+            .join(format!("program_test{}", std::env::consts::EXE_SUFFIX));
+        if !binary.is_file() {
+            return Ok(None);
+        }
+        let mut command = std::process::Command::new(&binary);
+        command.env(nikaia_std::fs::TEST_DIR_VAR, own);
+        self.held(self.ran(&binary, command, own).map(Some))
+    }
 }
 
 /// Run it, with the program's own arguments and every stream its own.
