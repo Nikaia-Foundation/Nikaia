@@ -1,0 +1,24 @@
+// A local lent to a `ref` field under the field's own name keeps its `&`:
+// `W { b: b }` is `W { b: ref b }`, and is not written as the shorthand `W { b }`.
+struct N {
+    pub v: i64,
+}
+
+struct W {
+    pub a: ref N,
+    pub b: ref N,
+}
+
+fn show(w: ref W) -> i64 {
+    return w.a.v + w.b.v
+}
+
+fn go(a: ref N) -> i64 {
+    let b = N { v: 2 }
+    return show(W { a: a, b: b })
+}
+
+fn main() {
+    let x = N { v: 1 }
+    println(f"{go(x)}")
+}

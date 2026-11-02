@@ -409,7 +409,7 @@ impl EmitState {
                 if same {
                     let mut inner = EmitOut::empty();
                     self.emit_expr(world, walk, &mut inner, host, value, depth, flow, scope)?;
-                    if inner.buf == written { continue; }
+                    if inner.buf == written && !self.facts.lent_fields.contains(&node_key(value)) { continue; }
                 }
                 out.push(": ");
                 out.push(&before);

@@ -622,7 +622,8 @@ impl EmitState {
                 if same {
                     let mut inner = EmitOut::empty()
                     self.emit_expr(world, walk, inner, host, value, depth, flow, scope)
-                    if inner.buf == written {
+                    // A value lent into a `ref` field keeps its `&`, so it is never the shorthand.
+                    if inner.buf == written && !self.facts.lent_fields.contains(node_key(value)) {
                         continue
                     }
                 }
