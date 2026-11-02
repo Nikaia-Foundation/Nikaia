@@ -368,3 +368,212 @@ test "the worst of several answers is the one a reader can act on" {
     assert(!worst.may())
     assert((worst.refused_part() ?? "") == "Locked[i64]")
 }
+
+// --- Tests moved from the compiler's `contracts::send` (ADR-294, #125) ---
+
+fn add_struct(mut ledger: Ledger, name: ref String, fields: ref Vec[(String, String)]) {
+    let mut contract = TypeContract::empty()
+    for (field, written) in fields {
+        contract.fields.push(FieldContract { name: field.clone(), ty: parse(written), public: true, default: "", attributes: [] })
+    }
+    ledger.types.insert(name.clone(), contract)
+}
+
+fn crossing_of(written: ref String, own: ref Ledger, into: Going) -> Crossing {
+    let library = Ledger::blank()
+    let ty = parse(written)
+    return crossing(ty, Walking { own: own, library: library, into: into })
+}
+
+fn ours(written: ref String) -> Crossing {
+    let own = Ledger::blank()
+    return crossing_of(written, own, Going::Ours)
+}
+
+fn foreign(written: ref String) -> Crossing {
+    let own = Ledger::blank()
+    return crossing_of(written, own, Going::Foreign)
+}
+
+fn is_undecided(answer: ref Crossing) -> bool {
+    return match answer {
+        Crossing::Undecided { .. } => true,
+        else => false,
+    }
+}
+
+fn is_may(answer: ref Crossing) -> bool {
+    return answer.may()
+}
+
+fn is_refused(answer: ref Crossing) -> bool {
+    return (answer.refused_part() ?? "") != ""
+}
+
+fn why_word(answer: ref Crossing) -> String {
+    let why = answer.why() ?? return "none"
+    return match why {
+        Refusal::Lock => "lock",
+        Refusal::Count => "count",
+        Refusal::Said => "said",
+    }
+}
+
+fn refused_as(answer: ref Crossing) -> String {
+    let part = answer.refused_part() ?? return "not refused"
+    let at = answer.refused_at() ?? "-"
+    return f"{part} at {at}"
+}
+
+/// Plain data crosses, and so does a container of it - at any depth.
+test "plain data and containers of it may cross" {
+    let all = ["i64", "String", "&str", "bool", "Vec[i64]", "HashMap[String, Vec[i64]]", "(i64, String)", "()", "Option[Vec[(String, f64)]]"]
+    for written in all {
+        assert(is_may(ours(written)))
+    }
+}
+
+/// `Shared` is answered by what it holds, at either setting (ADR-037 D6).
+test "a shared is answered by what it holds" {
+    assert(is_may(ours("Shared[String]")))
+    assert(is_may(ours("&Shared[String]")))
+    assert(is_may(ours("Vec[Shared[i64]]")))
+    assert(is_may(ours("(i64, Shared[i64])")))
+    assert(is_undecided(ours("Shared[Mapped]")))
+    assert(is_undecided(ours("Shared")))
+}
+
+/// Part II 12.2's counter (ADR-312 D6): a lock goes into a task of our own.
+test "a lock goes into a task of our own" {
+    let all = ["Locked[i32]", "SharedMut[i32]", "Shared[Locked[i32]]", "HashMap[String, Shared[Locked[i64]]]", "Vec[SharedMut[String]]"]
+    for written in all {
+        assert(is_may(ours(written)))
+    }
+    assert(is_undecided(ours("Locked[Mapped]")))
+    assert(is_undecided(ours("Locked")))
+    assert(is_undecided(ours("SharedMut")))
+}
+
+/// And it does not go into code nothing describes (ADR-312 D8).
+test "a lock does not go into code nothing describes" {
+    let all = ["Locked[i32]", "SharedMut[i32]", "Shared[Locked[i32]]", "HashMap[String, Shared[Locked[i64]]]"]
+    for written in all {
+        assert(is_refused(foreign(written)))
+    }
+    assert(refused_as(foreign("Shared[Locked[i32]]")) == "Locked[i32] at -")
+    // Everything that is neither a lock nor a shared count answers the same at
+    // both destinations.
+    for written in ["i64", "Vec[i64]", "Mapped", "?"] {
+        let a = ours(written)
+        let b = foreign(written)
+        assert(a.may() == b.may())
+        assert(is_undecided(a) == is_undecided(b))
+        assert(refused_as(a) == refused_as(b))
+    }
+}
+
+/// And a `Shared` does not go there either (ADR-312 D9); the contents still
+/// answer first.
+test "a shared count does not go into code nothing describes" {
+    for written in ["Shared[String]", "Shared[i64]", "Shared"] {
+        assert(why_word(foreign(written)) == "count")
+        assert(!is_refused(ours(written)))
+    }
+    assert(why_word(foreign("Vec[Shared[i64]]")) == "count")
+    assert(!is_refused(ours("Vec[Shared[i64]]")))
+
+    // A lock inside one is still the lock's refusal, by its own name.
+    let inside = foreign("Shared[Locked[i32]]")
+    assert(why_word(inside) == "lock")
+    assert(refused_as(inside) == "Locked[i32] at -")
+
+    // The sentence carries neither the word `lock` nor any Rust in it.
+    let note = foreign("Shared[String]").note() ?? "no note"
+    assert(note.contains("`Shared[String]`"))
+    assert(note.contains("per value"))
+    for word in ["lock", "Rc", "Arc", "Send"] {
+        assert(!note.contains(word))
+    }
+    let way_out = foreign("Shared[String]").way_out() ?? "no way out"
+    assert(way_out.contains("a view or a copy"))
+}
+
+/// The sentences a refusal prints (Part III C.2).
+test "a refusal says what it is and what to do instead" {
+    let refused = Crossing::MayNot { part: "Locked[i32]", at: "hits", why: Refusal::Lock }
+    assert(refused_as(refused) == "Locked[i32] at hits")
+    assert(why_word(refused) == "lock")
+    let note = refused.note() ?? "no note"
+    assert(note.contains("`Locked[i32]`"))
+    assert(note.contains("field `hits`"))
+    assert(note.contains("can't be passed to code the compiler knows nothing about"))
+    for word in ["Rc", "Arc", "Send", "E0277", "lifetime", "borrow"] {
+        assert(!note.contains(word))
+    }
+    let way_out = refused.way_out() ?? "no way out"
+    assert(way_out.contains("Open the lock"))
+    assert(way_out.contains("inside it"))
+}
+
+/// A type nothing describes is undecided, and undecided is not `May`.
+test "an undescribed type is undecided and not permission" {
+    for written in ["?", "Mapped", "Locked[Mapped]", "fn(&Stats)", "$V", "Vec[?]"] {
+        let answer = ours(written)
+        assert(is_undecided(answer))
+        assert(!answer.may())
+    }
+}
+
+/// A struct is its fields, through the ledger.
+test "a struct is its fields" {
+    let mut own = Ledger::blank()
+    add_struct(own, "Reading", [("name", "String"), ("temp", "f64")])
+    add_struct(own, "Counter", [("hits", "Shared[Locked[i64]]")])
+    add_struct(own, "Opaque", [("held", "Mapped")])
+    add_struct(own, "Report", [("counter", "Counter")])
+
+    assert(is_may(crossing_of("Reading", own, Going::Ours)))
+
+    let undecided = crossing_of("Opaque", own, Going::Ours)
+    assert(is_undecided(undecided))
+    assert((undecided.note() ?? "").contains("Mapped"))
+
+    for ty in ["Counter", "Report"] {
+        assert(is_may(crossing_of(ty, own, Going::Ours)))
+        let refused = crossing_of(ty, own, Going::Foreign)
+        assert(refused_as(refused) == "Locked[i64] at hits")
+        assert(why_word(refused) == "lock")
+        assert((refused.note() ?? "").contains("which its field `hits` holds"))
+    }
+}
+
+/// A type that holds itself terminates, and is answered by its other fields.
+test "a type that holds itself terminates" {
+    let mut own = Ledger::blank()
+    add_struct(own, "Node", [("value", "i64"), ("next", "Option[Node]")])
+    assert(is_may(crossing_of("Node", own, Going::Ours)))
+
+    add_struct(own, "Ring", [("held", "Shared[Locked[i64]]"), ("next", "Option[Ring]")])
+    assert(is_may(crossing_of("Ring", own, Going::Ours)))
+    assert(is_refused(crossing_of("Ring", own, Going::Foreign)))
+}
+
+/// A refusal beats an admission of ignorance, and that beats `May`.
+test "a refusal is reported over an undecided part" {
+    let orders = [["u", "r"], ["r", "u"], ["m", "u", "r"]]
+    for order in orders {
+        let mut worst = Crossing::May
+        for kind in order {
+            let answer = match kind {
+                "r" => Crossing::MayNot { part: "Held", at: null, why: Refusal::Lock },
+                "u" => Crossing::Undecided { part: "?" },
+                else => Crossing::May,
+            }
+            worst = worst_of(worst, answer)
+        }
+        assert(refused_as(worst) == "Held at -")
+    }
+    let mut worst = Crossing::May
+    worst = worst_of(worst, Crossing::Undecided { part: "?" })
+    assert(is_undecided(worst))
+}
