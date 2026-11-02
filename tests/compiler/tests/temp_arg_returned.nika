@@ -1,0 +1,36 @@
+// The text form of a number field, handed to a parameter that one path
+// returns, is new text: it outlives the statement it is made in (#1143).
+struct Site {
+    line: i64,
+}
+struct Walk {
+    sites: Vec[Site],
+}
+fn pad_left(text: String, width: i64) -> String {
+    if text.len() >= width {
+        return text
+    }
+    let mut out = ""
+    let mut i = text.len()
+    while i < width {
+        out = out + " "
+        i = i + 1
+    }
+    return out + text
+}
+fn show(walk: ref Walk) {
+    for site in walk.sites {
+        println(f"[{pad_left(site.line.to_string(), 4)}]")
+    }
+}
+fn main() {
+    let sites: Vec[Site] = [Site { line: 7 }, Site { line: 12345 }]
+    let mut cells: Vec[String] = []
+    for site in sites {
+        let cell = pad_left(site.line.to_string(), 4)
+        println(f"[{cell}]")
+        cells.push(pad_left(site.line.to_string(), 4))
+    }
+    println(cells.join("|"))
+    show(Walk { sites: sites })
+}

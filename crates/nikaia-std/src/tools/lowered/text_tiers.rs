@@ -3474,7 +3474,7 @@ pub(crate) fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &T
     if method == "filter" || method == "rev" || method == "skip" || method == "take" || method == "step_by" { return received; }
     if method == "to_string" && args.is_empty() && (!no_text(&received) || a_text_read_whole(receiver, ask, &walk)) {
         if handed_parameter(Some(receiver), ask, &walk).is_some() { return received; }
-        if tier_scalar_name(receiver, ask, &walk) { return owned_kinds(); }
+        if tier_scalar_name(receiver, ask, walk) { return owned_kinds(); }
         if owned_local(receiver, &received, ask, &walk) { return owned_kinds(); }
         let kept = viewed(&received);
         if kept.view && read_off_a_call(receiver, ask) { return owned_kinds(); }
@@ -3595,13 +3595,27 @@ pub(crate) fn owned_local(receiver: &Expr, received: &Kinds, ask: &TierAsk<'_, '
 
 pub(crate) fn a_read(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. }) }
 
-pub(crate) fn tier_scalar_name(receiver: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> bool {
+pub(crate) fn tier_scalar_name(receiver: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
     let local = match receiver {
-        Expr::Variable(name, _) => { let name = *name; match tier_local(ask.names.resolve(name), walk) { Some(__nikaia_value) => __nikaia_value, None => return false } },
+        Expr::Variable(name, _) => { let name = *name; match tier_local(ask.names.resolve(name), &walk) { Some(__nikaia_value) => __nikaia_value, None => return false } },
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; return tier_scalar_field(base, ask.names.resolve(name), ask, walk) },
         _ => return false,
     };
     let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return false };
     tier_scalar_type(ask, &declared.ty)
+}
+
+pub(crate) fn tier_scalar_field(base: &Expr, field: &str, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    let place = field_place(base, field, ask, walk);
+    if place.is_some() {
+        let found = match place { Some(__nikaia_value) => __nikaia_value, None => return false };
+        return tier_scalar_type(ask, &found.ty);
+    }
+    let ty = match beside_field(base, field, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match ty {
+        Ty::Named { ref name, ref args, view } => args.is_empty() && !view && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char"),
+        _ => false,
+    }
 }
 
 pub(crate) fn tier_scalar_type(ask: &TierAsk<'_, '_, '_, '_, '_>, ty: &Type) -> bool {

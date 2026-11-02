@@ -4996,13 +4996,31 @@ fn a_read(value: ref Expr) -> bool {
 }
 
 /// Whether a receiver is a name declared as a number, a `bool` or a `char`.
-fn tier_scalar_name(receiver: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+fn tier_scalar_name(receiver: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
     let local = match receiver {
         Expr::Variable(name, _) => tier_local(ask.names.resolve(name), walk) ?? return false,
+        // **A field declared as one is no view either** (#1143): the text
+        // form of `site.line` is new text, as that of a name is.
+        Expr::Field { base, name, .. } => return tier_scalar_field(base, ask.names.resolve(name), ask, walk),
         else => return false,
     }
     let declared = local.declared ?? return false
     return tier_scalar_type(ask, declared.ty)
+}
+
+/// Whether a field is declared a number, `bool` or `char`, by this file or
+/// by the file beside that publishes it.
+fn tier_scalar_field(base: ref Expr, field: ref String, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    let place = field_place(base, field, ask, walk)
+    if place != null {
+        let found = place ?? return false
+        return tier_scalar_type(ask, found.ty)
+    }
+    let ty = beside_field(base, field, ask, walk) ?? return false
+    return match ty {
+        Ty::Named { name, args, view } => args.len() == 0 && !view && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char"),
+        else => false,
+    }
 }
 
 /// Whether a written type is a number, `bool` or `char`.
