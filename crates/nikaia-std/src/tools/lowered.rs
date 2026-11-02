@@ -1025,14 +1025,6 @@ mod emit_calls_lowered {
 #[allow(unused_imports)]
 pub use emit_calls_lowered::*;
 
-mod emit_core_args_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    include!("lowered/emit_core_args.rs");
-}
-#[allow(unused_imports)]
-pub use emit_core_args_lowered::*;
-
 mod emit_contracts_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1040,6 +1032,14 @@ mod emit_contracts_lowered {
 }
 #[allow(unused_imports)]
 pub use emit_contracts_lowered::*;
+
+mod emit_core_args_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/emit_core_args.rs");
+}
+#[allow(unused_imports)]
+pub use emit_core_args_lowered::*;
 
 mod emit_core_below_lowered {
     #[allow(unused_imports)]
@@ -2540,6 +2540,10 @@ pub mod emit_calls {
     #[allow(unused_imports)]
     pub use super::{call_written_name, call_pausing_key, call_library_pauses, call_pauses, call_can_fail, call_callee_name, call_joined_throws, call_returns_either};
 }
+pub mod emit_contracts {
+    #[allow(unused_imports)]
+    pub use super::{EmitContractsProven, EmitContractsBuild, EmitContractsMade, EmitContractsHost, emit_contracts_state};
+}
 pub mod emit_core_args {}
 pub mod emit_core_below {
     #[allow(unused_imports)]
@@ -2552,10 +2556,6 @@ pub mod emit_core_leaves {
     pub use super::{emit_bytes_grammar, emit_fold_options};
 }
 pub mod emit_core_match {}
-pub mod emit_contracts {
-    #[allow(unused_imports)]
-    pub use super::{EmitContractsProven, EmitContractsBuild, EmitContractsMade, EmitContractsHost, emit_contracts_state};
-}
 pub mod emit_core_places {}
 pub mod emit_core_reads {}
 pub mod emit_core_types {
@@ -2725,7 +2725,7 @@ pub mod ledger_defaults {
 }
 pub mod ledger_items {
     #[allow(unused_imports)]
-    pub use super::{types_this_file_declares, types_declared_in, impl_parameters, a_literal, declared_extern, declared_grammar, literal_of, PublishedEnsures, expression_ensures, ComputedAt, declare_items, attribute_values, ledger_items_stored};
+    pub use super::{types_this_file_declares, types_declared_in, impl_parameters, a_literal, declared_extern, declared_grammar, literal_of, PublishedEnsures, expression_ensures, ComputedAt, declare_items, attribute_values, ledger_items_stored, LedgerInferHost, ledger_infer_package};
 }
 pub mod ledger_ops {
     #[allow(unused_imports)]
@@ -2773,7 +2773,7 @@ pub mod logic_smtlib {
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
+    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, manifest_parse, manifest_has_build_section, manifest_foreign_crates, manifest_test_table, manifest_test_word, manifest_test_value, manifest_test_refusal};
 }
 pub mod maps {
     #[allow(unused_imports)]
@@ -2977,7 +2977,7 @@ pub mod text_tiers {
 }
 pub mod threads {
     #[allow(unused_imports)]
-    pub use super::{Going, Refusal, Crossing, crossing, Walking, worst_of, held_across_a_pause};
+    pub use super::{Going, Refusal, Crossing, crossing, Walking, worst_of, held_across_a_pause, add_struct, crossing_of, ours, foreign, is_undecided, is_may, is_refused, why_word, refused_as};
 }
 pub mod throws {
     #[allow(unused_imports)]
@@ -2989,7 +2989,7 @@ pub mod tiers {
 }
 pub mod touch {
     #[allow(unused_imports)]
-    pub use super::{Reached, touches_of, Reach, TouchGraph, unit_touches, touches_of_graph};
+    pub use super::{Reached, touches_of, Reach, TouchGraph, unit_touches, touches_of_graph, touch_test_reached};
 }
 pub mod traits {
     #[allow(unused_imports)]
@@ -3005,7 +3005,7 @@ pub mod trust {
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, parse, split_args, a_view_of, Provenance, Sync, Lock, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index, method_keys};
+    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, parse, split_args, a_view_of, Provenance, Sync, Lock, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index, method_keys, ty_test_bound, ty_test_view, ty_test_name};
 }
 pub mod type_rules {
     #[allow(unused_imports)]
