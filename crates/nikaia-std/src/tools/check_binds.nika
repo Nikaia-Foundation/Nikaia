@@ -71,7 +71,7 @@ impl CheckState {
             parts = self.nested_pattern_parts(world, binds_tuple_parts(found, width), shape, names.len(), what, span)
         }
         let at = span.start as i64
-        let lent = self.facts.lent_lets.contains(at) || self.a_tuple_over_a_lent_name(world, value)
+        let lent = self.facts.lent_lets.contains(at) || self.a_tuple_over_a_lent_name(world, value) || self.a_tuple_got_past_a_jump(world, value)
         let mut frame = 0
         if self.scope.len() > 0 {
             frame = self.scope.len() - 1
@@ -210,6 +210,15 @@ impl CheckState {
     fn a_tuple_over_a_lent_name(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         return match value {
             Expr::Variable(name, _) => self.lent_here(world.words.resolve(name)),
+            else => false,
+        }
+    }
+
+    /// **A tuple a `std` list's or map's `get` hands back past a jump is the
+    /// element's view** (`Option<&T>` below, #1181), so its parts are lent.
+    fn a_tuple_got_past_a_jump(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        return match value {
+            Expr::Coalesce { value: read, fallback, .. } => self.flow.std_gets.contains(id_of(read) as i64) && self.jumps(world, fallback),
             else => false,
         }
     }

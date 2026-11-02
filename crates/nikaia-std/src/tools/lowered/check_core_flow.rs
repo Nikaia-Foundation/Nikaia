@@ -1049,7 +1049,7 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     check_core_flow_guard_box(state, world, host, &arm.pattern, &arm.body, (arm.guard).as_ref());
     let parts = check_core_flow_parts(state, world, &arm.pattern, typed, lendable, &arm.body);
     let a_list = check_core_flow_a_list(&arm.pattern);
-    let listed = state.flow.lent_list_reads.contains(&(id_of(value) as i64));
+    let listed = state.flow.lent_list_reads.contains(&(id_of(value) as i64)) || state.flow.std_gets.contains(&(id_of(value) as i64)) && check_core_method_a_tuple(typed);
     if typed.is_a_view() || through_the_reference || a_list || listed { check_core_flow_copied_parts(state, world, arm, typed, through_the_reference); } else { check_core_flow_copied_in_views(state, world, id_of(&arm.body) as i64, &arm.pattern, typed, &arm.body); }
     let lent_parts = !lendable && (typed.is_a_view() || listed);
     let mut owned_text: collections::BTreeSet<String> = collections::BTreeSet::new();

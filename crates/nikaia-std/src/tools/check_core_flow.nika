@@ -1325,8 +1325,8 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let parts = check_core_flow_parts(state, world, arm.pattern, typed, lendable, arm.body)
     let a_list = check_core_flow_a_list(arm.pattern)
     // **A list's `get` of a tuple is a view of the element below** (`Option<&T>`),
-    // and so are the arm's names for it and its parts.
-    let listed = state.flow.lent_list_reads.contains(id_of(value) as i64)
+    // and so are the arm's names for it and its parts; a map's too (#1181).
+    let listed = state.flow.lent_list_reads.contains(id_of(value) as i64) || (state.flow.std_gets.contains(id_of(value) as i64) && check_core_method_a_tuple(typed))
     if typed.is_a_view() || through_the_reference || a_list || listed {
         check_core_flow_copied_parts(state, world, arm, typed, through_the_reference)
     } else {

@@ -1,0 +1,43 @@
+// #1181: a tuple taken apart from a map's `get` past a jump is a view of
+// the map's value; its numbers are read out of it, as a list's are.
+use std::collections
+
+struct Bag {
+	n: i64,
+}
+
+impl Bag {
+	fn get(ref self, k: i64) -> (i64, i64)? {
+		if k == 0 {
+			return null
+		}
+		return (self.n, k)
+	}
+}
+
+fn main() {
+	let mut m: collections::BTreeMap[String, (i64, i64)] = collections::BTreeMap()
+	m.insert("a", (1, 2))
+	let mut h: collections::HashMap[String, (i64, String)] = collections::HashMap()
+	h.insert("a", (2, "s"))
+	let l: Vec[(i64, i64)] = [(0, 5), (2, 6)]
+	let v: Vec[i64] = [10, 20, 30]
+	let b = Bag { n: 1 }
+	for k in ["a", "b"] {
+		let (at, j) = m.get(k) ?? continue
+		let (c, s) = h.get(k) ?? continue
+		let (d, e) = l.get(1) ?? continue
+		let (f, g) = b.get(2) ?? continue
+		let x = v.get(at) ?? continue
+		let y = v.get(c) ?? continue
+		let z = v.get(d) ?? continue
+		let w = v.get(f) ?? continue
+		println(f"{x} {j + 1} {y} {s} {z} {e + 1} {w} {g + 1}")
+	}
+	for k in ["b", "a"] {
+		match m.get(k) {
+			null => println("none"),
+			(at, j) => println(f"{at + j}"),
+		}
+	}
+}

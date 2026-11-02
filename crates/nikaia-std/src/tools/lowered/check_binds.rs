@@ -53,7 +53,7 @@ impl CheckState {
             parts = self.nested_pattern_parts(world, binds_tuple_parts(found, width), shape, names.len() as i64, what, span);
         }
         let at = span.start as i64;
-        let lent = self.facts.lent_lets.contains(&at) || self.a_tuple_over_a_lent_name(world, value);
+        let lent = self.facts.lent_lets.contains(&at) || self.a_tuple_over_a_lent_name(world, value) || self.a_tuple_got_past_a_jump(world, value);
         let mut frame: i64 = 0;
         if !self.scope.is_empty() { frame = self.scope.len() as i64 - 1; }
         for index in 0..names.len() as i64 {
@@ -154,6 +154,14 @@ impl CheckState {
     pub(crate) fn a_tuple_over_a_lent_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         match value {
             Expr::Variable(name, _) => { let name = *name; self.lent_here(world.words.resolve(name)) },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_tuple_got_past_a_jump(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+        match value {
+            Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); self.flow.std_gets.contains(&(id_of(read) as i64)) && self.jumps(world, fallback) },
             _ => false,
         }
     }
