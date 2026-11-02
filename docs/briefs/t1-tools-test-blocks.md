@@ -14,6 +14,7 @@ Shape: feature
 Facts: Where things live, Traps already met, Moving Rust into Nikaia, Commands
 
 ## Facts
+* **Rerun (2026-11-02)**: step 1 is on `develop` (see the report, commit it names); build step 2 only. #1152, which step 2 waited on, is fixed for a `ref` field given a local (2ea6b825, b37). Overwrite the report with this run's.
 * **The seam**: `lower-std` lowers the tools package file by file in `crates/nikaia/src/sysroot.rs` (`lower_tools_files_cached`, the items reach `crate::emit::emit_std_items_against_at` at about line 714). Today a `test` block in a tools file goes nowhere useful.
 * **Already in Nikaia**: `modules_tests_as_functions` (`tools/modules.nika`, about line 560, ADR-269 D1) turns each `test` block into a `throws` function `test_function(k)`; the program path wraps them in `main`. The tools path needs the same turn, then `#[cfg(test)] #[test] fn <snake_case_title>() { <test_function_k>().unwrap() }` (or the emit's equivalent for a `throws` call) in the lowered file.
 * **What may be Rust**: the logic is Nikaia (a new function in `modules.nika` or a tools file of its own). The Rust side is a thin adapter of a few lines in `sysroot.rs` calling it, as every move has one. If the `#[test]` attribute or the wrapper can only be written by new Rust in `emit/`, stop before the first line: `Result: blocked`, `Found:` where, `Needs: supervisor decision`.

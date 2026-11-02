@@ -1,2 +1,4 @@
 s2-bounds-report
 s3-describe
+t1-tools-test-blocks
+t2-tests-ty-touch-manifest
