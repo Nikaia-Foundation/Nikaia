@@ -1,4 +1,4 @@
-s2-bounds-report
-s3-describe
-t1-tools-test-blocks
-t2-tests-ty-touch-manifest
+s2-bounds-report.md
+s3-describe.md
+t1-tools-test-blocks.md
+t2-tests-ty-touch-manifest.md
