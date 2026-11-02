@@ -3274,141 +3274,121 @@ fn runtime_dependencies(
 
 /// The wrapper: what Cargo runs in `rustc`'s place, for workspace members.
 ///
-/// Cargo calls this as `nikaia <rustc> <args…>`, for its own probes as well as
-/// for real compiles, so the first thing it does is decide whether this
-/// invocation has anything to do with Nikaia at all. Everything else - every
-/// crate from crates.io - is passed to the real `rustc` untouched, which is
-/// exactly what `RUSTC_WORKSPACE_WRAPPER` already guarantees and what this
-/// keeps true for a workspace member that happens to be Rust.
+/// Cargo calls this as `nikaia <rustc> <args…>`; what it decides and does is
+/// `project_drive_wrapper` (`tools/project_drive.nika`). The invocation, the
+/// lowering and the dependency file stay here, behind [`WrapperHost`].
 pub fn wrapper_main() -> Result<i32> {
     let argv: Vec<OsString> = std::env::args_os().skip(1).collect();
-    let mut invocation = Invocation::parse(&argv, EXTENSION)
+    let invocation = Invocation::parse(&argv, EXTENSION)
         .ok_or_else(|| anyhow!("{WRAPPER_MARKER} is set but no `rustc` was named"))?;
-
-    let Some(source) = invocation.source_path() else {
-        trace(&invocation, "passed through");
-        return invocation.run();
+    let host = WrapperHost {
+        invocation: RefCell::new(invocation),
+        failed: RefCell::new(None),
     };
-    trace(&invocation, "lowered");
-
-    let settings = Settings::from_env()?;
-    // **The packages, found the same way the project build finds them.** Cargo
-    // hands this a `.nika` path, so the manifest is the one above it
-    // (`Manifest::find` walks to the same root the cache does) - and it has to be
-    // read here rather than passed down, because the only channel from the build
-    // into the wrapper is the environment and a dependency list is not a switch.
-    // `packages_of` is the one resolution rule, so the two cannot disagree about
-    // what the program is.
-    let manifest = Manifest::find(&source)?;
-    let packages = match manifest.root() {
-        Some(root) => packages_of(&manifest, root, false)?,
-        None => Vec::new(),
-    };
-    let allowlist = std::env::var_os(READS_VAR).map(PathBuf::from);
-    let shown = std::env::var_os(SHOWN_AS_VAR).and_then(|value| {
-        let value = value.to_string_lossy().into_owned();
-        let (entry, written) = value.split_once('\u{1f}')?;
-        (canonical(&source).display().to_string() == entry).then(|| written.to_string())
-    });
-    let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown));
-    let lowered = lower_reading(
-        &source,
-        &settings,
-        std::env::var_os(NO_CACHE_VAR).is_some(),
-        &packages,
-        allowlist.as_deref(),
-    );
-    SHOWN_AS.with(|cell| cell.replace(shown_outer));
-    let lowered = lowered?;
-
-    let name = invocation.crate_name.clone().unwrap_or_else(|| {
-        source
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "main".to_string())
-    });
-    let name = match std::env::var_os(PROGRAM_TAG_VAR) {
-        Some(tag) => name
-            .strip_suffix(tag.to_string_lossy().as_ref())
-            .map(str::to_string)
-            .unwrap_or(name),
-        None => name,
-    };
-    let gen_dir = match std::env::var_os(GEN_DIR_VAR) {
-        Some(dir) => PathBuf::from(dir),
-        None => std::env::temp_dir().join("nikaia-gen"),
-    };
-    // **One directory per crate**, and that is not tidiness. Every generated
-    // crate root used to sit beside every other, so `rustc` refusing a name from
-    // a package this crate does not depend on offered to fix it with
-    // `mod deeper` - a file it had found next door, and advice that means
-    // nothing here. A crate root with no siblings cannot be offered any.
-    let generated = gen_dir.join(&name).join(format!("{name}.rs"));
-    write_if_changed(&generated, &lowered.rust)?;
-
-    invocation.replace_source(&generated);
-    // **The program links the libraries its packages name** (ADR-324 D2, D3),
-    // and only the program: a library crate is linked into it, and the
-    // build-time library is built elsewhere and never sees these (ADR-321 D14).
-    let a_program = invocation
-        .args
-        .windows(2)
-        .any(|pair| pair[0] == "--crate-type" && pair[1] == "bin");
-    if a_program && let Some(flags) = std::env::var_os(LINK_VAR) {
-        let flags: Vec<String> = flags
-            .to_string_lossy()
-            .split('\u{1f}')
-            .filter(|f| !f.is_empty())
-            .map(str::to_string)
-            .collect();
-        for arg in crate::libraries::as_rustc_args(&flags) {
-            invocation.args.push(OsString::from(arg));
-        }
-    }
-    let code = invocation.run()?;
-
-    // Cargo believes the dependency file `rustc` wrote, and `rustc` only saw
-    // the generated Rust. Without this an edit to a `.nika` source leaves the
-    // package fresh and the binary stale.
-    //
-    // **And the switches, for the same reason one step further out**
-    // (`Project::switches_path`): a build switch is not a source, so nothing
-    // Cargo watches changes when one does — and this wrapper is only run for a
-    // package Cargo already thinks is stale. Without the file in here, flipping
-    // `user-parallelism` left the program running at the setting it was built
-    // at, and said nothing.
-    if code == 0
-        && let Some(dep_info) = invocation.dep_info()
-    {
-        let mut inputs = lowered.sources.clone();
-        if let Some(switches) = switches_beside(&gen_dir) {
-            inputs.push(switches);
-        }
-        record_extra_dependencies(&dep_info, &inputs)?;
-    }
-    Ok(code)
+    project_drive::project_drive_wrapper(&host)
+        .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))
 }
 
-/// The switches file the driver wrote, where there is one.
-///
-/// The wrapper is told the generated-source directory and nothing else
-/// (`GEN_DIR_VAR` is the one channel), and the file sits in it — so this is a
-/// lookup rather than a second answer to where it lives. Absent means the
-/// wrapper was run by hand rather than by a project build, and then there is no
-/// switch anybody could flip between two runs.
-fn switches_beside(gen_dir: &Path) -> Option<PathBuf> {
-    project_settings::project_settings_switches_beside(gen_dir)
+/// What `project_drive_wrapper` asks of the compiler: the `rustc` invocation
+/// Cargo made, the lowering and the dependency file; a refusal is kept in
+/// `failed`.
+struct WrapperHost {
+    invocation: RefCell<Invocation>,
+    failed: RefCell<Option<anyhow::Error>>,
 }
 
-/// Record one invocation, if anybody asked: `project_settings_trace`.
-fn trace(invocation: &Invocation, verdict: &str) {
-    block_on(project_settings::project_settings_trace(
-        TRACE_VAR,
-        invocation.crate_name.clone(),
-        invocation.is_a_probe(),
-        verdict,
-        &SettingsHost,
-    ));
+impl WrapperHost {
+    /// `result` for the Nikaia side, its error kept to be handed back.
+    fn held<T>(&self, result: Result<T>) -> HostResult<T> {
+        result.map_err(|error| {
+            let said = format!("{error:#}");
+            *self.failed.borrow_mut() = Some(error);
+            said.into()
+        })
+    }
+}
+
+impl project_drive::ProjectDriveWrapperHost for WrapperHost {
+    fn source_path(&self) -> Option<PathBuf> {
+        self.invocation.borrow().source_path()
+    }
+
+    /// Record one invocation, if anybody asked: `project_settings_trace`.
+    fn trace(&self, verdict: &str) {
+        let invocation = self.invocation.borrow();
+        block_on(project_settings::project_settings_trace(
+            TRACE_VAR,
+            invocation.crate_name.clone(),
+            invocation.is_a_probe(),
+            verdict,
+            &SettingsHost,
+        ));
+    }
+
+    fn run(&self) -> HostResult<i32> {
+        self.held(self.invocation.borrow().run())
+    }
+
+    fn crate_name(&self) -> Option<String> {
+        self.invocation.borrow().crate_name.clone()
+    }
+
+    fn lower(
+        &self,
+        source: &Path,
+        no_cache: bool,
+        allowlist: Option<PathBuf>,
+        shown: Option<String>,
+    ) -> HostResult<(String, Vec<PathBuf>)> {
+        let lowered = (|| {
+            let settings = Settings::from_env()?;
+            // **The packages, found the same way the project build finds
+            // them**: the manifest above the `.nika` path Cargo handed over,
+            // read here because a dependency list is not a switch the
+            // environment could carry. `packages_of` is the one resolution
+            // rule, so the two cannot disagree about what the program is.
+            let manifest = Manifest::find(source)?;
+            let packages = match manifest.root() {
+                Some(root) => packages_of(&manifest, root, false)?,
+                None => Vec::new(),
+            };
+            let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown));
+            let lowered =
+                lower_reading(source, &settings, no_cache, &packages, allowlist.as_deref());
+            SHOWN_AS.with(|cell| cell.replace(shown_outer));
+            lowered
+        })();
+        let lowered = self.held(lowered)?;
+        Ok((lowered.rust, lowered.sources))
+    }
+
+    fn write_if_changed(&self, path: &Path, text: &str) -> HostResult<()> {
+        self.held(write_if_changed(path, text).map(|_| ()))
+    }
+
+    fn replace_source(&self, generated: &Path) {
+        self.invocation.borrow_mut().replace_source(generated);
+    }
+
+    fn args(&self) -> Vec<String> {
+        let invocation = self.invocation.borrow();
+        invocation
+            .args
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    fn push_arg(&self, arg: &str) {
+        self.invocation.borrow_mut().args.push(OsString::from(arg));
+    }
+
+    fn record_dependencies(&self, inputs: &[PathBuf]) -> HostResult<()> {
+        let Some(dep_info) = self.invocation.borrow().dep_info() else {
+            return Ok(());
+        };
+        self.held(record_extra_dependencies(&dep_info, inputs))
+    }
 }
 
 #[cfg(test)]

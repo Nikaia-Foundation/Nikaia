@@ -565,3 +565,117 @@ pub fn project_drive_kept_for_file[H: ProjectDriveKeptHost](file: ref fs::Path, 
     host.write_if_changed(root.join(entry), source)
     return root
 }
+
+
+/// What `project_drive_wrapper` asks of the compiler (`project.rs`'s
+/// `WrapperHost`): the `rustc` invocation Cargo made, the lowering and the
+/// dependency file `rustc` writes; a refusal of a `throws` method is kept
+/// there and handed back unchanged.
+pub trait ProjectDriveWrapperHost {
+    /// The `.nika` source the invocation compiles; null for any other.
+    fn source_path(ref self) -> fs::Path? sync
+    /// Records the invocation, if anybody asked (`project_settings_trace`).
+    fn trace(ref self, verdict: ref String) sync
+    /// Runs the invocation as it stands: `rustc`'s exit code.
+    fn run(ref self) -> i32 sync throws
+    /// The `--crate-name` Cargo passed, where it passed one.
+    fn crate_name(ref self) -> String? sync
+    /// **Lowers `source` as the project build does**: under the settings the
+    /// environment carries and the packages its manifest names, reading under
+    /// `allowlist`, the entry shown as `shown`. The Rust and the files read.
+    fn lower(ref self, source: ref fs::Path, no_cache: bool, allowlist: fs::Path?, shown: String?) -> (String, Vec[fs::Path]) sync throws
+    /// Writes `text` to `path` where it differs from what is there.
+    fn write_if_changed(ref self, path: ref fs::Path, text: ref String) sync throws
+    /// Points the invocation at `generated` in place of the `.nika` source.
+    fn replace_source(ref self, generated: ref fs::Path) sync
+    /// The invocation's arguments.
+    fn args(ref self) -> Vec[String] sync
+    /// Adds `arg` to the invocation.
+    fn push_arg(ref self, arg: ref String) sync
+    /// Adds `inputs` to the dependency file `rustc` wrote, where it wrote one.
+    fn record_dependencies(ref self, inputs: ref Vec[fs::Path]) sync throws
+}
+
+/// **The wrapper: what Cargo runs in `rustc`'s place**, for workspace
+/// members. Cargo calls it for its own probes as well as for real compiles,
+/// so it first decides whether this invocation has anything to do with
+/// Nikaia at all: every other crate goes to the real `rustc` untouched. A
+/// `.nika` source is lowered as the project build lowers it, written where the
+/// build said, and compiled in its place. Moved from `project.rs`'s
+/// `wrapper_main` (ADR-294, #125).
+pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 sync throws {
+    let source = match host.source_path() {
+        null => {
+            host.trace("passed through")
+            return host.run()
+        },
+        source => source,
+    }
+    host.trace("lowered")
+    // The only channel from the build into the wrapper is the environment.
+    let allowlist: fs::Path? = match env::var("NIKAIA_ALLOW_READ_FROM_LIST") {
+        null => null,
+        list => {
+            let path: fs::Path = list
+            path
+        },
+    }
+    // The name a loose file is shown as, for the entry it was copied to.
+    let shown: String? = match env::var("NIKAIA_SHOWN_AS") {
+        null => null,
+        value => {
+            let (entry, written) = value.split_once("\x1f") ?? ("", "")
+            if project_members_canonical(source).display() == entry { written.clone() } else { null }
+        },
+    }
+    let no_cache = env::var("NIKAIA_NO_CACHE") != null
+    let (rust, sources) = host.lower(source, no_cache, allowlist, shown)
+    let name = host.crate_name() ?? (source.with_extension("").file_name()?.display() ?? "main")
+    let tag = env::var("NIKAIA_PROGRAM_TAG") ?? ""
+    let name = name.strip_suffix(tag)?.clone() ?? name
+    let gen_dir: fs::Path = match env::var("NIKAIA_GEN_DIR") {
+        null => env::temp_dir().join("nikaia-gen"),
+        dir => {
+            let path: fs::Path = dir
+            path
+        },
+    }
+    // **One directory per crate**, and that is not tidiness: `rustc`
+    // refusing a name from a package this crate does not depend on offered to
+    // fix it with `mod deeper`, a file it had found next door. A crate root
+    // with no siblings cannot be offered any.
+    let generated = gen_dir.join(name).join(f"{name}.rs")
+    host.write_if_changed(generated, rust)
+    host.replace_source(generated)
+    // **The program links the libraries its packages name** (ADR-324 D2,
+    // D3), and only the program: a library crate is linked into it, and the
+    // build-time library is built elsewhere and never sees these (ADR-321 D14).
+    let args = host.args()
+    let a_program = args.iter().zip(args.iter().skip(1)).any(fn((a, b)) { a == "--crate-type" && b == "bin" })
+    if a_program {
+        match env::var("NIKAIA_LINK_FLAGS") {
+            null => {},
+            said => {
+                let flags: Vec[String] = said.split("\x1f").filter(fn(f) { f != "" }).map(fn(f) { f.clone() }).collect()
+                for arg in as_rustc_args(flags) {
+                    host.push_arg(arg)
+                }
+            },
+        }
+    }
+    let code = host.run()
+    // Cargo believes the dependency file `rustc` wrote, and `rustc` saw only
+    // the generated Rust: without the sources an edit to a `.nika` file leaves
+    // the binary stale. **And the switches**, one step further out: a build
+    // switch is no source, and flipping one left the program at the setting
+    // it was built at.
+    if code == 0 {
+        let mut inputs = sources
+        match project_settings_switches_beside(gen_dir) {
+            null => {},
+            switches => inputs.push(switches),
+        }
+        host.record_dependencies(inputs)
+    }
+    return code
+}

@@ -313,3 +313,88 @@ pub async fn project_drive_kept_for_file<H: ProjectDriveKeptHost>(file: &std::pa
     Ok(root)
 }
 
+pub trait ProjectDriveWrapperHost {
+    fn source_path(&self) -> Option<fs::Path>;
+    fn trace(&self, verdict: &str);
+    fn run(&self) -> Result<i32, Box<dyn std::error::Error>>;
+    fn crate_name(&self) -> Option<String>;
+    fn lower(&self, source: &std::path::Path, no_cache: bool, allowlist: Option<fs::Path>, shown: Option<String>) -> Result<(String, Vec<fs::Path>), Box<dyn std::error::Error>>;
+    fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
+    fn replace_source(&self, generated: &std::path::Path);
+    fn args(&self) -> Vec<String>;
+    fn push_arg(&self, arg: &str);
+    fn record_dependencies(&self, inputs: &[fs::Path]) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32, Box<dyn std::error::Error>> {
+    let source = match host.source_path() {
+        None => {
+            host.trace("passed through");
+            return Ok(host.run()?);
+        },
+        Some(source) => source,
+    };
+    host.trace("lowered");
+    let allowlist: Option<fs::Path> = match env::var("NIKAIA_ALLOW_READ_FROM_LIST") {
+        None => None,
+        Some(list) => {
+            let path: fs::Path = std::path::PathBuf::from(list);
+            Some(path)
+        },
+    };
+    let shown: Option<String> = match env::var("NIKAIA_SHOWN_AS") {
+        None => None,
+        Some(ref value) => {
+            let (entry, written) = nikaia_std::index::or(value.split_once("\x1f"), || ("".into(), "".into()));
+            if AsRef::<str>::as_ref(&(nikaia_std::fs::path::display(&(project_members_canonical(&source))))) == AsRef::<str>::as_ref(&(entry)) { Some(written.to_string()) } else { None }
+        },
+    };
+    let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
+    let (rust, sources) = host.lower(&source, no_cache, allowlist, shown)?;
+    let name = nikaia_std::index::or(host.crate_name(), || nikaia_std::index::or(match nikaia_std::fs::path::file_name(&(nikaia_std::fs::path::with_extension(&(source), std::path::Path::new(&(""))))).as_ref() {
+        Some(__nikaia_it) => Some(nikaia_std::fs::path::display(&(__nikaia_it))),
+        None => None,
+    }, || "main".into()).into());
+    let tag = nikaia_std::index::or(env::var("NIKAIA_PROGRAM_TAG"), || "".into());
+    let name = nikaia_std::index::or(match name.strip_suffix(&tag) {
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        None => None,
+    }, || name.into());
+    let gen_dir: fs::Path = match env::var("NIKAIA_GEN_DIR") {
+        None => nikaia_std::fs::path::join(&(env::temp_dir()), std::path::Path::new(&("nikaia-gen"))),
+        Some(dir) => {
+            let path: fs::Path = std::path::PathBuf::from(dir);
+            path
+        },
+    };
+    let generated = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(gen_dir), std::path::Path::new(&(name)))), std::path::Path::new(&(format!("{}.rs", name))));
+    host.write_if_changed(&generated, &rust)?;
+    host.replace_source(&generated);
+    let args = host.args();
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple34141| {
+        let (a, b) = __nikaia_tuple34141;
+        AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
+    });
+    if a_program {
+        match env::var("NIKAIA_LINK_FLAGS") {
+            None => { },
+            Some(ref said) => {
+                let flags: Vec<String> = said.split("\x1f").filter(|&f| { AsRef::<str>::as_ref(&(f)) != AsRef::<str>::as_ref(&("")) }).map(|f| { f.to_string() }).collect::<Vec<_>>();
+                for arg in as_rustc_args(&flags) { host.push_arg(&arg); }
+            },
+        }
+    }
+    let code = host.run()?;
+    if code == 0 {
+        let mut inputs = sources;
+        match project_settings_switches_beside(&gen_dir) {
+            None => { },
+            Some(switches) => { inputs.push(switches); },
+        }
+        host.record_dependencies(&inputs)?;
+    }
+    Ok(code)
+}
+
