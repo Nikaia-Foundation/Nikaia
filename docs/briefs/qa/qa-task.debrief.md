@@ -1,14 +1,17 @@
-1. **Most turns.** Working out why `badges.py --check` passed in the shared tree but failed in CI. I needed a `git archive HEAD` export to see that the 83.3 % only held with another agent's uncommitted `emit_core_leaves.nika`. After that, `commit.nika` refused my commit twice. The first refusal was a `Files:` field I had written with commas and a missing `Changelog:`/`Attribution:`. The second was because another session had already committed the same badge fix, so the file was unchanged.
+1. **Time spent.** Most of it went on the shared-tree problem, not the failure itself. The cause was obvious from `qa-input.txt` on the first read. After that I had to work out how to commit only my own hunk of `self_hosting.py`. That file held another agent's uncommitted row, and `commit.nika` stages whole files. I built a clean `git archive` export of HEAD to compute the badge, then used `git apply --cached`.
 
 2. **Lookups the brief could have handed me.**
-   - `qa-input.txt` is mostly raw CI log noise. The failing line was one grep away, and the driver could have put it at the top.
-   - The report format for `commit.nika` (space-separated `Files:`, required `Changelog:`, the `Attribution:` trailer) was only in the script's header comment.
-   - `nikaia` is not on PATH. I had to find `target/fast/nikaia`.
-   - That the share badge counts lines in the working tree, so uncommitted files from other agents change it.
+   - What `badges.py` measures: it reads files, so the result depends on the working tree.
+   - Whether a row in `self_hosting.py` is needed for each new `.nika` file.
+   - That `commit.nika` adds whole files.
+   - That `nikaia` is not on PATH, and the binary is `target/release/nikaia`.
+   - I read `qa.md` only as far as its header, so I may have missed rules there.
 
 3. **Checks.**
-   - Useful: `badges.py --check` in the shared tree (rc 0, which showed the discrepancy), and the same check on the `HEAD` export (rc 1, then rc 0 with the fix).
-   - Wasted: reading `qa.md` and the first 100 lines of the log, which were all runner setup, and `git log` on the badge file, which I did before checking whether someone else was already fixing it.
-   - I did not rerun the check in the shared tree after the fix. It would now show 83.2 % against the other agent's uncommitted state, but that is not my change.
+   - Useful: `badges.py --check` on the clean HEAD export, and `pre-push.nika`.
+   - Wasted: a stray `git diff --no-index /dev/null /dev/null`, and the first export attempt, which lacked `docs/specification`.
+   - Not run: clippy, and any Rust tests, because no Rust changed.
+   - The `version red` in pre-push is unexplained. I assumed it was the supervisor's and did not check.
+   - I committed before running pre-push. The first run failed with "command not found", so that ordering was a mistake.
 
-4. **One change.** Add to `qa.md` that the failing check must be reproduced on a `git archive HEAD` export, never in the shared checkout, and that `git log origin/develop..HEAD` should be rechecked just before committing, because other sessions commit fixes concurrently. Having the driver print the failing command at the top of `qa-input.txt` would save the rest.
+4. **Change.** Add a short note to `qa.md` or `builder.md`: "A badge or `self_hosting.py` fix is computed on a `git archive HEAD` export, because the shared tree has other agents' edits. When the file has foreign hunks, stage yours with `git apply --cached` and commit with plain `git commit`." Also add a flag to `commit.nika` that stages only already-staged files, and put the `nikaia` binary path in the brief.

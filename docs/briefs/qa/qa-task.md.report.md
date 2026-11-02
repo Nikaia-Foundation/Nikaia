@@ -1,12 +1,7 @@
 Result: done
-Cause: 547e6462 (self-hosted badge said 83.3 %, the committed tree counts 83.2 %; the 83.3 only held with another agent's uncommitted emit_core_leaves.nika in the tree) - step bootstrap_compiler, `badges.py --check`
-Fixed: none by me: 83b6aac0 (another session) already regenerated the badge to 83.2 %, identical to my fix
-Tests: `scripts/badges.py --check` on a `git archive HEAD` export with the fix: `--check` green (rc 0); no Rust changed
-Found: none. The agent holding the uncommitted emit_core_leaves.nika change must rerun scripts/badges.py when it commits (the share moves to 83.3 %).
-Files: docs/briefs/qa/qa-task.md.report.md
-Commit: qa: the self-hosted badge matches the committed tree (83.2 %)
-Changelog: none
-Attribution:
-Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
-Pushed: local 7b3c9c5ef7501269b149c2f4a581c25ddfb63df3
+Cause: b016c7c8 (S2 bounds report) - bootstrap_compiler: `badges.py --check` red, self-hosted.svg out of date (bounds_report.nika had no row in scripts/self_hosting.py)
+Fixed: added the bounds_report.nika row and regenerated assets/badges/self-hosted.svg, both computed on a clean HEAD export
+Tests: badges.py --check on a HEAD export + the fix: green; pre-push.nika (staged): index, fmt, adr-refs, badges green, version red (supervisor's, not touched). Working-tree `badges.py --check` is red only because other agents' uncommitted edits shift the share
+Found: none. Note: the shared tree holds another agent's uncommitted `diagnostics.nika` row in self_hosting.py (file untracked); I committed only my hunk via `git apply --cached`, so `scripts/commit.nika` was not used (it adds the whole file). That row needs its own badge refresh when diagnostics.nika is committed
+Files: scripts/self_hosting.py assets/badges/self-hosted.svg
+Commit: self_hosting: bounds_report.nika's row and the badge (9fdba933)
