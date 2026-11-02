@@ -1,0 +1,29 @@
+// A `return` inside an expression (`?? return x`, a `match` arm) in a function
+// that hands back a view on one path and text of its own on another is
+// wrapped as a `return` statement is (#1185's probe: rustc refused it).
+fn trimmed(binary: String) -> String {
+    let (name, hash) = binary.rsplit_once("-") ?? return binary
+    if hash.scalars.all(fn(c) { c.is_ascii_digit() }) {
+        return name.clone()
+    }
+    return binary
+}
+
+fn trimmed_by_match(binary: String) -> String {
+    let (name, hash) = match binary.rsplit_once("-") {
+        null => return binary,
+        pair => pair,
+    }
+    if hash.scalars.all(fn(c) { c.is_ascii_digit() }) {
+        return name.clone()
+    }
+    return binary
+}
+
+fn main() {
+    println(trimmed("it-0123456789"))
+    println(trimmed("it-01x"))
+    println(trimmed("plain"))
+    println(trimmed_by_match("it-42"))
+    println(trimmed_by_match("plain"))
+}

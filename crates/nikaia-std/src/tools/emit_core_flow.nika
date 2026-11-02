@@ -1195,13 +1195,29 @@ impl EmitState {
     pub fn emit_core_return[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if value != null {
             let held = value ?? return
+            // **A `return` inside an expression hands back what a `return`
+            // statement does** (#1185's probe): `?? return binary` in a function
+            // whose text result is either kind wraps the value as the statement
+            // form does (`emit_core_handed_back`).
+            let is_null = match held {
+                Expr::LitNull(_) => true,
+                else => false,
+            }
+            let either = call_returns_either(world.words, world.items, scope.function) && !is_null && !self.facts.mixed_choices.contains(node_key(held)) && !self.facts.mixed_leaves.contains_key(node_key(held)) && !never_a_value(held)
             if flow.can_throw {
                 out.push("return Ok(")
-                self.emit_expr(world, walk, out, host, held, depth, flow, scope)
-                out.push(")")
             } else {
                 out.push("return ")
-                self.emit_expr(world, walk, out, host, held, depth, flow, scope)
+            }
+            if either {
+                out.push("nikaia_std::either_text::either(")
+            }
+            self.emit_expr(world, walk, out, host, held, depth, flow, scope)
+            if either {
+                out.push(")")
+            }
+            if flow.can_throw {
+                out.push(")")
             }
         } else if flow.can_throw {
             out.push("return Ok(())")

@@ -773,14 +773,13 @@ impl EmitState {
     pub fn emit_core_return<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: Option<&Expr>, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if value.is_some() {
             let held = match value { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-            if flow.can_throw {
-                out.push("return Ok(");
-                self.emit_expr(world, walk, out, host, held, depth, flow, scope)?;
-                out.push(")");
-            } else {
-                out.push("return ");
-                self.emit_expr(world, walk, out, host, held, depth, flow, scope)?;
-            }
+            let is_null = matches!(held, Expr::LitNull(_));
+            let either = call_returns_either(world.words, world.items, &scope.function) && !is_null && !self.facts.mixed_choices.contains(&node_key(held)) && !self.facts.mixed_leaves.contains_key(&node_key(held)) && !never_a_value(held);
+            if flow.can_throw { out.push("return Ok("); } else { out.push("return "); }
+            if either { out.push("nikaia_std::either_text::either("); }
+            self.emit_expr(world, walk, out, host, held, depth, flow, scope)?;
+            if either { out.push(")"); }
+            if flow.can_throw { out.push(")"); }
         } else if flow.can_throw { out.push("return Ok(())"); } else { out.push("return"); }
         Ok(())
     }
