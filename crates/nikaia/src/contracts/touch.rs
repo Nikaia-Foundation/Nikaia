@@ -235,27 +235,8 @@ pub fn infer(
 mod tests {
     use super::*;
 
-    fn reached(kind: &str, named: Option<&str>, write: bool) -> Reached {
-        Reached {
-            kind: kind.to_string(),
-            named: named.map(str::to_string),
-            unknown: false,
-            write,
-        }
-    }
-
-    #[test]
-    fn a_touch_round_trips_through_its_text() {
-        for text in [
-            "file(path) read",
-            "file(path) write",
-            "stdout write",
-            "stderr write",
-            "args read",
-        ] {
-            assert_eq!(Touch::parse(text).expect("parses").text(), text, "{text}");
-        }
-    }
+    // The other tests of this module moved to `tools/touch.nika` (ADR-294,
+    // #125); this one reads `KINDS`, which only Rust holds.
 
     /// Every kind [`KINDS`] names is known, and nothing else is.
     ///
@@ -274,108 +255,5 @@ mod tests {
             let touch = Touch::parse(text).expect("parses");
             assert!(!touch.kind_is_known(), "{text}");
         }
-    }
-
-    /// … and an unknown kind is exactly the hole that check is there for.
-    ///
-    /// Written as an assertion about the wrong answer, so that anyone who ever
-    /// makes `conflicts_with` the guard instead sees why it cannot be.
-    #[test]
-    fn an_unknown_kind_would_be_disjoint_from_everything() {
-        let typo = reached("stdoutt", None, true);
-        assert!(!typo.conflicts_with(&reached("stdout", None, true)));
-        assert!(!typo.conflicts_with(&reached("file", Some("a.txt"), true)));
-    }
-
-    #[test]
-    fn a_touch_names_its_kind_and_parameter() {
-        let touch = Touch::parse("file(path) read").expect("parses");
-        assert_eq!(touch.kind, "file");
-        assert_eq!(touch.parameter.as_deref(), Some("path"));
-        assert!(!touch.write);
-
-        let out = Touch::parse("stdout write").expect("parses");
-        assert_eq!(out.kind, "stdout");
-        assert_eq!(out.parameter, None);
-        assert!(out.write);
-    }
-
-    #[test]
-    fn a_malformed_touch_says_what_is_wrong() {
-        for text in [
-            "file(path)",
-            "file(path) maybe",
-            "file(path read",
-            "(x) read",
-        ] {
-            assert!(Touch::parse(text).is_err(), "`{text}` should not parse");
-        }
-    }
-
-    /// Different kinds never meet. The cheap half of the rule.
-    #[test]
-    fn different_kinds_never_conflict() {
-        let file = reached("file", Some("a.txt"), true);
-        let out = reached("stdout", None, true);
-        assert!(!file.conflicts_with(&out));
-    }
-
-    /// … but the two console handles are one destination under `2>&1`.
-    ///
-    /// The exception the families exist for (`tools/touch.nika`), and the
-    /// reason it is not an exception to the rule so much as the rule about
-    /// *names* applied one level up: two resources this compiler cannot prove distinct are ordered.
-    /// Without it `println` / `eprintln` / `println` is a group of three whose
-    /// output interleaves on a redirected program, and D1's guarantee is gone
-    /// for the commonest shape a program has.
-    #[test]
-    fn the_two_console_handles_may_be_one_destination() {
-        let out = reached("stdout", None, true);
-        let err = reached("stderr", None, true);
-        assert!(out.conflicts_with(&err));
-        assert!(err.conflicts_with(&out));
-        // … and neither of them meets a file the program named.
-        assert!(!out.conflicts_with(&reached("file", Some("a.txt"), true)));
-        assert!(!err.conflicts_with(&reached("args", None, false)));
-    }
-
-    /// Two reads never conflict - a processor's rule for two loads.
-    #[test]
-    fn two_reads_never_conflict() {
-        let one = reached("file", Some("a.txt"), false);
-        let same = reached("file", Some("a.txt"), false);
-        assert!(!one.conflicts_with(&same));
-
-        // … and a write against the same file does.
-        let written = reached("file", Some("a.txt"), true);
-        assert!(one.conflicts_with(&written));
-        assert!(written.conflicts_with(&one));
-    }
-
-    /// Two different files do not conflict even when both are written.
-    #[test]
-    fn two_named_resources_are_compared_by_name() {
-        let a = reached("file", Some("a.txt"), true);
-        let b = reached("file", Some("b.txt"), true);
-        assert!(!a.conflicts_with(&b));
-    }
-
-    /// A resource the compiler could not name might be any of them.
-    ///
-    /// This is the fail-closed half: `fs::write(pfad, fs::Root::Anywhere, …)` where `pfad` is
-    /// computed keeps its order against every other file operation, because the
-    /// alternative is a program that is wrong on some inputs and not others.
-    #[test]
-    fn an_unnameable_resource_conflicts_with_its_whole_kind() {
-        let unknown = Reached {
-            kind: "file".to_string(),
-            named: None,
-            unknown: true,
-            write: true,
-        };
-        assert!(unknown.conflicts_with(&reached("file", Some("a.txt"), false)));
-        assert!(reached("file", Some("a.txt"), false).conflicts_with(&unknown));
-        // Still not a conflict with another kind entirely.
-        assert!(!unknown.conflicts_with(&reached("stdout", None, true)));
     }
 }

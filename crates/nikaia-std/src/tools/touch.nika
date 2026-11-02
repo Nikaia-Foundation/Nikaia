@@ -305,3 +305,100 @@ fn holds_touch(touches: ref Vec[Touch], touch: ref Touch) -> bool {
     }
     return false
 }
+
+// --- Tests moved from the compiler's `contracts::touch` (ADR-294, #125) ---
+
+fn touch_test_reached(kind: String, named: String?, write: bool) -> Reached {
+    return Reached { kind: kind, named: named, unknown: false, write: write }
+}
+
+test "a touch round trips through its text" {
+    for written in ["file(path) read", "file(path) write", "stdout write", "stderr write", "args read"] {
+        let touch = touch_of(written) catch {
+            assert(false)
+            return
+        }
+        assert(touch.text() == written)
+    }
+}
+
+test "a touch names its kind and parameter" {
+    let touch = touch_of("file(path) read") catch {
+        assert(false)
+        return
+    }
+    assert(touch.kind == "file")
+    assert((touch.parameter ?? "") == "path")
+    assert(!touch.write)
+
+    let out = touch_of("stdout write") catch {
+        assert(false)
+        return
+    }
+    assert(out.kind == "stdout")
+    assert(out.parameter == null)
+    assert(out.write)
+}
+
+test "a malformed touch says what is wrong" {
+    for written in ["file(path)", "file(path) maybe", "file(path read", "(x) read"] {
+        let mut parsed = true
+        touch_of(written) catch {
+            parsed = false
+        }
+        assert(!parsed)
+    }
+}
+
+/// An unknown kind would be disjoint from everything: written as an assertion
+/// about the wrong answer, so that anyone who makes `conflicts_with` the guard
+/// sees why it cannot be.
+test "an unknown kind would be disjoint from everything" {
+    let typo = touch_test_reached("stdoutt", null, true)
+    assert(!typo.conflicts_with(touch_test_reached("stdout", null, true)))
+    assert(!typo.conflicts_with(touch_test_reached("file", "a.txt", true)))
+}
+
+/// Different kinds never meet. The cheap half of the rule.
+test "different kinds never conflict" {
+    let file = touch_test_reached("file", "a.txt", true)
+    let out = touch_test_reached("stdout", null, true)
+    assert(!file.conflicts_with(out))
+}
+
+/// The two console handles are one destination under `2>&1`.
+test "the two console handles may be one destination" {
+    let out = touch_test_reached("stdout", null, true)
+    let err = touch_test_reached("stderr", null, true)
+    assert(out.conflicts_with(err))
+    assert(err.conflicts_with(out))
+    assert(!out.conflicts_with(touch_test_reached("file", "a.txt", true)))
+    assert(!err.conflicts_with(touch_test_reached("args", null, false)))
+}
+
+/// Two reads never conflict - a processor's rule for two loads.
+test "two reads never conflict" {
+    let one = touch_test_reached("file", "a.txt", false)
+    let same = touch_test_reached("file", "a.txt", false)
+    assert(!one.conflicts_with(same))
+    let written = touch_test_reached("file", "a.txt", true)
+    assert(one.conflicts_with(written))
+    assert(written.conflicts_with(one))
+}
+
+/// Two different files do not conflict even when both are written.
+test "two named resources are compared by name" {
+    let a = touch_test_reached("file", "a.txt", true)
+    let b = touch_test_reached("file", "b.txt", true)
+    assert(!a.conflicts_with(b))
+}
+
+/// A resource the compiler could not name might be any of them: the
+/// fail-closed half.
+test "an unnameable resource conflicts with its whole kind" {
+    let unknown = Reached { kind: "file", named: null, unknown: true, write: true }
+    let read = touch_test_reached("file", "a.txt", false)
+    assert(unknown.conflicts_with(read))
+    assert(read.conflicts_with(unknown))
+    assert(!unknown.conflicts_with(touch_test_reached("stdout", null, true)))
+}

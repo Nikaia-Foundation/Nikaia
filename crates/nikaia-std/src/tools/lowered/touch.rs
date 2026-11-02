@@ -203,3 +203,145 @@ pub(crate) fn holds_touch(touches: &[Touch], touch: &Touch) -> bool {
     false
 }
 
+pub(crate) fn touch_test_reached(kind: String, named: Option<String>, write: bool) -> Reached { Reached { kind, named, unknown: false, write } }
+
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    for written in ["file(path) read", "file(path) write", "stdout write", "stderr write", "args read"] {
+        let touch = match touch_of(written) {
+            Ok(value) => value,
+            Err(_error) => {
+                if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+                return Ok(());
+            },
+        };
+        if !(AsRef::<str>::as_ref(&(touch.text())) == AsRef::<str>::as_ref(&(written))) { nikaia_std::abort::assertion_failed("assert(touch.text() == written)", None, &[("touch.text()", (&&nikaia_std::abort::Operand(&(touch.text()))).shown()), ("written", (&&nikaia_std::abort::Operand(&(written))).shown()), ]) };
+    }
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let touch = match touch_of("file(path) read") {
+        Ok(value) => value,
+        Err(_error) => {
+            if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+            return Ok(());
+        },
+    };
+    if !(touch.kind == "file") { nikaia_std::abort::assertion_failed("assert(touch.kind == \"file\")", None, &[("touch.kind", (&&nikaia_std::abort::Operand(&(touch.kind))).shown()), ]) };
+    if !(nikaia_std::index::or(touch.parameter.as_deref(), || "") == "path") { nikaia_std::abort::assertion_failed("assert((touch.parameter ?? \"\") == \"path\")", None, &[("touch.parameter ?? \"\"", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(touch.parameter.as_deref(), || "")))).shown()), ]) };
+    if !(!touch.write) { nikaia_std::abort::assertion_failed("assert(!touch.write)", None, &[]) };
+    let out = match touch_of("stdout write") {
+        Ok(value) => value,
+        Err(_error) => {
+            if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+            return Ok(());
+        },
+    };
+    if !(out.kind == "stdout") { nikaia_std::abort::assertion_failed("assert(out.kind == \"stdout\")", None, &[("out.kind", (&&nikaia_std::abort::Operand(&(out.kind))).shown()), ]) };
+    if !(out.parameter.is_none()) { nikaia_std::abort::assertion_failed("assert(out.parameter == null)", None, &[("out.parameter", (&&nikaia_std::abort::Operand(&(out.parameter))).shown()), ]) };
+    if !(out.write) { nikaia_std::abort::assertion_failed("assert(out.write)", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+    for written in ["file(path)", "file(path) maybe", "file(path read", "(x) read"] {
+        let mut parsed = true;
+        match touch_of(written) {
+            Ok(_) => {},
+            Err(_error) => { parsed = false; },
+        };
+        if !(!parsed) { nikaia_std::abort::assertion_failed("assert(!parsed)", None, &[]) };
+    }
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+    let typo = touch_test_reached(String::from("stdoutt"), None, true);
+    if !(!typo.conflicts_with(&touch_test_reached(String::from("stdout"), None, true))) { nikaia_std::abort::assertion_failed("assert(!typo.conflicts_with(touch_test_reached(\"stdout\", null, true)))", None, &[]) };
+    if !(!typo.conflicts_with(&touch_test_reached(String::from("file"), Some(String::from("a.txt")), true))) { nikaia_std::abort::assertion_failed("assert(!typo.conflicts_with(touch_test_reached(\"file\", \"a.txt\", true)))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
+    let file = touch_test_reached(String::from("file"), Some(String::from("a.txt")), true);
+    let out = touch_test_reached(String::from("stdout"), None, true);
+    if !(!file.conflicts_with(&out)) { nikaia_std::abort::assertion_failed("assert(!file.conflicts_with(out))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
+    let out = touch_test_reached(String::from("stdout"), None, true);
+    let err = touch_test_reached(String::from("stderr"), None, true);
+    if !(out.conflicts_with(&err)) { nikaia_std::abort::assertion_failed("assert(out.conflicts_with(err))", None, &[]) };
+    if !(err.conflicts_with(&out)) { nikaia_std::abort::assertion_failed("assert(err.conflicts_with(out))", None, &[]) };
+    if !(!out.conflicts_with(&touch_test_reached(String::from("file"), Some(String::from("a.txt")), true))) { nikaia_std::abort::assertion_failed("assert(!out.conflicts_with(touch_test_reached(\"file\", \"a.txt\", true)))", None, &[]) };
+    if !(!err.conflicts_with(&touch_test_reached(String::from("args"), None, false))) { nikaia_std::abort::assertion_failed("assert(!err.conflicts_with(touch_test_reached(\"args\", null, false)))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
+    let one = touch_test_reached(String::from("file"), Some(String::from("a.txt")), false);
+    let same = touch_test_reached(String::from("file"), Some(String::from("a.txt")), false);
+    if !(!one.conflicts_with(&same)) { nikaia_std::abort::assertion_failed("assert(!one.conflicts_with(same))", None, &[]) };
+    let written = touch_test_reached(String::from("file"), Some(String::from("a.txt")), true);
+    if !(one.conflicts_with(&written)) { nikaia_std::abort::assertion_failed("assert(one.conflicts_with(written))", None, &[]) };
+    if !(written.conflicts_with(&one)) { nikaia_std::abort::assertion_failed("assert(written.conflicts_with(one))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
+    let a = touch_test_reached(String::from("file"), Some(String::from("a.txt")), true);
+    let b = touch_test_reached(String::from("file"), Some(String::from("b.txt")), true);
+    if !(!a.conflicts_with(&b)) { nikaia_std::abort::assertion_failed("assert(!a.conflicts_with(b))", None, &[]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
+    let unknown = Reached { kind: String::from("file"), named: None, unknown: true, write: true };
+    let read = touch_test_reached(String::from("file"), Some(String::from("a.txt")), false);
+    if !(unknown.conflicts_with(&read)) { nikaia_std::abort::assertion_failed("assert(unknown.conflicts_with(read))", None, &[]) };
+    if !(read.conflicts_with(&unknown)) { nikaia_std::abort::assertion_failed("assert(read.conflicts_with(unknown))", None, &[]) };
+    if !(!unknown.conflicts_with(&touch_test_reached(String::from("stdout"), None, true))) { nikaia_std::abort::assertion_failed("assert(!unknown.conflicts_with(touch_test_reached(\"stdout\", null, true)))", None, &[]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn a_touch_round_trips_through_its_text() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn a_touch_names_its_kind_and_parameter() {
+        super::__nikaia_test_1().unwrap()
+    }
+    #[test]
+    fn a_malformed_touch_says_what_is_wrong() {
+        super::__nikaia_test_2().unwrap()
+    }
+    #[test]
+    fn an_unknown_kind_would_be_disjoint_from_everything() {
+        super::__nikaia_test_3().unwrap()
+    }
+    #[test]
+    fn different_kinds_never_conflict() {
+        super::__nikaia_test_4().unwrap()
+    }
+    #[test]
+    fn the_two_console_handles_may_be_one_destination() {
+        super::__nikaia_test_5().unwrap()
+    }
+    #[test]
+    fn two_reads_never_conflict() {
+        super::__nikaia_test_6().unwrap()
+    }
+    #[test]
+    fn two_named_resources_are_compared_by_name() {
+        super::__nikaia_test_7().unwrap()
+    }
+    #[test]
+    fn an_unnameable_resource_conflicts_with_its_whole_kind() {
+        super::__nikaia_test_8().unwrap()
+    }
+}
