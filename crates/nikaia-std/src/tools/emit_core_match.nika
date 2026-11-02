@@ -331,12 +331,19 @@ impl EmitState {
 
     /// A name a pattern binds, as it is written: `_` where the names are not
     /// wanted, `ref n` where the arm only reads it (`lent_key` is the arm's body,
-    /// whose lent names the checker recorded; `-1` for none).
+    /// whose lent names the checker recorded; `-1` for none), `ref mut n` where
+    /// it keeps the part in place out of a field of a `mut` parameter (#1139).
     fn emit_match_bound(ref self, world: ref EmitWorld, name: winnow_grammar::Symbol, wild: bool, lent_key: i64) -> String {
         if wild {
             return "_"
         }
         let text = emit_text(world, name)
+        if lent_key >= 0 && self.facts.in_place_bindings.contains_key(lent_key) {
+            let kept = self.facts.in_place_bindings.get(lent_key) ?? return text
+            if kept.contains(text) {
+                return f"ref mut {text}"
+            }
+        }
         if lent_key < 0 || !self.facts.lent_bindings.contains_key(lent_key) {
             return text
         }

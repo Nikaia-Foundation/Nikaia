@@ -197,6 +197,10 @@ impl EmitState {
     pub(crate) fn emit_match_bound(&self, world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol, wild: bool, lent_key: i64) -> String {
         if wild { return String::from("_"); }
         let text = emit_text(world, name);
+        if lent_key >= 0 && self.facts.in_place_bindings.contains_key(&lent_key) {
+            let kept = match self.facts.in_place_bindings.get(&lent_key) { Some(__nikaia_value) => __nikaia_value, None => return text };
+            if kept.contains(&text) { return format!("ref mut {}", text); }
+        }
         if lent_key < 0 || !self.facts.lent_bindings.contains_key(&lent_key) { return text; }
         let lent = match self.facts.lent_bindings.get(&lent_key) { Some(__nikaia_value) => __nikaia_value, None => return text };
         if lent.contains(&text) { return format!("ref {}", text); }
