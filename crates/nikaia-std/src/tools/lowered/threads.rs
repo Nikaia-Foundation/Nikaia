@@ -237,35 +237,35 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub(crate) fn add_struct(ledger: &mut Ledger, name: &str, fields: &[(String, String)]) {
+pub fn add_struct(ledger: &mut Ledger, name: &str, fields: &[(String, String)]) {
     let mut contract = TypeContract::empty();
     for (field, written) in fields.iter() { contract.fields.push(FieldContract { name: field.to_string(), ty: parse(written), public: true, default: String::from(""), attributes: vec![] }); }
     ledger.types.insert(name.to_string(), contract);
 }
 
-pub(crate) fn crossing_of(written: &str, own: &Ledger, into: Going) -> Crossing {
+pub fn crossing_of(written: &str, own: &Ledger, into: Going) -> Crossing {
     let library = Ledger::blank();
     let ty = parse(written);
     crossing(&ty, &Walking { own, library: &library, into })
 }
 
-pub(crate) fn ours(written: &str) -> Crossing {
+pub fn ours(written: &str) -> Crossing {
     let own = Ledger::blank();
     crossing_of(written, &own, Going::Ours)
 }
 
-pub(crate) fn foreign(written: &str) -> Crossing {
+pub fn foreign(written: &str) -> Crossing {
     let own = Ledger::blank();
     crossing_of(written, &own, Going::Foreign)
 }
 
-pub(crate) fn is_undecided(answer: &Crossing) -> bool { matches!(answer, Crossing::Undecided { .. }) }
+pub fn is_undecided(answer: &Crossing) -> bool { matches!(answer, Crossing::Undecided { .. }) }
 
-pub(crate) fn is_may(answer: &Crossing) -> bool { answer.may() }
+pub fn is_may(answer: &Crossing) -> bool { answer.may() }
 
-pub(crate) fn is_refused(answer: &Crossing) -> bool { nikaia_std::index::or(answer.refused_part(), || "".into()) != "" }
+pub fn is_refused(answer: &Crossing) -> bool { nikaia_std::index::or(answer.refused_part(), || "".into()) != "" }
 
-pub(crate) fn why_word(answer: &Crossing) -> &'static str {
+pub fn why_word(answer: &Crossing) -> &'static str {
     let why = match answer.why() { Some(__nikaia_value) => __nikaia_value, None => return "none" };
     match why {
         Refusal::Lock => "lock",
@@ -274,7 +274,7 @@ pub(crate) fn why_word(answer: &Crossing) -> &'static str {
     }
 }
 
-pub(crate) fn refused_as(answer: &Crossing) -> String {
+pub fn refused_as(answer: &Crossing) -> String {
     let part = match answer.refused_part() { Some(__nikaia_value) => __nikaia_value, None => return String::from("not refused") };
     let at = nikaia_std::index::or(answer.refused_at(), || "-".into());
     format!("{} at {}", part, at)

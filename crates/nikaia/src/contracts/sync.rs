@@ -35,7 +35,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::ast::{Block, Expr, Stmt};
+use crate::ast::Expr;
 use crate::parser::Parsed;
 
 use crate::check::MethodCalls;

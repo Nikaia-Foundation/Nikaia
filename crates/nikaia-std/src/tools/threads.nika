@@ -371,7 +371,7 @@ test "the worst of several answers is the one a reader can act on" {
 
 // --- Tests moved from the compiler's `contracts::send` (ADR-294, #125) ---
 
-fn add_struct(mut ledger: Ledger, name: ref String, fields: ref Vec[(String, String)]) {
+pub fn add_struct(mut ledger: Ledger, name: ref String, fields: ref Vec[(String, String)]) {
     let mut contract = TypeContract::empty()
     for (field, written) in fields {
         contract.fields.push(FieldContract { name: field.clone(), ty: parse(written), public: true, default: "", attributes: [] })
@@ -379,38 +379,38 @@ fn add_struct(mut ledger: Ledger, name: ref String, fields: ref Vec[(String, Str
     ledger.types.insert(name.clone(), contract)
 }
 
-fn crossing_of(written: ref String, own: ref Ledger, into: Going) -> Crossing {
+pub fn crossing_of(written: ref String, own: ref Ledger, into: Going) -> Crossing {
     let library = Ledger::blank()
     let ty = parse(written)
     return crossing(ty, Walking { own: own, library: library, into: into })
 }
 
-fn ours(written: ref String) -> Crossing {
+pub fn ours(written: ref String) -> Crossing {
     let own = Ledger::blank()
     return crossing_of(written, own, Going::Ours)
 }
 
-fn foreign(written: ref String) -> Crossing {
+pub fn foreign(written: ref String) -> Crossing {
     let own = Ledger::blank()
     return crossing_of(written, own, Going::Foreign)
 }
 
-fn is_undecided(answer: ref Crossing) -> bool {
+pub fn is_undecided(answer: ref Crossing) -> bool {
     return match answer {
         Crossing::Undecided { .. } => true,
         else => false,
     }
 }
 
-fn is_may(answer: ref Crossing) -> bool {
+pub fn is_may(answer: ref Crossing) -> bool {
     return answer.may()
 }
 
-fn is_refused(answer: ref Crossing) -> bool {
+pub fn is_refused(answer: ref Crossing) -> bool {
     return (answer.refused_part() ?? "") != ""
 }
 
-fn why_word(answer: ref Crossing) -> String {
+pub fn why_word(answer: ref Crossing) -> String {
     let why = answer.why() ?? return "none"
     return match why {
         Refusal::Lock => "lock",
@@ -419,7 +419,7 @@ fn why_word(answer: ref Crossing) -> String {
     }
 }
 
-fn refused_as(answer: ref Crossing) -> String {
+pub fn refused_as(answer: ref Crossing) -> String {
     let part = answer.refused_part() ?? return "not refused"
     let at = answer.refused_at() ?? "-"
     return f"{part} at {at}"
