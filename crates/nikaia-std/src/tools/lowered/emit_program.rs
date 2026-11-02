@@ -43,6 +43,7 @@ impl EmitState {
         }
         self.emit_program_tether_wrappers(world, &walk, out);
         self.emit_program_entry_point(world, out, host);
+        if whole && self.user_main(world).is_some() { out.push("\n// ADR-300 D9: no table - this program was emitted without its file name.\nconst __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[];\n"); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

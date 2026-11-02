@@ -18,6 +18,25 @@ pub struct EmitMapEntry {
     pub unit: i64,
 }
 
+/// The narrowest entry of a source map whose emitted text covers `offset`:
+/// the map holds the innermost first, as the emitter records a node before
+/// anything that encloses it.
+pub fn emit_out_locate(entries: ref Vec[EmitMapEntry], offset: i64) -> EmitMapEntry? {
+    entries.iter().find(fn(entry) { entry.start <= offset && offset < entry.end })?.clone()
+}
+
+/// A source map as it reads once its module's text has been placed `by` bytes
+/// into a larger file, and tagged with the file it came from: a program of
+/// several modules is emitted one module at a time and joined, and this keeps
+/// ADR-300's promise across the join.
+pub fn emit_out_placed(mut entries: Vec[EmitMapEntry], by: i64, unit: i64) {
+    for mut entry in entries {
+        entry.start += by
+        entry.end += by
+        entry.unit = unit
+    }
+}
+
 /// The generated text so far, and the map of it.
 pub struct EmitOut {
     pub buf: String,

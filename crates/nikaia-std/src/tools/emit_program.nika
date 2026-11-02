@@ -62,6 +62,21 @@ impl EmitState {
         }
         self.emit_program_tether_wrappers(world, walk, out)
         self.emit_program_entry_point(world, out, host)
+        if whole && self.user_main(world) != null {
+            // **An empty table, and the reason it is empty.** `fn main` installs
+            // the hook that reads it (ADR-300 D10), so the name has to be defined
+            // or the program does not compile - and a table needs the *file* each
+            // line came from, which this path does not know: it is handed one
+            // parsed file and no path. The path a user takes goes through
+            // `modules::Program`, which knows every file and appends the real
+            // table (`abort_table`); this one is `emit_program`, which the tests
+            // and `lower-std` use.
+            //
+            // Empty is the fallback rather than a lie: a location the table does
+            // not know is handed to the hook installed before ours, which is
+            // Rust's own, so such a program is exactly as well off as it was.
+            out.push("\n// ADR-300 D9: no table - this program was emitted without its file name.\nconst __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[];\n")
+        }
     }
 
     /// **The copies of a function that takes a reflected field** (Part II

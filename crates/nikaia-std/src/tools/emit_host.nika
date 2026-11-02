@@ -17,14 +17,6 @@ pub trait EmitHost {
     /// (`text_tiers::wrap_hole`).
     fn wrap_hole(ref self, hole: ref Expr, wraps: ref Vec[(i64, winnow_grammar::Symbol)]) -> Expr sync
 
-    /// The names bound out of a lent value that an arm copies out
-    /// (`check::Checked::copied_bindings`), for the arm whose body is at `at`.
-    fn copied_bindings(ref self, at: i64) -> Vec[String] sync
-
-    /// The names a guard reads inside a box that an arm copies out
-    /// (`check::Checked::guards_inside_boxes`), for the arm whose body is at `at`.
-    fn guard_copies(ref self, at: i64) -> Vec[String] sync
-
     /// Takes back a `&` just written, where what follows is already the
     /// reference it asked for (0.0.250): `&*get(&v, i)` is `get(&v, i)`. `std`
     /// has no `String::pop` entry.
@@ -39,10 +31,6 @@ pub trait EmitHost {
 
     /// The type of the error a `throw` raises (`throws::error_type`).
     fn error_type(ref self, node: ref Expr) -> String? sync
-
-    /// The handles the task whose lambda is the node `task` names
-    /// (`Checked::task_handles`); a set cannot be walked in Nikaia.
-    fn task_handles(ref self, task: i64) -> Vec[String] sync
 
     /// The locals the prover knew to be whole non-negative numbers in `body`
     /// (`Emitter::nonnegative_bodies`, keyed by the block's address); `null`
@@ -69,10 +57,6 @@ pub trait EmitHost {
     /// The order the statements of a block are written in (`emit_order`).
     fn order_of(ref self, block: ref Block) -> Vec[i64] sync
 
-    /// A type known by its name alone, as a grammar rule returns it
-    /// (`ty_filled` with named lifetimes).
-    fn ty_of_name(ref self, mut walk: EmitWalk, name: winnow_grammar::Symbol) -> String sync throws
-
     /// `Build::overlaps_user_code`: user code may run on more than one thread.
     fn overlaps_user_code(ref self) -> bool sync
 
@@ -90,12 +74,6 @@ pub trait EmitHost {
     /// An expression as the program wrote it (`check::written`), which is what
     /// the prover's reaches are keyed by (`prove::call_key`).
     fn written(ref self, expr: ref Expr) -> String sync
-
-    /// The buffers whose keeps hold the values a method call puts into the
-    /// keeper rooted at `root`, by argument, each padded to the keeper's widest
-    /// value (ADR-283 D12, D15); `null` where the plan holds none. A set cannot
-    /// be walked in Nikaia.
-    fn held_buffers(ref self, walk: ref EmitWalk, function: ref String, statement: i64, root: ref String) -> Vec[(i64, Vec[i64])]? sync
 
     /// How the `pub` function or method of this key (`Type::name` for a
     /// method) declares its hidden map parameters, from the maps' analysis

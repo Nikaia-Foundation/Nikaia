@@ -1336,13 +1336,18 @@ impl EmitState {
         walk.hold_args = null
         let on = receiver ?? return
         let root = root_of(world.words, on) ?? return
-        let held = host.held_buffers(walk, scope.function, flow.statement, root)
-        if held == null {
-            return
-        }
+        let plan = self.keep_plans.get(scope.function) ?? self.keep_plans.get(walk.keep_function) ?? return
+        let holds = plan.holds.get((flow.statement, root.clone())) ?? return
+        // Each argument's buffers, padded to the keeper's widest value.
+        let width = plan.widths.get(root) ?? 1
         let mut by_arg: collections::BTreeMap[i64, Vec[i64]] = collections::BTreeMap()
-        for (arg, keeps) in (held ?? []) {
-            by_arg.insert(arg, keeps.clone())
+        for (arg, buffers) in holds {
+            let mut keeps: Vec[i64] = buffers.iter().collect()
+            while keeps.len() < width {
+                let last = keeps[keeps.len() - 1]
+                keeps.push(last)
+            }
+            by_arg.insert(arg, keeps)
         }
         walk.hold_args = by_arg
     }

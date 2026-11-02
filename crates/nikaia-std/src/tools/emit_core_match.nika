@@ -718,6 +718,21 @@ impl EmitState {
     /// taking apart each boxed part the pattern looked inside (D5: the guard has
     /// already said it has the shape), and with a line of its own first (`lead`):
     /// the arm that takes the value out of its place says so before anything else.
+    /// The names bound out of a lent value that an arm copies out
+    /// (`check::Checked::copied_bindings`), for the arm whose body is at `at`.
+    fn emit_copied_bindings(ref self, at: i64) -> Vec[String] sync {
+        self.facts.copied_bindings.iter().filter(fn(copied) { copied.0 == at }).map(fn(copied) { copied.1.clone() }).collect()
+    }
+
+    /// The names a guard reads inside a box that an arm copies out
+    /// (`check::Checked::guards_inside_boxes`), for the arm whose body is at `at`.
+    fn emit_guard_copies(ref self, at: i64) -> Vec[String] sync {
+        match self.facts.guards_inside_boxes.get(at) {
+            null => [],
+            names => names.iter().map(fn(name) { name.clone() }).collect(),
+        }
+    }
+
     pub fn emit_core_arm_body_led[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, nest_count: i64, body: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope, lead: ref String) sync throws {
         let mut taken_apart = lead.clone()
         for at in 0..<nest_count {
@@ -732,7 +747,7 @@ impl EmitState {
         // is not copied (#622).
         let read = self.emit_holes_names_read(world, host, body)
         let mut copied: Vec[String] = []
-        for name in host.copied_bindings(node_key(body)) {
+        for name in self.emit_copied_bindings(node_key(body)) {
             if read.contains(name) && self.facts.changed_copies.contains((node_key(body), name.clone())) {
                 copied.push(f"let mut {name} = *{name}; ")
             } else if read.contains(name) {
@@ -1216,7 +1231,7 @@ impl EmitState {
                     out.push(" => ")
                 }
                 out.push("{ ")
-                for name in host.guard_copies(key) {
+                for name in self.emit_guard_copies(key) {
                     let escaped = escaped_name(name)
                     out.push(f"let {escaped} = *{escaped}; ")
                 }
@@ -1251,7 +1266,7 @@ impl EmitState {
                 // a `&i64`, and the guard compares it with a number.
                 let guard_read = self.emit_holes_names_read(world, host, guard)
                 let mut guard_copied: Vec[String] = []
-                for name in host.copied_bindings(node_key(arm.body)) {
+                for name in self.emit_copied_bindings(node_key(arm.body)) {
                     if guard_read.contains(name) {
                         guard_copied.push(name)
                     }

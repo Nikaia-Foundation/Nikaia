@@ -1299,12 +1299,18 @@ impl EmitState {
         }
     }
 
+    /// The handles the task whose lambda is the node `task` names
+    /// (`Checked::task_handles`), in the set's order.
+    fn emit_task_handles(ref self, task: i64) -> Vec[String] sync {
+        self.facts.task_handles.iter().filter(fn(handle) { handle.0 == task }).map(fn(handle) { handle.1.clone() }).collect()
+    }
+
     fn emit_flow_task[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: i64, body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A handle the body names is duplicated, not moved** (ADR-312 D1). The
         // step is written *outside* the future, in a block of its own, so the name
         // the body moves is the new handle and the caller's own survives the
         // `spawn`.
-        let handles = host.task_handles(task)
+        let handles = self.emit_task_handles(task)
         if handles.len() > 0 {
             out.push("{ ")
             for name in handles {
@@ -1353,7 +1359,7 @@ impl EmitState {
             self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
             out.push(")")
         }
-        if host.task_handles(task).len() > 0 {
+        if self.emit_task_handles(task).len() > 0 {
             out.push(" }")
         }
     }

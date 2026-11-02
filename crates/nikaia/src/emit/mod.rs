@@ -233,29 +233,18 @@ pub struct Lowered {
 /// one of them can be traded back for a place in the source the user has open.
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
-    /// Innermost first: a lookup returns the first range that contains the
-    /// offset, and the emitter records a node before recording anything that
-    /// encloses it.
-    entries: Vec<MapEntry>,
-}
-
-#[derive(Debug, Clone)]
-struct MapEntry {
-    generated: std::ops::Range<usize>,
-    source: Span,
-    /// Which file it came from, as an index into the program's units. A
-    /// single-file program has one, and it is 0.
-    unit: usize,
+    /// Innermost first (`tools/emit_out.nika`): a lookup returns the first
+    /// range that contains the offset. A single-file program has one unit,
+    /// and it is 0.
+    entries: Vec<nikaia_std::tools::emit_out::EmitMapEntry>,
 }
 
 impl SourceMap {
     /// The narrowest source span whose emitted text covers `offset`, and the
     /// file it is in.
     pub fn locate(&self, offset: usize) -> Option<(usize, Span)> {
-        self.entries
-            .iter()
-            .find(|e| e.generated.contains(&offset))
-            .map(|e| (e.unit, e.source))
+        nikaia_std::tools::emit_out::emit_out_locate(&self.entries, offset as i64)
+            .map(|e| (e.unit as usize, e.source))
     }
 
     /// The narrowest source span whose emitted text covers `offset`.
@@ -267,32 +256,11 @@ impl SourceMap {
         self.entries.is_empty()
     }
 
-    /// The map of an `Out`, whose entries are `usize` ranges here.
-    fn from_entries(entries: Vec<nikaia_std::tools::emit_out::EmitMapEntry>) -> SourceMap {
-        SourceMap {
-            entries: entries
-                .into_iter()
-                .map(|e| MapEntry {
-                    generated: e.start as usize..e.end as usize,
-                    source: e.source,
-                    unit: e.unit as usize,
-                })
-                .collect(),
-        }
-    }
-
     /// This map, as it reads once its module's text has been placed `by` bytes
-    /// into a larger file - and tagged with which file it came from.
-    ///
-    /// A program of several modules is emitted one module at a time and joined;
-    /// this is what keeps ADR-300's promise across the join. Without it a
-    /// `rustc` message about the third module would be traded back for a place
-    /// in the first.
+    /// into a larger file - and tagged with which file it came from
+    /// (`emit_out_placed`).
     pub fn placed(mut self, by: usize, unit: usize) -> SourceMap {
-        for entry in &mut self.entries {
-            entry.generated = entry.generated.start + by..entry.generated.end + by;
-            entry.unit = unit;
-        }
+        nikaia_std::tools::emit_out::emit_out_placed(&mut self.entries, by as i64, unit as i64);
         self
     }
 
@@ -309,7 +277,7 @@ impl SourceMap {
     pub fn rows(&self) -> impl Iterator<Item = (usize, usize, usize)> + '_ {
         self.entries
             .iter()
-            .map(|e| (e.generated.start, e.source.at(), e.unit))
+            .map(|e| (e.start as usize, e.source.at(), e.unit as usize))
     }
 }
 
@@ -631,11 +599,6 @@ struct Emitter<'p> {
     main_params: std::cell::RefCell<Vec<String>>,
 }
 
-/// The generated name of [ADR-300](../../../docs/specification/adr/adr-300.md)
-/// D1's table. `__nikaia_` for the same reason `__nikaia_main` is: a name a
-/// program could also have chosen would be a name this compiler took from it.
-const ABORT_TABLE: &str = "__NIKAIA_SITES";
-
 /// **The oldest Rust a Nikaia installation works with**
 /// ([ADR-305](../../docs/specification/adr/adr-305.md)).
 ///
@@ -823,40 +786,13 @@ impl<'p> Emitter<'p> {
                 .emit_program(&self.world, walk, &mut out, self, whole)
         });
         self.crossed(crossed)?;
-        if whole && self.user_main().is_some() {
-            // **An empty table, and the reason it is empty.** `fn main` installs
-            // the hook that reads it (ADR-300 D10), so the name has to be defined
-            // or the program does not compile - and a table needs the *file* each
-            // line came from, which this path does not know: it is handed one
-            // `Parsed` and no path. The path a user takes goes through
-            // `modules::Program`, which knows every file and appends the real
-            // table (`abort_table`); this one is `emit_program`, which the tests
-            // and `lower-std` use.
-            //
-            // Empty is the fallback rather than a lie: a location the table does
-            // not know is handed to the hook installed before ours, which is
-            // Rust's own, so such a program is exactly as well off as it was.
-            out.push(&format!(
-                "\n// ADR-300 D9: no table - this program was emitted without its file name.\nconst {ABORT_TABLE}: &[nikaia_std::abort::Site] = &[];\n"
-            ));
-        }
         Ok(Lowered {
             rust: out.buf,
-            map: SourceMap::from_entries(out.entries),
+            map: SourceMap {
+                entries: out.entries,
+            },
             published: self.s.facts.published.clone(),
         })
-    }
-
-    /// The program's own `main`, if this file carries one the runtime can wrap.
-    ///
-    /// `Some(throws)` for the plain shape - `fn main()` or `fn main() throws`,
-    /// no receiver, no parameters, no returned value - and `None` for anything
-    /// else, including a `main` in a module rather than at the crate root. A
-    /// `main` this does not recognise is emitted exactly as written and keeps
-    /// its name, because a wrapper that guessed at a signature would be worse
-    /// than no wrapper at all.
-    fn user_main(&self) -> Option<bool> {
-        self.s.user_main(&self.world)
     }
 
     // --- Types ---

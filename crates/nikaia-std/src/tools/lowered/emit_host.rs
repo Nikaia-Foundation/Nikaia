@@ -3,13 +3,10 @@
 
 pub trait EmitHost {
     fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr;
-    fn copied_bindings(&self, at: i64) -> Vec<String>;
-    fn guard_copies(&self, at: i64) -> Vec<String>;
     fn take_lend(&self, out: &mut EmitOut) -> bool;
     fn wants_widening(&self, node: &Expr) -> bool;
     fn block_mentions(&self, block: &Block, name: &str) -> bool;
     fn error_type(&self, node: &Expr) -> Option<String>;
-    fn task_handles(&self, task: i64) -> Vec<String>;
     fn known_nonnegative(&self, body: &Block) -> Option<Vec<String>>;
     fn insert_after_first_brace(&self, out: &mut EmitOut, text: &str);
     fn insert_before_last_brace(&self, out: &mut EmitOut, text: &str);
@@ -17,13 +14,11 @@ pub trait EmitHost {
     fn given_up_unmuted(&self, at: i64) -> bool;
     fn given_up_rebound(&self, at: i64) -> Option<bool>;
     fn order_of(&self, block: &Block) -> Vec<i64>;
-    fn ty_of_name(&self, walk: &mut EmitWalk, name: winnow_grammar::Symbol) -> Result<String, Box<dyn std::error::Error>>;
     fn overlaps_user_code(&self) -> bool;
     fn crossings_are_possible(&self) -> bool;
     fn user_parallelism(&self) -> bool;
     fn parallelism(&self) -> String;
     fn written(&self, expr: &Expr) -> String;
-    fn held_buffers(&self, walk: &EmitWalk, function: &str, statement: i64, root: &str) -> Option<Vec<(i64, Vec<i64>)>>;
     fn seeds_shape(&self, key: &str) -> Option<EmitSeedsShape>;
     fn set_main_params(&self, params: &[String]);
     fn main_params(&self) -> Vec<String>;

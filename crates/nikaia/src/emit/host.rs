@@ -132,27 +132,6 @@ impl EmitHost for Emitter<'_> {
         nikaia_std::tools::emit_order::emit_order(block, &self.order_proofs, &self.parsed.interner)
     }
 
-    fn ty_of_name(
-        &self,
-        walk: &mut EmitWalk,
-        name: winnow_grammar::Symbol,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        let ty = crate::ast::Type {
-            name,
-            generics: Vec::new(),
-            is_view: false,
-            is_tuple: false,
-            is_nullable: false,
-            code: Box::new(None),
-            count: None,
-            is_mut: false,
-            is_slice: false,
-            either: false,
-            lasting: false,
-        };
-        self.ty_named(walk, &ty)
-    }
-
     fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr {
         let wraps: Vec<(usize, winnow_grammar::Symbol)> = wraps
             .iter()
@@ -161,25 +140,6 @@ impl EmitHost for Emitter<'_> {
         let mut wrapped = hole.clone();
         crate::text_tiers::wrap_hole(&mut wrapped, &wraps);
         wrapped
-    }
-
-    fn copied_bindings(&self, at: i64) -> Vec<String> {
-        self.s
-            .facts
-            .copied_bindings
-            .range((at, String::new())..)
-            .take_while(|(pattern, _)| *pattern == at)
-            .map(|(_, name)| name.clone())
-            .collect()
-    }
-
-    fn guard_copies(&self, at: i64) -> Vec<String> {
-        self.s
-            .facts
-            .guards_inside_boxes
-            .get(&at)
-            .map(|names| names.iter().cloned().collect())
-            .unwrap_or_default()
     }
 
     fn take_lend(&self, out: &mut Out) -> bool {
@@ -201,16 +161,6 @@ impl EmitHost for Emitter<'_> {
         crate::contracts::throws::error_type(self.parsed, node)
     }
 
-    fn task_handles(&self, task: i64) -> Vec<String> {
-        self.s
-            .facts
-            .task_handles
-            .iter()
-            .filter(|(at, _)| *at == task)
-            .map(|(_, name)| name.clone())
-            .collect()
-    }
-
     fn overlaps_user_code(&self) -> bool {
         self.build.overlaps_user_code()
     }
@@ -229,34 +179,6 @@ impl EmitHost for Emitter<'_> {
 
     fn written(&self, expr: &Expr) -> String {
         crate::check::written(self.parsed, expr)
-    }
-
-    fn held_buffers(
-        &self,
-        walk: &EmitWalk,
-        function: &str,
-        statement: i64,
-        root: &str,
-    ) -> Option<Vec<(i64, Vec<i64>)>> {
-        let plans = &self.s.keep_plans;
-        let plan = match plans.get(function) {
-            Some(plan) => plan,
-            None => plans.get(walk.keep_function.as_str())?,
-        };
-        let by_arg = plan.holds.get(&(statement, root.to_string()))?;
-        let width = plan.widths.get(root).copied().unwrap_or(1);
-        Some(
-            by_arg
-                .iter()
-                .map(|(arg, buffers)| {
-                    let mut keeps: Vec<i64> = buffers.iter().copied().collect();
-                    while (keeps.len() as i64) < width {
-                        keeps.push(keeps[keeps.len() - 1]);
-                    }
-                    (*arg, keeps)
-                })
-                .collect(),
-        )
     }
 
     fn seeds_shape(&self, key: &str) -> Option<EmitSeedsShape> {

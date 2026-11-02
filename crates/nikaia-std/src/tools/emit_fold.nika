@@ -152,7 +152,7 @@ impl EmitState {
                                 // path names it: without that, the backend's
                                 // `let merge = ..` leaves the closure with nothing
                                 // to infer from.
-                                let owner_type = host.ty_of_name(walk, owner)
+                                let owner_type = host.ty_named(walk, Type { name: owner, generics: [], is_view: false, is_tuple: false, is_nullable: false, code: null, count: null, is_mut: false, is_slice: false, either: false, lasting: false })
                                 out.push(f"|mut a: {owner_type}, b| {{ a.{emit_text(world, name)}({by_view}b); a }}")
                                 return
                             }

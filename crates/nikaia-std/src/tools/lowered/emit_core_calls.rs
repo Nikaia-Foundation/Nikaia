@@ -881,10 +881,19 @@ impl EmitState {
         walk.hold_args = None;
         let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return };
         let root = match root_of(world.words, on) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let held = host.held_buffers(&walk, &scope.function, flow.statement, &root);
-        if held.is_none() { return; }
+        let plan = match self.keep_plans.get(&scope.function) { Some(__nikaia_value) => __nikaia_value, None => match self.keep_plans.get(&walk.keep_function) { Some(__nikaia_value) => __nikaia_value, None => return } };
+        let holds = match plan.holds.get(&(flow.statement, root.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let width = nikaia_std::index::or(plan.widths.get(&root), || 1);
         let mut by_arg: collections::BTreeMap<i64, Vec<i64>> = collections::BTreeMap::new();
-        for (arg, keeps) in nikaia_std::index::or(held, || vec![].into()) { by_arg.insert(arg, keeps.to_owned()); }
+        for (arg, buffers) in holds.iter() {
+            let arg = nikaia_std::num::value(arg);
+            let mut keeps: Vec<i64> = buffers.iter().copied().collect::<Vec<_>>();
+            while (keeps.len() as i64) < width {
+                let last = *nikaia_std::index::get(&keeps, nikaia_std::index::at(keeps.len() as i64 - 1));
+                keeps.push(last);
+            }
+            by_arg.insert(arg, keeps);
+        }
         walk.hold_args = Some(by_arg);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

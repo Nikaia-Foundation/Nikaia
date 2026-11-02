@@ -2633,7 +2633,7 @@ pub mod emit_order {
 }
 pub mod emit_out {
     #[allow(unused_imports)]
-    pub use super::{EmitMapEntry, EmitOut};
+    pub use super::{EmitMapEntry, emit_out_locate, emit_out_placed, EmitOut};
 }
 pub mod emit_pattern {}
 pub mod emit_program {}

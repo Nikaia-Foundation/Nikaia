@@ -9,6 +9,21 @@ pub struct EmitMapEntry {
     pub unit: i64,
 }
 
+pub fn emit_out_locate(entries: &[EmitMapEntry], offset: i64) -> Option<EmitMapEntry> {
+    match entries.iter().find(|&entry| { entry.start <= offset && offset < entry.end }) {
+        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        None => None,
+    }
+}
+
+pub fn emit_out_placed(entries: &mut Vec<EmitMapEntry>, by: i64, unit: i64) {
+    for entry in entries.iter_mut() {
+        (*entry).start += by;
+        (*entry).end += by;
+        (*entry).unit = unit;
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmitOut {
     pub buf: String,

@@ -849,9 +849,12 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn emit_task_handles(&self, task: i64) -> Vec<String> { self.facts.task_handles.iter().filter(|handle| { handle.0 == task }).map(|handle| { handle.1.to_string() }).collect::<Vec<_>>() }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_flow_task<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: i64, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let handles = host.task_handles(task);
+        let handles = self.emit_task_handles(task);
         if !handles.is_empty() {
             out.push("{ ");
             for name in handles.iter() { out.push(&format!("let {} = {}.clone(); ", name, name)); }
@@ -881,7 +884,7 @@ impl EmitState {
             self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?;
             out.push(")");
         }
-        if !host.task_handles(task).is_empty() { out.push(" }"); }
+        if !self.emit_task_handles(task).is_empty() { out.push(" }"); }
         Ok(())
     }
 }

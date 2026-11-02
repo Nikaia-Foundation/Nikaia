@@ -483,6 +483,17 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn emit_copied_bindings(&self, at: i64) -> Vec<String> { self.facts.copied_bindings.iter().filter(|copied| { copied.0 == at }).map(|copied| { copied.1.to_string() }).collect::<Vec<_>>() }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_guard_copies(&self, at: i64) -> Vec<String> {
+        match self.facts.guards_inside_boxes.get(&at) {
+            None => vec![],
+            Some(names) => names.iter().map(|name| { name.to_string() }).collect::<Vec<_>>(),
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_arm_body_led<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, nest_count: i64, body: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, lead: &str) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mut taken_apart = lead.to_string();
@@ -494,7 +505,7 @@ impl EmitState {
         let opened = self.boxed_bindings(world, pattern);
         let read = self.emit_holes_names_read(world, host, body);
         let mut copied: Vec<String> = vec![];
-        for name in host.copied_bindings(node_key(body)) { if nikaia_std::list::contains(&read, &name) && self.facts.changed_copies.contains(&(node_key(body), name.to_string())) { copied.push(format!("let mut {} = *{}; ", name, name)); } else if nikaia_std::list::contains(&read, &name) { copied.push(format!("let {} = *{}; ", name, name)); } }
+        for name in self.emit_copied_bindings(node_key(body)) { if nikaia_std::list::contains(&read, &name) && self.facts.changed_copies.contains(&(node_key(body), name.to_string())) { copied.push(format!("let mut {} = *{}; ", name, name)); } else if nikaia_std::list::contains(&read, &name) { copied.push(format!("let {} = *{}; ", name, name)); } }
         for one in self.facts.changed_bindings.iter() { if one.0 == node_key(body) { copied.push(format!("let mut {} = {}; ", one.1, one.1)); } }
         let mut cloned: Vec<String> = vec![];
         for one in self.facts.cloned_bindings.iter() { if one.0 == node_key(body) { cloned.push(one.1.to_string()); } }
@@ -801,7 +812,7 @@ impl EmitState {
                     out.push(" => ");
                 }
                 out.push("{ ");
-                for name in host.guard_copies(key) {
+                for name in self.emit_guard_copies(key) {
                     let escaped = escaped_name(&name);
                     out.push(&format!("let {} = *{}; ", escaped, escaped));
                 }
@@ -823,7 +834,7 @@ impl EmitState {
                 let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 let guard_read = self.emit_holes_names_read(world, host, guard);
                 let mut guard_copied: Vec<String> = vec![];
-                for name in host.copied_bindings(node_key(&arm.body)) { if nikaia_std::list::contains(&guard_read, &name) { guard_copied.push(name); } }
+                for name in self.emit_copied_bindings(node_key(&arm.body)) { if nikaia_std::list::contains(&guard_read, &name) { guard_copied.push(name); } }
                 if nests == 0 && !guard_copied.is_empty() {
                     out.push(" if { ");
                     for name in guard_copied.iter() {
