@@ -67,19 +67,35 @@ pub(crate) fn emit_writes_a_built_in(world: &EmitWorld<'_, '_, '_, '_>, walk: &E
     }
 }
 
-pub(crate) fn emit_span_bindings(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, found: &mut Vec<String>) {
+pub(crate) fn emit_span_bindings(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, found: &mut Vec<String>, ranges: &mut Vec<String>, nested: bool) {
     match pattern {
         Pattern::Bind { name, pat: grouped } => {
             let grouped = nikaia_std::boxed::open(grouped); let name = *name;
             let pat = emit_ungrouped(grouped);
-            if emit_is_a_span(world, walk, &pat.node) { found.push(emit_text(world, name)); }
-            emit_span_bindings(world, walk, &pat.node, found);
+            if emit_is_a_span(world, walk, &pat.node) {
+                let said = emit_text(world, name);
+                match &pat.node {
+                    Pattern::Ref { args, .. } => {
+                        if emit_is_a_binding_span(world, walk, &pat.node, nested) {
+                            let from = emit_text_edge(world, walk, &said, args, "from");
+                            let to = emit_text_edge(world, walk, &said, args, "to");
+                            ranges.push(format!("{}.start..{}.end", from, to));
+                        } else { ranges.push(said.to_string()); }
+                    },
+                    _ => { ranges.push(said.to_string()); },
+                }
+                found.push(said);
+            }
+            emit_span_bindings(world, walk, &pat.node, found, ranges, nested);
         },
-        Pattern::Seq(parts) => { for part in parts.iter() { emit_span_bindings(world, walk, &part.node, found); } },
-        Pattern::Choice(parts) => { for part in parts.iter() { emit_span_bindings(world, walk, &part.node, found); } },
-        Pattern::Ref { args, .. } => { for arg in args.iter() { emit_span_bindings(world, walk, &arg.node, found); } },
-        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_span_bindings(world, walk, &pat.node, found); },
-        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); emit_span_bindings(world, walk, &pat.node, found); },
+        Pattern::Seq(parts) => { for part in parts.iter() { emit_span_bindings(world, walk, &part.node, found, ranges, nested); } },
+        Pattern::Choice(parts) => { for part in parts.iter() { emit_span_bindings(world, walk, &part.node, found, ranges, true); } },
+        Pattern::Ref { args, .. } => {
+            let open = !nested && (emit_is_a_binding_span(world, walk, pattern, false) || emit_is_a_binding_text(world, walk, pattern));
+            for arg in args.iter() { emit_span_bindings(world, walk, &arg.node, found, ranges, !open); }
+        },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); emit_span_bindings(world, walk, &pat.node, found, ranges, true); },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); emit_span_bindings(world, walk, &pat.node, found, ranges, nested); },
         _ => { },
     }
 }
@@ -90,7 +106,7 @@ pub(crate) fn emit_text_bindings(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitW
             let grouped = nikaia_std::boxed::open(grouped); let name = *name;
             let pat = emit_ungrouped(grouped);
             match &pat.node {
-                Pattern::Ref { args, .. } => { if emit_is_a_binding_text(world, walk, &pat.node) { emit_text_binding(world, walk, emit_text(world, name), args, found, ranges); } },
+                Pattern::Ref { args, .. } => { if emit_is_a_binding_text(world, walk, &pat.node) { emit_text_binding(world, walk, emit_text(world, name), args, found, ranges); } else if emit_is_a_binding_span(world, walk, &pat.node, false) { for arg in args.iter() { emit_text_bindings(world, walk, arg, found, ranges); } } },
                 _ => { },
             }
         },
@@ -331,10 +347,11 @@ impl EmitState {
                     let mut as_bytes: Vec<String> = vec![];
                     if !bytes { emit_bytes_bindings(world, &alt.pattern.node, &mut as_bytes); }
                     let mut as_spans: Vec<String> = vec![];
-                    emit_span_bindings(world, &walk, &alt.pattern.node, &mut as_spans);
+                    let mut spanned: Vec<String> = vec![];
+                    emit_span_bindings(world, &walk, &alt.pattern.node, &mut as_spans, &mut spanned, false);
                     let mut prelude = String::from("");
                     for name in as_bytes.iter() { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); }
-                    for name in as_spans.iter() { prelude = format!("{}let {} = ::nikaia_std::text::Span::of({}); ", prelude, name, name); }
+                    for (name, range) in as_spans.iter().zip(spanned.iter()) { prelude = format!("{}let {} = ::nikaia_std::text::Span::of({}); ", prelude, name, range); }
                     let mut as_texts: Vec<String> = vec![];
                     let mut covered: Vec<String> = vec![];
                     emit_text_bindings(world, &walk, &alt.pattern, &mut as_texts, &mut covered);

@@ -114,34 +114,52 @@ fn emit_writes_a_built_in(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref
     }
 }
 
-/// **The names bound to a `span(p)`** in a pattern: the backend hands each
-/// back as a range, which the action reads as a `text::Span` (#557).
-fn emit_span_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, mut found: Vec[String]) {
+/// **The names bound to a `span(p)`** in a pattern, each with the range the
+/// action reads as a `text::Span` (#557): the backend's own for `(p) @ s`, or
+/// from the first element's start to the last one's end where `p` is a
+/// sequence that binds names (`emit_is_a_binding_span`, #1197).
+fn emit_span_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, mut found: Vec[String], mut ranges: Vec[String], nested: bool) {
     match pattern {
         Pattern::Bind { name, pat: grouped } => {
             let pat = emit_ungrouped(grouped)
             if emit_is_a_span(world, walk, pat.node) {
-                found.push(emit_text(world, name))
+                let said = emit_text(world, name)
+                match pat.node {
+                    Pattern::Ref { args, .. } => {
+                        if emit_is_a_binding_span(world, walk, pat.node, nested) {
+                            let from = emit_text_edge(world, walk, said, args, "from")
+                            let to = emit_text_edge(world, walk, said, args, "to")
+                            ranges.push(f"{from}.start..{to}.end")
+                        } else {
+                            ranges.push(said.clone())
+                        }
+                    },
+                    else => ranges.push(said.clone()),
+                }
+                found.push(said)
             }
-            emit_span_bindings(world, walk, pat.node, found)
+            emit_span_bindings(world, walk, pat.node, found, ranges, nested)
         },
         Pattern::Seq(parts) => {
             for part in parts {
-                emit_span_bindings(world, walk, part.node, found)
+                emit_span_bindings(world, walk, part.node, found, ranges, nested)
             }
         },
         Pattern::Choice(parts) => {
             for part in parts {
-                emit_span_bindings(world, walk, part.node, found)
+                emit_span_bindings(world, walk, part.node, found, ranges, true)
             }
         },
+        // what a span or a text written out element by element holds is
+        // the alternative's still; below any other rule the backend's
         Pattern::Ref { args, .. } => {
+            let open = !nested && (emit_is_a_binding_span(world, walk, pattern, false) || emit_is_a_binding_text(world, walk, pattern))
             for arg in args {
-                emit_span_bindings(world, walk, arg.node, found)
+                emit_span_bindings(world, walk, arg.node, found, ranges, !open)
             }
         },
-        Pattern::Repeat { pat, .. } => emit_span_bindings(world, walk, pat.node, found),
-        Pattern::Group(pat) => emit_span_bindings(world, walk, pat.node, found),
+        Pattern::Repeat { pat, .. } => emit_span_bindings(world, walk, pat.node, found, ranges, true),
+        Pattern::Group(pat) => emit_span_bindings(world, walk, pat.node, found, ranges, nested),
         else => {},
     }
 }
@@ -157,6 +175,11 @@ fn emit_text_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Spa
                 Pattern::Ref { args, .. } => {
                     if emit_is_a_binding_text(world, walk, pat.node) {
                         emit_text_binding(world, walk, emit_text(world, name), args, found, ranges)
+                    } else if emit_is_a_binding_span(world, walk, pat.node, false) {
+                        // a span written out element by element (#1197)
+                        for arg in args {
+                            emit_text_bindings(world, walk, arg, found, ranges)
+                        }
                     }
                 },
                 else => {},
@@ -494,13 +517,14 @@ impl EmitState {
                         emit_bytes_bindings(world, alt.pattern.node, as_bytes)
                     }
                     let mut as_spans: Vec[String] = []
-                    emit_span_bindings(world, walk, alt.pattern.node, as_spans)
+                    let mut spanned: Vec[String] = []
+                    emit_span_bindings(world, walk, alt.pattern.node, as_spans, spanned, false)
                     let mut prelude = ""
                     for name in as_bytes {
                         prelude = f"{prelude}let {name} = {name}.as_bytes(); "
                     }
-                    for name in as_spans {
-                        prelude = f"{prelude}let {name} = ::nikaia_std::text::Span::of({name}); "
+                    for (name, range) in as_spans.iter().zip(spanned.iter()) {
+                        prelude = f"{prelude}let {name} = ::nikaia_std::text::Span::of({range}); "
                     }
                     let mut as_texts: Vec[String] = []
                     let mut covered: Vec[String] = []

@@ -1,0 +1,6 @@
+one ab: ab 0..2
+two <ab: ab 0..3
+three <abc>: abc 0..5
+three <ab: refused
+edges <x=yz: <x yz 0..5
+inner (<p.q>): p.q 2..5 in 1..6

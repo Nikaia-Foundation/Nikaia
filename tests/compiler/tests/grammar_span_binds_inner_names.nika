@@ -1,0 +1,38 @@
+// A labelled `span(..)` over two or more elements keeps the names bound
+// inside it for the action (Part II 10.8, #1197), as over one element; also
+// a bound `text(..)` at its edge and a span inside a span.
+
+grammar Spans {
+    rule WS = "" -> { }
+    rule LT = "<" -> { }
+    rule GT = ">" -> { }
+    entry rule one -> String = s:span(n:raw_ident) eof -> { f"{n} {s.start}..{s.end}" }
+    entry rule two -> String = s:span(LT n:raw_ident) eof -> { f"{n} {s.start}..{s.end}" }
+    entry rule three -> String = s:span(LT n:raw_ident GT) eof -> { f"{n} {s.start}..{s.end}" }
+    entry rule edges -> String = s:span(a:text(LT raw_ident) "=" b:raw_ident) eof -> { f"{a} {b} {s.start}..{s.end}" }
+    entry rule inner -> String = "(" s:span(LT t:span(n:raw_ident "." m:raw_ident) GT) ")" eof -> { f"{n}.{m} {t.start}..{t.end} in {s.start}..{s.end}" }
+}
+
+fn show(which: String, source: String) {
+    let input = Bytes(source.bytes().collect())
+    let r = match which {
+        "one" => Spans::one(input),
+        "two" => Spans::two(input),
+        "three" => Spans::three(input),
+        "edges" => Spans::edges(input),
+        else => Spans::inner(input),
+    } catch {
+        println(f"{which} {source}: refused")
+        return
+    }
+    println(f"{which} {source}: {r}")
+}
+
+fn main() {
+    show("one", "ab")
+    show("two", "<ab")
+    show("three", "<abc>")
+    show("three", "<ab")
+    show("edges", "<x=yz")
+    show("inner", "(<p.q>)")
+}

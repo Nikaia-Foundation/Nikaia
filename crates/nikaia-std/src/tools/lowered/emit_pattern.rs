@@ -50,6 +50,10 @@ impl EmitState {
                 if emit_is_a_span(world, &walk, &pat.node) {
                     match &pat.node {
                         Pattern::Ref { args, .. } => {
+                            if emit_is_a_binding_span(world, &walk, &pat.node, walk.grammar_nested) {
+                                self.emit_text_parts(world, walk, out, host, emit_text(world, name), args)?;
+                                return Ok(());
+                            }
                             out.push("(");
                             self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;
                             out.push(&format!(") @ {}", emit_text(world, name)));
@@ -307,6 +311,20 @@ impl EmitState {
 pub(crate) fn emit_is_a_span(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
     match pattern {
         Pattern::Ref { name, generics, args } => { let name = *name; emit_text(world, name) == "span" && generics.is_empty() && args.len() == 1 && !walk.grammar_rules.contains("span") },
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_is_a_binding_span(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, nested: bool) -> bool {
+    match pattern {
+        Pattern::Ref { args, .. } => emit_is_a_span(world, walk, pattern) && !nested && args.len() == 1 && emit_is_a_bound_run(&nikaia_std::index::get(&args, 0).node),
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_is_a_bound_run(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Seq(parts) => parts.len() >= 2 && parts.iter().any(|part| { emit_binds_a_name(&part.node) }),
         _ => false,
     }
 }

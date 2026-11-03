@@ -56,10 +56,18 @@ impl EmitState {
                 let pat = emit_ungrouped(grouped)
                 // **`s:span(p)` is `p` with the range it covered** (ADR-339
                 // D1, #557): the backend's `(p) @ s`, which keeps a name `p`
-                // binds, and is read as a `text::Span` before the action.
+                // binds when `p` is one element, and is read as a `text::Span`
+                // before the action. Over a sequence that binds names the
+                // backend's group would scope them (#1197), so the sequence is
+                // written as `text(..)`'s is (#1013), its first and last
+                // element each with the range it covered.
                 if emit_is_a_span(world, walk, pat.node) {
                     match pat.node {
                         Pattern::Ref { args, .. } => {
+                            if emit_is_a_binding_span(world, walk, pat.node, walk.grammar_nested) {
+                                self.emit_text_parts(world, walk, out, host, emit_text(world, name), args)
+                                return
+                            }
                             out.push("(")
                             self.emit_pattern(world, walk, out, host, args[0])
                             out.push(f") @ {emit_text(world, name)}")
@@ -393,6 +401,26 @@ impl EmitState {
 fn emit_is_a_span(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
     return match pattern {
         Pattern::Ref { name, generics, args } => emit_text(world, name) == "span" && generics.len() == 0 && args.len() == 1 && !walk.grammar_rules.contains("span"),
+        else => false,
+    }
+}
+
+/// **Whether a `span(p)` is a sequence that binds names** (#1197): the
+/// backend's `(a n:b c) @ s` scopes `n`, so such a span is written as a bound
+/// `text(..)` is (`emit_text_parts`). Below a repeat or a choice the
+/// backend's own form stays (`grammar_nested`, as for `text(..)`).
+fn emit_is_a_binding_span(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, nested: bool) -> bool {
+    return match pattern {
+        Pattern::Ref { args, .. } => emit_is_a_span(world, walk, pattern) && !nested && args.len() == 1 && emit_is_a_bound_run(args[0].node),
+        else => false,
+    }
+}
+
+/// Whether a pattern is a sequence of two or more elements, one of which
+/// binds a name.
+fn emit_is_a_bound_run(pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Seq(parts) => parts.len() >= 2 && parts.iter().any(fn(part) { emit_binds_a_name(part.node) }),
         else => false,
     }
 }
