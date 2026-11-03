@@ -286,7 +286,7 @@ pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world:
     };
     state.scope.push(frame);
     let count = action.stmts.len() as i64;
-    let tail = check_core_block(state, world, host, action);
+    let mut tail = check_core_block(state, world, host, action);
     state.scope.pop();
     if expected.is_some() && count > 0 {
         let wanted = nikaia_std::index::or(match expected {
@@ -294,6 +294,10 @@ pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world:
             None => None,
         }, || Ty::Unknown);
         let at = nikaia_std::index::get(&action.stmts, nikaia_std::index::at(count - 1)).span;
+        match &nikaia_std::index::get(&action.stmts, nikaia_std::index::at(count - 1)).node {
+            Stmt::Expr(value) => { tail = nikaia_std::index::or(state.text_literal(world, &wanted, value, true), || tail.into()); },
+            _ => { },
+        }
         state.expect_type(world, &tail, &wanted, &Span { start: at.start, end: at.end }, "returns", &|found, want| { format!("This action builds `{}`, but its rule returns `{}`.", found, want) });
         match &nikaia_std::index::get(&action.stmts, nikaia_std::index::at(count - 1)).node {
             Stmt::Expr(value) => { check_function_wrap_tail(state, world, host, &tail, &wanted, value, &Span { start: at.start, end: at.end }); },

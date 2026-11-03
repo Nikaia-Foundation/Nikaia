@@ -360,11 +360,20 @@ fn check_function_action[H: CheckHost](mut state: CheckState, world: ref CheckWo
     state.expected = expected?.clone()
     state.scope.push(frame)
     let count = action.stmts.len()
-    let tail = check_core_block(state, world, host, action)
+    let mut tail = check_core_block(state, world, host, action)
     state.scope.pop()
     if expected != null && count > 0 {
         let wanted = expected?.clone() ?? Ty::Unknown
         let at = action.stmts[count - 1].span
+        // **A text literal at the end is text of its own where the rule
+        // keeps one** (ADR-282 D4, #1196), as a function's tail is: a rule
+        // whose other alternative builds a `String`.
+        match action.stmts[count - 1].node {
+            Stmt::Expr(value) => {
+                tail = state.text_literal(world, wanted, value, true) ?? tail
+            },
+            else => {},
+        }
         state.expect_type(world, tail, wanted, Span { start: at.start, end: at.end }, "returns", fn(found, want) { f"This action builds `{found}`, but its rule returns `{want}`." })
         // What the action ends in takes the wrap into the rule's type, as a
         // function's tail does: `v` of `i64` is `Some(v)` in an `i64?` rule.

@@ -1,0 +1,8 @@
+one abc: abc
+one _: _
+one -: refused
+two -: dash
+two xy: xy
+three ?: none
+three !: bang
+three zz: zz

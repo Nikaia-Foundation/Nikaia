@@ -1,0 +1,40 @@
+// A rule `-> String` whose alternatives are a bound name and a text literal
+// (#1196): the literal is text of its own there, as a function's tail is
+// (ADR-282 D4), in either order and in a nullable rule.
+
+grammar Words {
+    rule WS = "" -> { }
+    rule word -> String = n:raw_ident -> { n.clone() } | "_" -> { "_" }
+    rule first -> String = "-" -> { "dash" } | n:raw_ident -> { n.clone() }
+    rule maybe -> String? = "?" -> { null } | "!" -> { "bang" } | n:raw_ident -> { n.clone() }
+    entry rule one -> String = w:word eof -> { w }
+    entry rule two -> String = w:first eof -> { w }
+    entry rule three -> String = w:maybe eof -> { w ?? "none" }
+}
+
+fn main() {
+    for s in ["abc", "_", "-"] {
+        let input = Bytes(s.bytes().collect())
+        let r = Words::one(input) catch {
+            println(f"one {s}: refused")
+            continue
+        }
+        println(f"one {s}: {r}")
+    }
+    for s in ["-", "xy"] {
+        let input = Bytes(s.bytes().collect())
+        let r = Words::two(input) catch {
+            println(f"two {s}: refused")
+            continue
+        }
+        println(f"two {s}: {r}")
+    }
+    for s in ["?", "!", "zz"] {
+        let input = Bytes(s.bytes().collect())
+        let r = Words::three(input) catch {
+            println(f"three {s}: refused")
+            continue
+        }
+        println(f"three {s}: {r}")
+    }
+}
