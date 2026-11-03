@@ -147,6 +147,34 @@ let mut y = 10
 y = 20     // This is allowed
 ```
 
+**Deep immutability: `immutable`**
+`let` promises that the name is not assigned again; a `SharedMut` it holds can
+still change through another owner. `immutable` promises more: neither the name
+nor anything reachable from its value ever changes ([ADR-389](adr/adr-389.md)).
+A value whose type reaches, through fields, elements, variants or captures, a
+`SharedMut`, a `Locked`, a channel end or another handle to storage changeable
+through another owner is refused (`NK1331`). Nothing is moved out of it and no
+`ref mut self` method is called on it. A task may read it, captured or handed
+over, without a copy or an owner count (8.3).
+
+```nika
+fn main() {
+    immutable limits = load_limits()
+    let a = async fn { check(ref(limits)) }   // no copy, no count
+}
+```
+
+Where an item stands, `immutable X = f()` is evaluated on first access, exactly
+once, even when several tasks reach it together; every later access reads the
+same value. Nobody can change it, so it is not global state. Its initializer may
+not throw; a value that may be missing is a `T?`. A cycle among item-level
+`immutable`s is refused (`NK1331`). A value known at build time is a `comptime`
+(Part II, 10.2).
+
+```nika
+immutable DUMP_DIR: String? = env::var("NIKAIA_DUMP_ACCEPTED")
+```
+
 **Taking a tuple apart.** `let (a, b) = pair()` binds each name to the part at its position. The names may nest as the tuple does, `let (a, (b, c)) = (1, (2, 3))`: a `let` takes a name, `_`, or a parenthesised list of these, as deep as it is written. A written type on a tuple is refused (`NK1136`), because one type cannot say which name it is about. A variant is refused (`NK1259`): it may not be the one the value holds, and taking it apart is a `match`'s. A **parameter** takes the same pattern, in a function, `fn dist((x, y): (f64, f64)) -> f64`, with the type of the whole after it, and in a lambda, `fn((name, v)) { … }`. It is still one parameter: callers, the function's type and its count of arguments see one tuple. `ref` or `mut` before it belong to the whole, so the parts are views or changeable. An option, which a call names, is never a pattern.
 
 **Reserved words**
@@ -156,16 +184,18 @@ reserved word. The reserved words are:
 
 ```text
 as        async     break     catch     comptime  continue  dsl       else
-enum      extern    false     fn        for       grammar   if        impl
-in        let       match     mut       null      pub       ref       return
-select    self      spawn     struct    sync      test      throw     throws
-trait     true      unsafe    use       while     with
+enum      extern    false     fn        for       grammar   if        immutable
+impl      in        let       match     mut       null      pub       ref
+return    select    self      spawn     struct    sync      test      throw
+throws    trait     true      unsafe    use       while     with
 ```
 
 A name that is a reserved word does not parse, and the parse error names the
 word and says it is reserved.
 
 **`ref` is reserved for the view it writes.** `ref(x)` is a borrow of `(x)`.
+
+**`immutable` is reserved for its construct**: a binding whose value nothing ever changes, deeply, where an item stands or inside a function body (2.1).
 
 **`comptime` is reserved for its construct**: a binding where an item stands or a statement inside a function
 body (Part II, 10.2). It promises a time of evaluation, not constancy.
