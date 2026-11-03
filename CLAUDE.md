@@ -58,6 +58,12 @@ The rules every session and agent needs. What only the main session does
   order Rust are read with this rule over them. A defect in existing Rust is
   fixed in Rust only where that code cannot be converted to Nikaia directly;
   where it can, the fix moves it into Nikaia.
+* **Exception: the specification first (owner, 2026-11-03, #1214).** Views-3
+  (#1213) and async-5 (#983) are built now, in Rust where the code they change
+  is Rust (the parser's grammar block, the std runtime, the compiler's Rust
+  parts); directly in Nikaia where that works without changing behaviour and
+  converting at once. A brief of these lanes that orders Rust is meant so. The
+  report lists the Rust it added, for #557 / #125.
 * **Helper tools** (a migration aid, a checker, a generator) are a
   `tools/*.nika` behind a `nikaia` subcommand or run with `nikaia run`, not
   Python or shell; the Python in `scripts/` moves when it is next reworked.
