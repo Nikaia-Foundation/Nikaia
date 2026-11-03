@@ -9,7 +9,7 @@
    - That `agent.nika` escalates below 3 GB free, which made `agent_script` look like a regression. A line saying "check `df` before the suite" would have helped.
 
 3. **Checks run, and which were wasted**
-   - **Useful:** `lower-std` fixpoint, the single-test runs, the `it` run filtered on parse/grammar/span/errors (185 passed), and pre-push, which caught the archived ADR-274 cite.
+   - **Useful:** `lower-std` fixpoint, the single-test runs, the `it` run filtered on parse/grammar/span/errors (185 passed), and pre-push, which caught the archived ADR-279 cite.
    - **Wasted:**
      - tc1, run with the renamed binary.
      - tc2, broken when the binary was rebuilt under it.
