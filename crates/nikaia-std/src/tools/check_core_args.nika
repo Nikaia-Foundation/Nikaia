@@ -164,7 +164,14 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                     // what the body comes to, so `filter_map` binds `U`
                     // (#1078).
                     let mut out: Ty? = null
-                    if !written.is_unknown() && !check_core_args_open_option(written) {
+                    // A written `Vec[U]` left unbound (`Vec[?]`) takes its
+                    // element from the `Seq`, `Vec` or `Array` the body
+                    // hands back, so `flat_map` binds `U` from what its
+                    // function walks (#1097).
+                    let walked = check_core_args_walked(written, came_to)
+                    if walked != null {
+                        out = walked
+                    } else if !written.is_unknown() && !check_core_args_open_option(written) {
                         out = written
                     } else if !came_to.is_unknown() {
                         out = came_to
@@ -187,6 +194,28 @@ fn check_core_args_open_option(ty: ref Ty) -> bool {
         Ty::Nullable(inner) => inner.is_unknown(),
         else => false,
     }
+}
+
+/// `Vec[X]` where the written result is `Vec[?]` and the body came to a
+/// `Seq[X]`, a `Vec[X]` or an `Array[X]` (with or without a length) whose `X`
+/// is known; else `null`. Only the element of what a `for` walks is taken.
+fn check_core_args_walked(written: ref Ty, came_to: ref Ty) -> Ty? {
+    let open = match written {
+        Ty::Named { name, args, .. } => name == "Vec" && args.len() == 1 && args[0].is_unknown(),
+        else => false,
+    }
+    if !open {
+        return null
+    }
+    let element: Ty = match came_to {
+        Ty::Seq { item, .. } => item.clone(),
+        Ty::Named { name, args, .. } => if (name == "Vec" && args.len() == 1) || (name == ARRAY && args.len() >= 1) { args[0].clone() } else { return null },
+        else => return null,
+    }
+    if element.is_unknown() {
+        return null
+    }
+    return Ty::Named { name: "Vec", args: [element], view: false }
 }
 
 /// **Any other argument**: walked, and recorded where a declared function or a

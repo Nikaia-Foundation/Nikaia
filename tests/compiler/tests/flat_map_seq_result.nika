@@ -1,0 +1,24 @@
+// #1097: `flat_map`'s function may hand back anything a `for` walks, a `Seq`,
+// a `Vec` or an `Array`, and the element type reaches the next lambda.
+
+fn lengths(l: String) -> Vec[i64] {
+	return [l.len(), 0]
+}
+
+fn main() {
+	let lines = ["a;bb", "ccc"]
+	// A `Seq` of views (`split`): the parts keep their text kind.
+	let parts = lines.iter().flat_map(fn(l) { l.split(";") }).map(fn(p) { p.len() }).collect()
+	println(parts.len())
+	let trimmed = lines.iter().flat_map(fn(l) { l.split(";") }).map(fn(p) { p.trim() }).collect()
+	for p in trimmed {
+		println(p)
+	}
+	// A `Vec` from a lambda.
+	let more = lines.iter().flat_map(fn(l) { [l.len(), 1] }).map(fn(n) { n + 1 }).collect()
+	println(more.len())
+	// A named function handing back a `Vec` (over `split`: a named function
+	// over `iter()` is #1098).
+	let named = "a;bb ccc".split(" ").flat_map(lengths).map(fn(n) { n * 2 }).collect()
+	println(named.len())
+}

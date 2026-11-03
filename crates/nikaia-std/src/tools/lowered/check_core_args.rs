@@ -122,7 +122,8 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                         for one in returned.iter() { for value in one.value.iter() { state.text_literal(world, &written, value, true); } }
                     }
                     let mut out: Option<Ty> = None;
-                    if !written.is_unknown() && !check_core_args_open_option(&written) { out = Some(written); } else if !came_to.is_unknown() { out = Some(came_to); } else if !written.is_unknown() { out = Some(written); }
+                    let walked = check_core_args_walked(&written, &came_to);
+                    if walked.is_some() { out = std::convert::identity(walked); } else if !written.is_unknown() && !check_core_args_open_option(&written) { out = Some(written); } else if !came_to.is_unknown() { out = Some(came_to); } else if !written.is_unknown() { out = Some(written); }
                     return Ty::Fn { params: given.to_owned(), result: Box::new(out), is_sync: !pauses, can_throw: fails };
                 },
                 _ => { },
@@ -138,6 +139,21 @@ pub(crate) fn check_core_args_open_option(ty: &Ty) -> bool {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.is_unknown() },
         _ => false,
     }
+}
+
+pub(crate) fn check_core_args_walked(written: &Ty, came_to: &Ty) -> Option<Ty> {
+    let open = match written {
+        Ty::Named { name, args, .. } => name == "Vec" && args.len() == 1 && (*nikaia_std::index::get(&args, 0)).is_unknown(),
+        _ => false,
+    };
+    if !open { return None; }
+    let element: Ty = match came_to {
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.clone() },
+        Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 || name == ARRAY && !args.is_empty() { (*nikaia_std::index::get(&args, 0)).clone() } else { return None; },
+        _ => return None,
+    };
+    if element.is_unknown() { return None; }
+    Some(Ty::Named { name: String::from("Vec"), args: vec![element], view: false })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
