@@ -2416,7 +2416,7 @@ pub mod check_numbers {
 }
 pub mod check_numbers2 {
     #[allow(unused_imports)]
-    pub use super::{is_a_list_literal};
+    pub use super::{a_collect_into_an_option, is_a_list_literal};
 }
 pub mod check_numbers3 {}
 pub mod check_numbers4 {

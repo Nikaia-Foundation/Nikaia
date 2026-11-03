@@ -1,0 +1,28 @@
+// `collect` of `T?` items into a declared `C[T]?` is `null` at the first
+// `null` item (ADR-293 D25, #1161).
+use std::text
+
+struct Parsed {
+    numbers: Vec[i64]?,
+}
+
+fn parse_all(words: ref Vec[String]) -> Vec[i64]? {
+    return words.iter().map(fn(w) { text::parse_i64(w) }).collect()
+}
+
+fn halves(xs: ref Vec[i64]) -> Vec[i64]? {
+    let out: Vec[i64]? = xs.iter().map(fn(x) { if x % 2 == 0 { x / 2 } else { null } }).collect()
+    return out
+}
+
+fn main() {
+    let good: Vec[String] = ["1", "2", "3"]
+    let bad: Vec[String] = ["1", "x", "3"]
+    let a = parse_all(good) ?? []
+    println(f"{a.len()} {a[2]}")
+    println(f"{parse_all(bad) == null}")
+    let h = halves([2, 4]) ?? []
+    println(f"{h.len()} {h[1]} {halves([2, 3]) == null}")
+    let p = Parsed { numbers: good.iter().map(fn(w) { text::parse_i64(w) }).collect() }
+    println(f"{p.numbers == null}")
+}

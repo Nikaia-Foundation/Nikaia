@@ -229,7 +229,7 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
     }
     if value != null {
         let given = value ?? return null
-        if check_overflow_list_into_nullables(state, given, found, want) {
+        if check_overflow_list_into_nullables(state, given, found, want) || a_collect_into_an_option(world, found, want, given) {
             return null
         }
     }

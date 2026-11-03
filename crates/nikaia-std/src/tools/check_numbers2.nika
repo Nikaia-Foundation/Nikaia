@@ -337,7 +337,8 @@ impl CheckState {
 
     /// **A `collect` that builds what its position asks** (ADR-293 D25): a map,
     /// a set or text, which the language below's own `collect` builds when
-    /// nothing overrides the type it reads off the place.
+    /// nothing overrides the type it reads off the place; and any of these or a
+    /// list as `C[T]?` from items of `T?` (#1161).
     pub fn collect_by_use(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
         let receiver = collect_receiver(value)
         if receiver.len() != 1 || !a_collect_call(world, value) {
@@ -351,15 +352,33 @@ impl CheckState {
         if made.len() != 1 || type_last_segment(found_name) != "Vec" {
             return null
         }
-        let wanted_name = match want {
+        // **Items of `T?` into a declared `C[T]?`** (ADR-293 D25, #1161): the
+        // whole is `null` at the first `null` item, as the language below's
+        // `collect` into an `Option` builds it.
+        let mut item = made[0].clone()
+        let mut into = want.clone()
+        let mut optional = false
+        match want {
+            Ty::Nullable(whole) => match made[0] {
+                Ty::Nullable(each) => {
+                    item = each.clone()
+                    into = whole.clone()
+                    optional = true
+                },
+                else => {},
+            },
+            else => {},
+        }
+        let wanted_name = match into {
             Ty::Named { name, view, .. } => if view { return null } else { name.clone() },
             else => return null,
         }
-        let parts = named_arguments_of(want)
+        let parts = named_arguments_of(into)
         let base = type_last_segment(wanted_name)
-        let item = made[0].clone()
         let mut fits = false
-        if (base == "HashMap" || base == "BTreeMap" || base == "TrustedMap") && parts.len() == 2 {
+        if optional && base == "Vec" && parts.len() == 1 {
+            fits = item.fits(parts[0])
+        } else if (base == "HashMap" || base == "BTreeMap" || base == "TrustedMap") && parts.len() == 2 {
             fits = item.fits(Ty::Tuple([parts[0].clone(), parts[1].clone()]))
         } else if (base == "HashSet" || base == "BTreeSet" || base == "TrustedSet") && parts.len() == 1 {
             fits = item.fits(parts[0])
@@ -371,6 +390,31 @@ impl CheckState {
         }
         self.facts.collected_into.insert(number_key(receiver[0]))
         return want.clone()
+    }
+}
+
+/// **A `collect` of `T?` items into a declared `C[T]?`** (ADR-293 D25,
+/// #1161): the whole is the option, built by the language below's `collect`,
+/// so it takes no `Some` around it.
+pub fn a_collect_into_an_option(world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> bool sync {
+    if !a_collect_call(world, value) {
+        return false
+    }
+    let made = named_arguments_of(found)
+    let found_name = match found {
+        Ty::Named { name, .. } => name.clone(),
+        else => return false,
+    }
+    if made.len() != 1 || type_last_segment(found_name) != "Vec" {
+        return false
+    }
+    let item_optional = match made[0] {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+    return item_optional && match want {
+        Ty::Nullable(_) => true,
+        else => false,
     }
 }
 

@@ -258,19 +258,47 @@ impl CheckState {
             _ => return None,
         };
         if made.len() != 1 || type_last_segment(&found_name) != "Vec" { return None; }
-        let wanted_name = match want {
-            Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { name.to_string() } },
+        let mut item = (*nikaia_std::index::get(&made, 0)).clone();
+        let mut into = want.clone();
+        let mut optional = false;
+        match want {
+            Ty::Nullable(whole) => { let whole = nikaia_std::boxed::open(whole); match *nikaia_std::index::get(&made, 0) {
+                Ty::Nullable(ref each) => {
+                    let each = nikaia_std::boxed::open(each);
+                    item = each.clone();
+                    into = whole.clone();
+                    optional = true;
+                },
+                _ => { },
+            }; },
+            _ => { },
+        }
+        let wanted_name = match into {
+            Ty::Named { ref name, view, .. } => if view { return None; } else { name.to_string() },
             _ => return None,
         };
-        let parts = named_arguments_of(want);
+        let parts = named_arguments_of(&into);
         let base = type_last_segment(&wanted_name);
-        let item = (*nikaia_std::index::get(&made, 0)).clone();
         let mut fits = false;
-        if (base == "HashMap" || base == "BTreeMap" || base == "TrustedMap") && parts.len() == 2 { fits = item.fits(&Ty::Tuple(vec![(*nikaia_std::index::get(&parts, 0)).clone(), (*nikaia_std::index::get(&parts, 1)).clone()])); } else if (base == "HashSet" || base == "BTreeSet" || base == "TrustedSet") && parts.len() == 1 { fits = item.fits(nikaia_std::index::get(&parts, 0)); } else if base == "String" && parts.is_empty() { fits = a_type_named(&item, "char", false) || a_type_named(&item, "scalar", false) || a_type_named(&item, "str", true) || a_type_named(&item, "String", false); }
+        if optional && base == "Vec" && parts.len() == 1 { fits = item.fits(nikaia_std::index::get(&parts, 0)); } else if (base == "HashMap" || base == "BTreeMap" || base == "TrustedMap") && parts.len() == 2 { fits = item.fits(&Ty::Tuple(vec![(*nikaia_std::index::get(&parts, 0)).clone(), (*nikaia_std::index::get(&parts, 1)).clone()])); } else if (base == "HashSet" || base == "BTreeSet" || base == "TrustedSet") && parts.len() == 1 { fits = item.fits(nikaia_std::index::get(&parts, 0)); } else if base == "String" && parts.is_empty() { fits = a_type_named(&item, "char", false) || a_type_named(&item, "scalar", false) || a_type_named(&item, "str", true) || a_type_named(&item, "String", false); }
         if !fits { return None; }
         self.facts.collected_into.insert(number_key(*nikaia_std::index::get(&receiver, 0)));
         Some(want.clone())
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn a_collect_into_an_option(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> bool {
+    if !a_collect_call(world, value) { return false; }
+    let made = named_arguments_of(found);
+    let found_name = match found {
+        Ty::Named { name, .. } => name.to_string(),
+        _ => return false,
+    };
+    if made.len() != 1 || type_last_segment(&found_name) != "Vec" { return false; }
+    let item_optional = matches!(*nikaia_std::index::get(&made, 0), Ty::Nullable(_));
+    item_optional && matches!(want, Ty::Nullable(_))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

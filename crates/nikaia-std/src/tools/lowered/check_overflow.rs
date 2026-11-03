@@ -157,7 +157,7 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     }
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if check_overflow_list_into_nullables(state, given, found, want) { return None; }
+        if check_overflow_list_into_nullables(state, given, found, want) || a_collect_into_an_option(world, found, want, given) { return None; }
     }
     let how = match check_wrap_for(found, want, literal) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let widen: String = match how {
