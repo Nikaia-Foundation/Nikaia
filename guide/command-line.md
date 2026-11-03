@@ -389,9 +389,10 @@ $ echo $?
 
 ## Claims the build does not prove: `unproved-claims` and `refuted-claims`
 
-The compiler proves every `assert` ([Contracts](contracts.md)). It refuses a claim it does
-not prove (`NK1300`), and it refuses a claim it shows false with values (`NK1207`). Two build
-settings in `nikaia.toml` change that, and each has a flag that overrides it for one build:
+The compiler tries to prove every `assert` ([Contracts](contracts.md); what it can prove
+and where it stops is in [The prover](prover.md)). It refuses a claim it does not prove
+(`NK1300`), and it refuses a claim it shows false with values (`NK1207`). Two build settings
+in `nikaia.toml` change that, and each has a flag that overrides it for one build:
 
 ```toml
 [build]

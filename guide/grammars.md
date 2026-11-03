@@ -868,6 +868,7 @@ compares two integers (§10.6).
 ## Where next
 
 * [A tour of the syntax](syntax.md): the rest of the language on one page.
+* [The prover](prover.md): what the compiler proves today, where it stops, and what is planned.
 * [`examples/calc`](../examples/calc/src/main.nika): a calculator in about 100 lines.
 * [`examples/config`](../examples/config/src/main.nika): an INI-style configuration file.
 * [`examples/json`](../examples/json/src/main.nika): a complete JSON parser.

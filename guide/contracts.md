@@ -180,7 +180,8 @@ branch conditions, not the product of two names like `w * h`. Such a claim stops
 with `NK1300`: not proved is not false, but nothing has shown it. With `[build]
 unproved-claims = "warn"` in `nikaia.toml`, or `--unproved-claims=warn` on the command line,
 it is a warning instead, and the program checks the claim when it runs. A better prover
-removes checks and does not change what a correct program does.
+removes checks and does not change what a correct program does. [The prover](prover.md)
+lists what it reads today, the claims it gives up on, and what is planned.
 
 ```nika
 fn average(total: int, count: int) -> int {
@@ -337,6 +338,7 @@ commit 7e84ae5c523c8b9937bb4faacc6d029bf49d4f75
 
 ## Where next
 
+* [The prover](prover.md): what the compiler proves today, where it stops, and what is planned.
 * [A tour of the syntax](syntax.md): the rest of the language on one page.
 * [Ownership](ownership.md): who owns a value, and who may read, change or keep it.
 * [Getting started](getting-started.md): install the compiler and run a project.

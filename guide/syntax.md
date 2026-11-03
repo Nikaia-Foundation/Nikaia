@@ -483,6 +483,7 @@ grammars in full, from this example up to a complete calculator.
 * [Getting started](getting-started.md): install the compiler and run a project.
 * [Ownership](ownership.md): the rules of lending, keeping and views, taught in full.
 * [Contracts](contracts.md): what the compiler proves about an `assert`.
+* [The prover](prover.md): what the compiler proves today, where it stops, and what is planned.
 * [Grammars and parsers](grammars.md): describing a text format and parsing it.
 * [`examples/`](../examples/): complete programs that compile and run.
 * [Specification, Part I](../docs/specification/10-nikaia-light.md): the rules, one

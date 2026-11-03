@@ -293,6 +293,205 @@ left out only after a small checker has accepted that certificate
 ([ADR-270](../docs/specification/adr/adr-270.md)). A proof the checker refuses proves nothing,
 and the check stays.
 
+## Where it stops today
+
+The prover reads whole numbers and the shapes listed above. A claim outside them is not
+false; the prover cannot say anything about it yet, so the claim is refused or its check
+stays. Each `assert` in this program is true for every call `main` makes, and six of them
+lie outside what the prover reads today:
+
+```nika
+struct Counter {
+    n: int,
+}
+
+fn area(w: int, h: int) -> int {
+    assert(w >= 0 && h >= 0)
+    let a = w * h
+    assert(a >= 0)                      // a product of two names
+    return a
+}
+
+fn larger(a: int, b: int) -> int {
+    let r = if a > b { a } else { b }
+    assert(r >= a)                      // an `if` used as a value
+    return r
+}
+
+fn ratio(a: f64, b: f64) -> f64 {
+    assert(b > 0.0)                     // a floating-point number
+    return a / b
+}
+
+fn total(xs: Vec[int]) -> int {
+    let mut t = 0
+    for x in xs {
+        assert(x >= 0)                  // what the elements of a list hold
+        t = t + x
+    }
+    return t
+}
+
+fn bump(mut c: Counter) -> int {
+    assert(c.n >= 0)                    // a field of a value handed over `mut`
+    c.n = c.n + 1
+    return c.n
+}
+
+fn greeting(name: String) -> String {
+    assert(name.starts_with("A"))       // what a text holds
+    return f"Hello, {name}"
+}
+
+fn main() {
+    let mut c = Counter { n: 0 }
+    println(f"{area(4, 5)} {larger(3, 9)} {ratio(1.0, 4.0)} {total([1, 2])} {bump(c)}")
+    println(greeting("Ada"))
+}
+```
+
+The report, followed by one `NK1300` error per refused claim (left out here):
+
+```text
+$ nikaia check --asserts limits.nika
+asserts in limits.nika: 7 - not proved 6 (refused 6, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 1 (proved 0, preconditions proved at every call 1)
+  limits.nika:8  assert(a >= 0)  refused, not proved: `a` is not a whole number the prover reads
+  limits.nika:14  assert(r >= a)  refused, not proved: `r` is not a whole number the prover reads
+  limits.nika:19  assert(b > 0.0)  refused, not proved: `b` is not a whole number the prover reads
+  limits.nika:26  assert(x >= 0)  refused, not proved: `x` is not a whole number the prover reads
+  limits.nika:33  assert(c.n >= 0)  refused, not proved: `c` is not a whole number the prover reads
+  limits.nika:39  assert(name.starts_with("A"))  refused, not proved: it is not a comparison of whole numbers the prover reads
+  limits.nika:6  assert(w >= 0 && h >= 0)  precondition of `area`: proved at every call the compiler sees; any other reaches the entry that checks it
+```
+
+In order, the prover today does not reason about:
+
+* the product of two names, such as `w * h`: its logic is linear arithmetic, so a product is
+  a value it knows nothing about;
+* the value of an `if` used as an expression; the same choice written as a `let mut` changed
+  in each branch is followed (see `price` in [Contracts](contracts.md#a-loop-needs-no-invariant));
+* floating-point numbers;
+* what the elements of a list hold: a claim about every element would need a quantifier,
+  which its logic does not have;
+* a value handed over `mut`: the function may change it, and calls with it may change it, so
+  its fields are not followed. A field of a parameter the function only reads is followed;
+* the contents of a text, or the result of a call that returns `bool`, such as
+  `is_sorted(xs)`.
+
+Some shapes stop a proof even where every value is a whole number. A precondition is not
+carried back through a function that calls itself, and a counter that counts down to zero is
+not yet tied to the length it started from (the warning's notes are left out of the output):
+
+```nika
+fn percent(part: int, whole: int) -> int {
+    assert(whole > 0)
+    return part * 100 / whole
+}
+
+fn halved(part: int, whole: int, depth: int) -> int {
+    return percent(part, whole) if depth == 0
+    return halved(part, whole, depth - 1) / 2
+}
+
+fn last_first(xs: Vec[int]) -> int {
+    let mut k = xs.len()
+    let mut s = 0
+    while k > 0 {
+        k -= 1
+        s = xs[k]
+    }
+    return s
+}
+
+fn main() {
+    println(f"{halved(1, 4, 3)} {last_first([5, 6])}")
+}
+```
+
+```text
+$ nikaia check --asserts --bounds --unproved-claims=warn shapes.nika
+asserts in shapes.nika: 1 - not proved 1 (refused 0, checked at run time 1, checked by a test 0); checked where the words arrive 0; proved 0 (proved 0, preconditions proved at every call 0)
+  shapes.nika:2  assert(whole > 0)  precondition of `percent`: one call checks it when it runs; any other call proves it or reaches the entry that checks it
+bounds in shapes.nika: 1 indexes, 0 proved; 3 operations, 1 proved - written without their check: indexes off, operations off
+     3  part * 100  checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+     8  depth - 1   checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    15  k -= 1      proved
+    16  xs[k]       checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+warning[NK1300]: `assert(whole > 0)`, the precondition of `percent`, is not proved: one call does not prove it.
+...
+Checked shapes.nika
+```
+
+Under `unproved-claims = "warn"` an unproved claim becomes a check that runs, and a false one
+stops the program. Built as a project with `nikaia build --unproved-claims=warn`, this
+`smallest` passes the sorted list and stops at the second:
+
+```nika
+fn is_sorted(xs: Vec[int]) -> bool {
+    for i in 1..<xs.len() {
+        return false if xs[i - 1] > xs[i]
+    }
+    return true
+}
+
+fn smallest(xs: Vec[int]) -> int {
+    assert(xs.len() > 0)
+    assert(is_sorted(xs))
+    return xs[0]
+}
+
+fn main() {
+    println(f"{smallest([1, 2, 3])}")
+    println(f"{smallest([3, 1, 2])}")
+}
+```
+
+```text
+$ ./target/nikaia/bin/sortp
+1
+…/sortp/src/main.nika:10: the program stopped: assertion failed
+    assert(is_sorted(xs))
+```
+
+## What is planned
+
+The plans below are recorded in the specification's decision records and in open issues.
+Some are decided and waiting to be built, others are still open questions; none is shown as
+working on this page.
+
+A call such as `is_sorted(xs)` is to become a named property: proved by name, carried to the
+callers as a precondition, published in the package's contract, and checked once where it is
+not proved ([ADR-381](../docs/specification/adr/adr-381.md), decided).
+
+The search for loop invariants is a portfolio that grows
+([ADR-361](../docs/specification/adr/adr-361.md) D5). Today it tries closed forms, intervals
+and guess-and-check; octagons, k-induction and property-directed reachability are the next
+strategies in the record. The same record describes `nikaia prove --propose`, by which an
+outside program, a language model among them, may suggest invariants that the compiler then
+checks like any other (D6); that command is not built yet. Invariants and ghost code written
+by hand are not part of the plan
+([#770](https://github.com/Nikaia-Foundation/Nikaia/issues/770)): finding the invariant
+stays the compiler's job.
+
+Facts about what a collection holds, such as a rule every element meets, would give the logic
+its first quantifier. It is an open question, together with sortedness in `std`
+([`facts-about-data.md`](../docs/facts-about-data.md)).
+
+The checks `--bounds` keeps name the issues that would supply the missing fact:
+
+* [#386](https://github.com/Nikaia-Foundation/Nikaia/issues/386): a product of two unknowns
+* [#432](https://github.com/Nikaia-Foundation/Nikaia/issues/432): a counter, a loop or a
+  length with no fact that bounds it
+* [#383](https://github.com/Nikaia-Foundation/Nikaia/issues/383): the length of a list whose
+  elements take space
+* [#388](https://github.com/Nikaia-Foundation/Nikaia/issues/388): one list as long as another
+* [#1053](https://github.com/Nikaia-Foundation/Nikaia/issues/1053): counters tied to a loop's
+  turns, and the count of proved checks in the compiler's own code
+* [#797](https://github.com/Nikaia-Foundation/Nikaia/issues/797): named properties
+  (ADR-381)
+* [#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798): facts about the elements of
+  a collection, and sortedness in `std`
+
 ---
 
 ## Where next
