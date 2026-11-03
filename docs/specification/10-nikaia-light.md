@@ -2214,7 +2214,10 @@ so the capture is decided where the lambda is written.
 
 **A function in user code declares a code parameter with a function type.** The
 type is spelled the way a signature is, `handler: fn(Request) -> Response`,
-with `sync` or `throws` after the result where a declaration puts them. Without
+with `sync` or `throws` after the result where a declaration puts them. A
+parameter the code changes keeps its `mut`, as in a signature: `f: fn(mut S)`
+lends the argument at each call as a `mut` parameter of a named function is
+lent, and both `fn bump(mut s: S)` and the lambda `fn(mut s) { … }` fit it. Without
 `sync` the code may pause; without `throws` it cannot fail. A lambda that does
 less fits a type that allows more. A pausing lambda handed to a `fn() sync` is
 refused.
