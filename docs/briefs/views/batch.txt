@@ -1,4 +1,2 @@
-v1b-views3-arrays.md
-v2-inferred-views.md
 v3-keep-marks.md
 v4-result-from.md

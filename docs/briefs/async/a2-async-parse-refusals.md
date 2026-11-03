@@ -8,7 +8,7 @@ effort: medium
 
 # a2: async-5 parse refusals, `fmt` for every form, parse tests (#984 steps 3, 5, 6)
 
-Score: the language topics (owner, 2026-11-03), #984 against ADR-async-5. Needs a1 (the AST nodes) on develop: if `async(handle)` does not parse, stop with `blocked`. Rust is allowed where the code is Rust (#1214); `fmt` is `tools/fmt.nika`, written in Nikaia. Read `docs/specification/adr/adr-async-5.md` D5, D30, D33, and the `NK21xx` row of Part III first. S=1, C~2-3 M.
+Score: the language topics (owner, 2026-11-03), #984 against ADR-async-5. Needs a1b on develop. Forms a1b refuses at parse (not built yet, until #986) are not formatted here. Rust is allowed where the code is Rust (#1214); `fmt` is `tools/fmt.nika`, written in Nikaia. Read `docs/specification/adr/adr-async-5.md` D5, D30, D33, and the `NK21xx` row of Part III first. S=1, C~2-3 M.
 
 **Owns:**
 * `crates/nikaia/src/parser/mod.rs` and the check pass that raises NK2115 / NK2120 if it is not the parser, `crates/nikaia-std/src/tools/fmt.nika` and its lowered file, new tests `tests/compiler/tests/async_parse_*.nika` and `tests/errors` entries for the two codes.
@@ -18,7 +18,7 @@ Score: the language topics (owner, 2026-11-03), #984 against ADR-async-5. Needs 
 
 ## To build
 1. **NK2115 and NK2120** (#984 step 3): `async` before a function's declaration, a `let` or a loop is NK2115 (D5); an `async` form inside a loop's body is NK2120 (D30), with the help Part III names (`xs.par_iter().for_each fn(x) { … }`). Both codes are specified; register them where the codes table of the compiler lives if they are not there. Tests: a refusal for each, with its `.stderr`. Commit `Part of #984`.
-2. **`fmt` and the parse tests** (#984 steps 5, 6): `nikaia fmt` formats every form a1 parses (value, statement, group, `async fn`, the handle forms with options, `catch`), and formatting twice changes nothing. Tests: one formatter test over all forms (input, expected output, idempotent), plus parse tests for any form a1 left without one. Commit `Part of #984`; if #984 is then fully built (steps 1-6), the last commit says `Fixes #984`.
+2. **`fmt` and the parse tests** (#984 steps 5, 6): `nikaia fmt` formats every form a1b parses, and formatting twice changes nothing. Tests: one formatter test over all forms (input, expected output, idempotent), plus parse tests for any form a1 left without one. Commit `Part of #984`; if #984 is then fully built (steps 1-6), the last commit says `Fixes #984`.
 
 List under `Body:` every Rust function you added or changed, for #557 / #125.
 
