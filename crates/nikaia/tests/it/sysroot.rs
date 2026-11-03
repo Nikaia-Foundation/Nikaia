@@ -317,7 +317,12 @@ fn a_tool_reads_the_names_of_the_tree_as_described() {
                   pub fn named(names: ref winnow_grammar::InternerContext, name: winnow_grammar::Symbol) -> bool {\n\
                   \x20   return names.resolve(name) == \"main\" && Named { name: name } == Named { name: name }\n\
                   }\n";
-    let lowered_in = |dir: &str| {
+    // A name only the tools' description holds (`winnow_grammar::Symbol` is
+    // `std`'s since ADR-388 D3, so a module of `std` reads it too).
+    let described_only = "pub fn number() -> u32 {\n\
+         \x20   return node_id::NodeId::fresh().get()\n\
+         }\n";
+    let lowered_in = |dir: &str, source: &str| {
         let at = root.join(dir);
         std::fs::create_dir_all(&at).expect("a directory to work in");
         let module = at.join("probe.nika");
@@ -329,7 +334,7 @@ fn a_tool_reads_the_names_of_the_tree_as_described() {
         }
     };
 
-    let tool = lowered_in("tools").expect("a tool lowers against the description");
+    let tool = lowered_in("tools", source).expect("a tool lowers against the description");
     assert!(
         tool.contains("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub struct Named"),
         "{tool}"
@@ -344,11 +349,12 @@ fn a_tool_reads_the_names_of_the_tree_as_described() {
         "{tool}"
     );
 
-    // `std`'s own module sees `std` alone, so `winnow_grammar::Symbol` is a
+    // `std`'s own module sees `std` alone, so `node_id::NodeId` is a
     // name nothing there knows. It is refused by this compiler rather than by
     // `rustc`, and not as a type that does not compare: whether a name nobody
     // knows compares is not asked (ADR-204 D1, #379).
-    let std_module = lowered_in("src").expect_err("std does not read the description");
+    let std_module =
+        lowered_in("src", described_only).expect_err("std does not read the description");
     let _ = std::fs::remove_dir_all(&root);
     let said = format!("{std_module:#}");
     assert!(said.contains("NK"), "{said}");
