@@ -225,13 +225,18 @@ waits and takes the first to finish (Part II, 12.4).
 **`test` is reserved for its construct**: a `test "name" { … }` block of the
 package it stands in (Part III 14.1).
 
-**`loop`, `const`, `macro`, `quote` and `from` are ordinary names.** A declared
-`loop`, `quote` or `from` is a name like any other. Where nothing declares one
+**`loop`, `const`, `macro` and `quote` are ordinary names.** A declared
+`loop` or `quote` is a name like any other. Where nothing declares one
 of them, the refusal every undeclared name meets carries a hint: `loop { … }` is
 answered with *write `while true`*, `const X = …` with *write `comptime`*, and
 `macro` and `quote` with *Nikaia has no macros*.
 
 **`seq` is an ordinary name.**
+
+**`keep` and `from` are not reserved; each means its construct in one position**
+([ADR-views-3](adr/adr-views-3.md) D13). `keep` is the mark only before a
+parameter or `self` in a parameter list (6.5), `from` the source only after a
+result type (6.6); both are names everywhere else.
 
 Three further rules about the list:
 
@@ -2911,7 +2916,7 @@ the source:
 | State | What it is | Cost |
 | :--- | :--- | :--- |
 | **Borrowed** | a plain reference into the buffer | nothing at all |
-| **Tethered** | a plain reference; the buffer has moved into a keep | nothing where a frame keeps it; one count per task, or per buffer where a container drops entries — no copy |
+| **Tethered** | a plain reference; the buffer has moved into an anchor | nothing where a frame keeps it; one count per task, or per buffer where a container drops entries — no copy |
 | **Owned** | a `String` of its own | one allocation, **only** where the program wrote `.clone()` |
 
 **The buffer cannot die while anything still points into it.** It is kept alive
@@ -2923,7 +2928,7 @@ Two rules keep this cheap on large data:
   is built and consumed inside the scope that owns the buffer keeps plain
   references.
 * **No handle on every slice.** When a map full of
-  slices outlives its buffer, the buffer lives in the keep of the frame that keeps the map, and its keys stay
+  slices outlives its buffer, the buffer lives in the anchor of the frame that keeps the map, and its keys stay
   plain references.
 
 **Nothing is written for a tether.** Where the buffer lives is the compiler's
@@ -2942,8 +2947,9 @@ fn tokenize(path: String) -> Vec[Token] throws {
 }
 ```
 
-**A buffer lives in the keep of whatever keeps its views**, and who owns that
-keep is read off the program:
+**A buffer lives in the anchor of whatever holds its views**: the anchor is the
+place a buffer moves to while a view of it lives, and who owns it is read off
+the program:
 
 * **the caller's frame**, wherever a frame outlives the views — handed back,
   kept in a `mut` parameter, or kept by a list outside a loop. This costs
@@ -2956,10 +2962,10 @@ keep is read off the program:
 
 **What a body owns is handed out the same way**, whole or a part: a view of a
 local handed back, a piece of a text the body read, puts that local in the
-caller's keep, and so does a struct, a variant's value, a tuple or a list
+caller's anchor, and so does a struct, a variant's value, a tuple or a list
 handed back whose views point into `s`. **A view handed back from a parameter points into the
 caller's argument**, which lives as long as the result does; an argument made
-in the call itself, `let r = e(name.clone())`, lives in the caller's keep. **A
+in the call itself, `let r = e(name.clone())`, lives in the caller's anchor. **A
 view of a parameter kept in a place another parameter holds**, such as a part of
 `s` pushed into `mut v: Vec[String]`, points into the caller's argument the same
 way, and that argument lives as long as the place's owner does.
@@ -3059,7 +3065,7 @@ an argument up is not changing it: a caller may assign its variable a new
 value, leave its scope, move it into another variable or into a struct, a
 variant's value, a tuple or a list it builds, or pass it to a lent parameter
 (6.5) while a view of it is still used, and the old buffer moves into
-the keep of whatever holds the view, to be freed with the last such view. The
+the anchor of whatever holds the view, to be freed with the last such view. The
 place it moved into holds a view of that buffer, so a field, element or
 variant's value is a view wherever such moves flow in, and holds either where
 text of its own flows in too (2.2). A variable or place it moved into is held
