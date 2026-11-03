@@ -1102,6 +1102,7 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     let lent_subject = state.facts.lent_scrutinees.contains(&(id_of(value) as i64)) && !state.facts.text_scrutinees.contains(&(id_of(value) as i64));
     let by_reference = through_the_reference || a_list || a_map_read || listed || lent_subject || name != "" && (on.is_a_view() || state.got_past_a_jump.contains(&name));
     check_core_flow_lent_parts(state, world, host, &arm.body, &parts, handed_from, changed_from, by_reference, a_list);
+    if mut_subject.is_none() && !by_reference && name != "" && !typed.is_a_view() { check_core_flow_subject_taken(state, world, &name, &parts, &arm.body, span); }
     check_core_flow_unlend_views(state, world, &arm.pattern, typed, &arm.body);
     let leaves = state.exits(world, &arm.body);
     state.a_branch_that_leaves(from, leaves, span);
@@ -1115,6 +1116,21 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     state.scope.pop();
     if state.leaves(world, &arm.body) { return None; }
     Some(ty)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_subject_taken(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, subject: &str, parts: &collections::BTreeMap<String, Ty>, body: &Expr, span: &Span) {
+    let lent: collections::BTreeSet<String> = nikaia_std::index::or(match state.facts.lent_bindings.get(&(id_of(body) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeSet::new().into());
+    for (name, part) in parts.iter() {
+        if state.takes_away(world, part) && !part.is_a_view() && !lent.contains(name) {
+            state.hands_over_name(world, subject, "taken apart by `match`", span);
+            return;
+        }
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

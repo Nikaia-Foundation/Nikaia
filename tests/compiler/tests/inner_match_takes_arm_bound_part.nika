@@ -1,0 +1,28 @@
+// #1158: an inner `match` on a name an outer arm bound, whose arm keeps a
+// part that does not copy, takes that name: the outer arm binds it by value.
+
+enum Wall {
+	Refused { detail: String },
+	Other,
+}
+
+enum Ran {
+	Hit(Wall),
+	Miss,
+}
+
+fn detail_of(r: Ran) -> String {
+	match r {
+		Ran::Hit(wall) => match wall {
+			Wall::Refused { detail } => detail,
+			Wall::Other => "other",
+		},
+		Ran::Miss => "miss",
+	}
+}
+
+fn main() {
+	println(detail_of(Ran::Hit(Wall::Refused { detail: "refused" })))
+	println(detail_of(Ran::Hit(Wall::Other)))
+	println(detail_of(Ran::Miss))
+}

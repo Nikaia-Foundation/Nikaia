@@ -1403,6 +1403,9 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let lent_subject = state.facts.lent_scrutinees.contains(id_of(value) as i64) && !state.facts.text_scrutinees.contains(id_of(value) as i64)
     let by_reference = through_the_reference || a_list || a_map_read || listed || lent_subject || (name != "" && (on.is_a_view() || state.got_past_a_jump.contains(name)))
     check_core_flow_lent_parts(state, world, host, arm.body, parts, handed_from, changed_from, by_reference, a_list)
+    if mut_subject == null && !by_reference && name != "" && !typed.is_a_view() {
+        check_core_flow_subject_taken(state, world, name, parts, arm.body, span)
+    }
     check_core_flow_unlend_views(state, world, arm.pattern, typed, arm.body)
     let leaves = state.exits(world, arm.body)
     state.a_branch_that_leaves(from, leaves, span)
@@ -1422,6 +1425,20 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         return null
     }
     return ty
+}
+
+/// **An arm that keeps a part by value takes its subject** (#1158): a part
+/// that does not copy and that the arm does not lend is moved out of the
+/// name matched, so that name is handed over. An outer arm that bound the
+/// name then binds it by value, not `ref`.
+fn check_core_flow_subject_taken(mut state: CheckState, world: ref CheckWorld, subject: ref String, parts: ref collections::BTreeMap[String, Ty], body: ref Expr, span: ref Span) sync {
+    let lent: collections::BTreeSet[String] = state.facts.lent_bindings.get(id_of(body) as i64)?.clone() ?? collections::BTreeSet()
+    for (name, part) in parts {
+        if state.takes_away(world, part) && !part.is_a_view() && !lent.contains(name) {
+            state.hands_over_name(world, subject, "taken apart by `match`", span)
+            return
+        }
+    }
 }
 
 /// `error` in a handler, untyped at its binding, read as the one type that
