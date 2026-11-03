@@ -26,8 +26,8 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **If the task names a brief file, read it first**; it replaces reading the
   plan, the call graph and the issue yourself. A research task (no edits, no
   commit) writes such a brief, at most 80 lines, and reports its path.
-* **A move is translated by hand, directly from the Rust** (owner, 2026-11-01:
-  the converter is gone): read the Rust function, write its Nikaia by the rules
+* **A move is translated by hand, directly from the Rust** (owner, 2026-11-01):
+  read the Rust function, write its Nikaia by the rules
   of `docs/builder-facts.md` (slices, patterns, syntax gaps, lowering). Iterator
   chains stay chains: one that does not compile is a gap, and stops the slice
   as below, it is not rewritten as a loop.

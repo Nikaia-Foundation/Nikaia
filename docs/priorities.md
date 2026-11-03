@@ -17,8 +17,7 @@ compiler bug a move finds goes as a brief into the bug lane
 (`docs/briefs/bugs/batch.txt`, with a `Blocks:` line) and the move waits for
 its fix there (owner, 2026-10-31; `docs/supervisor.md`, *Lanes*). The bug lane
 orders the other defects by the score below. The pause rule (more bugs found than fixed) still stops the self-hosting lane.
-Each move is translated by hand from the Rust (owner, 2026-11-01: the
-converter is deleted). A move is faithful by default; a real redesign needs a
+Each move is translated by hand from the Rust (owner, 2026-11-01). A move is faithful by default; a real redesign needs a
 named reason (`docs/supervisor.md`,
 *Briefs and reports*, owner 2026-10-29).
 

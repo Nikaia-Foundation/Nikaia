@@ -230,8 +230,7 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   from an earlier listing: every commit shifts them.
 * **Edit scripts:** replace blocks bottom-up with exact-string asserts. Never
   `str.replace('', ...)` (an empty-slice replace corrupted `emit/mod.rs` once).
-* **A move is translated by hand from the Rust** (owner, 2026-11-01: the
-  converter `rs2nika` is deleted; its rules live on in this file). Iterator
+* **A move is translated by hand from the Rust** (owner, 2026-11-01; the rules are in this file). Iterator
   chains (`.iter().map(..).sum()`, `.any(..)`, `.filter(..).map(..).collect()`)
   are the house style in `tools/*.nika` (owner, 2026-10-27). Open
   lowering defects are GitHub issues, the language options against the usual

@@ -146,8 +146,7 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   The measure is tokens per moved line (target below 50 k); turns are the guard
   (about 120). A slice runs as a chain: a research agent writes a brief of at
   most 80 lines to a file, the builder gets its path and the steps. The builder
-  translates the Rust by hand (owner, 2026-11-01: the converter is deleted); a
-  compiler defect is fixed first. After each agent, `nikaia run scripts/tokenspeed.nika
+  translates the Rust by hand (owner, 2026-11-01); a compiler defect is fixed first. After each agent, `nikaia run scripts/tokenspeed.nika
   -- --short AGENTS_DIR` prints one row for the *Runs* table of
   `docs/tokenspeed.md`. The figures and the reasons are in
   `docs/tokensaverstrategy.md`; the ordered steps for the core of `emit` and
@@ -216,7 +215,7 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
 * **The focus rotation** (owner, 2026-11-01). The main session starts
   `nikaia run scripts/drive.nika -- --focus` with `run_in_background`
   (`--max N`, `--dry-run` as below). It takes the areas of
-  `docs/briefs/focus.txt` (converter, selfhosting, bugs) in turn, up to
+  `docs/briefs/focus.txt` (selfhosting, bugs) in turn, up to
   `block` builder briefs each, a bug brief with a `Blocks:` line first; at
   each block's end the suite, a line in `docs/briefs/focus-log.md` (briefs,
   results, tokens, cost, queue, `kept k/m`), the pending bumps while CI is

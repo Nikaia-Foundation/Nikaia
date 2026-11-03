@@ -130,7 +130,7 @@ fn agent_resumable(abs: String, record: String, sum: String) -> String throws {
 fn agent_debrief_args(session: String, model: String, effort: String) -> Vec[String] {
     let mut v: Vec[String] = []
     v.push("-p")
-    v.push("Your run is over. Without using any tool, answer in at most 15 lines of Markdown: (1) what cost you the most turns or time; (2) what you had to look up (ADRs, the language, file locations, the converter) that the brief could have handed you; (3) which checks you ran and which were wasted; (4) one change to the brief or builder.md that would have saved the most.")
+    v.push("Your run is over. Without using any tool, answer in at most 15 lines of Markdown: (1) what cost you the most turns or time; (2) what you had to look up (ADRs, the language, file locations) that the brief could have handed you; (3) which checks you ran and which were wasted; (4) one change to the brief or builder.md that would have saved the most.")
     v.push("--resume")
     v.push(session)
     v.push("--max-turns")

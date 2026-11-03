@@ -61,8 +61,7 @@ Stage 1 alone is what the second check proves; Stage 2 is the first.
 `crates/nikaia-compiler/src`'s hand-written `lib.rs`, and `crates/orchestrator`
 (to zero: the crate is deleted, #923). Not in scope: `crates/nikaia-std` (point
 3; it gains only the new entries #920 and #922 the orchestrator needs, see
-D-7), `crates/unsafe/*` (ADR-218 D1, D4), `crates/rs2nika` (a development
-tool), and the Rust tests under `crates/nikaia/tests` (#821 goes on, not in
+D-7), `crates/unsafe/*` (ADR-218 D1, D4), and the Rust tests under `crates/nikaia/tests` (#821 goes on, not in
 this plan). The `#[cfg(test)]` modules inside the compiler and the
 orchestrator are in scope: each leaves with the code it tests, as a
 `tests/compiler` program where the moved code is not already covered, else
@@ -227,8 +226,8 @@ lanes run in C2 between lane 2's briefs and C3's work queues behind lane 2
 **The binary:** each checkout's `target/fast/nikaia` is used only by the agent
 in that checkout. Nobody runs another checkout's binary. The driver in C1
 runs `target/fast/nikaia` (`drive_exe`), which only lane 1's builder rebuilds,
-between briefs or in its own cycle; a converter run or a probe by another
-agent copies a binary into its scratchpad first.
+between briefs or in its own cycle; a probe by another agent
+copies a binary into its scratchpad first.
 
 ### File ownership
 
@@ -240,7 +239,6 @@ Every Rust file has one owning lane; a lane edits only its own.
 | 2 (moves) | `contracts/*`, `proofs.rs`, `prove.rs`, `bounds.rs`, `bounds_report.rs`, `fold.rs`, `fold_bound.rs`, `dsl.rs`, `check/*`, `emit/*`, `types.rs`, `traits.rs`, `ast/mod.rs`, every other file not named in this table; `parser/mod.rs` from #557 step 3 on; the five lowering files once the lowering lane hands them over | the ones its running brief names (`order`, `locks`, `sharing`, `maps`, `throws`, `touch`, `trust`, `sync`, `tether`, `keep*`, `ty`, `ledger_*`, `prove*`, `prover_*`, `bounds_*`, `fold*`, `dsl`, `parser_grammar`, new files) |
 | Lowering | `text_tiers.rs`, `view_changes.rs`, `type_rules.rs`, `one_variant.rs`, `views.rs` until it hands them to lane 2 | `emit_*` (not `emit_grammar`), `text_tiers`, `tiers`, `views`, `lends`, `type_rules`, `check_reads`, `check_facts`, `check_narrow` |
 | Compiler | `parser/mod.rs` until #557 step 3 is pushed | `check_grammar`, `emit_grammar`, `grammar_decode`, `parse_*`, `parser_leaves`, `node_numbers`, the `check_*` file its bug names |
-| Converter repair | `crates/rs2nika/` | none |
 | Lane 1, after O1 is briefed | `crates/orchestrator/src/*` | `orchestrator_*` (new) |
 | C3, new `std` entries (#920, #922) | `crates/nikaia-std/src/{process,hash,fs,time}.rs`, a new `env.rs`, their entries in `std.contracts` and Part III | none |
 | R0 (#921), once, at a quiet moment | everything its brief names: no other brief runs | the whole package (a `git mv`) |
@@ -282,22 +280,12 @@ hold the fixpoint. So:
    its regenerated files, in one commit (no tree on `develop` where the
    compiler and its output disagree).
 
-### Converter repair
-
-The 60 % rule stays as `scripts/drive.nika:85` has it. When the driver
-ESCALATEs on it, the supervisor starts the converter repair as the **next
-brief in C3** (ahead of the queue there; `crates/rs2nika/` only, so it
-touches no lane's files) and restarts the driver on the next move, which
-does not wait for the repair. The move that escalated is re-briefed after the
-repair lands. `drive.nika` itself is not changed by this plan.
-
 ### The fix checkout's queue
 
-Priority in C3, one agent at a time: (1) a converter repair after an
-ESCALATE; (2) #557 steps 1-3 (critical path); (3) a lowering defect that
-blocks a briefed slice; (4) #920 then #922, the `std` entries O1 and O2 wait
-for; (5) the lowering queue: #916 (absorbs
-#913, #914), #910, #907, #908, #915, #911, #917, #918, #899, #896; (6)
+Priority in C3, one agent at a time: (1) #557 steps 1-3 (critical path);
+(2) a lowering defect that blocks a briefed slice; (3) #920 then #922, the
+`std` entries O1 and O2 wait for; (4) the lowering queue: #916 (absorbs
+#913, #914), #910, #907, #908, #915, #911, #917, #918, #899, #896; (5)
 compiler bugs that block a move: #909, #898, #900, #882. A bug that blocks
 nothing waits until the moves are done (the owner's *bugs before moving* default is
 set aside for the moves, as `docs/priorities.md` allows when the figures
@@ -319,15 +307,13 @@ build costs.
 
 | Lever | The change | Expected saving |
 | :--- | :--- | :--- |
-| **L1 The converter's 60 % rule records, it does not stop** | `scripts/drive.nika`'s `drive_kept` (line 77) turns its stop into a line in the cycle's output (`CONVERTER <brief> kept N of M`), and the supervisor queues one converter repair a day in C3 from those lines (#877's list), instead of one repair per move with the pipeline standing. The draft stays the start of every move. | About 25 of a move's 56 minutes are the stop, the repair and the restart: up to **~45 % of lane 1's wall time**, the largest single reserve. Risk: the converter's share drifts lower during the day; the daily repair caps it. |
-| **L2 A pre-step writes the draft** | Before `claude -p`, `scripts/agent.nika` (or the driver) reads the brief's `Cut:` line (the functions to move; a field the architect adds to every move brief from now on), runs `crates/rs2nika/convert --only NAME` on each, `rs2nika --lint`, and `nikaia run scripts/where.nika -- NAME...`, and writes `draft.nika`, `notes.txt`, `where.txt` into the brief's scratch dir; the brief points at them. A cut the converter cannot take is reported before any model runs. | 5-10 turns of 40-75 and 2-4 minutes per move; at ~75k context a turn, **0.4-0.8 M cache tokens a move**. |
 | **L3 Larger slices: 400-600 lines, not 1,000** | The architect cuts 400-600 lines a brief (a driver with its crossings), `max_turns` 120, `budget_usd` 25. Not 1,000: a move of 170 lines already took 75 turns at 75k context (P3b); 1,000 lines would cross 120 turns and the 150k reset rule, and a red push then costs a whole day's slice. | The fixed cost a brief pays once (orientation, a cold `lower-std`, the `it` binary build, the guard set, clippy's own build in `target/debug`, pre-push, commit and push, the driver's turnaround) is estimated at 12-15 minutes. At 170 lines it is about half of the builder's time, at 500 about a quarter: **+40-60 % lines an hour**. |
 | **L4 Cheaper gates for a move** | (a) The guard set and the touched `it` tests run **once**, at the end, beside clippy (builder.md's *Clippy beside the last test run*), not after every cycle; cycles in between run only the probes and `nikaia test --project tests/compiler` on the moved subcommand's programs. (b) The brief names the touched tests (the architect greps them from the moved module), so the builder does not search. (c) A move that touches no `check_*`/`emit_*` file never runs `--both-settings` over `tests/compiler` (already the rule; state it in each brief). (d) Incremental builds on in every checkout (section 3). | (a) one `it` binary build and one guard run per brief instead of two to three: **5-10 minutes**; (b) 2-4 turns; (d) up to 50 seconds per build in C2/C3. |
-| **L5 Keep the transcripts** | Drop `--no-session-persistence` at `scripts/agent.nika:64`; delete transcripts older than three days at the start of each driver run. A transcript is a few MB. | Saves nothing by itself; without it `docs/tokenspeed.md` has no new rows and L1-L4 stay estimates. **Recommended: drop the flag.** |
+| **L5 Keep the transcripts** | Drop `--no-session-persistence` at `scripts/agent.nika:64`; delete transcripts older than three days at the start of each driver run. A transcript is a few MB. | Saves nothing by itself; without it `docs/tokenspeed.md` has no new rows and L3-L4 stay estimates. **Recommended: drop the flag.** |
 | L6 Briefs ahead | The architect's morning run leaves two cut briefs ready per lane, so neither the driver nor lane 2 waits for an architect run. | the wait between briefs; not measured |
 | L7 One cache limit | builder.md says `NIKAIA_CACHE_LIMIT=4G`, the owner's brief rule 2G: builder.md is corrected to 2G (a process defect at its source; the supervisor's file). | disk, not time |
 
-Two building lanes on four cores share the CPU: L1, L3 and L4
+Two building lanes on four cores share the CPU: L3 and L4
 cut tool time and so scale; more lanes do not.
 
 ## 4. Cost
@@ -339,7 +325,7 @@ the binding limit is quality, not money. A run costs about 0.6-5.9 USD.
 | :--- | ---: | ---: | ---: |
 | Lane 1 (driver) | 4-6 | 25 | 80 USD |
 | Lane 2 | 4-6 | 25 | 80 USD |
-| C3 (lowering + compiler + converter) | 5-8 | 20 | 80 USD |
+| C3 (lowering + compiler) | 5-8 | 20 | 80 USD |
 | Architect (re-plan, briefs) | 2-3 | - | 40 USD |
 | Main session (supervision, rebases, CI) | - | - | 60 USD |
 | **In all** | | | **340 USD**, reserve to 1,000 |
@@ -349,20 +335,18 @@ waits for lane 1's driver, in C1) when any of these holds within a day: two
 red `develop` runs caused by its commits; two conflicts the supervisor had to
 clean up by hand; its cost over twice its row above. Serial again for at
 least one day. If lane 1 itself stalls (two ESCALATEs in a day), lane 2
-becomes the only move lane until the converter repair lands.
+becomes the only move lane until the cause is fixed.
 
 ## 5. Risks and fallbacks
 
-* **Behind the plan.** Cut, in this order: (1) the fix queue's items (5) and
-  (6) that block no slice; (2) the `#[cfg(test)]` modules move as deletions
+* **Behind the plan.** Cut, in this order: (1) the fix queue's items (4) and
+  (5) that block no slice; (2) the `#[cfg(test)]` modules move as deletions
   where `tests/compiler` already covers the code, and new Nikaia tests only
   for what nothing covers; (3) style passes in moves (iterator house style,
   doc comment rewrites) become a later issue; (4) the slices are made larger
   (600-800 lines), the 30-minute limit of the driver permitting; never R0
   and never the compiler's Stage 2; (5) only then a third move stream, which
   needs the owner.
-* **A converter defect under 60 % on many slices at once**: the repair is
-  one brief per form (#877's list), in C3, before any other C3 work.
 * **Rebase churn in C1** (lowered files re-lowered by other lanes): the cost
   shows in the supervisor's turns; if it exceeds two manual cleanups a day,
   the stop rule applies to the lane that caused them.
