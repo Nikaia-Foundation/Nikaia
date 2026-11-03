@@ -6,3 +6,7 @@
 2026-11-01 14:16 bugs briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 465377 cost 0.95 queue 2
 2026-11-01 17:51 selfhosting briefs 2 done 1 partial 0 blocked 1 noop 0 tokens 5866102 cost 7.65 queue 0 kept 76/243
 2026-11-02 02:45 bugs briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 3978294 cost 4.09 queue 4
+2026-11-02 03:08 bugs briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 4564149 cost 4.80 queue 3
+2026-11-02 03:16 bugs briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 310798 cost 0.32 queue 2
+2026-11-02 03:45 bugs briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 4870791 cost 4.78 queue 1
+2026-11-03 07:14 selfhosting briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 296992 cost 4.01 queue 0
