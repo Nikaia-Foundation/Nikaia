@@ -337,10 +337,14 @@ the source stays the same.
 
 **Specification:** [Part I, §6.2 Unified types](../docs/specification/10-nikaia-light.md#62-unified-types) · [§6.3 The four doors](../docs/specification/10-nikaia-light.md#63-changing-shared-data-the-four-doors) · [Part II, Chapter 12 Thread safety](../docs/specification/20-nikaia-advance.md#chapter-12-thread-safety-and-synchronization)
 
-## Memory
+## Memory: lending and keeping
 
-A value is cleaned up at the end of the block that owns it, and a file or a socket is closed
-there too. What you decide is who owns a value, and the compiler tells you when it matters:
+Nikaia has no garbage collector, and you do not free memory by hand. A value is cleaned up
+at the end of the block that owns it, and a file or a socket is closed there too. What makes
+this work is that a value has one owner unless you write otherwise, and the owner can lend
+the value or hand it over. The compiler checks how each value is used and tells you, before
+the program runs, where a use does not fit. The rest of this section shows how that looks
+in a program, and then where the model ends.
 
 ```nika
 struct Person { name: String, age: int }
@@ -372,18 +376,126 @@ fn main() {
 }
 ```
 
-* A function that only reads a parameter is **lent** the value. The call writes nothing
-  extra, and the value is still yours afterwards.
-* A value that is **kept** somewhere else (pushed into a list, stored in a field, bound
-  to another name with `let`) is handed over. Using it after that is refused, with
-  `.clone()` named as the way out. If it is the last use, no copy is needed.
-* Numbers and `bool`s are copied; there is nothing to hand over.
-* A `for` lends the list, so it is still there after the loop.
+### Lent, changed in place, or kept
 
-The compiler never copies a value behind your back: every copy is a `.clone()` in the
-source.
+A function that only reads a parameter is lent the value, as a reference is lent in other
+languages. The call looks like any other call, and the value is still yours afterwards:
+`greet(ada)` can be written twice.
 
-**Specification:** [Part I, Chapter 6 Memory and ownership](../docs/specification/10-nikaia-light.md#chapter-6-memory-and-ownership)
+A function that changes a parameter says `mut` in its declaration, and the caller's value is
+changed in place. The call shows nothing extra, just as `xs.push(1)` shows nothing extra:
+
+```nika
+fn add_guest(mut names: Vec[String]) {
+    names.push("Grace")
+}
+
+fn main() {
+    let mut names: Vec[String] = ["Ada"]
+    add_guest(names)
+    println(names.len())            // 2
+}
+```
+
+A function that keeps a parameter (stores it, returns it, gives it to a task, or passes it to
+something that keeps it) takes it over. So does a list you push into, a field you assign, and
+a `let` that gives the value a new name. After that, the old name is gone, and a use of it is
+refused:
+
+```text
+error[NK2105]: You're using `ada.name`, but `ada` was passed to `pair`, which keeps it.
+   = note: `ada` is a `Person`, so it's handed over itself, not a copy. Nikaia never copies
+           behind your back, because a copy costs as much as the value is large.
+   = help: If both need it, hand over a copy: `ada.clone()`.
+```
+
+If both places need the value, you write `.clone()`, so every copy of a large value is
+visible in the source. On the last use no copy is needed, and the value is simply handed
+over. Numbers, `bool`s and other small values are copied wherever they are used, so there is
+nothing to hand over. A `for` loop lends the list it walks, so the list is still there after
+the loop; `for x in xs.drain()` takes the elements out instead.
+
+### How the compiler knows
+
+You do not write which of the three a parameter is. The compiler reads it off the function's
+body: a parameter the body only reads is lent, one the body changes must be declared `mut`,
+and one the body keeps is taken over. The result is recorded for every function in a file
+the compiler writes beside your code, `nikaia.contracts`, which you commit like a lock file.
+When an edit to a body changes what a function keeps, the compiler compares the old and the
+new record and names the edit in the error it reports at a caller.
+
+### Changing a list while it is read
+
+A loop that reads a list and changes the same list at the same time is refused, because the
+change could move the elements the loop is still reading. In many languages this is a crash
+or a silent bug at run time:
+
+```nika
+fn main() {
+    let mut users: Vec[String] = ["ada", "bob", "ada"]
+    for u in users {
+        if u == "bob" {
+            users.push("x")         // does not compile: NK2305, `users` is lent to this loop
+        }
+    }
+}
+```
+
+The error names a way that fits, and the standard library has a method for each common case
+(`retain`, `drain`, `entry`, `swap`):
+
+```nika
+fn main() {
+    let mut users: Vec[String] = ["ada", "bob", "ada"]
+    users.retain fn(u) { u != "bob" }
+    println(users.len())            // 2
+}
+```
+
+### Several owners
+
+Some data has more than one owner by nature: settings that many parts of a program read, or
+a counter several tasks change. You write it as `Shared[T]` (read by all) or `SharedMut[T]`
+(changed by all, through `get`, `set`, `update` and `access`), as in
+[Data that more than one task changes](#data-that-more-than-one-task-changes). The compiler
+keeps an owner count for it, and the data is cleaned up when the last owner is gone. It
+picks the cheaper count where no task is involved; `nikaia lower app.nika --sharing` prints
+which one each value got and why. Handing such a value to a second owner is meant to share
+the data, not copy it; that is specified but not built yet, and a second use of the same
+handle still fails today ([#1212](https://github.com/Nikaia-Foundation/Nikaia/issues/1212)).
+
+### Where the model ends
+
+The checks above are made before the program runs, and they have limits that are worth
+knowing.
+
+A check that runs before the program does refuses some programs that would have worked. The
+loop above that pushes to `users` is one: written with an index over a fixed length, it is
+fine, and the error message says so. You will now and then restructure code that was correct
+to make the check see that it is.
+
+Copies are yours to write. Where another language would copy a value or count its owners
+for you, Nikaia asks for `.clone()` or for `Shared`. That keeps costs visible, and it also
+means more to write in code that passes values around a lot.
+
+Data whose parts point at each other, such as a graph, a tree whose nodes know their parent,
+or a doubly linked list, does not fit one owner per value. It is written with indices into a
+list, which is the usual way, or with `SharedMut` handles. An owner count does not free a
+cycle of handles that point at each other, and Nikaia has no weak handle that would break
+one yet, so such a cycle stays in memory until the program ends
+([#1212](https://github.com/Nikaia-Foundation/Nikaia/issues/1212)).
+
+Because the compiler reads what a function keeps off its body, the signature does not show
+it. A change inside a function can change what its callers may do; the record in
+`nikaia.contracts` shows such a change in review, and the compiler names it, but you do not
+see it in the signature itself. Whether a kept parameter should say so in the declaration is
+an open question ([#1211](https://github.com/Nikaia-Foundation/Nikaia/issues/1211)).
+
+What a Rust crate or a C library does with memory is outside these checks. Nikaia turns
+your program into Rust, and Rust's compiler checks a Rust crate with the limits Rust has
+(its `unsafe` code is trusted); code in a C library is trusted as it is.
+
+**Specification:** [Part I, Chapter 6 Memory and ownership](../docs/specification/10-nikaia-light.md#chapter-6-memory-and-ownership) · [§6.5 References and borrowing](../docs/specification/10-nikaia-light.md#65-references-and-borrowing) · [§6.7 The borrow contract ledger](../docs/specification/10-nikaia-light.md#67-the-borrow-contract-ledger)
 
 ## Modules
 
