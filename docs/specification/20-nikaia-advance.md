@@ -151,9 +151,9 @@ bounded as well. A run that takes more than a few seconds is reported by name
 while it runs.
 
 **What crosses from build time to run time.** A result arrives in its **view**
-form: `Vec[T]` as a `ref Array[T]`, or as an `Array[T, N]` where the program
+form: `Vec[T]` as an `Array[T]` view of data the build fixed (Part I 2.2), or as an `Array[T, N]` where the program
 writes the length into the type, and `String` as a view of the program's text. A run of
-`struct`s arrives as a `ref Array[T]`. A value built with `push` is fixed once
+`struct`s arrives as an `Array[T]` view. A value built with `push` is fixed once
 it has crossed. A value that owns memory is refused by what it *is* and never by
 its parse: by its **type** for a `struct`, and for an `enum` by the **variant
 the value is**. `Shape::Empty` is a `const` and `Shape::Many([1, 2])` is not,

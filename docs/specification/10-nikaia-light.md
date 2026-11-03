@@ -314,23 +314,27 @@ Nikaia provides basic types to represent simple values.
       (`NK1300`). Only a `u8` becomes one by `as`, since every byte value is
       one: `b as scalar`.
 * **A run of elements:**
-    * `ref Array[T]`: a **view** of a run of `T`, with the promise
-      `ref String` carries — *this points at elements somebody else keeps, no
-      copy and no handle*. It is read with `.len()`, `xs[i]` and `for`, and it
-      is what a `Vec[T]` **crosses as** when a build hands one to the program
-      (10.2): a `comptime` declared `ref Array[T]` is a `const` the program
-      reads and nothing allocates. `ref Array[u8]` is the byte buffer.
-    * A value a body **built** does not go into one. Where the program builds
-      the run while it runs, the type is `Vec[T]`; a **parameter** is the one
-      place the view is the compiler's to write, so `total(xs)` for a
-      `Vec[i64]` needs no word. `NK1179` says which of the two a line is.
-    * `Array[T]`: an array of **any** length, fixed for each use. It is a
-      **parameter's** type and the call says which length:
-      `fn total(xs: Array[i64])` takes an array of three and an array of two,
-      and two arrays in one signature are two lengths. A **field** or a
-      **result** has no call, so `Array[T]` there is `NK1182` and the message
-      names all three ways out — `Vec[T]` to own and grow, `ref Array[T]` to
-      view, `Array[T, N]` to write the length down.
+    * `Array[T]`, with no length: a run of `T` of any length, read with
+      `.len()`, `xs[i]` and `for`. Where it does not own, it is a **view** of
+      the run, with the promise a view of text carries — *this points at
+      elements somebody else keeps, no copy and no handle*
+      ([ADR-views-3](adr/adr-views-3.md) D11). `Array[u8]` is the byte buffer.
+    * A lent **parameter** `xs: Array[T]` is a view, and `mut xs: Array[T]` a
+      changeable one; the caller hands an `Array[T, N]`, a `Vec[T]` or a piece
+      of either, so `total(xs)` for a `Vec[i64]` needs no word. A `keep`
+      parameter owns what it is given and is generic over its length: the call
+      says which, and two such arrays in one signature are two lengths.
+    * A **field**, an **element** or a **result** of type `Array[T]` is a view
+      where what flows into it is a piece of a buffer, tethered as text is
+      (6.6). Where it would have to own, it is `NK1182`, and the message names
+      the ways out — `Vec[T]` to own and grow, `Array[T, N]` to write the
+      length down. A run the program builds while it runs is a `Vec[T]`;
+      `NK1179` refuses a field declared as a view that is given a run the body
+      owns.
+    * A `comptime` declared `Array[T]` is a view of data the build fixed, the
+      form a `Vec[T]` **crosses as** when a build hands one to the program
+      (10.2): a `const` the program reads, and nothing allocates. `windows`
+      and `chunks` yield `Array[T]` views.
 
 **A number may carry a digit separator, a radix prefix or a scale, and nothing
 else.** `1_000_000`, `0xFF`, `0b1010` and `0o17` are the four forms, beside the
@@ -1971,7 +1975,7 @@ dot([1.0, 2.0], [3.0, 4.0, 5.0])     // refused: N cannot be 2 and 3
 ```
 
 The call writes nothing for it; inside it is a constant, and a result type may name it.
-`Array[T]` as a parameter (2.2) is such a length that nobody names.
+`Array[T]` as a `keep` parameter (2.2) is such a length that nobody names.
 
 A `T` on its own has no members:
 
