@@ -1,0 +1,28 @@
+// A bound `peek` (#1201, Part II 10.8): `p:peek(text(PRE))` hands the
+// action and the elements after it what the lookahead matched, and consumes
+// nothing, so a count read from it decides how much the next element takes.
+grammar G {
+    rule WS = "" -> { }
+    rule PC = digit -> { } | "_" -> { }
+    rule PRE = PC* -> { }
+    rule NUM -> String = p:peek(text(PRE)) t:text(any{p.len() as i64}) -> { t.clone() }
+    entry rule num -> String = n:NUM rest:text(any*) eof -> { f"{n}|{rest}" }
+    entry rule seen -> String = p:peek(text(PRE)) rest:text(any*) eof -> { f"{p}|{rest}" }
+}
+
+fn main() {
+    for s in ["12_3x", "x", ""] {
+        let input = Bytes(s.bytes().collect())
+        let r = G::num(input) catch {
+            println("refused")
+            continue
+        }
+        println(r)
+    }
+    let input = Bytes("4_2y".bytes().collect())
+    let r = G::seen(input) catch {
+        println("refused")
+        return
+    }
+    println(r)
+}

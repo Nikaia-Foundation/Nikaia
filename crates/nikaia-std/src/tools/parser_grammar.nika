@@ -306,6 +306,48 @@ grammar ParserGrammar {
         | "e" "+" d:digit+ -> { f"e+{d}" }
         | "e" d:digit+ -> { f"e{d}" }
 
+    // ---- numbers (Part I 2.2, ADR-285 D16, ADR-322) -----------------------
+
+    // A float, its text as written for the language below; `FLOAT_END`
+    // refuses `1.5E-4` and `1.5G` where they stand.
+    rule FLOAT -> String =
+          w:DIGITS "." f:DIGITS e:EXPONENT? FLOAT_END -> { f"{w}.{f}{e ?? ""}" }
+        | w:DIGITS e:EXPONENT FLOAT_END -> { f"{w}{e}" }
+
+    // What may not follow a float's digits (ADR-322): a scale, which stands
+    // on a whole number, and an exponent written `E`. Consumes nothing; the
+    // words are `parse_numbers.nika`'s. The Rust grammar's `float_end`, in
+    // capitals here: a lowercase rule skips trivia first, and `1.5 G` is a
+    // float and a name.
+    rule FLOAT_END = p:peek(text(NUMBER_PREFIX)) -> { pg_float_end(p) }
+
+    // Part I 2.2's number in its four spellings (ADR-285 D16): `255`,
+    // `1_000_000`, `0xFF`, `0b1010`, `0o17`, a scale (ADR-322). The value
+    // without its separators (D3) and the radix a spelling (D2): what comes
+    // back is the magnitude and whether a `-` was written.
+    rule number_lit -> (u64, bool) = n:NUMBER_AT(false) -> { n }
+
+    // A number with its `-` written directly against the digits (D16), the
+    // one spelling of `-9223372036854775808`; `- 5` and `-x` are the unary
+    // operator.
+    rule negative_number_lit -> (u64, bool) = n:NUMBER_AT(true) -> { n }
+
+    // `parse_numbers.nika` reads the characters in front of the caret and
+    // says how many the number takes; a refusal moves the caret onto the
+    // character that is wrong first.
+    rule NUMBER_AT(signed: bool) -> (u64, bool) =
+        n:NUMBER_READ(signed) if(pg_number_consumed(n) >= 0, "digits") any{pg_number_consumed(n)} -> { pg_number_taken(n) }
+
+    rule NUMBER_READ(signed: bool) -> Number = p:peek(text(NUMBER_PREFIX)) -> { number_at(p, signed) }
+
+    // The characters a number, a scale or an exponent can be made of.
+    rule NUMBER_PREFIX = "-"? NUMBER_CHAR* -> { }
+
+    rule NUMBER_CHAR =
+          "E+" -> { }
+        | "E-" -> { }
+        | c:any if(pg_number_char(c)) -> { }
+
     // An `f"…"` string's text as written: an escape whole, and `{{` and
     // `}}` doubled, as the format string it becomes spells them.
     rule F_TEXT -> String = s:text(F_TEXT_CHAR+) -> { s.clone() }
@@ -329,6 +371,53 @@ grammar ParserGrammar {
     entry rule g_builtin -> String = s:text(G_BUILTIN) eof -> { s.clone() }
     entry rule f_text -> String = t:F_TEXT eof -> { t }
     entry rule f_spec -> String = s:F_SPEC eof -> { s }
+    entry rule float -> String = f:FLOAT eof -> { f }
+    entry rule number -> String = n:number_lit eof -> { pg_number_text(n) }
+    entry rule negative_number -> String = n:negative_number_lit eof -> { pg_number_text(n) }
+}
+
+// A number the grammar refuses, in `parse_numbers.nika`'s words.
+struct PgNumberRefused {
+    message: String,
+}
+
+impl Error for PgNumberRefused {
+    fn message(ref self) -> String {
+        return self.message.clone()
+    }
+}
+
+// A character of a number's spelling: an ASCII letter or digit, `_`, `.`.
+fn pg_number_char(c: scalar) -> bool sync {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '.'
+}
+
+fn pg_float_end(p: String) sync throws {
+    let message = float_end(p) ?? return
+    throw PgNumberRefused { message: message }
+}
+
+// How many bytes the number takes, a refused one up to the wrong character;
+// -1 where there is none.
+fn pg_number_consumed(n: ref Number) -> i64 sync {
+    return match n {
+        Number::Not => -1,
+        Number::Refused { consumed, .. } => consumed,
+        Number::Taken { consumed, .. } => consumed,
+    }
+}
+
+fn pg_number_taken(n: ref Number) -> (u64, bool) sync throws {
+    return match n {
+        Number::Taken { magnitude, negative, .. } => (magnitude, negative),
+        Number::Refused { message, .. } => throw PgNumberRefused { message: message.clone() },
+        Number::Not => throw PgNumberRefused { message: "digits" },
+    }
+}
+
+fn pg_number_text(n: (u64, bool)) -> String sync {
+    let sign = if n.1 { "-" } else { "" }
+    return f"{sign}{n.0}"
 }
 
 // **The scan as text**, for the tests and for comparing with the Rust

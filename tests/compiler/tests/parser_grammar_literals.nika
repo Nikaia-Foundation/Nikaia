@@ -2,7 +2,8 @@
 // and characters with their escapes kept whole, digit runs without their
 // separators, and the pieces the scan does not reach (an exponent, a path's
 // segment, a grammar built-in, an `f"…"` text and spec), each through an
-// entry of its own. The grammar file is copied beside a small driver and run.
+// entry of its own. The grammar file, `parse_numbers.nika` and the `slice` it
+// calls are copied beside a small driver and run.
 use std::fs
 use std::process
 
@@ -50,12 +51,23 @@ fn driver() -> String {
     return lines.join("\n")
 }
 
+// The `slice` of `ledger.nika` that `parse_numbers.nika` calls.
+fn slice_fn(ledger: String) -> String {
+    let at = ledger.find("\nfn slice(") ?? return ""
+    let rest = ledger[at..]
+    let end = rest.find("\n}\n") ?? return ""
+    return f"{rest[0..<end]}\n}}\n"
+}
+
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    let rules = fs::read_to_string(f"{repo}/crates/nikaia-std/src/tools/parser_grammar.nika", fs::Root::Anywhere)
-    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, f"use std::cli\nuse std::fs\n{rules}\n{driver()}\n")
+    let tools = f"{repo}/crates/nikaia-std/src/tools"
+    let rules = fs::read_to_string(f"{tools}/parser_grammar.nika", fs::Root::Anywhere)
+    let numbers = fs::read_to_string(f"{tools}/parse_numbers.nika", fs::Root::Anywhere)
+    let slice = slice_fn(fs::read_to_string(f"{tools}/ledger.nika", fs::Root::Anywhere))
+    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, f"use std::cli\nuse std::fs\n{rules}\n{numbers}\n{slice}\n{driver()}\n")
     let q = "\""
     let b = "\\"
     let cases: Vec[String] = [

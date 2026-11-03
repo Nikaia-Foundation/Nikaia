@@ -551,6 +551,44 @@ grammar! {
           | "e" d:digit+
             -> { format!("e{}", d) }
 
+        rule FLOAT -> String =
+            w:DIGITS "." f:DIGITS e:EXPONENT? FLOAT_END
+            -> { format!("{}.{}{}", w, f, nikaia_std::index::or(e.as_deref(), || "")) }
+          | w:DIGITS e:EXPONENT FLOAT_END
+            -> { format!("{}{}", w, e) }
+
+        rule FLOAT_END =
+            p:peek(text(NUMBER_PREFIX))
+            -> { let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_float_end(p)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
+
+        rule number_lit -> (u64, bool) =
+            n:NUMBER_AT(signed = false)
+            -> { n }
+
+        rule negative_number_lit -> (u64, bool) =
+            n:NUMBER_AT(signed = true)
+            -> { n }
+
+        rule NUMBER_AT(signed: bool) -> (u64, bool) =
+            n:NUMBER_READ(signed = signed) if(pg_number_consumed(&n) >= 0, "digits") any{0i64 + (pg_number_consumed(&n))}
+            -> { let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_number_taken(&n)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
+
+        rule NUMBER_READ(signed: bool) -> Number =
+            p:peek(text(NUMBER_PREFIX))
+            -> { number_at(p, signed) }
+
+        rule NUMBER_PREFIX =
+            "-"? NUMBER_CHAR*
+            -> { }
+
+        rule NUMBER_CHAR =
+            "E+"
+            -> { }
+          | "E-"
+            -> { }
+          | c:any if(pg_number_char(c))
+            -> { }
+
         rule F_TEXT -> String =
             s:text(F_TEXT_CHAR+)
             -> { s.to_string() }
@@ -590,6 +628,18 @@ grammar! {
         pub rule f_spec -> String =
             s:F_SPEC eof
             -> { s }
+
+        pub rule float -> String =
+            f:FLOAT eof
+            -> { f }
+
+        pub rule number -> String =
+            n:number_lit eof
+            -> { pg_number_text(n) }
+
+        pub rule negative_number -> String =
+            n:negative_number_lit eof
+            -> { pg_number_text(n) }
 
         rule __nikaia_here -> u32 =
           empty @ at
@@ -1139,6 +1189,44 @@ grammar! {
           | "e" d:digit+
             -> { format!("e{}", d) }
 
+        rule FLOAT -> String =
+            w:DIGITS "." f:DIGITS e:EXPONENT? FLOAT_END
+            -> { format!("{}.{}{}", w, f, nikaia_std::index::or(e.as_deref(), || "")) }
+          | w:DIGITS e:EXPONENT FLOAT_END
+            -> { format!("{}{}", w, e) }
+
+        rule FLOAT_END =
+            p:peek(text(NUMBER_PREFIX))
+            -> { let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_float_end(p)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
+
+        rule number_lit -> (u64, bool) =
+            n:NUMBER_AT(signed = false)
+            -> { n }
+
+        rule negative_number_lit -> (u64, bool) =
+            n:NUMBER_AT(signed = true)
+            -> { n }
+
+        rule NUMBER_AT(signed: bool) -> (u64, bool) =
+            n:NUMBER_READ(signed = signed) if(pg_number_consumed(&n) >= 0, "digits") any{0i64 + (pg_number_consumed(&n))}
+            -> { let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_number_taken(&n)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
+
+        rule NUMBER_READ(signed: bool) -> Number =
+            p:peek(text(NUMBER_PREFIX))
+            -> { number_at(p, signed) }
+
+        rule NUMBER_PREFIX =
+            "-"? NUMBER_CHAR*
+            -> { }
+
+        rule NUMBER_CHAR =
+            "E+"
+            -> { }
+          | "E-"
+            -> { }
+          | c:any if(pg_number_char(c))
+            -> { }
+
         rule F_TEXT -> String =
             s:text(F_TEXT_CHAR+)
             -> { s.to_string() }
@@ -1179,6 +1267,18 @@ grammar! {
             s:F_SPEC eof
             -> { s }
 
+        pub rule float -> String =
+            f:FLOAT eof
+            -> { f }
+
+        pub rule number -> String =
+            n:number_lit eof
+            -> { pg_number_text(n) }
+
+        pub rule negative_number -> String =
+            n:negative_number_lit eof
+            -> { pg_number_text(n) }
+
         rule __nikaia_here -> u32 =
           empty @ at
             -> { ::nikaia_std::text::Span::of(at).start }
@@ -1195,6 +1295,59 @@ where
         return Err(::winnow_grammar::ParseError::from_input(i));
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PgNumberRefused {
+    pub(crate) message: String,
+}
+
+impl PgNumberRefused {
+    pub(crate) fn message(&self) -> String { self.message.to_string() }
+}
+impl std::fmt::Display for PgNumberRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message())
+    }
+}
+impl std::error::Error for PgNumberRefused {}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn pg_number_char(c: scalar) -> bool { c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' || c == '.' }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn pg_float_end(p: &str) -> Result<(), nikaia_std::error::Thrown<PgNumberRefused>> {
+    let message = match float_end(p) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+    return Err(nikaia_std::error::throwing(PgNumberRefused { message }, &"pg_float_end"));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn pg_number_consumed(n: &Number) -> i64 {
+    match n {
+        Number::Not => -1,
+        Number::Refused { consumed, .. } => { let consumed = *consumed; consumed },
+        Number::Taken { consumed, .. } => { let consumed = *consumed; consumed },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn pg_number_taken(n: &Number) -> Result<(u64, bool), nikaia_std::error::Thrown<PgNumberRefused>> {
+    Ok(match n {
+        Number::Taken { magnitude, negative, .. } => { let magnitude = *magnitude; let negative = *negative; (magnitude, negative) },
+        Number::Refused { message, .. } => return Err(nikaia_std::error::throwing(PgNumberRefused { message: message.to_string() }, &"pg_number_taken")),
+        Number::Not => return Err(nikaia_std::error::throwing(PgNumberRefused { message: String::from("digits") }, &"pg_number_taken")),
+    })
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn pg_number_text(n: (u64, bool)) -> String {
+    let sign = if n.1 { "-" } else { "" };
+    format!("{}{}", sign, n.0)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

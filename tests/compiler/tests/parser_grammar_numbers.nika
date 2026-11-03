@@ -1,0 +1,132 @@
+// The number rules of `tools/parser_grammar.nika` (#557 step 4c): `FLOAT`,
+// `number_lit` and `negative_number_lit` over ADR-285 D16's spellings and
+// ADR-322's scale and exponent, each through an entry of its own. The grammar
+// file, `parse_numbers.nika` and the `slice` it calls are copied beside a
+// small driver and run. A refused number's words and caret are the Rust
+// grammar's: each refusal is printed beside what `nikaia check` says of the
+// same literal after `let x = ` (12 columns further right).
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// Each argument a file: `RULE<TAB>input` through that rule's entry; a
+// refusal as its first line.
+fn driver() -> String {
+    let lines: Vec[String] = [
+        f"fn piece(which: String, s: String) -> String {{",
+        f"    let input = Bytes(s.bytes().collect())",
+        f"    let r = match which {{",
+        f"        \"float\" => ParserGrammar::float(input),",
+        f"        \"number\" => ParserGrammar::number(input),",
+        f"        else => ParserGrammar::negative_number(input),",
+        f"    }} catch {{",
+        f"        let e = f\"{{error}}\"",
+        f"        let first: Vec[String] = e.split(\"\\n\").map(fn(p) {{ p.clone() }}).collect()",
+        f"        return f\"refused: {{first[0]}}\"",
+        f"    }}",
+        f"    return r",
+        f"}}",
+        f"fn main() throws {{",
+        f"    let mut first = true",
+        f"    for a in cli::args() {{",
+        f"        if first {{ first = false; continue }}",
+        f"        let s = fs::read_to_string(a.clone(), fs::Root::Anywhere)",
+        f"        let parts: Vec[String] = s.split(\"\\t\").map(fn(p) {{ p.clone() }}).collect()",
+        f"        println(f\"{{parts[0]}} {{parts[1]}}: {{piece(parts[0].clone(), parts[1].clone())}}\")",
+        f"    }}",
+        f"}}",
+    ]
+    return lines.join("\n")
+}
+
+// The `slice` of `ledger.nika` that `parse_numbers.nika` calls.
+fn slice_fn(ledger: String) -> String {
+    let at = ledger.find("\nfn slice(") ?? return ""
+    let rest = ledger[at..]
+    let end = rest.find("\n}\n") ?? return ""
+    return f"{rest[0..<end]}\n}}\n"
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tools = f"{repo}/crates/nikaia-std/src/tools"
+    let rules = fs::read_to_string(f"{tools}/parser_grammar.nika", fs::Root::Anywhere)
+    let numbers = fs::read_to_string(f"{tools}/parse_numbers.nika", fs::Root::Anywhere)
+    let slice = slice_fn(fs::read_to_string(f"{tools}/ledger.nika", fs::Root::Anywhere))
+    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, f"use std::cli\nuse std::fs\n{rules}\n{numbers}\n{slice}\n{driver()}\n")
+    let cases: Vec[String] = [
+        // ADR-285 D16: the four spellings, the separator out of the value
+        // (D3), hexadecimal digits either case, up to a `u64` (D19).
+        "number\t255",
+        "number\t1_000_000",
+        "number\t0xFF",
+        "number\t0xff",
+        "number\t0b1010",
+        "number\t0o17",
+        "number\t0",
+        "number\t18446744073709551615",
+        // ADR-322: a scale spells the value.
+        "number\t1G",
+        "number\t4Gi",
+        // Refused, the caret on the character that is wrong.
+        "number\t0b1210",
+        "number\t99999999999999999999",
+        "number\t1_",
+        "number\t1__0",
+        "number\t0x",
+        "number\t1E5",
+        // Not a number: the alternative fails in the ordinary way.
+        "number\tabc",
+        // The `-` against the digits is the literal's (D16); `- 5` is not.
+        "negative\t-9223372036854775808",
+        "negative\t-0xFF",
+        "negative\t-5",
+        "negative\t- 5",
+        "negative\t-1.5",
+        // Floats: the separator, the exponent `e`, kept as written.
+        "float\t1.5",
+        "float\t1_000.5",
+        "float\t1.0e5",
+        "float\t9.54791938424326609e-04",
+        "float\t1e5",
+        "float\t1.5e+3",
+        "float\t1.5E-4",
+        "float\t1.5G",
+        // Trivia ends the float: no refusal of the `G` past it.
+        "float\t1.5 G",
+    ]
+    let mut args: Vec[String] = ["run", "main.nika", "--"]
+    let mut i = 0
+    for c in cases {
+        i += 1
+        fs::write(f"{tmp}/case{i}.txt", fs::Root::Anywhere, c)
+        args.push(f"case{i}.txt")
+    }
+    let out = process::run(nikaia.clone(), args; dir: tmp)
+    println(out.stdout.trim())
+    if out.stdout.trim().len() == 0 { println(out.stderr) }
+    // What the Rust grammar says of the same refused literals.
+    for lit in ["0b1210", "99999999999999999999", "1_", "1__0", "0x", "1E5", "1.5E-4", "1.5G"] {
+        fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, f"fn main() {{\n    let x = {lit}\n    println(f\"{{x}}\")\n}}\n")
+        let said = process::run(nikaia.clone(), ["check", "p.nika"]; dir: tmp)
+        let lines: Vec[String] = said.stderr.split("\n").map(fn(p) { p.clone() }).collect()
+        let message = if lines.len() > 1 { f"{lines[0]} {lines[1].trim()}" } else { said.stderr.trim().clone() }
+        println(f"rust {lit}: {message}")
+    }
+    process::run("rm", ["-rf", tmp])
+}

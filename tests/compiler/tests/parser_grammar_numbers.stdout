@@ -1,0 +1,39 @@
+number 255: 255
+number 1_000_000: 1000000
+number 0xFF: 255
+number 0xff: 255
+number 0b1010: 10
+number 0o17: 15
+number 0: 0
+number 18446744073709551615: 18446744073709551615
+number 1G: 1000000000
+number 4Gi: 4294967296
+number 0b1210: refused: a `0b` number only has the digits `0` and `1` at line 1, column 4
+number 99999999999999999999: refused: this number is too big: the largest integer types are `u64` and `i64` at line 1, column 21
+number 1_: refused: a number can't end in an underscore at line 1, column 3
+number 1__0: refused: an underscore in a number goes between two digits, like `1_000_000` at line 1, column 3
+number 0x: refused: a number needs at least one digit after its prefix at line 1, column 3
+number 1E5: refused: an exponent is written with a lower-case `e`: `1e5` at line 1, column 2
+number abc: refused: expected digits; found unexpected token `abc` at line 1, column 1
+negative -9223372036854775808: -9223372036854775808
+negative -0xFF: -255
+negative -5: -5
+negative - 5: refused: expected digits; found unexpected token `-` at line 1, column 1
+negative -1.5: refused: expected digits; found unexpected token `-` at line 1, column 1
+float 1.5: 1.5
+float 1_000.5: 1000.5
+float 1.0e5: 1.0e5
+float 9.54791938424326609e-04: 9.54791938424326609e-04
+float 1e5: 1e5
+float 1.5e+3: 1.5e+3
+float 1.5E-4: refused: an exponent is written with a lower-case `e`: `e-4` at line 1, column 4
+float 1.5G: refused: a scale like `G` stands on a whole number, not on a float at line 1, column 4
+float 1.5 G: refused: expected end of input; found unexpected token `G` at line 1, column 5
+rust 0b1210: error: A `0b` number only has the digits `0` and `1`. --> p.nika:2:16
+rust 99999999999999999999: error: This number is too big: the largest integer types are `u64` and `i64`. --> p.nika:2:33
+rust 1_: error: A number can't end in an underscore. --> p.nika:2:15
+rust 1__0: error: An underscore in a number goes between two digits, like `1_000_000`. --> p.nika:2:15
+rust 0x: error: A number needs at least one digit after its prefix. --> p.nika:2:15
+rust 1E5: error: An exponent is written with a lower-case `e`: `1e5`. --> p.nika:2:14
+rust 1.5E-4: error: An exponent is written with a lower-case `e`: `e-4`. --> p.nika:2:16
+rust 1.5G: error: A scale like `G` stands on a whole number, not on a float. --> p.nika:2:16
