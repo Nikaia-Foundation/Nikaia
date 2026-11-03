@@ -183,7 +183,10 @@ impl CheckState {
             if one == name { written = true; }
         }
         let asked = self.flow.at_a_write_door && !written;
-        let mut local = CheckLocal::free(world.words.resolve(name).to_string(), ty, self.a_new_binding());
+        let changed: Option<Ty> = lent_mut(&ty);
+        let changes = changed.is_some();
+        let mut local = CheckLocal::free(world.words.resolve(name).to_string(), nikaia_std::index::or(changed, || ty.into()), self.a_new_binding());
+        if changes { local.changing = true; }
         if asked { local.immutable = Some(CheckImmutable { at: span.clone(), kind: CheckKind::Parameter, over: String::from("") }); }
         let opened = self.flow.open_params.remove(&local.name);
         if self.flow.lent_params.remove(&local.name) {

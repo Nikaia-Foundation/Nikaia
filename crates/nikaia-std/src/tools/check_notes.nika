@@ -260,7 +260,14 @@ impl CheckState {
             }
         }
         let asked = self.flow.at_a_write_door && !written
-        let mut local = CheckLocal::free(world.words.resolve(name).clone(), ty, self.a_new_binding())
+        // **Handed a `mut` parameter of a function type** (#1134), the name is
+        // the `&mut` a named function's `mut` parameter is.
+        let changed: Ty? = lent_mut(ty)
+        let changes = changed != null
+        let mut local = CheckLocal::free(world.words.resolve(name).clone(), changed ?? ty, self.a_new_binding())
+        if changes {
+            local.changing = true
+        }
         if asked {
             local.immutable = CheckImmutable { at: span.clone(), kind: CheckKind::Parameter, over: "" }
         }

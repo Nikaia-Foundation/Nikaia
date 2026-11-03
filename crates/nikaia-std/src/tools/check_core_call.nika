@@ -156,12 +156,20 @@ fn check_core_call_declared(contract: ref FnContract) -> Ty? {
 
 /// What a `ref` parameter of code takes is lent to it (D20), unless it is a
 /// view already: a map's read past a jump is.
-fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty]) sync {
+fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty], name: ref String, span: ref Span) sync {
     let mut i = -1
     for given in args {
         i += 1
         if i >= params.len() as i64 || i >= found.len() as i64 {
             break
+        }
+        // **A `mut` parameter of a function type is lent `mut`** (#1134), as
+        // a named function's is.
+        let changed: Ty? = lent_mut(params[i])
+        if changed != null {
+            let want: Ty = changed ?? Ty::Unknown
+            state.lent_to_a_mut_parameter(world, given, found[i], want, false, name, span)
+            continue
         }
         if params[i].is_a_view() && !found[i].is_a_view() && !check_core_call_opaque(found[i]) && !(moves(found[i]) && state.a_map_read_past_a_jump(world, given)) {
             state.facts.lent_args.insert(id_of(given) as i64)
@@ -173,8 +181,8 @@ fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref 
 /// function keeps. What its type says is what the call does.
 fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], name: ref String, params: ref Vec[Ty], gives: Ty, is_sync: bool, fails: bool, span: ref Span) -> Ty sync {
     state.read_at.push((name.clone(), span.start as i64))
-    let found = check_core_arguments_to_code(state, world, host, args, params, span)
-    check_core_call_lent(state, world, args, params, found)
+    let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), span)
+    check_core_call_lent(state, world, args, params, found, name, span)
     state.kept_arguments_are_its_own(world, args, params)
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails))
     // **A call through a function value that may pause pauses** (#831): the
@@ -483,7 +491,7 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
         let looked: Ty = state.lookup(name) ?? Ty::Unknown
         match looked {
             Ty::Fn { params, result, can_throw, .. } => {
-                check_core_call_lent(state, world, args, params, found)
+                check_core_call_lent(state, world, args, params, found, name, span)
                 // **A parameter of code fails with what its callers hand
                 // it** (ADR-351 D1, D4).
                 let current: String = state.current?.clone() ?? ""
@@ -678,7 +686,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     if !have && is_variable && state.run_code.contains(name) {
         let looked: Ty = state.lookup(name) ?? Ty::Unknown
         match looked {
-            Ty::Fn { params, .. } => { expected = params.clone() },
+            Ty::Fn { params, .. } => { expected = unlent_each(params) },
             else => {}
         }
     }

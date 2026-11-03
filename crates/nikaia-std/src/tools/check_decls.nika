@@ -449,7 +449,13 @@ impl CheckState {
         let signature = contract.signature ?? return null
         let mut params: Vec[Ty] = []
         for param in signature.params {
-            params.push(param.1.clone())
+            // **A `mut` parameter is lent `mut`** (#1134): the value is a
+            // `fn(mut S)`, which a `fn(S)` is not.
+            if signature.mutable.contains(param.0) {
+                params.push(Ty::Pointed { item: param.1.clone(), slice: false, mutable: true })
+            } else {
+                params.push(param.1.clone())
+            }
         }
         return Ty::Fn { params: params, result: signature.result?.clone(), is_sync: contract.sync_claim.is_sync(), can_throw: contract.fails_with.len() > 0 }
     }

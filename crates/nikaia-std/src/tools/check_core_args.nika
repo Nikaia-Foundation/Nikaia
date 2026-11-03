@@ -113,6 +113,22 @@ fn check_core_args_a_run_parameter(state: ref CheckState, world: ref CheckWorld,
 
 /// **A lambda handed to a parameter of a function type**: typed by it, and
 /// recorded as kept, run or boxed into a future (ADR-277 D11, D12).
+/// **A lambda handed to `fn(mut S)` says `mut` where the type does**
+/// (#1134): `fn(S)` and `fn(mut S)` are different types, so a parameter the
+/// type lends `mut` is written `mut` in the lambda too.
+fn check_core_args_lambda_says_mut(mut state: CheckState, world: ref CheckWorld, arg: ref Expr, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], given: ref Vec[Ty], code: ref Ty, span: ref Span) sync {
+    let mut at = 0
+    for p in params {
+        if at < given.len() && lent_mut(given[at]) != null && !mutable.contains(p) {
+            let name = world.words.resolve(p).clone()
+            let wanted = code.text()
+            let position = at + 1
+            state.findings.push(check_refusal("NK1102", check_span_at(world, arg, span), f"This lambda takes `{name}` without `mut`, but `{wanted}` lends parameter {position} as `mut`.", ["`fn(S)` and `fn(mut S)` are different types: the code a `fn(mut S)` stands for changes that argument in place."], f"Write `mut {name}`."))
+        }
+        at += 1
+    }
+}
+
 fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, want: ref Ty, declared_here: bool, callee: ref FnContract?, at: i64, keeps: bool, span: ref Span) -> Ty sync {
     let id = id_of(arg) as i64
     // **Optional code keeps the lambda** (#1117): the option holds it, as a
@@ -129,6 +145,7 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                 Ty::Fn { params: given, result, is_sync, can_throw } => {
                     let pauses: bool = !is_sync
                     let fails: bool = can_throw
+                    check_core_args_lambda_says_mut(state, world, arg, params, mutable, given, code, span)
                     if pauses && declared_here {
                         state.facts.future_lambdas.insert(id)
                         if runs {

@@ -348,7 +348,7 @@ pub fn written_type(names: &winnow_grammar::InternerContext, ty: &Type) -> Strin
     if ty.is_view {
         out.push_str("ref ");
         if ty.is_mut { out.push_str("mut "); }
-    }
+    } else if ty.is_mut { out.push_str("mut "); }
     let mut parts: Vec<String> = vec![];
     for inner in ty.generics.iter() { parts.push(written_type(names, inner)); }
     let joined = parts.join(", ");

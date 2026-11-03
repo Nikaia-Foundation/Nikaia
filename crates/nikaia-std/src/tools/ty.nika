@@ -201,6 +201,45 @@ fn listed(parts: ref Array[Ty]) -> String {
     return out
 }
 
+/// A function type's parameters, a `mut` one as the source writes it,
+/// `mut S` (#1134), and not as the boundary's `ref mut S`.
+fn code_params_listed(params: ref Array[Ty]) -> String {
+    let mut out: String = ""
+    for part in params {
+        if !out.is_empty() {
+            out.push_str(", ")
+        }
+        let changed = lent_mut(part)
+        if changed != null {
+            let item = changed?.text() ?? ""
+            out.push_str(ref f"mut {item}")
+        } else {
+            out.push_str(ref text(part))
+        }
+    }
+    return out
+}
+
+/// **What a function type's `mut` parameter changes** (#1134): the `S` of
+/// `fn(mut S)`, held as a mutable pointer to it; `null` for any other
+/// parameter.
+pub fn lent_mut(ty: ref Ty) -> Ty? {
+    return match ty {
+        Ty::Pointed { item, slice, mutable } => if mutable && !slice { item.clone() } else { null },
+        else => null,
+    }
+}
+
+/// A function type's parameters as the arguments are typed against them:
+/// a `mut` one is the type it changes (#1134).
+pub fn unlent_each(params: ref Array[Ty]) -> Vec[Ty] {
+    let mut out: Vec[Ty] = []
+    for part in params {
+        out.push(lent_mut(part) ?? part.clone())
+    }
+    return out
+}
+
 /// `ref mut Array[T]`, and not the pointer it lowers to. The `?` a nullable
 /// pointee carries comes out after the brackets, which is the spelling
 /// `Ty::parse` reads back (ADR-302 D14).
@@ -223,7 +262,7 @@ fn pointed(item: ref Ty, slice: bool, mutable: bool) -> String {
 
 /// `fn(A, B) -> R sync throws`.
 fn code(params: ref Array[Ty], result: ref Ty?, is_sync: bool, can_throw: bool) -> String {
-    let mut out = f"fn({listed(params)})"
+    let mut out = f"fn({code_params_listed(params)})"
     if result != null {
         let returned = result?.text() ?? ""
         out.push_str(ref f" -> {returned}")
@@ -536,7 +575,16 @@ fn a_function(written: ref String) -> Ty? {
         }
         break
     }
-    let params = each(split_args(between(c, 3, close)))
+    let mut params: Vec[Ty] = []
+    for part in split_args(between(c, 3, close)) {
+        // `mut S`, a parameter lent `mut` (#1134).
+        let changed = part.strip_prefix("mut ")
+        if changed != null {
+            params.push(Ty::Pointed { item: parse(changed ?? ""), slice: false, mutable: true })
+        } else {
+            params.push(parse(part))
+        }
+    }
     if tail.starts_with("->") {
         let result = parse(cut(tail, 2, 0))
         return Ty::Fn { params: params, result: result, is_sync: is_sync, can_throw: can_throw }

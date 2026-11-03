@@ -96,6 +96,16 @@ impl EmitState {
     fn emit_code_part(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type, lifetimes: EmitLifetimes, count: Count) -> String {
         let inside = walk.in_parameter
         walk.in_parameter = false
+        // **A `mut` parameter of a function type is lent `&mut`** (#1134):
+        // `fn(mut S)` is written `Fn(&mut S)`.
+        if ty.is_mut && !ty.is_view && !ty.is_slice {
+            let mut item = ty.clone()
+            item.is_mut = false
+            let inner = self.emit_core_ty_counted(world, walk, crossings, overlaps, item, lifetimes, count)
+            walk.in_parameter = inside
+            let reference = lifetimes.reference()
+            return f"{reference}mut {inner}"
+        }
         let written = self.emit_core_ty_counted(world, walk, crossings, overlaps, ty, lifetimes, count)
         walk.in_parameter = inside
         return written

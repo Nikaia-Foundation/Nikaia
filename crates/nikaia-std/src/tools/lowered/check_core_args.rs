@@ -82,6 +82,23 @@ pub(crate) fn check_core_args_a_run_parameter(state: &CheckState, world: &CheckW
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_args_lambda_says_mut(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], given: &[Ty], code: &Ty, span: &Span) {
+    let mut at: i64 = 0;
+    for p in params.iter() {
+        let p = *p;
+        if ((at) as usize) < given.len() && lent_mut(nikaia_std::index::get(&given, (at) as usize)).is_some() && !mutable.contains(&p) {
+            let name = world.words.resolve(p).to_string();
+            let wanted = code.text();
+            let position: i64 = at + 1;
+            state.findings.push(check_refusal("NK1102", &check_span_at(world, arg, span), format!("This lambda takes `{}` without `mut`, but `{}` lends parameter {} as `mut`.", name, wanted, position), vec![String::from("`fn(S)` and `fn(mut S)` are different types: the code a `fn(mut S)` stands for changes that argument in place.")], Some(format!("Write `mut {}`.", name))));
+        }
+        at += 1;
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &Expr, want: &Ty, declared_here: bool, callee: Option<&FnContract>, at: i64, keeps: bool, span: &Span) -> Ty {
     let id = id_of(arg) as i64;
     let optional = check_core_args_optional_code(want);
@@ -97,6 +114,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     let result = nikaia_std::boxed::open(result);
                     let pauses: bool = !is_sync;
                     let fails: bool = can_throw;
+                    check_core_args_lambda_says_mut(state, world, arg, params, mutable, given, &code, span);
                     if pauses && declared_here {
                         state.facts.future_lambdas.insert(id);
                         if runs { state.facts.run_lambdas.insert(id); }

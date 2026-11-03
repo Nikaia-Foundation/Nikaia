@@ -15,6 +15,11 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
         if ty.is_nullable { return Ty::Pointed { item: Box::new(Ty::Nullable(Box::new(item))), slice: true, mutable: ty.is_mut }; }
         return Ty::Pointed { item: Box::new(item), slice: true, mutable: ty.is_mut };
     }
+    if ty.is_mut && !ty.is_view && !ty.is_slice {
+        let mut changed = ty.clone();
+        changed.is_mut = false;
+        return Ty::Pointed { item: Box::new(written_ty(names, aliases, &changed)), slice: false, mutable: true };
+    }
     if ty.is_slice || ty.is_mut {
         let item = lent_item(names, aliases, ty);
         if ty.is_nullable { return Ty::Pointed { item: Box::new(Ty::Nullable(Box::new(item))), slice: ty.is_slice, mutable: ty.is_mut }; }

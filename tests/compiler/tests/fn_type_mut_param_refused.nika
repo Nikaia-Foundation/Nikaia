@@ -1,0 +1,11 @@
+// `fn(S)` and `fn(mut S)` are different types (#1134): a lambda handed
+// where a `fn(mut S)` is wanted says `mut`.
+struct S { pub n: i64 }
+fn twice(mut s: S, f: fn(mut S)) {
+    f(s)
+    f(s)
+}
+fn main() {
+    let mut s = S { n: 1 }
+    twice(s, fn(t) { println(f"{t.n}") })
+}

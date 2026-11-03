@@ -552,6 +552,8 @@ pub fn written_type(names: ref winnow_grammar::InternerContext, ty: ref Type) ->
         if ty.is_mut {
             out.push_str("mut ")
         }
+    } else if ty.is_mut {
+        out.push_str("mut ")
     }
     let mut parts: Vec[String] = []
     for inner in ty.generics {

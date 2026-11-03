@@ -88,6 +88,45 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
+    pub fn lent_to_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given_expr: &Expr, found: &Ty, want: &Ty, takes_a_receiver: bool, written: &str, span: &Span) -> bool {
+        if check_reference_written(given_expr) && !takes_a_receiver && !found.is_unknown() {
+            let mut under = false;
+            for owned in viewed_from_type(found) { if owned.fits(want) || self.fits_through_deref(world, &owned, want) { under = true; } }
+            if under {
+                self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![] });
+                return true;
+            }
+        }
+        if self.borrowing_self && check_references_is_self(world, given_expr) && unviewed_type(found).fits(want) {
+            self.facts.mut_args.insert(id_of(given_expr) as i64);
+            self.facts.reborrowed_args.insert(id_of(given_expr) as i64);
+            return true;
+        }
+        let viewed = self.a_mut_view_name(world, given_expr);
+        if !(found.fits(want) || self.fits_through_deref(world, found, want) || viewed && unviewed_type(found).fits(want)) { return false; }
+        if !viewed && self.a_name_that_changes(world, given_expr) {
+            check_narrow_written_through(&mut *self, given_expr);
+            return true;
+        }
+        let root: Option<String> = self.rooted_at(world, given_expr);
+        if root.is_some() {
+            let changed: String = nikaia_std::index::or(root, || "".into());
+            self.a_changed_binding_says_mut(&changed, "handed to a `mut` parameter here", check_span_at(world, given_expr, span));
+        }
+        check_narrow_handed(&mut *self, world, given_expr, span.start as i64);
+        check_narrow_written_through(&mut *self, given_expr);
+        self.facts.mut_args.insert(id_of(given_expr) as i64);
+        if viewed { self.facts.reborrowed_args.insert(id_of(given_expr) as i64); }
+        let bound = match given_expr {
+            Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::index::or(self.binding(world.words.resolve(symbol)).as_ref().map(|__nikaia_it| __nikaia_it.id), || -1) },
+            _ => -1,
+        };
+        if bound >= 0 { self.facts.mut_arg_bindings.insert(id_of(given_expr) as i64, bound); }
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
     pub fn the_compiler_writes_the_reference(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, at: i64, given: Option<&Expr>, found: &Ty, want: &Ty, own: bool, written: &str, span: &Span) -> bool {
         let mut takes_a_receiver = false;
         let mut changes = false;
@@ -109,40 +148,7 @@ impl CheckState {
         }
         if changes {
             let given_expr = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
-            if check_reference_written(given_expr) && !takes_a_receiver && !found.is_unknown() {
-                let mut under = false;
-                for owned in viewed_from_type(found) { if owned.fits(want) || self.fits_through_deref(world, &owned, want) { under = true; } }
-                if under {
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![] });
-                    return true;
-                }
-            }
-            if self.borrowing_self && check_references_is_self(world, given_expr) && unviewed_type(found).fits(want) {
-                self.facts.mut_args.insert(id_of(given_expr) as i64);
-                self.facts.reborrowed_args.insert(id_of(given_expr) as i64);
-                return true;
-            }
-            let viewed = self.a_mut_view_name(world, given_expr);
-            if !(found.fits(want) || self.fits_through_deref(world, found, want) || viewed && unviewed_type(found).fits(want)) { return false; }
-            if !viewed && self.a_name_that_changes(world, given_expr) {
-                check_narrow_written_through(&mut *self, given_expr);
-                return true;
-            }
-            let root: Option<String> = self.rooted_at(world, given_expr);
-            if root.is_some() {
-                let changed: String = nikaia_std::index::or(root, || "".into());
-                self.a_changed_binding_says_mut(&changed, "handed to a `mut` parameter here", check_span_at(world, given_expr, span));
-            }
-            check_narrow_handed(&mut *self, world, given_expr, span.start as i64);
-            check_narrow_written_through(&mut *self, given_expr);
-            self.facts.mut_args.insert(id_of(given_expr) as i64);
-            if viewed { self.facts.reborrowed_args.insert(id_of(given_expr) as i64); }
-            let bound = match given_expr {
-                Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::index::or(self.binding(world.words.resolve(symbol)).as_ref().map(|__nikaia_it| __nikaia_it.id), || -1) },
-                _ => -1,
-            };
-            if bound >= 0 { self.facts.mut_arg_bindings.insert(id_of(given_expr) as i64, bound); }
-            return true;
+            return self.lent_to_a_mut_parameter(world, given_expr, found, want, takes_a_receiver, written, span);
         }
         let lends = if own { lends_in_own(contract, position, &vec![world.library]) } else { lends_in(contract, position, &vec![world.library]) };
         if !lends { return false; }

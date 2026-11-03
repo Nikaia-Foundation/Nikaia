@@ -1,0 +1,17 @@
+// A kept `fn(mut S)` (#1134): a named function in a field, and a local
+// holding it, lend their argument `mut` as a parameter of code does.
+struct S { pub n: i64 }
+struct K { pub f: fn(mut S) }
+fn twice(mut s: S, f: fn(mut S)) {
+    f(s)
+    f(s)
+}
+fn bump(mut s: S) { s.n += 10 }
+fn main() {
+    let mut s = S { n: 1 }
+    twice(s, fn(mut t) { t.n += 1 })
+    let k = K { f: bump }
+    let g = k.f
+    g(s)
+    println(f"{s.n}")
+}

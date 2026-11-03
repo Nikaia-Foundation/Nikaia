@@ -387,7 +387,13 @@ fn check_core_a_kept_function[H: CheckHost](mut state: CheckState, world: ref Ch
     for n in names {
         if at < params.len() {
             let id = state.a_new_binding()
-            frame.push(CheckLocal::free(world.words.resolve(n).clone(), params[at].clone(), id))
+            // A `mut` parameter of the kept type (#1134) is the `&mut` the
+            // call lends on, as a lambda's `mut` parameter is.
+            let changed: Ty? = lent_mut(params[at])
+            let changes = changed != null
+            let mut local = CheckLocal::free(world.words.resolve(n).clone(), changed ?? params[at].clone(), id)
+            local.changing = changes
+            frame.push(local)
         }
         at += 1
     }

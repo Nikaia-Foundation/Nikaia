@@ -415,7 +415,7 @@ pub(crate) fn written_foreign(names: &winnow_grammar::InternerContext, ty: &Type
 pub(crate) fn written_at(names: &winnow_grammar::InternerContext, ty: &Type, known: &collections::BTreeSet<String>, a_parameter: bool, span: &Span, out: &mut Vec<Finding>) { written_at_the_boundary(names, ty, known, a_parameter, false, span, out); }
 
 pub(crate) fn written_at_the_boundary(names: &winnow_grammar::InternerContext, ty: &Type, known: &collections::BTreeSet<String>, a_parameter: bool, at_c: bool, span: &Span, out: &mut Vec<Finding>) {
-    if ty.is_mut && !at_c {
+    if ty.is_mut && (ty.is_view || ty.is_slice) && !at_c {
         out.push(refusal("NK1158", span.clone(), String::from("`ref mut` can only be used when talking to C."), vec![String::from("`ref mut` is only for `extern \"C\"` declarations. Everywhere else, Nikaia has its own way to say it.")], String::from("Put `mut` in front of the name instead: `fn fill(mut out: Vec[i64])`.")));
         return;
     }

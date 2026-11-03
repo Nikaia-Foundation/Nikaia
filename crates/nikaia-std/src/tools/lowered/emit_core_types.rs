@@ -52,6 +52,14 @@ impl EmitState {
     pub(crate) fn emit_code_part(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes, count: Count) -> String {
         let inside = walk.in_parameter;
         walk.in_parameter = false;
+        if ty.is_mut && !ty.is_view && !ty.is_slice {
+            let mut item = ty.clone();
+            item.is_mut = false;
+            let inner = self.emit_core_ty_counted(world, walk, crossings, overlaps, &item, lifetimes, count);
+            walk.in_parameter = inside;
+            let reference = lifetimes.reference();
+            return format!("{}mut {}", reference, inner);
+        }
         let written = self.emit_core_ty_counted(world, walk, crossings, overlaps, ty, lifetimes, count);
         walk.in_parameter = inside;
         written

@@ -36,6 +36,13 @@ pub fn written_ty(names: ref winnow_grammar::InternerContext, aliases: ref colle
         }
         return Ty::Pointed { item: item, slice: true, mutable: ty.is_mut }
     }
+    // **A function type's `mut` parameter** (#1134): lent `mut` at each call,
+    // and so not the plain type it changes.
+    if ty.is_mut && !ty.is_view && !ty.is_slice {
+        let mut changed = ty.clone()
+        changed.is_mut = false
+        return Ty::Pointed { item: written_ty(names, aliases, changed), slice: false, mutable: true }
+    }
     // **What the C boundary lends** (ADR-302 D5). A `?` on one of these is the
     // pointee's (D14): `&mut sqlite3?` is the out-parameter.
     if ty.is_slice || ty.is_mut {

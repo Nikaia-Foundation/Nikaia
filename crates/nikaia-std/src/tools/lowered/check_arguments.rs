@@ -324,6 +324,11 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             notes.push(format!("{}, so it needs one of its own.", capitalised(&keeper)));
             help = format!("Write `.clone()` to hand `{}` a copy of its own.", key);
         }
+        let differs: i64 = check_arguments_mut_differs(&found_here, &want);
+        if differs > 0 {
+            notes.push(format!("Parameter {} differs in `mut`: `fn(S)` and `fn(mut S)` are different types, and the code a `fn(mut S)` stands for changes that argument in place.", differs));
+            help = format!("Declare parameter {} the way `{}` says, with or without `mut`.", differs, want.text());
+        }
         let mut at_span = span.clone();
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -332,5 +337,27 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         state.findings.push(check_refusal("NK1102", &at_span, format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, want.text(), found_here.text()), notes, Some(help)));
     }
     signature.result_or_unit()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_arguments_mut_differs(found: &Ty, want: &Ty) -> i64 {
+    let had: Vec<Ty> = match found {
+        Ty::Fn { params, .. } => params.to_owned(),
+        _ => vec![],
+    };
+    let wanted: Vec<Ty> = match want {
+        Ty::Fn { params, .. } => params.to_owned(),
+        _ => vec![],
+    };
+    if (had.len() as i64) != wanted.len() as i64 { return 0; }
+    let mut at: i64 = 0;
+    for one in had.iter() {
+        let other = (*nikaia_std::index::get(&wanted, (at) as usize)).clone();
+        let changes = lent_mut(one).is_some();
+        if changes != (lent_mut(&other).is_some()) && nikaia_std::index::or(lent_mut(one), || one.clone().into()).fits(&nikaia_std::index::or(lent_mut(&other), || other.clone().into())) { return at + 1; }
+        at += 1;
+    }
+    0
 }
 

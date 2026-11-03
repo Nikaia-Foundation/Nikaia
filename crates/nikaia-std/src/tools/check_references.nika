@@ -115,6 +115,76 @@ impl CheckState {
         }
     }
 
+    /// **An argument handed to a `mut` parameter** (ADR-094 D3): the
+    /// compiler writes its `&mut`, and the caller's name must say `mut`. A
+    /// named function's `mut` parameter and a function type's (`fn(mut S)`,
+    /// #1134) are lent alike. Whether the answer is `true`: nothing is left for
+    /// the positions below to decide.
+    pub fn lent_to_a_mut_parameter(ref mut self, world: ref CheckWorld, given_expr: ref Expr, found: ref Ty, want: ref Ty, takes_a_receiver: bool, written: ref String, span: ref Span) -> bool sync {
+        // **A `ref` written in front of it is the compiler's to write as
+        // well** (Part I 6.5, #700): `put(ref t)` for `mut tab: Table` is
+        // `NK1137`, as a `ref` at any other argument is.
+        if check_reference_written(given_expr) && !takes_a_receiver && !found.is_unknown() {
+            let mut under = false
+            for owned in viewed_from_type(found) {
+                if owned.fits(want) || self.fits_through_deref(world, owned, want) {
+                    under = true
+                }
+            }
+            if under {
+                self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call."], help: "Remove the `ref`.", labels: [] })
+                return true
+            }
+        }
+        // **A borrowed `self` is the reference already** (#787): lent on
+        // again (`&mut *self`), not copied out.
+        if self.borrowing_self && check_references_is_self(world, given_expr) && unviewed_type(found).fits(want) {
+            self.facts.mut_args.insert(id_of(given_expr) as i64)
+            self.facts.reborrowed_args.insert(id_of(given_expr) as i64)
+            return true
+        }
+        // **A mutable view of an entry or an element is the `&mut`
+        // already** (#975): lent on again, `&mut *x`, whether it is
+        // typed as the view an entry's `or_insert` hands back or as the
+        // value it stands for.
+        let viewed = self.a_mut_view_name(world, given_expr)
+        // **The `&mut` is the compiler's, the type is still the
+        // argument's.**
+        if !(found.fits(want) || self.fits_through_deref(world, found, want) || (viewed && unviewed_type(found).fits(want))) {
+            return false
+        }
+        // **A reference that is already there is not written twice**; a
+        // proved read of it is still lent `mut` out of its option
+        // (ADR-382 D5, bit 16).
+        if !viewed && self.a_name_that_changes(world, given_expr) {
+            check_narrow_written_through(self, given_expr)
+            return true
+        }
+        // **The caller's name is changed there** (Part I 6.5, #734): a
+        // `let` without `mut` is `NK1139`, a parameter without it `NK1138`,
+        // as for any other change.
+        let root: String? = self.rooted_at(world, given_expr)
+        if root != null {
+            let changed: String = root ?? ""
+            self.a_changed_binding_says_mut(changed, "handed to a `mut` parameter here", check_span_at(world, given_expr, span))
+        }
+        // **A path handed over `mut` loses its proofs** (ADR-382 D5).
+        check_narrow_handed(self, world, given_expr, span.start as i64)
+        check_narrow_written_through(self, given_expr)
+        self.facts.mut_args.insert(id_of(given_expr) as i64)
+        if viewed {
+            self.facts.reborrowed_args.insert(id_of(given_expr) as i64)
+        }
+        let bound = match given_expr {
+            Expr::Variable(symbol, _) => self.binding(world.words.resolve(symbol))?.id ?? -1,
+            else => -1,
+        }
+        if bound >= 0 {
+            self.facts.mut_arg_bindings.insert(id_of(given_expr) as i64, bound)
+        }
+        return true
+    }
+
     /// **The compiler writes the reference at the call, and a written one is
     /// refused** (ADR-094 D1). `at` is the position among the arguments, the
     /// receiver not counted; `given` what the source wrote there, `found` its
@@ -144,68 +214,7 @@ impl CheckState {
         }
         if changes {
             let given_expr = given ?? return false
-            // **A `ref` written in front of it is the compiler's to write as
-            // well** (Part I 6.5, #700): `put(ref t)` for `mut tab: Table` is
-            // `NK1137`, as a `ref` at any other argument is.
-            if check_reference_written(given_expr) && !takes_a_receiver && !found.is_unknown() {
-                let mut under = false
-                for owned in viewed_from_type(found) {
-                    if owned.fits(want) || self.fits_through_deref(world, owned, want) {
-                        under = true
-                    }
-                }
-                if under {
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call."], help: "Remove the `ref`.", labels: [] })
-                    return true
-                }
-            }
-            // **A borrowed `self` is the reference already** (#787): lent on
-            // again (`&mut *self`), not copied out.
-            if self.borrowing_self && check_references_is_self(world, given_expr) && unviewed_type(found).fits(want) {
-                self.facts.mut_args.insert(id_of(given_expr) as i64)
-                self.facts.reborrowed_args.insert(id_of(given_expr) as i64)
-                return true
-            }
-            // **A mutable view of an entry or an element is the `&mut`
-            // already** (#975): lent on again, `&mut *x`, whether it is
-            // typed as the view an entry's `or_insert` hands back or as the
-            // value it stands for.
-            let viewed = self.a_mut_view_name(world, given_expr)
-            // **The `&mut` is the compiler's, the type is still the
-            // argument's.**
-            if !(found.fits(want) || self.fits_through_deref(world, found, want) || (viewed && unviewed_type(found).fits(want))) {
-                return false
-            }
-            // **A reference that is already there is not written twice**; a
-            // proved read of it is still lent `mut` out of its option
-            // (ADR-382 D5, bit 16).
-            if !viewed && self.a_name_that_changes(world, given_expr) {
-                check_narrow_written_through(self, given_expr)
-                return true
-            }
-            // **The caller's name is changed there** (Part I 6.5, #734): a
-            // `let` without `mut` is `NK1139`, a parameter without it `NK1138`,
-            // as for any other change.
-            let root: String? = self.rooted_at(world, given_expr)
-            if root != null {
-                let changed: String = root ?? ""
-                self.a_changed_binding_says_mut(changed, "handed to a `mut` parameter here", check_span_at(world, given_expr, span))
-            }
-            // **A path handed over `mut` loses its proofs** (ADR-382 D5).
-            check_narrow_handed(self, world, given_expr, span.start as i64)
-            check_narrow_written_through(self, given_expr)
-            self.facts.mut_args.insert(id_of(given_expr) as i64)
-            if viewed {
-                self.facts.reborrowed_args.insert(id_of(given_expr) as i64)
-            }
-            let bound = match given_expr {
-                Expr::Variable(symbol, _) => self.binding(world.words.resolve(symbol))?.id ?? -1,
-                else => -1,
-            }
-            if bound >= 0 {
-                self.facts.mut_arg_bindings.insert(id_of(given_expr) as i64, bound)
-            }
-            return true
+            return self.lent_to_a_mut_parameter(world, given_expr, found, want, takes_a_receiver, written, span)
         }
         let lends = if own { lends_in_own(contract, position, [world.library]) } else { lends_in(contract, position, [world.library]) }
         if !lends {

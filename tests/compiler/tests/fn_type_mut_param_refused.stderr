@@ -1,0 +1,9 @@
+error[NK1102]: This lambda takes `t` without `mut`, but `fn(mut S)` lends parameter 1 as `mut`.
+   --> tests/fn_type_mut_param_refused.nika:10:14
+    |
+ 10 |     twice(s, fn(t) { println(f"{t.n}") })
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `fn(S)` and `fn(mut S)` are different types: the code a `fn(mut S)` stands for changes that argument in place.
+    = help: Write `mut t`.
+1 type error

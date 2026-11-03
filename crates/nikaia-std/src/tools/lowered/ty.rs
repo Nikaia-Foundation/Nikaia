@@ -82,6 +82,35 @@ pub(crate) fn listed(parts: &[Ty]) -> String {
     out
 }
 
+pub(crate) fn code_params_listed(params: &[Ty]) -> String {
+    let mut out: String = String::from("");
+    for part in params.iter() {
+        if !out.is_empty() { out.push_str(", "); }
+        let changed = lent_mut(part);
+        if changed.is_some() {
+            let item = nikaia_std::index::or(match changed.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.text()),
+                None => None,
+            }, || "".into());
+            out.push_str(&format!("mut {}", item));
+        } else { out.push_str(&text(part)); }
+    }
+    out
+}
+
+pub fn lent_mut(ty: &Ty) -> Option<Ty> {
+    match ty {
+        Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if mutable && !slice { Some(item.clone()) } else { None } },
+        _ => None,
+    }
+}
+
+pub fn unlent_each(params: &[Ty]) -> Vec<Ty> {
+    let mut out: Vec<Ty> = vec![];
+    for part in params.iter() { out.push(nikaia_std::index::or(lent_mut(part), || part.clone().into())); }
+    out
+}
+
 pub(crate) fn pointed(item: &Ty, slice: bool, mutable: bool) -> String {
     let mut out: String = String::from("ref ");
     if mutable { out.push_str("mut "); }
@@ -98,7 +127,7 @@ pub(crate) fn pointed(item: &Ty, slice: bool, mutable: bool) -> String {
 }
 
 pub(crate) fn code(params: &[Ty], result: Option<&Ty>, is_sync: bool, can_throw: bool) -> String {
-    let mut out = format!("fn({})", listed(params));
+    let mut out = format!("fn({})", code_params_listed(params));
     if result.is_some() {
         let returned = nikaia_std::index::or(match result {
             Some(__nikaia_it) => Some(__nikaia_it.text()),
@@ -299,7 +328,11 @@ pub(crate) fn a_function(written: &str) -> Option<Ty> {
         }
         break;
     }
-    let params = each(&split_args(&between(&c, 3, close)));
+    let mut params: Vec<Ty> = vec![];
+    for part in split_args(&between(&c, 3, close)) {
+        let changed = part.strip_prefix("mut ");
+        if changed.is_some() { params.push(Ty::Pointed { item: Box::new(parse(nikaia_std::index::or(changed, || ""))), slice: false, mutable: true }); } else { params.push(parse(&part)); }
+    }
     if tail.starts_with("->") {
         let result = parse(&cut(&tail, 2, 0));
         return Some(Ty::Fn { params, result: Box::new(Some(result)), is_sync, can_throw });

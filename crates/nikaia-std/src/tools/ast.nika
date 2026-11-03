@@ -919,6 +919,9 @@ pub struct Type {
     /// language has a use for the distinction, because a parameter's
     /// mutability is otherwise written `mut name: T`
     /// ([ADR-094](../../../docs/specification/adr/adr-094.md) D3).
+    ///
+    /// Without `is_view` it is that `mut` of a signature, kept by a function
+    /// type's parameter (`fn(mut S)`, #1134), the one place it stands.
     pub is_mut: bool,
     /// **`[T]`** ([ADR-302](../../../docs/specification/adr/adr-302.md) D5): a
     /// run of `T` whose length the caller knows and the type does not.

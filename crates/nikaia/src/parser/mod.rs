@@ -1819,7 +1819,7 @@ grammar! {
           // belongs to the *result type*. A function whose own promise is meant
           // writes it before the arrow, which `fn_item` accepts already —
           // `fn make() sync -> fn(i64) -> i64`.
-          | KW_FN "(" params:type_refs? ")" result:return_type_arrow?
+          | KW_FN "(" params:code_params? ")" result:return_type_arrow?
             s:kw_sync? t:kw_throws? -> {
                 Type {
                     name: _state.intern("fn"),
@@ -1890,6 +1890,28 @@ grammar! {
             }
 
         rule type_ref_tail -> Type = "," t:type_ref -> { t }
+
+        // **A function type keeps a parameter's `mut`** (Part I, *code
+        // parameters*; #1134): `fn(mut S)` lends the argument at each call as a
+        // `mut` parameter of a named function is lent. The word is recorded
+        // as `is_mut` without `is_view`, which no other position writes.
+        rule code_params -> Vec<Type> =
+            head:code_param tail:code_param_tail* -> {
+                let mut params = vec![head];
+                params.extend(tail);
+                params
+            }
+
+        rule code_param_tail -> Type = "," t:code_param -> { t }
+
+        rule code_param -> Type =
+            m:kw_mut? t:type_ref -> {
+                let mut t = t;
+                if m.is_some() {
+                    t.is_mut = true;
+                }
+                t
+            }
 
         // --- Part II, Kapitel 10: Grammatiken ---
 

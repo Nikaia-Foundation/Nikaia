@@ -99,11 +99,17 @@ pub(crate) fn check_core_call_declared(contract: &FnContract) -> Option<Ty> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty], found: &[Ty]) {
+pub(crate) fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty], found: &[Ty], name: &str, span: &Span) {
     let mut i: i64 = -1;
     for given in args.iter() {
         i += 1;
         if i >= params.len() as i64 || i >= found.len() as i64 { break; }
+        let changed: Option<Ty> = lent_mut(nikaia_std::index::get(&params, nikaia_std::index::at(i)));
+        if changed.is_some() {
+            let want: Ty = nikaia_std::index::or(changed, || Ty::Unknown);
+            state.lent_to_a_mut_parameter(world, given, nikaia_std::index::get(&found, nikaia_std::index::at(i)), &want, false, name, span);
+            continue;
+        }
         if (*nikaia_std::index::get(&params, nikaia_std::index::at(i))).is_a_view() && !(*nikaia_std::index::get(&found, nikaia_std::index::at(i))).is_a_view() && !check_core_call_opaque(nikaia_std::index::get(&found, nikaia_std::index::at(i))) && !(moves(nikaia_std::index::get(&found, nikaia_std::index::at(i))) && state.a_map_read_past_a_jump(world, given)) { state.facts.lent_args.insert(id_of(given) as i64); }
     }
 }
@@ -113,8 +119,8 @@ pub(crate) fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], name: &str, params: &[Ty], gives: Ty, is_sync: bool, fails: bool, span: &Span) -> Ty {
     state.read_at.push((name.to_string(), span.start as i64));
-    let found = check_core_arguments_to_code(state, world, host, args, params, span);
-    check_core_call_lent(state, world, args, params, &found);
+    let found = check_core_arguments_to_code(state, world, host, args, &unlent_each(params), span);
+    check_core_call_lent(state, world, args, params, &found, name, span);
     state.kept_arguments_are_its_own(world, args, params);
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails));
     state.a_call_that_may_pause(name, !is_sync, false, span);
@@ -360,7 +366,7 @@ pub(crate) fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, w
         match looked {
             Ty::Fn { ref params, ref result, can_throw, .. } => {
                 let result = nikaia_std::boxed::open(result);
-                check_core_call_lent(state, world, args, params, found);
+                check_core_call_lent(state, world, args, params, found, name, span);
                 let current: String = nikaia_std::index::or(match state.current.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
@@ -524,7 +530,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     if !have && is_variable && state.run_code.contains(name) {
         let looked: Ty = nikaia_std::index::or(state.lookup(name), || Ty::Unknown);
         match looked {
-            Ty::Fn { ref params, .. } => { expected = params.to_owned(); },
+            Ty::Fn { ref params, .. } => { expected = unlent_each(params); },
             _ => { },
         }
     }

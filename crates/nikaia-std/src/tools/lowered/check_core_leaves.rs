@@ -298,7 +298,11 @@ pub(crate) fn check_core_a_kept_function<H: CheckHost>(state: &mut CheckState, w
         let n = *n;
         if ((at) as usize) < params.len() {
             let id = state.a_new_binding();
-            frame.push(CheckLocal::free(world.words.resolve(n).to_string(), (*nikaia_std::index::get(&params, (at) as usize)).clone(), id));
+            let changed: Option<Ty> = lent_mut(nikaia_std::index::get(&params, (at) as usize));
+            let changes = changed.is_some();
+            let mut local = CheckLocal::free(world.words.resolve(n).to_string(), nikaia_std::index::or(changed, || (*nikaia_std::index::get(&params, (at) as usize)).clone().into()), id);
+            local.changing = changes;
+            frame.push(local);
         }
         at += 1;
     }

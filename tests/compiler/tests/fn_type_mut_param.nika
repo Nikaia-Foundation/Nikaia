@@ -1,0 +1,17 @@
+// A `mut` parameter of a function type (#1134): both a named function's
+// `mut` parameter and a lambda's `mut` one fit `fn(mut S)`, and the code
+// changes the caller's value in place.
+struct S { pub n: i64 }
+impl S {
+    fn apply(ref mut self, f: fn(mut S)) {
+        f(self)
+        self.n += 1
+    }
+}
+fn bump(mut s: S) { s.n += 10 }
+fn main() {
+    let mut s = S { n: 1 }
+    s.apply(bump)
+    s.apply(fn(mut t) { t.n += 100 })
+    println(f"{s.n}")
+}

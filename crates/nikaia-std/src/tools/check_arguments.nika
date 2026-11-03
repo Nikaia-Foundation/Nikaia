@@ -494,6 +494,12 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             notes.push(f"{capitalised(keeper)}, so it needs one of its own.")
             help = f"Write `.clone()` to hand `{key}` a copy of its own."
         }
+        // **Which parameter's `mut` differs** (#1134).
+        let differs: i64 = check_arguments_mut_differs(found_here, want)
+        if differs > 0 {
+            notes.push(f"Parameter {differs} differs in `mut`: `fn(S)` and `fn(mut S)` are different types, and the code a `fn(mut S)` stands for changes that argument in place.")
+            help = f"Declare parameter {differs} the way `{want.text()}` says, with or without `mut`."
+        }
         let mut at_span = span.clone()
         if given_here != null {
             let value = given_here ?? continue
@@ -504,3 +510,29 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     return signature.result_or_unit()
 }
 
+
+/// The first parameter, counted from 1, at which two function types differ
+/// only in `mut` (#1134); 0 where they do not.
+fn check_arguments_mut_differs(found: ref Ty, want: ref Ty) -> i64 sync {
+    let had: Vec[Ty] = match found {
+        Ty::Fn { params, .. } => params.clone(),
+        else => [],
+    }
+    let wanted: Vec[Ty] = match want {
+        Ty::Fn { params, .. } => params.clone(),
+        else => [],
+    }
+    if had.len() != wanted.len() {
+        return 0
+    }
+    let mut at = 0
+    for one in had {
+        let other = wanted[at].clone()
+        let changes = lent_mut(one) != null
+        if changes != (lent_mut(other) != null) && (lent_mut(one) ?? one.clone()).fits(lent_mut(other) ?? other.clone()) {
+            return at + 1
+        }
+        at += 1
+    }
+    return 0
+}
