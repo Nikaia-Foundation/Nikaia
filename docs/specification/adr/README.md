@@ -132,6 +132,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [views-3](adr-views-3.md) | A parameter that keeps its argument says `keep`, a plain one is lent, the body is checked against it; `ref` leaves the language outside `extern "C"`; views in fields, elements and lets are inferred; a result's source is inferred and may be written `-> T from a \| b`, required where there is no body | Accepted | no |
 | [views-2](adr-views-2.md) | `mut` on a `for` binding means what it means on a `let`: `mut` in front of the whole head (`for mut x`, `for mut (a, b)`); over a list or an array the element is a view that writes through (`iter_mut()`), over owned elements it is the loop's own; a key and a set element are refused with their reason; the list is not used in the body. `mut` on one name of a tuple, and so map values in place, refused now, possible later (`NK1307`) | Accepted | no |
 | [views-1](adr-views-1.md) | A part taken out of a `let mut` view of a place (`let mut c = m[k] ?? continue`) is given back before the view's block is left, as out of a `mut` parameter (`NK2108`); lowered as `mem::take`/`mem::replace`; no `std::mem` | Accepted | no |
 | [312](adr-312.md) | A handle on a shared value is duplicated, never moved; it may go into a task of our own but not into code nothing describes, and at one user thread its count is plain. | Accepted | partly: D9's bridge type |
@@ -353,7 +354,14 @@ either finds the other. Records replaced as a whole are not here: they are in
 | [330](adr-330.md) §3 | [333](adr-333.md) D3 | a function's parameter may be `comptime` |
 | [304](adr-304.md) D6 | [330](adr-330.md) D1 | a shape walk's type may come from the call |
 | [100](adr-100.md) D3 | [251](adr-251.md) D1 | the source hashes live in `nikaia.derived` beside the ledger, not in its header; the ledger is believed while they match |
-| [094](adr-094.md) D2 | [184](adr-184.md) D1 | the assertion that a parameter is a view is spelled `ref T` |
+| [094](adr-094.md) D2 | [views-3](adr-views-3.md) D2 | a parameter that keeps its argument says `keep`; the inference checks it |
+| [094](adr-094.md) D6 | [views-3](adr-views-3.md) D4 | `ref` leaves the language outside `extern "C"` |
+| [184](adr-184.md) D1 | [views-3](adr-views-3.md) D4 | `ref X` stands only inside `extern "C"`; elsewhere a view is inferred |
+| [202](adr-202.md) D2 | [views-3](adr-views-3.md) D4, D7 | no `ref` on a result; a view of the subject is handed back unmarked |
+| [353](adr-353.md) D2 | [views-3](adr-views-3.md) D8 | without a body the source is written `from`, not the union |
+| [353](adr-353.md) D5, [251](adr-251.md) D4 | [views-3](adr-views-3.md) D10 | the ledger writes `-> T from a \| b` |
+| [354](adr-354.md) D1, D2 | [views-3](adr-views-3.md) D4, D5 | lets over a place are inferred views; `NK1257` retires |
+| [358](adr-358.md) D3 | [views-3](adr-views-3.md) D2, D4 | `mut` and `keep` belong to the whole parameter |
 | [002](adr-002.md) D2 | [177](adr-177.md) D1 | a grammar that runs while the program is built is compiled from the parser it generates; other `comptime` code is evaluated in the compiler's process |
 | [002](adr-002.md) D3 | [021](adr-021.md) D9 | Cranelift is an option for development builds, not the default |
 | [203](adr-203.md) D2 | [204](adr-204.md) D1 | a unit-only `enum` compares by the structural walk that decides every type, not by a rule of its own |
