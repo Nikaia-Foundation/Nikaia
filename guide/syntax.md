@@ -455,8 +455,24 @@ comes from. `pub` makes something visible outside its package.
 ## Grammars
 
 A program can describe a text format as a grammar, and the compiler builds a parser for
-it. A grammar is too large for this page. [`examples/calc/src/main.nika`](../examples/calc/src/main.nika) is a complete
-calculator in about 100 lines.
+it that hands back values of the program's own types:
+
+```nika
+grammar Pairs {
+    entry rule pair -> (String, i64) = key:NAME "=" value:NUMBER -> { (key, value) }
+    rule NAME -> String = s:alpha1 -> { s }
+    rule NUMBER -> i64 = n:dec[i64](digit+) -> { n }
+}
+
+fn main() throws {
+    let (key, value) = Pairs::pair("width = 80")
+    println(f"{key} is {value}")
+}
+```
+
+Input the grammar does not accept makes the call fail, and the program handles that
+with `catch` like any other failure. [Grammars and parsers](grammars.md) teaches
+grammars in full, from this example up to a complete calculator.
 
 **Specification:** [Part II, Chapter 10 Metaprogramming](../docs/specification/20-nikaia-advance.md#chapter-10-metaprogramming-code-that-writes-code)
 
@@ -467,6 +483,7 @@ calculator in about 100 lines.
 * [Getting started](getting-started.md): install the compiler and run a project.
 * [Ownership](ownership.md): the rules of lending, keeping and views, taught in full.
 * [Contracts](contracts.md): what the compiler proves about an `assert`.
+* [Grammars and parsers](grammars.md): describing a text format and parsing it.
 * [`examples/`](../examples/): complete programs that compile and run.
 * [Specification, Part I](../docs/specification/10-nikaia-light.md): the rules, one
   chapter at a time.

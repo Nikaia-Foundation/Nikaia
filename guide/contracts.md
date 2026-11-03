@@ -340,4 +340,5 @@ commit 7e84ae5c523c8b9937bb4faacc6d029bf49d4f75
 * [A tour of the syntax](syntax.md): the rest of the language on one page.
 * [Ownership](ownership.md): who owns a value, and who may read, change or keep it.
 * [Getting started](getting-started.md): install the compiler and run a project.
+* [Grammars and parsers](grammars.md): describing a text format and parsing it.
 * [`examples/`](../examples/): complete programs that compile and run.

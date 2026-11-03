@@ -780,5 +780,6 @@ removes `ref`.
 * [A tour of the syntax](syntax.md): the rest of the language on one page.
 * [Getting started](getting-started.md): install the compiler and run a project.
 * [Contracts](contracts.md): what the compiler proves about an `assert`.
+* [Grammars and parsers](grammars.md): describing a text format and parsing it.
 * [Specification, Part I, Chapter 6](../docs/specification/10-nikaia-light.md#chapter-6-memory-and-ownership):
   the rules in full.

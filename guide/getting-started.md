@@ -174,6 +174,7 @@ example exposed, and which are still open.
 * [Ownership](ownership.md): who owns a value, and who may read, change or keep it.
 * [Contracts](contracts.md): what the compiler proves about an `assert`.
 * [The command line](command-line.md): `main`'s parameters, options, `--help`.
+* [Grammars and parsers](grammars.md): describing a text format and parsing it.
 * [Specification, Part I](../docs/specification/10-nikaia-light.md): the full rules.
 * [Specification, Part II](../docs/specification/20-nikaia-advance.md): concurrency,
   parallelism and grammars.
