@@ -1,0 +1,18 @@
+Result: done
+Files: crates/nikaia/src/parser/mod.rs crates/nikaia-std/src/tools/ast.nika crates/nikaia-std/src/tools/check_arguments.nika crates/nikaia-std/src/tools/check_core_args.nika crates/nikaia-std/src/tools/check_core_call.nika crates/nikaia-std/src/tools/check_core_leaves.nika crates/nikaia-std/src/tools/check_decls.nika crates/nikaia-std/src/tools/check_notes.nika crates/nikaia-std/src/tools/check_references.nika crates/nikaia-std/src/tools/declared.nika crates/nikaia-std/src/tools/emit_core_calls.nika crates/nikaia-std/src/tools/emit_core_types.nika crates/nikaia-std/src/tools/ty.nika crates/nikaia-std/src/tools/types.nika crates/nikaia-std/src/tools/views.nika crates/nikaia-std/src/tools/lowered.rs crates/nikaia-std/src/tools/lowered/check_arguments.rs crates/nikaia-std/src/tools/lowered/check_core_args.rs crates/nikaia-std/src/tools/lowered/check_core_call.rs crates/nikaia-std/src/tools/lowered/check_core_leaves.rs crates/nikaia-std/src/tools/lowered/check_decls.rs crates/nikaia-std/src/tools/lowered/check_notes.rs crates/nikaia-std/src/tools/lowered/check_references.rs crates/nikaia-std/src/tools/lowered/declared.rs crates/nikaia-std/src/tools/lowered/emit_core_calls.rs crates/nikaia-std/src/tools/lowered/emit_core_types.rs crates/nikaia-std/src/tools/lowered/ty.rs crates/nikaia-std/src/tools/lowered/types.rs crates/nikaia-std/src/tools/lowered/views.rs tests/compiler/tests/fn_type_mut_param.nika tests/compiler/tests/fn_type_mut_param.stdout tests/compiler/tests/fn_type_mut_param_kept.nika tests/compiler/tests/fn_type_mut_param_kept.stdout tests/compiler/tests/fn_type_mut_param_refused.nika tests/compiler/tests/fn_type_mut_param_refused.stderr
+Commit: fn(mut S): a function type keeps a parameter's mut, lent at each call
+Body: The parser reads `mut` before a parameter type of a function type (`code_param`, recorded as `is_mut` without `is_view`); the checker types it as a mutable pointer (`Ty::Pointed { mutable }`, printed back `fn(mut S)`, read by `Ty::parse`), so `fn(S)` and `fn(mut S)` are different types. A named function's `mut` parameter gives `fn(mut S)`; a lambda handed to it must write `mut t` (NK1102 names the parameter), a mismatched named function gets a note naming the parameter. The argument at a call through code (run, kept field, kept local) is lent by the same rule as a named function's `mut` parameter (`lent_to_a_mut_parameter`, factored out of `check_references`), emitted `&mut`; the code type lowers as `impl AsyncFn(&mut S)` / `Kept<dyn Fn(&mut S)>`, the existing shape of code types (the argument changes, not the closure's state, so no `FnMut`). The brief's expected `112` is 113 (1+10+1+100+1).
+Fixes: #1134
+Tests: fn_type_mut_param, fn_type_mut_param_kept, fn_type_mut_param_refused pass --both-settings and all three FAILED on the unfixed binary; it binary (parser change) 2886 passed, 1 failed: compiler_test_package_passes_at_both_settings on agent_script (settings disagree), the same on the unfixed binary, not this change; parser:: lib tests ok; cargo fmt, clippy clean; lower-std fixpoint clean
+Gate: green
+Deviation: lowered as `impl AsyncFn(&mut S)` / `Kept<dyn Fn(&mut S)>`, the existing code-type lowering, not the brief's `FnMut` / `Box<dyn FnMut>`
+Found: none
+Needs: none
+Changelog: Function types keep a parameter's `mut`: `fn(mut S)` lends the argument as a named function's `mut` parameter does (#1134).
+Owner: none
+Disk freed: target/nikaia-project-tests removed (under 3 GB free), now 5.9G free on /
+Rs2nika: none
+Attribution:
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
+Pushed: local 8a671b67c03a849e468902cced6fe6be2dfb7efc

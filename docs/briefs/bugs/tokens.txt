@@ -49,3 +49,5 @@
 /home/user/Nikaia/docs/briefs/bugs/b39b-1160-finish.md 1761302 40
 /home/user/Nikaia/docs/briefs/bugs/b40-1161-collect-into-optional.md 1142735 14
 /home/user/Nikaia/docs/briefs/bugs/b21-1097-flat-map-seq-result.md 571035 7
+/home/user/Nikaia/docs/briefs/bugs/b41-1134-fn-mut-param-type.md 0 1
+/home/user/Nikaia/docs/briefs/bugs/b41-1134-fn-mut-param-type.md 371677 6
