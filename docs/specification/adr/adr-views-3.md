@@ -231,6 +231,58 @@ has one place for a view per field that holds one (`tethered`, in the order the
 fields are written); an `enum` has one place for all its views. A value whose
 views point into what the body owns takes the caller's keep (ADR-283 D10, D23).
 
+### D11 — `Array[T]` without a length is a view of a run wherever it does not own.
+
+*Added November 3, 2026 (#1213), from writing D4 into Parts I-III.*
+
+D4 takes away `ref Array[T]`, ADR-184 D3's one spelling of a view of a run,
+while a view of a run is still needed: a byte buffer handed to a parser, a
+`comptime` table the program reads (Part I 2.2, Part II 10.2), `windows` and
+`chunks`. D5's rule for text applies to it one type over, as ADR-184 D3 already
+argued from ADR-282: owning needs a length, viewing does not.
+
+* A lent parameter `xs: Array[T]` is a view of a run, and `mut xs: Array[T]` a
+  changeable one; the caller hands an `Array[T, N]`, a `Vec[T]` or a piece of
+  either. ADR-184 D3's function generic over the length stays for a `keep`
+  parameter, which owns what it is given.
+* A field, an element or a result of type `Array[T]` holds a view where what
+  flows into it is a piece of a buffer (D5, D8), tethered as text is. Where it
+  would have to own, it is `NK1182`, whose ways out become `Vec[T]` and
+  `Array[T, N]`.
+* A `comptime` declared `Array[T]` is a view of data the build fixed; nothing
+  allocates. `windows` and `chunks` yield `Array[T]` views.
+
+This replaces ADR-184 D3's "under a `ref`" paragraph and the parameter rule for
+lent and changed parameters; its field and result rule and D4 (no `&`) stand.
+
+### D12 — Returning a parameter hands back a view of it; it does not keep it.
+
+*Added November 3, 2026 (#1213), from writing D2 and D8 into Parts I-III.*
+
+D2's list of what keeps reads "returns it by value"; D8 says a result that
+hands back a parameter points into it. D8 governs: `fn pick(a: String) ->
+String { a }` is lent, its result is `from a`, and the caller's `a` stays
+usable while the rules of D9 hold. Keeping covers storing into what outlives
+the call, giving to a task, and passing to a parameter that keeps; a function
+whose result must own the value it hands back takes it with `keep` or returns
+`.clone()`. D2's list is read without "returns it by value".
+
+### D13 — `keep` and `from` are words in one position each, not reserved; the noun of ADR-283 D23 is "anchor".
+
+*Added November 3, 2026 (#1213).*
+
+`from` names Rust's `From::from`, which a Nikaia program calls through ADR-290
+descriptions and implements, and both words are names in existing programs. So
+neither is reserved: `keep` means the mark only before a parameter or `self` in
+a parameter list, `from` the source only after a result type, and both are
+names everywhere else. A reserved word still means one thing wherever it
+appears (Part I); these two are not reserved words.
+
+The place a given-up buffer moves to while a view of it lives, which ADR-283
+D23 and D9 above call a *keep*, is called the *anchor* in Parts I-III (the
+caller's anchor, a frame's anchor), so that one word has one meaning. ADR-283's
+text is left as written.
+
 ## 5. Consequences
 
 A signature now tells a reader what a function does with each argument: kept

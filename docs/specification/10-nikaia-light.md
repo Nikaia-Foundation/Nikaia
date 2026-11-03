@@ -2739,7 +2739,7 @@ result are declared with their type (`String`, `Vec[Row]`, `Reading`), and
 whether each is a view or a value of its own is read off the program. `ref` is
 written only inside `extern "C"` (Part III 15.1); a `ref` anywhere else is
 refused, with a help that removes it: at a call or in an expression with
-`NK1137`, `ref mut` with `NK1158`, in a declaration with `NK????`.
+`NK1137`, `ref mut` with `NK1158`, in a declaration with `NK1333`.
 
 **Nikaia source contains no lifetime annotations.** There is no syntax for
 them. Everything described below happens inside the compiler.
@@ -2787,7 +2787,7 @@ caller's value is usable again after the call. The compiler infers keeping
 over the call graph and fails closed, so a use it cannot follow counts as
 keeping. It checks the signature against that: a body that keeps a parameter
 not marked `keep` is refused with `NK2302`, with a help that adds the word,
-and a `keep` on a parameter the body never keeps is a warning, `NK????`. The
+and a `keep` on a parameter the body never keeps is a warning, `NK1334`. The
 ledger records each parameter's `keep` (6.7).
 
 **The receiver follows the same rule**: `self` is lent, `mut self` is changed
@@ -3035,10 +3035,10 @@ fn longest(a: String, b: String) -> String {
 `fn first_word(s: String) -> String from s`,
 `fn longest(a: String, b: String) -> String from a | b`. Where it is written,
 the body is checked against it: a way out that hands back a view of a
-parameter the `from` does not name is refused with `NK????`. It must be
+parameter the `from` does not name is refused with `NK1335`. It must be
 written where there is no body to infer it from - a trait's method, a function
 type, a foreign or Rust function - and a result there that is a view without a
-`from` is refused with `NK????`. Elsewhere it is optional. A method
+`from` is refused with `NK1336`. Elsewhere it is optional. A method
 implementing a trait hands back views of what the trait's `from` names.
 
 Every argument no view of the result points into is free when the call
