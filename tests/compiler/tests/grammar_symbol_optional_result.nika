@@ -1,0 +1,23 @@
+// #1202: an action handing back an `ident` binding to a rule that returns
+// `winnow_grammar::Symbol?` is wrapped in `Some`, as a value of any other
+// type is; the symbol is read through the table handed as `words:`
+// (ADR-388 D1).
+
+use std::winnow_grammar
+
+grammar G {
+    rule WS = "" -> { }
+    entry rule m -> winnow_grammar::Symbol? = n:ident eof -> { n }
+}
+
+fn main() {
+    let words = winnow_grammar::InternerContext()
+    let found = G::m(Bytes("ab".bytes().collect()); words: words) catch {
+        println("refused")
+        return
+    }
+    match found {
+        null => println("none"),
+        s => println(words.resolve(s)),
+    }
+}

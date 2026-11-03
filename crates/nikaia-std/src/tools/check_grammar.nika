@@ -148,6 +148,12 @@ impl CheckState {
             if (called == "until" || called == "text") && args.len() >= 1 {
                 return pattern_text()
             }
+            // **`ident` and `intern(p)` yield the `Symbol` interned into the
+            // table** (Part II 10.6, ADR-388): known here, an action handing
+            // it to a `Symbol?` result is wrapped as any other value (#1202).
+            if (called == "ident" && args.len() == 0) || (called == "intern" && args.len() == 1) {
+                return pattern_named("winnow_grammar::Symbol", false)
+            }
             // **`bytes(p)` is what `p` covered, as bytes** (ADR-366 D4), over
             // either input.
             if called == "bytes" && args.len() >= 1 {

@@ -133,6 +133,7 @@ impl CheckState {
                 if called == "raw_ident" || called == "string" || called == "alpha1" || called == "multispace0" || called == "multispace1" { return pattern_text(); }
             }
             if (called == "until" || called == "text") && !args.is_empty() { return pattern_text(); }
+            if called == "ident" && args.is_empty() || called == "intern" && args.len() == 1 { return pattern_named("winnow_grammar::Symbol", false); }
             if called == "bytes" && !args.is_empty() { return pattern_named("Bytes", true); }
             if called == "span" && args.len() == 1 { return pattern_named("text::Span", false); }
             if called == "here" && args.is_empty() { return pattern_named("u32", false); }
