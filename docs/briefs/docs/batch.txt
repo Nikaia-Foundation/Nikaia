@@ -1,2 +1,1 @@
-d2-grammar-guide.md
 d3-prover-guide.md
