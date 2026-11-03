@@ -242,3 +242,4 @@
 /home/user/Nikaia/docs/briefs/qa/qa-task.md 348300 15
 /home/user/Nikaia/docs/briefs/qa/qa-task.md 596136 21
 /home/user/Nikaia/docs/briefs/p557g-parser-rules2.md 40619 1
+/home/user/Nikaia/docs/briefs/qa/qa-task.md 215408 13

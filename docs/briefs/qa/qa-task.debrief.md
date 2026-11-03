@@ -1,20 +1,14 @@
-1. **Most time.** The two clippy rebuilds were the slowest steps, and the second one only showed that another agent's uncommitted `diagnostics/mod.rs` was failing. The commit script's refusal cost the most turns. It said "`sync.rs` is unchanged" when the real problem was my comma-separated `Files:` line. I misread that as a staging problem, unstaged the files, and reran the script.
+1. **Time and turns.** The run was short, about 8 tool calls. The most expensive step was the first read of `qa-input.txt`. It is 36KB, mostly CI runner boilerplate, and the one real error sits at line ~170. After that, `nikaia` wasn't on PATH, so `pre-push` and `commit.nika` each failed once before I added `target/release` to PATH.
 
 2. **Lookups the brief could have handed me.**
-   - The brief points to `.claude/agents/qa.md`, which I never opened. I worked from the task and the system rules.
-   - `nikaia` is not on PATH, so I had to find `target/fast/nikaia`.
-   - The `Files:` format (space-separated, no commas) was not stated. I only found it by grepping an earlier report.
-   - How lowered test helpers are meant to be exported, `pub` or otherwise, was also not stated. I chose `pub` on my own and hand-edited the lowered `.rs` instead of regenerating it, because `lower-std` would have touched other agents' files.
+   - The brief points to `.claude/agents/qa.md` for the rules, and I never opened it. I only listed the agents directory.
+   - I didn't know where the `nikaia` binary lives. It is `target/release/nikaia` here, and `docs/builder-facts.md` names `target/fast/nikaia` for tests.
+   - I had to find the report format by reading the `commit.nika` header and a builder's report. That covers the `Changelog:` and `Attribution:` fields and the attribution lines.
+   - I found the replacement ADR by grepping `docs/history/adr/README.md`. I didn't open the ADR-279 text to confirm the debrief's sentence still fits it.
 
 3. **Checks.**
-   - Useful: `cargo clippy --all-targets -- -D warnings`, `cargo test -p nikaia-std --features compiler --lib threads`, and `pre-push.nika`.
-   - Wasted: `rustfmt --check` on a single file without `--edition 2024` gave a false let-chains error. I should have used `cargo fmt --check`.
-   - Not run: I did not run `cargo fmt` on my edits.
-   - Not checked: the CI log came from `ci/briefs`, and I never confirmed that it matched the current HEAD.
+   - Useful: `check-adr-refs.py` directly, which gave a fast green result.
+   - Slightly wasted: the first `pre-push` run. It checks staged content, so it reported the old citation as red because my edit wasn't staged yet. That was my ordering mistake, not a real failure.
+   - Not done: I did not rerun `pre-push` after staging. I only confirmed with `git show` and `git grep` that the commit holds the fix.
 
-4. **One change.** Add a short "QA quick facts" block to the brief or `builder.md`:
-   - The `nikaia` binary path.
-   - The `Files:` line is space-separated.
-   - The commit script's "unchanged" refusal usually means a malformed `Files:` line.
-   - Run `cargo clippy` first, since the log's `error:` lines name the cause.
-   - If a dirty file belongs to another agent, report it and do not wait on it.
+4. **One change that would have saved the most.** Have the driver put the extracted error lines at the top of `qa-input.txt`, here the "1 citation(s) of an archived ADR" block, and trim the runner preamble. The brief should also say to export `PATH=$PWD/target/release:$PATH` before running `nikaia`.
