@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1343] — 2026-11-03
+
+**immutable: the reserved word, the binding inside a function and the deep rule NK1331 (ADR-389 D1, D2, D6)**
+- immutable, a deeply immutable binding inside a function: immutable x = e or immutable x: T = e; a value reaching a SharedMut, Locked or channel end is refused (NK1331, naming its path), as are a ref mut self call on it and a move out of it; immutable is now a reserved word.
+
 ## [0.0.1342] — 2026-11-03
 
 **check: a lent match binding is the pattern of a text method as it is, with no `&` of its own (check_host a_lent_part_is_a_reference_already) (#1176:, #1178); check: a copy of a tuple with view parts is a tuple of its own, each view part copied (ADR-293 D24) (#1184); check: a number type is not a std module, so u64::from no longer asks for use std::u64 (#1186); checker: a text item a walk lends looks up a text-keyed map as str (#1190, #1190); checker: a let of a field of a call's owned result moves it out (#1191); checker: an element read past a jump of a struct declared beside is a view (#1183); checker: a let of a field of a call's owned result moves it out (#1191); describe: crate_root (describe.rs into describe.nika) (#1193); lowering: text into a `fs::Path` parameter the callee only reads is lent as a `PathBuf` (#1195); lowering: `m.get(k)?.field` lends the member like `m[k]?.field` (#1194); lowering: text into a `fs::Path` parameter the callee only reads is lent as a `PathBuf` (#1195); std: String::pop and String::insert_str; OutText's take_lend and brace inserts move into emit_out.nika (#1180); ; specbook: which reading got furthest, and the report, in Nikaia; contracts: infer_package_noted's pass order, the keeps fixpoint, evaluate_defaults and expression_ensures move into ledger_items.nika (contracts/mod.rs, Part: #125)**
