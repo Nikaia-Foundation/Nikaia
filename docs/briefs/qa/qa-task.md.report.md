@@ -1,12 +1,11 @@
 Result: done
-Cause: 0084edc1 (p557g-parser-rules2 debrief, line 12) cites archived ADR-274; step bootstrap_compiler (check-adr-refs.py)
-Fixed: the debrief cites ADR-279, the record that replaced ADR-274
+Cause: the earlier qa-task report (committed in a0d60512..0b0f2f56) names the archived ADR number of the p557g-parser-rules2 debrief fix; step bootstrap_compiler (check-adr-refs.py, 3 citations)
+Fixed: the report is rewritten without the archived number (the debrief itself already cites ADR-279); the check is green
 Tests: python3 scripts/check-adr-refs.py green; pre-push below
-Found: none
-Files: docs/briefs/p557g-parser-rules2.debrief.md
-Commit: Debrief of p557g-parser-rules2 cites ADR-279, which replaced the archived ADR-274
+Found: none (a QA report that names an archived ADR in prose trips the check it reports on)
+Files: docs/briefs/qa/qa-task.md.report.md
+Commit: QA report no longer names the archived ADR it once fixed a citation of
 Changelog: none
 Attribution:
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
-Pushed: local a6710d674553e02ece7af0aafe374078dfd6af99
