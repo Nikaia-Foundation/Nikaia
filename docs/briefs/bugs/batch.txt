@@ -1,4 +1,3 @@
-b40-1161-collect-into-optional.md
 r3c-c-match-in-place.md
 b34-557-same-line.md
 b35-1142-1143-owned-field-and-temp-arg.md
