@@ -1,5 +1,1 @@
 p1199a-immutable-binding.md
-pbc1-keep-fixpoint.md
-pbc3-touch-sharing.md
-pbc5a-tier-wrapping.md
-pbc2-tether-infer.md
