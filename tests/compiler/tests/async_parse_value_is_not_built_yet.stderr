@@ -1,0 +1,6 @@
+error: `async e`, a value computed beside the code after it, isn't built yet (#986).
+  --> tests/async_parse_value_is_not_built_yet.nika:9:16
+   |
+ 9 | 	let a = async load(1)
+   |                ^^^^
+   |

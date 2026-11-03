@@ -1,0 +1,7 @@
+// `admission:` on an `async` form (ADR-async-5 D15, D18) is refused until the
+// checker handles it (#986).
+
+fn main() {
+	let h = async(detached, admission: task::Admission::Eager) fn { 1 }
+	println(f"{h.join()}")
+}

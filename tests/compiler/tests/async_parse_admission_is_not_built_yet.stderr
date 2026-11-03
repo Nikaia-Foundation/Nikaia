@@ -1,0 +1,6 @@
+error: `admission:` on `async` isn't built yet (#986).
+  --> tests/async_parse_admission_is_not_built_yet.nika:5:26
+   |
+ 5 | 	let h = async(detached, admission: task::Admission::Eager) fn { 1 }
+   |                          ^^^^^^^^^
+   |

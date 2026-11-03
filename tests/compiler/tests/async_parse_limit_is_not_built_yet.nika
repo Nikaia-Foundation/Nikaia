@@ -1,0 +1,13 @@
+// `limit:` on an `async` form (ADR-async-5 D15) is refused until the checker
+// handles it (#986).
+
+fn log(n: i64) {
+	println(f"{n}")
+}
+
+fn main() {
+	async(limit: 2) {
+		async log(1)
+		log(2)
+	}
+}

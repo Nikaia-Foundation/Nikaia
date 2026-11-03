@@ -1,0 +1,6 @@
+error: `async e` as a statement isn't built yet (#986).
+  --> tests/async_parse_statement_is_not_built_yet.nika:9:8
+   |
+ 9 | 	async log(1)
+   |        ^^^
+   |

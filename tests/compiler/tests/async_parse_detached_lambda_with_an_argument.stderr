@@ -1,0 +1,9 @@
+error[NK2103]: This task's lambda takes `x`, but a task isn't given any arguments.
+  --> tests/async_parse_detached_lambda_with_an_argument.nika:5:2
+   |
+ 5 | 	let h = async(detached) fn(x) { 1 }
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `spawn` starts a body without arguments; the body takes what it needs from the code around it.
+   = help: Remove the argument list: `spawn fn { … }`. If `x` is a value from here, declare it before the task and use it inside.
+

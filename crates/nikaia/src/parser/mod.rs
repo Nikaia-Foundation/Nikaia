@@ -2406,8 +2406,9 @@ grammar! {
           | t:throw_stmt -> { Spanned::new(t, Span::from(_span)) }
           | w:while_stmt -> { Spanned::new(w, Span::from(_span)) }
           | f:for_stmt -> { Spanned::new(f, Span::from(_span)) }
+          | s:async_stmt -> { Spanned::new(s, Span::from(_span)) }
           | a:assign_stmt -> { Spanned::new(a, Span::from(_span)) }
-          | e:expr_stmt -> { Spanned::new(e, Span::from(_span)) }
+          | e:expr_stmt ->{ Spanned::new(e, Span::from(_span)) }
           | b:break_stmt -> { Spanned::new(b, Span::from(_span)) }
           | c:continue_stmt -> { Spanned::new(c, Span::from(_span)) }
 
@@ -3336,6 +3337,7 @@ grammar! {
 
         rule primary_expr_bare -> Expr =
             sp:spawn_expr -> { sp }
+          | a:async_expr -> { a }
           | d:dsl_block_expr -> { d }
           | d:dsl_from_expr -> { d }
           | i:if_expr -> { i }
@@ -3751,6 +3753,94 @@ grammar! {
         rule list_rest -> Result<Expr, Vec<Expr>> =
             ";" count:expr -> { Ok(count) }
           | tail:call_args_tail* ","? -> { Err(tail) }
+
+        // **Part I 8.1.2: `async`, the prefix that starts a task**
+        // ([ADR-async-5](../../../../docs/specification/adr/adr-async-5.md)
+        // D5-D15, D22). Of its forms only `async(detached) fn { … }` has a node
+        // the checker and the lowering handle: it is `spawn fn { … }` (D13), so
+        // it parses into `Expr::Spawn`, and a lambda that names an argument
+        // meets `NK2103` there. Every other form is refused here, by name, until
+        // the checker handles it (#986) - the way `immutable_item` refuses
+        // (ADR-389 D4): a reader gets the sentence, not a parse error at the
+        // word, and no form is silently taken for another.
+        //
+        // The parse error that is reported is the one that reached furthest,
+        // so each `fail` stands where the form shows, and no earlier than where
+        // another arm stops: on what follows `async`, or on the option it names.
+        // A list of several options not built yet names the first.
+        rule async_expr -> Expr =
+            KW_ASYNC "(" OPT_DETACHED ")" body:trailing_lambda not(KW_CATCH) -> {
+                Expr::Spawn { body: Box::new(body), is_move: false, id: NodeId::parsed() }
+            }
+          | KW_ASYNC "(" async_built_options u:async_unbuilt_option -> { u }
+          | KW_ASYNC "(" OPT_DETACHED ")" trailing_lambda peek(KW_CATCH) fail(
+                "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
+                 the task's lambda."
+            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
+          | KW_ASYNC "(" OPT_DETACHED ")" fail(
+                "`async(detached)` takes a lambda. Write `async(detached) fn { … }`."
+            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
+          | KW_ASYNC "(" async_built_options fail(
+                "An `async` option is `handle`, `deferred`, `detached`, `limit:`, `within:` or \
+                 `admission:`."
+            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
+          | KW_ASYNC peek(KW_FN) not(async_named_fn) fail(
+                "`async fn { … }` isn't built yet (#986). `async(detached) fn { … }` is, for a \
+                 task that takes what it uses."
+            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
+          | KW_ASYNC peek("{") fail(
+                "`async { … }`, the group, isn't built yet (#986). `overlap { … }` runs each of \
+                 its statements beside the others."
+            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
+          | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) fail(
+                "`async e`, a value computed beside the code after it, isn't built yet (#986)."
+            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
+
+        // `async` before a function's declaration is the checker's `NK2115`
+        // (D5), not a lambda.
+        rule async_named_fn = KW_FN NAME -> { () }
+
+        // `async e` as a statement (D9), refused for the reason `async_expr`
+        // gives. Tried before `expr_stmt`, so a statement gets its own
+        // sentence; the forms with a `(`, a `{` or a lambda after the word go on
+        // to `async_expr`, which names each of them, and `async` before a `let`
+        // or a loop is left to the checker's `NK2115`.
+        rule async_stmt -> Stmt =
+            KW_ASYNC not("(") not("{") not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) fail(
+                "`async e` as a statement isn't built yet (#986)."
+            ) -> { Stmt::Expr(Expr::ListLit { items: Vec::new(), id: NodeId::parsed() }) }
+
+        // The options after `async(` up to the first one not built yet, which
+        // `async_unbuilt_option` names: of the built ones only `detached` stands
+        // before it, so the scan stops there and its `fail` is the furthest any
+        // arm of `async_expr` reaches.
+        rule async_built_options = (OPT_DETACHED ",")* -> { () }
+
+        rule async_unbuilt_option -> Expr =
+            peek(OPT_HANDLE) fail(
+                "`async(handle) fn { … }` isn't built yet (#986). `async(detached) fn { … }` \
+                 is: it starts a free task and hands back its handle."
+            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
+          | peek(OPT_DEFERRED) fail(
+                "`async(deferred) fn { … }` isn't built yet (#986). Start the task where it \
+                 should run, with `async(detached) fn { … }`."
+            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
+          | peek(OPT_LIMIT) fail("`limit:` on `async` isn't built yet (#986).") -> {
+                Expr::ListLit { items: Vec::new(), id: NodeId::parsed() }
+            }
+          | peek(OPT_WITHIN) fail("`within:` on `async` isn't built yet (#986).") -> {
+                Expr::ListLit { items: Vec::new(), id: NodeId::parsed() }
+            }
+          | peek(OPT_ADMISSION) fail("`admission:` on `async` isn't built yet (#986).") -> {
+                Expr::ListLit { items: Vec::new(), id: NodeId::parsed() }
+            }
+
+        rule OPT_HANDLE = "handle" not(ident)
+        rule OPT_DEFERRED = "deferred" not(ident)
+        rule OPT_DETACHED = "detached" not(ident)
+        rule OPT_LIMIT = "limit" not(ident)
+        rule OPT_WITHIN = "within" not(ident)
+        rule OPT_ADMISSION = "admission" not(ident)
 
         // **Part I 8.2: `spawn fn { … }`, and that is the one spelling.**
         //

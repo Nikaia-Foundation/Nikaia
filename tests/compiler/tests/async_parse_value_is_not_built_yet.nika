@@ -1,0 +1,12 @@
+// `async e`, the value form (ADR-async-5 D6), is refused until the checker
+// handles it (#986).
+
+fn load(n: i64) -> i64 {
+	return n
+}
+
+fn main() {
+	let a = async load(1)
+	let b = load(2)
+	println(f"{a + b}")
+}

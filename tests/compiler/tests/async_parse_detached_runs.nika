@@ -1,0 +1,12 @@
+// `async(detached) fn { … }` starts a free task and hands back its handle
+// (ADR-async-5 D13): the form `spawn fn { … }` was, and it runs.
+
+fn work(n: i64) -> i64 {
+	return n * 2
+}
+
+fn main() throws {
+	let h = async(detached) fn { work(21) }
+	let s = spawn fn { work(4) }
+	println(f"{h.join()} {s.join()}")
+}

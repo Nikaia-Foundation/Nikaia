@@ -1,0 +1,13 @@
+// `async { … }`, the group (ADR-async-5 D9), is refused until the checker
+// handles it (#986).
+
+fn log(n: i64) {
+	println(f"{n}")
+}
+
+fn main() {
+	async {
+		log(1)
+		log(2)
+	}
+}

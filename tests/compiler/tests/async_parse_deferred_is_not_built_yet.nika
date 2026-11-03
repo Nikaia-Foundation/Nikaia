@@ -1,0 +1,8 @@
+// `async(deferred) fn { … }` (ADR-async-5 D12), alone or beside `detached`,
+// is refused until the checker handles it (#986).
+
+fn main() {
+	let h = async(detached, deferred) fn { 1 }
+	h.start()
+	println(f"{h.join()}")
+}
