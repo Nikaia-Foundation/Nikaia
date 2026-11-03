@@ -249,3 +249,4 @@
 /home/user/Nikaia/docs/briefs/p1198b-words-required.md 296992 4
 /home/user/Nikaia/docs/briefs/qa/qa-task.md 606336 21
 /home/user/Nikaia/docs/briefs/qa/qa-task.md 263948 16
+/home/user/Nikaia/docs/briefs/p557h-number-literals.md 5184919 76
