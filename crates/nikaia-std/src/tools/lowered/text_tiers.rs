@@ -1735,12 +1735,12 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
                 bind_tier_local(ask.names.resolve(binding).to_string(), local, walk);
                 at += 1;
             }
-            tier_block(body, ask, walk);
+            tier_loop_turns(None, body, ask, walk);
             close_tier_scope(walk);
         },
         Stmt::While { cond, body } => {
             tier_expr(cond, ask, walk);
-            tier_block(body, ask, walk);
+            tier_loop_turns(Some(cond), body, ask, walk);
         },
         Stmt::Return(value) => {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return no_kinds() };
@@ -1757,6 +1757,31 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
         _ => { },
     }
     no_kinds()
+}
+
+pub(crate) fn tier_loop_turns(cond: Option<&Expr>, body: &Block, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    let mut before = tier_loop_seen(&walk);
+    loop {
+        tier_block(body, ask, walk);
+        let after = tier_loop_seen(&walk);
+        if after == before { return; }
+        before = after;
+        match cond {
+            None => { },
+            Some(c) => { tier_expr(c, ask, walk); },
+        }
+    }
+}
+
+pub(crate) fn tier_loop_seen(walk: &TierWalk) -> String {
+    let mut out: String = String::from("");
+    for (name, stack) in walk.locals.iter() {
+        let top = stack.len() as i64 - 1;
+        if top < 0 { continue; }
+        let k = nikaia_std::index::get(&stack, nikaia_std::index::at(top)).kinds;
+        out.push_str(&format!("{} {} {} {} {} {} {}\n", name, k.owned, k.view, k.lasting, k.still, k.either, nikaia_std::index::get(&stack, nikaia_std::index::at(top)).literal));
+    }
+    out
 }
 
 pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, at: i64, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {

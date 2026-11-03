@@ -2498,12 +2498,12 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
                 bind_tier_local(ask.names.resolve(binding).clone(), local, walk)
                 at += 1
             }
-            tier_block(body, ask, walk)
+            tier_loop_turns(null, body, ask, walk)
             close_tier_scope(walk)
         }
         Stmt::While { cond, body } => {
             tier_expr(cond, ask, walk)
-            tier_block(body, ask, walk)
+            tier_loop_turns(cond, body, ask, walk)
         }
         Stmt::Return(value) => {
             let given = value ?? return no_kinds()
@@ -2520,6 +2520,44 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
         else => {}
     }
     return no_kinds()
+}
+
+/// **A loop's body is walked until its next turn reads nothing new** (#1203):
+/// a name bound outside the loop and assigned in it (`previous =
+/// line.trim()`) holds that value where the next turn reads it, also above
+/// the assignment (`return previous`). Each walk only joins kinds and adds to
+/// sets, so it ends.
+fn tier_loop_turns(cond: ref Expr?, body: ref Block, ask: ref TierAsk, mut walk: TierWalk) {
+    let mut before = tier_loop_seen(walk)
+    while true {
+        tier_block(body, ask, walk)
+        let after = tier_loop_seen(walk)
+        if after == before {
+            return
+        }
+        before = after
+        match cond {
+            null => {},
+            c => {
+                tier_expr(c, ask, walk)
+            },
+        }
+    }
+}
+
+/// What a turn of a loop reads of the names bound around it: each one's
+/// kinds and whether it is still the literal it was bound to.
+fn tier_loop_seen(walk: ref TierWalk) -> String {
+    let mut out = ""
+    for (name, stack) in walk.locals {
+        let top = stack.len() - 1
+        if top < 0 {
+            continue
+        }
+        let k = stack[top].kinds
+        out.push_str(f"{name} {k.owned} {k.view} {k.lasting} {k.still} {k.either} {stack[top].literal}\n")
+    }
+    return out
 }
 
 fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Type?, at: i64, ask: ref TierAsk, mut walk: TierWalk) {

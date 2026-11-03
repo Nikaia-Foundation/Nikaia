@@ -1,0 +1,19 @@
+// #1203: a local bound to a literal and assigned a view of a parameter in a
+// loop is handed back above that assignment, in the loop's next turn: the
+// result views the parameter, not the program's static text.
+
+fn before(text: String, name: String) -> String {
+    let mut previous = ""
+    for line in text.lines() {
+        if line.contains(name) { return previous }
+        previous = line.trim()
+    }
+    return "absent"
+}
+
+fn main() {
+    let text = "alpha\n  beta  \ngamma\n"
+    println(before(text, "gamma"))
+    println(f"[{before(text, "alpha")}]")
+    println(before(text, "delta"))
+}
