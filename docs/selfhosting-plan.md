@@ -903,3 +903,33 @@ Known risk of each:
   the refusals, and Rust builds the `Unit`s from the arena indices. Every refusal text
   and its path display must stay byte for byte (`tests/compiler` `.stderr`), and
   `read_dir`'s order is Nikaia's sorted names where Rust sorted `PathBuf`s.
+
+## Borrowing core (decided 2026-11-03)
+
+Owner, 2026-11-03: the parts a later change to borrowing touches (the compiler
+deciding `ref` itself, from the ledger, as it decides String tiers) are Nikaia
+first; then the parser. The decisions are mostly Nikaia already (`keep.nika`,
+`keeps.nika`, `tether.nika`, `touch.nika`, `sharing.nika`, `text_tiers.nika`,
+`tiers.nika`); what is left in Rust is mostly the crossing over the Rust
+`Parsed`. Counted 2026-11-03 (non-comment lines).
+
+| Id | Rust | Target | Host | Needs | Brief |
+|----|------|--------|------|-------|-------|
+| BC-1 | keep.rs dead code, `from_nikaia` mirror, `infer` fixpoint, `keeping_positions`; tether.rs `HeldOps`, `refusals_of`; sharing.rs `analyse`, `ClassOps` (~280) | keep.nika `keep_infer` | none | - | pbc1 |
+| BC-2 | tether.rs `infer`, `lent_text`, `function_key` (~150) | tether.nika `tether_infer` | `function_views`, `buffer_plans` | BC-1 | pbc2 |
+| BC-3 | touch.rs `infer` write-back and its tests; sharing.rs `infer` (~75) | touch.nika, sharing.nika | `MethodCalls` handed in | - | pbc3 |
+| BC-4 | keep.rs `beside`, `buffer_plans`; check/host.rs `tethered`; emit/mod.rs `ContractsHost::buffer_plans` (~90) | keep.nika `keep_buffer_plans` over `package_borrowing` | `given_up`, `literal_expressions`, `unaliased` | BC-1 | later |
+| BC-5a | text_tiers.rs `separate_repeated_ids`, `wrap_item`, `wrapped`, `wrap_hole`, decision part of `refine_with` (~80) | text_tiers.nika `tier_refine` | ast.nika `set_id` | - | pbc5a |
+| BC-5b | text_tiers.rs `each_block`, `visit_block_mut`, `visit_expr_mut` (~155) | - | - | one_variant.rs, `assets_read_in` moved (closures do not cross) | last |
+| BC-6 | keeps.rs `keeping_statement` (~60) | keeps.nika | `holes` | the open keeps.rs work landed | later |
+
+After BC-1 to BC-6, about 370 lines of borrowing Rust stay, all crossing glue:
+`report` and `refusals_of` adapters, the `MethodCalls` conversion,
+`analyse_program`, `refine`/`refine_package`/`beside_fields` and the `Parsed`
+writes of `refine_with`, the `InferHost` and `ContractsHost` bodies. They go
+with `Parsed` (#557 step 3, #903), `views.rs` and `view_changes.rs`.
+`emit/seeds.rs` is E12-3, not part of this.
+
+What stays open on purpose after the borrowing core: the parser (#557, next)
+and the drivers of *Large files 3* that wait on `Parsed`, #920, #922 and the O
+rows (#923).
