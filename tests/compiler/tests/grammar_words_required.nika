@@ -1,0 +1,52 @@
+// An entry whose result can hold a `Symbol` must be handed the table
+// (ADR-388 D2, #1198): called without `words:`, its symbols would point into
+// a table nobody can reach, so each call below is refused with NK1330, the
+// symbol in an element, a field, a variant, a variant's field, behind `?` and in a tuple.
+
+use std::winnow_grammar
+
+struct Named {
+    name: winnow_grammar::Symbol,
+}
+
+enum Word {
+    Plain(winnow_grammar::Symbol),
+    Number(i64),
+}
+
+enum Tagged {
+    Tag { name: winnow_grammar::Symbol },
+}
+
+grammar Names {
+    rule WS = " "* -> { }
+    entry rule names -> Vec[winnow_grammar::Symbol] = ns:ident+ eof -> { ns }
+    entry rule named -> Named = n:ident eof -> { Named { name: n } }
+    entry rule word -> Word = n:ident eof -> { Word::Plain(n) }
+    entry rule maybe -> Named? = n:ident eof -> { Named { name: n } }
+    entry rule tagged -> Tagged = n:ident eof -> { Tagged::Tag { name: n } }
+    entry rule pair -> (i64, Named) = n:ident eof -> { (1, Named { name: n }) }
+}
+
+fn main() {
+    let input = Bytes("ab".bytes().collect())
+    let a = Names::names(input) catch {
+        return
+    }
+    let b = Names::named(input) catch {
+        return
+    }
+    let c = Names::word(input) catch {
+        return
+    }
+    let d = Names::maybe(input) catch {
+        return
+    }
+    let e = Names::pair(input) catch {
+        return
+    }
+    let f = Names::tagged(input) catch {
+        return
+    }
+    println(f"{a.len()}")
+}

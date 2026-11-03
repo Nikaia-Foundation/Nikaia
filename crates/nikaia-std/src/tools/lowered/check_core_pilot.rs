@@ -43,6 +43,13 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
                 }
                 if !found { state.findings.push(check_refusal("NK1109", span, format!("`{}` has no option called `{}`.", key, option), vec![String::from("An entry's options are what its rule declares after its `;`.")], Some(String::from("Name an option the rule declares.")))); }
             }
+            let handed = config.iter().any(|c| { world.words.resolve(c.name) == "words" });
+            let declares_words = signature.config.iter().any(|o| { o.name == "words" });
+            if !handed && !declares_words && nikaia_std::index::or(check_grammar_entry_interns(world, key), || false) {
+                let result = nikaia_std::index::or(signature.result, || Ty::Unknown);
+                let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+                if check_holds_a_symbol(&state, world, &result, &mut seen) { state.findings.push(check_refusal("NK1330", span, format!("`{}` hands back `{}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", key, result.text()), vec![String::from("Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).")], Some(format!("Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{}(input; words: table)`; `table.resolve(symbol)` reads a name back.", key)))); }
+            }
         },
         None => { },
     }
@@ -88,6 +95,39 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
     }
     let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     nikaia_std::index::or(signature.result, || Ty::Unknown)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_holds_a_symbol(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            for arg in args.iter() { if check_holds_a_symbol(state, world, arg, seen) { return true; } }
+            let declared = state.structs.contains_key(name) || state.enum_payloads.contains_key(name) || state.enums.contains_key(name) || world.parts_beside.contains_key(name);
+            if !declared { return name == "winnow_grammar::Symbol" || name == "Symbol"; }
+            if seen.contains(name) { return false; }
+            seen.insert(name.to_string());
+            let mut parts: Vec<Ty> = vec![];
+            if state.structs.contains_key(name) {
+                let fields = match state.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                for field in fields.iter() { parts.push(field.ty.clone()); }
+            } else if state.enum_payloads.contains_key(name) {
+                let held = match state.enum_payloads.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                parts = held.to_owned();
+            } else if world.parts_beside.contains_key(name) {
+                let held = match world.parts_beside.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                parts = held.to_owned();
+            }
+            for part in parts.iter() { if check_holds_a_symbol(state, world, part, seen) { return true; } }
+            return false;
+        },
+        Ty::Tuple(parts) => {
+            for part in parts.iter() { if check_holds_a_symbol(state, world, part, seen) { return true; } }
+            return false;
+        },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); return check_holds_a_symbol(state, world, inner, seen) },
+        _ => return false,
+    }
 }
 
 pub fn check_grammar_entry_interns(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<bool> {

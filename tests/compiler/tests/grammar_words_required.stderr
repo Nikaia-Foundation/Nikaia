@@ -1,0 +1,49 @@
+error[NK1330]: `Names::names` hands back `Vec[winnow_grammar::Symbol]`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.
+   --> tests/grammar_words_required.nika:33:5
+    |
+ 33 |     let a = Names::names(input) catch {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).
+    = help: Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `Names::names(input; words: table)`; `table.resolve(symbol)` reads a name back.
+error[NK1330]: `Names::named` hands back `Named`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.
+   --> tests/grammar_words_required.nika:36:5
+    |
+ 36 |     let b = Names::named(input) catch {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).
+    = help: Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `Names::named(input; words: table)`; `table.resolve(symbol)` reads a name back.
+error[NK1330]: `Names::word` hands back `Word`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.
+   --> tests/grammar_words_required.nika:39:5
+    |
+ 39 |     let c = Names::word(input) catch {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).
+    = help: Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `Names::word(input; words: table)`; `table.resolve(symbol)` reads a name back.
+error[NK1330]: `Names::maybe` hands back `Named?`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.
+   --> tests/grammar_words_required.nika:42:5
+    |
+ 42 |     let d = Names::maybe(input) catch {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).
+    = help: Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `Names::maybe(input; words: table)`; `table.resolve(symbol)` reads a name back.
+error[NK1330]: `Names::pair` hands back `(i64, Named)`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.
+   --> tests/grammar_words_required.nika:45:5
+    |
+ 45 |     let e = Names::pair(input) catch {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).
+    = help: Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `Names::pair(input; words: table)`; `table.resolve(symbol)` reads a name back.
+error[NK1330]: `Names::tagged` hands back `Tagged`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.
+   --> tests/grammar_words_required.nika:48:5
+    |
+ 48 |     let f = Names::tagged(input) catch {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).
+    = help: Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `Names::tagged(input; words: table)`; `table.resolve(symbol)` reads a name back.
+6 type errors

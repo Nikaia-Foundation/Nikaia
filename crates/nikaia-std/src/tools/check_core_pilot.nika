@@ -70,6 +70,18 @@ pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref C
                     state.findings.push(check_refusal("NK1109", span, f"`{key}` has no option called `{option}`.", ["An entry's options are what its rule declares after its `;`."], "Name an option the rule declares."))
                 }
             }
+            // **An entry whose result can hold a symbol is handed the table**
+            // (ADR-388 D2): its symbols would point into a table nobody can
+            // reach. One that interns only on the way keeps a table of its own.
+            let handed = config.iter().any(fn(c) { world.words.resolve(c.name) == "words" })
+            let declares_words = signature.config.iter().any(fn(o) { o.name == "words" })
+            if !handed && !declares_words && (check_grammar_entry_interns(world, key) ?? false) {
+                let result = signature.result ?? Ty::Unknown
+                let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+                if check_holds_a_symbol(state, world, result, seen) {
+                    state.findings.push(check_refusal("NK1330", span, f"`{key}` hands back `{result.text()}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", ["Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2)."], f"Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{key}(input; words: table)`; `table.resolve(symbol)` reads a name back."))
+                }
+            }
         },
         null => {},
     }
@@ -113,6 +125,59 @@ pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref C
     }
     let signature = contract.signature ?? return Ty::Unknown
     return signature.result ?? Ty::Unknown
+}
+
+/// **Whether a value of `ty` can hold a `winnow_grammar::Symbol`** (ADR-388
+/// D2): itself, or in a field, an element, a variant's payload, a part of a
+/// tuple or behind `?`, at any depth. `seen` keeps a type that holds itself
+/// from being walked twice.
+fn check_holds_a_symbol(state: ref CheckState, world: ref CheckWorld, ty: ref Ty, mut seen: collections::BTreeSet[String]) -> bool sync {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            for arg in args {
+                if check_holds_a_symbol(state, world, arg, seen) {
+                    return true
+                }
+            }
+            let declared = state.structs.contains_key(name) || state.enum_payloads.contains_key(name) || state.enums.contains_key(name) || world.parts_beside.contains_key(name)
+            if !declared {
+                return name == "winnow_grammar::Symbol" || name == "Symbol"
+            }
+            if seen.contains(name) {
+                return false
+            }
+            seen.insert(name.clone())
+            let mut parts: Vec[Ty] = []
+            if state.structs.contains_key(name) {
+                let fields = state.structs.get(name) ?? return false
+                for field in fields {
+                    parts.push(field.ty.clone())
+                }
+            } else if state.enum_payloads.contains_key(name) {
+                let held = state.enum_payloads.get(name) ?? return false
+                parts = held.clone()
+            } else if world.parts_beside.contains_key(name) {
+                let held = world.parts_beside.get(name) ?? return false
+                parts = held.clone()
+            }
+            for part in parts {
+                if check_holds_a_symbol(state, world, part, seen) {
+                    return true
+                }
+            }
+            return false
+        },
+        Ty::Tuple(parts) => {
+            for part in parts {
+                if check_holds_a_symbol(state, world, part, seen) {
+                    return true
+                }
+            }
+            return false
+        },
+        Ty::Nullable(inner) => return check_holds_a_symbol(state, world, inner, seen),
+        else => return false,
+    }
 }
 
 /// **Whether the entry `key` (`Grammar::rule`) interns** (ADR-388 D1): its
