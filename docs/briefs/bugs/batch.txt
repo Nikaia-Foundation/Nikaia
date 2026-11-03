@@ -3,6 +3,5 @@ b34-557-same-line.md
 b22-1099-fstring-no-hole-braces.md
 b33-1107-copy-view-copied.md
 b21-1097-flat-map-seq-result.md
-b41-1134-fn-mut-param-type.md
 b42-1202-1203-symbol-opt-and-param-view.md
 b43-1204-1210-tuple-subject-and-list-literal.md
