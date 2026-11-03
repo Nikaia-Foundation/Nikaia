@@ -1,3 +1,2 @@
-d1-ownership-guide.md
 d2-grammar-guide.md
 d3-prover-guide.md
