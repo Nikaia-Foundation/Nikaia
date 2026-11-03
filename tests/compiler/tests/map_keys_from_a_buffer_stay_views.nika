@@ -1,0 +1,41 @@
+// Keys and elements that are pieces of a buffer and never changed stay views
+// of it (ADR-views-3 D5, #1213): no copy is asked for, and the ledger lists
+// `Index.counts` as `tethered` and `count`'s map keys as `ref(text)`. A list
+// whose element is changed in place is
+// `a_view_into_an_element_changed_in_place_is_refused`.
+use std::collections
+
+struct Index { counts: collections::HashMap[String, i64], total: i64 }
+
+fn count(text: String) -> collections::HashMap[String, i64] {
+	let mut m: collections::HashMap[String, i64] = collections::HashMap()
+	for w in text.split(" ") {
+		m.insert(w, 1)
+	}
+	return m
+}
+
+fn index(text: String) -> Index {
+	let mut idx = Index { counts: collections::HashMap(), total: 0 }
+	for w in text.split(" ") {
+		idx.counts.insert(w, 1)
+		idx.total += 1
+	}
+	return idx
+}
+
+fn words(text: String) -> Vec[String] {
+	let mut m: Vec[String] = []
+	for w in text.split(" ") {
+		m.push(w)
+	}
+	return m
+}
+
+fn main() {
+	let t = f"a b {1}"
+	let m = count(t)
+	let idx = index(t)
+	let ws = words(t)
+	println(f"{m.len()} {idx.counts.len()} {idx.total} {ws.len()} {ws[0]}")
+}

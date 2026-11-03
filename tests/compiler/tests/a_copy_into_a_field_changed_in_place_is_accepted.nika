@@ -1,0 +1,17 @@
+// A field the program changes in place holds text of its own (ADR-views-3
+// D5, #1213): given a copy of a piece of the buffer, it is accepted. Without
+// the `.clone()` it is `a_view_into_a_field_changed_in_place_is_refused`.
+struct Cursor { input: String, pos: i64 }
+
+fn make(text: String) -> Cursor {
+	let mut c = Cursor { input: text.trim().clone(), pos: 0 }
+	c.input.push_str("!")
+	c.pos += 1
+	return c
+}
+
+fn main() {
+	let t = f" a {1} "
+	let c = make(t)
+	println(f"{c.input} {c.pos}")
+}

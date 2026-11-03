@@ -1,0 +1,18 @@
+// An element the program changes in place holds text of its own (ADR-views-3
+// D5, #1213): the pieces of `text` pushed into the list are refused at the
+// push, because `m[0]` is changed afterwards, and the help names `.clone()`.
+// The same list never changed holds views (`map_keys_from_a_buffer_stay_views`).
+fn words(text: String) -> Vec[String] {
+	let mut m: Vec[String] = []
+	for w in text.split(" ") {
+		m.push(w)
+	}
+	m[0].push_str("!")
+	return m
+}
+
+fn main() {
+	let t = f"a b {1}"
+	let m = words(t)
+	println(f"{m.len()}")
+}
