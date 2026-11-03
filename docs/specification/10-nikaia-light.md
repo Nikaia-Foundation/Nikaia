@@ -184,18 +184,16 @@ reserved word. The reserved words are:
 
 ```text
 as        async     break     catch     comptime  continue  dsl       else
-enum      extern    false     fn        for       grammar   if        immutable
-impl      in        let       match     mut       null      pub       ref
-return    select    self      spawn     struct    sync      test      throw
-throws    trait     true      unsafe    use       while     with
+enum      extern    false     fn        for       grammar   if        impl
+in        let       match     mut       null      pub       ref       return
+select    self      spawn     struct    sync      test      throw     throws
+trait     true      unsafe    use       while     with
 ```
 
 A name that is a reserved word does not parse, and the parse error names the
 word and says it is reserved.
 
 **`ref` is reserved for the view it writes.** `ref(x)` is a borrow of `(x)`.
-
-**`immutable` is reserved for its construct**: a binding whose value nothing ever changes, deeply, where an item stands or inside a function body (2.1).
 
 **`comptime` is reserved for its construct**: a binding where an item stands or a statement inside a function
 body (Part II, 10.2). It promises a time of evaluation, not constancy.
