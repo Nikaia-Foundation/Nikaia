@@ -1,0 +1,7 @@
+// An `immutable` lambda that captures a `SharedMut` is refused (ADR-389 D2).
+
+fn main() {
+	let hits: SharedMut[i64] = SharedMut(0)
+	immutable bump = fn { hits.update fn(mut v) { v += 1 } }
+	println("bound")
+}

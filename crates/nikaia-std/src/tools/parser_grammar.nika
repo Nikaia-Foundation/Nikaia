@@ -122,6 +122,7 @@ grammar ParserGrammar {
         | KW_FROM -> { }
         | KW_GRAMMAR -> { }
         | KW_IF -> { }
+        | KW_IMMUTABLE -> { }
         | KW_IMPL -> { }
         | KW_IN -> { }
         | KW_LET -> { }
@@ -174,6 +175,7 @@ grammar ParserGrammar {
     rule KW_FROM = "from" not(ident) -> { }
     rule KW_GRAMMAR = "grammar" not(ident) -> { }
     rule KW_IF = "if" not(ident) -> { }
+    rule KW_IMMUTABLE = "immutable" not(ident) -> { }
     rule KW_IMPL = "impl" not(ident) -> { }
     rule KW_IN = "in" not(ident) -> { }
     rule KW_LET = "let" not(ident) -> { }

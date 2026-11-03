@@ -212,7 +212,7 @@ fn check_core_stmt_mut_view(mut state: CheckState, world: ref CheckWorld, value:
                         let parts: Vec[ref String] = path.split(".").collect()
                         let root = parts[0].clone()
                         let found = state.binding(root) ?? return
-                        if found.immutable == null {
+                        if found.without_mut == null {
                             state.facts.mut_view_reads.insert(id_of(value) as i64, "")
                         } else {
                             state.a_changed_binding_says_mut(root, "a mutable view of the field is taken here", span.clone())
@@ -227,7 +227,7 @@ fn check_core_stmt_mut_view(mut state: CheckState, world: ref CheckWorld, value:
                         let parts: Vec[ref String] = path.split(".").collect()
                         let root = parts[0].clone()
                         let found = state.binding(root) ?? return
-                        if found.immutable == null {
+                        if found.without_mut == null {
                             state.facts.mut_view_reads.insert(id_of(value) as i64, "")
                             state.facts.mut_view_gets.insert(id_of(receiver) as i64)
                         } else {
@@ -240,7 +240,7 @@ fn check_core_stmt_mut_view(mut state: CheckState, world: ref CheckWorld, value:
                     let parts: Vec[ref String] = path.split(".").collect()
                     let root = parts[0].clone()
                     let found = state.binding(root) ?? return
-                    if found.immutable == null {
+                    if found.without_mut == null {
                         let mut lend: String = "&mut "
                         if parts.len() == 1 && state.a_mut_parameter_place(world, base) != null {
                             lend = ""
@@ -269,7 +269,7 @@ fn check_core_stmt_mut_view_of_an_element(mut state: CheckState, world: ref Chec
             let parts: Vec[ref String] = path.split(".").collect()
             let root = parts[0].clone()
             let found = state.binding(root) ?? return
-            if found.immutable == null {
+            if found.without_mut == null {
                 state.facts.mut_view_reads.insert(id_of(value) as i64, "")
             }
         },
@@ -283,7 +283,7 @@ fn check_core_stmt_mut_view_of_an_element(mut state: CheckState, world: ref Chec
             let parts: Vec[ref String] = path.split(".").collect()
             let root = parts[0].clone()
             let found = state.binding(root) ?? return
-            if found.immutable == null {
+            if found.without_mut == null {
                 state.facts.mut_view_reads.insert(id_of(value) as i64, "")
             }
         },
@@ -375,9 +375,10 @@ fn check_core_stmt_an_unchanged_owned_let(state: ref CheckState, name: ref Strin
         return false
     }
     let local: CheckLocal = state.binding(name) ?? return false
-    let how: CheckImmutable = local.immutable ?? return false
+    let how: CheckImmutable = local.without_mut ?? return false
     return match how.kind {
         CheckKind::Let => true,
+        CheckKind::Immutable => true,
         // The element of a walk that lends is a view (`lent_here` above).
         CheckKind::Loop => !local.lent,
         else => false,
@@ -729,7 +730,7 @@ pub fn check_core_stmt_holds_code(ty: ref Ty) -> bool {
     }
 }
 
-pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
+pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, deep: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
     let by_use: Ty? = state.flow.let_lambda_use?.clone()
     state.flow.let_lambda_use = null
     let typed_by_use = ty == null && by_use != null
@@ -1280,9 +1281,15 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if ty == null {
         literal = check_core_stmt_literal(value)
     }
-    let mut immutable: CheckImmutable? = null
+    let mut without_mut: CheckImmutable? = null
     if !mutable {
-        immutable = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Let, over: "" }
+        let mut kind = CheckKind::Let
+        if deep {
+            kind = CheckKind::Immutable
+            let deep_name: String = world.words.resolve(names[0]).clone()
+            check_core_stmt_an_immutable_that_changes(state, world, deep_name, bound, value, span)
+        }
+        without_mut = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: kind, over: "" }
     }
     match bound {
         Ty::Named { name, .. } => {
@@ -1304,7 +1311,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     local.empty_list = pending
     local.open_number = open
     local.literal = literal
-    local.immutable = immutable
+    local.without_mut = without_mut
     local.written_mut = mutable
     state.bind_local(local)
     // **A mutable view is the `&mut` already** (#975): handed to a `mut`
@@ -1313,6 +1320,168 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         state.flow.mut_view_bindings.insert(id)
     }
     return check_core_stmt_unit()
+}
+
+/// **`NK1331`: an `immutable` whose value can change** (ADR-389 D2): the
+/// first part its type reaches, through fields, elements, variants or the
+/// captures of the lambda it is bound to, that is changeable through another
+/// owner. Labelled at the initializer and named by its path
+/// (`config.cache: SharedMut[Map[String, i64]]`). A `Shared[T]` passes where
+/// `T` does.
+///
+/// A lambda's captures are read where the initializer is the lambda itself:
+/// a function value of any other origin carries no captures in its type.
+fn check_core_stmt_an_immutable_that_changes(mut state: CheckState, world: ref CheckWorld, name: ref String, bound: ref Ty, value: ref Expr, span: ref Span) sync {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut part: String? = check_core_stmt_a_changing_part(state, world, name, bound, seen)
+    let mut captured = false
+    if part == null {
+        part = check_core_stmt_a_changing_capture(state, world, value)
+        captured = part != null
+    }
+    let found: String = part ?? return
+    let at = check_span_at(world, value, span)
+    let mut message: String = f"`{name}` is `immutable`, but its value can change: `{found}` is changeable through another owner."
+    if captured {
+        message = f"`{name}` is `immutable`, but the lambda it holds captures `{found}`, which is changeable through another owner."
+    }
+    let note: String = "`immutable` promises that nothing reachable from the value ever changes (ADR-389). A `SharedMut`, a `Locked` and a channel end are changed through every other owner of the same storage."
+    let help: String = "Bind it with `let`, or hold a value that can't change: a copy, or a `Shared[T]` of a `T` that can't change."
+    let label = CheckLabel { span: at.clone(), word: "", text: "can change through another owner", main: true }
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1331", message: message, notes: [note], help: help, labels: [label] })
+}
+
+/// A handle to storage another owner changes: `SharedMut`, `Locked`, a
+/// channel end. A type of the program's own that happens to be called
+/// `Sender` is none.
+fn check_core_stmt_changes_through_another_owner(state: ref CheckState, world: ref CheckWorld, name: ref String) -> bool sync {
+    if name == "SharedMut" || name == "Locked" || name == "channel::Sender" || name == "channel::Receiver" {
+        return true
+    }
+    if name != "Sender" && name != "Receiver" {
+        return false
+    }
+    return !state.structs.contains_key(name) && !state.enums.contains_key(name) && !world.own.types.contains_key(name)
+}
+
+/// The first part of `ty`, at `path`, that changes through another owner, as
+/// `path: Type`; `null` where none does. `seen` holds the types of the
+/// program's own already walked, so a recursive type ends.
+fn check_core_stmt_a_changing_part(state: ref CheckState, world: ref CheckWorld, path: ref String, ty: ref Ty, mut seen: collections::BTreeSet[String]) -> String? sync {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if check_core_stmt_changes_through_another_owner(state, world, name) {
+                return f"{path}: {ty.text()}"
+            }
+            // `Shared[T]` and `Box[T]` hold one value at the same path; a
+            // collection's arguments are its elements, keys and values.
+            let mut inner_path: String = f"{path}[…]"
+            if name == "Shared" || name == "Box" {
+                inner_path = path.clone()
+            }
+            for arg in args {
+                let inner = check_core_stmt_a_changing_part(state, world, inner_path, arg, seen)
+                if inner != null {
+                    return inner
+                }
+            }
+            if seen.contains(name) {
+                return null
+            }
+            seen.insert(name.clone())
+            let fields = state.fields_of(world, name) ?? return check_core_stmt_a_changing_variant(state, world, path, name, seen)
+            for field in fields {
+                let inner = check_core_stmt_a_changing_part(state, world, f"{path}.{field.name}", field.ty, seen)
+                if inner != null {
+                    return inner
+                }
+            }
+            return check_core_stmt_a_changing_variant(state, world, path, name, seen)
+        },
+        Ty::Tuple(parts) => {
+            let mut i = 0
+            for part in parts {
+                let inner = check_core_stmt_a_changing_part(state, world, f"{path}.{i}", part, seen)
+                if inner != null {
+                    return inner
+                }
+                i += 1
+            }
+            return null
+        },
+        Ty::Pointed { item, .. } => return check_core_stmt_a_changing_part(state, world, path, item, seen),
+        Ty::Nullable(inner) => return check_core_stmt_a_changing_part(state, world, path, inner, seen),
+        Ty::Seq { item, .. } => return check_core_stmt_a_changing_part(state, world, f"{path}[…]", item, seen),
+        else => return null,
+    }
+}
+
+/// The same question of what the variants of the enum `name` hold, at
+/// `path.Variant.0` or `path.Variant.field`.
+fn check_core_stmt_a_changing_variant(state: ref CheckState, world: ref CheckWorld, path: ref String, name: ref String, mut seen: collections::BTreeSet[String]) -> String? sync {
+    let variants = state.enums.get(name) ?? return check_core_stmt_a_changing_contract(world, state, path, name, seen)
+    for variant in variants {
+        let key = f"{name}::{variant}"
+        if state.variant_parts.contains_key(key) {
+            let parts = state.variant_parts.get(key) ?? continue
+            let mut i = 0
+            for part in parts {
+                let inner = check_core_stmt_a_changing_part(state, world, f"{path}.{variant}.{i}", part, seen)
+                if inner != null {
+                    return inner
+                }
+                i += 1
+            }
+        }
+        let named = state.structs.get(key) ?? continue
+        for field in named {
+            let inner = check_core_stmt_a_changing_part(state, world, f"{path}.{variant}.{field.name}", field.ty, seen)
+            if inner != null {
+                return inner
+            }
+        }
+    }
+    return null
+}
+
+/// The variants of a type of the program's contract (`world.own`), where the
+/// checker's own tables do not list the enum.
+fn check_core_stmt_a_changing_contract(world: ref CheckWorld, state: ref CheckState, path: ref String, name: ref String, mut seen: collections::BTreeSet[String]) -> String? sync {
+    let contract = world.own.types.get(name) ?? return null
+    for variant in contract.variants {
+        for field in variant.holds {
+            let inner = check_core_stmt_a_changing_part(state, world, f"{path}.{variant.name}.{field.name}", field.ty, seen)
+            if inner != null {
+                return inner
+            }
+        }
+    }
+    return null
+}
+
+/// The first name a lambda written as the initializer captures whose value
+/// changes through another owner, as `name: Type`.
+fn check_core_stmt_a_changing_capture(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> String? sync {
+    match value {
+        Expr::Closure { params, body, .. } => {
+            let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+            names_in_block(body, world.words, named)
+            let own = lambda_own(world, params)
+            for captured in named {
+                if own.contains(captured) {
+                    continue
+                }
+                let local = state.binding(captured) ?? continue
+                let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+                let inner = check_core_stmt_a_changing_part(state, world, captured, local.ty, seen)
+                if inner != null {
+                    return inner
+                }
+            }
+            return null
+        },
+        else => return null,
+    }
 }
 
 /// A shift, `<<` or `>>`.
@@ -1832,7 +2001,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
             let written: String = list ?? ""
             let parts: Vec[ref String] = written.split(".").collect()
             let found = state.binding(parts[0]) ?? return check_core_stmt_unit()
-            match found.immutable {
+            match found.without_mut {
                 null => {
                     mut_view = true
                     state.facts.mut_view_reads.insert(id_of(iter) as i64, "")
@@ -1898,7 +2067,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         // ADR-views-2): its head is a `let`'s pattern, so a change to one
         // without it is `NK1139`.
         if !mutable {
-            local.immutable = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: walked_list.clone() }
+            local.without_mut = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: walked_list.clone() }
         }
         frame.push(local)
     }
@@ -2043,7 +2212,7 @@ pub fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref S
 pub fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, stmt: ref Stmt, span: ref Span) -> Ty sync {
     state.flow.literal_receivers.clear()
     return match stmt {
-        Stmt::Let { names, shape, mutable, ty, value } => check_core_stmt_let(state, world, host, names, shape, mutable, ty, value, span),
+        Stmt::Let { names, shape, mutable, deep, ty, value } => check_core_stmt_let(state, world, host, names, shape, mutable, deep, ty, value, span),
         // **`comptime` is a `let` that has to fold** (ADR-287 D4, D5).
         Stmt::Comptime { name, ty, value, bounds } => check_core_comptime_binding(state, world, host, name, ty, value, bounds, span),
         Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, op, value, span),

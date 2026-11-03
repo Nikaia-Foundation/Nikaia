@@ -187,7 +187,7 @@ impl CheckState {
         let changes = changed.is_some();
         let mut local = CheckLocal::free(world.words.resolve(name).to_string(), nikaia_std::index::or(changed, || ty.into()), self.a_new_binding());
         if changes { local.changing = true; }
-        if asked { local.immutable = Some(CheckImmutable { at: span.clone(), kind: CheckKind::Parameter, over: String::from("") }); }
+        if asked { local.without_mut = Some(CheckImmutable { at: span.clone(), kind: CheckKind::Parameter, over: String::from("") }); }
         let opened = self.flow.open_params.remove(&local.name);
         if self.flow.lent_params.remove(&local.name) {
             if a_tuple(&local.ty) { local.lent = true; }

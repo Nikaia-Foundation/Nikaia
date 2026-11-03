@@ -438,7 +438,7 @@ pub fn check_narrow_read_as_proved(mut state: CheckState, expr: ref Expr, name: 
 /// lowering's flags.
 /// Whether the binding is a parameter that did not say `mut`.
 fn check_narrow_a_parameter(local: ref CheckLocal) -> bool {
-    return match local.immutable {
+    return match local.without_mut {
         null => false,
         written => match written.kind {
             CheckKind::Parameter => true,

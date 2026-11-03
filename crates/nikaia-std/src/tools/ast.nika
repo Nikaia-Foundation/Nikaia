@@ -303,6 +303,10 @@ pub enum Stmt {
         /// written in the head, which the checker refuses (`NK1259`).
         shape: Vec[i64],
         mutable: bool,
+        /// **`immutable x = e`** ([ADR-389](../../../docs/specification/adr/adr-389.md)
+        /// D1, D2): one name, no `mut`, and nothing reachable from the value
+        /// ever changes (`NK1331`). Lowered as a plain `let`.
+        deep: bool,
         ty: Type?, // Type Inference macht dies optional
         value: Expr,
     },

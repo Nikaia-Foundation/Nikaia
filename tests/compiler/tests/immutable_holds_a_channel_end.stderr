@@ -1,0 +1,9 @@
+error[NK1331]: `t` is `immutable`, but its value can change: `t: channel::Sender[?]` is changeable through another owner.
+  --> tests/immutable_holds_a_channel_end.nika:7:16
+   |
+ 7 | 	immutable t = tx
+   |                ^^ can change through another owner
+   |
+   = note: `immutable` promises that nothing reachable from the value ever changes (ADR-389). A `SharedMut`, a `Locked` and a channel end are changed through every other owner of the same storage.
+   = help: Bind it with `let`, or hold a value that can't change: a copy, or a `Shared[T]` of a `T` that can't change.
+1 type error

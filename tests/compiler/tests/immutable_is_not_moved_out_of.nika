@@ -1,0 +1,9 @@
+// Nothing is moved out of an `immutable` (ADR-389 D2).
+
+struct Names { all: Vec[String] }
+
+fn main() {
+	immutable names: Vec[String] = ["a"]
+	let kept = Names { all: names }
+	println(f"{kept.all.len()}")
+}

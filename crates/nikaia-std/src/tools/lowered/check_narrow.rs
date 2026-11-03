@@ -281,7 +281,7 @@ pub fn check_narrow_read_as_proved(state: &mut CheckState, expr: &Expr, name: &s
 }
 
 pub(crate) fn check_narrow_a_parameter(local: &CheckLocal) -> bool {
-    match &local.immutable {
+    match &local.without_mut {
         None => false,
         Some(written) => matches!(written.kind, CheckKind::Parameter),
     }

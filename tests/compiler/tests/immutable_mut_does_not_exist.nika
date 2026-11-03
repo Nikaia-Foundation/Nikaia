@@ -1,0 +1,6 @@
+// `immutable mut` is a syntax error (ADR-389 D1).
+
+fn main() {
+    immutable mut n = 1
+    println(f"{n}")
+}

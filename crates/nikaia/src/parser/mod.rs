@@ -976,6 +976,7 @@ grammar! {
           | d:doc_here a:attribute* t:trait_item -> { Spanned::attributed(t, Span::from(_span), d, a) }
           | d:doc_here a:attribute* u:use_item -> { Spanned::attributed(u, Span::from(_span), d, a) }
           | d:doc_here a:attribute* c:comptime_item -> { Spanned::attributed(c, Span::from(_span), d, a) }
+          | d:doc_here a:attribute* i:immutable_item -> { Spanned::attributed(i, Span::from(_span), d, a) }
           | d:doc_here a:attribute* e:extern_item -> { Spanned::attributed(e, Span::from(_span), d, a) }
           | d:doc_here a:attribute* i:fn_item -> { Spanned::attributed(i, Span::from(_span), d, a) }
           | d:doc_here a:attribute* t:test_item -> { Spanned::attributed(t, Span::from(_span), d, a) }
@@ -2400,6 +2401,7 @@ grammar! {
         rule stmt -> Spanned<Stmt> # "statement" @=
             c:comptime_stmt -> { Spanned::new(c, Span::from(_span)) }
           | l:let_stmt -> { Spanned::new(l, Span::from(_span)) }
+          | i:immutable_stmt -> { Spanned::new(i, Span::from(_span)) }
           | r:return_stmt -> { Spanned::new(r, Span::from(_span)) }
           | t:throw_stmt -> { Spanned::new(t, Span::from(_span)) }
           | w:while_stmt -> { Spanned::new(w, Span::from(_span)) }
@@ -2529,6 +2531,47 @@ grammar! {
                 }
             }
 
+        // **`immutable x = e`, deeply immutable**
+        // ([ADR-389](../../../../docs/specification/adr/adr-389.md) D1, D2): a
+        // `let` of one name whose value nothing reachable from it ever changes,
+        // which is the checker's to hold (`NK1331`). One name and no tuple, as
+        // Part I 2.1 writes it. **No `mut`**: the two words promise opposite
+        // things, so the pair gets a sentence rather than a parse error at the
+        // `mut`.
+        rule immutable_stmt -> Stmt =
+            KW_IMMUTABLE KW_MUT fail(
+                "`immutable mut` doesn't exist: `immutable` promises that nothing \
+                 reachable from the value ever changes. Write `let mut` for a binding \
+                 that changes."
+            ) -> { Stmt::Break }
+          | KW_IMMUTABLE
+            name:NAME
+            ty:type_annotation?
+            "="
+            val:expr
+            semi?
+            -> {
+                Stmt::Let {
+                    names: vec![name],
+                    shape: Vec::new(),
+                    mutable: false,
+                    deep: true,
+                    ty,
+                    value: val
+                }
+            }
+
+        // **`immutable X = f()` where an item stands parses, and is refused**
+        // (ADR-389 D4): its evaluation on first access is not built yet (#1199,
+        // p1199b), and a program that writes it gets that sentence rather than
+        // a parse error at the word, nor a binding silently taken for another.
+        rule immutable_item -> Item =
+            kw_pub? KW_IMMUTABLE fail(
+                "An `immutable` where an item stands isn't built yet. Bind it inside \
+                 the function that reads it, or write `comptime` for a value known at \
+                 build time."
+            ) -> { Item::Import { path: Vec::new(), alias: None } }
+
         rule let_stmt -> Stmt =
             KW_LET
             mutable:kw_mut?
@@ -2543,6 +2586,7 @@ grammar! {
                     names,
                     shape,
                     mutable: mutable.is_some(),
+                    deep: false,
                     ty,
                     value: val
                 }
@@ -3993,6 +4037,7 @@ grammar! {
         rule KW_FROM = "from" not(ident)
         rule KW_GRAMMAR = "grammar" not(ident)
         rule KW_IF = "if" not(ident)
+        rule KW_IMMUTABLE = "immutable" not(ident)
         rule KW_IMPL = "impl" not(ident)
         rule KW_IN = "in" not(ident)
         rule KW_LET = "let" not(ident)
@@ -4168,6 +4213,11 @@ grammar! {
           // Part I's list has it since 0.0.1305. No `.nika` in the tree writes
           // it as a name; it appears only inside strings the lowering emits.
           | KW_ASYNC -> { 0 }
+          // **`immutable`, with its binding**
+          // ([ADR-389](../../../../docs/specification/adr/adr-389.md) D1). No
+          // `.nika` in the tree wrote it as a name but a field of the checker's
+          // own `CheckLocal`, renamed `without_mut` with this rule.
+          | KW_IMMUTABLE -> { 0 }
 
 
         // The compiler's identifier.

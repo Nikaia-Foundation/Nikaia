@@ -1,0 +1,8 @@
+error: `immutable` is a reserved word, so it can't be used as a name here.
+  --> tests/immutable_is_a_reserved_word.nika:4:9
+   |
+ 4 |     let immutable = 1
+   |         ^^^^^^^^^
+   |
+   = note: Expected `mut` here, but found `immutable`.
+   = help: Choose another name, such as `immutable_`.

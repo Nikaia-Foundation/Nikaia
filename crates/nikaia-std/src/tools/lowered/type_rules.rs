@@ -847,7 +847,7 @@ pub(crate) fn tr_checked_literal(words: &winnow_grammar::InternerContext, intern
     let checks = tr_asserts(words, &intern, &renew, rules, type_name, &binding, &at, false);
     match values {
         None => {
-            let mut stmts: Vec<Spanned<Stmt>> = vec![Spanned::new(Stmt::Let { names: vec![rules.binding], shape: vec![], mutable: false, ty: None, value: literal }, tr_span(&at))];
+            let mut stmts: Vec<Spanned<Stmt>> = vec![Spanned::new(Stmt::Let { names: vec![rules.binding], shape: vec![], mutable: false, deep: false, ty: None, value: literal }, tr_span(&at))];
             stmts.extend(checks);
             stmts.push(Spanned::new(Stmt::Expr(Expr::Variable(rules.binding, node_id::NodeId::fresh())), tr_span(&at)));
             return stmts;

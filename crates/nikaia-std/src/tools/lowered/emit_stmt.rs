@@ -229,7 +229,7 @@ impl EmitState {
         self.write_keep_prelude(walk, out, &scope.function, at, depth);
         self.emit_core_hold_temporaries(world, walk, out, host, node, span, depth, tail, here, scope)?;
         match node {
-            Stmt::Let { names, shape, mutable, ty, value } => { let mutable = *mutable; self.emit_stmt_let(world, walk, out, host, names, shape, mutable, (ty).as_ref(), value, span, depth, here, scope)?; },
+            Stmt::Let { names, shape, mutable, ty, value, .. } => { let mutable = *mutable; self.emit_stmt_let(world, walk, out, host, names, shape, mutable, (ty).as_ref(), value, span, depth, here, scope)?; },
             Stmt::Comptime { name, .. } => {
                 let name = *name;
                 let bound = emit_text(world, name);

@@ -1062,7 +1062,7 @@ fn tr_checked_literal(words: ref winnow_grammar::InternerContext, intern: fn(ref
     let checks = tr_asserts(words, intern, renew, rules, type_name, binding, at, false)
     match values {
         null => {
-            let mut stmts: Vec[Spanned[Stmt]] = [Spanned(Stmt::Let { names: [rules.binding], shape: [], mutable: false, ty: null, value: literal }, tr_span(at))]
+            let mut stmts: Vec[Spanned[Stmt]] = [Spanned(Stmt::Let { names: [rules.binding], shape: [], mutable: false, deep: false, ty: null, value: literal }, tr_span(at))]
             stmts.extend(checks)
             stmts.push(Spanned(Stmt::Expr(Expr::Variable(rules.binding, node_id::NodeId::fresh())), tr_span(at)))
             return stmts

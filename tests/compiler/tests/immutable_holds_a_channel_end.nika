@@ -1,0 +1,9 @@
+// An `immutable` of a channel end is refused (ADR-389 D2).
+
+use std::channel
+
+fn main() {
+	let (tx, _rx) = channel::bounded[i64](4)
+	immutable t = tx
+	println("bound")
+}

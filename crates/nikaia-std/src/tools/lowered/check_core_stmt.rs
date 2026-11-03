@@ -161,7 +161,7 @@ pub(crate) fn check_core_stmt_mut_view(state: &mut CheckState, world: &CheckWorl
                         let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
                         let root = (*nikaia_std::index::get(&parts, 0)).to_string();
                         let found = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return };
-                        if found.immutable.is_none() { state.facts.mut_view_reads.insert(id_of(value) as i64, String::from("")); } else { state.a_changed_binding_says_mut(&root, "a mutable view of the field is taken here", span.clone()); }
+                        if found.without_mut.is_none() { state.facts.mut_view_reads.insert(id_of(value) as i64, String::from("")); } else { state.a_changed_binding_says_mut(&root, "a mutable view of the field is taken here", span.clone()); }
                     }
                 },
                 Expr::MethodCall { receiver, .. } => {
@@ -171,7 +171,7 @@ pub(crate) fn check_core_stmt_mut_view(state: &mut CheckState, world: &CheckWorl
                         let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
                         let root = (*nikaia_std::index::get(&parts, 0)).to_string();
                         let found = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return };
-                        if found.immutable.is_none() {
+                        if found.without_mut.is_none() {
                             state.facts.mut_view_reads.insert(id_of(value) as i64, String::from(""));
                             state.facts.mut_view_gets.insert(id_of(receiver) as i64);
                         } else { state.a_changed_binding_says_mut(&root, "a mutable view of the entry is taken here", span.clone()); }
@@ -183,7 +183,7 @@ pub(crate) fn check_core_stmt_mut_view(state: &mut CheckState, world: &CheckWorl
                     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
                     let root = (*nikaia_std::index::get(&parts, 0)).to_string();
                     let found = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return };
-                    if found.immutable.is_none() {
+                    if found.without_mut.is_none() {
                         let mut lend: String = String::from("&mut ");
                         if parts.len() == 1 && state.a_mut_parameter_place(world, base).is_some() { lend = String::from(""); }
                         state.facts.mut_view_reads.insert(id_of(value) as i64, lend);
@@ -206,7 +206,7 @@ pub(crate) fn check_core_stmt_mut_view_of_an_element(state: &mut CheckState, wor
             let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
             let root = (*nikaia_std::index::get(&parts, 0)).to_string();
             let found = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return };
-            if found.immutable.is_none() { state.facts.mut_view_reads.insert(id_of(value) as i64, String::from("")); }
+            if found.without_mut.is_none() { state.facts.mut_view_reads.insert(id_of(value) as i64, String::from("")); }
         },
         Expr::Field { .. } => {
             if !a_copy_type { return; }
@@ -214,7 +214,7 @@ pub(crate) fn check_core_stmt_mut_view_of_an_element(state: &mut CheckState, wor
             let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
             let root = (*nikaia_std::index::get(&parts, 0)).to_string();
             let found = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return };
-            if found.immutable.is_none() { state.facts.mut_view_reads.insert(id_of(value) as i64, String::from("")); }
+            if found.without_mut.is_none() { state.facts.mut_view_reads.insert(id_of(value) as i64, String::from("")); }
         },
         _ => { },
     }
@@ -291,9 +291,10 @@ pub(crate) fn check_core_stmt_a_part_of_an_unchanged_let(state: &CheckState, wor
 pub(crate) fn check_core_stmt_an_unchanged_owned_let(state: &CheckState, name: &str) -> bool {
     if state.lent_here(name) || state.got_past_a_jump.contains(name) { return false; }
     let local: CheckLocal = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    let how: CheckImmutable = match local.immutable { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let how: CheckImmutable = match local.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };
     match how.kind {
         CheckKind::Let => true,
+        CheckKind::Immutable => true,
         CheckKind::Loop => !local.lent,
         _ => false,
     }
@@ -584,7 +585,7 @@ pub fn check_core_stmt_holds_code(ty: &Ty) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, ty: Option<&Type>, value: &Expr, span: &Span) -> Ty {
+pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, deep: bool, ty: Option<&Type>, value: &Expr, span: &Span) -> Ty {
     let by_use: Option<Ty> = match state.flow.let_lambda_use.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -934,8 +935,16 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if bound.is_unknown() || state.a_drivers_row(world, value) { state.flow.unknown_bound.insert(id); }
     let mut literal: Option<String> = None;
     if ty.is_none() { literal = check_core_stmt_literal(value); }
-    let mut immutable: Option<CheckImmutable> = None;
-    if !mutable { immutable = Some(CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Let, over: String::from("") }); }
+    let mut without_mut: Option<CheckImmutable> = None;
+    if !mutable {
+        let mut kind = CheckKind::Let;
+        if deep {
+            kind = CheckKind::Immutable;
+            let deep_name: String = world.words.resolve(*nikaia_std::index::get(&names, 0)).to_string();
+            check_core_stmt_an_immutable_that_changes(state, world, &deep_name, &bound, value, span);
+        }
+        without_mut = Some(CheckImmutable { at: Span { start: span.start, end: span.end }, kind, over: String::from("") });
+    }
     match bound {
         Ty::Named { ref name, .. } => { if name == "TaskHandle" { state.flow.handle_lets.insert(span.start as i64); } },
         _ => { },
@@ -947,11 +956,134 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     local.empty_list = pending;
     local.open_number = open;
     local.literal = literal;
-    local.immutable = immutable;
+    local.without_mut = without_mut;
     local.written_mut = mutable;
     state.bind_local(local);
     if mutable && state.facts.mut_view_reads.contains_key(&(id_of(value) as i64)) { state.flow.mut_view_bindings.insert(id); }
     check_core_stmt_unit()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_an_immutable_that_changes(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, bound: &Ty, value: &Expr, span: &Span) {
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut part: Option<String> = check_core_stmt_a_changing_part(&state, world, name, bound, &mut seen);
+    let mut captured = false;
+    if part.is_none() {
+        part = check_core_stmt_a_changing_capture(&state, world, value);
+        captured = part.is_some();
+    }
+    let found: String = match part { Some(__nikaia_value) => __nikaia_value, None => return };
+    let at = check_span_at(world, value, span);
+    let mut message: String = format!("`{}` is `immutable`, but its value can change: `{}` is changeable through another owner.", name, found);
+    if captured { message = format!("`{}` is `immutable`, but the lambda it holds captures `{}`, which is changeable through another owner.", name, found); }
+    let note: String = String::from("`immutable` promises that nothing reachable from the value ever changes (ADR-389). A `SharedMut`, a `Locked` and a channel end are changed through every other owner of the same storage.");
+    let help: String = String::from("Bind it with `let`, or hold a value that can't change: a copy, or a `Shared[T]` of a `T` that can't change.");
+    let label = CheckLabel { span: at.clone(), word: String::from(""), text: String::from("can change through another owner"), main: true };
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1331"), message, notes: vec![note], help: Some(help), labels: vec![label] });
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_changes_through_another_owner(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+    if name == "SharedMut" || name == "Locked" || name == "channel::Sender" || name == "channel::Receiver" { return true; }
+    if name != "Sender" && name != "Receiver" { return false; }
+    !state.structs.contains_key(name) && !state.enums.contains_key(name) && !world.own.types.contains_key(name)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_changing_part(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<String> {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if check_core_stmt_changes_through_another_owner(state, world, name) { return Some(format!("{}: {}", path, ty.text())); }
+            let mut inner_path: String = format!("{}[…]", path);
+            if name == "Shared" || name == "Box" { inner_path = path.to_string(); }
+            for arg in args.iter() {
+                let inner = check_core_stmt_a_changing_part(state, world, &inner_path, arg, seen);
+                if inner.is_some() { return std::convert::identity(inner); }
+            }
+            if seen.contains(name) { return None; }
+            seen.insert(name.to_string());
+            let fields = match state.fields_of(world, name) { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_a_changing_variant(state, world, path, name, seen) };
+            for field in fields.iter() {
+                let inner = check_core_stmt_a_changing_part(state, world, &format!("{}.{}", path, field.name), &field.ty, seen);
+                if inner.is_some() { return std::convert::identity(inner); }
+            }
+            return check_core_stmt_a_changing_variant(state, world, path, name, seen);
+        },
+        Ty::Tuple(parts) => {
+            let mut i = 0;
+            for part in parts.iter() {
+                let inner = check_core_stmt_a_changing_part(state, world, &format!("{}.{}", path, i), part, seen);
+                if inner.is_some() { return std::convert::identity(inner); }
+                i += 1;
+            }
+            return None;
+        },
+        Ty::Pointed { item, .. } => { let item = nikaia_std::boxed::open(item); return check_core_stmt_a_changing_part(state, world, path, item, seen) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); return check_core_stmt_a_changing_part(state, world, path, inner, seen) },
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); return check_core_stmt_a_changing_part(state, world, &format!("{}[…]", path), item, seen) },
+        _ => return None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_changing_variant(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, name: &str, seen: &mut collections::BTreeSet<String>) -> Option<String> {
+    let variants = match state.enums.get(name) { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_a_changing_contract(world, state, path, name, seen) };
+    for variant in variants.iter() {
+        let key = format!("{}::{}", name, variant);
+        if state.variant_parts.contains_key(&key) {
+            let parts = match state.variant_parts.get(&key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut i = 0;
+            for part in parts.iter() {
+                let inner = check_core_stmt_a_changing_part(state, world, &format!("{}.{}.{}", path, variant, i), part, seen);
+                if inner.is_some() { return std::convert::identity(inner); }
+                i += 1;
+            }
+        }
+        let named = match state.structs.get(&key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        for field in named.iter() {
+            let inner = check_core_stmt_a_changing_part(state, world, &format!("{}.{}.{}", path, variant, field.name), &field.ty, seen);
+            if inner.is_some() { return std::convert::identity(inner); }
+        }
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_changing_contract(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, state: &CheckState, path: &str, name: &str, seen: &mut collections::BTreeSet<String>) -> Option<String> {
+    let contract = match world.own.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    for variant in contract.variants.iter() {
+        for field in variant.holds.iter() {
+            let inner = check_core_stmt_a_changing_part(state, world, &format!("{}.{}.{}", path, variant.name, field.name), &field.ty, seen);
+            if inner.is_some() { return std::convert::identity(inner); }
+        }
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_changing_capture(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<String> {
+    match value {
+        Expr::Closure { params, body, .. } => {
+            let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+            names_in_block(body, world.words, &mut named);
+            let own = lambda_own(world, params);
+            for captured in named.iter() {
+                if own.contains(captured) { continue; }
+                let local = match state.binding(captured) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+                let inner = check_core_stmt_a_changing_part(state, world, captured, &local.ty, &mut seen);
+                if inner.is_some() { return std::convert::identity(inner); }
+            }
+            return None;
+        },
+        _ => return None,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1334,7 +1466,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             let written: String = nikaia_std::index::or(list, || "".into());
             let parts: Vec<&str> = written.split('.').collect::<Vec<_>>();
             let found = match state.binding(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
-            match found.immutable {
+            match found.without_mut {
                 None => {
                     mut_view = true;
                     state.facts.mut_view_reads.insert(id_of(iter) as i64, String::from(""));
@@ -1366,7 +1498,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         local.written_mut = mutable;
         if mut_view { local.view_of = nikaia_std::index::or(dotted_path(world, iter), || "".into()); }
         local.lent = lent && !mut_view && !copied && !a_view;
-        if !mutable { local.immutable = Some(CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: walked_list.to_string() }); }
+        if !mutable { local.without_mut = Some(CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: walked_list.to_string() }); }
         frame.push(local);
     }
     if bindings.len() == 1 { check_core_stmt_for_a_range(state, world, iter, &mut frame, span); }
@@ -1479,7 +1611,7 @@ pub fn check_core_stmt_jump(state: &mut CheckState, word: &str, span: &Span) -> 
 pub fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, stmt: &Stmt, span: &Span) -> Ty {
     state.flow.literal_receivers.clear();
     match stmt {
-        Stmt::Let { names, shape, mutable, ty, value } => { let mutable = *mutable; check_core_stmt_let(state, world, host, names, shape, mutable, (ty).as_ref(), value, span) },
+        Stmt::Let { names, shape, mutable, deep, ty, value } => { let deep = *deep; let mutable = *mutable; check_core_stmt_let(state, world, host, names, shape, mutable, deep, (ty).as_ref(), value, span) },
         Stmt::Comptime { name, ty, value, bounds } => { let name = *name; check_core_comptime_binding(state, world, host, name, (ty).as_ref(), value, bounds, span) },
         Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, (op).as_ref(), value, span),
         Stmt::While { cond, body } => check_core_stmt_while(state, world, host, cond, body, span),

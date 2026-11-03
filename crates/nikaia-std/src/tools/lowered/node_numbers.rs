@@ -269,7 +269,7 @@ pub(crate) fn numbers_maybe_block(block: Option<Block>, st: &mut NodeNumbersStat
 
 pub(crate) fn numbers_stmt(stmt: Stmt, st: &mut NodeNumbersState) -> Stmt {
     match stmt {
-        Stmt::Let { names, shape, mutable, ty, value } => { return Stmt::Let { names, shape, mutable, ty, value: numbers_expr(value, st) }; },
+        Stmt::Let { names, shape, mutable, deep, ty, value } => { return Stmt::Let { names, shape, mutable, deep, ty, value: numbers_expr(value, st) }; },
         Stmt::Comptime { name, ty, value, bounds } => {
             let value2 = numbers_expr(value, st);
             let bounds2 = numbers_config(bounds, st);

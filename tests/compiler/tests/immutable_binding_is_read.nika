@@ -1,0 +1,14 @@
+// `immutable` binds a value nothing reachable from ever changes, with and
+// without a type, and a `Shared[T]` passes where `T` does (ADR-389 D1, D2).
+
+struct Point { x: i64, y: i64 }
+
+fn main() {
+	immutable limit = 3
+	immutable name: String = "nikaia"
+	immutable p = Point { x: 1, y: 2 }
+	immutable shared: Shared[Point] = Shared(Point { x: 4, y: 5 })
+	let plain = 4
+	immutable next: fn() -> i64 = fn { plain + 1 }
+	println(f"{limit} {name} {p.x} {shared.y} {name.len()} {next()}")
+}

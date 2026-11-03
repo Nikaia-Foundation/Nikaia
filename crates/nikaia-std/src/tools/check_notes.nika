@@ -269,7 +269,7 @@ impl CheckState {
             local.changing = true
         }
         if asked {
-            local.immutable = CheckImmutable { at: span.clone(), kind: CheckKind::Parameter, over: "" }
+            local.without_mut = CheckImmutable { at: span.clone(), kind: CheckKind::Parameter, over: "" }
         }
         // **Handed the items of a walk of an open number, it is that number**
         // (ADR-285 D34, #594), as a `for` binding over its list is.

@@ -31,7 +31,7 @@ pub(crate) fn lambda_own(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params:
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn a_lent_parameter(local: &CheckLocal) -> bool {
-    let kind = match local.immutable.as_ref().map(|__nikaia_it| &__nikaia_it.kind) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let kind = match local.without_mut.as_ref().map(|__nikaia_it| &__nikaia_it.kind) { Some(__nikaia_value) => __nikaia_value, None => return false };
     *kind == CheckKind::Parameter && local.ty.is_a_view()
 }
 

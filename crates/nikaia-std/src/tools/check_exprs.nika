@@ -451,10 +451,10 @@ impl CheckState {
 
 /// Whether a binding is a parameter.
 fn a_parameter_binding(local: ref CheckLocal) -> bool {
-    if local.immutable == null {
+    if local.without_mut == null {
         return false
     }
-    let at = local.immutable ?? return false
+    let at = local.without_mut ?? return false
     return at.kind == CheckKind::Parameter
 }
 

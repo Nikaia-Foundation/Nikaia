@@ -1,0 +1,6 @@
+// `immutable` is a reserved word (ADR-389 D1).
+
+fn main() {
+    let immutable = 1
+    println(f"{immutable}")
+}

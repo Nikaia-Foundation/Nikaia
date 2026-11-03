@@ -82,33 +82,40 @@ impl CheckState {
     pub fn a_changed_binding_says_mut(&mut self, name: &str, how: &str, changed_at: Span) {
         self.changed.push(name.to_string());
         let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let immutable = match local.immutable { Some(__nikaia_value) => __nikaia_value, None => return };
-        let declared = immutable.at.start as i64;
+        let without_mut = match local.without_mut { Some(__nikaia_value) => __nikaia_value, None => return };
+        let declared = without_mut.at.start as i64;
         if self.said_mut.contains(&declared) { return; }
         let mut code: String = String::from("NK1139");
         let mut message: String = format!("You're changing `{}`, but it wasn't declared as mutable.", name);
         let mut notes: Vec<String> = vec![];
         let mut help: String = format!("Add `mut` where it's declared: `let mut {}`.", name);
         let mut declared_text: String = String::from("declared here without `mut`");
-        if immutable.kind == CheckKind::Loop {
+        if without_mut.kind == CheckKind::Loop {
             message = format!("You're changing `{}`, which a `for` binds, but the `for` wasn't declared `mut`.", name);
             notes.push(String::from("A `for` binding is the element of this turn, and it changes only if the head says `mut`."));
             help = format!("For a change meant for this turn only, change a copy: `let mut {}_own = {}.clone()`.", name, name);
-            if immutable.over != "" {
-                let list = immutable.over.to_string();
+            if without_mut.over != "" {
+                let list = without_mut.over.to_string();
                 notes.push(format!("`for mut {} in {}` makes `{}` the element of `{}` itself, and a change to it reaches `{}`.", name, list, name, list, list));
                 help = format!("To change `{}`, write `for mut {} in {}`. For a change meant for this turn only, write `let mut {}_own = {}.clone()`.", list, name, list, name, name);
             }
             declared_text = String::from("bound here by the `for`, without `mut`");
         }
-        if immutable.kind == CheckKind::Parameter {
+        if without_mut.kind == CheckKind::Immutable {
+            code = String::from("NK1331");
+            message = format!("You're changing `{}`, but it is `immutable`: nothing reachable from it ever changes.", name);
+            notes = vec![String::from("An `immutable` binding is read through views only, so neither the name nor any part of its value is changed (ADR-389).")];
+            help = format!("Change a copy: `let mut {}_own = {}.clone()`, or bind it with `let mut` if it is meant to change.", name, name);
+            declared_text = String::from("declared `immutable` here");
+        }
+        if without_mut.kind == CheckKind::Parameter {
             code = String::from("NK1138");
             message = format!("You're changing the parameter `{}`, but it wasn't declared as mutable.", name);
             notes.push(format!("A parameter declared `mut {}` is changed in place, so the caller sees the change too.", name));
             help = format!("Write `mut {}` in the parameter list. If the caller's value should stay as it was, change a copy instead: `let mut {}_own = {}`.", name, name, name);
         }
         self.said_mut.insert(declared);
-        let there = CheckLabel { span: immutable.at.clone(), word: name.to_string(), text: declared_text, main: false };
+        let there = CheckLabel { span: without_mut.at.clone(), word: name.to_string(), text: declared_text, main: false };
         let here = CheckLabel { span: changed_at.clone(), word: name.to_string(), text: how.to_string(), main: true };
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code, message, notes, help: Some(help), labels: vec![there, here] });
     }

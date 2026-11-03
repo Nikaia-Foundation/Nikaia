@@ -1,0 +1,7 @@
+// An `immutable` whose elements are `SharedMut` is refused (ADR-389 D2).
+
+fn main() {
+	let a: SharedMut[i64] = SharedMut(1)
+	immutable all = [a]
+	println(f"{all.len()}")
+}

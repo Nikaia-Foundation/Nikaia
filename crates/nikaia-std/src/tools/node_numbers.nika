@@ -314,8 +314,8 @@ fn numbers_maybe_block(block: Block?, mut st: NodeNumbersState) -> Block? {
 
 fn numbers_stmt(stmt: Stmt, mut st: NodeNumbersState) -> Stmt {
     match stmt {
-        Stmt::Let { names, shape, mutable, ty, value } => {
-            return Stmt::Let { names: names, shape: shape, mutable: mutable, ty: ty, value: numbers_expr(value, st) }
+        Stmt::Let { names, shape, mutable, deep, ty, value } => {
+            return Stmt::Let { names: names, shape: shape, mutable: mutable, deep: deep, ty: ty, value: numbers_expr(value, st) }
         },
         Stmt::Comptime { name, ty, value, bounds } => {
             let value2 = numbers_expr(value, st)

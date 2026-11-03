@@ -25,6 +25,9 @@ pub enum CheckKind {
     Parameter,
     Let,
     Loop,
+    /// **An `immutable`** (ADR-389 D2): a change to it, a `ref mut self` call
+    /// on it and a move out of it are `NK1331`.
+    Immutable,
 }
 
 /// A binding that did not say `mut`: where it was written, and which kind it is.
@@ -70,7 +73,7 @@ pub struct CheckLocal {
     /// Where the binding was written and what kind it is, when it did **not**
     /// say `mut`. On the binding rather than in a map so that the scope is the
     /// one `scope` already keeps.
-    pub immutable: CheckImmutable?,
+    pub without_mut: CheckImmutable?,
     /// **A parameter whose declaration wrote `mut`**, which is already a
     /// `&mut T` in the lowering (ADR-094 D3): a second reference would be
     /// `&mut &mut T`.
@@ -104,7 +107,7 @@ impl CheckLocal {
             constant: null,
             lent: false,
             view_of: "",
-            immutable: null,
+            without_mut: null,
             changing: false,
             built: null,
             literal: null,

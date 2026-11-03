@@ -203,6 +203,10 @@ impl CheckState {
         if !self.task_bindings.is_empty() { return; }
         if !self.takes_away(world, &ty.unseen()) { return; }
         let root = a_root_segment(&path);
+        if self.an_immutable_binding(&root) {
+            self.a_move_out_of_an_immutable(&path, &root, to, span);
+            return;
+        }
         let mut stand_in: Option<String> = None;
         if node >= 0 { stand_in = self.a_part_taken_out(world, &path, ty); }
         if path.contains('.') && self.lent_here(&root) && stand_in.is_none() {
@@ -224,6 +228,20 @@ impl CheckState {
         if what == "loop" { again = String::from("the next time round the loop it would be handed over again, but it's already gone"); } else if what == "guard" || what == "bound" { again = format!("a {} only reads the labels of its alternative: they stay the alternative's, for its action", what); }
         let copy = a_copy_said(&path, ty);
         self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.text(), again), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("Hand over a copy each time: `{}`.", copy))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn an_immutable_binding(&self, name: &str) -> bool {
+        let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let how = match local.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };
+        how.kind == CheckKind::Immutable
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_move_out_of_an_immutable(&mut self, path: &str, root: &str, to: &str, span: &Span) {
+        let mut how: String = to.to_string();
+        if how == "" { how = String::from("handed over"); }
+        self.findings.push(check_refusal("NK1331", span, format!("`{}` is {} here, but `{}` is `immutable`, so nothing is moved out of it.", path, how, root), vec![String::from("An `immutable` binding is read through views only: a move would leave the name without its value, and the value changes owner (ADR-389).")], Some(format!("Hand over a view, or a copy: `{}`.", a_copy_said(path, &nikaia_std::index::or(self.lookup(path), || Ty::Unknown))))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -1,0 +1,7 @@
+error: An `immutable` where an item stands isn't built yet.
+  --> tests/immutable_item_is_not_built_yet.nika:4:15
+   |
+ 4 | pub immutable LIMIT = 3
+   |               ^^^^^
+   |
+   = help: Bind it inside the function that reads it, or write `comptime` for a value known at build time.

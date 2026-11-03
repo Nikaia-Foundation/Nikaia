@@ -346,6 +346,10 @@ impl CheckState {
             return
         }
         let root = a_root_segment(path)
+        if self.an_immutable_binding(root) {
+            self.a_move_out_of_an_immutable(path, root, to, span)
+            return
+        }
         let mut stand_in: String? = null
         if node >= 0 {
             stand_in = self.a_part_taken_out(world, path, ty)
@@ -377,6 +381,23 @@ impl CheckState {
         }
         let copy = a_copy_said(path, ty)
         self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"Hand over a copy each time: `{copy}`."))
+    }
+
+    /// Whether `name` is bound by an `immutable` (ADR-389 D2).
+    fn an_immutable_binding(ref self, name: ref String) -> bool sync {
+        let local = self.binding(name) ?? return false
+        let how = local.without_mut ?? return false
+        return how.kind == CheckKind::Immutable
+    }
+
+    /// **`NK1331`: a move out of an `immutable`** (ADR-389 D2): it is read
+    /// through views, so nothing is handed over out of it.
+    fn a_move_out_of_an_immutable(ref mut self, path: ref String, root: ref String, to: ref String, span: ref Span) sync {
+        let mut how: String = to.clone()
+        if how == "" {
+            how = "handed over"
+        }
+        self.findings.push(check_refusal("NK1331", span, f"`{path}` is {how} here, but `{root}` is `immutable`, so nothing is moved out of it.", ["An `immutable` binding is read through views only: a move would leave the name without its value, and the value changes owner (ADR-389)."], f"Hand over a view, or a copy: `{a_copy_said(path, self.lookup(path) ?? Ty::Unknown)}`."))
     }
 
     // The part `path` taken out of `root` by the hand-over `handed`: missing

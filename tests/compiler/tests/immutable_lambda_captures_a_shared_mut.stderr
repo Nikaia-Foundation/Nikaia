@@ -1,0 +1,9 @@
+error[NK1331]: `bump` is `immutable`, but the lambda it holds captures `hits: SharedMut[i64]`, which is changeable through another owner.
+  --> tests/immutable_lambda_captures_a_shared_mut.nika:5:19
+   |
+ 5 | 	immutable bump = fn { hits.update fn(mut v) { v += 1 } }
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ can change through another owner
+   |
+   = note: `immutable` promises that nothing reachable from the value ever changes (ADR-389). A `SharedMut`, a `Locked` and a channel end are changed through every other owner of the same storage.
+   = help: Bind it with `let`, or hold a value that can't change: a copy, or a `Shared[T]` of a `T` that can't change.
+1 type error

@@ -1,0 +1,9 @@
+// A `Shared[T]` passes only where `T` does: one of a struct holding a
+// `SharedMut` is refused (ADR-389 D2).
+
+struct Counter { hits: SharedMut[i64] }
+
+fn main() {
+	immutable s = Shared(Counter { hits: SharedMut(1) })
+	println("bound")
+}

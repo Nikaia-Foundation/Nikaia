@@ -561,7 +561,7 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
         changing: false,
         constant: constant,
         built: evaluated,
-        immutable: null,
+        without_mut: null,
         empty_list: null,
         open_number: null,
     })

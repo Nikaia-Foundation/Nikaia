@@ -1,0 +1,12 @@
+// An `immutable` whose type reaches a `SharedMut` through a field is
+// refused, named by its path (ADR-389 D2).
+
+use std::collections
+
+struct Config { name: String, cache: SharedMut[collections::HashMap[String, i64]] }
+
+fn main() {
+	let config = Config { name: "a", cache: SharedMut(collections::HashMap()) }
+	immutable c = config
+	println(c.name)
+}

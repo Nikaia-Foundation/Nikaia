@@ -117,7 +117,7 @@ fn comptime_turn_function(turn: ref ComptimeTurn, returns: ref Type, intern: fn(
     let at_field = Expr::Binary { op: BinaryOp::Eq, lhs: Expr::Field { base: Expr::Variable(local, fresh_id()), name: intern("name"), id: fresh_id() }, rhs: Expr::LitStr { text: turn.field.clone(), id: fresh_id() }, span: Span::nowhere(), grouped: false, id: fresh_id() }
     let pick = Expr::If { cond: at_field, then_branch: Block { stmts: [nowhere(Stmt::Expr(push))] }, else_branch: null, id: fresh_id() }
     let each = Stmt::For { bindings: [local], shape: [], mutable: false, iter: Expr::Path([t, intern("fields")], fresh_id()), body: Block { stmts: [nowhere(Stmt::Expr(pick))] } }
-    let start = Stmt::Let { names: [kept], shape: [], mutable: true, ty: list.clone(), value: Expr::ListLit { items: [], id: fresh_id() } }
+    let start = Stmt::Let { names: [kept], shape: [], mutable: true, deep: false, ty: list.clone(), value: Expr::ListLit { items: [], id: fresh_id() } }
     let stmts: Vec[Spanned[Stmt]] = [nowhere(start), nowhere(each), nowhere(Stmt::Return(Expr::Variable(kept, fresh_id())))]
     let generics: Vec[GenericParam] = [GenericParam { name: t, bounds: [intern("Struct")] }]
     return Item::Fn { name: intern(TURN_MARK), generics: generics, receiver: null, args: [], config: [], spread: null, ret_type: list, body: Block { stmts: stmts }, is_sync: true, sync_by: [], is_public: false, can_throw: false, is_extern: false }
@@ -172,7 +172,7 @@ fn comptime_constant_as_let(words: ref winnow_grammar::InternerContext, bound_he
             let names: Vec[winnow_grammar::Symbol] = [intern(named)]
             let path: Vec[winnow_grammar::Symbol] = constructor.split("::").map(fn(segment) { intern(segment) }).collect()
             let call = Expr::Call { func: Expr::Path(path, fresh_id()), args: args, config: [], id: fresh_id() }
-            let node = Stmt::Let { names: names, shape: [], mutable: false, ty: ty?.clone(), value: call }
+            let node = Stmt::Let { names: names, shape: [], mutable: false, deep: false, ty: ty?.clone(), value: call }
             Spanned { node: node, span: Span::nowhere(), doc: null, attributes: [] }
         },
         else => null,

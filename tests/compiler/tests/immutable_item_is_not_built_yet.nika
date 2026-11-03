@@ -1,0 +1,8 @@
+// An `immutable` where an item stands is parsed and refused until it is
+// built (ADR-389 D6).
+
+pub immutable LIMIT = 3
+
+fn main() {
+    println("bound")
+}

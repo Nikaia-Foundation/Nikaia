@@ -32,7 +32,7 @@ fn lambda_own(world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol]) ->
 
 /// Whether a binding is a parameter that arrives as a view.
 fn a_lent_parameter(local: ref CheckLocal) -> bool sync {
-    let kind = local.immutable?.kind ?? return false
+    let kind = local.without_mut?.kind ?? return false
     return kind == CheckKind::Parameter && local.ty.is_a_view()
 }
 

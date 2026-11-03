@@ -1,0 +1,9 @@
+// An `immutable` of an enum one of whose variants holds a `Locked` is
+// refused, whichever variant it is now (ADR-389 D2).
+
+enum Slot { Empty, Held(Locked[i64]) }
+
+fn main() {
+	immutable s = Slot::Empty
+	println("bound")
+}

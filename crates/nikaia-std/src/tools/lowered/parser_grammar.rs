@@ -138,6 +138,8 @@ grammar! {
             -> { }
           | KW_IF
             -> { }
+          | KW_IMMUTABLE
+            -> { }
           | KW_IMPL
             -> { }
           | KW_IN
@@ -279,6 +281,10 @@ grammar! {
 
         rule KW_IF =
             "if" not(ident)
+            -> { }
+
+        rule KW_IMMUTABLE =
+            "immutable" not(ident)
             -> { }
 
         rule KW_IMPL =
@@ -776,6 +782,8 @@ grammar! {
             -> { }
           | KW_IF
             -> { }
+          | KW_IMMUTABLE
+            -> { }
           | KW_IMPL
             -> { }
           | KW_IN
@@ -917,6 +925,10 @@ grammar! {
 
         rule KW_IF =
             "if" not(ident)
+            -> { }
+
+        rule KW_IMMUTABLE =
+            "immutable" not(ident)
             -> { }
 
         rule KW_IMPL =

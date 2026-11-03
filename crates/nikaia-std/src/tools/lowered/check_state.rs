@@ -6,6 +6,7 @@ pub enum CheckKind {
     Parameter,
     Let,
     Loop,
+    Immutable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,7 +30,7 @@ pub struct CheckLocal {
     pub constant: Option<Integer>,
     pub lent: bool,
     pub view_of: String,
-    pub immutable: Option<CheckImmutable>,
+    pub without_mut: Option<CheckImmutable>,
     pub changing: bool,
     pub built: Option<BuildValue>,
     pub literal: Option<String>,
@@ -39,7 +40,7 @@ pub struct CheckLocal {
 }
 
 impl CheckLocal {
-    pub fn free(name: String, ty: Ty, id: i64) -> CheckLocal { CheckLocal { name, written_mut: false, ty, constant: None, lent: false, view_of: String::from(""), immutable: None, changing: false, built: None, literal: None, empty_list: None, open_number: None, id } }
+    pub fn free(name: String, ty: Ty, id: i64) -> CheckLocal { CheckLocal { name, written_mut: false, ty, constant: None, lent: false, view_of: String::from(""), without_mut: None, changing: false, built: None, literal: None, empty_list: None, open_number: None, id } }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

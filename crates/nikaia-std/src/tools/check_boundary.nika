@@ -273,7 +273,7 @@ impl CheckState {
             else => return false,
         }
         let found = self.binding(name) ?? return false
-        let held = found.immutable ?? return false
+        let held = found.without_mut ?? return false
         let (container, a_view) = match found.ty {
             Ty::Named { name, view, .. } => (a_type_base(name), view),
             else => return false,
@@ -301,8 +301,8 @@ impl CheckState {
         }
         let found = self.binding(root) ?? return false
         let mut a_parameter = false
-        if found.immutable != null {
-            let held = found.immutable ?? return false
+        if found.without_mut != null {
+            let held = found.without_mut ?? return false
             a_parameter = held.kind == CheckKind::Parameter
         }
         let a_view = match found.ty {

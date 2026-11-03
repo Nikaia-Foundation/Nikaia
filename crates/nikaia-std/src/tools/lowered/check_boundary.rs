@@ -183,7 +183,7 @@ impl CheckState {
             _ => return false,
         };
         let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let held = match found.immutable { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let held = match found.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };
         let (container, a_view) = match found.ty {
             Ty::Named { ref name, view, .. } => (a_type_base(name), view),
             _ => return false,
@@ -202,8 +202,8 @@ impl CheckState {
         if root == "self" { return self.borrowing_self; }
         let found = match self.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let mut a_parameter = false;
-        if found.immutable.is_some() {
-            let held = match found.immutable { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if found.without_mut.is_some() {
+            let held = match found.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };
             a_parameter = held.kind == CheckKind::Parameter;
         }
         let a_view = match found.ty {

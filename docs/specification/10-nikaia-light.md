@@ -184,10 +184,10 @@ reserved word. The reserved words are:
 
 ```text
 as        async     break     catch     comptime  continue  dsl       else
-enum      extern    false     fn        for       grammar   if        impl
-in        let       match     mut       null      pub       ref       return
-select    self      spawn     struct    sync      test      throw     throws
-trait     true      unsafe    use       while     with
+enum      extern    false     fn        for       grammar   if        immutable
+impl      in        let       match     mut       null      pub       ref
+return    select    self      spawn     struct    sync      test      throw
+throws    trait     true      unsafe    use       while     with
 ```
 
 A name that is a reserved word does not parse, and the parse error names the

@@ -91,7 +91,7 @@ pub(crate) fn comptime_turn_function(turn: &ComptimeTurn, returns: &Type, intern
     let at_field = Expr::Binary { op: BinaryOp::Eq, lhs: Box::new(Expr::Field { base: Box::new(Expr::Variable(local, fresh_id())), name: intern("name"), id: fresh_id() }), rhs: Box::new(Expr::LitStr { text: turn.field.to_string(), id: fresh_id() }), span: Span::nowhere(), grouped: false, id: fresh_id() };
     let pick = Expr::If { cond: Box::new(at_field), then_branch: Block { stmts: vec![nowhere(Stmt::Expr(push))] }, else_branch: None, id: fresh_id() };
     let each = Stmt::For { bindings: vec![local], shape: vec![], mutable: false, iter: Expr::Path(vec![t, intern("fields")], fresh_id()), body: Block { stmts: vec![nowhere(Stmt::Expr(pick))] } };
-    let start = Stmt::Let { names: vec![kept], shape: vec![], mutable: true, ty: Some(list.clone()), value: Expr::ListLit { items: vec![], id: fresh_id() } };
+    let start = Stmt::Let { names: vec![kept], shape: vec![], mutable: true, deep: false, ty: Some(list.clone()), value: Expr::ListLit { items: vec![], id: fresh_id() } };
     let stmts: Vec<Spanned<Stmt>> = vec![nowhere(start), nowhere(each), nowhere(Stmt::Return(Some(Expr::Variable(kept, fresh_id()))))];
     let generics: Vec<GenericParam> = vec![GenericParam { name: t, bounds: vec![intern("Struct")] }];
     Item::Fn { name: Some(intern(TURN_MARK)), generics, receiver: None, args: vec![], config: vec![], spread: None, ret_type: Some(list), body: Block { stmts }, is_sync: true, sync_by: vec![], is_public: false, can_throw: false, is_extern: false }
@@ -136,7 +136,7 @@ pub(crate) fn comptime_constant_as_let(words: &winnow_grammar::InternerContext, 
             let names: Vec<winnow_grammar::Symbol> = vec![intern(&named)];
             let path: Vec<winnow_grammar::Symbol> = constructor.split("::").map(|segment| { intern(segment) }).collect::<Vec<_>>();
             let call = Expr::Call { func: Box::new(Expr::Path(path, fresh_id())), args, config: vec![], id: fresh_id() };
-            let node = Stmt::Let { names, shape: vec![], mutable: false, ty: match ty {
+            let node = Stmt::Let { names, shape: vec![], mutable: false, deep: false, ty: match ty {
                 Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
                 None => None,
             }, value: call };

@@ -1,0 +1,7 @@
+error: `immutable mut` doesn't exist: `immutable` promises that nothing reachable from the value ever changes.
+  --> tests/immutable_mut_does_not_exist.nika:4:19
+   |
+ 4 |     immutable mut n = 1
+   |                   ^
+   |
+   = help: Write `let mut` for a binding that changes.
