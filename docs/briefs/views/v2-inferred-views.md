@@ -14,7 +14,7 @@ Score: the language topics (owner, 2026-11-03), #1213 (ADR-views-3, option D). T
 * The checker and ledger parts in `crates/nikaia-std/src/tools/` that decide whether a field or element holds a view (`tether.nika`, `tiers.nika`, `text_tiers.nika`, `views.nika`, `view_changes.nika`, `ledger*.nika` as the change needs), their lowered files, and new tests under `tests/compiler/`.
 
 **Not yours:**
-* The parser (`crates/nikaia/src/parser/mod.rs`): `keep` and `from` wait on the decision #1214; nothing here parses a new word.
+* The parser (`crates/nikaia/src/parser/mod.rs`): `keep` is v3, `from` is v4; nothing here parses a new word.
 * `keeps.nika`, `lowered/keeps.rs`, `contracts/keeps.rs`, `contracts/sync.rs` (another lane): a change needed there stops the step and is reported under `Needs:`.
 * The specification text (v1).
 * `tools/emit_*.nika`, `describe*.nika`.
@@ -31,7 +31,7 @@ A form Nikaia, `std` or the toolchain lacks is sorted per CLAUDE.md *A missing f
 Both rules hold with tests (or a blocker is reported with its probe). `nikaia test tests/compiler --both-settings` and `tests/errors` give every count as before plus the new tests; the `it` tests filtered on `view`, `tether`, `ledger`; the guard set of `.claude/agents/builder.md`. Clippy clean; the lower-std fixpoint holds; the committed ledgers of `crates/nikaia-std` and the packages unchanged or their change explained in `Body:`. No changelog line.
 
 ## Stop and report if
-a `.stderr` of an existing test changes in a way the rule does not explain; the work needs `keep` or `from` parsed; the work needs a change in `keeps.nika`.
+a `.stderr` of an existing test changes in a way the rule does not explain; the work needs `keep` or `from` parsed (that is v3 and v4: stop, report under `Needs:`); the work needs a change in `keeps.nika`.
 
 ## Rules (CLAUDE.md; shared checkout)
 * Read `docs/builder-facts.md` first. You work in `/home/user/Nikaia` on `develop` (the shared checkout). Build with `CARGO_INCREMENTAL=0 cargo build --profile fast -p nikaia`; use only `/home/user/Nikaia/target/fast/nikaia`.
