@@ -59,7 +59,8 @@ The rules every session and agent needs. What only the main session does
   fixed in Rust only where that code cannot be converted to Nikaia directly;
   where it can, the fix moves it into Nikaia.
 * **Exception: the specification first (owner, 2026-11-03, #1214).** Views-3
-  (#1213) and async-5 (#983) are built now, in Rust where the code they change
+  (#1213), async-5 (#983) and grammar rules in traits (#1020, owner,
+  2026-11-03) are built now, in Rust where the code they change
   is Rust (the parser's grammar block, the std runtime, the compiler's Rust
   parts); directly in Nikaia where that works without changing behaviour and
   converting at once. A brief of these lanes that orders Rust is meant so. The
