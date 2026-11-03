@@ -1,4 +1,3 @@
-b38-1158-inner-match-takes-arm-name.md
 b39-1160-test-only-helpers-cfg-test.md
 b40-1161-collect-into-optional.md
 r3c-c-match-in-place.md
@@ -8,3 +7,4 @@ b36-1144-to-string-owned.md
 b22-1099-fstring-no-hole-braces.md
 b33-1107-copy-view-copied.md
 b21-1097-flat-map-seq-result.md
+b41-1134-fn-mut-param-type.md
