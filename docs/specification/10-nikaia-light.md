@@ -768,6 +768,23 @@ string inside a hole has plain quotes: `f"{greet("Ada")}"`. What follows a `:` i
 the value rather than which value. The first colon that is not inside a call or
 an index separates the two, so `move(by: 1)` in a hole keeps its own colon.
 
+**The format after the colon is a closed set**, as in Rust and Python, in this
+order, each part optional: a fill character and an alignment, a `0`, a width, a
+precision, a base.
+
+| written | what it does |
+| :--- | :--- |
+| `<` `>` `^` | left, right or centred in the width; a character before it is the fill (`{s:*^9}`), a space where none is written. Without one, a number stands right and text left |
+| `0` | a number is filled with zeros after its sign: `{n:05}` is `-0042` for `-42` |
+| a width | the least number of scalars written, as decimal digits: `{s:>8}` |
+| `.` and digits | a float's digits after the point, rounded: `{x:.2}` is `3.14` |
+| `x` `X` `b` `o` | an integer in hexadecimal (lower or upper case), binary or octal, with no prefix: `{h:016x}` |
+
+The width and the precision are literal digits. A base on a value that is not an
+integer, a precision on one that is not a float, a `0` on one that is not a
+number, and anything outside the table are refused (`NK1332`), and the message
+names the table.
+
 **A hole is written as its value's text, and so is what a print call is
 handed.** Text, a number, a `bool`, a `scalar` and an error (whose text is its
 message) have one. A list, a map, a set, a range, a tuple, a value behind a
