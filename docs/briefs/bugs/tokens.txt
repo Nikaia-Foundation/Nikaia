@@ -48,3 +48,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b39-1160-test-only-helpers-cfg-test.md 6073764 91
 /home/user/Nikaia/docs/briefs/bugs/b39b-1160-finish.md 1761302 40
 /home/user/Nikaia/docs/briefs/bugs/b40-1161-collect-into-optional.md 1142735 14
+/home/user/Nikaia/docs/briefs/bugs/b21-1097-flat-map-seq-result.md 571035 7
