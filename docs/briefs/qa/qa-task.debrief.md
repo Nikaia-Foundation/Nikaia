@@ -1,15 +1,15 @@
-1. **Most time.** The Rust rebuilds took the most wall-clock time: roughly 3.5 minutes for the first test run and then a clippy run. On the diagnosis side, I spent several turns working out that the failing commit was already on `origin/develop`, not one of the unpushed commits. The unpushed commits only touched `check_core_pilot`. The second failed attempt at the fix cost one more rebuild. A bare struct field with an unknown path type isn't refused, so I had to switch to a call.
+1. **Most turns:** Finding the real failure. `qa-input.txt` was about 17 KB, and nearly all of it was CI setup noise (checkout, git hints, cache config). The actual error, `out of date in assets/badges/: self-hosted.svg`, was one line near the end. It took me three or four greps and cuts to reach it. A smaller cost was the commit script refusing the report because of a stray comma in `Files:`.
 
-2. **Lookups the brief could have handed me.**
-   - The brief points to `.claude/agents/qa.md`, but I never opened it. The instructions in my system prompt were enough.
-   - The directory is wrong: `qa-input.txt` is in `docs/briefs/`, not `docs/briefs/qa/`.
-   - I had to find the report format by reading another builder's report, and I needed the `Attribution:` and `Changelog:` fields.
-   - `nikaia` isn't on PATH, so I had to find `target/release/nikaia`.
-   - `qa-input.txt` is mostly CI log noise. A one-line "failing test X, in file Y" extract at the top would have been enough.
+2. **Looked up:**
+   - The brief points at `.claude/agents/qa.md` and the input paths, but not which file is current. Both `docs/briefs/qa-input.txt` and `docs/briefs/bugs/qa-input.txt` existed, and I had to check timestamps.
+   - The required report fields for `scripts/commit.nika` (`Changelog:`, `Attribution:`, `Commit:`, space-separated `Files:`). I had to copy them from another builder's report.
+   - Which `nikaia` binary to use. `which nikaia` found nothing, so I used `target/release/nikaia`.
 
-3. **Checks.**
-   - Useful: rerunning the failing test (twice), `cargo fmt`, clippy.
-   - Partly wasted: `pre-push` came back red on the version and badge checks, which have nothing to do with my file. I couldn't tell whether they were red before my change, and I didn't check.
-   - I did not run any other tests. A grep for other tests that use `winnow_grammar::Symbol` as a name std doesn't know would have been a cheap safety check.
+3. **Checks:**
+   - Useful: `python3 scripts/badges.py --check`, before and after the regeneration.
+   - Partly wasted: my first `scripts/pre-push.nika` run. It checks only staged files, so it reported "badges red" even though the fix was in the working tree.
+   - Not run: clippy, since no Rust changed. I also did not rerun pre-push after the commit.
+   - I also did not check whether `origin/develop` had the same badge drift.
+   - Cost: the first commit attempt was refused because of the comma typo.
 
-4. **One change.** Have the driver put the failing test's panic message and file path into `qa-input.txt`, along with whether the culprit sha is in `origin/develop..HEAD`. That would have skipped the log reading and the git archaeology. A second change: say in the brief whether a red `pre-push` on version or badges is expected for QA agents.
+4. **One change:** Have the driver put the failing step's error lines at the top of `qa-input.txt`, with the log tail filtered of setup lines. Add a qa-report template (or `commit.nika --template`) that includes the required fields. Either would have saved most of my turns.
