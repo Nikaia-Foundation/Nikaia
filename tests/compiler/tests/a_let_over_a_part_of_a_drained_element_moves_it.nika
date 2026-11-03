@@ -1,0 +1,19 @@
+// `let mut` over a field of an element a `for` takes out of a `drain()`
+// owns that field (#1142 for a loop's owned element): it moves, it is not a
+// view of the element, so it can be changed and stored.
+struct Row { cells: Vec[i64], tag: i64 }
+
+fn widen(mut rows: Vec[Row]) -> Vec[Row] {
+    let mut kept: Vec[Row] = []
+    for row in rows.drain() {
+        let mut cells = row.cells
+        cells.push(row.tag)
+        kept.push(Row { cells: cells, tag: row.tag })
+    }
+    return kept
+}
+
+fn main() {
+    let rows = widen([Row { cells: [1], tag: 7 }, Row { cells: [], tag: 8 }])
+    for row in rows { println(f"{row.tag}: {row.cells.len()} cells, last {row.cells[row.cells.len() - 1]}") }
+}

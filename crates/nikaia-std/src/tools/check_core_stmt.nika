@@ -356,7 +356,9 @@ fn check_core_stmt_a_part_of_an_owned_parameter(state: ref CheckState, world: re
 }
 
 /// A field path whose root is a `let` without `mut` that owns what it holds
-/// (#1142): not a view of a place, not a `for` binding, not a parameter.
+/// (#1142), or the binding of a `for` over elements the loop owns (`drain()`,
+/// a produced sequence; ADR-views-2): not a view of a place, not a `for`
+/// binding over one, not a parameter.
 fn check_core_stmt_a_part_of_an_unchanged_let(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
         Expr::Field { base, .. } => match base {
@@ -367,7 +369,7 @@ fn check_core_stmt_a_part_of_an_unchanged_let(state: ref CheckState, world: ref 
     }
 }
 
-/// A name bound by a `let` without `mut`, owning its value.
+/// A name bound by a `let` or a `for` without `mut`, owning its value.
 fn check_core_stmt_an_unchanged_owned_let(state: ref CheckState, name: ref String) -> bool sync {
     if state.lent_here(name) || state.got_past_a_jump.contains(name) {
         return false
@@ -376,6 +378,8 @@ fn check_core_stmt_an_unchanged_owned_let(state: ref CheckState, name: ref Strin
     let how: CheckImmutable = local.immutable ?? return false
     return match how.kind {
         CheckKind::Let => true,
+        // The element of a walk that lends is a view (`lent_here` above).
+        CheckKind::Loop => !local.lent,
         else => false,
     }
 }

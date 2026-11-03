@@ -292,7 +292,11 @@ pub(crate) fn check_core_stmt_an_unchanged_owned_let(state: &CheckState, name: &
     if state.lent_here(name) || state.got_past_a_jump.contains(name) { return false; }
     let local: CheckLocal = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let how: CheckImmutable = match local.immutable { Some(__nikaia_value) => __nikaia_value, None => return false };
-    matches!(how.kind, CheckKind::Let)
+    match how.kind {
+        CheckKind::Let => true,
+        CheckKind::Loop => !local.lent,
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
