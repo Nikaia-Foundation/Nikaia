@@ -27,7 +27,7 @@
 //! rather than merely discouraged.
 
 use crate::contracts::LedgerOps;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -606,11 +606,23 @@ fn lower_tools_files_cached(
             &Host,
         )
     });
-    let file_key = |at: usize| -> Option<String> {
+    // A file with tests is keyed on what only its tests reach too (#1160):
+    // another file that starts to call one of them changes its lowering.
+    let file_key = |at: usize, only_tests: &BTreeSet<String>| -> Option<String> {
         let name = paths[at].file_name()?.to_string_lossy();
         let interface = interface.as_deref()?;
+        let text = if only_tests.is_empty() {
+            std::borrow::Cow::Borrowed(texts[at].as_str())
+        } else {
+            let names: Vec<&str> = only_tests.iter().map(String::as_str).collect();
+            std::borrow::Cow::Owned(format!(
+                "{}\n// only tests reach: {}",
+                texts[at],
+                names.join(" ")
+            ))
+        };
         Some(sysroot_cache::sysroot_file_key(
-            interface, &name, &texts[at], &Host,
+            interface, &name, &text, &Host,
         ))
     };
 
@@ -626,7 +638,18 @@ fn lower_tools_files_cached(
     ) {
         let started = std::time::Instant::now();
         let (path, unit) = (&paths[at], &parsed[at]);
-        let key = file_key(at);
+        let has_tests = nikaia_std::tools::modules::modules_test_count(&unit.program.items) > 0;
+        let only_tests = if has_tests {
+            nikaia_std::tools::modules::modules_only_tests_reach(
+                &unit.program.items,
+                &unit.interner,
+                &texts,
+                at as i64,
+            )
+        } else {
+            BTreeSet::new()
+        };
+        let key = file_key(at, &only_tests);
         if let Some(rust) = cache.get(key.as_deref()) {
             return (
                 Ok((rust, true)),
@@ -662,12 +685,14 @@ fn lower_tools_files_cached(
         // (`modules_tests_as_functions`) with the `#[cfg(test)]` module that
         // runs them (`modules_test_wrappers`). The file is parsed again for
         // it, and the facts of the first check belong to the first parse.
-        let (tests, facts) =
-            if nikaia_std::tools::modules::modules_test_count(&unit.program.items) > 0 {
-                (Some(with_tests_as_functions(path, &parsed)), None)
-            } else {
-                (None, facts)
-            };
+        let (tests, facts) = if has_tests {
+            (
+                Some(with_tests_as_functions(path, &parsed, &only_tests)),
+                None,
+            )
+        } else {
+            (None, facts)
+        };
         let (unit, wrappers) = match &tests {
             Some(Ok((again, wrappers))) => (again, wrappers.as_str()),
             _ => (unit, ""),
@@ -724,10 +749,13 @@ fn lower_tools_files_cached(
 }
 
 /// The file at `path` parsed again with its `test` blocks as functions, and
-/// the text of the `#[cfg(test)]` module that runs them.
+/// the text of the `#[cfg(test)]` module that runs them. Those functions and
+/// the ones only they reach (`only_tests`) are marked to lower under
+/// `#[cfg(test)]` (#1160).
 fn with_tests_as_functions(
     path: &Path,
     all: &[crate::parser::Parsed],
+    only_tests: &BTreeSet<String>,
 ) -> Result<(crate::parser::Parsed, String)> {
     let source = std::fs::read_to_string(path)?;
     let mut again = crate::parser::parse_unrefined(&source).map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -739,6 +767,13 @@ fn with_tests_as_functions(
         &mut again.program.items,
         &source,
         0,
+        &|text| interner.intern_string(text),
+    );
+    nikaia_std::tools::modules::modules_mark_test_only(
+        &mut again.program.items,
+        only_tests,
+        found.len() as i64,
+        interner,
         &|text| interner.intern_string(text),
     );
     let titles: Vec<String> = found.into_iter().map(|(title, _)| title).collect();

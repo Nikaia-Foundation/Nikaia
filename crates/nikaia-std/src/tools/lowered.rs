@@ -2833,7 +2833,7 @@ pub mod logic_smtlib {
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, manifest_parse, manifest_has_build_section, manifest_foreign_crates, manifest_test_table, manifest_test_word, manifest_test_value, manifest_test_refusal};
+    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
 }
 pub mod maps {
     #[allow(unused_imports)]
@@ -2841,7 +2841,7 @@ pub mod maps {
 }
 pub mod modules {
     #[allow(unused_imports)]
-    pub use super::{declared_names, a_use_refused, could_promise, pause_path, lost_sync, ModulesPause, lost_sync_unplaced, declared_once, groups, as_promised, contracts_as_promised, dependency_ledgers, absorb_own, shown_paths, package_names, is_single_file, test_function, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
+    pub use super::{declared_names, a_use_refused, could_promise, pause_path, lost_sync, ModulesPause, lost_sync_unplaced, declared_once, groups, as_promised, contracts_as_promised, dependency_ledgers, absorb_own, shown_paths, package_names, is_single_file, test_function, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, modules_test_only_mark, modules_only_tests_reach, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
 }
 pub mod names {
     #[allow(unused_imports)]
@@ -3045,7 +3045,7 @@ pub mod text_tiers {
 }
 pub mod threads {
     #[allow(unused_imports)]
-    pub use super::{Going, Refusal, Crossing, crossing, Walking, worst_of, held_across_a_pause, add_struct, crossing_of, ours, foreign, is_undecided, is_may, is_refused, why_word, refused_as};
+    pub use super::{Going, Refusal, Crossing, crossing, Walking, worst_of, held_across_a_pause};
 }
 pub mod throws {
     #[allow(unused_imports)]
@@ -3057,7 +3057,7 @@ pub mod tiers {
 }
 pub mod touch {
     #[allow(unused_imports)]
-    pub use super::{Reached, touches_of, Reach, TouchGraph, unit_touches, touches_of_graph, touch_test_reached};
+    pub use super::{Reached, touches_of, Reach, TouchGraph, unit_touches, touches_of_graph};
 }
 pub mod traits {
     #[allow(unused_imports)]
@@ -3073,7 +3073,7 @@ pub mod trust {
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, parse, split_args, a_view_of, Provenance, Sync, Lock, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index, method_keys, ty_test_bound, ty_test_view, ty_test_name};
+    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, parse, split_args, a_view_of, Provenance, Sync, Lock, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index, method_keys};
 }
 pub mod type_rules {
     #[allow(unused_imports)]

@@ -234,13 +234,17 @@ pub(crate) fn manifest_dependencies(items: &[ManifestItem]) -> Result<collection
     Ok(out)
 }
 
-pub fn manifest_test_table(section: String, name: String, machine: bool) -> ManifestItem { ManifestItem { section, name, key: String::from(""), table: true, text: String::from(""), word: None, integer: None, machine } }
+#[cfg(test)]
+pub(crate) fn manifest_test_table(section: String, name: String, machine: bool) -> ManifestItem { ManifestItem { section, name, key: String::from(""), table: true, text: String::from(""), word: None, integer: None, machine } }
 
-pub fn manifest_test_word(section: String, name: String, key: String, word: String) -> ManifestItem { ManifestItem { section, name, key, table: false, text: format!("\"{}\"", word), word: Some(word), integer: None, machine: false } }
+#[cfg(test)]
+pub(crate) fn manifest_test_word(section: String, name: String, key: String, word: String) -> ManifestItem { ManifestItem { section, name, key, table: false, text: format!("\"{}\"", word), word: Some(word), integer: None, machine: false } }
 
-pub fn manifest_test_value(section: String, name: String, key: String, text: String, integer: Option<i64>) -> ManifestItem { ManifestItem { section, name, key, table: false, text, word: None, integer, machine: false } }
+#[cfg(test)]
+pub(crate) fn manifest_test_value(section: String, name: String, key: String, text: String, integer: Option<i64>) -> ManifestItem { ManifestItem { section, name, key, table: false, text, word: None, integer, machine: false } }
 
-pub fn manifest_test_refusal(items: &[ManifestItem]) -> String {
+#[cfg(test)]
+pub(crate) fn manifest_test_refusal(items: &[ManifestItem]) -> String {
     let parsed = match manifest_parse(items) {
         Ok(value) => value,
         Err(error) => {
@@ -251,6 +255,7 @@ pub fn manifest_test_refusal(items: &[ManifestItem]) -> String {
     format!("parsed {}", parsed.version)
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("package"), String::from(""), false), manifest_test_word(String::from("package"), String::from("name"), String::from(""), String::from("x"))];
     let manifest = match manifest_parse(&items) {
@@ -266,6 +271,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("user_parallelism"), String::from(""), String::from("yes"))];
     let said = manifest_test_refusal(&items);
@@ -274,6 +280,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("user-parallelism"), String::from(""), String::from("yes")), manifest_test_table(String::from("build"), String::from("x86_64-linux"), true), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("opt-level"), String::from("3"), Some(3)), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("lto"), String::from("true"), None), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("incremental"), String::from("false"), None), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("debug"), String::from("2"), Some(2))];
     let manifest = match manifest_parse(&items) {
@@ -296,6 +303,7 @@ pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from("x86_64-linux"), true), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("opt_level"), String::from("3"), Some(3))];
     let said = manifest_test_refusal(&items);
@@ -305,18 +313,21 @@ pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from("x86_65-linux"), false), manifest_test_value(String::from("build"), String::from("x86_65-linux"), String::from("opt-level"), String::from("3"), Some(3))];
     if !(manifest_test_refusal(&items).contains("x86_64-linux")) { nikaia_std::abort::assertion_failed("assert(manifest_test_refusal(items).contains(\"x86_64-linux\"))", None, &[]) };
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("dependencies"), String::from("x"), false), manifest_test_word(String::from("dependencies"), String::from("x"), String::from("type"), String::from("c")), manifest_test_word(String::from("dependencies"), String::from("x"), String::from("version"), String::from("1"))];
     if !(manifest_test_refusal(&items).contains("rust")) { nikaia_std::abort::assertion_failed("assert(manifest_test_refusal(items).contains(\"rust\"))", None, &[]) };
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("dependencies"), String::from("x"), false), manifest_test_value(String::from("dependencies"), String::from("x"), String::from("type"), String::from("1"), Some(1)), manifest_test_word(String::from("dependencies"), String::from("x"), String::from("path"), String::from("../x"))];
     let said = manifest_test_refusal(&items);
@@ -325,6 +336,7 @@ pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("dependencies"), String::from("http"), false), manifest_test_word(String::from("dependencies"), String::from("http"), String::from("path"), String::from("../http")), manifest_test_table(String::from("dependencies"), String::from("hyper-shim"), false), manifest_test_word(String::from("dependencies"), String::from("hyper-shim"), String::from("type"), String::from("rust")), manifest_test_word(String::from("dependencies"), String::from("hyper-shim"), String::from("version"), String::from("1"))];
     let manifest = match manifest_parse(&items) {
@@ -340,6 +352,7 @@ pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("cleanup-deadline"), String::from(""), String::from("30s"))];
     let manifest = match manifest_parse(&items) {
@@ -358,6 +371,7 @@ pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_9() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("target"), String::from(""), String::from("x86_64-linux"))];
     let manifest = match manifest_parse(&items) {
@@ -371,6 +385,7 @@ pub(crate) fn __nikaia_test_9() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_10() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("ordering"), String::from(""), String::from("strict"))];
     let said = manifest_test_refusal(&items);
@@ -382,6 +397,7 @@ pub(crate) fn __nikaia_test_10() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn __nikaia_test_11() -> Result<(), Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_value(String::from("build"), String::from("user-parallelism"), String::from(""), String::from("false"), None)];
     let manifest = match manifest_parse(&items) {

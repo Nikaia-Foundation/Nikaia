@@ -1,0 +1,10 @@
+threads add_struct: #[cfg(test)]
+threads why_word: #[cfg(test)]
+threads ours: #[cfg(test)]
+threads is_refused: #[cfg(test)]
+threads __nikaia_test_0: #[cfg(test)]
+ty ty_test_view: #[cfg(test)]
+touch touch_test_reached: #[cfg(test)]
+manifest manifest_test_table: #[cfg(test)]
+manifest manifest_test_value: #[cfg(test)]
+touch family: plain

@@ -2020,17 +2020,17 @@ pub fn method_keys(index: ref MethodIndex, method: ref String) -> Vec[String] {
 
 // --- Tests moved from the compiler's `contracts::ty` (ADR-294, #125) ---
 
-pub fn ty_test_bound(pattern: ref String, actual: ref String) -> collections::BTreeMap[String, Ty] {
+fn ty_test_bound(pattern: ref String, actual: ref String) -> collections::BTreeMap[String, Ty] {
     let mut out: collections::BTreeMap[String, Ty] = collections::BTreeMap()
     bind(parse(pattern), parse(actual), out)
     return out
 }
 
-pub fn ty_test_view(name: String) -> Ty {
+fn ty_test_view(name: String) -> Ty {
     return Ty::Named { name: name, args: [], view: true }
 }
 
-pub fn ty_test_name(name: String) -> Ty {
+fn ty_test_name(name: String) -> Ty {
     return Ty::Named { name: name, args: [], view: false }
 }
 

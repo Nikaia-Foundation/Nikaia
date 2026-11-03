@@ -430,20 +430,20 @@ fn manifest_dependencies(items: ref Vec[ManifestItem]) -> collections::BTreeMap[
 
 // --- Tests moved from the compiler's `manifest` (ADR-294, #125) ---
 
-pub fn manifest_test_table(section: String, name: String, machine: bool) -> ManifestItem {
+fn manifest_test_table(section: String, name: String, machine: bool) -> ManifestItem {
     return ManifestItem { section: section, name: name, key: "", table: true, text: "", word: null, integer: null, machine: machine }
 }
 
-pub fn manifest_test_word(section: String, name: String, key: String, word: String) -> ManifestItem {
+fn manifest_test_word(section: String, name: String, key: String, word: String) -> ManifestItem {
     return ManifestItem { section: section, name: name, key: key, table: false, text: f"\"{word}\"", word: word, integer: null, machine: false }
 }
 
-pub fn manifest_test_value(section: String, name: String, key: String, text: String, integer: i64?) -> ManifestItem {
+fn manifest_test_value(section: String, name: String, key: String, text: String, integer: i64?) -> ManifestItem {
     return ManifestItem { section: section, name: name, key: key, table: false, text: text, word: null, integer: integer, machine: false }
 }
 
 // What parsing the items refuses with, or nothing where they parse.
-pub fn manifest_test_refusal(items: ref Vec[ManifestItem]) -> String {
+fn manifest_test_refusal(items: ref Vec[ManifestItem]) -> String {
     let parsed = manifest_parse(items) catch {
         return f"{error}"
     }

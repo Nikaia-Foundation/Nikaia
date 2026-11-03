@@ -308,7 +308,7 @@ fn holds_touch(touches: ref Vec[Touch], touch: ref Touch) -> bool {
 
 // --- Tests moved from the compiler's `contracts::touch` (ADR-294, #125) ---
 
-pub fn touch_test_reached(kind: String, named: String?, write: bool) -> Reached {
+fn touch_test_reached(kind: String, named: String?, write: bool) -> Reached {
     return Reached { kind: kind, named: named, unknown: false, write: write }
 }
 

@@ -56,6 +56,12 @@ pub(crate) fn emit_renamed_lifetime(text: &str, from: &str, to: &str) -> String 
     out
 }
 
+pub(crate) fn emit_fn_only_in_tests(words: &winnow_grammar::InternerContext, attributes: &[Attribute]) -> bool {
+    let mark = modules_test_only_mark();
+    for attribute in attributes.iter() { if words.resolve(attribute.name) == mark { return true; } }
+    false
+}
+
 pub(crate) fn emit_same_symbol(one: Option<winnow_grammar::Symbol>, other: winnow_grammar::Symbol) -> bool {
     match one {
         Some(symbol) => symbol == other,
@@ -569,6 +575,11 @@ impl EmitState {
                 if has_declared_by && !is_bridged { declared_pausing = self.emit_fn_declared_pausing(&format!("{}::{}", declared_by, own_name)); }
                 let mut pausing: String = String::from("");
                 if call_pauses(&self.own_contracts, &key) || declared_pausing || self.lambda_decides(&key) { pausing = String::from("async "); }
+                let only_in_tests = emit_fn_only_in_tests(world.words, &written.attributes);
+                if only_in_tests {
+                    out.push("#[cfg(test)]\n");
+                    out.push(&pad);
+                }
                 if walk.specialising.is_some() {
                     out.push("#[allow(non_snake_case)]\n");
                     out.push(&pad);
@@ -617,6 +628,7 @@ impl EmitState {
                         }
                     }
                     let mut entry: String = format!("{}#[allow(dead_code)]\n{}{}", pad, hint_line, pad);
+                    if only_in_tests { entry = format!("{}#[cfg(test)]\n{}", pad, entry); }
                     entry.push_str(&emit_fn_signature(&vis, &pausing, &emitted, &declared, &params, &ret));
                     entry.push_str("{ ");
                     entry.push_str(&check_lines);

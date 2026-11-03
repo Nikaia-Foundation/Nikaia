@@ -612,6 +612,252 @@ pub fn modules_test_wrappers(titles: ref Vec[String], first: i64) -> String {
     return text
 }
 
+/// The attribute `lower-std` puts on a function only the tests of its file
+/// reach (#1160), which the emitter writes as `#[cfg(test)]`. A program cannot
+/// write it: an attribute it writes is a path.
+pub fn modules_test_only_mark() -> String {
+    return "cfg(test)"
+}
+
+/// **The private functions of a tools file that only its `test` blocks
+/// reach** (#1160), by name: a function without a receiver and not `pub`,
+/// mentioned by a `test` block or by another such function, and by nothing
+/// else - no other item of the file, no other file of the package (`texts`,
+/// the package's sources, of which `own` is this file's). A mention is a
+/// call of the name (`modules_call_starts`), in a comment or a string too: the
+/// files of a package share one namespace, and a local of the same name
+/// (`let foreign = ...`, `ours[i]`) is no mention. Lowered under
+/// `#[cfg(test)]`, such a function is not dead code to a build without the
+/// tests; one the rest names without calling it (a function value) fails that
+/// build loudly, never silently.
+pub fn modules_only_tests_reach(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, texts: ref Vec[String], own: i64) -> collections::BTreeSet[String] {
+    let mut found: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut candidates: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut tests: Vec[i64] = []
+    let mut at = 0
+    for item in items {
+        match item.node {
+            Item::Fn { name, receiver, is_public, is_extern, .. } => {
+                let held = name ?? {
+                    at += 1
+                    continue
+                }
+                if receiver == null && !is_public && !is_extern {
+                    candidates.insert(words.resolve(held).clone(), at)
+                }
+            },
+            Item::Test { .. } => tests.push(at),
+            else => {},
+        }
+        at += 1
+    }
+    if tests.is_empty() || candidates.is_empty() {
+        return found
+    }
+    let source = texts[own].clone()
+    let mentions = modules_mentions_by_item(items, source, candidates)
+    // What the tests reach through the candidates.
+    let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
+    for t in tests {
+        for name in mentions[t] {
+            reached.insert(name.clone())
+        }
+    }
+    modules_close_over(reached, candidates, mentions)
+    // What the rest of the file reaches, and what another file names.
+    let mut live: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut k = 0
+    for each in mentions {
+        let is_test = tests.contains(k)
+        let mut is_candidate = false
+        for (_, place) in candidates {
+            if place == k {
+                is_candidate = true
+            }
+        }
+        if !is_test && !is_candidate {
+            for name in each {
+                live.insert(name.clone())
+            }
+        }
+        k += 1
+    }
+    while true {
+        modules_close_over(live, candidates, mentions)
+        let mut named_beside: Vec[String] = []
+        for name in reached {
+            if live.contains(name) {
+                continue
+            }
+            let mut j = 0
+            for text in texts {
+                if j != own && modules_calls_in(text, name) {
+                    named_beside.push(name.clone())
+                    break
+                }
+                j += 1
+            }
+        }
+        if named_beside.is_empty() {
+            break
+        }
+        for name in named_beside.drain() {
+            live.insert(name)
+        }
+    }
+    for name in reached {
+        if candidates.contains_key(name) && !live.contains(name) {
+            found.insert(name.clone())
+        }
+    }
+    return found
+}
+
+// Whether `text` calls `name` (`modules_call_starts`).
+fn modules_calls_in(text: ref String, name: ref String) -> bool {
+    for (word, _) in modules_call_starts(text) {
+        if word == name {
+            return true
+        }
+    }
+    return false
+}
+
+// Each call of a plain name in `text` with the byte it starts at: a word not
+// after a `.` (a method, a field) and followed by `(`, spaces between. A word
+// in a comment or a string counts too.
+fn modules_call_starts(text: ref String) -> Vec[(String, i64)] {
+    let mut out: Vec[(String, i64)] = []
+    let mut word: String = ""
+    let mut start = 0
+    let mut before = 32
+    let mut last = 32
+    let mut waiting: String = ""
+    let mut waiting_at = 0
+    let mut at = 0
+    for b in text.bytes() {
+        let c = b as i64
+        let in_word = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95
+        if !waiting.is_empty() && c != 32 {
+            if c == 40 {
+                out.push((waiting.clone(), waiting_at))
+            }
+            waiting = ""
+        }
+        if in_word {
+            if word.is_empty() {
+                before = last
+                start = at
+            }
+            word.push_str(f"{(c as u8) as char}")
+            last = 97
+        } else {
+            if !word.is_empty() {
+                if before != 46 {
+                    if c == 40 {
+                        out.push((word.clone(), start))
+                    } else if c == 32 {
+                        waiting = word.clone()
+                        waiting_at = start
+                    }
+                }
+                word = ""
+            }
+            if c != 32 {
+                last = c
+            }
+        }
+        at += 1
+    }
+    return out
+}
+
+// `names` with every candidate a candidate in it mentions, until nothing new
+// is added.
+fn modules_close_over(mut names: collections::BTreeSet[String], candidates: ref collections::BTreeMap[String, i64], mentions: ref Vec[collections::BTreeSet[String]]) {
+    while true {
+        let mut added: Vec[String] = []
+        for name in names {
+            let place = candidates.get(name) ?? continue
+            for other in mentions[place] {
+                if !names.contains(other) {
+                    added.push(other.clone())
+                }
+            }
+        }
+        if added.is_empty() {
+            return
+        }
+        for name in added.drain() {
+            names.insert(name)
+        }
+    }
+}
+
+// The candidates' names each item's text calls (`modules_call_starts`), by
+// the item's place in `items`.
+fn modules_mentions_by_item(items: ref Vec[Spanned[Item]], source: ref String, candidates: ref collections::BTreeMap[String, i64]) -> Vec[collections::BTreeSet[String]] {
+    let mut out: Vec[collections::BTreeSet[String]] = []
+    for _ in items {
+        out.push(collections::BTreeSet())
+    }
+    for (word, start) in modules_call_starts(source) {
+        modules_note_word(items, candidates, word, start, out)
+    }
+    return out
+}
+
+// `word`, starting at byte `start`, into the mentions of the item it stands
+// in, when it is a candidate's name.
+fn modules_note_word(items: ref Vec[Spanned[Item]], candidates: ref collections::BTreeMap[String, i64], word: ref String, start: i64, mut out: Vec[collections::BTreeSet[String]]) {
+    if !candidates.contains_key(word) {
+        return
+    }
+    let mut k = 0
+    for item in items {
+        if start >= item.span.start as i64 && start < item.span.end as i64 {
+            out[k].insert(word.clone())
+            return
+        }
+        k += 1
+    }
+}
+
+/// **The functions a tools file lowers under `#[cfg(test)]`** (#1160): its
+/// tests, which `modules_tests_as_functions` turned into functions, and those
+/// of `only_tests` (`modules_only_tests_reach`) carry `modules_test_only_mark`.
+/// `tests` is how many tests the file has, numbered from 0.
+pub fn modules_mark_test_only(mut items: Vec[Spanned[Item]], only_tests: ref collections::BTreeSet[String], tests: i64, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) {
+    let mut marks = only_tests.clone()
+    for k in 0..<tests {
+        marks.insert(test_function(k))
+    }
+    let mut kept: Vec[Spanned[Item]] = []
+    for item in items.drain() {
+        let mut marked = false
+        match item.node {
+            Item::Fn { name, receiver, .. } => {
+                match name {
+                    held => {
+                        let written = words.resolve(held)
+                        marked = receiver == null && marks.contains(written)
+                    },
+                    null => {},
+                }
+            },
+            else => {},
+        }
+        if marked {
+            let mut attributes = item.attributes
+            attributes.push(Attribute { name: intern(modules_test_only_mark()), args: [], config: [], span: item.span })
+            kept.push(Spanned { node: item.node, span: item.span, doc: item.doc, attributes: attributes })
+        } else {
+            kept.push(item)
+        }
+    }
+    items.extend(kept)
+}
+
 // The line the byte `at` of `source` stands on, the first being 1.
 fn modules_line_of(source: ref String, at: i64) -> i64 {
     let mut line = 1

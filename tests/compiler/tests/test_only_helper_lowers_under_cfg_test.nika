@@ -1,0 +1,50 @@
+// A function of a `tools/*.nika` that only its `test` blocks reach lowers
+// under `#[cfg(test)]` (#1160), as do the test blocks themselves; a helper
+// the rest of the file calls stays a plain function. A local of the same
+// name (`let foreign = ...` in `threads`, `ours[i]` in `maps`) is no call.
+// Read from the lowered files `lower-std` wrote, so `clippy -D warnings`
+// sees no dead code there.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// Prints the line before the first `fn NAME(` of the file, `plain` when
+// that line is blank.
+fn show(file: String, text: String, name: String) {
+    let mut previous = ""
+    for line in text.lines() {
+        if line.contains(f" fn {name}(") || line.starts_with(f"fn {name}(") {
+            if previous.len() == 0 { println(f"{file} {name}: plain") } else { println(f"{file} {name}: {previous}") }
+            return
+        }
+        previous = line.trim()
+    }
+    println(f"{file} {name}: absent")
+}
+
+fn main() throws {
+    let repo = root()
+    let cases: Vec[(String, String)] = [
+        ("threads", "add_struct"),
+        ("threads", "why_word"),
+        ("threads", "ours"),
+        ("threads", "is_refused"),
+        ("threads", "__nikaia_test_0"),
+        ("ty", "ty_test_view"),
+        ("touch", "touch_test_reached"),
+        ("manifest", "manifest_test_table"),
+        ("manifest", "manifest_test_value"),
+        ("touch", "family"),
+    ]
+    for (file, name) in cases {
+        let text = fs::read_to_string(f"{repo}/crates/nikaia-std/src/tools/lowered/{file}.rs", fs::Root::Anywhere)
+        show(file, text, name)
+    }
+}

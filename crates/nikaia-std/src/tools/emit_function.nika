@@ -80,6 +80,18 @@ fn emit_renamed_lifetime(text: ref String, from: ref String, to: ref String) -> 
     return out
 }
 
+// Whether the function carries `modules_test_only_mark`, which `lower-std`
+// puts on what only a tools file's tests reach (#1160).
+fn emit_fn_only_in_tests(words: ref winnow_grammar::InternerContext, attributes: ref Vec[Attribute]) -> bool {
+    let mark = modules_test_only_mark()
+    for attribute in attributes {
+        if words.resolve(attribute.name) == mark {
+            return true
+        }
+    }
+    return false
+}
+
 fn emit_same_symbol(one: winnow_grammar::Symbol?, other: winnow_grammar::Symbol) -> bool {
     return match one {
         symbol => symbol == other,
@@ -944,6 +956,13 @@ impl EmitState {
                 if call_pauses(self.own_contracts, key) || declared_pausing || self.lambda_decides(key) {
                     pausing = "async "
                 }
+                // **What only a tools file's tests reach is built with them**
+                // (#1160, `modules_only_tests_reach`).
+                let only_in_tests = emit_fn_only_in_tests(world.words, written.attributes)
+                if only_in_tests {
+                    out.push("#[cfg(test)]\n")
+                    out.push(pad)
+                }
                 // **A name this compiler chose is not one the program wrote.**
                 if walk.specialising != null {
                     out.push("#[allow(non_snake_case)]\n")
@@ -1006,6 +1025,9 @@ impl EmitState {
                         }
                     }
                     let mut entry: String = f"{pad}#[allow(dead_code)]\n{hint_line}{pad}"
+                    if only_in_tests {
+                        entry = f"{pad}#[cfg(test)]\n{entry}"
+                    }
                     entry.push_str(emit_fn_signature(vis, pausing, emitted, declared, params, ret))
                     entry.push_str("{ ")
                     entry.push_str(check_lines)
