@@ -39,7 +39,7 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
                 if !found && option == "words" && nikaia_std::index::or(check_grammar_entry_interns(world, key), || false) {
                     found = true;
                     let given = check_core_expr(state, world, host, &c.value, span);
-                    state.expect_type(world, &given, &Ty::Named { name: String::from("winnow_grammar::InternerContext"), args: vec![], view: true }, span, "argument", &|was, wanted| { format!("The table `words` is `{}`, but `{}` takes `{}`.", was, key, wanted) });
+                    state.expect_type(world, &given.owned(), &Ty::Named { name: String::from("winnow_grammar::InternerContext"), args: vec![], view: false }, span, "argument", &|was, wanted| { format!("The table `words` is `{}`, but `{}` takes a `ref {}`.", was, key, wanted) });
                 }
                 if !found { state.findings.push(check_refusal("NK1109", span, format!("`{}` has no option called `{}`.", key, option), vec![String::from("An entry's options are what its rule declares after its `;`.")], Some(String::from("Name an option the rule declares.")))); }
             }

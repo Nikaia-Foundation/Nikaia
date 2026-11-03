@@ -1,0 +1,46 @@
+// ADR-388 D1, D2 (#1198): an entry whose result holds a `Symbol` runs when it
+// is handed the table, a table the caller owns lent as to a `ref` parameter,
+// the symbol in a field or a variant; an entry that interns only on the way,
+// its result holding no symbol, still runs without `words:`.
+
+use std::winnow_grammar
+
+struct Named {
+    name: winnow_grammar::Symbol,
+}
+
+enum Word {
+    Plain(winnow_grammar::Symbol),
+}
+
+struct Counted {
+    count: i64,
+}
+
+grammar Names {
+    rule WS = " "* -> { }
+    entry rule named -> Named = n:ident eof -> { Named { name: n } }
+    entry rule word -> Word = n:ident eof -> { Word::Plain(n) }
+    entry rule counted -> Counted = ns:ident+ eof -> { Counted { count: ns.len() } }
+}
+
+fn main() {
+    let words = winnow_grammar::InternerContext()
+    let named = Names::named(Bytes("ab".bytes().collect()); words: words) catch {
+        println("refused")
+        return
+    }
+    println(words.resolve(named.name))
+    let word = Names::word(Bytes("cd".bytes().collect()); words: words) catch {
+        println("refused")
+        return
+    }
+    match word {
+        Word::Plain(s) => println(words.resolve(s)),
+    }
+    let counted = Names::counted(Bytes("x y z".bytes().collect())) catch {
+        println("refused")
+        return
+    }
+    println(f"own table: {counted.count}")
+}

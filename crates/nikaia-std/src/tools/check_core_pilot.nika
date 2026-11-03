@@ -59,11 +59,12 @@ pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref C
                     }
                 }
                 // **The table an entry that interns is handed** (ADR-388 D1):
-                // `words:` after its input, a `ref winnow_grammar::InternerContext`.
+                // `words:` after its input, a `ref winnow_grammar::InternerContext`;
+                // a table the caller owns is lent, as to a `ref` parameter.
                 if !found && option == "words" && (check_grammar_entry_interns(world, key) ?? false) {
                     found = true
                     let given = check_core_expr(state, world, host, c.value, span)
-                    state.expect_type(world, given, Ty::Named { name: "winnow_grammar::InternerContext", args: [], view: true }, span, "argument", fn(was, wanted) { f"The table `words` is `{was}`, but `{key}` takes `{wanted}`." })
+                    state.expect_type(world, given.owned(), Ty::Named { name: "winnow_grammar::InternerContext", args: [], view: false }, span, "argument", fn(was, wanted) { f"The table `words` is `{was}`, but `{key}` takes a `ref {wanted}`." })
                 }
                 if !found {
                     state.findings.push(check_refusal("NK1109", span, f"`{key}` has no option called `{option}`.", ["An entry's options are what its rule declares after its `;`."], "Name an option the rule declares."))
