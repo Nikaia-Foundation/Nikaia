@@ -152,14 +152,14 @@ while it runs.
 
 **What crosses from build time to run time.** A result arrives in its **view**
 form: `Vec[T]` as a `ref Array[T]`, or as an `Array[T, N]` where the program
-writes the length into the type, and `String` as a `ref String`. A run of
+writes the length into the type, and `String` as a view of the program's text. A run of
 `struct`s arrives as a `ref Array[T]`. A value built with `push` is fixed once
 it has crossed. A value that owns memory is refused by what it *is* and never by
 its parse: by its **type** for a `struct`, and for an `enum` by the **variant
 the value is**. `Shape::Empty` is a `const` and `Shape::Many([1, 2])` is not,
 though both are a `Shape`. A `T?` crosses where `T` does: `null` is a `const`,
 and any other value crosses as its `T`, so a `String?` arrives as a
-`ref String?` (#1087). A value of a `std` type crosses where its ledger
+view that may be missing (#1087). A value of a `std` type crosses where its ledger
 entry names a `constant` (Part III 13.5): it is written as that constructor over
 its parts, so `comptime T: time::Duration = 30.seconds()` is a `const`. A `std`
 type without one is refused with `NK1167`. A grammar call's result crosses when it is a whole
@@ -172,15 +172,15 @@ closed key set. How it is looked up is the compiler's decision.
 says it is a map. There is no map literal:
 
 ```nika
-comptime ROUTES: Fixed[ref String, i64] = [("get", 1), ("post", 2)]
+comptime ROUTES: Fixed[String, i64] = [("get", 1), ("post", 2)]
 ```
 
-`Fixed[ref String, V]` is the fixed map, a type in `std`. `ROUTES.get(k)` is a `V?`.
+`Fixed[String, V]` is the fixed map, a type in `std`. `ROUTES.get(k)` is a `V?`.
 Keys are text; a key of any other type is refused with `NK1170`, and a key
 written twice with `NK1169`. **A value may be a `struct` or an `enum` this
 program declares**, and what the program reads is a **view** of the row, which
 lives in the binary. `TABLE.get(k)?.field ?? …` reaches a field of one (2.3). A
-list of text crosses as an array of views, `Array[ref String, N]`.
+list of text crosses as an array of views, `Array[String, N]`.
 
 **Reading a file while the program is built.** A build given no allowlist reads
 nothing. A file the build reads is named three times: in the source, as the
@@ -189,7 +189,7 @@ invocation that puts the list in effect, `--allow-read-from-list=…`. A read
 missing one of the three is refused with `NK1175`, which names the missing one.
 The path may not be computed; a computed path is refused with `NK1176`. There
 are no patterns. `asset("…")` yields the file's **text**, which crosses to the
-program as the `ref String` a `const` holds; bytes that are not UTF-8 are
+program as the view of text a `const` holds; bytes that are not UTF-8 are
 refused. An `asset` written outside a `comptime` is refused with `NK1177`,
 naming the run-time read. The list binds the whole build, a dependency's read
 included. A path stays inside the project: one with a `..` component, or an
@@ -342,7 +342,7 @@ program is built, walked as `T::fields` is. A reflected parameter answers
 `.name`, `.ty`, `.default` and `.attribute(X)` / `.attributes(X)`, as a field
 does, and `F::result` is the result type.
 
-`ref A`, `Shared[A]` and `SharedMut[A]` have the kind of `A`. How a value is
+A view of an `A`, a `Shared[A]` and a `SharedMut[A]` have the kind of `A`. How a value is
 reached is `T::access`, a `meta::Access`: `Owned`, `Ref`, `Shared` or
 `SharedMut`. `A?` is a kind, `Maybe(A)`.
 
@@ -476,7 +476,7 @@ spread**:
 ```nika
 impl Template {
     // Subject: self (the parsed block) ; Config: the DSL's parameters
-    pub fn prepare(ref self; ...args: Self::dsl) -> Self::dsl {
+    pub fn prepare(self; ...args: Self::dsl) -> Self::dsl {
         return args
     }
 }
@@ -564,7 +564,7 @@ Nikaia parallelises the *parse itself* when the grammar declares where the input
 // Up to ";" - or to the end of the frame, whichever comes first. `frame_end`
 // is the boundary of the frame this rule is reached from: written once, in
 // the attribute below, and referenced here.
-rule NAME -> ref String = s:until(";" | frame_end) -> { s }
+rule NAME -> String = s:until(";" | frame_end) -> { s }
 
 @frame(boundary: "\n")
 rule MEASUREMENT -> Reading =
@@ -861,7 +861,7 @@ At `user_parallelism = yes` user code runs on several CPU cores at once. The rul
 
 ```nika
 pub trait Admission {
-    fn decide(ref mut self, load: task::Load) -> task::Decision sync
+    fn decide(mut self, load: task::Load) -> task::Decision sync
 }
 ```
 
@@ -901,7 +901,7 @@ function, from `access` (12.2), or from a `par_iter` body:
 ```nika
 fn bonus(score: i32) -> i32 { score * 2 + 1 }   // no `sync`, and cannot pause
 
-fn total(p: ref Player) -> i32 sync {
+fn total(p: Player) -> i32 sync {
     return p.score + bonus(p.score)             // fine: `bonus` provably cannot pause
 }
 ```
@@ -1189,7 +1189,7 @@ let pages = urls.par_iter(limit: 8).map fn(u) { http::get(u) }.collect()
 
 **A chain beside the code after it** is one task: `let pages = async urls.par_iter().map fn(u) { http::get(u) }.collect()` runs the chain while the next statements run, and is waited for where `pages` is first named (Part I 8.1.2).
 
-**`fold` combines with nothing shared.** `xs.par_iter().fold(init, step, merge)` folds the elements into accumulators and merges them into one, which it returns. `init` is a type, called with no arguments, or a function `fn { … }`; it is called once per accumulator. `step` takes an accumulator and an element and returns the accumulator, `merge` takes two and returns one. Either may instead return nothing and change its first argument in place: a function of type `fn(ref mut A, T)` or `fn(ref mut A, A)`, or a lambda whose body returns nothing, whose first parameter is then `ref mut` (`fn(acc, m) { acc.record(m) }`). The result type says which, the two choose independently, and any other result type is `NK1102` ([ADR-372](adr/adr-372.md) D9). The same holds for `par_fold` and `fold` in a grammar (10.7). Both are lambdas of the walk and are asked what any other is (`NK2104`, `NK2107`); unlike a `map` lambda, they never pause (`NK2209`), and neither does a `par_pieces` lambda. A fold over values that need a pause is a pausing `map` followed by the `fold`, `xs.par_iter().map fn(u) { http::get(u) }.fold(…)`, and `NK2209`'s help names that chain ([ADR-async-5](adr/adr-async-5.md) D29). An accumulator is folded by one worker at a time, so `step` changes it without a lock. Over no elements the result is one made by `init`.
+**`fold` combines with nothing shared.** `xs.par_iter().fold(init, step, merge)` folds the elements into accumulators and merges them into one, which it returns. `init` is a type, called with no arguments, or a function `fn { … }`; it is called once per accumulator. `step` takes an accumulator and an element and returns the accumulator, `merge` takes two and returns one. Either may instead return nothing and change its first argument in place: a function of type `fn(mut A, T)` or `fn(mut A, A)`, or a lambda whose body returns nothing, whose first parameter is then `mut` (`fn(acc, m) { acc.record(m) }`). The result type says which, the two choose independently, and any other result type is `NK1102` ([ADR-372](adr/adr-372.md) D9). The same holds for `par_fold` and `fold` in a grammar (10.7). Both are lambdas of the walk and are asked what any other is (`NK2104`, `NK2107`); unlike a `map` lambda, they never pause (`NK2209`), and neither does a `par_pieces` lambda. A fold over values that need a pause is a pausing `map` followed by the `fold`, `xs.par_iter().map fn(u) { http::get(u) }.fold(…)`, and `NK2209`'s help names that chain ([ADR-async-5](adr/adr-async-5.md) D29). An accumulator is folded by one worker at a time, so `step` changes it without a lock. Over no elements the result is one made by `init`.
 
 ```nika
 let summary = rows.par_iter().fold(Summary, fn(acc, r) { acc.record(r) }, Summary::merge)

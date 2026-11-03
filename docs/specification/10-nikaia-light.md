@@ -154,13 +154,13 @@ nor anything reachable from its value ever changes ([ADR-389](adr/adr-389.md)).
 A value whose type reaches, through fields, elements, variants or captures, a
 `SharedMut`, a `Locked`, a channel end or another handle to storage changeable
 through another owner is refused (`NK1331`). Nothing is moved out of it and no
-`ref mut self` method is called on it. A task may read it, captured or handed
+`mut self` method is called on it. A task may read it, captured or handed
 over, without a copy or an owner count (8.3).
 
 ```nika
 fn main() {
     immutable limits = load_limits()
-    let a = async fn { check(ref(limits)) }   // no copy, no count
+    let a = async fn { check(limits) }   // no copy, no count
 }
 ```
 
@@ -175,7 +175,7 @@ not throw; a value that may be missing is a `T?`. A cycle among item-level
 immutable DUMP_DIR: String? = env::var("NIKAIA_DUMP_ACCEPTED")
 ```
 
-**Taking a tuple apart.** `let (a, b) = pair()` binds each name to the part at its position. The names may nest as the tuple does, `let (a, (b, c)) = (1, (2, 3))`: a `let` takes a name, `_`, or a parenthesised list of these, as deep as it is written. A written type on a tuple is refused (`NK1136`), because one type cannot say which name it is about. A variant is refused (`NK1259`): it may not be the one the value holds, and taking it apart is a `match`'s. A **parameter** takes the same pattern, in a function, `fn dist((x, y): (f64, f64)) -> f64`, with the type of the whole after it, and in a lambda, `fn((name, v)) { … }`. It is still one parameter: callers, the function's type and its count of arguments see one tuple. `ref` or `mut` before it belong to the whole, so the parts are views or changeable. An option, which a call names, is never a pattern.
+**Taking a tuple apart.** `let (a, b) = pair()` binds each name to the part at its position. The names may nest as the tuple does, `let (a, (b, c)) = (1, (2, 3))`: a `let` takes a name, `_`, or a parenthesised list of these, as deep as it is written. A written type on a tuple is refused (`NK1136`), because one type cannot say which name it is about. A variant is refused (`NK1259`): it may not be the one the value holds, and taking it apart is a `match`'s. A **parameter** takes the same pattern, in a function, `fn dist((x, y): (f64, f64)) -> f64`, with the type of the whole after it, and in a lambda, `fn((name, v)) { … }`. It is still one parameter: callers, the function's type and its count of arguments see one tuple. `mut` before it belongs to the whole, so the parts are changeable; without it they are views. An option, which a call names, is never a pattern.
 
 **Reserved words**
 
@@ -193,7 +193,7 @@ throws    trait     true      unsafe    use       while     with
 A name that is a reserved word does not parse, and the parse error names the
 word and says it is reserved.
 
-**`ref` is reserved for the view it writes.** `ref(x)` is a borrow of `(x)`.
+**`ref` is reserved for the pointer an `extern "C"` declaration writes** (Part III 15.1); anywhere else it is refused (6.5).
 
 **`comptime` is reserved for its construct**: a binding where an item stands or a statement inside a function
 body (Part II, 10.2). It promises a time of evaluation, not constancy.
@@ -297,10 +297,9 @@ Nikaia provides basic types to represent simple values.
       published field, parameter or result is - a view, and of which
       parameter, or text of its own; lent or kept - is recorded in the ledger
       (Part III 13.5).
-    * `ref String`: a view of text, written in an `extern "C"` declaration and
-      on a `pub extern fn` (Part III 15.1), where it is required and the
-      body is held to it. Anywhere else it says what `String` already says,
-      and it is a warning (`NK1261`).
+    * `ref String`: a view of text, written only in an `extern "C"`
+      declaration and on a `pub extern fn` (Part III 15.1), where it is
+      required and the body is held to it.
     * `scalar`: one Unicode scalar value - a code point that is not a
       surrogate - and not a byte. It is written between single quotes, with
       the escapes a string uses: `'a'`, `'ä'`, `'\n'` (2.6). Walking a text's
@@ -655,7 +654,7 @@ assignment.
 
 A path of fields is proved like a name, at any depth. Its proof ends at an
 assignment to the path or to a path it is part of (`p.name = …`, `p = …`), at
-a `mut` hand-over of either (a `ref mut self` method called on it, a `mut`
+a `mut` hand-over of either (a `mut self` method called on it, a `mut`
 argument), and at a lambda or a task (an `async` form, a `par_iter` element, a `select` arm) that sees
 the root; a write to a sibling (`p.age = 3`) and a call that only reads keep
 it. A read through an index or a call (`v[i].f`, `f().x`) is not a path and
@@ -672,7 +671,7 @@ time. A type is rarely written. The compiler uses **type inference** to deduce
 the type from the value.
 
 ```nika
-let name = "Nikaia"  // Compiler knows this is a ref String - a view of static text
+let name = "Nikaia"  // Compiler knows this is a String - a view of static text
 let count = 42       // an i32, because nothing here asks for anything else
 ```
 
@@ -842,7 +841,7 @@ it counts:
 | :--- | :--- | :--- |
 | `s.bytes` | `u8` | `s.bytes[i]`, `s.bytes[a..<b]`, `s.bytes.len()`, `s.bytes.find(…)`, `s.bytes.iter()`, `for` |
 | `s.scalars` | `scalar` | `take(n)`, `skip(n)`, `count()`, `for` |
-| `s.graphemes` | `ref String`, one grapheme | `take(n)`, `skip(n)`, `count()`, `for` |
+| `s.graphemes` | `String`, a view of one grapheme | `take(n)`, `skip(n)`, `count()`, `for` |
 
 `s.bytes` is a `Bytes` (Part I 6.6) over the text's own buffer, borrowed: it
 costs no copy unless it is kept beyond the text. There is no `s.len()` and no `s[i]`. `s.is_empty()` needs no view. `split`,
@@ -886,7 +885,7 @@ run time. `regex::Any` holds a regular expression of any engine (`re.any()`).
 `re.find_all(s) -> Seq[text::Match]` (not overlapping), `re.captures(s; from:
 text::Pos) -> regex::Captures?` with `c.group(i)` and `c.named(name)`, each a
 `text::Match?` (group 0 the whole match), `re.replace_all(s, with) -> String`
-(`$1`, `${name}` in `with`) and `re.split(s) -> Seq[ref String]`. Every position
+(`$1`, `${name}` in `with`) and `re.split(s) -> Seq[String]`. Every position
 is a `text::Pos` of `s`. `--comptime` prints for each known pattern its engine
 and what the calls on it became.
 
@@ -926,7 +925,7 @@ run time, is refused (`NK1214`); so is a number, and the help names
 **A position is kept in a `text::Cursor`, never in a field** (`NK1284`). A
 cursor is a text and a position in it: `text::Cursor(t)` stands at
 `t.start()`; `c.at()` is the position, `c.go(p)` sets it to one of the same
-text; `c.until(needle) -> ref String?` is the text from the position to the
+text; `c.until(needle) -> String?` is the text from the position to the
 next `needle` and moves past it, or `null` without moving where none follows;
 `c.rest()` is the text from the position, `c.text()` the whole text.
 
@@ -939,12 +938,12 @@ while true {
 }
 ```
 
-**A `Bytes` is one run of bytes, whatever holds its memory:** what it allocated, a `Vec[u8]` handed over with `Bytes(v)`, which copies nothing, or a mapped file (`fs::Mapped` is a `Bytes`, Part III 17.2). It reads the same in each case and is handed on by a count. A `ref Bytes` that a function only reads takes any of them, and a text's `s.bytes`.
+**A `Bytes` is one run of bytes, whatever holds its memory:** what it allocated, a `Vec[u8]` handed over with `Bytes(v)`, which copies nothing, or a mapped file (`fs::Mapped` is a `Bytes`, Part III 17.2). It reads the same in each case and is handed on by a count. A `Bytes` parameter, lent, takes any of them, and a text's `s.bytes`.
 
 **A `Bytes` is read as a run of bytes:** `b[i] -> u8`, `b[a..<b]`, `b.len()`,
 `b.find(byte; from: i64) -> i64?`, `b.iter()`, the bytes one at a time as a
 list's `iter` gives its elements, `b.starts_with(prefix)` and
-`b.ends_with(suffix)`, each a `ref Bytes` compared byte for byte, and
+`b.ends_with(suffix)`, each a `Bytes` compared byte for byte, and
 `b.text()`, which checks UTF-8 and is
 `NotText` where it fails, and `b.text_lossy()`, an owned copy in which each
 run that is not UTF-8 is U+FFFD. An index outside stops the program, as a list's does.
@@ -953,7 +952,7 @@ run that is not UTF-8 is U+FFFD. An index outside stops the program, as a list's
 written empty is refused (`NK1287`); one empty at run time finds nothing.
 `b.find(set; from: i64) -> i64?` is the first byte of the set at or after
 `from`, `b.find_all(set; from: i64) -> Seq[i64]` every one, rising, and
-`b.split(set) -> Seq[ref Bytes]` the pieces between them by text's `split`
+`b.split(set) -> Seq[Bytes]` the pieces between them by text's `split`
 rules: neighbouring bytes of the set give an empty piece, one at the end an
 empty last piece, an empty `b` one empty piece. `b.find_all(set).count()` counts without making a position. Each position `find_all` yields is at least `from` and below `b.len()`, and a proof may use it (Part III 14.2). `find_all` takes `scan: bytes::Scan`: `Scan::ByBlock`, the default, reads the next block when the hits of the last one are spent; `Scan::AfterHit` looks for each hit in the half block right after the one before it, which costs a compare a hit and is predicted where hits lie mostly within half a block of one another. Both yield the same positions.
 **A word is read at a position, in the order its name says:** `b.u32_le(i)`
@@ -997,7 +996,7 @@ literal: `"👍🏽"`.
 
 **A grapheme is the standard library's.** `s.graphemes` follows Unicode's
 segmentation rules in the version of the `std` the program is built with. A
-grapheme is a `ref String`, compared with a text literal.
+grapheme is a view of text, compared with a text literal.
 
 **`==` compares bytes, and so does a hash.** A precomposed and a decomposed `ä`
 differ. `s.normalized(text::Form::Nfc)` - or `Nfd`, `Nfkc`, `Nfkd` - makes a
@@ -1145,7 +1144,7 @@ back from the last. A sequence something **produces** — `keys()`,
 (`NK2702`, Part III C.3). Whether one can be walked from its back end is known
 to the compiler: a range, a list's `iter()`, `scalars` and a `map` over any of
 them can; `io::lines()` cannot, and `rev()` on it is refused. A range in a
-list's brackets reads a **run** of it, `ref Array[T]`, whether the range is
+list's brackets reads a **run** of it, a view, whether the range is
 written there or kept in a name.
 
 A `for` over a list **lends** it: the elements are looked at, and the list is
@@ -1154,7 +1153,7 @@ element kept past the turn, text in a field for instance, is kept as a copy,
 `.clone()`; a number, a `bool` and a `scalar` are the element itself. A map is
 walked as pairs, `for (key, value) in scores`. A `for` head takes the pattern a `let` takes, nested tuples and `_` included, `for (name, (line, col)) in places`, and no variant (`NK1259`). Taking the elements away is written,
 `for x in xs.drain()` (6.5). A `ref` written in front of the list is refused with
-`NK1137`, because the compiler writes that reference.
+`NK1137` (6.5).
 
 **A `for` binding changes only with `mut`, and `mut` means what it means on a
 `let`** ([ADR-views-2](adr/adr-views-2.md)). A change to a binding without it is
@@ -1337,7 +1336,7 @@ enum with more than one variant is refused with `NK1252`.
 | `(x, y) if x == y` | a **guard**: the arm matches only where the condition holds, and the word is `if` |
 | `Event::Click(Point { x, .. })` | a pattern inside a pattern, and `..` for the fields this one does not name |
 | `Held::Precondition(..)`, `Held::Precondition(c, ..)` | that variant, whatever values it carries, binding none (ADR-349); beside other parts, `..` is the values they do not name, as in `(a, ..)`. On a variant without values it is refused with `NK1255` |
-| `[]`, `[x]`, `[first, .., last]`, `[h, ..rest]` | a `Vec[T]`, an `Array[T]` or a view of either, element by element (ADR-355). `..` is the elements not named and binds nothing; `..rest` binds them as a view, `ref Array[T]`. A pattern has at most one `..` (`NK1258`), and a `match` with a list pattern needs `else` |
+| `[]`, `[x]`, `[first, .., last]`, `[h, ..rest]` | a `Vec[T]`, an `Array[T]` or a view of either, element by element (ADR-355). `..` is the elements not named and binds nothing; `..rest` binds them as a view of the run. A pattern has at most one `..` (`NK1258`), and a `match` with a list pattern needs `else` |
 | `Point { x: 0, y }`, `Move { x: px, .. }` | a field against a pattern: `x: 0` matches where the field is `0`, `x: px` binds the field to the name `px`, and `x: Op::Times` or `x: (0, y)` reaches inside it. It names every field, or ends with `..`; one that leaves a field out otherwise is refused with `NK1234` |
 
 **`..` means two different things**: in a range pattern it is the range, and
@@ -1445,8 +1444,8 @@ enum whose variants hold nothing - is copied at a read rather than lent; every
 other type is lent, at every size ([ADR-279](adr/adr-279.md) D8).
 
 **A left side that is itself only borrowed, beside a fallback that jumps, is
-a view wherever it stands** ([ADR-279](adr/adr-279.md) D10): over a `c: ref
-Contract`, `let s = c.signature ?? return false` binds a view of the field.
+a view wherever it stands** ([ADR-279](adr/adr-279.md) D10): over a lent
+`c: Contract`, `let s = c.signature ?? return false` binds a view of the field.
 Nothing can take a part of a loan, and a `return`, `throw`, `continue` or
 `break` has no value of its own, so the answer can only be the left side,
 lent. Kept past the loan - returned, stored, pushed - the view is refused, and
@@ -1630,7 +1629,7 @@ struct Player {
 }
 
 impl Player {
-    fn hit(ref mut self, damage: int) {
+    fn hit(mut self, damage: int) {
         self.health = self.health - damage
     }
 }
@@ -1669,7 +1668,7 @@ enum Shape {
     Rect { w: f64, h: f64 },
 }
 
-fn area(s: ref Shape) -> f64 {
+fn area(s: Shape) -> f64 {
     return match s {
         Shape::Circle { r } => 3.14159 * r * r,
         Shape::Rect { w, h } => w * h,
@@ -1783,7 +1782,7 @@ The standard library provides types for groups of values.
 * **Tuple:** a fixed number of values of *different* types, with no name for
     the group and no names for the parts. It is written and read by position:
     ```nika
-    let pair = ("*", 3)          // (ref String, i64)
+    let pair = ("*", 3)          // (String, i64), the text a view
     let op = pair.0
     ```
     A tuple is the type for values that belong together for one step of a
@@ -1990,11 +1989,11 @@ A **trait** declares a set of methods that different types can share.
 
 ```nika
 trait Summarize {
-    fn summary(ref self) -> String
+    fn summary(self) -> String
 }
 
 impl Summarize for User {
-    fn summary(ref self) -> String {
+    fn summary(self) -> String {
         return f"User: {self.username}"
     }
 }
@@ -2024,7 +2023,7 @@ body something it may do (4.6):
 
 ```nika
 trait Summarize {
-    fn summary(ref self) -> String
+    fn summary(self) -> String
 }
 
 fn shout[T: Summarize](x: T) -> String {
@@ -2043,7 +2042,7 @@ over every ledger the program reads plus its own. A call that passes a type with
 without `throws` it cannot fail. An implementation is checked against the
 declaration: a body that pauses under a `sync` declaration is refused, and a
 body that does less than the declaration allows is accepted. A trait can
-therefore describe I/O, `fn load(ref self) -> String throws`, and a call
+therefore describe I/O, `fn load(self) -> String throws`, and a call
 through its bound pauses where the declaration says it may.
 
 An `impl` owes its trait the declared methods and no others: a method the trait
@@ -2052,7 +2051,7 @@ with `NK1130`. A method whose implementation **pauses** where the declaration
 says `sync` is refused with `NK1129`. A trait method has no **default body**,
 and a trait is not a type: there is no `dyn` and no `fn f(x: Summarize)`.
 
-**`Eq` and `Ord` are traits of the language**, in scope everywhere (a program that declares a trait or an enum of the same name keeps its own): `Eq` has `eq(ref self, other: ref Self) -> bool sync`, `Ord` has `compare(ref self, other: ref Self) -> Ordering sync`, and `Ordering` is the enum `Less | Equal | Greater`; they are the standard library's `Eq`, `Ord` and `std::cmp::Ordering` in the Rust a program lowers to, so a type with an `impl Ord` is an `Ord` type to Rust code. A bound `[T: Eq]` gives the body `==` and `!=` on two `T`; `[T: Ord]` gives `<`, `<=`, `>`, `>=`, `compare`, and also `==` and `!=`, because an ordered type is an `Eq` one. An operator on a type parameter that no bound allows is refused with `NK1248`. A bound is answered by an `impl`, and where there is none by the language: the numbers except the floats, `bool`, `scalar`, `String` and `Bytes` are `Eq` and `Ord`, a float is neither, and a container is when what it holds is, and so is a view of a run, `ref Array[T]`: two `ref Array[u8]` are equal where their bytes are. A `struct` or an `enum` the program declares is `Eq` where its parts are, and `Ord` only where the program writes `impl Ord` for it. `impl Eq` and `impl Ord` are written for a type the program declares, and `impl Ord` only for a type that is `Eq`; any other is `NK1249`. An `impl Eq` replaces the equality the type would have had, and a body of either that can pause is `NK1129`. The laws are the program's: equality is reflexive, symmetric and transitive, the order is total, and `compare` is `Equal` exactly where `eq` is `true`. The compiler does not check them. **`Hash` is a trait of the language too**: `hash(ref self, mut into: Hasher) sync`, where the body hands the parts that make a value what it is to `into.add(x)`, each of a type that hashes; it is Rust's `Hash`. `impl Hash` is written for a type the program declares and that is `Eq`, any other is `NK1249`; it replaces the hash the type would have had, and a type with an `impl Eq` is a hash map's key only through one. Its law is the program's as well: two values `eq` calls equal feed `add` the same values.
+**`Eq` and `Ord` are traits of the language**, in scope everywhere (a program that declares a trait or an enum of the same name keeps its own): `Eq` has `eq(self, other: Self) -> bool sync`, `Ord` has `compare(self, other: Self) -> Ordering sync`, and `Ordering` is the enum `Less | Equal | Greater`; they are the standard library's `Eq`, `Ord` and `std::cmp::Ordering` in the Rust a program lowers to, so a type with an `impl Ord` is an `Ord` type to Rust code. A bound `[T: Eq]` gives the body `==` and `!=` on two `T`; `[T: Ord]` gives `<`, `<=`, `>`, `>=`, `compare`, and also `==` and `!=`, because an ordered type is an `Eq` one. An operator on a type parameter that no bound allows is refused with `NK1248`. A bound is answered by an `impl`, and where there is none by the language: the numbers except the floats, `bool`, `scalar`, `String` and `Bytes` are `Eq` and `Ord`, a float is neither, and a container is when what it holds is, and so is a view of a run: two views of `u8` runs are equal where their bytes are. A `struct` or an `enum` the program declares is `Eq` where its parts are, and `Ord` only where the program writes `impl Ord` for it. `impl Eq` and `impl Ord` are written for a type the program declares, and `impl Ord` only for a type that is `Eq`; any other is `NK1249`. An `impl Eq` replaces the equality the type would have had, and a body of either that can pause is `NK1129`. The laws are the program's: equality is reflexive, symmetric and transitive, the order is total, and `compare` is `Equal` exactly where `eq` is `true`. The compiler does not check them. **`Hash` is a trait of the language too**: `hash(self, mut into: Hasher) sync`, where the body hands the parts that make a value what it is to `into.add(x)`, each of a type that hashes; it is Rust's `Hash`. `impl Hash` is written for a type the program declares and that is `Eq`, any other is `NK1249`; it replaces the hash the type would have had, and a type with an `impl Eq` is a hash map's key only through one. Its law is the program's as well: two values `eq` calls equal feed `add` the same values.
 
 ---
 
@@ -2217,7 +2216,7 @@ context the lambda is used in. The rule is the same at both values of
 #### A. Immediate Context (`@immediate`)
 A function that runs the callback to completion before it returns is an
 **immediate context**.
-* **Behavior:** implicit borrow (`ref T`).
+* **Behavior:** implicit borrow (a view).
 * **Examples:** `map`, `filter`, `for_each`, `sort_by`.
 
 ```nika
@@ -2260,7 +2259,8 @@ so the capture is decided where the lambda is written.
 **A function in user code declares a code parameter with a function type.** The
 type is spelled the way a signature is, `handler: fn(Request) -> Response`,
 with `sync` or `throws` after the result where a declaration puts them. A
-parameter the code changes keeps its `mut`, as in a signature: `f: fn(mut S)`
+parameter the code changes carries `mut`, and one it keeps `keep`, as in a
+signature: `f: fn(mut S)`
 lends the argument at each call as a `mut` parameter of a named function is
 lent, and both `fn bump(mut s: S)` and the lambda `fn(mut s) { … }` fit it. Without
 `sync` the code may pause; without `throws` it cannot fail. A lambda that does
@@ -2269,8 +2269,8 @@ refused.
 
 The context of such a parameter is **inferred**, not written. A parameter the
 body only calls is immediate and borrows. A parameter the body keeps (stores,
-hands back, gives to a task) is detached and moves. It is the question 6.5 asks
-of every parameter, and there is no `@detached` to write. For an immediate
+hands back, gives to a task) says `keep`, as every kept parameter does (6.5),
+and is detached and moves; there is no `@detached` to write. For an immediate
 parameter the lambda's `touches` count for the callee, while
 whether the call may pause, and the shape it is lowered to, follow the
 parameter's type. `std`'s own lambda-taking entries, such as `map`, are written
@@ -2362,8 +2362,7 @@ fn main(a: int; times: int = 4, verbose: bool = false) {
   `Vec[T]` of one of them, which takes every positional word left, none
   included. A number is read in the shape `std` reads one from text (Part III
   17.1) and must fit its type. A subject of type `T?` stands after every
-  required subject and before a last `Vec[T]`. Another type, a `ref`
-  parameter, a required subject after a `T?` one, and a parameter of `main` on
+  required subject and before a last `Vec[T]`. Another type, a required subject after a `T?` one, and a parameter of `main` on
   a target with no command line (`wasm32-unknown`) are refused (`NK1273`); so
   is an option named `help` (`NK1274`).
 * **`main`'s preconditions are derived as every function's are** (Part III
@@ -2452,23 +2451,23 @@ called. A duplicated handle copies no data: one value, one more owner. The rule
 is the same for both shared types; a `SharedMut[T]` may go into a task of the program's own, and not into code nothing written down describes
 (Part II, 11.2).
 
-**Lending the inner value out duplicates nothing.** `ref` on a shared value is a
-view of the value *inside* it, so a function that only uses the value takes an
+**Lending the inner value out duplicates nothing.** A lent parameter handed a
+shared value is a view of the value *inside* it, so a function that only uses the value takes an
 ordinary view and never mentions sharing:
 
 ```nika
-fn serve(db: ref Connection) { … }
+fn serve(db: Connection) { … }
 
 let db = Shared(postgres::connect("…"))
 serve(db)              // a view; no handle is made, and the count is untouched
 ```
 
 A signature names the shared type only where the function **keeps** the value
-past the call: puts it in a structure, gives it to a task, hangs it on
+past the call, `keep db: Shared[Connection]`: puts it in a structure, gives it to a task, hangs it on
 something that outlives the call.
 
 **A `SharedMut[T]` is opened, and the opened value is an ordinary view.** There
-is no `ref` straight through a lock. The caller opens the lock with one of the
+is no view straight through a lock. The caller opens the lock with one of the
 four doors of 6.3 and passes the borrowed value in. The called function sees a
 plain value and obeys the rule for an open lock: it may not pause, and it may
 not touch a lock of its own (Part II, 12.2).
@@ -2619,7 +2618,7 @@ struct FileHandle {
 }
 
 impl Drop for FileHandle {
-    fn drop(ref mut self) {
+    fn drop(mut self) {
         println("Closing file descriptor...")
         // Native close call would go here
     }
@@ -2643,13 +2642,13 @@ impl Cleanup for BufferedFile {
     // Pausable teardown. May pause, may fail.
     // Runs where the value dies - on normal exit AND while an error is
     // bubbling up.
-    fn cleanup(ref mut self) throws {
+    fn cleanup(mut self) throws {
         fs::write(self.path.clone(), fs::Root::Anywhere, self.held.clone(); append: true)
     }
 }
 ```
 
-`impl Cleanup` has the one method, `fn cleanup(ref mut self)`, with `throws`
+`impl Cleanup` has the one method, `fn cleanup(mut self)`, with `throws`
 where it can fail. A type that also needs a synchronous last resort writes it
 as its own `impl Drop`: `drop` runs after `cleanup`, or alone where `cleanup`
 cannot run (below). Anything else written in `impl Cleanup`, a `drop`
@@ -2657,7 +2656,7 @@ included, is refused with `NK2601`, and the message points at `impl Drop`.
 
 User code never calls `cleanup`. **The value dies where ownership says it
 does**: at the closing brace of the block that owns it, or in the function it
-was handed to when that function keeps it. The compiler runs `cleanup` there:
+was handed to when that function's parameter is `keep` (6.7). The compiler runs `cleanup` there:
 the end of that block is a place where the function may pause and where a
 failure surfaces. Values that die together are cleaned up in the order they
 die, the last one bound first. What holds such a value (a struct field, a list
@@ -2734,12 +2733,13 @@ A function that only *looks at* a value, and does not own it, takes a
 **view** of it. The owner keeps the value, the borrower may read it, and the
 loan ends on its own.
 
-**`ref X` is a view of an `X`, and that is the whole rule.** It is one word and
-one meaning wherever a type may stand: `ref String` is a view of text,
-`ref Array[T]` a view of a run, `ref Reading` a view of a struct, `ref self` a
-method's view of its receiver. There is no second noun for the view of a type.
-
-**`ref` is reserved** (2.1). `ref(x)` is a borrow of `(x)`, never a call.
+**A view is never written; the compiler infers it** ([ADR-views-3](adr/adr-views-3.md)
+D4, D5). A parameter, a receiver, a field, an element, a local binding and a
+result are declared with their type (`String`, `Vec[Row]`, `Reading`), and
+whether each is a view or a value of its own is read off the program. `ref` is
+written only inside `extern "C"` (Part III 15.1); a `ref` anywhere else is
+refused, with a help that removes it: at a call or in an expression with
+`NK1137`, `ref mut` with `NK1158`, in a declaration with `NK????`.
 
 **Nikaia source contains no lifetime annotations.** There is no syntax for
 them. Everything described below happens inside the compiler.
@@ -2754,49 +2754,56 @@ Two things are guaranteed:
     ```nika
 use std::fs
 
-    fn report(config: ref Config) throws {
-        let name = ref config.name       // borrow
+    fn report(config: Config) throws {
+        let name = config.name           // a view of `config.name`
         let data = fs::read("log", fs::Root::Anywhere)    // pauses here (I/O)...
-        println(f"{name}: {data}")     // ...and the borrow is still valid.
+        println(f"{name}: {data}")     // ...and the view is still valid.
     }
     ```
 
-2.  **Returning a borrowed value from a function.** `fn first_word(s: ref String) -> ref String`
+2.  **Returning a view from a function.** `fn first_word(s: String) -> String`
     needs no annotation. Where a function takes several, the compiler reads
-    off its body which one the result comes from, and a caller reads it off
-    the ledger (6.6, 6.7).
+    off its body which one the result comes from, a caller reads it off the
+    ledger, and the function may write it, `-> String from s` (6.6, 6.7).
 
 **A borrow may not outlive its owner** (6.6).
 
-**The declaration writes the `ref`, never the call.** A parameter written with a
-plain type is a **view** unless the function's body keeps the value: stores
-it, hands it back, gives it to a task, or passes it to something that keeps
-it. Moving it into a struct, a variant's value, a tuple or a list the body
-builds is not keeping it, unless that value keeps it. **Handing back a *part* of it is handing it back**: a field whose type
-moves, taken out of the parameter and returned, keeps the parameter; a field
-that **copies** leaves the parameter a view. Which of the two it is comes from
-the body, is written to the ledger (6.7), and holds for every caller. The
-caller writes `serve(db)` and `fs::map(path, root)`, and the compiler writes
-the reference the callee asked for, as it writes the pause and the failure a
-call carries (7.1, 8.1). A `ref` written at a call, `serve(ref db)`, is refused
-with `NK1137`. A `ref` in a parameter type is an assertion, *this is a view*, as
-`sync` is (Part II, 12.1).
+**The caller writes nothing; the callee's declaration says what an argument
+becomes** (D1). `serve(db)`, `fs::map(path, root)`, `into.merge(stats)`:
+whether an argument is lent, kept or changed is read off the callee's
+parameter, and the compiler writes the reference, as it writes the pause and
+the failure a call carries (7.1, 8.1).
 
-**A trait method keeps what its default body and the impls in its own package
-keep**, position by position, and with neither it keeps nothing
-([ADR-277](adr/adr-277.md) D17). This holds for every parameter it takes by
-value, code or data, and for every impl and every call through a bound. An impl
-in another package, or under the package's `tests/`, counts for nothing: one
-that keeps what the method does not is refused with `NK1264`, since only the
-trait's package widens it.
+**A plain parameter is lent; a parameter that keeps its argument says `keep`**
+(D2): `fn add(mut self, keep item: Item) { self.items.push(item) }`. *Keeps* means: stores it into something that outlives the call (a field of
+the subject, a struct or collection handed back), gives it to a task, or
+passes it to a callee whose own parameter keeps it. Moving it into a struct, a
+variant's value, a tuple or a list the body builds is not keeping it, unless
+that value is kept. **Handing back a *part* of it is keeping it**: a field
+whose type moves, taken out of the parameter and returned, keeps the
+parameter; a field that **copies** leaves it lent. A whole parameter handed
+back is a view the result points into (6.6). A plain parameter is lent: the
+caller's value is usable again after the call. The compiler infers keeping
+over the call graph and fails closed, so a use it cannot follow counts as
+keeping. It checks the signature against that: a body that keeps a parameter
+not marked `keep` is refused with `NK2302`, with a help that adds the word,
+and a `keep` on a parameter the body never keeps is a warning, `NK????`. The
+ledger records each parameter's `keep` (6.7).
+
+**The receiver follows the same rule**: `self` is lent, `mut self` is changed
+in place, `keep self` consumes the object.
+
+**A trait method's signature fixes `keep` for every implementation** (D2): an
+impl that keeps a parameter its trait method does not mark `keep` is refused
+with `NK1264`.
 
 A parameter the function changes in place says `mut` in the declaration,
-`fn fill(mut out: Vec[i64])`, and is passed as `ref mut`; the call shows
-nothing, as `xs.push(1)` shows nothing. A parameter the body changes without
-`mut` is refused with `NK1138`. A `mut` parameter handed to another `mut`
-parameter is passed straight on. `ref self` is written by the author, and that
-shape is `NK1131`, as is a `mut` parameter given away whole: it stays the
-caller's, so the way out is `.clone()` or taking it without `mut`.
+`fn fill(mut out: Vec[i64])` (D3); the call, `fill(xs)`, shows nothing, as
+`xs.push(1)` shows nothing. A parameter the body changes without `mut` is
+refused with `NK1138`. A `mut` parameter handed to another `mut` parameter is
+passed straight on. A `mut` parameter given away whole is `NK1131`: it stays
+the caller's, so the way out is `.clone()` or taking it `keep`. A callee that
+wants a changeable copy writes `let mut v = x` inside.
 
 **A part taken out of a `mut` parameter is given back before the function is
 left**, and one taken out of a `let mut` view of a place before the view's block
@@ -2807,7 +2814,7 @@ gives it back. On every way out of the function - its end, a `return`, a
 back stands no `throw` and no call that can fail. Both are refused with
 `NK2108`. In `match e { E::Add(a, b) => { … e = E::Add(l, r) } … }` the arm
 takes `a` and `b` out of `e`, and the assignment makes it whole again.
-`ref mut self` is such a parameter too. A `let mut` over a place of something
+`mut self` is such a parameter too. A `let mut` over a place of something
 the function may change, `let mut c = m[k] ?? continue`, is a view through
 which a change reaches the place, and the same rule holds for it: on every way
 out of its block - its end, a `continue`, a `break`, a `return`, a `throw` - it
@@ -2828,65 +2835,61 @@ or `.clone()` makes the copy. A
 `let` over a place (`config.name`, `totals.stations[name]`) is a view of it
 where the value would otherwise have to move, and **takes** the part where
 the name is kept (handed to a keeper, returned, or assigned into a place) and
-the place is a part of a `mut` parameter, of `ref mut self` or of a `let mut`
+the place is a part of a `mut` parameter, of `mut self` or of a `let mut`
 view ([ADR-views-1](adr/adr-views-1.md) D6): `let outer = walk.at;
 walk.at = P {..}; visit(walk); walk.at = outer` copies nothing. In a loop,
 such a part is given back before the turn ends, and a refusal that comes from
 the taking names the line that keeps the name.
 
-**Declared `ref T` or `ref T?`, an index or a field read off a place is a view
-of it** ([ADR-354](adr/adr-354.md)), in the `let` and in an arm of its value:
+**Fields, elements and local bindings are views where the code makes them
+so** (D5). `let s = totals[name]` and `let n = config.name` over a place are
+views, and so is an arm of their value; taking the value out is written
+(`remove`, `drain`, `.clone()`). `let y = x` over a whole variable is a
+rename, and a `let` whose initialiser is a call or a literal owns what it is
+given. A field or an element holds a view, tethered to its buffer (6.6), where
+what flows into it is a piece of a buffer, and a value of its own otherwise. A
+field or an element the program changes in place, or hands to a `keep`
+parameter, holds a value of its own; where a view would flow into it, the
+refusal names where to write `.clone()`:
 
 ```nika
 struct Expr { n: i64 }
 
-fn pick(given: ref Vec[Expr], tail: ref Expr, c: bool) -> i64 {
-    let first: ref Expr = given[0]
-    let either: ref Expr? = if c { tail } else { given[0] }
-    return first.n + (either?.n ?? 0)
+fn pick(given: Vec[Expr], tail: Expr, c: bool) -> i64 {
+    let first = given[0]                           // a view of `given[0]`
+    let either = if c { tail } else { given[0] }   // a view of either
+    return first.n + either.n
 }
 ```
 
-**`ref` stands in front of a tuple as in front of a name**: `ref (String,
-Entry, i64)` is a view of the whole tuple, `ref (String, Entry)?` a view that
-may be missing, in every place a `ref T` stands (a parameter, a `let`, a field,
-a result, a type argument), and its parts are read through the view as a
-field is (`t.0`). A tuple whose parts all copy is copied as a whole, so `ref`
-on it is refused as on a number, below. This is not `(ref String, Entry)`,
-which is a tuple holding one view.
-
 A value that is a word by its kind - a number, a `bool`, a `scalar`, an enum
-whose variants hold nothing - is copied at a read, so there is no view of it to
-declare: `ref` on such a type is refused with `NK1257` on a `let`, a parameter,
-a field and a result, and anywhere inside their types: a type argument, a part
-of a tuple, a parameter or the result of a function type. `let n: ref i64 = counts[0]` is refused, and
-`let n = counts[0]` is the program; `Vec[ref i64]` is refused, and `Vec[i64]`
-is the program. In an `extern "C"` declaration `ref i32`
-and `ref mut i32` are the pointers C expects and stay (Part III 15.1). A `ref T` in a body generic over `T` is a
-view whatever `T` becomes.
+whose variants hold nothing - and a tuple whose parts all are, is copied at a
+read, so it is never a view. In an `extern "C"` declaration `ref i32` and
+`ref mut i32` are the pointers C expects (Part III 15.1).
 
-Nothing here inserts a copy. A value handed to a function that keeps it, and
-used again afterwards, is refused with `.clone()` named as the way out (8.3).
+Nothing here inserts a copy. A value handed to a `keep` parameter, and used
+again afterwards, is refused with `.clone()` named as the way out (8.3).
 
-Four kinds of argument are not lent and are passed owned: a parameter the body
-**keeps**, a value that **copies**, an argument that is **already a view**, and
-a **method's** argument.
+Four kinds of argument are not lent and are passed owned: one handed to a
+**`keep`** parameter, a value that **copies**, an argument that is **already a
+view**, and a **method's** argument.
 
-**A view handed to a parameter the body only reads is passed as it is**: in
-`for p in team { greet(p) }` the element `p` is a `ref Person`, and a
-`greet(p: Person)` that only reads `p` is lent that view, with no copy and
-no `ref` written. A parameter the body keeps needs a value of its own, so a
-view handed to it is refused (`NK1102`), with `.clone()` as the way out.
+**A view handed to a lent parameter is passed as it is**: in
+`for p in team { greet(p) }` the element `p` is a view of a `Person`, and a
+`greet(p: Person)` is lent that view, with no copy. A `keep` parameter needs a
+value of its own, so a view handed to it is refused (`NK1102`), with
+`.clone()` as the way out.
 
 **A value used after it was handed over is refused** with `NK2105`: an argument
-kept, a key or a value written into a container, a field, an element, a `let`
-that renames it, an assignment, and, inside a loop or a lambda, the next turn's
-hand-over of what is already gone; a lambda that runs at most once has no next
-turn (5.4 D). A second use in the **same** statement is
-refused too. A **part** is tracked on its own: after `xs.push(p.name)`, `p.x`
-is still there and `p.name` and `p` are not. A part of something only lent is
-refused where it is handed over, with `NK2106`. A parameter whose part is
-handed over is kept, so its caller hands it over whole.
+handed to a `keep` parameter, a key or a value written into a container, a
+field, an element, a `let` that renames it, an assignment, and, inside a loop
+or a lambda, the next turn's hand-over of what is already gone; a lambda that
+runs at most once has no next turn (5.4 D). A second use in the **same**
+statement is refused too. A **part** is tracked on its own: after
+`xs.push(p.name)`, `p.x` is still there and `p.name` and `p` are not. A part of
+something only lent is refused where it is handed over, with `NK2106`. A
+parameter whose part is handed over is kept, so it says `keep` and its caller
+hands it over whole.
 
 ### 6.6. Escaping References Are Tethered
 
@@ -2897,7 +2900,7 @@ alive as long as the view does.
 
 > **Transient = borrow. Escaping = tether. Copying = yours to ask for.**
 
-Every view (`ref String`, `ref Array[u8]`) is in one of three states. The
+Every view (of text, of a run) is in one of three states. The
 compiler picks the cheapest one that works, and the states are never written in
 the source:
 
@@ -2924,7 +2927,7 @@ decision, like which count a `Shared` gets:
 
 ```nika
 struct Token {
-    text: ref String,   // a view into someone else's buffer
+    text: String,   // a view into someone else's buffer
 }
 
 fn tokenize(path: String) -> Vec[Token] throws {
@@ -2948,8 +2951,8 @@ keep is read off the program:
   and is read and written through them; the struct itself is unchanged.
 
 **What a body owns is handed out the same way**, whole or a part: a view of a
-local, `fn d() -> ref String { let s = "x".clone(); return ref s }`, puts `s` in
-the caller's keep, and so does a struct, a variant's value, a tuple or a list
+local handed back, a piece of a text the body read, puts that local in the
+caller's keep, and so does a struct, a variant's value, a tuple or a list
 handed back whose views point into `s`. **A view handed back from a parameter points into the
 caller's argument**, which lives as long as the result does; an argument made
 in the call itself, `let r = e(name.clone())`, lives in the caller's keep. **A
@@ -2961,7 +2964,7 @@ A struct built and consumed inside the scope that owns its buffer is borrowed,
 and costs nothing:
 
 ```nika
-struct Reading { name: ref String, temp: i32 }
+struct Reading { name: String, temp: i32 }   // `name` a view where views flow in
 ```
 
 `--tethers` (on `nikaia build` and `nikaia lower`) prints where each buffer lives and why, and changes nothing;
@@ -2977,32 +2980,30 @@ task and out of the function is refused with `NK2304`, and so is a container of
 structs holding views that drops entries inside a loop where the container is
 not a list, or a struct's views are not text.
 
-**A parameter written `ref String` may not be kept past its call** unless the
-place it is kept names a buffer. A view inside a struct carries the buffer it
-points into; a parameter written `ref String` does not. A function that stores
-such a parameter where nothing names its buffer is refused with `NK2302`
-(Part III, C.3): into a task, or into a field of a subject that holds no view.
-Such a function puts the view in a struct and takes the struct:
+**A lent parameter is not kept past its call**: storing it into a task or a
+field is keeping it, and the parameter says `keep` (6.5, `NK2302`). A view
+inside a struct carries the buffer it points into, so a function that keeps a
+view, and not a copy of its text, takes the struct that holds it `keep`:
 
 ```nika
-struct Reading { name: ref String, temp: i32 }
+struct Reading { name: String, temp: i32 }
 
 impl Summary {
-    fn record(ref mut self, m: Reading) { … }     // and not `name: ref String`
+    fn record(mut self, keep m: Reading) { … }     // and not `keep name: String`
 }
 ```
 
 Handing a view back out of the buffer it came from is **not** this rule:
-`fn count(seq: ref String, k: i64) -> HashMap[ref String, Tally]` returns views
+`fn count(seq: String, k: i64) -> HashMap[String, Tally]` returns views
 of `seq`, and the result points into `seq` and nothing else. The same holds for
-a struct literal handed back: `fn make(name: ref String) -> Reading` returns a
-`Reading` that points into `name`, and so does `fn make(name: String)` whose
-body only moves `name` into the `Reading`.
+a struct literal handed back: `fn make(name: String) -> Reading` whose body
+only moves `name` into the `Reading` returns a `Reading` that points into
+`name`.
 
 **A result points where the body says, view by view.** Every way out of the
 body - a `return`, the last expression - is followed back to the parameters
-whose views reach what it hands back: the receiver, a parameter written `ref`,
-and a parameter lowered as a view (6.5). A literal, a buffer the body made and
+whose views reach what it hands back: the receiver and every lent parameter
+(6.5). A literal, a buffer the body made and
 a copy reach none. Each view the result holds - the result itself, or each view
 in a field, an element or a variant's value - points into the parameters that
 reach it, and only those. Where the body chooses at run time, by two ways out
@@ -3011,7 +3012,7 @@ parameter reaches it, it points into nothing a caller passed.
 
 ```nika
 impl Checker {
-    fn label(ref self, world: ref World) -> String {
+    fn label(self, world: World) -> String {
         return world.names[self.at]     // points into `world`; `self` is free again
     }
 }
@@ -3030,23 +3031,30 @@ fn longest(a: String, b: String) -> String {
 }
 ```
 
+**The source may be written on the result with `from`** (D8):
+`fn first_word(s: String) -> String from s`,
+`fn longest(a: String, b: String) -> String from a | b`. Where it is written,
+the body is checked against it: a way out that hands back a view of a
+parameter the `from` does not name is refused with `NK????`. It must be
+written where there is no body to infer it from - a trait's method, a function
+type, a foreign or Rust function - and a result there that is a view without a
+`from` is refused with `NK????`. Elsewhere it is optional. A method
+implementing a trait hands back views of what the trait's `from` names.
+
 Every argument no view of the result points into is free when the call
-returns. The ledger (6.7) writes each view's sources: `-> ref(world) String`,
-`-> ref(a | b) String`, and for a value holding views each by its path,
-`left: ref(a), right: ref(b)`. Each field of a `struct` keeps its own
+returns. The ledger (6.7) writes each view's sources in the same spelling
+(D10): `-> String from world`, `-> String from a | b`, and for a value holding
+views each by its path, `left: from a, right: from b`. Each field of a `struct` keeps its own
 sources, whether the type is `pub` or not: `pair(x, y).left` points into `x`
 alone. A field whose type holds several views joins their sources, and an
 `enum` joins those of all its variants, since which variant a value is gets
-decided as the program runs. A trait's method and a function type have no
-body: their result points into the receiver, or else into every parameter that
-is a view. A method implementing a trait hands back views of what the trait's
-declaration names.
+decided as the program runs.
 
 **While a view is used, the data it may point into stays as it was.** Giving
 an argument up is not changing it: a caller may assign its variable a new
 value, leave its scope, move it into another variable or into a struct, a
-variant's value, a tuple or a list it builds, or pass it to a parameter that is
-a view (6.5) while a view of it is still used, and the old buffer moves into
+variant's value, a tuple or a list it builds, or pass it to a lent parameter
+(6.5) while a view of it is still used, and the old buffer moves into
 the keep of whatever holds the view, to be freed with the last such view. The
 place it moved into holds a view of that buffer, so a field, element or
 variant's value is a view wherever such moves flow in, and holds either where
@@ -3063,12 +3071,12 @@ println(r)
 **Changing that data in place while the view is still used is refused** with
 `NK2305`, at the change: a method that changes the value, or an assignment to a
 part of it. So is **handing the data to a new owner**, at the call: a callee
-whose parameter keeps or changes it (`push` on a list too), since it may change
+whose parameter is `keep` or `mut` (`push` on a list too), since it may change
 or discard the data. So is **moving it into a place that must hold text of its
 own**, at the move: a field, element or variant's value that the program,
-in any function, changes in place or hands to a callee that keeps it. The
-message names the view, the call that made it and the way out of the callee
-that may hand back that argument; for such a move, also the place that makes
+in any function, changes in place or hands to a `keep` parameter. The
+message names the view, the call that made it and the parameter it comes from,
+speaks of data and never of how long anything lives; for such a move, also the place that makes
 the field own its text. Use the view before the change, or take a copy of it
 with `.clone()` before the change; for a hand-over, a copy may also be what is
 handed over (`take(y.clone())`); for a move into a place, a copy may be what
@@ -3083,30 +3091,27 @@ y.push_str("er")            // NK2305: `r` may point into `y` (`longest`: `retur
 println(r)
 ```
 
-Where the destination **already carries a buffer**, there is nothing to refuse.
-A method of a struct that holds a view has that struct's buffer in hand, so
-storing the parameter into one of its fields is accepted, and the parameter is
-a view of *that* buffer. `fn note(ref mut self, name: ref String)` on a
-`Summary` holding `label: ref String` compiles, and `name` is a view of the
-buffer `label` points into. That narrows what a caller may pass. The same holds
-for a field of a struct **parameter** that holds views, where the subject holds
-none: `fn relabel(mut s: Summary, name: ref String) { s.label = name }`
-compiles, and `name` is a view of the buffer `s` points into. Fields of two such
-parameters are refused with `NK2302`. Where the view is handed to a call on the
-subject, it is treated as kept, and the parameter is a view of the subject's
-buffer.
-
 **A tether keeps the whole buffer alive**, not just the part pointed at.
 `--tethers` (on `nikaia build` and `nikaia lower`) names every buffer kept this way and what keeps it;
 `.clone()` keeps the part and lets the buffer go.
 
 ### 6.7. The Borrow Contract Ledger
 
-For every function whose signature involves a borrow, the compiler infers a
-**borrow contract**, such as "the result of `checker.label(world)` borrows
-from `world`." A contract is never written in the source. Contracts are stored in a
-generated file, **`nikaia.contracts`**, the ledger, which is committed
-alongside `nikaia.lock` (Part III, 13.5).
+For every function the compiler infers a **borrow contract**: which
+parameters it keeps, and what each view of its result points into, such as
+"the result of `checker.label(world)` points into `world`." The source writes
+`keep` (6.5) and may write `from` (6.6), and the compiler checks them against
+the inferred contract. Contracts are stored in a generated file,
+**`nikaia.contracts`**, the ledger, which is committed alongside `nikaia.lock`
+(Part III, 13.5). It writes keeps per parameter and a result's sources in the
+source's spelling, `-> String from a | b`, a written `from` as written
+([ADR-views-3](adr/adr-views-3.md) D10). A change of either on a `pub` function
+is a contract change.
+
+**The cleanup point moves with a kept value** (D6): a callee that keeps a
+`File` runs its cleanup at the end of the callee, not of the caller's block
+(6.4). A change to a parameter's `keep` on a type whose teardown has an effect
+is a contract change the ledger names, with the callers whose cleanup moved.
 
 The ledger has two jobs:
 
@@ -3172,7 +3177,7 @@ use std::net
 fn fetch_config() -> String throws {
     let text = fs::read_to_string("config.txt", fs::Root::Anywhere)   // can fail
     let mut peer = net::connect("127.0.0.1:9000")   // can fail too
-    peer.write(ref text)
+    peer.write(text)
     return text
 }
 ```
@@ -3217,11 +3222,11 @@ whatever any caller may pass, and needs `else`.
 enum ConfigError {
     NotFound(fs::Path),
     Unreadable(fs::Path),
-    BadSyntax { line: i64, expected: ref String },
+    BadSyntax { line: i64, expected: String },
 }
 
 impl Error for ConfigError {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         match self {
             ConfigError::NotFound(p)   => f"no config at {p.display()}"
             ConfigError::Unreadable(p) => f"cannot read {p.display()}"
@@ -3360,7 +3365,7 @@ beside its `impl Error for T`. `Fatal` has no methods.
 
 ```nika
 enum Abort { Now(String) }
-impl Error for Abort { fn message(ref self) -> String { return "aborted" } }
+impl Error for Abort { fn message(self) -> String { return "aborted" } }
 impl Fatal for Abort {}
 ```
 
