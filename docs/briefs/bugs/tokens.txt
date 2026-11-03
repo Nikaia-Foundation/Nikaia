@@ -45,3 +45,5 @@
 /home/user/Nikaia/docs/briefs/bugs/b22-1099-fstring-no-hole-braces.md 310798 11
 /home/user/Nikaia/docs/briefs/bugs/b33-1107-copy-view-copied.md 4870791 71
 /home/user/Nikaia/docs/briefs/bugs/b38-1158-inner-match-takes-arm-name.md 862866 17
+/home/user/Nikaia/docs/briefs/bugs/b39-1160-test-only-helpers-cfg-test.md 6073764 91
+/home/user/Nikaia/docs/briefs/bugs/b39b-1160-finish.md 1761302 40
