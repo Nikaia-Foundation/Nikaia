@@ -1,0 +1,20 @@
+// `overlap` left the reserved words (ADR-async-5): a program may name a
+// value so, and `overlap { … }` still parses and runs until #991 removes it.
+
+fn sum(xs: Vec[i64]) -> i64 {
+    let mut s = 0
+    for x in xs {
+        s = s + x
+    }
+    return s
+}
+
+fn main() {
+    let overlap = 3
+    println(f"{overlap}")
+    let r = overlap {
+        sum([1, 2, 3])
+        sum([4, 5])
+    }
+    println(f"{r.0} {r.1}")
+}

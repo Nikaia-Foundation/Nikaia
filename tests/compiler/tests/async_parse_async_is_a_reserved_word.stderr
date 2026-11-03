@@ -1,0 +1,8 @@
+error: `async` is a reserved word, so it can't be used as a name here.
+  --> tests/async_parse_async_is_a_reserved_word.nika:4:9
+   |
+ 4 |     let async = 1
+   |         ^^^^^
+   |
+   = note: Expected `mut` here, but found `async`.
+   = help: Choose another name, such as `async_`.

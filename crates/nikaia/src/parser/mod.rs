@@ -4102,10 +4102,9 @@ grammar! {
         // `boundary`, `fold`, `par_fold` and `unchecked` are the grammar
         // sublanguage's vocabulary - they are keywords inside a `grammar`
         // block and words a program may want everywhere else, so they are not
-        // here. `overlap` is here and the grammar has no construct for it yet
-        // ([ADR-292](../../../../docs/specification/adr/adr-292.md) D2):
-        // reserving a word costs nothing before programs exist and breaks them
-        // afterwards, so the free moment is now.
+        // here. Reserving a word costs nothing before programs exist and
+        // breaks them afterwards
+        // ([ADR-298](../../../../docs/specification/adr/adr-298.md)).
         //
         // **`self` is deliberately absent**, and that is not an oversight. It
         // is the one keyword that *is* a name - `self.min` refers to it - and
@@ -4148,7 +4147,11 @@ grammar! {
             KW_MATCH -> { 0 }
           | KW_MUT -> { 0 }
           | KW_NULL -> { 0 }
-          | KW_OVERLAP -> { 0 }
+          // **`overlap` left this list**
+          // ([ADR-async-5](../../../../docs/specification/adr/adr-async-5.md)):
+          // `async { … }` is the group now. Its construct still parses, keyword
+          // first in `primary_expr_bare`, until #991 removes it; as a name it is
+          // free.
           | KW_PUB -> { 0 }
           | KW_RETURN -> { 0 }
           | KW_SPAWN -> { 0 }

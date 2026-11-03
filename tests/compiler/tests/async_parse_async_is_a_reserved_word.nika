@@ -1,0 +1,6 @@
+// `async` is a reserved word (ADR-async-5 D5): it starts a task, so it is no name.
+
+fn main() {
+    let async = 1
+    println(f"{async}")
+}
