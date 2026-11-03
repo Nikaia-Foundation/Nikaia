@@ -1,16 +1,19 @@
-1. **Time:** Most of it went on working out which input was mine. The brief names two `qa-input.txt` files (main lane and bug lane), and both existed. The one I used had an empty "unpushed commits" list, and `HEAD` equalled `origin/develop`. After that I had to find out that the failing report was already committed and that my own report had to overwrite it.
+1. **Time cost.** The two `cargo test -p nikaia --test it` runs cost the most. The first one included a 4-minute build, and the later runs each took about 15 s of test time. A broad `grep -rnw immutable` over `crates tests guide`, which pulled in `target/`, hit the 120 s timeout and went to the background. It cost one wasted call and left a background task running.
 
-2. **Lookups the brief could have handed me:**
-   - Which lane this run was for.
-   - That `nikaia` isn't on `PATH`. I had to find `target/release/nikaia`.
-   - That `commit.nika` needs a changed file in `Files:`, so a fix that only rewrites the report has to list the report itself.
-   - That `check-adr-refs.py` scans the QA report and fails on archived ADR numbers. That is why my first draft would have broken the check again.
-   - I never opened `builder.md` or `qa.md` beyond the first 50 lines of `qa.md`. That was a gap on my side.
+2. **Lookups the brief could have handed me.**
+   - The brief points to `qa-input.txt`, but its first lines already name only the CI job. It does not say that `suite.log` holds the failing test names near the end, so I grepped for them.
+   - I had to find that the unpushed commits were spec-only (9ebcd115 and 1755150b).
+   - I had to find where `RESERVED_WORDS` lives and that the real reservation is a grammar rule, not just the list.
+   - I had to find that `nikaia` is not on PATH and `target/debug/nikaia` has to be used.
+   - I had to find the report fields and the commit script's `Changelog:` and `Attribution:` format.
 
-3. **Checks:**
-   - I ran `check-adr-refs.py` twice. The first run was useful because it showed the check passing with the report file deleted. The second confirmed my rewrite.
-   - I did not run `nikaia run scripts/pre-push.nika`. I wrote "pre-push below" in the Tests line, which says more than I checked. I don't know whether `commit.nika` runs those checks.
-   - I ran no cargo checks, which was reasonable because no Rust changed.
-   - I did not check whether the `qa-task.md.run.json` and `.session` files also cite the archived ADR. `check-adr-refs.py` only flagged the report.
+3. **Checks.**
+   - Useful: the targeted `specification::` tests, the numbers-stripped diff of the two baselines, and `pre-push.nika`.
+   - Wasted: the repo-wide grep above.
+   - Not run: `from_is_a_name`, since it cannot pass without the parser change.
+   - I did not run clippy because I changed no Rust.
 
-4. **One change:** have the driver name the lane and the exact `qa-input.txt` path in the task. Also have it say whether the red is on committed `develop` or on unpushed commits. That would have avoided the guessing about which input was mine.
+4. **One change.** Add a short "first five minutes" note to `qa.md`, covering three things:
+   - Run `git log origin/develop..HEAD --stat`, because spec-only commits that turn tests red usually mean a stale baseline or an unbuilt feature.
+   - Say that `target/debug/nikaia` is the binary.
+   - Say that a page list of reserved words ahead of the parser is a supervisor decision (blocked), so QA doesn't spend turns on it.
