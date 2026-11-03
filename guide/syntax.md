@@ -92,6 +92,17 @@ while n < 5 {
 `a..b` includes its end and `a..<b` excludes it. There is `for`, `while`, `break` and
 `continue`. An endless loop is `while true { … }`.
 
+A `for` reads the elements of a list and leaves the list as it was. `for mut` changes each
+element in the list itself:
+
+```nika
+let mut scores: Vec[int] = [70, 85, 92]
+for mut s in scores {
+    s += 5
+}
+println(scores.iter().join(", "))   // 75, 90, 97
+```
+
 **Specification:** [Part I, §3.3 Loops](../docs/specification/10-nikaia-light.md#33-loops)
 
 ## Functions
@@ -116,6 +127,28 @@ text or text of its own is the compiler's decision. `ref String` is written only
 `extern "C"` declaration; elsewhere it is a warning.
 
 **Specification:** [Part I, §5.1 The subject ; config protocol](../docs/specification/10-nikaia-light.md#51-the-subject--config-protocol)
+
+## Generic functions
+
+```nika
+fn pair_of[T](a: T, b: T) -> Vec[T] {
+    return [a, b]
+}
+
+fn empty[T]() -> Vec[T] {
+    return []
+}
+
+println(pair_of(1, 2).len())        // 2: `T` is `int` here
+let names = empty[String]()         // nothing says what `T` is: name it at the call
+println(names.len())                // 0
+```
+
+A type parameter is written in square brackets, `[T]`, where Java and TypeScript write
+`<T>`. The compiler fills it from the arguments; where no argument says what it is, the call
+names it, `empty[String]()`.
+
+**Specification:** [Part I, §4.6 Generics](../docs/specification/10-nikaia-light.md#46-generics-type-parameters)
 
 ## Structs and methods
 
