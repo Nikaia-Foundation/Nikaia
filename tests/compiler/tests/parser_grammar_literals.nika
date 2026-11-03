@@ -1,0 +1,100 @@
+// The literal rules of `tools/parser_grammar.nika` (#557 step 4c): strings
+// and characters with their escapes kept whole, digit runs without their
+// separators, and the pieces the scan does not reach (an exponent, a path's
+// segment, a grammar built-in, an `f"…"` text and spec), each through an
+// entry of its own. The grammar file is copied beside a small driver and run.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// Each argument a file: a scan line `tokens`, or `RULE<TAB>input` through
+// that rule's entry.
+fn driver() -> String {
+    let lines: Vec[String] = [
+        f"fn piece(which: String, s: String) -> String {{",
+        f"    let input = Bytes(s.bytes().collect())",
+        f"    let r = match which {{",
+        f"        \"exponent\" => ParserGrammar::exponent(input),",
+        f"        \"segment\" => ParserGrammar::segment(input),",
+        f"        \"g_builtin\" => ParserGrammar::g_builtin(input),",
+        f"        \"f_text\" => ParserGrammar::f_text(input),",
+        f"        else => ParserGrammar::f_spec(input),",
+        f"    }} catch {{",
+        f"        return \"refused\"",
+        f"    }}",
+        f"    return r",
+        f"}}",
+        f"fn main() throws {{",
+        f"    let mut first = true",
+        f"    for a in cli::args() {{",
+        f"        if first {{ first = false; continue }}",
+        f"        let s = fs::read_to_string(a.clone(), fs::Root::Anywhere)",
+        f"        let parts: Vec[String] = s.split(\"\\t\").map(fn(p) {{ p.clone() }}).collect()",
+        f"        if parts.len() == 2 {{ println(f\"{{parts[0]}} {{parts[1]}}: {{piece(parts[0].clone(), parts[1].clone())}}\") }} else {{ println(pg_render(s)) }}",
+        f"    }}",
+        f"}}",
+    ]
+    return lines.join("\n")
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let rules = fs::read_to_string(f"{repo}/crates/nikaia-std/src/tools/parser_grammar.nika", fs::Root::Anywhere)
+    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, f"use std::cli\nuse std::fs\n{rules}\n{driver()}\n")
+    let q = "\""
+    let b = "\\"
+    let cases: Vec[String] = [
+        // Strings: an escaped quote and backslash kept whole, an empty one,
+        // a `//` and a `/*` that are text, and one never closed.
+        f"{q}a{b}{q}b{q} {q}{q} {q}x{b}{b}{q} {q}// not a comment{q} {q}/* nor this{q}",
+        f"{q}open",
+        // Characters: plain, escaped, `'ab'` (read here, refused below), a
+        // stray `'` before a line break.
+        f"'x' '{b}n' '{b}'' 'ab' ' x",
+        // Digit runs of ADR-285 D1/D3: the separator is left out.
+        "0 255 1_000_000 007 1_2_3 1__0",
+        "exponent\te5",
+        "exponent\te-12",
+        "exponent\te+3",
+        "exponent\tE5",
+        "exponent\te",
+        "segment\ttype",
+        "segment\tx2",
+        "segment\t2x",
+        "g_builtin\ttext",
+        "g_builtin\tuntil",
+        "g_builtin\ttexts",
+        "g_builtin\tname",
+        f"f_text\ta{{{{b}}}}{b}u{{41}}{b}n",
+        "f_text\ta{b",
+        f"f_text\tsay {q}",
+        "f_spec\t:>8",
+        "f_spec\t:",
+    ]
+    let mut args: Vec[String] = ["run", "main.nika", "--"]
+    let mut i = 0
+    for c in cases {
+        i += 1
+        fs::write(f"{tmp}/case{i}.txt", fs::Root::Anywhere, c)
+        args.push(f"case{i}.txt")
+    }
+    let out = process::run(nikaia, args; dir: tmp)
+    println(out.stdout.trim())
+    if out.stdout.trim().len() == 0 { println(out.stderr) }
+    process::run("rm", ["-rf", tmp])
+}

@@ -39,6 +39,12 @@ pub enum PgKind {
     Reserved(String),
     Name(String),
     Underscore,
+    // A string literal's body as written, escapes whole.
+    Str(String),
+    // A character literal's body as written.
+    Char(String),
+    // A run of decimal digits, its separators left out (ADR-285 D3).
+    Digits(String),
     // A `///` run, its lines joined.
     Doc(String),
     Other(String),
@@ -58,6 +64,9 @@ grammar ParserGrammar {
 
     rule kind -> PgKind =
           d:docs -> { PgKind::Doc(d) }
+        | s:STRING -> { PgKind::Str(s) }
+        | c:CHAR -> { PgKind::Char(c) }
+        | n:DIGITS -> { PgKind::Digits(n) }
         | w:text(RESERVED) -> { PgKind::Reserved(w.clone()) }
         | w:text(KEYWORD) -> { PgKind::Keyword(w.clone()) }
         | UNDERSCORE -> { PgKind::Underscore }
@@ -252,6 +261,74 @@ grammar ParserGrammar {
     rule NAME -> winnow_grammar::Symbol = not(digit) not(RESERVED) not(UNDERSCORE) n:ident -> { n }
 
     rule UNDERSCORE = "_" not(raw_ident) not(digit) -> { }
+
+    // A path's segment: any identifier but one that starts with a digit,
+    // a reserved word included (a path names what its spelling names).
+    rule SEGMENT -> winnow_grammar::Symbol = not(digit) n:ident -> { n }
+
+    // The name of a grammar built-in, where a pattern names one.
+    rule G_BUILTIN -> winnow_grammar::Symbol = peek(G_BUILTIN_WORD) n:NAME -> { n }
+
+    rule G_BUILTIN_WORD =
+        ("until" | "text" | "bytes" | "peek" | "not" | "list" | "dec" | "span"
+         | "count" | "recover" | "paren" | "fail" | "intern") not(ident) -> { }
+
+    // ---- literals (Part I 2.2 to 2.5) -----------------------------------
+
+    // A string's body as written: an escape is kept whole, for the
+    // language below to read.
+    rule STRING -> String = "\"" parts:STR_CHAR* "\"" -> { parts.join("") }
+
+    rule STR_CHAR -> String =
+          "\\" c:any -> { f"\\{c}" }
+        | not("\"") c:any -> { f"{c}" }
+
+    // A character literal's body (Part I 2.4, ADR-320 D8): what it holds is
+    // checked below, so `'ab'` is read here and refused there in words; a
+    // line break ends the attempt, so a stray `'` does not swallow the file
+    // up to the next one.
+    rule CHAR -> String = "'" parts:CHAR_BODY+ "'" -> { parts.join("") }
+
+    rule CHAR_BODY -> String =
+          "\\" c:any -> { f"\\{c}" }
+        | not("'") not("\n") c:any -> { f"{c}" }
+
+    // A run of decimal digits with ADR-285 D1's separator in it; the
+    // separator is not in what comes back (D3). What a float counts in:
+    // `1_000.5` is a number and `1_000` beside `.5` is two.
+    rule DIGITS -> String = head:digit+ rest:DIGIT_GROUP* -> { f"{head}{rest.join("")}" }
+
+    rule DIGIT_GROUP -> String = "_" d:digit+ -> { d.clone() }
+
+    // A float's exponent, written `e` (ADR-322).
+    rule EXPONENT -> String =
+          "e" "-" d:digit+ -> { f"e-{d}" }
+        | "e" "+" d:digit+ -> { f"e+{d}" }
+        | "e" d:digit+ -> { f"e{d}" }
+
+    // An `f"…"` string's text as written: an escape whole, and `{{` and
+    // `}}` doubled, as the format string it becomes spells them.
+    rule F_TEXT -> String = s:text(F_TEXT_CHAR+) -> { s.clone() }
+
+    // `\u{…}` first: its braces belong to the escape, not to a hole
+    // (Part I 2.5).
+    rule F_TEXT_CHAR =
+          "\\u{" (not("}") any)* "}" -> { }
+        | "\\" any -> { }
+        | "{{" -> { }
+        | "}}" -> { }
+        | not("\"") not("{") not("}") not("\\") any -> { }
+
+    // What follows a hole's `:`, up to its `}`.
+    rule F_SPEC -> String = ":" s:text((not("}") any)*) -> { s.clone() }
+
+    // ---- the pieces the scan does not reach, one entry each, for the tests
+
+    entry rule exponent -> String = e:EXPONENT eof -> { e }
+    entry rule segment -> String = s:text(SEGMENT) eof -> { s.clone() }
+    entry rule g_builtin -> String = s:text(G_BUILTIN) eof -> { s.clone() }
+    entry rule f_text -> String = t:F_TEXT eof -> { t }
+    entry rule f_spec -> String = s:F_SPEC eof -> { s }
 }
 
 // **The scan as text**, for the tests and for comparing with the Rust
@@ -280,6 +357,7 @@ pub fn pg_count(source: String) -> String sync {
     let mut words = 0
     let mut names = 0
     let mut docs = 0
+    let mut literals = 0
     let mut other = 0
     let mut breaks = 0
     for t in ts {
@@ -290,10 +368,13 @@ pub fn pg_count(source: String) -> String sync {
             PgKind::Name(_) => { names += 1 }
             PgKind::Underscore => { names += 1 }
             PgKind::Doc(_) => { docs += 1 }
+            PgKind::Str(_) => { literals += 1 }
+            PgKind::Char(_) => { literals += 1 }
+            PgKind::Digits(_) => { literals += 1 }
             PgKind::Other(_) => { other += 1 }
         }
     }
-    return f"{words} words, {names} names, {docs} docs, {other} other, {breaks} after a line break"
+    return f"{words} words, {names} names, {docs} docs, {literals} literals, {other} other, {breaks} after a line break"
 }
 
 fn pg_kind_text(kind: ref PgKind) -> String {
@@ -302,6 +383,9 @@ fn pg_kind_text(kind: ref PgKind) -> String {
         PgKind::Reserved(w) => f"res {w}",
         PgKind::Name(w) => f"name {w}",
         PgKind::Underscore => "_",
+        PgKind::Str(t) => f"str {t}",
+        PgKind::Char(t) => f"char {t}",
+        PgKind::Digits(t) => f"digits {t}",
         PgKind::Doc(d) => f"doc {d.replace("\n", "\\n")}",
         PgKind::Other(c) => f"other {c}",
     }

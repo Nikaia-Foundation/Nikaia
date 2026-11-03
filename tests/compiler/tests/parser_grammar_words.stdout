@@ -9,10 +9,10 @@ kw boundary@0 | kw entry@9 | kw fold@15 | kw from@20 | kw par_fold@25 | kw rule@
 == case5.txt
 name asx@0 | name fnord@4 | name iffy@10 | name let_@15 | name _let@20 | name in2@25 | name self_@29
 == case6.txt
-_@0 | name _x@2 | name _0@5 | other 1@8 | name _000@9 | name __@14 | _@17 | name x@19
+_@0 | name _x@2 | name _0@5 | digits 1000@8 | name __@14 | _@17 | name x@19
 == B1.nika
-3 words, 3 names, 0 docs, 7 other, 3 after a line break
+3 words, 3 names, 0 docs, 1 literals, 6 other, 3 after a line break
 == gate_full_dry_run.nika
-40 words, 368 names, 0 docs, 742 other, 51 after a line break
+40 words, 195 names, 0 docs, 74 literals, 407 other, 51 after a line break
 == grammar_failing_action_in_alternative.nika
-36 words, 101 names, 0 docs, 253 other, 39 after a line break
+35 words, 79 names, 0 docs, 25 literals, 154 other, 39 after a line break

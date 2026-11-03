@@ -14,6 +14,9 @@ pub enum PgKind {
     Reserved(String),
     Name(String),
     Underscore,
+    Str(String),
+    Char(String),
+    Digits(String),
     Doc(String),
     Other(String),
 }
@@ -45,6 +48,12 @@ grammar! {
         rule kind -> PgKind =
             d:docs
             -> { PgKind::Doc(d) }
+          | s:STRING
+            -> { PgKind::Str(s) }
+          | c:CHAR
+            -> { PgKind::Char(c) }
+          | n:DIGITS
+            -> { PgKind::Digits(n) }
           | w:text(RESERVED)
             -> { PgKind::Reserved(w.to_string()) }
           | w:text(KEYWORD)
@@ -494,6 +503,94 @@ grammar! {
             "_" not(raw_ident) not(digit)
             -> { }
 
+        rule SEGMENT -> winnow_grammar::Symbol =
+            not(digit) n:ident
+            -> { n }
+
+        rule G_BUILTIN -> winnow_grammar::Symbol =
+            peek(G_BUILTIN_WORD) n:NAME
+            -> { n }
+
+        rule G_BUILTIN_WORD =
+            ("until" | "text" | "bytes" | "peek" | "not" | "list" | "dec" | "span" | "count" | "recover" | "paren" | "fail" | "intern") not(ident)
+            -> { }
+
+        rule STRING -> String =
+            "\"" parts:STR_CHAR* "\""
+            -> { parts.join("") }
+
+        rule STR_CHAR -> String =
+            "\\" c:any
+            -> { format!("\\{}", c) }
+          | not("\"") c:any
+            -> { format!("{}", c) }
+
+        rule CHAR -> String =
+            "'" parts:CHAR_BODY+ "'"
+            -> { parts.join("") }
+
+        rule CHAR_BODY -> String =
+            "\\" c:any
+            -> { format!("\\{}", c) }
+          | not("'") not("\n") c:any
+            -> { format!("{}", c) }
+
+        rule DIGITS -> String =
+            head:digit+ rest:DIGIT_GROUP*
+            -> { format!("{}{}", head, rest.join("")) }
+
+        rule DIGIT_GROUP -> String =
+            "_" d:digit+
+            -> { d.to_string() }
+
+        rule EXPONENT -> String =
+            "e" "-" d:digit+
+            -> { format!("e-{}", d) }
+          | "e" "+" d:digit+
+            -> { format!("e+{}", d) }
+          | "e" d:digit+
+            -> { format!("e{}", d) }
+
+        rule F_TEXT -> String =
+            s:text(F_TEXT_CHAR+)
+            -> { s.to_string() }
+
+        rule F_TEXT_CHAR =
+            "\\u{" (not("}") any)* "}"
+            -> { }
+          | "\\" any
+            -> { }
+          | "{{"
+            -> { }
+          | "}}"
+            -> { }
+          | not("\"") not("{") not("}") not("\\") any
+            -> { }
+
+        rule F_SPEC -> String =
+            ":" s:text((not("}") any)*)
+            -> { s.to_string() }
+
+        pub rule exponent -> String =
+            e:EXPONENT eof
+            -> { e }
+
+        pub rule segment -> String =
+            s:text(SEGMENT) eof
+            -> { s.to_string() }
+
+        pub rule g_builtin -> String =
+            s:text(G_BUILTIN) eof
+            -> { s.to_string() }
+
+        pub rule f_text -> String =
+            t:F_TEXT eof
+            -> { t }
+
+        pub rule f_spec -> String =
+            s:F_SPEC eof
+            -> { s }
+
         rule __nikaia_here -> u32 =
           empty @ at
             -> { ::nikaia_std::text::Span::of(at).start }
@@ -539,6 +636,12 @@ grammar! {
         rule kind -> PgKind =
             d:docs
             -> { PgKind::Doc(d) }
+          | s:STRING
+            -> { PgKind::Str(s) }
+          | c:CHAR
+            -> { PgKind::Char(c) }
+          | n:DIGITS
+            -> { PgKind::Digits(n) }
           | w:text(RESERVED)
             -> { PgKind::Reserved(w.to_string()) }
           | w:text(KEYWORD)
@@ -988,6 +1091,94 @@ grammar! {
             "_" not(raw_ident) not(digit)
             -> { }
 
+        rule SEGMENT -> winnow_grammar::Symbol =
+            not(digit) n:ident
+            -> { n }
+
+        rule G_BUILTIN -> winnow_grammar::Symbol =
+            peek(G_BUILTIN_WORD) n:NAME
+            -> { n }
+
+        rule G_BUILTIN_WORD =
+            ("until" | "text" | "bytes" | "peek" | "not" | "list" | "dec" | "span" | "count" | "recover" | "paren" | "fail" | "intern") not(ident)
+            -> { }
+
+        rule STRING -> String =
+            "\"" parts:STR_CHAR* "\""
+            -> { parts.join("") }
+
+        rule STR_CHAR -> String =
+            "\\" c:any
+            -> { format!("\\{}", c) }
+          | not("\"") c:any
+            -> { format!("{}", c) }
+
+        rule CHAR -> String =
+            "'" parts:CHAR_BODY+ "'"
+            -> { parts.join("") }
+
+        rule CHAR_BODY -> String =
+            "\\" c:any
+            -> { format!("\\{}", c) }
+          | not("'") not("\n") c:any
+            -> { format!("{}", c) }
+
+        rule DIGITS -> String =
+            head:digit+ rest:DIGIT_GROUP*
+            -> { format!("{}{}", head, rest.join("")) }
+
+        rule DIGIT_GROUP -> String =
+            "_" d:digit+
+            -> { d.to_string() }
+
+        rule EXPONENT -> String =
+            "e" "-" d:digit+
+            -> { format!("e-{}", d) }
+          | "e" "+" d:digit+
+            -> { format!("e+{}", d) }
+          | "e" d:digit+
+            -> { format!("e{}", d) }
+
+        rule F_TEXT -> String =
+            s:text(F_TEXT_CHAR+)
+            -> { s.to_string() }
+
+        rule F_TEXT_CHAR =
+            "\\u{" (not("}") any)* "}"
+            -> { }
+          | "\\" any
+            -> { }
+          | "{{"
+            -> { }
+          | "}}"
+            -> { }
+          | not("\"") not("{") not("}") not("\\") any
+            -> { }
+
+        rule F_SPEC -> String =
+            ":" s:text((not("}") any)*)
+            -> { s.to_string() }
+
+        pub rule exponent -> String =
+            e:EXPONENT eof
+            -> { e }
+
+        pub rule segment -> String =
+            s:text(SEGMENT) eof
+            -> { s.to_string() }
+
+        pub rule g_builtin -> String =
+            s:text(G_BUILTIN) eof
+            -> { s.to_string() }
+
+        pub rule f_text -> String =
+            t:F_TEXT eof
+            -> { t }
+
+        pub rule f_spec -> String =
+            s:F_SPEC eof
+            -> { s }
+
         rule __nikaia_here -> u32 =
           empty @ at
             -> { ::nikaia_std::text::Span::of(at).start }
@@ -1033,6 +1224,7 @@ pub fn pg_count(source: &str) -> String {
     let mut words = 0;
     let mut names = 0;
     let mut docs = 0;
+    let mut literals = 0;
     let mut other = 0;
     let mut breaks = 0;
     for t in ts.iter() {
@@ -1043,10 +1235,13 @@ pub fn pg_count(source: &str) -> String {
             PgKind::Name(_) => { names += 1; },
             PgKind::Underscore => { names += 1; },
             PgKind::Doc(_) => { docs += 1; },
+            PgKind::Str(_) => { literals += 1; },
+            PgKind::Char(_) => { literals += 1; },
+            PgKind::Digits(_) => { literals += 1; },
             PgKind::Other(_) => { other += 1; },
         }
     }
-    format!("{} words, {} names, {} docs, {} other, {} after a line break", words, names, docs, other, breaks)
+    format!("{} words, {} names, {} docs, {} literals, {} other, {} after a line break", words, names, docs, literals, other, breaks)
 }
 
 pub(crate) fn pg_kind_text(kind: &PgKind) -> String {
@@ -1055,6 +1250,9 @@ pub(crate) fn pg_kind_text(kind: &PgKind) -> String {
         PgKind::Reserved(w) => format!("res {}", w),
         PgKind::Name(w) => format!("name {}", w),
         PgKind::Underscore => String::from("_"),
+        PgKind::Str(t) => format!("str {}", t),
+        PgKind::Char(t) => format!("char {}", t),
+        PgKind::Digits(t) => format!("digits {}", t),
         PgKind::Doc(d) => format!("doc {}", d.replace("\n", "\\n")),
         PgKind::Other(c) => format!("other {}", c),
     }

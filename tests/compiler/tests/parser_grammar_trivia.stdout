@@ -9,7 +9,7 @@ name a@0 | \nname b@34
 == case5.txt
 name a@0 | name b@33
 == case6.txt
-other "@0 | other "@18
+str /* in a string */@0
 == case7.txt
 doc one\n two@0 | \nres fn@29 | name f@32
 == case8.txt
@@ -37,18 +37,18 @@ in NIKAIA_OWN_WS
 in WS
 in tokens
 == case10.txt
-name xs@0 | other [@2 | other 0@3 | other ]@4
+name xs@0 | other [@2 | digits 0@3 | other ]@4
 == case11.txt
-name xs@0 | \nother [@3 | other 0@4 | other ]@5
+name xs@0 | \nother [@3 | digits 0@4 | other ]@5
 == case12.txt
-name xs@0 | \nother [@16 | other 0@17 | other ]@18
+name xs@0 | \nother [@16 | digits 0@17 | other ]@18
 == case13.txt
-name xs@0 | other [@19 | other 0@20 | other ]@21
+name xs@0 | other [@19 | digits 0@20 | other ]@21
 == case14.txt
-name xs@0 | \nother [@24 | other 0@25 | other ]@26
+name xs@0 | \nother [@24 | digits 0@25 | other ]@26
 == A1.nika
-2 words, 5 names, 0 docs, 4 other, 3 after a line break
+2 words, 5 names, 0 docs, 0 literals, 4 other, 3 after a line break
 == drive_docs.nika
-25 words, 258 names, 0 docs, 498 other, 32 after a line break
+25 words, 136 names, 0 docs, 36 literals, 273 other, 32 after a line break
 == grammar_same_line.nika
-20 words, 109 names, 0 docs, 282 other, 25 after a line break
+20 words, 76 names, 0 docs, 30 literals, 139 other, 25 after a line break

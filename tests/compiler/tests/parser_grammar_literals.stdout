@@ -1,0 +1,21 @@
+str a\"b@0 | str @7 | str x\\@10 | str // not a comment@16 | str /* nor this@35
+other "@0 | name open@1
+char x@0 | char \n@4 | char \'@9 | char ab@14 | other '@19 | name x@21
+digits 0@0 | digits 255@2 | digits 1000000@6 | digits 007@16 | digits 123@20 | digits 1@26 | name __0@27
+exponent e5: e5
+exponent e-12: e-12
+exponent e+3: e+3
+exponent E5: refused
+exponent e: refused
+segment type: type
+segment x2: x2
+segment 2x: refused
+g_builtin text: text
+g_builtin until: until
+g_builtin texts: refused
+g_builtin name: refused
+f_text a{{b}}\u{41}\n: a{{b}}\u{41}\n
+f_text a{b: refused
+f_text say ": refused
+f_spec :>8: >8
+f_spec ::
