@@ -51,3 +51,4 @@
 /home/user/Nikaia/docs/briefs/bugs/b21-1097-flat-map-seq-result.md 571035 7
 /home/user/Nikaia/docs/briefs/bugs/b41-1134-fn-mut-param-type.md 0 1
 /home/user/Nikaia/docs/briefs/bugs/b41-1134-fn-mut-param-type.md 371677 6
+/home/user/Nikaia/docs/briefs/bugs/b42-1202-1203-symbol-opt-and-param-view.md 1237163 15
