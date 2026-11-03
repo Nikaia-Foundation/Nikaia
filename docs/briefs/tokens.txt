@@ -245,3 +245,5 @@
 /home/user/Nikaia/docs/briefs/qa/qa-task.md 215408 13
 /home/user/Nikaia/docs/briefs/qa/qa-task.md 201122 11
 /home/user/Nikaia/docs/briefs/qa/qa-task.md 607086 20
+/home/user/Nikaia/docs/briefs/p1198-words-table.md 5395990 91
+/home/user/Nikaia/docs/briefs/p1198b-words-required.md 296992 4
