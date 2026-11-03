@@ -1,4 +1,4 @@
-b39-1160-test-only-helpers-cfg-test.md
+b39b-1160-finish.md
 b40-1161-collect-into-optional.md
 r3c-c-match-in-place.md
 b34-557-same-line.md
