@@ -545,7 +545,7 @@ struct Emitter<'p> {
     /// file of the build, so a program knows the hidden parameters of the
     /// library types it names.
     seeds: seeds::Seeds,
-    /// **What a give-up lowers to** (ADR-353 D3, `view_changes`): an
+    /// **What a give-up lowers to** (ADR-views-3 D9, `view_changes`): an
     /// assignment that becomes a binding of its own, and the `let`s that need
     /// no `mut` because of it.
     give_ups: crate::view_changes::GiveUps,

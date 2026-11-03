@@ -1,5 +1,5 @@
 // A struct, or a tuple, handed back whose views point into text the body made
-// puts that text in the caller's keep (ADR-353 D10, ADR-283 D23): the field
+// puts that text in the caller's keep (ADR-views-3 D10, ADR-283 D23): the field
 // stays a view, nothing is copied, and the view is read after the call (#942).
 struct View { head: String }
 

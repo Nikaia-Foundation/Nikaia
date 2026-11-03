@@ -266,7 +266,7 @@ impl EmitState {
     /// `emit_expr_as_written`, past the copy of a text's bytes: the dispatch.
     fn emit_expr_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = node_key(node)
-        // **An arm read off a place under a `ref T` is lent** (ADR-354 D1).
+        // **An arm read off a place under a `ref T` is lent** (ADR-views-3 D5).
         if self.facts.lent_reads.contains(at) {
             out.push("&")
         }

@@ -10,7 +10,7 @@ fn advance(mut c: Cursor) {
     println(c.input)
 }
 
-// ADR-353 D9 (#942): with `v` no longer read after the move, `text` is
+// ADR-views-3 D9 (#942): with `v` no longer read after the move, `text` is
 // simply handed to the field that owns it.
 fn main() {
     let n = 1

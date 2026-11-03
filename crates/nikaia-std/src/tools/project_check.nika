@@ -76,7 +76,7 @@ pub fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -
     // tally has to say what it counted and these are two different shapes: one
     // is a view given to a call and kept, the other a view of a buffer the body
     // made and handed back.
-    // **Data changed under a view** (ADR-353 D4): the way out is an order of
+    // **Data changed under a view** (ADR-views-3 D9): the way out is an order of
     // statements, or a copy.
     let changed_under = project_check_count(findings, "NK2305")
     if changed_under > 0 {

@@ -260,7 +260,7 @@ pub struct TextTiers {
     /// of the name, and the name is not moved (ADR-282 D7, D13, #712).
     pub viewed_arms: collections::BTreeSet[i64],
     /// **The names moved into a literal's position that must hold text of
-    /// its own while a view of them is still used** (ADR-353 D9), by their
+    /// its own while a view of them is still used** (ADR-views-3 D9), by their
     /// nodes: each stays a move, and `view_changes` refuses it (`NK2305`).
     pub refused_moves: collections::BTreeMap[i64, TierRefusal],
 }
@@ -618,10 +618,10 @@ struct Flows {
     /// function walked too, with this one's index (#740).
     kept_through: collections::BTreeSet[(String, i64)],
     /// The uses of each parameter that are an arm still read later, a view
-    /// of it whatever its callers hand (ADR-353 D8, #948), by its word.
+    /// of it whatever its callers hand (ADR-views-3 D9, #948), by its word.
     arm_uses: collections::BTreeMap[String, i64],
     /// The first change in place of each position, by its word: what makes
-    /// it hold text of its own (ADR-353 D9).
+    /// it hold text of its own (ADR-views-3 D9).
     forced: collections::BTreeMap[String, TierForced],
 }
 
@@ -704,7 +704,7 @@ struct TextTie {
     through_text: bool,
     /// The callee hands back a value of a declared type, a struct or an
     /// enum: handed back out of the function walked, the local text it views
-    /// goes into the caller's keep (ADR-353 D10).
+    /// goes into the caller's keep (ADR-views-3 D10).
     through_value: bool,
 }
 
@@ -3026,7 +3026,7 @@ fn tie_leaves(value: ref Expr, depth: i64, into: String?, back: bool, ask: ref T
         return
     }
     // **A value viewing what the body owns takes the caller's keep**
-    // (ADR-353 D10, ADR-283 D23): a struct or an enum a callee built over a
+    // (ADR-views-3 D10, ADR-283 D23): a struct or an enum a callee built over a
     // local's text, handed back, leaves the callee's parameter lent.
     for tie in ties {
         if tie.depth > depth && !(back && tie.depth == 0 && tie.through_text) && !(back && tie.depth > 0 && tie.through_value) {
@@ -3518,7 +3518,7 @@ struct TierLateFound {
     params: collections::BTreeSet[i64],
     /// The names moved into a literal's position while a view of them is
     /// still used, by their nodes: the position's word and how it is written
-    /// (ADR-353 D8, D9).
+    /// (ADR-views-3 D9).
     moved: collections::BTreeMap[i64, (String, String)],
     /// Those among them only a view made later out of their holder keeps
     /// (#948).
@@ -3563,7 +3563,7 @@ struct TierLate {
     branch_args: Vec[TierLateArm],
     branches: i64,
     /// The functions of this program whose result may hold a view of a text
-    /// handed to them, by key, and the methods among them by name (ADR-353
+    /// handed to them, by key, and the methods among them by name (ADR-views-3
     /// D8).
     viewing: collections::BTreeSet[String],
     viewing_methods: collections::BTreeSet[String],
@@ -3578,7 +3578,7 @@ struct TierLate {
     /// it lived, by its node: the position's word and how it is written.
     moved: collections::BTreeMap[i64, (String, String)],
     /// The methods of this program that change their subject and may hand
-    /// back a view of it, by name (ADR-353 D8, #948).
+    /// back a view of it, by name (ADR-views-3 D9, #948).
     changing_methods: collections::BTreeSet[String],
     /// The text fields of the program's structs, `S.f`.
     text_fields: collections::BTreeSet[String],
@@ -4101,7 +4101,7 @@ fn late_argument(arg: ref Expr, ask: ref TierAsk, mut late: TierLate) {
     late_defer(TierLateArm { at: node_key(arg), name: word.clone(), serial: serial, loops: loops, argument: true }, late)
 }
 
-// --- A text moved into a literal while a view of it lives (ADR-353 D8) ---
+// --- A text moved into a literal while a view of it lives (ADR-views-3 D9) ---
 
 /// Whether a value of `ty` may hold text: a `String`, or a type that holds
 /// one, a struct's field or a variant's payload of this program among them.
@@ -4288,7 +4288,7 @@ fn late_made(value: ref Expr) -> ref Expr {
     }
 }
 
-/// **A view made out of a struct by a method that changes it** (ADR-353 D8,
+/// **A view made out of a struct by a method that changes it** (ADR-views-3 D9,
 /// ADR-282 D13, #948): `let e = p.next()`, where `next` takes `ref mut self`
 /// and hands back what may view `p`. Where `e` is read later, `p` cannot
 /// own the text it took: the view would outlive the method's hold on `p`.
@@ -4325,7 +4325,7 @@ fn late_held_view(name: ref String, value: ref Expr, ask: ref TierAsk, mut late:
 }
 
 /// **A name moved as it is into a literal while a view of it is still used
-/// is a view of it** (ADR-353 D8): the literal is a variable of the function,
+/// is a view of it** (ADR-views-3 D9): the literal is a variable of the function,
 /// and moving the text would end the view read next. A declared position it
 /// goes into is kept, by its word and as written.
 fn late_moved(value: ref Expr, position: (String, String)?, ask: ref TierAsk, mut late: TierLate) {
@@ -5822,7 +5822,7 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
         out.insert(word.clone(), Tier::View)
     }
     // **A parameter named only as arms that stay views of it is a view**
-    // (ADR-353 D8, Part I 6.5, #948): `Parser { input: text, .. }` bound to
+    // (ADR-views-3 D9, Part I 6.5, #948): `Parser { input: text, .. }` bound to
     // a local while a view of `text`, or one made out of the local later,
     // is still read. Moving it in is no keeping, so its callers lend it.
     for (word, count) in flows.arm_uses {
@@ -6345,7 +6345,7 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
         adopted.insert(at.clone(), TierAdopted { owner: target.owner.clone(), ty: target.ty.clone() })
     }
     // **A moved text whose position must hold text of its own stays a move**
-    // (ADR-353 D9): `view_changes` refuses it, with the place that makes it
+    // (ADR-views-3 D9): `view_changes` refuses it, with the place that makes it
     // so.
     let mut viewed_arms = walk.flows.viewed_arms.clone()
     let mut refused_moves: collections::BTreeMap[i64, TierRefusal] = collections::BTreeMap()

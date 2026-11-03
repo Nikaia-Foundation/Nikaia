@@ -5,7 +5,7 @@ fn parse(t: String) -> View {
     return View { head: t }
 }
 
-// ADR-353 D3, D4 (#942): `text` moved into `c.input` is followed there, so
+// ADR-views-3 D9 (#942): `text` moved into `c.input` is followed there, so
 // changing that field in place while `v` is still used is refused; `c.pos`
 // is no part of the data `v` may point into.
 fn main() {

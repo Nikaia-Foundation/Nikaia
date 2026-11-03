@@ -274,7 +274,7 @@ fn a_loop_over_standard_input_binds_a_string_and_still_costs_throws() {
 ///
 /// **64 at 0.0.177**, and the thirteenth is the eleventh becoming **two calls**.
 /// `request.body` is an accessor now rather than a field
-/// ([ADR-202](../../../docs/specification/adr/adr-202.md) D1 gave a method the
+/// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D7 gave a method the
 /// spelling to hand a view of a field back), so `request.body().len()` is a call
 /// on the untyped lambda parameter *and* a call on what it hands back, where the
 /// field form was one. Measured both ways round on this tree: 63 with the field,

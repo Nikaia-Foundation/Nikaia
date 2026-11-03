@@ -2,7 +2,7 @@
 //
 // **The tables of views** (ADR-294, #125, #855, E11-5): which structs and enums
 // of a file hold a view into the input (Part II, 10.6), and the view-holding
-// fields of each struct that holds two or more (ADR-353 D1, D7). The Rust
+// fields of each struct that holds two or more (ADR-views-3 D8, D10). The Rust
 // side (`emit/mod.rs`) calls these with the unit's interner and items and puts
 // the answers in its own tables.
 //
@@ -142,7 +142,7 @@ pub fn emit_tables_borrowing_structs_beside(words: ref winnow_grammar::InternerC
 }
 
 /// The view-holding fields of each struct of a unit that holds two or more
-/// (ADR-353 D1, D7): one lifetime each, `pub` or not, in the order written.
+/// (ADR-views-3 D8, D10): one lifetime each, `pub` or not, in the order written.
 /// An error keeps one place.
 pub fn emit_tables_view_slots(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], borrowing: ref collections::BTreeSet[String]) -> Vec[(String, Vec[String])] {
     let errors = declared_errors(words, items)
@@ -292,7 +292,7 @@ pub fn emit_tables_tethered(own: ref Ledger, beside: ref Vec[ParsedView]) -> col
     return out
 }
 
-/// **The places of each type another package declares** (ADR-353 D7): the
+/// **The places of each type another package declares** (ADR-views-3 D10): the
 /// ledger's `tethered` lists its view fields in the order written, one
 /// lifetime each where there are two or more. An enum, and a type a function
 /// there throws, keeps one place.

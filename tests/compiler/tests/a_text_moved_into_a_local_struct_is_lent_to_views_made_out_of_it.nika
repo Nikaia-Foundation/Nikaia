@@ -1,6 +1,6 @@
 // A text moved into a local struct literal, with no view of it yet, is lent
 // all the same where a method that changes the struct hands back views of
-// it that are read later (ADR-353 D8, ADR-282 D13, #948): the field is a
+// it that are read later (ADR-views-3 D9, ADR-282 D13, #948): the field is a
 // view, the text stays in its keep, and the views outlive each call.
 struct Event { text: String, line: i64 }
 

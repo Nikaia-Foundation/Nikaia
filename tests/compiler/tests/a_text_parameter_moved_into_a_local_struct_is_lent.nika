@@ -1,5 +1,5 @@
 // A text parameter the body only moves into a local struct is not kept
-// (Part I 6.5, ADR-353 D8): it stays a view, the struct's field views the
+// (Part I 6.5, ADR-views-3 D9): it stays a view, the struct's field views the
 // caller's text, and the events handed back point into it (#942).
 struct Event { text: String, line: i64 }
 

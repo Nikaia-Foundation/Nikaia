@@ -878,11 +878,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple64304| {
-                            let (at, arg) = __nikaia_tuple64304; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple64317| {
+                            let (at, arg) = __nikaia_tuple64317; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none()
-                        }).map(|__nikaia_tuple64364| {
-                            let (at, arg) = __nikaia_tuple64364;
+                        }).map(|__nikaia_tuple64377| {
+                            let (at, arg) = __nikaia_tuple64377;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);

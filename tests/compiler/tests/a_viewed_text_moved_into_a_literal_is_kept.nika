@@ -13,7 +13,7 @@ fn show(p: Piece) {
     }
 }
 
-// ADR-353 D8 (#942): a text that a live view reads, moved into a literal
+// ADR-views-3 D9 (#942): a text that a live view reads, moved into a literal
 // whose position only reads it, is kept where it is and the position views
 // it: a struct, a tuple, a list, a variant, and a text moved on first.
 fn main() {

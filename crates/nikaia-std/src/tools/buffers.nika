@@ -96,7 +96,7 @@ pub struct BufferAsk {
     pub given_up: ref collections::BTreeMap[i64, String],
     /// The names the text tiers took as a view of themselves where they
     /// stand, by their nodes (`viewed_arms`): a buffer moved so into a
-    /// literal is a view of it (ADR-353 D8).
+    /// literal is a view of it (ADR-views-3 D9).
     pub viewed: ref collections::BTreeSet[i64],
 }
 
@@ -402,7 +402,7 @@ fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: f
     }
     let at = span.start as i64
     // **A move into another local** while a view of the buffer is used
-    // afterwards (ADR-353 D3, `view_changes`' answer in `ask.given_up`): the
+    // afterwards (ADR-views-3 D9, `view_changes`' answer in `ask.given_up`): the
     // buffer lives in the frame's keep from its `let`, and the new name holds
     // the same data. No copy.
     match value {
@@ -912,7 +912,7 @@ fn flow_into(root: ref String, origins: collections::BTreeSet[(i64, String)], mu
 }
 
 // **A buffer given a new value inside a block nested below its `let`**, while
-// a view of it made outside that block is used afterwards (ADR-353 D3; which
+// a view of it made outside that block is used afterwards (ADR-views-3 D9; which
 // ones is `view_changes`' answer, `ask.given_up`): a binding of its own would
 // end with the inner block, so the buffer lives in the frame's keep from its
 // `let`, and the assignment puts the new value there too (#293). No copy.
@@ -1716,7 +1716,7 @@ fn a_library_struct_of_views(name: ref String, ask: ref BufferAsk) -> bool {
 }
 
 // **A call that hands back a view of its arguments makes no buffer**
-// (ADR-353 D1): `longest(longest(x, y), z)` points into `x`, `y` and `z`,
+// (ADR-views-3 D8): `longest(longest(x, y), z)` points into `x`, `y` and `z`,
 // which the inner call's origins already carry.
 fn buffers_view_call(arg: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync) -> bool {
     return match arg {

@@ -29,7 +29,7 @@ pub struct EmitSeedsEnd {
 }
 
 /// A result of several view fields: each source parameter's own lifetime and
-/// the result's lifetime arguments (ADR-353 D1).
+/// the result's lifetime arguments (ADR-views-3 D8).
 pub struct EmitSplit {
     pub own: Vec[EmitPair],
     pub fields: Vec[String],
@@ -259,7 +259,7 @@ impl EmitState {
     }
 
     /// Whether the result points into the parameter `name`, whole
-    /// (`borrows`) or by path (`returns`, ADR-353 D5).
+    /// (`borrows`) or by path (`returns`, ADR-views-3 D10).
     fn emit_fn_result_points_into(ref self, key: ref String, name: ref String) -> bool {
         let c = self.own_contracts.functions.get(key) ?? return false
         if c.borrows.contains(name) {
@@ -838,7 +838,7 @@ impl EmitState {
                     channel = self.error_channel(world, key, emit_is_elided(lifetimes), lifetimes.params(), static_lifetimes.params(), borrows_any)
                 }
                 // **One lifetime per parameter a view field points into**
-                // (ADR-353 D1).
+                // (ADR-views-3 D8).
                 let returns_text = self.emit_fn_returns(key)
                 if shared && !source_nested && several_at.len() >= 2 && returns_text != null {
                     let mut sources: Vec[String] = []
@@ -1118,13 +1118,13 @@ impl EmitState {
 }
 
 /// **Each source parameter's own lifetime, and the result's lifetime
-/// arguments** (ADR-353 D1, D5), where the result is a struct of several view
+/// arguments** (ADR-views-3 D8, D10), where the result is a struct of several view
 /// fields and `returns` names one of `sources` for each; null where it does
 /// not.
 ///
 /// A union (`ref(a | b)`) is one lifetime over its group: every parameter a
 /// field may view is tied to the others it may view, and to nothing else
-/// (ADR-353 D2). A group is named by its lowest parameter, `'r` first and
+/// (ADR-views-3 D8). A group is named by its lowest parameter, `'r` first and
 /// `'r1`, `'r2` after.
 fn emit_split_lifetimes(state: ref EmitState, world: ref EmitWorld, ty: ref Type, returns: ref String, sources: ref Vec[String]) -> EmitSplit? {
     if !ty.generics.is_empty() || ty.is_view || returns.is_empty() {

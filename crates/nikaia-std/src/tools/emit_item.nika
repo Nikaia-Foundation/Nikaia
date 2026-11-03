@@ -116,7 +116,7 @@ impl EmitState {
         return found.clone()
     }
 
-    /// The view fields of a struct, in order (ADR-353 D1).
+    /// The view fields of a struct, in order (ADR-views-3 D8).
     fn emit_item_slots(ref self, name: ref String) -> Vec[String] {
         let found = self.view_slots.get(name) ?? return []
         return found.clone()
@@ -240,7 +240,7 @@ impl EmitState {
                 }
                 let vis = if is_public { "pub " } else { "" }
                 let mut body = EmitOut::empty()
-                // **One lifetime per view field** (ADR-353 D1): `'a`, `'a1`, ...
+                // **One lifetime per view field** (ADR-views-3 D8): `'a`, `'a1`, ...
                 let slots = self.emit_item_slots(text)
                 for field in fields {
                     let field_text = emit_text(world, field.name)

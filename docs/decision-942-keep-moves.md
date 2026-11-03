@@ -41,7 +41,7 @@ error: Cannot move out of `text` because it is borrowed.
 That is rustc's E0505, translated: a message about a file nobody wrote
 (Part III C.1 forbids exactly that).
 
-**Why a question arises.** ADR-353 D3 says a caller may *give up* a value while
+**Why a question arises.** ADR-views-3 D9 says a caller may *give up* a value while
 a view of it lives: its buffer moves into the keep and lives as long as the
 views. The data never changes, so `v` and `c` could both read one buffer. But
 `c.input` is declared `String`, an owner. One buffer cannot be owned by
@@ -57,7 +57,7 @@ below, counting owners, copying, or refusing. Which one is the decision.
 * Step 2 (commit 1b1d740, 0.0.1272) is built: `view_changes`
   (`crates/nikaia-std/src/tools/view_changes.nika`, `vc_moved_parts`) follows a
   text moved into a struct field, tuple or list, and a change in place of that
-  part while `v` lives is `NK2305` (ADR-353 D4). Step 1, the lowering, is open
+  part while `v` lives is `NK2305` (ADR-views-3 D9). Step 1, the lowering, is open
   and was sent back for a decision by the builder (comment on #942).
 * The owner asked to weigh the new Rust borrow checker (Polonius) before
   building anything it might later solve better. Section 6.
@@ -66,10 +66,10 @@ below, counting owners, copying, or refusing. Which one is the decision.
 
 | Record | What it settles | Read as |
 | :--- | :--- | :--- |
-| ADR-353 D3 | giving a value up (reassignment, end of scope, **a move into another variable of the same function**, a hand-over to a view parameter) moves its buffer to the keep; no copy | decided; a move into a *field* is **not named** |
-| ADR-353 D4 | a change in place of data a view may point into is `NK2305`, at the change | decided, built for fields (step 2) |
-| ADR-353 D6 | handing the data to a **callee** that keeps it is `NK2305` at the hand-over; the copy is the program's; copy-on-write rejected | decided for callees; its reason ("a move into a variable of the same function is not refused: the compiler sees every change of that variable") applies just as well to a local struct |
-| ADR-353 D7 | a struct has one place per view-holding field; an enum one place | decided |
+| ADR-views-3 D9 | giving a value up (reassignment, end of scope, **a move into another variable of the same function**, a hand-over to a view parameter) moves its buffer to the keep; no copy | decided; a move into a *field* is **not named** |
+| ADR-views-3 D9 | a change in place of data a view may point into is `NK2305`, at the change | decided, built for fields (step 2) |
+| ADR-views-3 D9 | handing the data to a **callee** that keeps it is `NK2305` at the hand-over; the copy is the program's; copy-on-write rejected | decided for callees; its reason ("a move into a variable of the same function is not refused: the compiler sees every change of that variable") applies just as well to a local struct |
+| ADR-views-3 D10 | a struct has one place per view-holding field; an enum one place | decided |
 | ADR-283 D3 | the compiler never inserts a copy | decided; rules out an inserted `.clone()` |
 | ADR-283 D9-D10, D23 | a buffer whose views outlive its scope moves into a keep; a function whose result carries views takes the caller's keep | decided; for a *struct* result holding a view of a local, not built for this shape (fact F7) |
 | ADR-283 D14 | emitted code for held views writes no `unsafe` | decided; rules out option E as it stands |
@@ -139,8 +139,8 @@ moved (`NK2105` on a later use of `text`).
   contradicts D6's own reason (the compiler sees every change of a local
   struct, so D4 covers it) and D3's spirit; F3 (`let moved = text; Cursor {
   input: moved }`) would need the same refusal to stay consistent.
-* Risk: refuses programs whose data is never in danger, the outcome ADR-353 §3
-  rejected for Rust.
+* Risk: refuses programs whose data is never in danger, the outcome the archived record of view sources
+  (`docs/history/adr`, its §3) rejected for Rust.
 
 **C. The keep hands back a shared owner (a count).** The field becomes a
 counted buffer below (`Rc<str>`/`Arc<str>`, or `Bytes`-like), the keep holds
@@ -150,7 +150,7 @@ one count, `c.input` another.
 * Consequences: the representation changes program-wide just as in A (no
   lifetime, but a count); every move costs an increment, every drop a
   decrement; a change in place needs uniqueness, i.e. copy-on-write, which
-  ADR-353 D6 rejected. Swift's model.
+  ADR-views-3 D9 rejected. Swift's model.
 
 **D. Insert the copy, with a note.** rustc accepts (K1). Forbidden by
 ADR-283 D3 and ADR-282 D7 (no inserted copy). Listed for completeness.
@@ -284,7 +284,7 @@ that way applied to the field.
 ## 10. Recommendation
 
 **Option A, with B's refusal only where the position must own its text**
-(the mixed rule of §5). Reasons: it is what ADR-353 D3 and D6's own reason
+(the mixed rule of §5). Reasons: it is what ADR-views-3 D9's own reason
 already say about values the function can see; it reuses the tiers, which
 already handle all four literal forms (F5b) and already refuse in Nikaia terms
 where owning is needed (F7, F8); it adds no `unsafe`, no count and no copy; it
@@ -293,13 +293,13 @@ F3. Before or with it, fix F9 (#944, a false `NK2305` on `c.pos` while `v` views
 `c.input`), or the owner's cursor stays refused either way.
 
 Not recommended: D (forbidden), E/F (`unsafe`, ADR-283 D14, representation
-risk), C (a count everywhere and copy-on-write, both rejected in ADR-353 D6).
+risk), C (a count everywhere and copy-on-write, both rejected in ADR-views-3 D9).
 Polonius: neither wait for it nor depend on it.
 
 ## 11. Questions for the owner
 
 1. Is a struct, tuple, list or variant literal inside the function a "variable
-   of the same function" (ADR-353 D3), so the move is kept, not refused? (A vs B)
+   of the same function" (ADR-views-3 D9), so the move is kept, not refused? (A vs B)
 2. Is a field's representation changing program-wide (view / `EitherText`)
    because a moved text flows in acceptable, as it already is for a view
    flowing in (ADR-282 D13)?

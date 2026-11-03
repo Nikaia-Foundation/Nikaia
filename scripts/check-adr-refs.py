@@ -191,7 +191,7 @@ def banished():
     An archived record was replaced by one that states the same decisions in
     their current form. Pointing a reader - or a model - at it sends them to
     the route rather than the answer and costs a second read, so only the
-    history may name it: `docs/history/` and `CHANGELOG.md`.
+    history may name it: `docs/history/`, `docs/briefs/` and `CHANGELOG.md`.
     """
     archived = {name_of(p) for p in records(ARCHIVE)} - {None}
     if not archived:
@@ -203,7 +203,8 @@ def banished():
     for p in SEARCH:
         files |= {f for f in glob.glob(p, recursive=True) if os.path.isfile(f)}
     for f in sorted(files):
-        if f.startswith("docs/history/") or f == "CHANGELOG.md" or "__pycache__" in f or "/target/" in f:
+        # A brief or its report is a plan of its day, read as written (9b6436ff).
+        if f.startswith(("docs/history/", "docs/briefs/")) or f == "CHANGELOG.md" or "__pycache__" in f or "/target/" in f:
             continue
         if os.path.abspath(f) == os.path.abspath(__file__):
             continue

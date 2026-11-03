@@ -5,16 +5,12 @@
 **Answers:** whether a signature says that a parameter keeps its argument, and
 with which word; how a view is written once that is said; how a result that
 points into a parameter is written (#1213, which absorbed #1211)
+**History:** the records this one replaces are archived in [`docs/history/adr`](../../history/adr/README.md); read them only for how the decision was reached
 **Supersedes / Related:**
 [ADR-094](adr-094.md) (the caller writes no `&`, inferred `keeps`): D2 and D6
 are replaced here, D1, D3-D5 and D7 are restated here;
 [ADR-184](adr-184.md) D1 (`ref X` is a view everywhere): replaced here, except
 in `extern "C"`;
-[ADR-202](adr-202.md) (a view of the subject is handed back without `ref`):
-restated here as D7;
-[ADR-353](adr-353.md) (a result's views and their sources): restated here as
-D8-D10, its D5 spelling replaced;
-[ADR-354](adr-354.md) (`ref T` on a `let`, `NK1257`): replaced here by D5;
 [ADR-358](adr-358.md) D3 (`ref`/`mut` on a whole pattern parameter): `mut`
 only;
 [ADR-251](adr-251.md) D4 (the ledger's `-> ref(a | b) T`): written

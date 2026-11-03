@@ -442,7 +442,7 @@ impl CheckState {
                 got = self.tuple_literal(world, founds[at], wants[at], parts[at])
             }
             // **An element or a field read off a place, as a part that
-            // declares a view, is lent** (ADR-354 D1, #655): `(2, given[1])`
+            // declares a view, is lent** (ADR-views-3 D5, #655): `(2, given[1])`
             // under `(i64, ref E?)` is `(2, Some(&given[1]))`.
             if got == null && check_core_stmt_element_view(self, world, parts[at], founds[at], wants[at]) == 1 {
                 self.facts.lent_reads.insert(node_key(parts[at]))

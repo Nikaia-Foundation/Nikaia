@@ -45,7 +45,7 @@ fn result_findings(source: &str) -> Vec<Finding> {
 }
 
 /// Whether some function's ledger entry names two or more parameters as its
-/// result's sources (ADR-353 D2): the walk followed the view to both.
+/// result's sources (ADR-views-3 D8): the walk followed the view to both.
 fn two_sources(source: &str) -> bool {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
@@ -298,7 +298,7 @@ impl Summary {
 
 // --- what stays NK2302 ---------------------------------------------------------
 
-/// ADR-353 D1, D2: the ledger writes every parameter a result may point into,
+/// ADR-views-3 D8: the ledger writes every parameter a result may point into,
 /// and the lowering ties them and the result to one buffer group.
 #[test]
 fn longest_and_pair_lower_with_every_source() {
@@ -328,7 +328,7 @@ pub fn total(x: ref String, y: ref String) -> i64 {
     }
 }
 
-/// ADR-353 D1: a call handing back a view of its arguments makes no buffer, so
+/// ADR-views-3 D8: a call handing back a view of its arguments makes no buffer, so
 /// `longest(longest(x, y), z)` points into all three and takes no keep; and a
 /// method's result may point into its receiver and a parameter at once.
 #[test]
@@ -632,7 +632,7 @@ fn the_ledger_names_the_source() {
 }
 
 // --- holes the review found: a view that reaches a second parameter by a way the
-// walk has to follow, each one found (ADR-353 D2) -------------------------------------------
+// walk has to follow, each one found (ADR-views-3 D8) -------------------------------------------
 
 /// A method that changes a local list may keep its argument: `v.push(b)` makes `v` carry `b`.
 #[test]
@@ -993,7 +993,7 @@ fn longest_is_accepted_since_adr353() {
     assert!(found.is_empty(), "{found:#?}");
 }
 
-/// A declaration with no body and two views points into both (ADR-353 D2).
+/// A declaration with no body and two views points into both (ADR-views-3 D8).
 #[test]
 fn a_declaration_with_two_views_is_accepted() {
     let source = "trait Picks {\n    fn pick(a: ref String, b: ref String) -> ref String\n}\n";
@@ -1051,7 +1051,7 @@ fn package_compiled(purpose: &str, dir: &std::path::Path, program: &nikaia::modu
     );
 }
 
-/// ADR-353 D1, D5 across files: a caller reads the callee's per-view
+/// ADR-views-3 D8, D10 across files: a caller reads the callee's per-view
 /// `returns` off the ledger, and a view out of one field keeps that field's
 /// source alone.
 #[test]
@@ -1076,7 +1076,7 @@ const HELPER: &str = "pub struct Txt { pub n: ref String }\n\
 
 /// **A struct of views another file declares is judged like one declared here**
 /// (B12): a result holding the views of `a` on one way out and of `b` on
-/// another points into both (ADR-353 D2), and compiles.
+/// another points into both (ADR-views-3 D8), and compiles.
 #[test]
 fn a_foreign_struct_result_with_two_sources_is_accepted() {
     let main = "fn hole(a: ref String, b: ref String) -> Txt {\n    if a.len() > 9 {\n        return Txt { n: a }\n    }\n    return mk(b)\n}\n\
@@ -1117,7 +1117,7 @@ fn a_foreign_struct_without_views_is_accepted() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// ADR-353 D1: each view field has a lifetime of its own, so a caller that
+/// ADR-views-3 D8: each view field has a lifetime of its own, so a caller that
 /// keeps `pair(x, y).left` may give `y` a new value while it uses the view
 /// (#614, To build 3).
 #[test]
@@ -1140,7 +1140,7 @@ pub fn keep_left() -> String {
     compiled("a_view_field_outlives_the_other_parameter", source);
 }
 
-// ---- ADR-353 D3, D4: giving an argument up, and changing it in place ----
+// ---- ADR-views-3 D9: giving an argument up, and changing it in place ----
 
 const LONGEST: &str = r#"fn longest(a: ref String, b: ref String) -> ref String {
     if a.len() >= b.len() {
@@ -1207,7 +1207,7 @@ fn a_reassigned_argument_may_be_changed_afterwards() {
     compiled("a_reassigned_argument_may_be_changed_afterwards", &source);
 }
 
-/// D3 with ADR-354: a view of an element, the list given a new value.
+/// D3 with ADR-views-3: a view of an element, the list given a new value.
 #[test]
 fn a_reassigned_list_keeps_the_element_a_view_points_into() {
     let source = format!(
@@ -1328,7 +1328,7 @@ fn a_change_after_the_last_use_compiles() {
     compiled("a_change_after_the_last_use_compiles", &source);
 }
 
-/// D4 with ADR-354: an element view, and a change inside a loop that uses the
+/// D4 with ADR-views-3: an element view, and a change inside a loop that uses the
 /// view on its next round.
 #[test]
 fn a_change_under_an_element_view_or_in_a_loop_is_nk2305() {
@@ -1464,7 +1464,7 @@ pub fn run() -> String {
     compiled("a_union_field_takes_one_lifetime_over_its_group", source);
 }
 
-// ---- ADR-353 D6: handing the data to a new owner; D3: a move into a local ----
+// ---- ADR-views-3 D9: handing the data to a new owner; D3: a move into a local ----
 
 const TAKE: &str = r#"fn take(s: String) -> i64 {
     let mut v: Vec[String] = []
@@ -1614,7 +1614,7 @@ fn a_change_to_the_local_moved_into_is_nk2305() {
     );
 }
 
-// ---- ADR-353 D7: a pub type keeps a place per view field ----
+// ---- ADR-views-3 D10: a pub type keeps a place per view field ----
 
 const PUB_PAIR: &str = "pub struct Pair { pub left: ref String, pub right: ref String }\n\
      pub fn pair(a: ref String, b: ref String) -> Pair {\n    return Pair { left: a, right: b }\n}\n";

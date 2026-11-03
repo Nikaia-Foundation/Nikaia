@@ -36,7 +36,7 @@ pub trait EmitHost {
     /// returns it.
     fn ty_named(ref self, mut walk: EmitWalk, ty: ref Type) -> String sync throws
 
-    /// Whether the `let` at `at` is a mutable view given up unmuted (ADR-353).
+    /// Whether the `let` at `at` is a mutable view given up unmuted (ADR-views-3).
     fn given_up_unmuted(ref self, at: i64) -> bool sync
 
     /// Whether the assignment at `at` rebinds a given-up name, and with `mut`.

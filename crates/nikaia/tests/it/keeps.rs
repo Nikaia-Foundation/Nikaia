@@ -109,7 +109,7 @@ fn a_parameter_put_into_a_struct_is_kept() {
     );
 
     // **A text parameter only moved into a field is not kept**
-    // ([ADR-353](../../../docs/specification/adr/adr-353.md) D8, #945): the
+    // ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D9, #945): the
     // tiers lend it, the field views the caller's argument, and `returns`
     // records where the result points.
     assert!(

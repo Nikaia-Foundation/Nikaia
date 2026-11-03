@@ -146,7 +146,6 @@ implementation.
 | [358](adr-358.md) | A positional parameter of a function or a lambda may be one irrefutable tuple pattern (ADR-356's), `fn dist((x, y): (f64, f64))`, `fn((name, v))`; it stays one parameter to callers and types; `ref`/`mut` belong to the whole; the ledger names the parts; a variant is `NK1259` | Accepted | no |
 | [356](adr-356.md) | A `let` and a `for` head take a nested tuple of names and `_`, as deep as it is written; a variant there is refused (`NK1259`), naming `match`. | Accepted | yes |
 | [291](adr-291.md) | A `let` takes names or a flat tuple, `_` ignores a value, and a `match` takes nested patterns, ends in `else`, covers every case and lends what an arm only reads; `..` is inclusive and `..<` exclusive. | Accepted | yes |
-| [354](adr-354.md) | An index or a field read off a place is a view where a `let` declares `ref T` or `ref T?`, in the `let` and in an arm; `ref` on a word by its kind is `NK1257` at every position outside `extern "C"`; a generic `T` is a view whatever it becomes | Accepted | yes |
 | [279](adr-279.md) | `??` takes one value as its fallback, has no postfix form, and lends its left side where the answer is read and takes it where it is kept; after a type that is not `T?` it is a warning (`NK1216`), after a list's index refused (`NK1211`); `?.` alike (D13). | Accepted | partly: D12 (#342), D13 not built (#476) |
 | [246](adr-246.md) | A type that holds itself holds itself through a box the compiler writes. | Accepted | partly: `Option<Box<T>>` for a nullable field |
 | [247](adr-247.md) | An output test runs in a directory of its own with `NAME.in/` and `NAME.out/`, its expectations are written by `nikaia test --bless`, and a `test` block gets a scratch root. | Accepted | yes |
@@ -160,7 +159,6 @@ implementation.
 | [217](adr-217.md) | `T::variants` under `[T: Enum]`, a kept function value, a view kept by a struct literal and `fs::read` returning `Bytes` are lowered as the specification states them. | Accepted | yes |
 | [204](adr-204.md) | Whether a type compares is decided from its parts, a float makes `Eq` fail, and a type that does not compare is refused with `NK1188`. | Accepted | yes |
 | [203](adr-203.md) | An `enum`'s cases are a `variants` column of the ledger, so a `match` over another package's `enum` is checked for completeness. | Accepted | yes |
-| [202](adr-202.md) | A view of the subject is handed back without a written `ref`, and the ledger's `borrows` column names the receiver. | Accepted | yes |
 | [005](adr-005.md) | Ownership has no lifetime annotations: four groups of borrow situation say which the compiler solves, and borrow contracts are inferred whole-program into the ledger. | Accepted | partly: Group B.2's desugaring (D2), D8's check on a second OS |
 | [094](adr-094.md) | The caller writes no `&`: whether a parameter is lent or kept is inferred into the ledger's `keeps` column, and mutation is `mut` in the declaration, never at the call. | Accepted | yes |
 | [108](adr-108.md) | Every `std` function that takes a path takes its root right after it, an `fs::Root` checked component by component or `Anywhere`, which `nikaia --trust` lists. | Accepted | yes |
@@ -277,7 +275,6 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
-| [353](adr-353.md) | Each view a result holds points into the parameters that reach it, a run-time choice into their union; no function is refused for it; a caller may give an argument up while a view of it lives (the buffer moves to the keep); a change in place of viewed data is `NK2305` at the change; the ledger writes each view's sources | Accepted | no |
 | [288](adr-288.md) | `sync` means a function never pauses: it is inferred from the body, decided by a lambda where one runs, and promised across packages only where written. | Accepted | yes |
 | [020](adr-020.md) | The ledger records what the compiler knows, and a library brings its own. | Accepted | yes |
 | [100](adr-100.md) | A consumer reads a dependency's ledger and derives it only where its source hashes do not match, and the inference graph is the package. | Accepted | yes |
@@ -340,7 +337,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 | [023](adr-023.md) D4, [280](adr-280.md) D18, [308](adr-308.md) D11 | [357](adr-357.md) D1-D3 | the set of error types at a `catch` is closed; a `match` naming every type needs no `else`, and a grown set refuses it |
 | [291](adr-291.md) D1, D5 | [356](adr-356.md) D1, D2 | a `let` and a `for` head take a nested tuple; a variant there is `NK1259` |
 | [349](adr-349.md) D3 | [355](adr-355.md) D3 | `E::V(a, ..)` and `(a, ..)` are the remaining values; `NK1255` only on a variant without values |
-| [283](adr-283.md) D25 | [353](adr-353.md) D1-D4 | a result may point into several parameters, view by view; giving an argument up while viewed is allowed; a change in place is `NK2305` |
+| [283](adr-283.md) D25 | [views-3](adr-views-3.md) D8, D9 | a result may point into several parameters, view by view; giving an argument up while viewed is allowed; a change in place is `NK2305` |
 | [346](adr-346.md) D7 | [351](adr-351.md) D5 | a supervisor throws a child's fatal error itself; no `supervisor::Handed` |
 | [343](adr-343.md) D1-D3 | [345](adr-345.md) D3-D5 | `exit` throws the fatal `process::Exit`; no `exits` column, no `NK2607` |
 | [296](adr-296.md) D25 | [299](adr-299.md) D21 | the author may mark one entry `main`; the compiler still picks none |
@@ -357,15 +354,12 @@ either finds the other. Records replaced as a whole are not here: they are in
 | [094](adr-094.md) D2 | [views-3](adr-views-3.md) D2 | a parameter that keeps its argument says `keep`; the inference checks it |
 | [094](adr-094.md) D6 | [views-3](adr-views-3.md) D4 | `ref` leaves the language outside `extern "C"` |
 | [184](adr-184.md) D1 | [views-3](adr-views-3.md) D4 | `ref X` stands only inside `extern "C"`; elsewhere a view is inferred |
-| [202](adr-202.md) D2 | [views-3](adr-views-3.md) D4, D7 | no `ref` on a result; a view of the subject is handed back unmarked |
-| [353](adr-353.md) D2 | [views-3](adr-views-3.md) D8 | without a body the source is written `from`, not the union |
-| [353](adr-353.md) D5, [251](adr-251.md) D4 | [views-3](adr-views-3.md) D10 | the ledger writes `-> T from a \| b` |
-| [354](adr-354.md) D1, D2 | [views-3](adr-views-3.md) D4, D5 | lets over a place are inferred views; `NK1257` retires |
+| [251](adr-251.md) D4 | [views-3](adr-views-3.md) D10 | the ledger writes `-> T from a \| b` |
 | [358](adr-358.md) D3 | [views-3](adr-views-3.md) D2, D4 | `mut` and `keep` belong to the whole parameter |
 | [002](adr-002.md) D2 | [177](adr-177.md) D1 | a grammar that runs while the program is built is compiled from the parser it generates; other `comptime` code is evaluated in the compiler's process |
 | [002](adr-002.md) D3 | [021](adr-021.md) D9 | Cranelift is an option for development builds, not the default |
 | [203](adr-203.md) D2 | [204](adr-204.md) D1 | a unit-only `enum` compares by the structural walk that decides every type, not by a rule of its own |
-| [083](adr-083.md) D2 | [202](adr-202.md) D1 | a field handed back where the result is declared a view is lent, not refused; `NK1131` stands where a field is bound or passed |
+| [083](adr-083.md) D2 | [views-3](adr-views-3.md) D7 | a field of the subject handed back is a view of it, not refused; `NK1131` stands where a field is bound or passed |
 | [013](adr-013.md) D4 | [140](adr-140.md) D2 | a type is built by its anonymous constructor, not `new` |
 | [013](adr-013.md) D5 | [277](adr-277.md) D2 | a lambda takes the arguments it names |
 | [014](adr-014.md) D1 | [002](adr-002.md) D4 | `std`'s Nikaia half is lowered at release time and the `.rs` is committed |

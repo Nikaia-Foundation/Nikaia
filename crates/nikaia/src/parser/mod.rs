@@ -326,7 +326,7 @@ pub struct Parsed {
     pub viewed_arms: std::collections::BTreeSet<i64>,
     /// **The names moved into a literal's position that must hold text of
     /// its own while a view of them is still used**, by their nodes
-    /// ([ADR-353](../../../docs/specification/adr/adr-353.md) D9):
+    /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D9):
     /// [`crate::view_changes`] refuses each (`NK2305`).
     pub refused_moves: std::collections::BTreeMap<i64, nikaia_std::tools::text_tiers::TierRefusal>,
     /// **Every hole this file's readers parsed, by its text**: what

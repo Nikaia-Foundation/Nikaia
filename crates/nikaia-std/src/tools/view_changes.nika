@@ -1,12 +1,12 @@
 // crates/nikaia-std/src/tools/view_changes.nika
 //
 // **What happens to data while a view of it is still used**
-// ([ADR-353](../../../../docs/specification/adr/adr-353.md) D3, D4; Part I 6.6),
+// ([ADR-views-3](../../../../docs/specification/adr/adr-views-3.md) D9; Part I 6.6),
 // moved from the compiler's `view_changes.rs` (ADR-294, #125).
 //
 // A view is a local bound to a call that hands back views of its arguments
 // (`let r = longest(x, y)`, the ledger's `borrows`) or to an element or a
-// field read off a place (`let e = ys[0]`, ADR-094 D4, ADR-354). While such a
+// field read off a place (`let e = ys[0]`, ADR-094 D4, ADR-views-3). While such a
 // view is still used - a later statement of the block that binds it names it,
 // or a loop around the change does - the data it may point into is watched:
 //
@@ -55,10 +55,10 @@ pub struct VcAsk {
     pub lent: ref collections::BTreeSet[i64],
     pub coalesced: ref collections::BTreeSet[i64],
     /// The names moved into a position that must hold text of its own, by
-    /// their nodes (`text_tiers`, ADR-353 D9).
+    /// their nodes (`text_tiers`, ADR-views-3 D9).
     pub refused: ref collections::BTreeMap[i64, TierRefusal],
     /// The names that stay where they are, a view of them going in instead
-    /// of the name (`text_tiers`, ADR-282 D7, ADR-353 D8), by their nodes.
+    /// of the name (`text_tiers`, ADR-282 D7, ADR-views-3 D9), by their nodes.
     pub viewed: ref collections::BTreeSet[i64],
     /// The `let mut`s that bind a mutable view of an element or a field of a
     /// `mut` place, by the id of the value (`mut_view_reads`, #959, #962).

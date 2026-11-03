@@ -5,7 +5,7 @@ fn parse(t: String) -> View {
     return View { head: t }
 }
 
-// ADR-353 (#942): a view itself, stored in a field that is changed in place,
+// ADR-views-3 (#942): a view itself, stored in a field that is changed in place,
 // is still a type error (`NK1106`), not a moved text.
 fn main() {
     let n = 1

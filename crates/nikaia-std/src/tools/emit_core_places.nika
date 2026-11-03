@@ -245,7 +245,7 @@ impl EmitState {
                 continue
             }
             // A part read off a place into a `ref T?` slot goes inside its
-            // option (ADR-354 D1, #655).
+            // option (ADR-views-3 D5, #655).
             let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(part), part)
             out.push(before)
             self.emit_expr(world, walk, out, host, part, depth, flow, scope)

@@ -405,7 +405,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         }
         // **An element or a field read off a place, handed to a `ref T?`
         // slot (a `Vec` element), is lent and goes inside the option**
-        // (ADR-354 D1, #655): `v.push(given[1])` is `v.push(Some(&given[1]))`.
+        // (ADR-views-3 D5, #655): `v.push(given[1])` is `v.push(Some(&given[1]))`.
         if given_here != null && check_arguments_nullable(want) && !check_arguments_nullable(found_here) {
             let value = given_here ?? continue
             if check_core_stmt_element_view(state, world, value, found_here, want) == 1 {

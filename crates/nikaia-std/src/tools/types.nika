@@ -326,7 +326,7 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
     }
 }
 
-// **`ref` on a word by its kind says nothing** (ADR-354 D2): a number, a
+// **`ref` on a word by its kind says nothing** (ADR-views-3 D4): a number, a
 // `bool` or a `scalar` is copied at a read, so a parameter, a field or a
 // result written `ref i64` is `NK1257` outside the C boundary. A `let` is
 // refused where its value is read (`check_core_stmt`).

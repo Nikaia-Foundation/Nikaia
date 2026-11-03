@@ -63,7 +63,7 @@ fn where_a_result_points_is_written_in_the_result() {
 }
 
 /// **A result holding views writes each view's sources by its path**
-/// ([ADR-353](../../../docs/specification/adr/adr-353.md) D1, D5), and reads
+/// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D8, D10), and reads
 /// back to the same contract; a view built from another call's views keeps
 /// its own path's sources.
 #[test]

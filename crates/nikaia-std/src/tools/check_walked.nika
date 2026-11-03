@@ -367,7 +367,7 @@ pub trait CheckWalkedPasses {
     /// A naked view parameter kept past the call (`NK2302`).
     fn view_findings(ref self) -> Vec[CheckFinding] sync
     /// A change in place of data a view still to be used may point into
-    /// (`NK2305`, ADR-353 D4).
+    /// (`NK2305`, ADR-views-3 D9).
     fn view_change_findings(ref self, lent: ref collections::BTreeSet[i64], coalesced: ref collections::BTreeSet[i64], mut_viewed: ref collections::BTreeSet[i64]) -> Vec[CheckFinding] sync
     /// The buffer plans, kept for the emitter where they are made against
     /// `std` alone, as it makes them (#727), and the tether's refusals

@@ -35,7 +35,7 @@ pub struct EmitContractsBuild {
 pub struct EmitContractsMade {
     pub state: EmitState,
     pub order_proofs: EmitOrderProofs,
-    /// **What a give-up lowers to** (ADR-353 D3, `view_changes`): an
+    /// **What a give-up lowers to** (ADR-views-3 D9, `view_changes`): an
     /// assignment that becomes a binding of its own, and the `let`s that need
     /// no `mut` because of it.
     pub give_ups: VcGiveUps,
@@ -139,7 +139,7 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
     let mut state = EmitState {
         described: described.clone(),
         // **A dependency's type keeps its places where it is written**
-        // (ADR-353 D7, #1037): the program's own ledger holds the types
+        // (ADR-views-3 D10, #1037): the program's own ledger holds the types
         // of the packages it reads under their written path
         // (`two::Node`), with that package's `tethered`; a bare key is
         // this package's own, read from the units above.

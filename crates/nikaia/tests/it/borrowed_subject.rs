@@ -376,7 +376,7 @@ fn a_mut_parameter_given_away_whole_is_refused() {
     }
 }
 
-/// **The written `ref` is the compiler's line said twice** (#96, ADR-202 D2):
+/// **The written `ref` is the compiler's line said twice** (#96, ADR-views-3 D4, D7):
 /// at a `return` of a place inside a borrowed subject or a lent parameter it is
 /// `NK1137`. That the line without it lends - a parameter declared `ref Row`
 /// as a `ref self` does - is run in `tests/language/src/borrowed_subject.nika`.

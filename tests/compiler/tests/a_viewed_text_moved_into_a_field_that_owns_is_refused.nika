@@ -10,7 +10,7 @@ fn advance(mut c: Cursor) {
     println(c.input)
 }
 
-// ADR-353 D9 (#942): `advance` changes a `Cursor`'s `input` in place, so that
+// ADR-views-3 D9 (#942): `advance` changes a `Cursor`'s `input` in place, so that
 // field must own its text; `text` moved there while `v` still reads it is
 // refused at the move.
 fn main() {

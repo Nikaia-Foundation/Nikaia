@@ -314,7 +314,7 @@ fn through_a_view(func: ref Expr, args: ref Vec[Expr], interner: ref winnow_gram
 }
 
 // **Whether the callee's result points into its parameter at `at`**: the
-// ledger's `ref(..)`, whole (`borrows`) or by path (`returns`, ADR-353 D5). A
+// ledger's `ref(..)`, whole (`borrows`) or by path (`returns`, ADR-views-3 D10). A
 // callee no ledger describes is not one: its arguments keep (D2).
 fn a_position_the_result_points_into(callee: ref String?, at: i64, own: ref Ledger, library: ref Ledger) -> bool {
     let known = (callee ?? return false).clone()
@@ -539,7 +539,7 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         // **A struct literal keeps every field it is given**: the struct
         // outlives the call wherever it goes. `P { x }` is the field and the
         // name in one, and the name may be a parameter. **A text parameter
-        // the tiers lent is not kept by moving it in** (Part I 6.5, ADR-353
+        // the tiers lent is not kept by moving it in** (Part I 6.5, ADR-views-3
         // D8, #945): the field it goes into is a view of it, and a result
         // built from the literal points into it (`returns`).
         Expr::StructLit { fields, .. } => {
@@ -1014,7 +1014,7 @@ fn keep_part(expr: ref Expr?, interner: ref winnow_grammar::InternerContext, con
 
 // **A `String` parameter that is a view below** - lent by the tiers or
 // written `ref` - and not the receiver: moved into a struct literal, the field
-// views it (ADR-353 D8).
+// views it (ADR-views-3 D9).
 fn keeps_a_lent_text(name: ref String, context: ref KeepsBody) -> bool {
     if name == "self" || !context.lent.contains(name) {
         return false

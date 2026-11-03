@@ -98,7 +98,7 @@ impl CheckState {
     }
 
     /// **A `null` arm beside arms that read an element off a place, under a
-    /// `ref E?`, is an optional view** (ADR-354 D1, #655): every other arm is
+    /// `ref E?`, is an optional view** (ADR-views-3 D5, #655): every other arm is
     /// lent, `null` stays `None`. True where the arms were lent.
     pub fn lend_choice_beside_null(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty) -> bool sync {
         let optional = match want {
@@ -883,7 +883,7 @@ impl CheckState {
                 self.flow.field_either = mixed
             }
             // **An arm that reads off a place, under a `let` that declares a
-            // view, is lent** (ADR-354 D1, #613).
+            // view, is lent** (ADR-views-3 D5, #613).
             if what == "let" && check_core_stmt_element_view(self, world, arm, ty, want) == 1 {
                 self.facts.lent_reads.insert(node_key(arm))
                 ty = match want {

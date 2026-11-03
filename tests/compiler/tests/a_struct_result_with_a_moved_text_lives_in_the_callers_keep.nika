@@ -5,7 +5,7 @@ fn parse(t: String) -> View {
     return View { head: t }
 }
 
-// ADR-353 D8, D10 (#942): `make` builds a text, views it, moves it into the
+// ADR-views-3 D9, D10 (#942): `make` builds a text, views it, moves it into the
 // `Cursor` it returns; the text lives in the caller's keep.
 fn make(n: i64) -> Cursor {
     let text = f"a: {n}"

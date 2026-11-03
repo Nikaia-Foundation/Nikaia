@@ -1,5 +1,5 @@
 // A text a view still reads, moved into a struct, is kept and the field
-// views it (ADR-353 D8): a callee that takes the struct `mut` and changes
+// views it (ADR-views-3 D9): a callee that takes the struct `mut` and changes
 // another field cannot change that text, so the view stays valid (#948).
 enum Value {
     Str(String),

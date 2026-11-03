@@ -76,7 +76,7 @@ impl EmitState {
     }
 
     /// The lifetime arguments a mention of `name` writes: `lifetime` once per
-    /// view field (ADR-353 D1), or once for a struct with one.
+    /// view field (ADR-views-3 D8), or once for a struct with one.
     pub fn lifetime_args(ref self, name: ref String, lifetime: ref String) -> String {
         let slots = self.view_slots.get(name) ?? return lifetime.clone()
         let mut parts: Vec[String] = []

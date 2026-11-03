@@ -627,7 +627,7 @@ fn ledger_borrows_in_order(mut entry: FnContract) {
     }
 }
 
-// `left: ref(a), right: ref(b)` (ADR-353 D5): every parameter any view names.
+// `left: ref(a), right: ref(b)` (ADR-views-3 D10): every parameter any view names.
 fn path_borrows_of(value: ref String, n: i64) -> Vec[String] throws {
     let mut names: Vec[String] = []
     for part in value.split("),") {

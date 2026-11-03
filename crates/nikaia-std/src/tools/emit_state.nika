@@ -64,7 +64,7 @@ pub struct EmitState {
     /// The types that carry a tether, by name, this package's and the ones beside it.
     pub tethered: collections::BTreeSet[String],
     /// The view-holding fields of a struct that holds two or more, in order:
-    /// one lifetime each (ADR-353 D1). A struct not here takes one.
+    /// one lifetime each (ADR-views-3 D8). A struct not here takes one.
     pub view_slots: collections::BTreeMap[String, Vec[String]],
     /// The symbols of the views a method's statement carries in from its
     /// input, by the start of the method.

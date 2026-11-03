@@ -166,7 +166,7 @@ fn borrowed_subject_of(row: ref BorrowedSubjectNamed) -> ref String {
     return row.name
 }
 
-// The line without a written `ref` lends (#96, ADR-202 D2): a parameter
+// The line without a written `ref` lends (#96, ADR-views-3 D4, D7): a parameter
 // declared `ref Row` lends as a `ref self` does.
 test "a lent parameter lends" {
     let r = BorrowedSubjectNamed { name: "ada" }

@@ -1,7 +1,7 @@
 // crates/nikaia/src/view_changes.rs
 //
 // **What happens to data while a view of it is still used**
-// ([ADR-353](../../docs/specification/adr/adr-353.md) D3, D4; Part I 6.6).
+// ([ADR-views-3](../../docs/specification/adr/adr-views-3.md) D9; Part I 6.6).
 // The walk is Nikaia's (`tools/view_changes.nika`, ADR-294); what is left
 // here hands it the unit and a literal's holes, which only the parser reads.
 

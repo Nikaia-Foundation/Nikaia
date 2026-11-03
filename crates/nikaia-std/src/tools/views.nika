@@ -1978,7 +1978,7 @@ fn rsrc_join(mut into: collections::BTreeSet[String], more: ref collections::BTr
     into.extend(more.clone())
 }
 
-// **A source per view** (ADR-353 D1): an entry is a parameter, which every view
+// **A source per view** (ADR-views-3 D8): an entry is a parameter, which every view
 // of the value may point into, or `path:parameter`, which only the view at that
 // path does: `left:a` for `Pair { left: a, .. }`, `left.name:a` one further in.
 fn rsrc_param_of(entry: ref String) -> String {
@@ -2897,7 +2897,7 @@ fn rsrc_callee(asked: ref Asked, known: ref collections::BTreeMap[String, Result
 }
 
 // The ledger's sources as (path, parameter): `returns = "left: ref(a)"` per
-// view (ADR-353 D5), else every parameter for every view.
+// view (ADR-views-3 D10), else every parameter for every view.
 fn rsrc_written_paths(contract: ref FnContract) -> Vec[(String, String)] {
     let mut out: Vec[(String, String)] = []
     if contract.returns.len() == 0 {
@@ -3203,7 +3203,7 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
             named.push(source.clone())
         }
     }
-    // Two or more parameters reached is no refusal (ADR-353 D1, D2): the
+    // Two or more parameters reached is no refusal (ADR-views-3 D8): the
     // result points into each of them, and the ledger writes them all.
     // An `impl` of a trait hands back what the trait's declaration names
     // (D26): the receiver, else the only view.
@@ -3232,7 +3232,7 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
 }
 
 // A function type that takes no view and hands one back has nothing to
-// point at; with several, the result points into each (ADR-353 D2).
+// point at; with several, the result points into each (ADR-views-3 D8).
 fn rsrc_function_type(unit: ref Unit, asked: ref Asked, ty: ref Type, at: ref Span, mut out: Vec[Finding]) {
     if ty.code != null {
         let code = ty.code ?? return
@@ -3270,7 +3270,7 @@ fn rsrc_function_types(unit: ref Unit, asked: ref Asked, args: ref Vec[FnArg], r
 pub struct ResultSource {
     pub key: String,
     pub borrows: Vec[String],
-    // Each view's own sources by its path where they differ (ADR-353 D1, D5):
+    // Each view's own sources by its path where they differ (ADR-views-3 D8, D10):
     // `left: ref(a), right: ref(b)`; empty where every view has them all.
     pub returns: String,
 }

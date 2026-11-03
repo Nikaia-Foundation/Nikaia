@@ -623,7 +623,7 @@ impl EmitState {
             },
             else => {}
         }
-        // **Given up while a view of it is used** (ADR-353 D3): the new value is
+        // **Given up while a view of it is used** (ADR-views-3 D9): the new value is
         // a binding of its own, and the old one lives on to the end of the block.
         let rebound = host.given_up_rebound(at)
         if rebound != null {
