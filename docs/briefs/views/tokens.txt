@@ -1,2 +1,3 @@
 /home/user/Nikaia/docs/briefs/views/v1-views3-spec.md 6462617 91
 /home/user/Nikaia/docs/briefs/views/v1-views3-spec.md 1269342 27
+/home/user/Nikaia/docs/briefs/views/v1b-views3-arrays.md 1838718 42
