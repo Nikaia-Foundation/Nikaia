@@ -1,4 +1,4 @@
 block 3
 area selfhosting docs/briefs
 area bugs docs/briefs/bugs
-current selfhosting 0
+current bugs 0
