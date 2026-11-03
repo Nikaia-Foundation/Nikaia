@@ -146,6 +146,34 @@ where
         .map_err(|error| ParseError::of(error.render(source)))
 }
 
+/// [`parse`] interning into the caller's table
+/// ([ADR-388](../../../docs/specification/adr/adr-388.md) D1, D3):
+/// `G::rule(text; words: table)`, so every symbol the parse yields reads its
+/// text from `words` after the call.
+pub fn parse_in<'a, S, O>(
+    source: &'a S,
+    words: &winnow_grammar::InternerContext,
+    mut rule: impl winnow::Parser<
+        winnow_grammar::ParseInput<'a, LineBreaks>,
+        O,
+        winnow_grammar::ParseError,
+    >,
+) -> Result<O, ParseError>
+where
+    S: Source + ?Sized,
+{
+    let source = source.text()?;
+    let mut stream = winnow_grammar::ParseInput::<LineBreaks> {
+        state: winnow_grammar::ParseContext::with_state_and_interner(
+            crate::runtime::line_breaks(),
+            words.clone(),
+        ),
+        input: winnow::stream::LocatingSlice::new(source),
+    };
+    rule.parse_next(&mut stream)
+        .map_err(|error| ParseError::of(error.render(source)))
+}
+
 /// [`parse`] for a `par_fold` rule: `run` is the generated
 /// `parse_<rule>_pieces` applied to `source` and to how it is cut.
 ///
@@ -205,6 +233,27 @@ pub fn parse_bytes<'a, O>(
 ) -> Result<O, ParseError> {
     let mut stream = winnow_grammar::ParseBytes::<LineBreaks> {
         state: winnow_grammar::ParseContext::with_state(crate::runtime::line_breaks()),
+        input: winnow::stream::LocatingSlice::new(source),
+    };
+    rule.parse_next(&mut stream)
+        .map_err(|error| ParseError::of(error.render(source)))
+}
+
+/// [`parse_bytes`] interning into the caller's table, as [`parse_in`] does.
+pub fn parse_bytes_in<'a, O>(
+    source: &'a [u8],
+    words: &winnow_grammar::InternerContext,
+    mut rule: impl winnow::Parser<
+        winnow_grammar::ParseBytes<'a, LineBreaks>,
+        O,
+        winnow_grammar::ParseError,
+    >,
+) -> Result<O, ParseError> {
+    let mut stream = winnow_grammar::ParseBytes::<LineBreaks> {
+        state: winnow_grammar::ParseContext::with_state_and_interner(
+            crate::runtime::line_breaks(),
+            words.clone(),
+        ),
         input: winnow::stream::LocatingSlice::new(source),
     };
     rule.parse_next(&mut stream)

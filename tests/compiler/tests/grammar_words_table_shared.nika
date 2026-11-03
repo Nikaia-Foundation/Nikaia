@@ -1,0 +1,39 @@
+// The caller hands an entry that interns its table as `words:` (ADR-388 D1,
+// D3, #1198): the names of two parses land in one table, so a `Symbol` of the
+// result reads back as its text, and a spelling interned twice is one name.
+
+use std::winnow_grammar
+
+grammar Names {
+    rule WS = " "* -> { }
+    entry rule names -> Vec[winnow_grammar::Symbol] = ns:ident+ eof -> { ns }
+    entry rule count -> i64 = ns:ident+ eof -> { ns.len() }
+}
+
+fn parse(words: ref winnow_grammar::InternerContext, source: String) -> Vec[winnow_grammar::Symbol] {
+    let input = Bytes(source.bytes().collect())
+    return Names::names(input; words: words) catch {
+        println(f"{source}: refused")
+        return []
+    }
+}
+
+fn main() {
+    let words = winnow_grammar::InternerContext()
+    let first = parse(words, "ab cd ab")
+    let second = parse(words, "cd ef")
+    for s in first {
+        println(words.resolve(s))
+    }
+    for s in second {
+        println(words.resolve(s))
+    }
+    println(f"one name: {first[1] == second[0]}")
+    println(f"two names: {first[0] == second[1]}")
+    let input = Bytes("x y z".bytes().collect())
+    let n = Names::count(input) catch {
+        println("refused")
+        return
+    }
+    println(f"own table: {n}")
+}

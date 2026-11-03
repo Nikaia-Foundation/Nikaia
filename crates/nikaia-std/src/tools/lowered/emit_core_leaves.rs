@@ -22,6 +22,16 @@ pub(crate) fn emit_leaf_has_holes(parts: &[FPart]) -> bool {
     false
 }
 
+pub(crate) fn emit_leaf_declares_words(world: &EmitWorld<'_, '_, '_, '_>, entered: Option<&GrammarRule>) -> bool {
+    match entered {
+        None => return false,
+        Some(rule) => {
+            for option in rule.config.iter() { if emit_text(world, option.name) == "words" { return true; } }
+            return false;
+        },
+    }
+}
+
 pub(crate) fn emit_leaf_par_fold(rule: &GrammarRule) -> bool {
     for alt in rule.alts.iter() {
         match &alt.pattern.node {
@@ -364,16 +374,35 @@ impl EmitState {
             over = "_bytes";
             lowered = emit_bytes_grammar(&name);
         }
+        let mut table: Option<Expr> = None;
+        for c in config.iter() { if emit_text(world, c.name) == "words" && !emit_leaf_declares_words(world, (entered).as_ref()) { table = Some(c.value.clone()); } }
         if parallel {
             out.push(&format!("nikaia_std::grammar::parse{}_pieces(&*", over));
             self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
             let options = emit_fold_options(&name, &rule_name);
             let claimed = parallelism != "Parallelism::Off";
-            out.push(&format!(", {}(), {}, |source, how| {}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){}", options, claimed, lowered, rule_name, question));
+            match table {
+                None => { out.push(&format!(", {}(), {}, |source, how| {}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){}", options, claimed, lowered, rule_name, question)); },
+                Some(ref words) => {
+                    out.push(&format!(", {}(), {}, |source, how| {}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::with_state_and_interner((), winnow_grammar::InternerContext::clone(&", options, claimed, lowered, rule_name));
+                    self.emit_expr(world, walk, out, host, words, depth, flow, scope)?;
+                    out.push(&format!(")), how)){}", question));
+                },
+            }
             return Ok(());
         }
-        out.push(&format!("nikaia_std::grammar::parse{}(&*", over));
-        self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
+        match table {
+            None => {
+                out.push(&format!("nikaia_std::grammar::parse{}(&*", over));
+                self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
+            },
+            Some(ref words) => {
+                out.push(&format!("nikaia_std::grammar::parse{}_in(&*", over));
+                self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
+                out.push(", &");
+                self.emit_expr(world, walk, out, host, words, depth, flow, scope)?;
+            },
+        }
         out.push(&format!(", {}::parse_{}(", lowered, rule_name));
         match entered {
             Some(ref rule) => {

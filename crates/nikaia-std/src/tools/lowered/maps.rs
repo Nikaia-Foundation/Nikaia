@@ -276,7 +276,7 @@ impl<'a> MpBody<'a> {
             _ => return false,
         }
     }
-    pub(crate) fn ends_in_a_map(&self, segments: &'a Vec<winnow_grammar::Symbol>) -> bool {
+    pub(crate) fn ends_in_a_map(&self, segments: &[winnow_grammar::Symbol]) -> bool {
         if segments.is_empty() { return false; }
         mp_made_name(self.words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))))
     }

@@ -58,6 +58,13 @@ pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref C
                         state.expect_type(world, given, o.ty, span, "argument", fn(was, wanted) { f"The option `{option}` is `{was}`, but `{key}` takes `{wanted}`." })
                     }
                 }
+                // **The table an entry that interns is handed** (ADR-388 D1):
+                // `words:` after its input, a `ref winnow_grammar::InternerContext`.
+                if !found && option == "words" && (check_grammar_entry_interns(world, key) ?? false) {
+                    found = true
+                    let given = check_core_expr(state, world, host, c.value, span)
+                    state.expect_type(world, given, Ty::Named { name: "winnow_grammar::InternerContext", args: [], view: true }, span, "argument", fn(was, wanted) { f"The table `words` is `{was}`, but `{key}` takes `{wanted}`." })
+                }
                 if !found {
                     state.findings.push(check_refusal("NK1109", span, f"`{key}` has no option called `{option}`.", ["An entry's options are what its rule declares after its `;`."], "Name an option the rule declares."))
                 }
@@ -105,6 +112,104 @@ pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref C
     }
     let signature = contract.signature ?? return Ty::Unknown
     return signature.result ?? Ty::Unknown
+}
+
+/// **Whether the entry `key` (`Grammar::rule`) interns** (ADR-388 D1): its
+/// pattern, or a rule it reaches, calls `ident` or `intern(p)`. `null` where
+/// the grammar is in none of this program's files.
+pub fn check_grammar_entry_interns(world: ref CheckWorld, key: ref String) -> bool? {
+    let cut = key.find("::") ?? return null
+    let owner = key[0..<cut].clone()
+    let rule = key[cut + 2..].clone()
+    let here = check_grammar_interns_in(world.here, owner, rule)
+    if here != null {
+        return here
+    }
+    for other in world.beside {
+        let there = check_grammar_interns_in(other, owner, rule)
+        if there != null {
+            return there
+        }
+    }
+    return null
+}
+
+/// [`check_grammar_entry_interns`] in one file: the rules the entry reaches,
+/// walked once each.
+fn check_grammar_interns_in(view: ref ParsedView, owner: ref String, entry: ref String) -> bool? {
+    for item in view.items {
+        match item.node {
+            Item::Grammar(def) => {
+                if view.text(def.name) == owner {
+                    let mut rules: collections::BTreeSet[String] = collections::BTreeSet()
+                    for r in def.rules {
+                        rules.insert(view.text(r.name))
+                    }
+                    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+                    let mut todo: Vec[String] = [entry.clone()]
+                    while todo.len() > 0 {
+                        let at = todo.pop() ?? break
+                        if !seen.contains(at) {
+                            seen.insert(at.clone())
+                            for r in def.rules {
+                                if view.text(r.name) == at {
+                                    for alt in r.alts {
+                                        if check_grammar_pattern_interns(view, alt.pattern.node, rules, todo) {
+                                            return true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return false
+                }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
+/// Whether `pattern` calls `ident` or `intern(p)` itself; the rules of the
+/// grammar it names go on `todo`.
+fn check_grammar_pattern_interns(view: ref ParsedView, pattern: ref Pattern, rules: ref collections::BTreeSet[String], mut todo: Vec[String]) -> bool {
+    match pattern {
+        Pattern::Seq(parts) => return parts.iter().any(fn(p) { check_grammar_pattern_interns(view, p.node, rules, todo) }),
+        Pattern::Choice(parts) => return parts.iter().any(fn(p) { check_grammar_pattern_interns(view, p.node, rules, todo) }),
+        Pattern::Bind { pat, .. } => return check_grammar_pattern_interns(view, pat.node, rules, todo),
+        Pattern::Group(pat) => return check_grammar_pattern_interns(view, pat.node, rules, todo),
+        Pattern::Repeat { pat, .. } => return check_grammar_pattern_interns(view, pat.node, rules, todo),
+        Pattern::Counted { pat, .. } => return check_grammar_pattern_interns(view, pat.node, rules, todo),
+        Pattern::Ref { name, args, .. } => {
+            let called = view.text(name)
+            if rules.contains(called) {
+                todo.push(called)
+                return false
+            }
+            if called == "ident" || called == "intern" {
+                return true
+            }
+            return args.iter().any(fn(p) { check_grammar_pattern_interns(view, p.node, rules, todo) })
+        },
+        Pattern::Call { name, .. } => {
+            todo.push(view.text(name))
+            return false
+        },
+        Pattern::Fold(spec) => {
+            todo.push(view.text(spec.rule))
+            return false
+        },
+        Pattern::Choose { arms, .. } => return arms.iter().any(fn(arm) { arm.alts.iter().any(fn(alt) { check_grammar_pattern_interns(view, alt.pattern.node, rules, todo) }) }),
+        Pattern::Members { key, value, sep, fields, .. } => {
+            todo.push(view.text(value))
+            for field in fields {
+                todo.push(view.text(field.value))
+            }
+            return check_grammar_pattern_interns(view, key.node, rules, todo) || check_grammar_pattern_interns(view, sep.node, rules, todo)
+        },
+        else => return false,
+    }
 }
 
 /// **`NK1162`: a compound assignment to a map's slot** (ADR-080 D2). It reads

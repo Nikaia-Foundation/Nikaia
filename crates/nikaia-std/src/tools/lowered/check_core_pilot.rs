@@ -36,6 +36,11 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
                         state.expect_type(world, &given, &o.ty, span, "argument", &|was, wanted| { format!("The option `{}` is `{}`, but `{}` takes `{}`.", option, was, key, wanted) });
                     }
                 }
+                if !found && option == "words" && nikaia_std::index::or(check_grammar_entry_interns(world, key), || false) {
+                    found = true;
+                    let given = check_core_expr(state, world, host, &c.value, span);
+                    state.expect_type(world, &given, &Ty::Named { name: String::from("winnow_grammar::InternerContext"), args: vec![], view: true }, span, "argument", &|was, wanted| { format!("The table `words` is `{}`, but `{}` takes `{}`.", was, key, wanted) });
+                }
                 if !found { state.findings.push(check_refusal("NK1109", span, format!("`{}` has no option called `{}`.", key, option), vec![String::from("An entry's options are what its rule declares after its `;`.")], Some(String::from("Name an option the rule declares.")))); }
             }
         },
@@ -83,6 +88,82 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
     }
     let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     nikaia_std::index::or(signature.result, || Ty::Unknown)
+}
+
+pub fn check_grammar_entry_interns(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<bool> {
+    let cut = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let owner = nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_string();
+    let rule = nikaia_std::index::get(&key, nikaia_std::index::at(cut + 2..)).to_string();
+    let here = check_grammar_interns_in(&world.here, &owner, &rule);
+    if here.is_some() { return std::convert::identity(here); }
+    for other in world.beside.iter() {
+        let there = check_grammar_interns_in(other, &owner, &rule);
+        if there.is_some() { return std::convert::identity(there); }
+    }
+    None
+}
+
+pub(crate) fn check_grammar_interns_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, entry: &str) -> Option<bool> {
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Grammar(def) => {
+                if view.text(def.name) == owner {
+                    let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
+                    for r in def.rules.iter() { rules.insert(view.text(r.name)); }
+                    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+                    let mut todo: Vec<String> = vec![entry.to_string()];
+                    while !todo.is_empty() {
+                        let at = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+                        if !seen.contains(&at) {
+                            seen.insert(at.to_string());
+                            for r in def.rules.iter() { if view.text(r.name) == at { for alt in r.alts.iter() { if check_grammar_pattern_interns(view, &alt.pattern.node, &rules, &mut todo) { return Some(true); } } } }
+                        }
+                    }
+                    return Some(false);
+                }
+            },
+            _ => { },
+        }
+    }
+    None
+}
+
+pub(crate) fn check_grammar_pattern_interns(view: &ParsedView<'_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>, todo: &mut Vec<String>) -> bool {
+    match pattern {
+        Pattern::Seq(parts) => return parts.iter().any(|p| { check_grammar_pattern_interns(view, &p.node, rules, todo) }),
+        Pattern::Choice(parts) => return parts.iter().any(|p| { check_grammar_pattern_interns(view, &p.node, rules, todo) }),
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); return check_grammar_pattern_interns(view, &pat.node, rules, todo) },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); return check_grammar_pattern_interns(view, &pat.node, rules, todo) },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); return check_grammar_pattern_interns(view, &pat.node, rules, todo) },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); return check_grammar_pattern_interns(view, &pat.node, rules, todo) },
+        Pattern::Ref { name, args, .. } => {
+            let name = *name;
+            let called = view.text(name);
+            if rules.contains(&called) {
+                todo.push(called);
+                return false;
+            }
+            if called == "ident" || called == "intern" { return true; }
+            return args.iter().any(|p| { check_grammar_pattern_interns(view, &p.node, rules, todo) });
+        },
+        Pattern::Call { name, .. } => {
+            let name = *name;
+            todo.push(view.text(name));
+            return false;
+        },
+        Pattern::Fold(spec) => {
+            todo.push(view.text(spec.rule));
+            return false;
+        },
+        Pattern::Choose { arms, .. } => return arms.iter().any(|arm| { arm.alts.iter().any(|alt| { check_grammar_pattern_interns(view, &alt.pattern.node, rules, todo) }) }),
+        Pattern::Members { key, value, sep, fields, .. } => {
+            let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep); let value = *value;
+            todo.push(view.text(value));
+            for field in fields.iter() { todo.push(view.text(field.value)); }
+            return check_grammar_pattern_interns(view, &key.node, rules, todo) || check_grammar_pattern_interns(view, &sep.node, rules, todo);
+        },
+        _ => return false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

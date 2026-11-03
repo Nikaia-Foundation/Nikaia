@@ -6530,3 +6530,44 @@ pub = true
 sync = true
 touches = []
 signature = "(ref self) -> ref(self) String"
+
+# **The table a grammar interns its names into** (ADR-388 D1, D3): the caller
+# makes it and hands it to an entry that reaches `ident` or `intern(p)` as
+# `words:`; every `winnow_grammar::Symbol` the parse yields reads its text
+# here after the call. One table handed to several parses gives one spelling
+# one symbol across all of them. The toolchain's own Nikaia takes it as a
+# parameter too (`words: ref winnow_grammar::InternerContext`).
+[type."winnow_grammar::InternerContext"]
+pub = true
+
+# An empty table.
+[fn."winnow_grammar::InternerContext::new"]
+pub = true
+sync = true
+touches = []
+signature = "() -> winnow_grammar::InternerContext"
+
+# The text a name was interned from.
+[fn."winnow_grammar::InternerContext::resolve"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref winnow_grammar::InternerContext, symbol: winnow_grammar::Symbol) -> ref(self) String"
+
+# An interned name: the compiler's tree holds one wherever the source wrote a
+# name. A `Copy` handle of one `u32`, compared as that number.
+[type."winnow_grammar::Symbol"]
+pub = true
+crosses = true
+compares = true
+# Ordered by the number it is: the order of interning, not of the text.
+equates = true
+orders = true
+copies = true
+
+# A copy of the handle, which is the handle (0.0.325).
+[fn."winnow_grammar::Symbol::clone"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref winnow_grammar::Symbol) -> winnow_grammar::Symbol"
