@@ -1,5 +1,2 @@
-a1b-async-parse.md
-a2-async-parse-refusals.md
-a3-async-group-runtime.md
 a4-async-value-check.md
 a5-async-value-lowering.md
