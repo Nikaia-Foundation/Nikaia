@@ -172,8 +172,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   into the report and prints `committed <sha8> local`. Several commits: one report
   `<brief>.step<N>.report.md` per step, only if needed.
 * **Do not delete branches.** You cannot, and need not: leave a `wip/*` branch where it is; the owner deletes it.
-* **You have no GitHub access.** What the issue says is in your task; put
-  what an issue comment should say in your report.
+* **You have no GitHub access.** The issues your brief names are in your
+  prompt, with their comments; put what an issue comment should say in your
+  report.
 * **Report** in at most 30 lines: the commits, what the change decided (a
   CHANGELOG title and entry for the supervisor), the tests run, what is
   still open, and any error found in another agent's file.

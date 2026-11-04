@@ -88,8 +88,9 @@ not make your gate red: report `Gate: green` and the figure under `Tests:`.
   binary; a test program cannot set `RUSTFLAGS` or see git state. Such a
   change is checked by hand runs; say so under `Deviation`.
 * Valgrind cannot run a binary built for an AVX-512 CPU: name `x86-64-v3`.
-* Builders have no GitHub: the brief holds the issue text. If it does not,
-  say so under `Deviation` and build from the brief's title only.
+* Builders have no GitHub: the prompt holds the text and comments of the
+  issues the brief names. If an issue it needs is missing, say so under
+  `Deviation` and build from the brief.
 * Syntax gaps of `tools/*.nika`: the list below, *Moving Rust into Nikaia*.
 * Guard tests (`range_spelling`, `shipped_ledger`, the std ledger in
   `contracts`) scan the whole repository: a script's `a..b` or a new

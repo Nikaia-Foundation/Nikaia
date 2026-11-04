@@ -436,8 +436,10 @@ without it (`Moving Rust into Nikaia`); an unknown one stops the run.
 
 **Issues are written in brief form** (owner, 2026-10-25): frontmatter, facts,
 *Locations*, *To build* steps with tests, rules, report form, so a builder can
-start on one directly. Builders have no GitHub access: a brief
-copies the issue's problem, probe and *To build* steps.
+start on one directly. Builders have no GitHub access: `agent.nika` puts the
+text and comments of every issue the brief names (`issues: 1213, 1238` in the
+frontmatter, else each `#N` in its title) into its prompt, so a brief cites the
+issue instead of copying it and adds only the decision and the probe it lacks.
 
 **A brief names the place** (owner, 2026-10-31):
 

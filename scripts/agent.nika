@@ -299,6 +299,56 @@ fn agent_facts(body: String, facts: String) -> String {
     return out.join("\n")
 }
 
+// The issues a brief is about: `issues: 1213, 1238` in its frontmatter, else
+// every `#N` in its title (the first `# ` line).
+fn agent_issue_numbers(body: String) -> Vec[String] {
+    let listed = agent_front(body.clone(), "issues", "")
+    let mut source = listed.clone()
+    if source == "" {
+        for line in body.split("\n") {
+            if line.starts_with("# ") {
+                source = line.clone()
+                break
+            }
+        }
+    }
+    let mut out: Vec[String] = []
+    let mut digits: String = ""
+    let mut after_hash = listed != ""
+    for c in (source + " ").chars() {
+        if c.is_ascii_digit() && after_hash {
+            digits = digits + c.to_string()
+        } else {
+            if digits != "" && !out.contains(digits.clone()) { out.push(digits.clone()) }
+            digits = ""
+            after_hash = c == '#' || listed != ""
+        }
+    }
+    return out
+}
+
+// The text of the issues the brief names, with their comments, under one
+// heading for the prompt (#1238's third gap: builders have no GitHub access);
+// "" when the brief names none or `gh` cannot read them.
+fn agent_issues(body: String, repo: String) -> String throws {
+    let numbers = agent_issue_numbers(body)
+    if numbers.len() == 0 { return "" }
+    let mut out: Vec[String] = ["", "", "# The issues this brief names (as GitHub has them now; you need no GitHub access)"]
+    for n in numbers {
+        let issue = process::run("gh", ["api", f"repos/{repo}/issues/{n}", "--jq", "\"## #\\(.number) \\(.title) [\\(.state)]\\n\\n\\(.body // \"\")\""])
+        if issue.code != 0 { continue }
+        out.push("")
+        out.push(issue.stdout.trim().clone())
+        let comments = process::run("gh", ["api", f"repos/{repo}/issues/{n}/comments?per_page=100", "--jq", ".[] | \"### Comment by \\(.user.login), \\(.created_at[0:10])\\n\\n\\(.body)\\n\""])
+        if comments.code == 0 && comments.stdout.trim() != "" {
+            out.push("")
+            out.push(comments.stdout.trim().clone())
+        }
+    }
+    if out.len() == 3 { return "" }
+    return out.join("\n")
+}
+
 fn agent_exe() -> String throws {
     for exe in ["target/fast/nikaia", "target/release/nikaia"] {
         if fs::exists(exe, fs::Root::Anywhere) { return exe.to_string() }
@@ -360,6 +410,8 @@ fn main() throws {
         agent_escalate(dir.clone(), f"unknown Facts heading in {abs}: {unknown}")
     }
     claude_args[1] = claude_args[1].clone() + agent_facts(text.clone(), facts)
+    // The issues the brief names go into its prompt too.
+    claude_args[1] = claude_args[1].clone() + agent_issues(text.clone(), "Nikaia-Foundation/Nikaia")
     let record = f"{abs}.session"
     let sum = process::run("cksum", [abs.clone()]).stdout.trim().split(" ").collect()[0].clone()
     let mut resumed = agent_resumable(abs.clone(), agent_read(record.clone()), sum.clone())
