@@ -1908,7 +1908,7 @@ struct Box[T] {
 }
 
 impl Box[T] {
-    fn get(self) -> T {
+    fn get(keep self) -> T {
         return self.item
     }
 }
