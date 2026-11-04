@@ -6,7 +6,7 @@ budget_usd: 8
 ---
 # Brief: verify and commit K3a part 1, left uncommitted in the shared checkout (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1. K3a part 2 (`k3a2-comptime-compute.md`, next in the batch) builds on this host; nothing else moves until it is on `develop`. S=1, cost small.
+Score: self-hosting lane 1. K3a part 2 (`k3a2-comptime-compute.md`, next in the batch) builds on this host; nothing else moves until it is on `develop`. S=1, cost small.
 
 ## Facts
 * The k3a1 builder (2026-10-29) wrote `docs/briefs/k3a1-comptime-lower.md.report.md` with `Result: done` but **never committed or pushed**: no `Pushed:` line, placeholders `TC` and `DISK`. Its work is in the working tree of the main checkout, uncommitted:

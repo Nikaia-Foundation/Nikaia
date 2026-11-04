@@ -6,7 +6,7 @@ budget_usd: 20
 ---
 # Brief: BT - the build-time folder's refusal, the run check and the default read move into Nikaia (Part #125)
 
-Score: self-hosting lane, bootstrap week lane 1, row BT of `docs/selfhosting-plan.md` (next in the plan's order after K3a, which is built). No `#922`/`#920` entry needed.
+Score: self-hosting lane 1, row BT of `docs/selfhosting-plan.md` (next in the plan's order after K3a, which is built). No `#922`/`#920` entry needed.
 
 Facts: Moving Rust into Nikaia, Where things live, Traps already met, Commands
 

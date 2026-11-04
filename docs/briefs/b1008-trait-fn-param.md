@@ -6,7 +6,7 @@ budget_usd: 20
 ---
 # Brief: #1008, a trait method's `fn` parameter (impl type and the kept callback's clone)
 
-Score: bug lane, a false acceptance (checker passes, rustc refuses; S=2) that blocks K3a part 2 (`comptime_computed` hands its callbacks to `ComptimeComputeHost` at every step); bootstrap week: a blocker of a move goes first. Builders have no GitHub: the issue text is copied below; every probe row was run by the architect on 3b845e0b, except the recursive trait row of step 1, which cannot run before the fix (its free-function twin prints `9`): if it fails for a reason other than defects 1-2, that is a `Found:`.
+Score: bug lane, a false acceptance (checker passes, rustc refuses; S=2) that blocks K3a part 2 (`comptime_computed` hands its callbacks to `ComptimeComputeHost` at every step); bootstrap: a blocker of a move goes first. Builders have no GitHub: the issue text is copied below; every probe row was run by the architect on 3b845e0b, except the recursive trait row of step 1, which cannot run before the fix (its free-function twin prints `9`): if it fails for a reason other than defects 1-2, that is a `Found:`.
 
 ## Problem
 
