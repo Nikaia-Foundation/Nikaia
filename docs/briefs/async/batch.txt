@@ -1,2 +1,1 @@
-a7-async-pausing-tasks.md
-a8-async-conflicts.md
+a9-async-outer-write.md
