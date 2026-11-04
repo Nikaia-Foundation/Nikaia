@@ -199,6 +199,7 @@ pub fn declared_trait_method(names: &winnow_grammar::InternerContext, aliases: &
     if method.is_sync { contract.sync_claim = Sync::Asserted; }
     if method.can_throw { contract.fails_with = vec![String::from("?")]; }
     contract.signature = Some(Signature { bounds: vec![], params, mutable, config: options, result });
+    contract.borrows = method.ret_from.iter().map(|source| { names.resolve(*source).to_string() }).collect::<Vec<_>>();
     DeclaredFn { key: format!("{}::{}", trait_name, names.resolve(method.name)), contract }
 }
 

@@ -58,6 +58,21 @@ pub fn result_sources(
     )
 }
 
+/// What each body's result points into whatever its `from` says
+/// (ADR-views-3 D8, `tools/views.nika`): what `check_result_from` holds a
+/// written `from` against.
+pub fn result_sources_inferred(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+) -> Vec<nikaia_std::tools::views::ResultSource> {
+    nikaia_std::tools::views::result_sources_inferred(
+        &asked(parsed, own, library),
+        &parsed.program.items,
+        &|value: &Expr| own_buffer(parsed, value, own, library),
+    )
+}
+
 /// What each function keeps in a `mut` parameter's place (ADR-283 D27,
 /// `tools/views.nika`), by ledger key: `v:s`.
 pub fn places_stored(

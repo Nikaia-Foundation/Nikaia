@@ -94,11 +94,11 @@ fn numbers_attributes(attributes: Vec[Attribute], mut st: NodeNumbersState) -> V
 
 fn numbers_item(item: Item, mut st: NodeNumbersState) -> Item {
     match item {
-        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern } => {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern, ret_from } => {
             let args2 = numbers_fn_args(args, st)
             let config2 = numbers_config_params(config, st)
             let body2 = numbers_block(body, st)
-            return Item::Fn { name: name, generics: generics, receiver: receiver, args: args2, config: config2, spread: spread, ret_type: ret_type, body: body2, is_sync: is_sync, sync_by: sync_by, is_public: is_public, can_throw: can_throw, is_extern: is_extern }
+            return Item::Fn { name: name, generics: generics, receiver: receiver, args: args2, config: config2, spread: spread, ret_type: ret_type, body: body2, is_sync: is_sync, sync_by: sync_by, is_public: is_public, can_throw: can_throw, is_extern: is_extern, ret_from: ret_from }
         },
         Item::Enum { name, variants, is_public, is_extern } => {
             let mut variants2: Vec[EnumVariant] = []
@@ -177,7 +177,7 @@ fn numbers_trait_methods(methods: Vec[Spanned[TraitMethod]], mut st: NodeNumbers
 fn numbers_trait_method(method: TraitMethod, mut st: NodeNumbersState) -> TraitMethod {
     let args = numbers_fn_args(method.args, st)
     let config = numbers_config_params(method.config, st)
-    return TraitMethod { name: method.name, generics: method.generics, receiver: method.receiver, args: args, config: config, ret_type: method.ret_type, is_sync: method.is_sync, can_throw: method.can_throw }
+    return TraitMethod { name: method.name, generics: method.generics, receiver: method.receiver, args: args, config: config, ret_type: method.ret_type, ret_from: method.ret_from, is_sync: method.is_sync, can_throw: method.can_throw }
 }
 
 fn numbers_fn_args(args: Vec[FnArg], mut st: NodeNumbersState) -> Vec[FnArg] {

@@ -3286,8 +3286,17 @@ pub struct ResultSource {
 }
 
 /// The answer of D25 for every function of the unit that hands back a view,
-/// the ledger's `ref(..)` (#580 step 5).
+/// the ledger's `ref(..)` (#580 step 5): a written `from` as written
+/// (ADR-views-3 D10), else what the body reaches.
 pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
+    let mut out = result_sources_inferred(asked, items, own_buffer)
+    result_from_as_written(asked.names, items, out)
+    return out
+}
+
+/// What each body's ways out reach, whatever its `from` says: what the check
+/// of a written `from` holds it against (`check_result_from.nika`).
+pub fn result_sources_inferred(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
     let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     let mut ignored: Vec[Finding] = []

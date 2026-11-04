@@ -305,7 +305,7 @@ pub fn modules_dispatcher_as_main(items: &mut Vec<Spanned<Item>>, names: &winnow
 
 pub(crate) fn modules_named(item: Item, to: winnow_grammar::Symbol) -> Item {
     match item {
-        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern } => Item::Fn { name: Some(to), generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern },
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern, ret_from } => Item::Fn { name: Some(to), generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern, ret_from },
         other => other,
     }
 }
@@ -319,7 +319,7 @@ pub fn modules_tests_as_functions(items: &mut Vec<Spanned<Item>>, source: &str, 
             Item::Test { name, body } => {
                 let function: Option<winnow_grammar::Symbol> = Some(intern(&test_function(first + tests.len() as i64)));
                 tests.push((name, modules_line_of(source, start)));
-                let node = Item::Fn { name: function, generics: vec![], receiver: None, args: vec![], config: vec![], spread: None, ret_type: None, body, is_sync: false, sync_by: vec![], is_public: false, can_throw: true, is_extern: false };
+                let node = Item::Fn { name: function, generics: vec![], receiver: None, args: vec![], config: vec![], spread: None, ret_type: None, body, is_sync: false, sync_by: vec![], is_public: false, can_throw: true, is_extern: false, ret_from: vec![] };
                 kept.push(Spanned { node, span: item.span, doc: item.doc, attributes: item.attributes });
             },
             other => { kept.push(Spanned { node: other, span: item.span, doc: item.doc, attributes: item.attributes }); },

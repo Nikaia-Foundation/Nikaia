@@ -155,7 +155,7 @@ pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item
 pub(crate) fn keep_marks_keeping_statement(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: &Option<String>, parameter: &str, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
     let settling: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     match &item.node {
-        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern } => {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern, ret_from } => {
             let can_throw = *can_throw; let is_extern = *is_extern; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;
             let mut stmts: Vec<Spanned<Stmt>> = vec![];
             for stmt in body.stmts.iter() {
@@ -166,7 +166,7 @@ pub(crate) fn keep_marks_keeping_statement(view: &ParsedView<'_, '_, '_, '_, '_,
                 }, args: args.to_owned(), config: config.to_owned(), spread, ret_type: match ret_type {
                     Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
                     None => None,
-                }, body: Block { stmts: stmts.to_owned() }, is_sync, sync_by: sync_by.to_owned(), is_public, can_throw, is_extern };
+                }, body: Block { stmts: stmts.to_owned() }, is_sync, sync_by: sync_by.to_owned(), is_public, can_throw, is_extern, ret_from: ret_from.to_owned() };
                 let found = match keeps_uses_of(view, &prefix, &match target.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,

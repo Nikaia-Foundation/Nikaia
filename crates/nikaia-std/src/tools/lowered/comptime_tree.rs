@@ -94,7 +94,7 @@ pub(crate) fn comptime_turn_function(turn: &ComptimeTurn, returns: &Type, intern
     let start = Stmt::Let { names: vec![kept], shape: vec![], mutable: true, deep: false, ty: Some(list.clone()), value: Expr::ListLit { items: vec![], id: fresh_id() } };
     let stmts: Vec<Spanned<Stmt>> = vec![nowhere(start), nowhere(each), nowhere(Stmt::Return(Some(Expr::Variable(kept, fresh_id()))))];
     let generics: Vec<GenericParam> = vec![GenericParam { name: t, bounds: vec![intern("Struct")] }];
-    Item::Fn { name: Some(intern(TURN_MARK)), generics, receiver: None, args: vec![], config: vec![], spread: None, ret_type: Some(list), body: Block { stmts }, is_sync: true, sync_by: vec![], is_public: false, can_throw: false, is_extern: false }
+    Item::Fn { name: Some(intern(TURN_MARK)), generics, receiver: None, args: vec![], config: vec![], spread: None, ret_type: Some(list), body: Block { stmts }, is_sync: true, sync_by: vec![], is_public: false, can_throw: false, is_extern: false, ret_from: vec![] }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -339,7 +339,7 @@ pub(crate) fn comptime_method_key(words: &winnow_grammar::InternerContext, metho
     None
 }
 
-pub(crate) fn comptime_a_function(name: Option<winnow_grammar::Symbol>, ret_type: Option<Type>, stmts: Vec<Spanned<Stmt>>) -> Item { Item::Fn { name, generics: vec![], receiver: None, args: vec![], config: vec![], spread: None, ret_type, body: Block { stmts }, is_sync: false, sync_by: vec![], is_public: false, can_throw: false, is_extern: false } }
+pub(crate) fn comptime_a_function(name: Option<winnow_grammar::Symbol>, ret_type: Option<Type>, stmts: Vec<Spanned<Stmt>>) -> Item { Item::Fn { name, generics: vec![], receiver: None, args: vec![], config: vec![], spread: None, ret_type, body: Block { stmts }, is_sync: false, sync_by: vec![], is_public: false, can_throw: false, is_extern: false, ret_from: vec![] } }
 
 pub(crate) fn comptime_literal_of(value: &BuildValue, intern: &dyn Fn(&str) -> winnow_grammar::Symbol) -> Option<Expr> {
     match value {

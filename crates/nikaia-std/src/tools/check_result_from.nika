@@ -1,0 +1,170 @@
+// crates/nikaia-std/src/tools/check_result_from.nika
+//
+// **A result's written source held against the body** (ADR-views-3 D8, D10,
+// #1213 step 4). `-> String from a | b` names the parameters the result's
+// views point into. Where a body is written, the views pass (`views.nika`,
+// `result_sources_inferred`) has worked out which parameters its ways out
+// reach; one the `from` does not name is `NK1335`. Where there is no body to
+// infer it from - a trait's method, a foreign function - a result that is a
+// view needs a `from` (`NK1336`), unless it is a view of the subject (D7).
+//
+// The ledger records a written `from` as written (D10):
+// `result_from_as_written` replaces what the inference found with it, so a
+// caller reads the declaration, not the body.
+//
+// Free functions over the file's items; the Rust adapter
+// (`check::check_result_from`) adds what they return.
+
+use std::collections
+
+/// Every finding about written `from`s in `view`. `inferred` is what the
+/// views pass found each body's result points into, by ledger key, before a
+/// written `from` replaces it.
+pub fn result_from_check(view: ref ParsedView, inferred: ref Vec[ResultSource]) -> Vec[CheckFinding] {
+    let mut reached: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for source in inferred {
+        reached.insert(source.key.clone(), source.borrows.clone())
+    }
+    let mut out: Vec[CheckFinding] = []
+    for item in view.items {
+        match item.node {
+            Item::Fn { .. } => result_from_of_body(view, item, null, reached, out),
+            Item::Impl { target, methods, .. } => {
+                let owner = view.text(target.name)
+                for method in methods {
+                    result_from_of_body(view, method, owner.clone(), reached, out)
+                }
+            },
+            Item::Trait { methods, .. } => {
+                for method in methods {
+                    result_from_of_signature(view, method, out)
+                }
+            },
+            Item::Extern { declarations, .. } => {
+                for declared in declarations {
+                    result_from_of_signature(view, declared, out)
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+/// **The ledger's sources, as written** (D10): each function of `items` that
+/// writes `from` points into what it names, in the order written, whatever
+/// the body reaches.
+pub fn result_from_as_written(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], mut sources: Vec[ResultSource]) {
+    let mut written: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Fn { .. } => result_from_written_of(names, item.node, null, written),
+            Item::Impl { target, methods, .. } => {
+                let owner = names.resolve(target.name).clone()
+                for method in methods {
+                    result_from_written_of(names, method.node, owner.clone(), written)
+                }
+            },
+            else => {},
+        }
+    }
+    if written.is_empty() {
+        return
+    }
+    for mut source in sources {
+        let named = written[source.key] ?? continue
+        source.borrows = named.clone()
+        source.returns = ""
+    }
+}
+
+fn result_from_written_of(names: ref winnow_grammar::InternerContext, item: ref Item, owner: String?, mut written: collections::BTreeMap[String, Vec[String]]) {
+    match item {
+        Item::Fn { name, ret_from, .. } => {
+            if ret_from.is_empty() {
+                return
+            }
+            let function = function_name(names, name)
+            let key = rsrc_key(owner, function)
+            written.insert(key, ret_from.iter().map(fn(source) { names.resolve(source).clone() }).collect())
+        },
+        else => {},
+    }
+}
+
+/// The parameters a `from` may name: `self` for a method, then each named
+/// parameter.
+fn result_from_parameters(view: ref ParsedView, receiver: ref Receiver?, args: ref Vec[FnArg]) -> Vec[String] {
+    let mut names: Vec[String] = []
+    if receiver != null {
+        names.push("self")
+    }
+    names.extend(args.iter().map(fn(arg) { view.text(arg.name) }))
+    return names
+}
+
+/// **Every name of a `from` is a parameter**: `NK1335` at the declaration
+/// where one is not. Whether any was refused.
+fn result_from_names(view: ref ParsedView, function: ref String, at: ref Span, ret_from: ref Vec[winnow_grammar::Symbol], parameters: ref Vec[String], mut out: Vec[CheckFinding]) -> bool {
+    for source in ret_from {
+        let named = view.text(source)
+        if !parameters.contains(named) {
+            out.push(check_refusal("NK1335", at, f"`{function}` writes `from {named}`, but `{named}` is no parameter of `{function}`.", ["A result's `from` names the parameters its views point into (ADR-views-3 D8)."], f"Name one of `{function}`'s parameters after `from`."))
+            return true
+        }
+    }
+    return false
+}
+
+/// **A body against its written `from`** (D8): every parameter its ways out
+/// hand back a view of is named.
+fn result_from_of_body(view: ref ParsedView, item: ref Spanned[Item], owner: String?, reached: ref collections::BTreeMap[String, Vec[String]], mut out: Vec[CheckFinding]) {
+    match item.node {
+        Item::Fn { name, receiver, args, ret_from, .. } => {
+            if ret_from.is_empty() {
+                return
+            }
+            let function = function_name(view.words, name)
+            let key = rsrc_key(owner, function)
+            let parameters = result_from_parameters(view, receiver, args)
+            if result_from_names(view, key, item.span, ret_from, parameters, out) {
+                return
+            }
+            let named: Vec[String] = ret_from.iter().map(fn(source) { view.text(source) }).collect()
+            let sources = reached[key] ?? return
+            for source in sources {
+                if !named.contains(source) {
+                    let written = named.join(" | ")
+                    out.push(check_refusal("NK1335", item.span, f"`{key}` hands back a view of `{source}`'s data, but its result says `from {written}`.", [f"A caller reads the signature: it keeps `{written}` unchanged while the result is used, and nothing holds `{source}` (ADR-views-3 D8)."], f"Write `from {written} | {source}`, or hand back a copy of what comes from `{source}` with `.clone()`."))
+                    return
+                }
+            }
+        },
+        else => {},
+    }
+}
+
+/// **A signature with no body names its result's source** (D8): a trait's
+/// method or a foreign function whose result is a view writes `from`, unless
+/// it is a method and the view is of the subject (D7).
+fn result_from_of_signature(view: ref ParsedView, method: ref Spanned[TraitMethod], mut out: Vec[CheckFinding]) {
+    let function = view.text(method.node.name)
+    let parameters = result_from_parameters(view, method.node.receiver, method.node.args)
+    if !method.node.ret_from.is_empty() {
+        result_from_names(view, function, method.span, method.node.ret_from, parameters, out)
+        return
+    }
+    let result = method.node.ret_type ?? return
+    if !holds_view(result) {
+        return
+    }
+    let of_subject = match method.node.receiver {
+        null => false,
+        r => !r.is_keep,
+    }
+    if of_subject {
+        return
+    }
+    let help = if parameters.is_empty() { "Hand back text of its own: declare the result without `ref`." } else { f"Write `from` and the parameters it points into after the result type, e.g. `from {parameters[0]}`." }
+    out.push(check_refusal("NK1336", method.span, f"`{function}` hands back a view, but has no body to tell whose data it points into, and no `from`.", ["Where there is no body to infer it from - a trait's method, a foreign function - the result names its source (ADR-views-3 D8)."], help))
+}

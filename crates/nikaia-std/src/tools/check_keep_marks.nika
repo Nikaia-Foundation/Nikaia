@@ -205,11 +205,11 @@ fn keep_marks_of_body(view: ref ParsedView, item: ref Spanned[Item], target: Str
 fn keep_marks_keeping_statement(view: ref ParsedView, item: ref Spanned[Item], target: String?, parameter: ref String, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Span? {
     let settling: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     match item.node {
-        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern } => {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern, ret_from } => {
             let mut stmts: Vec[Spanned[Stmt]] = []
             for stmt in body.stmts {
                 stmts.push(stmt.clone())
-                let prefix = Item::Fn { name: name, generics: generics.clone(), receiver: receiver?.clone(), args: args.clone(), config: config.clone(), spread: spread, ret_type: ret_type?.clone(), body: Block { stmts: stmts.clone() }, is_sync: is_sync, sync_by: sync_by.clone(), is_public: is_public, can_throw: can_throw, is_extern: is_extern }
+                let prefix = Item::Fn { name: name, generics: generics.clone(), receiver: receiver?.clone(), args: args.clone(), config: config.clone(), spread: spread, ret_type: ret_type?.clone(), body: Block { stmts: stmts.clone() }, is_sync: is_sync, sync_by: sync_by.clone(), is_public: is_public, can_throw: can_throw, is_extern: is_extern, ret_from: ret_from.clone() }
                 let found = keeps_uses_of(view, prefix, target?.clone(), own, library, indexes, resolved, holes_of) ?? continue
                 if found.uses.kept.contains(parameter) || found.uses.passed.iter().any(fn(passed) { passed.parameter == parameter && keeps_its(passed.callee, passed.at, settling, own, library) }) {
                     return stmt.span.clone()

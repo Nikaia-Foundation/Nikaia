@@ -1,0 +1,12 @@
+// A way out that hands back a view of a parameter the written `from` does
+// not name is refused (ADR-views-3 D8).
+fn second(a: String, b: String) -> String from a {
+    if a.len() > 3 {
+        return a.trim()
+    }
+    return b.trim()
+}
+
+fn main() {
+    println(second("ab", "cd"))
+}

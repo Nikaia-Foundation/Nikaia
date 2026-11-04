@@ -548,7 +548,7 @@ pub fn modules_dispatcher_as_main(mut items: Vec[Spanned[Item]], names: ref winn
 // A function under another name; any other item as it is.
 fn modules_named(item: Item, to: winnow_grammar::Symbol) -> Item {
     return match item {
-        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern } => Item::Fn { name: to, generics: generics, receiver: receiver, args: args, config: config, spread: spread, ret_type: ret_type, body: body, is_sync: is_sync, sync_by: sync_by, is_public: is_public, can_throw: can_throw, is_extern: is_extern },
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern, ret_from } => Item::Fn { name: to, generics: generics, receiver: receiver, args: args, config: config, spread: spread, ret_type: ret_type, body: body, is_sync: is_sync, sync_by: sync_by, is_public: is_public, can_throw: can_throw, is_extern: is_extern, ret_from: ret_from },
         other => other,
     }
 }
@@ -567,7 +567,7 @@ pub fn modules_tests_as_functions(mut items: Vec[Spanned[Item]], source: ref Str
             Item::Test { name, body } => {
                 let function: winnow_grammar::Symbol? = intern(test_function(first + tests.len()))
                 tests.push((name, modules_line_of(source, start)))
-                let node = Item::Fn { name: function, generics: [], receiver: null, args: [], config: [], spread: null, ret_type: null, body: body, is_sync: false, sync_by: [], is_public: false, can_throw: true, is_extern: false }
+                let node = Item::Fn { name: function, generics: [], receiver: null, args: [], config: [], spread: null, ret_type: null, body: body, is_sync: false, sync_by: [], is_public: false, can_throw: true, is_extern: false, ret_from: [] }
                 kept.push(Spanned { node: node, span: item.span, doc: item.doc, attributes: item.attributes })
             },
             other => kept.push(Spanned { node: other, span: item.span, doc: item.doc, attributes: item.attributes }),

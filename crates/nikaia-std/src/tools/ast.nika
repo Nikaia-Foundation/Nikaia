@@ -132,6 +132,11 @@ pub enum Item {
         /// ([ADR-284](../../../../docs/specification/adr/adr-284.md) D4,
         /// ADR-324 D6).
         is_extern: bool,
+        /// `-> String from a | b`: the parameters the result's views point
+        /// into, as written ([ADR-views-3](../../../../docs/specification/adr/adr-views-3.md)
+        /// D8). Empty where no `from` is written; the check holds the body
+        /// against it (`check_result_from.nika`).
+        ret_from: Vec[winnow_grammar::Symbol],
     },
 
     // Kap 4.4: enum Message { Quit, Move { x: i32 }, Write(String) }
@@ -1182,6 +1187,10 @@ pub struct TraitMethod {
     pub args: Vec[FnArg],
     pub config: Vec[ConfigParam],
     pub ret_type: Type?,
+    /// `-> String from a`: the parameters the result's views point into
+    /// (ADR-views-3 D8). A view result with no body to infer it from needs
+    /// one (`NK1336`).
+    pub ret_from: Vec[winnow_grammar::Symbol],
     pub is_sync: bool,
     pub can_throw: bool,
 }

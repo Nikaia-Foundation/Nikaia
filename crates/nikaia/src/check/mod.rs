@@ -220,6 +220,7 @@ pub fn check_against<'a>(
     );
     refuse_unproved_claims(&mut checked);
     check_keep_marks(parsed, beside, own, library, &mut checked);
+    check_result_from(parsed, own, library, &mut checked);
     if beside.is_empty() && modules.is_empty() {
         dump_accepted(parsed, &checked);
     }
@@ -755,6 +756,16 @@ pub fn check_keep_marks(
         &checked.methods,
         &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
     );
+    checked.findings.extend(found);
+}
+
+/// **A result's written `from` against the body** (`NK1335`, `NK1336`,
+/// ADR-views-3 D8): `tools/check_result_from.nika`, handed what the views pass
+/// finds each body reaches before a written `from` replaces it.
+pub fn check_result_from(parsed: &Parsed, own: &Ledger, library: &Ledger, checked: &mut Checked) {
+    let view = parsed_view_of(parsed);
+    let inferred = crate::views::result_sources_inferred(parsed, own, library);
+    let found = nikaia_std::tools::check_result_from::result_from_check(&view, &inferred);
     checked.findings.extend(found);
 }
 

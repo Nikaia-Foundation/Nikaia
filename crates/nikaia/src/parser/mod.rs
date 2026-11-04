@@ -1148,9 +1148,10 @@ grammar! {
             generics:generic_list?
             params:fn_params?
             promise_before_the_arrow?
-            ret:return_type_arrow?
+            ret:result_with_from?
             promise:promise_after_the_type
             -> {
+                let (ret, ret_from) = ret.unwrap_or_default();
                 // A trait method's `sync(f)` is not built: it reads as a method
                 // that may pause, which is the promise's weaker side.
                 let (sync, _, throws) = promise;
@@ -1163,6 +1164,7 @@ grammar! {
                     args: params.args,
                     config: params.config,
                     ret_type: ret,
+                    ret_from,
                     is_sync: sync,
                     can_throw: throws,
                 }, Span::from(_span), d, a)
@@ -1211,11 +1213,12 @@ grammar! {
             KW_FN
             head:fn_head
             promise_before_the_arrow?
-            ret:return_type_arrow?
+            ret:result_with_from?
             promise:promise_after_the_type
             body:block
             -> {
                 let (name, generics, params) = head;
+                let (ret, ret_from) = ret.unwrap_or_default();
                 let (sync, sync_by, throws) = promise;
                 Item::Fn {
                     name,
@@ -1231,6 +1234,7 @@ grammar! {
                     is_public: vis.is_some(),
                     can_throw: throws,
                     is_extern: exported.is_some(),
+                    ret_from,
                 }
             }
 
@@ -1718,6 +1722,22 @@ grammar! {
 
         rule return_type_arrow -> Type =
             "->" ty:type_ref -> { ty }
+
+        // **`-> String from a | b`** (ADR-views-3 D8): the parameters the
+        // result's views point into, after a declaration's result type. `from`
+        // is no reserved word (D13): it means the source only here, after a
+        // result type, where no other form may stand.
+        rule result_with_from -> (Option<Type>, Vec<Symbol>) =
+            ty:return_type_arrow from:result_from? -> { (Some(ty), from.unwrap_or_default()) }
+
+        rule result_from -> Vec<Symbol> =
+            KW_FROM head:NAME tail:result_from_tail* -> {
+                let mut names = vec![head];
+                names.extend(tail);
+                names
+            }
+
+        rule result_from_tail -> Symbol = "|" name:NAME -> { name }
 
         // USING [ ] SYNTAX directly for testing
         rule generic_list -> Vec<GenericParam> =

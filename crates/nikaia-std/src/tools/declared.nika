@@ -291,6 +291,9 @@ pub fn declared_trait_method(names: ref winnow_grammar::InternerContext, aliases
         contract.fails_with = ["?"]
     }
     contract.signature = Signature { bounds: [], params: params, mutable: mutable, config: options, result: result }
+    // **A written `from` as written** (ADR-views-3 D10): the source a caller
+    // through the trait reads.
+    contract.borrows = method.ret_from.iter().map(fn(source) { names.resolve(source).clone() }).collect()
     return DeclaredFn { key: f"{trait_name}::{names.resolve(method.name)}", contract: contract }
 }
 

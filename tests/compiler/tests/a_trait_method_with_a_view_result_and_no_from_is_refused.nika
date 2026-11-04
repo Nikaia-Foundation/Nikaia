@@ -1,0 +1,13 @@
+// A trait's method has no body to infer its result's source from: a result
+// that is a view writes `from` (ADR-views-3 D8).
+trait Pick {
+    fn pick(a: ref String, b: ref String) -> ref String
+}
+
+trait Choose {
+    fn choose(a: ref String, b: ref String) -> ref String from a | b
+}
+
+fn main() {
+    println("unreached")
+}

@@ -2397,6 +2397,12 @@ pub struct ResultSource {
 }
 
 pub fn result_sources(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
+    let mut out = result_sources_inferred(asked, items, own_buffer);
+    result_from_as_written(asked.names, items, &mut out);
+    out
+}
+
+pub fn result_sources_inferred(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
     let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];

@@ -70,11 +70,11 @@ pub(crate) fn numbers_attributes(attributes: Vec<Attribute>, st: &mut NodeNumber
 
 pub(crate) fn numbers_item(item: Item, st: &mut NodeNumbersState) -> Item {
     match item {
-        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern } => {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern, ret_from } => {
             let args2 = numbers_fn_args(args, st);
             let config2 = numbers_config_params(config, st);
             let body2 = numbers_block(body, st);
-            return Item::Fn { name, generics, receiver, args: args2, config: config2, spread, ret_type, body: body2, is_sync, sync_by, is_public, can_throw, is_extern };
+            return Item::Fn { name, generics, receiver, args: args2, config: config2, spread, ret_type, body: body2, is_sync, sync_by, is_public, can_throw, is_extern, ret_from };
         },
         Item::Enum { name, variants, is_public, is_extern } => {
             let mut variants2: Vec<EnumVariant> = vec![];
@@ -143,7 +143,7 @@ pub(crate) fn numbers_trait_methods(methods: Vec<Spanned<TraitMethod>>, st: &mut
 pub(crate) fn numbers_trait_method(method: TraitMethod, st: &mut NodeNumbersState) -> TraitMethod {
     let args = numbers_fn_args(method.args, st);
     let config = numbers_config_params(method.config, st);
-    TraitMethod { name: method.name, generics: method.generics, receiver: method.receiver, args, config, ret_type: method.ret_type, is_sync: method.is_sync, can_throw: method.can_throw }
+    TraitMethod { name: method.name, generics: method.generics, receiver: method.receiver, args, config, ret_type: method.ret_type, ret_from: method.ret_from, is_sync: method.is_sync, can_throw: method.can_throw }
 }
 
 pub(crate) fn numbers_fn_args(args: Vec<FnArg>, st: &mut NodeNumbersState) -> Vec<FnArg> {

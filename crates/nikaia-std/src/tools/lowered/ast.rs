@@ -40,7 +40,7 @@ pub struct Program {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
-    Fn { name: Option<winnow_grammar::Symbol>, generics: Vec<GenericParam>, receiver: Option<Receiver>, args: Vec<FnArg>, config: Vec<ConfigParam>, spread: Option<winnow_grammar::Symbol>, ret_type: Option<Type>, body: Block, is_sync: bool, sync_by: Vec<winnow_grammar::Symbol>, is_public: bool, can_throw: bool, is_extern: bool },
+    Fn { name: Option<winnow_grammar::Symbol>, generics: Vec<GenericParam>, receiver: Option<Receiver>, args: Vec<FnArg>, config: Vec<ConfigParam>, spread: Option<winnow_grammar::Symbol>, ret_type: Option<Type>, body: Block, is_sync: bool, sync_by: Vec<winnow_grammar::Symbol>, is_public: bool, can_throw: bool, is_extern: bool, ret_from: Vec<winnow_grammar::Symbol> },
     Enum { name: winnow_grammar::Symbol, variants: Vec<EnumVariant>, is_public: bool, is_extern: bool },
     Struct { name: winnow_grammar::Symbol, generics: Vec<GenericParam>, fields: Vec<FieldDef>, is_public: bool, is_extern: bool, rules: Vec<Spanned<Expr>> },
     Impl { trait_name: Option<winnow_grammar::Symbol>, target: Type, methods: Vec<Spanned<Item>> },
@@ -284,6 +284,7 @@ pub struct TraitMethod {
     pub args: Vec<FnArg>,
     pub config: Vec<ConfigParam>,
     pub ret_type: Option<Type>,
+    pub ret_from: Vec<winnow_grammar::Symbol>,
     pub is_sync: bool,
     pub can_throw: bool,
 }

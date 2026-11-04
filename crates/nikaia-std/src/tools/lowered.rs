@@ -787,6 +787,14 @@ mod check_reports_lowered {
 #[allow(unused_imports)]
 pub use check_reports_lowered::*;
 
+mod check_result_from_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/check_result_from.rs");
+}
+#[allow(unused_imports)]
+pub use check_result_from_lowered::*;
+
 mod check_scope_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2476,6 +2484,10 @@ pub mod check_reports {
     #[allow(unused_imports)]
     pub use super::{CheckWall};
 }
+pub mod check_result_from {
+    #[allow(unused_imports)]
+    pub use super::{result_from_check, result_from_as_written};
+}
 pub mod check_scope {
     #[allow(unused_imports)]
     pub use super::{CheckResolved, resolve_call, resolve_method};
@@ -3101,7 +3113,7 @@ pub mod view_changes {
 }
 pub mod views {
     #[allow(unused_imports)]
-    pub use super::{Stored, Destination, Asked, views_stored, views_checked, holds_view, views_the_call_s, written_type, local_struct_handed_back, FieldsHeld, fields_held, carrying, ResultSource, result_sources, PlacesStored, places_stored};
+    pub use super::{Stored, Destination, Asked, views_stored, views_checked, holds_view, views_the_call_s, written_type, local_struct_handed_back, FieldsHeld, fields_held, carrying, ResultSource, result_sources, result_sources_inferred, PlacesStored, places_stored};
 }
 pub mod written {
     #[allow(unused_imports)]

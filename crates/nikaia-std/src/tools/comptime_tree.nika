@@ -120,7 +120,7 @@ fn comptime_turn_function(turn: ref ComptimeTurn, returns: ref Type, intern: fn(
     let start = Stmt::Let { names: [kept], shape: [], mutable: true, deep: false, ty: list.clone(), value: Expr::ListLit { items: [], id: fresh_id() } }
     let stmts: Vec[Spanned[Stmt]] = [nowhere(start), nowhere(each), nowhere(Stmt::Return(Expr::Variable(kept, fresh_id())))]
     let generics: Vec[GenericParam] = [GenericParam { name: t, bounds: [intern("Struct")] }]
-    return Item::Fn { name: intern(TURN_MARK), generics: generics, receiver: null, args: [], config: [], spread: null, ret_type: list, body: Block { stmts: stmts }, is_sync: true, sync_by: [], is_public: false, can_throw: false, is_extern: false }
+    return Item::Fn { name: intern(TURN_MARK), generics: generics, receiver: null, args: [], config: [], spread: null, ret_type: list, body: Block { stmts: stmts }, is_sync: true, sync_by: [], is_public: false, can_throw: false, is_extern: false, ret_from: [] }
 }
 
 // `__nikaia_comptime_turn[On]().remove(0)`: the one value the turn pushed.
@@ -456,7 +456,7 @@ fn comptime_method_key(words: ref winnow_grammar::InternerContext, method: winno
 }
 
 fn comptime_a_function(name: winnow_grammar::Symbol?, ret_type: Type?, stmts: Vec[Spanned[Stmt]]) -> Item {
-    return Item::Fn { name: name, generics: [], receiver: null, args: [], config: [], spread: null, ret_type: ret_type, body: Block { stmts: stmts }, is_sync: false, sync_by: [], is_public: false, can_throw: false, is_extern: false }
+    return Item::Fn { name: name, generics: [], receiver: null, args: [], config: [], spread: null, ret_type: ret_type, body: Block { stmts: stmts }, is_sync: false, sync_by: [], is_public: false, can_throw: false, is_extern: false, ret_from: [] }
 }
 
 /// **An earlier `comptime`'s value as the literal that writes it**: a number,

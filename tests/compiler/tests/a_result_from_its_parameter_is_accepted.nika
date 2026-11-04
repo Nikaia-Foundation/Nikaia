@@ -1,0 +1,11 @@
+// A result whose `from` names the parameter its ways out hand back a view
+// of is accepted (ADR-views-3 D8).
+fn first_word(s: String) -> String from s {
+    let i = s.find(" ") ?? return s.trim()
+    return s[0..<i]
+}
+
+fn main() {
+    let line = "hello world"
+    println(first_word(line))
+}
