@@ -283,6 +283,24 @@ D23 and D9 above call a *keep*, is called the *anchor* in Parts I-III (the
 caller's anchor, a frame's anchor), so that one word has one meaning. ADR-283's
 text is left as written.
 
+### D14 — Without a body, `from` alone makes a result a view; a function type names the parameters its `from` reads.
+
+*Added November 4, 2026 (#1213), from building D8.*
+
+Once `ref` leaves (D4), nothing but `from` can say that a body-less result is a
+view. So in a trait's method, a function type and a foreign or Rust function, a
+result that writes `from` is a view of what it names, and one that writes no
+`from` owns its value; there is no third reading, and D8's "a view without a
+`from` is refused" applies where the migration finds a `ref` result: it writes
+the `from` that the implementations' bodies infer, or refuses with the choices.
+
+A function type may name its parameters, as `fn(s: String, n: Int) -> String
+from s`; the names are part of nothing but the `from` and documentation, two
+function types that differ only in them are the same type, and a function type
+whose result writes `from` names the parameters it reads. Positions (`from 0`)
+are not used: a number says less than a name and means nothing elsewhere in a
+signature.
+
 ## 5. Consequences
 
 A signature now tells a reader what a function does with each argument: kept
