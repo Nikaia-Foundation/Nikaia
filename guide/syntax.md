@@ -34,8 +34,8 @@ There are no semicolons at the end of lines. A comment is `//` or `/* … */`.
 
 | Type | What it is |
 | :--- | :--- |
-| `int` | the integer for most numbers: up to 64 bits, and the compiler chooses the machine type |
-| `i64`, `i32`, `u8`, `u64`, `u32` | integers of exactly that width, for a hash, a byte, a wire format or C. Every length and index is an `i64`, and `int` and `i64` convert to each other without `as` |
+| `int` | the integer for most numbers. In your code it works exactly like an `i64`; in memory the compiler may hold it in fewer bits where it knows the values fit |
+| `i64`, `i32`, `u8`, `u64`, `u32` | integers of exactly that width, for a hash, a byte, a wire format or C. Every length and index is an `i64`, and an `int` goes where an `i64` is expected, and back, without `as` |
 | `f64` | a floating-point number |
 | `bool` | `true` or `false` |
 | `scalar` | one Unicode scalar value, `'a'` |
@@ -64,7 +64,7 @@ decision.
 
 **Specification:** [Part I, §2.5 Strings, plain and interpolated](../docs/specification/10-nikaia-light.md#25-strings-plain-and-interpolated)
 
-## Everything is an expression
+## `if`, `match` and blocks have a value
 
 ```nika
 let count = 7
