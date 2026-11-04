@@ -1,0 +1,18 @@
+fn work(n: i64) -> i64 {
+	return n
+}
+
+fn main() throws {
+	let a = async(detached) fn { work(1) }
+	let b = async(detached) fn {
+		let x = work(2)
+		x + 1
+	}
+	async(detached) fn { println("c") }.join()
+	async(detached) fn {
+		println("d")
+	}.detach()
+	let e = async(detached) fn(x) { x }
+	println(f"{a.join()} {b.join()}")
+}
+idempotent: true

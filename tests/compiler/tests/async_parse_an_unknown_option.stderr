@@ -1,0 +1,6 @@
+error: An `async` option is `handle`, `deferred`, `detached`, `limit:`, `within:` or `admission:`.
+  --> tests/async_parse_an_unknown_option.nika:4:16
+   |
+ 4 | 	let h = async(eager) fn { 1 }
+   |                ^^^^^
+   |

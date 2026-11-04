@@ -1,0 +1,28 @@
+// `nikaia fmt` formats every `async` form the parser takes (ADR-async-5,
+// #984): `async(detached) fn { … }` on one line, over several, as a
+// statement, with a call after it and with an argument the checker refuses
+// (`NK2103`); and formatting twice changes nothing. The forms the parser
+// refuses as not built yet (#986) are not formatted.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	let file = f"{tmp}/forms.nika"
+	let source = "fn work(n: i64) -> i64 {\n    return n\n}\n\nfn main() throws {\n    let a = async(detached)   fn { work(1) }\n    let b = async(detached) fn {\n        let x = work(2)\n            x + 1\n    }\n  async(detached) fn { println(\"c\") }.join()\n    async(detached) fn {\n        println(\"d\")\n    }.detach()\n    let e = async(detached) fn(x) { x }\n    println(f\"{a.join()} {b.join()}\")\n}\n"
+	fs::write(file, fs::Root::Anywhere, source)
+	process::run(nikaia, ["fmt", file.clone()])
+	let once = fs::read_to_string(file, fs::Root::Anywhere)
+	print(once)
+	process::run(nikaia, ["fmt", file.clone()])
+	let twice = fs::read_to_string(file, fs::Root::Anywhere)
+	println(f"idempotent: {once == twice}")
+	process::run("rm", ["-rf", tmp])
+}

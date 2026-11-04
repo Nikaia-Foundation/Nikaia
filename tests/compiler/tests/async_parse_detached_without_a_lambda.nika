@@ -1,0 +1,10 @@
+// `async(detached)` takes a lambda (ADR-async-5 D13).
+
+fn work() -> i64 {
+	return 1
+}
+
+fn main() throws {
+	let h = async(detached) work()
+	println(f"{h.join()}")
+}

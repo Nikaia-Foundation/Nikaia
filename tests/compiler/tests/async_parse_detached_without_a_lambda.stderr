@@ -1,0 +1,7 @@
+error: `async(detached)` takes a lambda.
+  --> tests/async_parse_detached_without_a_lambda.nika:8:26
+   |
+ 8 | 	let h = async(detached) work()
+   |                          ^^^^
+   |
+   = help: Write `async(detached) fn { … }`.
