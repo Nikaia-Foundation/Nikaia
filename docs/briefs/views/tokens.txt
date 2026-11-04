@@ -9,3 +9,5 @@
 /home/user/Nikaia/docs/briefs/views/v6-from-without-body.md 1024377 10
 /home/user/Nikaia/docs/briefs/views/v7-lowering-lifetimes.md 0 1
 /home/user/Nikaia/docs/briefs/views/v8-finish-v7.md 567570 6
+/home/user/Nikaia/docs/briefs/views/v9-ref-migration.md 5780099 91
+/home/user/Nikaia/docs/briefs/views/v9b-commit-migration-tool.md 673870 22
