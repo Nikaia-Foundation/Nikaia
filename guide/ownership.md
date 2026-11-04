@@ -490,9 +490,34 @@ error[NK1102]: `enrol` expects `p` to be `Person`, but you're passing `ref Perso
 1 type error
 ```
 
-`p` is a view of an element of `people`, and `enrol` keeps what it gets. Write
-`enrol(team, p.clone())`, or, when `people` is not needed afterwards, take the elements out
-with `for p in people.drain()`.
+`p` is a view of an element of `people`, and `enrol` keeps what it gets. When `people` is not
+needed after the loop, `people.drain()` hands its elements over one by one instead of lending
+them. `enrol` then keeps each `Person` itself, and nothing is copied:
+
+```nika
+struct Person { name: String, age: int }
+
+fn enrol(mut team: Vec[Person], p: Person) {
+    team.push(p)
+}
+
+fn main() {
+    let people: Vec[Person] = [Person { name: "Ada", age: 36 }, Person { name: "Bob", age: 41 }]
+    let mut team: Vec[Person] = []
+    for p in people.drain() {
+        enrol(team, p)
+    }
+    println(team.len())
+}
+```
+
+```text
+2
+```
+
+`people` is handed over with its elements, so using it after the loop is refused
+([`NK2105`](#nk2105-a-value-used-after-it-was-handed-over)). Where `people` is still needed,
+`enrol(team, p.clone())` hands `enrol` a copy of each element instead.
 
 ### NK1138: a parameter changed without `mut`
 
