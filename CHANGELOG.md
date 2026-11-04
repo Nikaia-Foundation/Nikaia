@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1345] — 2026-11-04
+
+**views: a bare `self` is lent, and only `keep self` consumes the object; migrate: `nikaia migrate views-3` drops `ref` and writes `keep` from the ledger (ADR-views-3 D4)**
+- A bare `self` is lent: `self` looks, `mut self` changes the object, `keep self` consumes it (ADR-views-3 D1).
+- `nikaia migrate views-3 PATH...` rewrites `.nika` files and the Nikaia blocks of Markdown to views-3: `ref` is dropped outside `extern`, `ref mut` parameters become `mut x: T`, and `keep` is written where the body keeps a parameter.
+
 ## [0.0.1344] — 2026-11-04
 
 **Archive ADR-202, 353 and 354 under views-3; rewrite ADR-094, 184, 251, 358 in place; Test the caller rule for a result's sources, written and inferred (ADR-views-3 D9); Parse and check a result's written `from` (ADR-views-3 D8, D10); A trait's ref result is not warned; function types name parameters for from (ADR-views-3 D14); tests: a named function with a String parameter fits a function type of its signature (#1231, #1231)**
