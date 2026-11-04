@@ -405,56 +405,6 @@ an owner of its own ([`NK1102`](#nk1102-a-view-handed-to-a-function-that-keeps-i
 
 **Specification:** [Part I, §6.5 References and borrowing](../docs/specification/10-nikaia-light.md#65-references-and-borrowing) · [§6.6 Escaping references are tethered](../docs/specification/10-nikaia-light.md#66-escaping-references-are-tethered)
 
-## Changing a list while a loop reads it
-
-A `for` loop lends its list to the loop body. A change to the list inside the loop is refused,
-because it could move the elements the loop is still reading. In many languages this is a
-crash or a silent bug at run time:
-
-```nika
-fn main() {
-    let mut users: Vec[String] = ["ada", "bob", "ada"]
-    for u in users {
-        if u == "bob" {
-            users.push("x")         // does not compile: NK2305
-        }
-    }
-}
-```
-
-```text
-error[NK2305]: `users` is changed here, inside the loop that lends it.
-  --> main.nika:5:13
-   |
- 3 |     for u in users {
-   |              ----- `users` is lent to this loop
-   ...
- 5 |             users.push("x")         // does not compile: NK2305
-   |             ^^^^^ `users` changes here
-   |
-   = help: Collect what the loop wants to add in a list of its own and add it after the loop with `users.extend(more)`, or walk `0..<n` with `let n = users.len()` before the loop.
-1 change to data a view still to be used may point into
-```
-
-The standard library has a method for the common cases (`retain`, `drain`, `entry`, `swap`),
-and the message names one where it fits:
-
-```nika
-fn main() {
-    let mut users: Vec[String] = ["ada", "bob", "ada"]
-    users.retain fn(u) { u != "bob" }
-    println(users.len())
-}
-```
-
-```text
-2
-```
-
-`for x in xs.drain()` takes the elements out of the list instead of lending them.
-
-**Specification:** [Part I, §6.6 Escaping references are tethered](../docs/specification/10-nikaia-light.md#66-escaping-references-are-tethered) · [§6.8 When the compiler says no](../docs/specification/10-nikaia-light.md#68-when-the-compiler-says-no)
-
 ## The contract ledger
 
 You do not write which parameters a function keeps, or what its result points into. The
@@ -570,8 +520,9 @@ The same for a variable is `NK1139`, which asks for `let mut`.
 
 ### NK2305: data changed while a view of it is still used
 
-Either a list changed inside a loop that walks it, or a value changed while a view that may
-point into it is used later ([A view and the data it points into](#a-view-and-the-data-it-points-into)).
+Either a list changed inside a loop that walks it
+([Changing a list while a loop reads it](syntax.md#changing-a-list-while-a-loop-reads-it)),
+or a value changed while a view that may point into it is used later ([A view and the data it points into](#a-view-and-the-data-it-points-into)).
 Use the view before the change, copy it with `.clone()` before the change, or, in a loop, use
 the method the message names.
 

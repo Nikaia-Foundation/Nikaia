@@ -103,7 +103,76 @@ for mut s in scores {
 println(scores.iter().join(", "))   // 75, 90, 97
 ```
 
-**Specification:** [Part I, §3.3 Loops](../docs/specification/10-nikaia-light.md#33-loops)
+### Changing a list while a loop reads it
+
+A `for` loop lends its list to the loop body, so the body cannot add elements to that list or
+remove them. Such a change could move the elements the loop is still reading, which in many
+languages is a crash or a silent bug at run time. Nikaia refuses it when it compiles:
+
+```nika
+fn main() {
+    let mut users: Vec[String] = ["ada", "bob", "ada"]
+    for u in users {
+        if u == "bob" {
+            users.push("x")         // does not compile: NK2305
+        }
+    }
+}
+```
+
+```text
+error[NK2305]: `users` is changed here, inside the loop that lends it.
+  --> main.nika:5:13
+   |
+ 3 |     for u in users {
+   |              ----- `users` is lent to this loop
+   ...
+ 5 |             users.push("x")         // does not compile: NK2305
+   |             ^^^^^ `users` changes here
+   |
+   = help: Collect what the loop wants to add in a list of its own and add it after the loop with `users.extend(more)`, or walk `0..<n` with `let n = users.len()` before the loop.
+1 change to data a view still to be used may point into
+```
+
+What the loop wants to add goes into a list of its own, and that list is added once the loop
+has finished:
+
+```nika
+fn main() {
+    let mut users: Vec[String] = ["ada", "bob", "ada"]
+    let mut more: Vec[String] = []
+    for u in users {
+        if u == "bob" {
+            more.push("x")
+        }
+    }
+    users.extend(more)
+    println(users.iter().join(", "))
+}
+```
+
+```text
+ada, bob, ada, x
+```
+
+For removing elements the standard library has `retain`, which keeps those the function
+accepts. The message names such a method (`retain`, `drain`, `entry`, `swap`) where one fits:
+
+```nika
+fn main() {
+    let mut users: Vec[String] = ["ada", "bob", "ada"]
+    users.retain fn(u) { u != "bob" }
+    println(users.iter().join(", "))
+}
+```
+
+```text
+ada, ada
+```
+
+`for x in xs.drain()` takes the elements out of the list instead of lending them.
+
+**Specification:** [Part I, §3.3 Loops](../docs/specification/10-nikaia-light.md#33-loops) · [§6.8 When the compiler says no](../docs/specification/10-nikaia-light.md#68-when-the-compiler-says-no)
 
 ## Functions
 
