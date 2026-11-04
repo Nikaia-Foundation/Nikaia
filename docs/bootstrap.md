@@ -7,6 +7,24 @@ and token cost counts. This file is the plan; the supervisor's *State*
 (`docs/supervisor.md`) and the plan rows (`docs/selfhosting-plan.md`) stay
 where they are and point here.
 
+**Paused for the specification (owner, 2026-11-03, #1214).** The bootstrap
+waits while the compiler catches up with the specification. Two language
+topics are built first: views as the specification now states them (#1213:
+`self`, `mut self`, `keep`, and `ref` leaving the language) and async as
+ADR-async-5 states it (#983). Where the code these topics change is still Rust
+(the parser's grammar block, the runtime of `std`, parts of the compiler), the
+change is made in Rust, and the port picks it up later (#557, #125).
+
+The reason is what a reader of Nikaia can check. A specification is only a
+claim until a compiler does what it says. While the compiler still works the
+old way in places, the specification has to explain which parts are not real
+yet, and the ideas behind views and async remain an idea on paper. With the
+compiler close to the specification, every rule in it can be tried in a
+program, and the concepts are shown to work rather than asserted. A compiler
+written in Nikaia is worth more once the language it is written in is the
+language the specification describes; so the gap is closed first and the
+bootstrap resumes after.
+
 **The goal, as the owner set it (2026-10-28):**
 
 1. **The Nikaia compiler is written in Nikaia.** Glue that only makes sense in
