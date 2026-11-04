@@ -12,6 +12,13 @@ pub(crate) fn check_core_ops_base(name: &str) -> String {
     format!("{}", *nikaia_std::index::get(&parts, nikaia_std::index::at(last)))
 }
 
+pub(crate) fn check_core_ops_a_lent_copy(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && !copies_as_a_view(ty) && !is_text_type(ty) },
+        _ => false,
+    }
+}
+
 pub(crate) fn check_core_ops_arithmetic(op: BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem) }
 
 pub(crate) fn check_core_ops_unchecked(op: BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) }
@@ -275,7 +282,13 @@ pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world
         state.arithmetic_on_something_that_has_none(world, op, lhs, left, rhs, right, false, span);
         return Ty::Unknown;
     }
-    let (found, named) = check_core_ops_same(&state, op, lhs, left, rhs, right, at);
+    if check_core_ops_arithmetic(op) {
+        let here = at.start as i64;
+        if check_core_ops_a_lent_copy(&left.unseen()) { let added = state.facts.compared_views.insert((here, String::from("lhs"))); }
+        if check_core_ops_a_lent_copy(&right.unseen()) { let added = state.facts.compared_views.insert((here, String::from("rhs"))); }
+    }
+    let (same, named) = check_core_ops_same(&state, op, lhs, left, rhs, right, at);
+    let found = if check_core_ops_arithmetic(op) { unviewed_type(&same) } else { same };
     if named != "" { state.facts.arithmetic.insert(at.start as i64, named); } else if check_core_ops_unchecked(op) && check_core_ops_whole_or_open(&state, world, lhs, left) && check_core_ops_whole_or_open(&state, world, rhs, right) { state.open_number_site(world, &vec![lhs, rhs], at.start as i64); }
     found
 }

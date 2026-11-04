@@ -29,6 +29,15 @@ fn check_core_ops_base(name: ref String) -> String {
 }
 
 /// `+`, `-`, `*`, `/` and `%`.
+/// A view of a value that is neither a number nor text: a lent `self` of a
+/// type that copies, as `time::Duration` (#1240).
+fn check_core_ops_a_lent_copy(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => view && args.len() == 0 && !copies_as_a_view(ty) && !is_text_type(ty),
+        else => false,
+    }
+}
+
 fn check_core_ops_arithmetic(op: BinaryOp) -> bool {
     return match op {
         BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => true,
@@ -442,7 +451,22 @@ fn check_core_ops_outcome[H: CheckHost](mut state: CheckState, world: ref CheckW
         state.arithmetic_on_something_that_has_none(world, op, lhs, left, rhs, right, false, span)
         return Ty::Unknown
     }
-    let (found, named) = check_core_ops_same(state, op, lhs, left, rhs, right, at)
+    // **An operator on a lent value that copies reads the value** (#1240):
+    // `self * 2` in a method lent a `time::Duration` is `*self * 2` below,
+    // where no operator takes the reference; a number's view needs no `*`.
+    if check_core_ops_arithmetic(op) {
+        let here = at.start as i64
+        if check_core_ops_a_lent_copy(left.unseen()) {
+            let added = state.facts.compared_views.insert((here, "lhs"))
+        }
+        if check_core_ops_a_lent_copy(right.unseen()) {
+            let added = state.facts.compared_views.insert((here, "rhs"))
+        }
+    }
+    let (same, named) = check_core_ops_same(state, op, lhs, left, rhs, right, at)
+    // **An operator's result is a value of its own** (#1240): it points into
+    // neither operand, so a view on either side does not make it one.
+    let found = if check_core_ops_arithmetic(op) { unviewed_type(same) } else { same }
     if named != "" {
         state.facts.arithmetic.insert(at.start as i64, named)
     } else if check_core_ops_unchecked(op) && check_core_ops_whole_or_open(state, world, lhs, left) && check_core_ops_whole_or_open(state, world, rhs, right) {

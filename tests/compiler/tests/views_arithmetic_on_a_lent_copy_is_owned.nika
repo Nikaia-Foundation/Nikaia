@@ -1,0 +1,37 @@
+// An operator on a lent value that copies gives a value of its own (#1240):
+// `self * 2` in a method lent a `time::Duration` points into nothing, and an
+// integer field read through a lent `self` is a number the result owns.
+use std::time
+
+trait Doubled {
+	fn doubled(self) -> time::Duration
+}
+
+impl Doubled for time::Duration {
+	fn doubled(self) -> time::Duration {
+		return self * 2
+	}
+}
+
+struct Counter {
+	n: i64,
+}
+
+impl Counter {
+	fn twice(self) -> i64 {
+		return self.n * 2
+	}
+
+	fn sum(self, other: time::Duration) -> time::Duration {
+		return other + other
+	}
+}
+
+fn main() {
+	let d = 3.millis()
+	println(f"{d.doubled().in_millis()}")
+	println(f"{d.doubled().in_millis()}")
+	let c = Counter { n: 4 }
+	println(f"{c.twice()} {c.twice()}")
+	println(f"{c.sum(d).in_millis()}")
+}
