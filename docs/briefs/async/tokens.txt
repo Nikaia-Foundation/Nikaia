@@ -1,3 +1,4 @@
 /home/user/Nikaia/docs/briefs/async/a1-async-parse.md 355015 5
 /home/user/Nikaia/docs/briefs/async/a1b-async-parse.md 1630236 22
 /home/user/Nikaia/docs/briefs/async/a2-async-parse-refusals.md 726175 11
+/home/user/Nikaia/docs/briefs/async/qa/qa-task.md 1137436 34
