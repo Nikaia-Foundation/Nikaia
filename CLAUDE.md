@@ -86,12 +86,8 @@ The rules every session and agent needs. What only the main session does
   rules: slices, syntax gaps of `tools/*.nika`, lowering).
 * **Whoever measures performance or quotes a figure**: `docs/measuring.md`
   (count with callgrind, never time; against tuned Rust; tokens, not lines).
-* **Whoever writes for the website, `README.md` or `guide/`**:
-  `docs/writing-guide.md` (lead with safety, no absolute claims, no comparisons
-  with other languages, natural prose without bold lead-ins, nothing shown as
-  runnable before it is built). Its last section is for whoever writes the
-  specification: compact for models that read it whole, one rule in one
-  place, one meaning per word.
+* **Whoever writes for the website, `README.md`, `guide/` or the
+  specification**: `docs/writing-guide.md`.
 
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
 
