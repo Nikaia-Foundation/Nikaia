@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1344] — 2026-11-04
+
+**Archive ADR-202, 353 and 354 under views-3; rewrite ADR-094, 184, 251, 358 in place; Test the caller rule for a result's sources, written and inferred (ADR-views-3 D9); Parse and check a result's written `from` (ADR-views-3 D8, D10); A trait's ref result is not warned; function types name parameters for from (ADR-views-3 D14); tests: a named function with a String parameter fits a function type of its signature (#1231, #1231)**
+- Specification: views-3 written into Parts I-III (keep on kept parameters, mut on changed ones, -> T from a | b, ref only in extern "C"); ADR-202, 353, 354 archived
+- A result may name its sources: `-> String from s`, `-> String from a | b`. The body is checked against it (NK1335), the ledger records it as written, a trait method or foreign function whose result is a view must write it (NK1336), and a caller keeps every named source unchanged while the result is used (NK2305).
+- A result may name its sources: `-> String from s`, `-> String from a | b`. The body is checked against it (NK1335), the ledger records it as written, and a trait method or foreign function whose result is a view must write it (NK1336).
+- A function type may name its parameters and write its result's source: `fn(s: String, n: i64) -> String from s`. The names do not change the type, and a `from` that names no parameter of the type is refused (NK1335). A trait method's `-> ref String` is no longer warned as redundant (NK1261): without a body it is what makes the result a view.
+- A trait method whose result says `from a` takes `a: String` as lent and lowers with one lifetime shared by its sources (#1230); a named function with a `String` parameter is covered as a function value (#1231).
+
 ## [0.0.1343] — 2026-11-03
 
 **immutable: the reserved word, the binding inside a function and the deep rule NK1331 (ADR-389 D1, D2, D6)**
