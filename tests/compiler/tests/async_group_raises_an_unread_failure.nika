@@ -1,0 +1,52 @@
+// A statement task's failure nobody reads is raised at its group's end
+// (ADR-async-5 D21, #988): the group's own statements run on after it, and
+// the line after the group does not. `run` throws two kinds of error, so its
+// channel carries a task's crash too.
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Oops(n) => f"task {n} failed",
+		}
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n
+}
+
+enum Late { Again }
+impl Error for Late {
+	fn message(ref self) -> String {
+		return "late"
+	}
+}
+
+fn ready(n: i64) -> i64 throws {
+	if n < 0 {
+		throw Late::Again
+	}
+	return n
+}
+
+fn run() -> i64 throws {
+	let n = async {
+		async work(7)
+		println("the group's statements run on")
+		ready(1)
+	}
+	println("not reached")
+	return n
+}
+
+fn main() {
+	let n = run() catch {
+		println(f"caught at the group's end: {error}")
+		0
+	}
+	println(f"{n}")
+}

@@ -364,7 +364,11 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); thrown_in(expr, names, holes_of, contribution_of, in_a_handler, caught, out); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out); },
-        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out); },
+        Expr::Async(inner, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            if !caught { out.direct.insert(String::from("task::Crashed")); }
+            thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out);
+        },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); thrown_in(expr, names, holes_of, contribution_of, in_a_handler, caught, out); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); thrown_in(base, names, holes_of, contribution_of, in_a_handler, caught, out); },

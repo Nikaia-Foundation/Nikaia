@@ -1,0 +1,36 @@
+// A function that starts a task throws `task::Crashed` besides what its body
+// throws (Part II 12.7, ADR-328 D8, #988): its inferred error channel holds a
+// task's crash, as it does for a `task::scope`, so a task's own error reaches
+// the caller through it.
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Oops(n) => f"task {n} failed",
+		}
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n
+}
+
+fn run(n: i64) -> i64 throws {
+	let a = async work(n)
+	println("the window's statement")
+	return a + 1
+}
+
+fn main() {
+	for n in [1, 7] {
+		let m = run(n) catch {
+			println(f"caught: {error}")
+			0
+		}
+		println(f"{m}")
+	}
+}

@@ -567,7 +567,15 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
         }
         Expr::Unary { expr, .. } => thrown_in(expr, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Try(inner, _) => thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out),
-        Expr::Async(inner, _) => thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out),
+        // **A task's crash is an error to whoever waits for it** (Part II
+        // 12.7, ADR-328 D8): the function that starts it throws
+        // `task::Crashed`, as a `task::scope` in it does.
+        Expr::Async(inner, _) => {
+            if !caught {
+                out.direct.insert("task::Crashed")
+            }
+            thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out)
+        }
         Expr::Throw(inner, _) => thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Cast { expr, .. } => thrown_in(expr, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Field { base, .. } => thrown_in(base, names, holes_of, contribution_of, in_a_handler, caught, out),
