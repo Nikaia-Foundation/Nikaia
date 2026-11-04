@@ -12,3 +12,4 @@
 /home/user/Nikaia/docs/briefs/views/v9-ref-migration.md 5780099 91
 /home/user/Nikaia/docs/briefs/views/v9b-commit-migration-tool.md 673870 22
 /home/user/Nikaia/docs/briefs/views/v10-self-lent.md 5295528 74
+/home/user/Nikaia/docs/briefs/views/v11-keep-cross-file.md 1401326 21

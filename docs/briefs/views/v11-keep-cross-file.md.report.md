@@ -1,0 +1,19 @@
+Result: done
+Files: crates/nikaia/src/parser/mod.rs crates/nikaia-std/src/tools/ast.nika crates/nikaia-std/src/tools/emit_kinds.nika crates/nikaia-std/src/tools/traits.nika crates/nikaia/src/bounds_report.rs crates/nikaia/src/contracts/trust.rs crates/nikaia/src/project.rs crates/nikaia-std/src/tools/lowered/ast.rs crates/nikaia-std/src/tools/lowered/bounds_report.rs crates/nikaia-std/src/tools/lowered/check_numbers4.rs crates/nikaia-std/src/tools/lowered/check_walked.rs crates/nikaia-std/src/tools/lowered/emit_build.rs crates/nikaia-std/src/tools/lowered/emit_kinds.rs crates/nikaia-std/src/tools/lowered/project_settings.rs crates/nikaia-std/src/tools/lowered/traits.rs crates/nikaia-std/src/tools/lowered/ty.rs crates/nikaia-std/src/tools/lowered/type_rules.rs crates/nikaia/tests/it/borrowed_subject.rs crates/nikaia/tests/it/function_values.rs crates/nikaia/tests/it/generics.rs crates/nikaia/tests/it/parallel_folds.rs crates/nikaia/tests/it/traits.rs tests/language/src/borrowed_subject.nika tests/specification/EXPECTED.txt tests/specification/COMPILES.txt tests/compiler/tests/views_a_bare_self_is_lent.nika tests/compiler/tests/views_a_bare_self_is_lent.stdout
+Commit: views: a bare `self` is lent, and only `keep self` consumes the object
+Body: Step 2 of v11 (ADR-views-3 D1). The parser's `receiver` rule reads a bare `self` as `ref self`, so `b.show()` twice runs; `keep self` stays the one receiver taken by value. EmitFlow's `self with {..}` builders take `keep self`; `receiver_text` names a by-value receiver `keep self`. Lowered signatures that turned to `&` changed three Rust callers. Rust changed (#557 / #125): parser/mod.rs `receiver` rule; call sites in bounds_report.rs (`bounds_report_checked` args), contracts/trust.rs (`Provenance` fold), project.rs (`cpu_config` args); it tests whose programs consumed a bare `self` now write `keep self` (borrowed_subject, function_values, generics, parallel_folds, traits); Spec baselines: blocks #94 and #101 now lower, #56 and #62 no longer do (see Found).
+Part: #1213
+Pushed: local 839a036f6aab6b92360075adb6cab916e656c5e9
+Tests: views_a_bare_self_is_lent passes (fails on the old binary: `b` moved by the first call); tests/language 404/404; it modules borrowed_subject function_values generics keeps parallel_folds specification traits examples: 110 passed after the test updates (spec baselines regenerated, it programs that consumed a bare `self` now write `keep self`); tests/compiler both settings 692/692 (9 first hit a relinked binary, then passed); lower-std at its fixpoint; fmt, clippy clean; examples: every package passes its own tests --locked
+Gate: green
+Deviation: the test that `keep self` still consumes is not a tests/compiler program: the use after the move is refused by rustc (translated "Use of moved value: `b`"), which `nikaia test` counts as a failed build, not a refusal; checked by hand on the new binary
+Found: (1) spec 10-nikaia-light.md #56 `fn get(self) -> T { return self.item }` and #62/#2023 `fn doubled(self)` now mean a lent `self` and should say `keep self` (page, not mine); (2) defect, before this change too: `fn doubled(ref self) -> time::Duration { return self * 2 }` is NK1104 "returning `ref time::Duration`" (arithmetic on a lent Copy value keeps the `ref`); (3) the checker does not refuse a use after a `keep self` call, nor `self.part.into_x()` with `keep self` inside a `ref self` method; only rustc does
+Needs: supervisor: fix page blocks #56 #62 to `keep self`; file defect (2) and (3)
+Changelog: A bare `self` is lent: `self` looks, `mut self` changes the object, `keep self` consumes it (ADR-views-3 D1).
+Owner: none
+Disk freed: none (cache 3.4G, 5.5G free; new entries over 100 MB: rlib df8bcfe6 827M, rlib af187e66 268M, run-bundle c1ccf85a 290M)
+Rs2nika: none
+
+Attribution:
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
