@@ -1,0 +1,8 @@
+warning[NK1334]: `s` is marked `keep`, but `look` never keeps it.
+  --> tests/a_keep_never_kept_is_warned.nika:3:9
+   |
+ 3 | fn look(keep s: String) -> i64 {
+   |         ^^^^^^^^^^^^^^
+   |
+   = note: A parameter the body only reads or changes is lent (ADR-views-3 D2).
+   = help: Remove `keep` before `s`.

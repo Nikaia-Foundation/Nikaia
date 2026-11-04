@@ -571,6 +571,14 @@ mod check_items_lowered {
 #[allow(unused_imports)]
 pub use check_items_lowered::*;
 
+mod check_keep_marks_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/check_keep_marks.rs");
+}
+#[allow(unused_imports)]
+pub use check_keep_marks_lowered::*;
+
 mod check_kinds_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2380,6 +2388,10 @@ pub mod check_imports {}
 pub mod check_items {
     #[allow(unused_imports)]
     pub use super::{declares_a_type, declared_with_no_arithmetic, either_param, either_field, imports_a_package, imports_exactly, a_field_of_static_text, an_extern_struct_named, a_c_value, implements_error, fields_by_base, check_payload_in, ItemGeneric};
+}
+pub mod check_keep_marks {
+    #[allow(unused_imports)]
+    pub use super::{keep_marks_check};
 }
 pub mod check_kinds {
     #[allow(unused_imports)]

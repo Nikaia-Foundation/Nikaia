@@ -1,0 +1,9 @@
+error[NK2302]: `take` marks `item` otherwise than `Sink::take`, which keeps it.
+   --> tests/an_impl_marking_keep_otherwise_than_its_trait_is_refused.nika:12:20
+    |
+ 12 | 	fn take(mut self, item: String) {
+    |                    ^^^^^^^^^^^^
+    |
+    = note: A trait's signature fixes `keep` for every implementation (ADR-views-3 D2): a caller through the trait reads that signature, not this one.
+    = help: Write `keep` before `item`, as the trait does.
+1 view kept past the call that was given it

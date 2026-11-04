@@ -219,6 +219,7 @@ pub fn check_against<'a>(
         parsed, beside, own, library, modules, newly, reads, false, true,
     );
     refuse_unproved_claims(&mut checked);
+    check_keep_marks(parsed, beside, own, library, &mut checked);
     if beside.is_empty() && modules.is_empty() {
         dump_accepted(parsed, &checked);
     }
@@ -726,6 +727,35 @@ pub fn refuse_unproved_claims(checked: &mut Checked) {
         &checked.facts.claims,
     );
     checked.findings.extend(unproved);
+}
+
+/// **The written `keep` against the inferred keeps** (`NK2302`, `NK1334`,
+/// ADR-views-3 D2): `tools/check_keep_marks.nika`. The ledger `own` carries
+/// what the keep inference decided; this hands it the file and its neighbours.
+pub fn check_keep_marks(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    own: &Ledger,
+    library: &Ledger,
+    checked: &mut Checked,
+) {
+    let view = parsed_view_of(parsed);
+    let others: Vec<_> = beside.iter().map(|other| parsed_view_of(other)).collect();
+    let own_methods = nikaia_std::tools::ty::method_index(own);
+    let library_methods = nikaia_std::tools::ty::method_index(library);
+    let found = nikaia_std::tools::check_keep_marks::keep_marks_check(
+        &view,
+        &others,
+        own,
+        library,
+        &nikaia_std::tools::keeps::KeepsIndexes {
+            own: &own_methods,
+            library: &library_methods,
+        },
+        &checked.methods,
+        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+    );
+    checked.findings.extend(found);
 }
 
 /// **`std` assumes nothing** (`NK1295`, ADR-376 D3): `tools/check_claims.nika`.

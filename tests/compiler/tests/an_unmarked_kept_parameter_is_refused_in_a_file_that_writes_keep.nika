@@ -1,0 +1,19 @@
+// A file that writes `keep` once has opted into views-3: a parameter its body
+// keeps without the mark is refused at the keeping statement (NK2302,
+// ADR-views-3 D2).
+fn store(mut into: Vec[String], s: String) {
+	let n = into.len()
+	into.push(s)
+	println(f"{n}")
+}
+
+fn hold(mut into: Vec[String], keep s: String) {
+	into.push(s)
+}
+
+fn main() {
+	let mut v: Vec[String] = []
+	store(v, "a")
+	hold(v, "b")
+	println(f"{v.len()}")
+}

@@ -1,0 +1,222 @@
+// crates/nikaia-std/src/tools/check_keep_marks.nika
+//
+// **The written `keep` held against the inferred keeps** (ADR-views-3 D2,
+// #1213 step 2). The keep inference (`keeps.nika`) has already written into
+// the ledger which parameters each body keeps; this compares that with the
+// mark the signature carries. A parameter kept and not marked is `NK2302` at
+// the statement that keeps it; a `keep` the body never keeps is the warning
+// `NK1334`. A trait's signature fixes the mark for every implementation, so
+// an `impl` method marked otherwise than its trait's is `NK2302` as well.
+//
+// **Transition rule** (#1213, removed by the migration brief, step 6): until
+// the migration has written `keep` everywhere, `NK2302` for an unmarked kept
+// parameter is raised only in a file that writes `keep` at least once, the
+// file that has opted into views-3; `NK1334` always.
+//
+// Free functions over the file's items and the ledgers; the Rust adapter
+// (`check_against`) adds what they return.
+
+use std::collections
+
+/// Every finding about `keep` marks in `view`. `beside` are the program's
+/// other files, where a trait an `impl` answers may be declared.
+pub fn keep_marks_check(view: ref ParsedView, beside: ref Vec[ParsedView], own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Vec[CheckFinding] {
+    let mut out: Vec[CheckFinding] = []
+    let opted = keep_marks_opted_in(view)
+    let traits = keep_marks_of_traits(view, beside)
+    for item in view.items {
+        match item.node {
+            Item::Fn { .. } => {
+                keep_marks_of_body(view, item, null, own, library, indexes, resolved, holes_of, opted, out)
+            },
+            Item::Impl { trait_name, target, methods } => {
+                let target_name = view.text(target.name)
+                match trait_name {
+                    null => {
+                        for method in methods {
+                            keep_marks_of_body(view, method, target_name.clone(), own, library, indexes, resolved, holes_of, opted, out)
+                        }
+                    },
+                    t => {
+                        let owner = view.text(t)
+                        for method in methods {
+                            keep_marks_against_trait(view, method, owner, traits, out)
+                        }
+                    },
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+/// **The file has opted into views-3**: it writes `keep` before a parameter
+/// or `self` at least once.
+fn keep_marks_opted_in(view: ref ParsedView) -> bool {
+    for item in view.items {
+        match item.node {
+            Item::Fn { receiver, args, .. } => {
+                if keep_marks_written(receiver, args) {
+                    return true
+                }
+            },
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { receiver, args, .. } => {
+                            if keep_marks_written(receiver, args) {
+                                return true
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            Item::Trait { methods, .. } => {
+                for method in methods {
+                    if keep_marks_written(method.node.receiver, method.node.args) {
+                        return true
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+fn keep_marks_written(receiver: ref Receiver?, args: ref Vec[FnArg]) -> bool {
+    let consumes = match receiver {
+        null => false,
+        r => r.is_keep,
+    }
+    return consumes || args.iter().any(fn(arg) { arg.keep })
+}
+
+/// **Each trait method's marks**, by `Trait::method`: whether `self` is
+/// `keep self`, then one mark per parameter in order.
+fn keep_marks_of_traits(view: ref ParsedView, beside: ref Vec[ParsedView]) -> collections::BTreeMap[String, Vec[bool]] {
+    let mut marks: collections::BTreeMap[String, Vec[bool]] = collections::BTreeMap()
+    keep_marks_traits_of(view, marks)
+    for other in beside {
+        keep_marks_traits_of(other, marks)
+    }
+    return marks
+}
+
+fn keep_marks_traits_of(view: ref ParsedView, mut marks: collections::BTreeMap[String, Vec[bool]]) {
+    for item in view.items {
+        match item.node {
+            Item::Trait { name, methods, .. } => {
+                let owner = view.text(name)
+                for method in methods {
+                    let called = view.text(method.node.name)
+                    marks.insert(f"{owner}::{called}", keep_marks_row(method.node.receiver, method.node.args))
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+fn keep_marks_row(receiver: ref Receiver?, args: ref Vec[FnArg]) -> Vec[bool] {
+    let consumes = match receiver {
+        null => false,
+        r => r.is_keep,
+    }
+    let mut row: Vec[bool] = [consumes]
+    row.extend(args.iter().map(fn(arg) { arg.keep }))
+    return row
+}
+
+/// **An `impl` method takes its trait's marks** (D2): each parameter, and
+/// `self`, marked as the trait's method marks it. A trait of another package
+/// is not read here: its signature is no item of this program.
+fn keep_marks_against_trait(view: ref ParsedView, method: ref Spanned[Item], owner: ref String, traits: ref collections::BTreeMap[String, Vec[bool]], mut out: Vec[CheckFinding]) {
+    match method.node {
+        Item::Fn { name, receiver, args, .. } => {
+            let own = view.text(name ?? return)
+            let at_trait = f"{owner}::{own}"
+            let marks = traits[at_trait] ?? return
+            if marks.len() != args.len() + 1 {
+                return
+            }
+            let consumes = match receiver {
+                null => false,
+                r => r.is_keep,
+            }
+            if receiver != null && consumes != marks[0] {
+                let written = if marks[0] { "`keep self`" } else { "`self` without `keep`" }
+                let help = f"Write {written}, as the trait does."
+                out.push(check_refusal("NK2302", method.span, f"`{own}` marks `self` otherwise than `{at_trait}` does.", ["A trait's signature fixes `keep` for every implementation (ADR-views-3 D2)."], help))
+            }
+            let mut at = 0
+            for arg in args {
+                let marked = marks[at + 1]
+                if arg.keep != marked {
+                    let parameter = view.text(arg.name)
+                    let help = if marked { f"Write `keep` before `{parameter}`, as the trait does." } else { f"Remove `keep` before `{parameter}`, as the trait does." }
+                    let said = if marked { "keeps" } else { "lends" }
+                    out.push(check_refusal("NK2302", arg.span, f"`{own}` marks `{parameter}` otherwise than `{at_trait}`, which {said} it.", ["A trait's signature fixes `keep` for every implementation (ADR-views-3 D2): a caller through the trait reads that signature, not this one."], help))
+                }
+                at += 1
+            }
+        },
+        else => {},
+    }
+}
+
+/// **A body's parameters against what the inference decided** for it: kept
+/// and unmarked is `NK2302` where the file has opted in; marked and never kept
+/// is `NK1334`. `self` is not asked: the inference does not decide it, the
+/// receiver's word does.
+fn keep_marks_of_body(view: ref ParsedView, item: ref Spanned[Item], target: String?, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync, opted: bool, mut out: Vec[CheckFinding]) {
+    match item.node {
+        Item::Fn { args, is_extern, .. } => {
+            if is_extern || args.is_empty() {
+                return
+            }
+            let found = keeps_uses_of(view, item.node, target?.clone(), own, library, indexes, resolved, holes_of) ?? return
+            let contract = own.functions[found.key] ?? return
+            for arg in args {
+                let parameter = view.text(arg.name)
+                if parameter == "" || parameter == "_" {
+                    continue
+                }
+                let kept = contract.keeps.contains(parameter)
+                if kept && !arg.keep && opted {
+                    let at = keep_marks_keeping_statement(view, item, target?.clone(), parameter, own, library, indexes, resolved, holes_of) ?? arg.span.clone()
+                    out.push(check_refusal("NK2302", at, f"`{found.key}` keeps `{parameter}`, but `{parameter}` is not marked `keep`.", ["A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).", "Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213)."], f"Write `keep {parameter}` in the signature of `{found.key}`."))
+                }
+                if arg.keep && !kept {
+                    let mut warned = check_refusal("NK1334", arg.span, f"`{parameter}` is marked `keep`, but `{found.key}` never keeps it.", ["A parameter the body only reads or changes is lent (ADR-views-3 D2)."], f"Remove `keep` before `{parameter}`.")
+                    warned.severity = CheckSeverity::Warning
+                    out.push(warned)
+                }
+            }
+        },
+        else => {},
+    }
+}
+
+/// **The statement that keeps `parameter`**: the first prefix of the body
+/// whose walk keeps it; `null` where none does on its own.
+fn keep_marks_keeping_statement(view: ref ParsedView, item: ref Spanned[Item], target: String?, parameter: ref String, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Span? {
+    let settling: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    match item.node {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern } => {
+            let mut stmts: Vec[Spanned[Stmt]] = []
+            for stmt in body.stmts {
+                stmts.push(stmt.clone())
+                let prefix = Item::Fn { name: name, generics: generics.clone(), receiver: receiver?.clone(), args: args.clone(), config: config.clone(), spread: spread, ret_type: ret_type?.clone(), body: Block { stmts: stmts.clone() }, is_sync: is_sync, sync_by: sync_by.clone(), is_public: is_public, can_throw: can_throw, is_extern: is_extern }
+                let found = keeps_uses_of(view, prefix, target?.clone(), own, library, indexes, resolved, holes_of) ?? continue
+                if found.uses.kept.contains(parameter) || found.uses.passed.iter().any(fn(passed) { passed.parameter == parameter && keeps_its(passed.callee, passed.at, settling, own, library) }) {
+                    return stmt.span.clone()
+                }
+            }
+        },
+        else => {},
+    }
+    return null
+}

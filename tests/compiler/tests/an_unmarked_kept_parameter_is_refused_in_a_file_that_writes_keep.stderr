@@ -1,0 +1,10 @@
+error[NK2302]: `store` keeps `s`, but `s` is not marked `keep`.
+  --> tests/an_unmarked_kept_parameter_is_refused_in_a_file_that_writes_keep.nika:6:2
+   |
+ 6 | 	into.push(s)
+   |  ^^^^^^^^^^^^
+   |
+   = note: A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).
+   = note: Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).
+   = help: Write `keep s` in the signature of `store`.
+1 view kept past the call that was given it

@@ -1,0 +1,21 @@
+// `keep self` consumes the object and is accepted (ADR-views-3 D2).
+struct Bag {
+	items: Vec[String],
+}
+
+impl Bag {
+	fn add(mut self, keep item: String) {
+		self.items.push(item)
+	}
+
+	fn done(keep self) -> Vec[String] {
+		self.items
+	}
+}
+
+fn main() {
+	let mut bag = Bag { items: [] }
+	bag.add("a")
+	let items = bag.done()
+	println(f"{items.len()}")
+}

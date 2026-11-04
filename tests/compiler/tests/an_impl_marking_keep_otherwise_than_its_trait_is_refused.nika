@@ -1,0 +1,21 @@
+// A trait's signature fixes `keep` for every implementation: an impl that
+// marks a parameter otherwise is refused (NK2302, ADR-views-3 D2).
+trait Sink {
+	fn take(mut self, keep item: String)
+}
+
+struct Bag {
+	items: Vec[String],
+}
+
+impl Sink for Bag {
+	fn take(mut self, item: String) {
+		self.items.push(item)
+	}
+}
+
+fn main() {
+	let mut bag = Bag { items: [] }
+	bag.take("a")
+	println(f"{bag.items.len()}")
+}

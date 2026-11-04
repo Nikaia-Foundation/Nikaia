@@ -1,0 +1,10 @@
+// A `keep` on a parameter the body never keeps is a warning (NK1334,
+// ADR-views-3 D2); the program still runs.
+fn look(keep s: String) -> i64 {
+	s.len() as i64
+}
+
+fn main() {
+	let w = "abc"
+	println(f"{look(w)}")
+}

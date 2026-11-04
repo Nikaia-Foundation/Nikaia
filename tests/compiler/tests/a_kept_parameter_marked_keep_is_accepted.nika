@@ -1,0 +1,10 @@
+// A parameter the body keeps, marked `keep`, is accepted (ADR-views-3 D2).
+fn store(mut into: Vec[String], keep s: String) {
+	into.push(s)
+}
+
+fn main() {
+	let mut v: Vec[String] = []
+	store(v, "a")
+	println(f"{v.len()}")
+}
