@@ -1,0 +1,16 @@
+// `r` may point into `y`, whose source is inferred; changing `y` after `r`'s last use is free (ADR-views-3 D9).
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() {
+        return a.trim()
+    }
+    return b.trim()
+}
+
+fn main() {
+    let x = "abc"
+    let mut y = f"short"
+    let r = longest(x, y)
+    println(r)
+    y.push_str("er")
+    println(y)
+}

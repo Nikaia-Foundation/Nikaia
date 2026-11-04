@@ -1,0 +1,15 @@
+// `r` may point into `y`; changing `y` in place while `r` is still used is refused (ADR-views-3 D9).
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() {
+        return a.trim()
+    }
+    return b.trim()
+}
+
+fn main() {
+    let x = "abc"
+    let mut y = f"short"
+    let r = longest(x, y)
+    y.push_str("er")
+    println(r)
+}

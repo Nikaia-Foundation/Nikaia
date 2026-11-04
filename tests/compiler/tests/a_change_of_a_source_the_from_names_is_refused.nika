@@ -1,0 +1,12 @@
+// The written `from` is what a caller reads: `b` stays unchanged while the result lives.
+fn pick(a: String, b: String) -> String from a | b {
+    return a.trim()
+}
+
+fn main() {
+    let x = "long word"
+    let mut y = f"short"
+    let r = pick(x, y)
+    y.push_str("er")
+    println(r)
+}

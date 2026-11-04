@@ -1,0 +1,16 @@
+// Giving `y` up while `r` lives is allowed: its buffer lives on with `r` (ADR-views-3 D9).
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() {
+        return a.trim()
+    }
+    return b.trim()
+}
+
+fn main() {
+    let x = "abc"
+    let mut y = f"short"
+    let r = longest(x, y)
+    y = f"replaced"
+    println(r)
+    println(y)
+}

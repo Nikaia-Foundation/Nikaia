@@ -1,0 +1,13 @@
+error[NK2305]: `y` is changed here, but `r` may point into its data and is used later.
+   --> tests/a_change_while_the_results_view_lives_is_refused.nika:13:5
+    |
+ 12 |     let r = longest(x, y)
+    |         - `r` is made here by `longest`
+ 13 |     y.push_str("er")
+    |     ^ `y` changes here
+ 14 |     println(r)
+    |             - `r` is used here, after the change
+    |
+    = note: `longest` may hand back what it was given as `b`.
+    = help: Use `r` before this change, or take a copy of it with `r.clone()` before the change.
+1 change to data a view still to be used may point into

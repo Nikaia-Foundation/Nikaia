@@ -1,0 +1,13 @@
+error[NK2305]: `y` is changed here, but `r` may point into its data and is used later.
+   --> tests/a_change_of_a_source_the_from_names_is_refused.nika:10:5
+    |
+  9 |     let r = pick(x, y)
+    |         - `r` is made here by `pick`
+ 10 |     y.push_str("er")
+    |     ^ `y` changes here
+ 11 |     println(r)
+    |             - `r` is used here, after the change
+    |
+    = note: `pick` may hand back what it was given as `b`.
+    = help: Use `r` before this change, or take a copy of it with `r.clone()` before the change.
+1 change to data a view still to be used may point into
