@@ -529,7 +529,9 @@ impl CheckState {
                 continue
             }
             let mut first: String = f"A task started with `spawn` may outlive this function, so it takes the variables it uses with it. `{name}` is a `{ty.text()}`, so it went to the task."
-            if who != "a background task" {
+            if who == "a detached task" {
+                first = f"A task started with `async(detached)` may outlive this function, so it takes the variables it uses with it. `{name}` is a `{ty.text()}`, so it went to the task."
+            } else if who != "a background task" {
                 first = f"A function kept to be called later - a supervisor's child, a handler - is called after this function has moved on, so it takes the variables it uses with it. `{name}` is a `{ty.text()}`, so it went to the function."
             }
             found.push(check_refusal("NK2101", Span { start: used as u32, end: used as u32 }, f"You're using `{name}` after {who} took it.", [first, "Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied."], f"Make a copy before and hand over the copy: `let copy = {name}.clone()`, then use `copy` inside."))

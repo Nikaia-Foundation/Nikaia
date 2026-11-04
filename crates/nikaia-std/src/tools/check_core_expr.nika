@@ -389,7 +389,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             if written_async && state.flow.loops > 0 {
                 state.an_async_inside_a_loop(span)
             }
-            check_core_ops_spawn(state, world, host, body, span)
+            check_core_ops_spawn(state, world, host, body, written_async, span)
         },
         Expr::Dsl { target, package, context, content, .. } => check_core_expr_dsl(state, world, host, expr, target, package, context, content, span),
         // An `asm` block: what it produces is the business of the emitter

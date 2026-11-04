@@ -164,8 +164,9 @@ impl CheckState {
     /// rather than refused, because the emitter writes the step and has no
     /// types (ADR-288). Unconditional, and not only where the name is used
     /// again: a line further down may not decide what a line further up does to
-    /// a cleanup point. A value a move takes away goes with it.
-    pub fn a_task_takes_these(ref mut self, world: ref CheckWorld, body: ref Expr, task: i64, span: ref Span) sync {
+    /// a cleanup point. A value a move takes away goes with it. `who` is the
+    /// task as `NK2101` names it: a `spawn`ed or an `async(detached)` one.
+    pub fn a_task_takes_these(ref mut self, world: ref CheckWorld, body: ref Expr, task: i64, who: ref String, span: ref Span) sync {
         let mut named: collections::BTreeSet[String] = collections::BTreeSet()
         names_in(body, world.words, named)
         for name in named {
@@ -178,7 +179,7 @@ impl CheckState {
                 if !self.takes_away(world, local.ty) {
                     continue
                 }
-                self.moved_into_a_task.push((name.clone(), local.ty.clone(), span.end as i64, "a background task"))
+                self.moved_into_a_task.push((name.clone(), local.ty.clone(), span.end as i64, who.clone()))
             }
         }
     }

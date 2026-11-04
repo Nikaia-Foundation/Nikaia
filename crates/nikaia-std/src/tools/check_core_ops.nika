@@ -1139,13 +1139,14 @@ fn check_core_ops_lambda_tail_wrapped[H: CheckHost](mut state: CheckState, world
 
 /// **A task's lambda, walked** (Part I 8.2, ADR-055 D5, ADR-312, ADR-281 D29):
 /// its body's value is what the handle hands back.
-fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, task: i64, params: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) -> Ty sync {
+fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, task: i64, params: ref Vec[winnow_grammar::Symbol], body: ref Block, detached: bool, span: ref Span) -> Ty sync {
     // A task is handed nothing, so a parameter has nothing to be bound from.
     state.a_task_takes_no_arguments(world, params, span)
     // **What the task takes with it** (`NK2101`), read off the body before it
     // is walked. No parameter of a task is ever `mut`.
     let closure = Expr::Closure { params: params.clone(), mutable: [], body: body.clone(), id: fresh_id() }
-    state.a_task_takes_these(world, closure, task, span)
+    let who = if detached { "a detached task" } else { "a background task" }
+    state.a_task_takes_these(world, closure, task, who, span)
     state.scope.push([])
     state.task_bindings.push([])
     // A task runs later and elsewhere: taking a lock in one is not a door's.
@@ -1165,8 +1166,9 @@ fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     return Ty::Named { name: "TaskHandle", args: [value], view: false }
 }
 
-/// **`spawn`** hands back a `TaskHandle` of what the task's body comes to.
-pub fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, spawned: ref Expr, span: ref Span) -> Ty sync {
+/// **`spawn`** hands back a `TaskHandle` of what the task's body comes to;
+/// `detached` where it is written `async(detached)` (ADR-async-5 D13).
+pub fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, spawned: ref Expr, detached: bool, span: ref Span) -> Ty sync {
     // **Before** the body is walked, so that the task's own `let`s are not
     // yet in scope.
     state.crosses_into_a_task(world, spawned, span)
@@ -1174,7 +1176,7 @@ pub fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref Chec
     let task = id_of(spawned) as i64
     match spawned {
         Expr::Closure { params, body, .. } => {
-            return check_core_ops_task(state, world, host, task, params, body, span)
+            return check_core_ops_task(state, world, host, task, params, body, detached, span)
         },
         else => {},
     }

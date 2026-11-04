@@ -778,10 +778,12 @@ pub(crate) fn check_core_ops_lambda_tail_wrapped<H: CheckHost>(state: &mut Check
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, task: i64, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, task: i64, params: &[winnow_grammar::Symbol], body: &Block, detached: bool, span: &Span) -> Ty {
     state.a_task_takes_no_arguments(world, params, span);
     let closure = Expr::Closure { params: params.to_owned(), mutable: vec![], body: body.clone(), id: fresh_id() };
-    state.a_task_takes_these(world, &closure, task, span);
+    let who = if detached { "a detached task" } else { "a background task" };
+    state.a_task_takes_these(world, &closure, task, who, span);
     state.scope.push(vec![]);
     state.task_bindings.push(vec![]);
     let outer_inside = state.inside_a_door;
@@ -800,11 +802,11 @@ pub(crate) fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, spawned: &Expr, span: &Span) -> Ty {
+pub fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, spawned: &Expr, detached: bool, span: &Span) -> Ty {
     state.crosses_into_a_task(world, spawned, span);
     let task = id_of(spawned) as i64;
     match spawned {
-        Expr::Closure { params, body, .. } => { return check_core_ops_task(state, world, host, task, params, body, span); },
+        Expr::Closure { params, body, .. } => { return check_core_ops_task(state, world, host, task, params, body, detached, span); },
         _ => { },
     }
     check_core_expr(state, world, host, spawned, span);

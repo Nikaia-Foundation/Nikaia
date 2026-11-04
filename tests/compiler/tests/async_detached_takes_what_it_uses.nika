@@ -1,0 +1,15 @@
+// A detached task takes the variables it uses, and NK2101's note names the
+// form that started it, `async(detached)` (ADR-async-5 D13, #1227).
+
+fn main() throws {
+	let names: Vec[String] = ["a", "b"]
+	let h = async(detached) fn { names.len() }
+	println(f"{names.len()} {h.join()}")
+}
+
+// The same taken by `spawn` keeps the `spawn` wording.
+fn spawned() throws {
+	let names: Vec[String] = ["a", "b"]
+	let h = spawn fn { names.len() }
+	println(f"{names.len()} {h.join()}")
+}

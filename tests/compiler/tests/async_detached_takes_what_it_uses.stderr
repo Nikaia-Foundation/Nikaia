@@ -1,0 +1,19 @@
+error[NK2101]: You're using `names` after a detached task took it.
+  --> tests/async_detached_takes_what_it_uses.nika:7:2
+   |
+ 7 | 	println(f"{names.len()} {h.join()}")
+   |  ^
+   |
+   = note: A task started with `async(detached)` may outlive this function, so it takes the variables it uses with it. `names` is a `Vec[ref String]`, so it went to the task.
+   = note: Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.
+   = help: Make a copy before and hand over the copy: `let copy = names.clone()`, then use `copy` inside.
+error[NK2101]: You're using `names` after a background task took it.
+   --> tests/async_detached_takes_what_it_uses.nika:14:2
+    |
+ 14 | 	println(f"{names.len()} {h.join()}")
+    |  ^
+    |
+    = note: A task started with `spawn` may outlive this function, so it takes the variables it uses with it. `names` is a `Vec[ref String]`, so it went to the task.
+    = note: Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.
+    = help: Make a copy before and hand over the copy: `let copy = names.clone()`, then use `copy` inside.
+2 values a task took with it

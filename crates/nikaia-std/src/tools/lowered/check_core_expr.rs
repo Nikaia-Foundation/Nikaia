@@ -326,7 +326,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::Spawn { body, written_async, .. } => {
             let body = nikaia_std::boxed::open(body); let written_async = *written_async;
             if written_async && state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
-            check_core_ops_spawn(state, world, host, body, span)
+            check_core_ops_spawn(state, world, host, body, written_async, span)
         },
         Expr::Dsl { target, package, context, content, .. } => { let context = *context; let package = *package; let target = *target; check_core_expr_dsl(state, world, host, expr, target, package, context, content, span) },
         Expr::Asm { .. } => {

@@ -135,7 +135,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_task_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, task: i64, span: &Span) {
+    pub fn a_task_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, task: i64, who: &str, span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(body, world.words, &mut named);
         for name in named.iter() {
@@ -144,7 +144,7 @@ impl CheckState {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
                 if is_a_handle(&local.ty) { self.facts.task_handles.insert((task, name.to_string())); }
                 if !self.takes_away(world, &local.ty) { continue; }
-                self.moved_into_a_task.push((name.to_string(), local.ty.clone(), span.end as i64, String::from("a background task")));
+                self.moved_into_a_task.push((name.to_string(), local.ty.clone(), span.end as i64, who.to_string()));
             }
         }
     }
