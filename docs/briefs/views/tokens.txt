@@ -7,3 +7,5 @@
 /home/user/Nikaia/docs/briefs/views/v5-view-fields-anchored.md 2441127 44
 /home/user/Nikaia/docs/briefs/views/qa/qa-task.md 109329 8
 /home/user/Nikaia/docs/briefs/views/v6-from-without-body.md 1024377 10
+/home/user/Nikaia/docs/briefs/views/v7-lowering-lifetimes.md 0 1
+/home/user/Nikaia/docs/briefs/views/v8-finish-v7.md 567570 6
