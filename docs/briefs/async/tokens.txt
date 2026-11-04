@@ -10,3 +10,4 @@
 /home/user/Nikaia/docs/briefs/async/a6-docs-teach-async.md 2099350 46
 /home/user/Nikaia/docs/briefs/async/a7-async-pausing-tasks.md 4581908 83
 /home/user/Nikaia/docs/briefs/async/a8-async-conflicts.md 457994 6
+/home/user/Nikaia/docs/briefs/async/a9-async-outer-write.md 2092798 46
