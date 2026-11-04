@@ -292,6 +292,14 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   supervisor files every `partial|blocked` report's defect (issue `ready` and
   bug brief, *Reported defects are filed*) and decides obvious language gaps
   itself (*Language decisions*); a non-obvious one goes to the owner.
+* **Every debrief is read when it lands** (owner, 2026-11-04: a retrospective
+  after each run, not after a batch). `agent.nika` writes `BRIEF.debrief.md`
+  after each run; the supervisor watches the driver's log for `builder done`,
+  reads the debrief at once and, before the next brief is written, turns each
+  point into one of three things: a line in `docs/builder-facts.md` (a trap, a
+  location, a recipe), a fix to the brief template or a wrong fact in a
+  waiting brief, or a `ready` issue when the toolchain lacks what the builder
+  needed. A point two builders reported is never left for a third.
 * **Cost watch.** A builder past about 120 turns or 200k context is told to push what is verified and end; the
   next one starts fresh, never resumed (SendMessage) for a second slice. Its
   state is in the repository.
