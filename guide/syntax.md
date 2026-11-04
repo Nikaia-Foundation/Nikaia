@@ -352,27 +352,32 @@ to its caller.
 ## Waiting and doing things at the same time
 
 ```nika
-use std::fs
-
-fn size_of(path: String) -> int throws {
-    let text = fs::read_to_string(path, fs::Root::Anywhere)
-    return text.len()
+fn count_words(text: String) -> int {
+    return text.split(" ").count()
 }
 
-fn main() throws {
-    fs::write("a.txt", fs::Root::Anywhere, "hello")    // two files to read
-    fs::write("b.txt", fs::Root::Anywhere, "world!")
-
-    let (a, b) = overlap {        // both files are read at the same time
-        size_of("a.txt")
-        size_of("b.txt")
-    }
-    println(f"{a + b} characters in both files")
-
-    let greeting = "hello from a task"
-    let handle = spawn fn { println(greeting) }   // a background task
-    handle.join()
+fn add(a: int, b: int) -> int {
+    return a + b
 }
+
+fn main() {
+    let first = "the quick brown fox"
+    let second = "jumps over the lazy dog"
+
+    let a = async count_words(first)     // starts at once
+    let b = async count_words(second)    // runs beside the first
+    println("both counts have started")
+    println(f"{a + b} words")            // waits for both here
+
+    let total = add(async count_words(first), async count_words(second))
+    println(f"{total} words again")
+}
+```
+
+```text
+both counts have started
+9 words
+9 words again
 ```
 
 In JavaScript, Python or C#, a function that waits is marked `async` and its calls say
@@ -380,50 +385,101 @@ In JavaScript, Python or C#, a function that waits is marked `async` and its cal
 pause. Reading a file pauses the function without blocking the program, you write it as an
 ordinary call, and a function that starts to wait leaves its callers as they are.
 
-Lines run in the order they are written. In the program above, `overlap { … }` runs its lines
-at the same time and waits for all of them, and `spawn` starts a task that runs on its own.
-Both compile today. The specification replaces them with one word, `async`, written before an
-expression; this is the design being built
-([#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983)), not yet accepted by the
-compiler:
+Lines run in the order they are written. To run work beside the code after it, you write
+`async` before an expression. `async e` starts `e` at once, and the program waits for its
+value where the value is first needed: above, both counts run while the first `println`
+does its work, and `a + b` waits for both. As an argument, `add(async count_words(first),
+async count_words(second))` runs both calls beside each other and calls `add` when both are
+done. The function that receives the values gets plain `int`s, so neither its signature nor
+its callers change.
+
+Written as a statement, `async e` starts a task without a value, and `async { … }` is a
+group: its own lines run in order beside the tasks started in it, and the group ends only
+when every one of its tasks has ended, also when the function leaves it early with a
+`return`. A task started outside any `async { … }` belongs to the block it is written in,
+so it has ended before that block does.
+
+A task's error is thrown where the program waits for the task, and the compiler asks for it
+to be handled there, as for any call that can fail:
 
 ```nika
-let user = async db::load_user(id)
-let rights = async db::load_rights(id)
-let prefs = cache::load_prefs(id)      // runs while both loads are in flight
-render(user, rights, prefs)            // waits for both first
+struct TooLong { words: int }
+impl Error for TooLong {
+    fn message(ref self) -> String {
+        return f"{self.words} words is too long"
+    }
+}
+
+fn short_count(text: String) -> int throws {
+    let n = text.split(" ").count()
+    if n > 4 {
+        throw TooLong { words: n }
+    }
+    return n
+}
+
+fn total(first: String, second: String) -> int throws {
+    let a = async short_count(first)
+    let b = async short_count(second)
+    println("both counts have started")
+    return a + b                         // the second count's error is thrown here
+}
+
+fn main() {
+    let n = total("the quick brown fox", "jumps over the lazy dog") catch {
+        println(f"caught: {error}")
+        0
+    }
+    println(f"{n} words")
+}
 ```
 
-`async e` starts `e` at once, and the program waits for its value where the value is first
-needed, so `f(async g(), async h())` runs `g` and `h` beside each other and then calls `f`. A
-`catch` written after an `async` expression is its fallback. `async(handle)` gives a handle
-with `join` and `cancel`, `async(detached)` starts a task that may outlive its function and
-takes the place of `spawn`, and work over every element of a list is `xs.par_iter()`, whose
-lambdas may pause. The option names `handle`, `deferred` and `detached` are placeholders.
+```text
+both counts have started
+caught: 5 words is too long
+0 words
+```
+
+A failure that nobody reads, such as one of a task started as a statement, is thrown at the
+end of its group. Older programs use `overlap { … }` and `spawn`, which the compiler still
+accepts; `async` replaces both.
+
+Some of the design is specified and still being built
+([#988](https://github.com/Nikaia-Foundation/Nikaia/issues/988),
+[#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983)). A task whose call pauses,
+such as reading a file, is not yet translated. `async(handle)` is to give a handle with
+`join` and `cancel`, `async(deferred)` a handle whose task starts only when asked to, and
+`async(detached)` a task that may outlive its function. The options `limit:`, `within:` and
+`admission:` are to bound how many tasks run at once, how long they may take and when they
+start, and work over every element of a list is to be `xs.par_iter()`, whose lambdas may
+pause. With `user_parallelism: yes` the tasks of a group still run one after another for
+now.
 
 ### What the compiler checks about tasks
 
-Two tasks that would change the same value at once, or both write to standard output, are
-refused when the program is built, and the message names what they share. Where the compiler
-cannot tell what a call touches, it does not refuse; today it also accepts two tasks that write
-the same file. A task's error is thrown where the program waits for it, at `handle.join()` or
-at the end of `overlap`, and the compiler asks for it to be handled there as for any call that
-can fail: `main` above says `throws`. A task handle that is never joined, cancelled or detached
-is refused. Each task is to get a memory budget of its own, and a task that uses it up ends
-with `task::OverBudget` while the rest of the program runs on; this is specified and not built
-yet, and memory a Rust crate or a C library allocates for itself is not counted.
+The compiler checks that a task has something to run beside: an `async` whose value is
+needed in the very next line is refused, and the message suggests removing the word. It
+refuses a jump such as `return` out of a task, and a group that starts no task. The
+specification also refuses two tasks that would change the same value at once, or both
+write to standard output, and names what they share; for `async` this check is still being
+built ([#988](https://github.com/Nikaia-Foundation/Nikaia/issues/988)). Where the compiler
+cannot tell what a call touches, it does not refuse. A task's error reaches the place where
+the program waits, and the compiler asks for it to be handled there. Each task is to get a
+memory budget of its own, and a task that uses it up ends with `task::OverBudget` while the
+rest of the program runs on; this is specified and not built yet, and memory a Rust crate
+or a C library allocates for itself is not counted.
 
 **Specification:** [Part I, Chapter 8 Concurrency](../docs/specification/10-nikaia-light.md#chapter-8-concurrency-doing-things-at-the-same-time)
 
 ## Data that more than one task changes
 
 ```nika
-fn main() throws {                        // `join` fails if the task crashed
+fn main() {
     let counter = SharedMut(0)
-    let first = spawn fn { counter.update fn(mut v) { v += 1 } }
-    let second = spawn fn { counter.update fn(mut v) { v += 2 } }
-    first.join()
-    second.join()
+    async {
+        async counter.update fn(mut v) { v += 1 }
+        async counter.update fn(mut v) { v += 2 }
+    }                                         // both tasks have ended here
     println(f"counter is {counter.get()}")    // counter is 3
 }
 ```

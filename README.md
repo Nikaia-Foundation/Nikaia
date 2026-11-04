@@ -84,10 +84,12 @@ grammar.
 
 You do not need to mark the functions that wait, because the compiler finds where a function
 pauses: a call that waits is written like any other, and a function that starts to wait leaves
-its callers as they are. The specification writes concurrent work with `async` before an
-expression, `f(async g(), async h())` running `g` and `h` beside each other; that form is being
-built ([#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983)), and today the same is
-written with `overlap { … }` and `spawn`.
+its callers as they are. Work that runs beside other work is written with `async` before an
+expression: `async e` starts `e` at once, and the program waits for its value where it is first
+needed, so `f(async g(), async h())` runs `g` and `h` beside each other and then calls `f`. A
+task's error is thrown where the program waits for it, and an `async { … }` group ends only when
+every task in it has ended. Handles, detached tasks and the options that bound tasks are
+specified and still being built ([#988](https://github.com/Nikaia-Foundation/Nikaia/issues/988)).
 
 Nikaia checks your program, and Rust's compiler checks memory safety again. The name comes from my
 daughter, **Nika**: in Persian, *nik* means *good*, so the motto is *good wins*. The longer

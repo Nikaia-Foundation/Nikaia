@@ -216,30 +216,38 @@ passes it on to another function that keeps it. You do not write which parameter
 keeps; the compiler reads it off the body, and records it (see
 [The contract ledger](#the-contract-ledger)).
 
-A task is the clearest case. A task started with `spawn` may run longer than the function
-that started it, so it takes the variables it uses with it:
+A task shows where the line runs. A task started with `async` belongs to a group and ends
+before the group does, so it can borrow what was bound outside the group, and the code after
+it still has the value:
 
 ```nika
-fn main() throws {
+fn words(text: String) -> int {
+    return text.split(" ").count()
+}
+
+fn letters(text: String) -> int {
+    return text.len()
+}
+
+fn main() {
     let report = "nightly report".to_uppercase()
-    let handle = spawn fn { println(report) }
-    handle.join()
-    println(report)                 // does not compile: NK2101
+    let w = async words(report)      // the task reads `report`
+    let n = letters(report)          // runs beside the task
+    println(f"{w} words, {n} letters")
+    println(report)                  // still here: the task only borrowed it
 }
 ```
 
 ```text
-error[NK2101]: You're using `report` after a background task took it.
-  --> main.nika:5:5
-   |
- 5 |     println(report)                 // does not compile: NK2101
-   |     ^
-   |
-   = note: A task started with `spawn` may outlive this function, so it takes the variables it uses with it. `report` is a `String`, so it went to the task.
-   = note: Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.
-   = help: Make a copy before and hand over the copy: `let copy = report.clone()`, then use `copy` inside.
-1 value a task took with it
+2 words, 14 letters
+NIGHTLY REPORT
 ```
+
+A task that may run longer than the function that started it works the other way: it takes
+the variables it uses with it, and a later use of such a variable is refused
+([`NK2101`](#nk2101-a-value-used-after-a-task-took-it)). In the specification that task is
+started with `async(detached)`, whose handle rules are still being built
+([#988](https://github.com/Nikaia-Foundation/Nikaia/issues/988)).
 
 Building a value out of a parameter and handing it back is different: the result points into
 the caller's argument, and the caller still has it.
