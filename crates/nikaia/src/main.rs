@@ -262,6 +262,17 @@ pub enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// Rewrite `.nika` files and the Nikaia blocks of `.md` files to a new
+    /// edition of the language: `views-3` drops `ref` outside `extern "C"`
+    /// and writes `keep` where the body keeps a parameter (ADR-views-3 D4).
+    Migrate {
+        /// The edition to migrate to: `views-3`.
+        #[arg(value_parser = ["views-3"])]
+        edition: String,
+        /// The files, or directories to migrate the `.nika` and `.md` files of.
+        #[arg(value_name = "PATH", required = true)]
+        files: Vec<PathBuf>,
+    },
     /// Run one `.nika` file in the interpreter; nothing is written and
     /// nothing is compiled.
     ///
@@ -704,6 +715,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
         | Command::Cache { .. }
         | Command::Check { .. }
         | Command::Fmt { .. }
+        | Command::Migrate { .. }
         | Command::Interpret { .. }
         | Command::Explain { .. } => {
             unreachable!("the single-file verbs are dispatched by `run`")
@@ -1080,6 +1092,10 @@ fn run() -> Result<()> {
         Command::Fmt { files, check } => {
             let start = std::env::current_dir().context("finding the working directory")?;
             let code = nikaia::fmt::run(&start, files, *check)?;
+            std::process::exit(code);
+        }
+        Command::Migrate { files, .. } => {
+            let code = nikaia::migrate::run(files)?;
             std::process::exit(code);
         }
         Command::Interpret { file } => single_file(&args, file, Verb::Interpret),

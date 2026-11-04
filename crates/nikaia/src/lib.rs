@@ -34,6 +34,7 @@ pub mod grammar_run;
 pub mod interpreter;
 pub mod libraries;
 pub mod manifest;
+pub mod migrate;
 pub mod modules;
 pub(crate) mod one_variant;
 pub mod parser;

@@ -1,0 +1,41 @@
+// #1213 step 6, ADR-views-3 D2: `nikaia migrate views-3` writes `keep` on a
+// parameter the keep inference finds kept (the checker's own, which refuses
+// it unmarked with NK2302 once a file writes `keep`), and not on one only
+// read; in a package it reads the other files, so a call into one that keeps
+// is seen. In Markdown it rewrites only the `nika` blocks.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn show(tmp: String, path: String) throws {
+    println(f"-- {path}")
+    print(fs::read_to_string(f"{tmp}/{path}", fs::Root::Anywhere))
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/pkg/src"])
+    fs::write(f"{tmp}/alone.nika", fs::Root::Anywhere, "struct Bag { items: Vec[String] }\n\nimpl Bag {\n    fn add(ref mut self, s: String) { self.items.push(s) }\n    fn has(ref self, s: ref String) -> bool { return self.items.contains(s) }\n}\n\nfn store(b: ref mut Bag, s: String, keep t: String) {\n    b.items.push(s)\n    b.items.push(t)\n}\n\nfn main() {\n    let mut b = Bag { items: [] }\n    b.add(\"a\")\n    store(b, \"b\", \"c\")\n    println(b.has(\"a\"))\n}\n")
+    fs::write(f"{tmp}/guide.md", fs::Root::Anywhere, "# Prose: ref self stays\n\n```nika\nfn store(v: ref mut Vec[String], s: String) { v.push(s) }\n```\n\n```rust\nfn f(x: &ref) {}\n```\n\nText `x: ref T` stays.\n")
+    fs::write(f"{tmp}/pkg/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/pkg/src/bag.nika", fs::Root::Anywhere, "pub struct Bag { items: Vec[String] }\n\npub fn put(b: ref mut Bag, s: String) { b.items.push(s) }\n")
+    fs::write(f"{tmp}/pkg/src/main.nika", fs::Root::Anywhere, "fn through(b: ref mut Bag, s: String) { put(b, s) }\n\nfn main() {\n    let mut b = Bag { items: [] }\n    through(b, \"x\")\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/alone.nika", f"{tmp}/guide.md", f"{tmp}/pkg"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    show(tmp.clone(), "alone.nika")
+    show(tmp.clone(), "guide.md")
+    show(tmp.clone(), "pkg/src/bag.nika")
+    show(tmp.clone(), "pkg/src/main.nika")
+    let checked = process::run(nikaia, ["check", f"{tmp}/alone.nika"])
+    println(f"-- check: {checked.code}")
+    print(f"{checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
+    let again = process::run(nikaia, ["migrate", "views-3", f"{tmp}/alone.nika", f"{tmp}/guide.md", f"{tmp}/pkg"])
+    println(f"second run: [{again.stdout}{again.stderr}]")
+    process::run("rm", ["-rf", tmp])
+}

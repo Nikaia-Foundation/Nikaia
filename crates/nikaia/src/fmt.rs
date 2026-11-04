@@ -141,7 +141,7 @@ pub fn run(start: &Path, named: &[PathBuf], check: bool) -> Result<i32> {
 
 /// Every `.nika` file under `dir`, in name order: not in `target/`, a hidden
 /// directory, or a directory with a `nikaia.toml` of its own (another package).
-fn sources_under(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+pub(crate) fn sources_under(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
     let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)
         .with_context(|| format!("cannot read {}", dir.display()))?
         .filter_map(|entry| entry.ok())

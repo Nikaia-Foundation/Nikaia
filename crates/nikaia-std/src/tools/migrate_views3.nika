@@ -1,0 +1,527 @@
+// crates/nikaia-std/src/tools/migrate_views3.nika
+//
+// **`nikaia migrate views-3`** (ADR-views-3 D4, D2; #1213 step 6): the one-off
+// rewrite that takes `ref` out of a program and writes `keep` where the keep
+// inference says a parameter is kept.
+//
+// **Over the tokens, not the tree**, as `nikaia fmt` is (`fmt.nika`): every
+// token, blank and comment stays as written except the ones a rewrite names.
+// A comment, a string, an `f"…"` and a `dsl` body are single tokens or part of
+// the blanks before one, so a `ref` in them is never touched.
+//
+// The rewrites (D4):
+// * `ref self` -> `self`, `ref mut self` -> `mut self`;
+// * a parameter `x: ref T` -> `x: T`, `x: ref mut T` -> `mut x: T`;
+// * `return ref s` -> `return s`, `f(ref x)` -> `f(x)`;
+// * `ref` before a type (a field, an element, a binding, a tuple, a result)
+//   is dropped.
+// Left alone: an `extern` block (also written `extern "C"` or
+// `extern(library: …)`) and an `extern fn`'s signature, where `ref` keeps
+// its meaning at the C boundary (D4, Part III); `ref(a | b) T`, whose
+// sources D8 spells `T from a | b` after the type; and a `ref mut T`
+// that is neither a receiver nor a parameter's type (no form replaces it).
+//
+// `keep` (D2) comes from the inference the checker holds the marks against
+// (`keeps.nika` through `keeps_uses_of`, as `check_keep_marks.nika` asks it):
+// `migrate_views3_keeps` names the parameters it would refuse unmarked, and
+// the rewrite writes `keep` before each.
+
+use std::collections
+
+enum MigrateKind {
+    Word,
+    // A string, an `f"…"` with its holes, a character, a `dsl` body.
+    Text,
+    Open,
+    Close,
+    Punct,
+}
+
+struct MigrateToken {
+    // The blanks and comments before it, as written.
+    gap: String,
+    text: String,
+    kind: MigrateKind,
+    // The character index its text starts at.
+    at: i64,
+}
+
+struct MigrateLexer {
+    c: Vec[scalar],
+    at: i64,
+    tokens: Vec[MigrateToken],
+}
+
+impl MigrateLexer {
+    fn run(mut self) sync {
+        while self.at < self.c.len() {
+            let gap_start = self.at
+            self.skip_gap()
+            let mut gap: String = ""
+            for k in gap_start..<self.at {
+                gap.push(self.c[k])
+            }
+            if self.at >= self.c.len() {
+                self.tokens.push(MigrateToken { gap, text: "", kind: MigrateKind::Punct, at: self.at })
+                return
+            }
+            let start = self.at
+            let kind = self.scan()
+            let end = if self.at > self.c.len() { self.c.len() } else { self.at }
+            self.at = end
+            let mut text: String = ""
+            for k in start..<end {
+                text.push(self.c[k])
+            }
+            self.tokens.push(MigrateToken { gap, text, kind, at: start })
+        }
+    }
+
+    // Blanks, line ends and comments: `//` to the line's end, `/* … */`
+    // nested.
+    fn skip_gap(mut self) sync {
+        while self.at < self.c.len() {
+            let c = self.c[self.at]
+            let d = migrate_ahead(self.c, self.at + 1)
+            if c.is_whitespace() {
+                self.at += 1
+            } else if c == '/' && d == '/' {
+                while self.at < self.c.len() && self.c[self.at] != '\n' {
+                    self.at += 1
+                }
+            } else if c == '/' && d == '*' {
+                let mut depth = 0
+                while self.at < self.c.len() {
+                    let e = self.c[self.at]
+                    let f = migrate_ahead(self.c, self.at + 1)
+                    if e == '/' && f == '*' {
+                        depth += 1
+                        self.at += 2
+                    } else if e == '*' && f == '/' {
+                        depth -= 1
+                        self.at += 2
+                        if depth == 0 {
+                            break
+                        }
+                    } else {
+                        self.at += 1
+                    }
+                }
+            } else {
+                return
+            }
+        }
+    }
+
+    fn scan(mut self) -> MigrateKind sync {
+        let c = self.c[self.at]
+        let d = migrate_ahead(self.c, self.at + 1)
+        if c == '"' {
+            self.at += 1
+            self.quoted()
+            return MigrateKind::Text
+        }
+        if c == 'f' && d == '"' {
+            self.at += 2
+            self.interpolated()
+            return MigrateKind::Text
+        }
+        if c == '\'' {
+            let after = migrate_character_end(self.c, self.at)
+            if after > 0 {
+                self.at = after
+                return MigrateKind::Text
+            }
+        }
+        if c.is_alphanumeric() || c == '_' {
+            while self.at < self.c.len() && (self.c[self.at].is_alphanumeric() || self.c[self.at] == '_') {
+                self.at += 1
+            }
+            return MigrateKind::Word
+        }
+        if c == '{' && migrate_after_dsl(self.tokens) {
+            self.verbatim()
+            return MigrateKind::Text
+        }
+        self.at += 1
+        if c == '(' || c == '[' || c == '{' {
+            return MigrateKind::Open
+        }
+        if c == ')' || c == ']' || c == '}' {
+            return MigrateKind::Close
+        }
+        if c == ':' && d == ':' {
+            self.at += 1
+        }
+        if c == '-' && d == '>' {
+            self.at += 1
+        }
+        return MigrateKind::Punct
+    }
+
+    // A plain string, from after its opening quote through its closing one.
+    fn quoted(mut self) sync {
+        while self.at < self.c.len() {
+            let c = self.c[self.at]
+            if c == '\\' {
+                self.at += 2
+            } else {
+                self.at += 1
+                if c == '"' {
+                    return
+                }
+            }
+        }
+    }
+
+    // An `f"…"`, from after `f"`; a hole's braces nest, and a string in a
+    // hole is one.
+    fn interpolated(mut self) sync {
+        let mut depth = 0
+        while self.at < self.c.len() {
+            let c = self.c[self.at]
+            let d = migrate_ahead(self.c, self.at + 1)
+            if c == '\\' || (depth == 0 && ((c == '{' && d == '{') || (c == '}' && d == '}'))) {
+                self.at += 2
+            } else {
+                self.at += 1
+                if c == '"' && depth == 0 {
+                    return
+                }
+                if c == '"' {
+                    self.quoted()
+                } else if c == '{' {
+                    depth += 1
+                } else if c == '}' {
+                    depth -= 1
+                }
+            }
+        }
+    }
+
+    // A `dsl` body from its `{` through `} eod`.
+    fn verbatim(mut self) sync {
+        let mut k = self.at + 1
+        while k + 4 < self.c.len() {
+            if self.c[k] == '}' && self.c[k + 1] == ' ' && self.c[k + 2] == 'e' && self.c[k + 3] == 'o' && self.c[k + 4] == 'd' {
+                self.at = k + 5
+                return
+            }
+            k += 1
+        }
+        self.at = self.c.len()
+    }
+}
+
+fn migrate_ahead(c: ref Vec[scalar], k: i64) -> scalar sync {
+    if k < c.len() {
+        return c[k]
+    }
+    return ' '
+}
+
+// Where a character literal starting at `at` ends, or 0 where none does.
+fn migrate_character_end(c: ref Vec[scalar], at: i64) -> i64 sync {
+    let mut k = at + 1
+    if k < c.len() && c[k] == '\\' {
+        k += 2
+    } else {
+        k += 1
+    }
+    while k < c.len() && c[k] != '\'' && c[k] != '\n' {
+        k += 1
+    }
+    if k < c.len() && c[k] == '\'' {
+        return k + 1
+    }
+    return 0
+}
+
+// Whether the tokens before a `{` are `dsl NAME` or `dsl NAME::NAME`.
+fn migrate_after_dsl(tokens: ref Vec[MigrateToken]) -> bool sync {
+    let n = tokens.len()
+    if n < 2 || tokens[n - 1].kind != MigrateKind::Word {
+        return false
+    }
+    if tokens[n - 2].text == "dsl" {
+        return true
+    }
+    return n >= 4 && tokens[n - 2].text == "::" && tokens[n - 4].text == "dsl"
+}
+
+// Whether a gap holds only blanks on one line: dropping it joins two tokens
+// of a line, never two lines or a comment.
+fn migrate_blank(gap: String) -> bool sync {
+    return gap.chars().all(fn(c) { c == ' ' || c == '\t' })
+}
+
+// The text of token `k`, or nothing past the end.
+fn migrate_text_at(tokens: Vec[MigrateToken], k: i64) -> String sync {
+    if k >= 0 && k < tokens.len() {
+        return tokens[k].text.clone()
+    }
+    return ""
+}
+
+// The index of the token that closes the bracket opened at `open`, or the
+// last token.
+fn migrate_closing(tokens: Vec[MigrateToken], open: i64) -> i64 sync {
+    let mut depth = 0
+    let mut k = open
+    while k < tokens.len() {
+        match tokens[k].kind {
+            MigrateKind::Open => { depth += 1 },
+            MigrateKind::Close => {
+                depth -= 1
+                if depth == 0 {
+                    return k
+                }
+            },
+            else => {},
+        }
+        k += 1
+    }
+    return tokens.len() - 1
+}
+
+// **The C boundary**: from an `extern` at `at`, the last token that stays as
+// written. An `extern { … }` block whole, also one written `extern "C"` or
+// `extern(library: "name")`; an `extern fn`, its signature up to the body's
+// `{`.
+fn migrate_extern_end(tokens: Vec[MigrateToken], at: i64) -> i64 sync {
+    let mut k = at + 1
+    if k < tokens.len() && tokens[k].kind == MigrateKind::Text {
+        k += 1
+    }
+    if migrate_text_at(tokens, k) == "(" {
+        k = migrate_closing(tokens, k) + 1
+    }
+    if migrate_text_at(tokens, k) == "{" {
+        return migrate_closing(tokens, k)
+    }
+    let mut depth = 0
+    while k < tokens.len() {
+        let t = tokens[k].text.clone()
+        match tokens[k].kind {
+            MigrateKind::Open => {
+                if t == "{" && depth == 0 {
+                    return k - 1
+                }
+                depth += 1
+            },
+            MigrateKind::Close => {
+                if depth == 0 {
+                    return k - 1
+                }
+                depth -= 1
+            },
+            else => {},
+        }
+        k += 1
+    }
+    return tokens.len() - 1
+}
+
+/// **The rewrite of one piece of Nikaia code**: `keep_at` are the character
+/// indices of the parameters to mark `keep` (a parameter takes the mark at
+/// its first token at or after the index).
+pub fn migrate_views3_code(code: String, keep_at: Vec[i64]) -> String sync {
+    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
+    lexer.run()
+    let tokens = lexer.tokens
+    let n = tokens.len()
+    let mut dropped: Vec[bool] = []
+    let mut gapless: Vec[bool] = []
+    let mut prefix: Vec[String] = []
+    let mut guarded: Vec[bool] = []
+    for _t in tokens {
+        dropped.push(false)
+        gapless.push(false)
+        prefix.push("")
+        guarded.push(false)
+    }
+    // Where a bracket opened: `true` for a declaration's parameter list.
+    let mut params: Vec[bool] = []
+    let mut fn_depth = -1
+    let mut until = -1
+    let mut k = 0
+    while k < n {
+        let t = tokens[k].text.clone()
+        let kind = tokens[k].kind
+        if k <= until {
+            guarded[k] = true
+        }
+        if kind == MigrateKind::Word && t == "extern" && k > until {
+            until = migrate_extern_end(tokens, k)
+            guarded[k] = true
+        }
+        match kind {
+            MigrateKind::Open => {
+                params.push(t == "(" && fn_depth == params.len())
+                if t == "(" && fn_depth == params.len() - 1 {
+                    fn_depth = -1
+                }
+                if t == "{" {
+                    fn_depth = -1
+                }
+            },
+            MigrateKind::Close => {
+                if params.len() > 0 {
+                    params.pop()
+                }
+            },
+            MigrateKind::Word => {
+                if t == "fn" {
+                    fn_depth = params.len()
+                }
+            },
+            MigrateKind::Punct => {
+                if t == "=" || t == ";" {
+                    fn_depth = -1
+                }
+            },
+            else => {},
+        }
+        if kind == MigrateKind::Word && t == "ref" && !guarded[k] {
+            let next = migrate_text_at(tokens, k + 1)
+            let after = migrate_text_at(tokens, k + 2)
+            let in_params = params.len() > 0 && params[params.len() - 1]
+            let named = k >= 3 && migrate_text_at(tokens, k - 1) == ":" && tokens[k - 2].kind == MigrateKind::Word && (migrate_text_at(tokens, k - 3) == "(" || migrate_text_at(tokens, k - 3) == ",")
+            if next == "(" && tokens[k + 1].gap == "" {
+                // `ref(a | b) T`: left for D8's `from`; `ref (A, B)` is a
+                // tuple (#1115) and loses its `ref` below.
+            } else if next == "mut" && after == "self" {
+                dropped[k] = true
+                gapless[k + 1] = migrate_blank(tokens[k + 1].gap)
+            } else if next == "mut" && in_params && named {
+                dropped[k] = true
+                dropped[k + 1] = true
+                gapless[k + 1] = true
+                gapless[k + 2] = migrate_blank(tokens[k + 2].gap)
+                prefix[k - 2] = "mut "
+            } else if next == "mut" {
+                // `ref mut T` elsewhere: no form replaces it.
+            } else if k + 1 < n && tokens[k + 1].kind != MigrateKind::Punct {
+                dropped[k] = true
+                gapless[k + 1] = migrate_blank(tokens[k + 1].gap)
+            }
+        }
+        k += 1
+    }
+    for at in keep_at {
+        let mut j = 0
+        while j < n && tokens[j].at < at {
+            j += 1
+        }
+        if j < n && prefix[j] == "" && !guarded[j] && tokens[j].text != "keep" && tokens[j].text != "mut" {
+            prefix[j] = "keep "
+        }
+    }
+    let mut out: String = ""
+    let mut j = 0
+    while j < n {
+        if !gapless[j] {
+            out.push_str(tokens[j].gap)
+        }
+        out.push_str(prefix[j])
+        if !dropped[j] {
+            out.push_str(tokens[j].text)
+        }
+        j += 1
+    }
+    return out
+}
+
+/// **A `.nika` file**: the code is the file. `ref` goes first; `keeps_of`
+/// then names, in the migrated text, the parameters to mark `keep`: the keep
+/// inference is asked about the program the checker will check, since a
+/// `ref` still written (a `ref` field, `ref mut self`) changes what it finds.
+pub fn migrate_views3_nika(source: String, keeps_of: fn(ref String) -> Vec[i64] sync) -> String sync {
+    let dropped = migrate_views3_code(source, [])
+    let keep_at = keeps_of(dropped)
+    return migrate_views3_code(dropped, keep_at)
+}
+
+/// **A Markdown file**: only a fenced block marked `nika` or `nikaia` is
+/// code; the prose, and every other block, stays as written.
+pub fn migrate_views3_markdown(source: String, keeps_of: fn(ref String) -> Vec[i64] sync) -> String sync {
+    let mut out: String = ""
+    let mut block: String = ""
+    let mut inside = false
+    let mut first = true
+    for line in source.split("\n") {
+        let fence = line.trim()
+        if inside && fence == "```" {
+            out.push_str(migrate_views3_nika(block, keeps_of))
+            block = ""
+            inside = false
+        }
+        if inside {
+            block.push_str(line)
+            block.push('\n')
+        } else {
+            if !first {
+                out.push('\n')
+            }
+            first = false
+            out.push_str(line)
+            if fence == "```nika" || fence == "```nikaia" {
+                inside = true
+                out.push('\n')
+                first = true
+            }
+        }
+    }
+    // A block the file never closes: its lines as they stood.
+    out.push_str(block.strip_suffix("\n") ?? "")
+    return out
+}
+
+/// **The parameters the checker would refuse unmarked** (ADR-views-3 D2,
+/// `check_keep_marks.nika`'s `NK2302` without its transition rule): each a
+/// parameter of a free function or an inherent method that the inference
+/// keeps and that says neither `keep` nor `mut`, as the byte offset its
+/// declaration starts at. `self` is not asked, as the checker does not ask
+/// it; an `impl` of a trait takes the trait's marks.
+pub fn migrate_views3_keeps(view: ref ParsedView, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Vec[i64] {
+    let mut out: Vec[i64] = []
+    for item in view.items {
+        match item.node {
+            Item::Fn { .. } => {
+                migrate_keeps_of_body(view, item, null, own, library, indexes, resolved, holes_of, out)
+            },
+            Item::Impl { trait_name, target, methods } => {
+                if trait_name == null {
+                    let target_name = view.text(target.name)
+                    for method in methods {
+                        migrate_keeps_of_body(view, method, target_name.clone(), own, library, indexes, resolved, holes_of, out)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+fn migrate_keeps_of_body(view: ref ParsedView, item: ref Spanned[Item], target: String?, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync, mut out: Vec[i64]) {
+    match item.node {
+        Item::Fn { args, is_extern, .. } => {
+            if is_extern || args.is_empty() {
+                return
+            }
+            let found = keeps_uses_of(view, item.node, target?.clone(), own, library, indexes, resolved, holes_of) ?? return
+            let contract = own.functions[found.key] ?? return
+            for arg in args {
+                let parameter = view.text(arg.name)
+                if parameter == "" || parameter == "_" || arg.keep || arg.mutable || !arg.attributes.is_empty() {
+                    continue
+                }
+                if contract.keeps.contains(parameter) {
+                    out.push(arg.span.start as i64)
+                }
+            }
+        },
+        else => {},
+    }
+}

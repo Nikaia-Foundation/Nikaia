@@ -1635,6 +1635,14 @@ mod maps_lowered {
 #[allow(unused_imports)]
 pub use maps_lowered::*;
 
+mod migrate_views3_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/migrate_views3.rs");
+}
+#[allow(unused_imports)]
+pub use migrate_views3_lowered::*;
+
 mod modules_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2862,6 +2870,10 @@ pub mod manifest {
 pub mod maps {
     #[allow(unused_imports)]
     pub use super::{MpHeld, MpShape, MpFnMaps, mp_analyse};
+}
+pub mod migrate_views3 {
+    #[allow(unused_imports)]
+    pub use super::{migrate_views3_code, migrate_views3_nika, migrate_views3_markdown, migrate_views3_keeps};
 }
 pub mod modules {
     #[allow(unused_imports)]

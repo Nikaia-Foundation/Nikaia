@@ -1,0 +1,25 @@
+migrated TMP/forms.nika
+// a comment: ref self, x: ref T
+struct Bag { items: Vec[String], pair: (i64, i64), }
+
+impl Bag {
+    fn count(self) -> i64 { return self.items.len() }
+    fn clear(mut self) { self.items.clear() }
+    fn at(self, i: i64) -> String { return self.items[i] }
+}
+
+fn grow(mut b: Bag, n: i64) { b.clear() }
+
+fn length(xs: Vec[i64], names: Vec[String]) -> i64 {
+    let first: i64 = xs[0]
+    println("a string: ref self {first}")
+    println(f"interpolated: ref {first}")
+    return xs.len()
+}
+
+extern(library: "m") {
+    fn frexp(x: f64, e: ref mut i32) -> f64
+}
+
+pub extern fn exported(p: ref u8) -> i64 { return 0 }
+second run: []

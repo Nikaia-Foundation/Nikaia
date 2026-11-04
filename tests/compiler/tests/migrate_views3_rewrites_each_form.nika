@@ -1,0 +1,27 @@
+// #1213 step 6, ADR-views-3 D4: `nikaia migrate views-3` drops `ref` from a
+// receiver, a parameter, a `return`, a field, an element, a binding and a
+// tuple, moves `ref mut T` on a parameter to `mut x: T`, and leaves a comment,
+// a string, an `extern` block and an `extern fn`'s signature as written. A
+// second run changes nothing.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let file = f"{tmp}/forms.nika"
+    let source = "// a comment: ref self, x: ref T\nstruct Bag { items: Vec[String], pair: ref (i64, i64), }\n\nimpl Bag {\n    fn count(ref self) -> i64 { return self.items.len() }\n    fn clear(ref mut self) { self.items.clear() }\n    fn at(ref self, i: i64) -> ref String { return ref self.items[i] }\n}\n\nfn grow(b: ref mut Bag, n: i64) { b.clear() }\n\nfn length(xs: ref Vec[i64], names: Vec[ref String]) -> i64 {\n    let first: ref i64 = xs[0]\n    println(\"a string: ref self {first}\")\n    println(f\"interpolated: ref {first}\")\n    return xs.len()\n}\n\nextern(library: \"m\") {\n    fn frexp(x: f64, e: ref mut i32) -> f64\n}\n\npub extern fn exported(p: ref u8) -> i64 { return 0 }\n"
+    fs::write(file, fs::Root::Anywhere, source)
+    let first = process::run(nikaia, ["migrate", "views-3", file.clone()])
+    print(f"{first.stdout}{first.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(file, fs::Root::Anywhere))
+    let second = process::run(nikaia, ["migrate", "views-3", file.clone()])
+    println(f"second run: [{second.stdout}{second.stderr}]")
+    process::run("rm", ["-rf", tmp])
+}

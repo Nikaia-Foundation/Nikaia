@@ -1,0 +1,49 @@
+migrated TMP/alone.nika
+migrated TMP/guide.md
+migrated TMP/pkg/src/bag.nika
+migrated TMP/pkg/src/main.nika
+-- alone.nika
+struct Bag { items: Vec[String] }
+
+impl Bag {
+    fn add(mut self, keep s: String) { self.items.push(s) }
+    fn has(self, s: String) -> bool { return self.items.contains(s) }
+}
+
+fn store(mut b: Bag, keep s: String, keep t: String) {
+    b.items.push(s)
+    b.items.push(t)
+}
+
+fn main() {
+    let mut b = Bag { items: [] }
+    b.add("a")
+    store(b, "b", "c")
+    println(b.has("a"))
+}
+-- guide.md
+# Prose: ref self stays
+
+```nika
+fn store(mut v: Vec[String], keep s: String) { v.push(s) }
+```
+
+```rust
+fn f(x: &ref) {}
+```
+
+Text `x: ref T` stays.
+-- pkg/src/bag.nika
+pub struct Bag { items: Vec[String] }
+
+pub fn put(mut b: Bag, keep s: String) { b.items.push(s) }
+-- pkg/src/main.nika
+fn through(mut b: Bag, keep s: String) { put(b, s) }
+
+fn main() {
+    let mut b = Bag { items: [] }
+    through(b, "x")
+}
+-- check: 0
+Checked TMP/alone.nika
+second run: []
