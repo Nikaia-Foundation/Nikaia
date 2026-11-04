@@ -14,3 +14,4 @@
 /home/user/Nikaia/docs/briefs/views/v10-self-lent.md 5295528 74
 /home/user/Nikaia/docs/briefs/views/v11-keep-cross-file.md 1401326 21
 /home/user/Nikaia/docs/briefs/views/qa/qa-task.md 617187 22
+/home/user/Nikaia/docs/briefs/views/v12-keep-view-copy.md 665985 12
