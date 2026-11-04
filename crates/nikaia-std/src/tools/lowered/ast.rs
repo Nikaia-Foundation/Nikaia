@@ -293,6 +293,7 @@ pub struct FnArg {
     pub name: winnow_grammar::Symbol,
     pub ty: Type,
     pub mutable: bool,
+    pub keep: bool,
     pub span: Span,
     pub attributes: Vec<Attribute>,
 }
@@ -468,6 +469,7 @@ pub struct FoldSpec {
 pub struct Receiver {
     pub is_ref: bool,
     pub is_mut: bool,
+    pub is_keep: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

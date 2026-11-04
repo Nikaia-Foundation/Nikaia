@@ -180,7 +180,7 @@ pub fn declared_trait_method(names: &winnow_grammar::InternerContext, aliases: &
         let subject = nikaia_std::index::or(match method.receiver.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || Receiver { is_ref: false, is_mut: false });
+        }, || Receiver { is_ref: false, is_mut: false, is_keep: false });
         let owner = trait_name.to_string();
         let self_name: String = String::from("self");
         params.push((self_name, Ty::Named { name: owner, args: vec![], view: subject.is_ref }));

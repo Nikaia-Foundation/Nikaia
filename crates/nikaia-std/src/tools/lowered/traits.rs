@@ -141,8 +141,8 @@ pub(crate) fn wanted_receiver(names: &winnow_grammar::InternerContext, items: &[
             _ => { },
         }
     }
-    let shared = Receiver { is_ref: true, is_mut: false };
-    let changed = Receiver { is_ref: true, is_mut: true };
+    let shared = Receiver { is_ref: true, is_mut: false, is_keep: false };
+    let changed = Receiver { is_ref: true, is_mut: true, is_keep: false };
     if trait_name == "Error" && method == "message" || trait_name == "Eq" && method == "eq" || trait_name == "Ord" && method == "compare" { return Wanted { known: true, receiver: Some(shared) }; }
     if trait_name == "Drop" && method == "drop" || trait_name == "Cleanup" && method == "cleanup" { return Wanted { known: true, receiver: Some(changed) }; }
     Wanted { known: false, receiver: None }
@@ -150,8 +150,8 @@ pub(crate) fn wanted_receiver(names: &winnow_grammar::InternerContext, items: &[
 
 pub(crate) fn same_receiver(a: Option<Receiver>, b: Option<Receiver>) -> bool {
     if a.is_none() || b.is_none() { return a.is_none() && b.is_none(); }
-    let one = nikaia_std::index::or(a, || Receiver { is_ref: false, is_mut: false });
-    let other = nikaia_std::index::or(b, || Receiver { is_ref: false, is_mut: false });
+    let one = nikaia_std::index::or(a, || Receiver { is_ref: false, is_mut: false, is_keep: false });
+    let other = nikaia_std::index::or(b, || Receiver { is_ref: false, is_mut: false, is_keep: false });
     one.is_ref == other.is_ref && one.is_mut == other.is_mut
 }
 

@@ -1456,9 +1456,15 @@ grammar! {
 
         rule receiver -> Receiver =
             KW_REF KW_MUT KW_SELF -> {
-                Receiver { is_ref: true, is_mut: true }
+                Receiver { is_ref: true, is_mut: true, is_keep: false }
             }
-          | KW_REF KW_SELF -> { Receiver { is_ref: true, is_mut: false } }
+          | KW_REF KW_SELF -> { Receiver { is_ref: true, is_mut: false, is_keep: false } }
+          // **`mut self` changes the object, `keep self` consumes it**
+          // (ADR-views-3 D2). Until the migration (#1213 step 6) `mut self`
+          // is what `ref mut self` is, and `keep self` what a bare `self` is;
+          // a bare `self` stays by value until then.
+          | KW_MUT KW_SELF -> { Receiver { is_ref: true, is_mut: true, is_keep: false } }
+          | KW_KEEP KW_SELF -> { Receiver { is_ref: false, is_mut: false, is_keep: true } }
           // Before the bare arm: `self: i64` is a parameter somebody named
           // `self`, and the bare arm would take the word and leave the `: i64`
           // to fail as the *next* parameter - at the colon, with nothing to say.
@@ -1477,8 +1483,8 @@ grammar! {
           | KW_SELF ":" fail(
                 "A parameter can't be called `self`. `self` is the value a method is \
                  called on, written `self`, `ref self` or `ref mut self`, without a type."
-            ) -> { Receiver { is_ref: false, is_mut: false } }
-          | KW_SELF -> { Receiver { is_ref: false, is_mut: false } }
+            ) -> { Receiver { is_ref: false, is_mut: false, is_keep: false } }
+          | KW_SELF -> { Receiver { is_ref: false, is_mut: false, is_keep: false } }
 
         // Kap 9.2: use std::fs
         rule use_item -> Item =
@@ -1679,7 +1685,13 @@ grammar! {
         // its type, because the caller needs it - what `_` says is that this body
         // does not read the value, never that the signature is shorter.
         rule fn_arg_def -> FnArg @=
-            attributes:attribute* mutable:kw_mut? name:NAME ":" ty:type_ref -> {
+            // **`keep item: Item`** (ADR-views-3 D2): the callee keeps the
+            // argument. `keep` is no reserved word (D13): when no name follows,
+            // this arm fails and `keep: i64` is a parameter called `keep`.
+            attributes:attribute* KW_KEEP name:NAME ":" ty:type_ref -> {
+                FnArg { name, ty, mutable: false, keep: true, span: Span::from(_span), attributes }
+            }
+          | attributes:attribute* mutable:kw_mut? name:NAME ":" ty:type_ref -> {
                 // **`mut p: ref T` is `mut p: T`** (Part I, 6.5): a `ref` in a
                 // parameter type only asserts *this is a view*, and a `mut`
                 // parameter is passed `ref mut` already, so the word adds
@@ -1688,20 +1700,20 @@ grammar! {
                 if mutable.is_some() && ty.is_view && !ty.is_mut {
                     ty.is_view = false;
                 }
-                FnArg { name, ty, mutable: mutable.is_some(), span: Span::from(_span), attributes }
+                FnArg { name, ty, mutable: mutable.is_some(), keep: false, span: Span::from(_span), attributes }
             }
           | attributes:attribute* UNDERSCORE ":" ty:type_ref -> {
-                FnArg { name: _state.intern("_"), ty, mutable: false, span: Span::from(_span), attributes }
+                FnArg { name: _state.intern("_"), ty, mutable: false, keep: false, span: Span::from(_span), attributes }
             }
           // **A type in the parameter list** (ADR-330 D1): `fn schema[T](T)`,
           // a slot the call fills with a type rather than a value. It has no
           // name, and the empty name, which no program can write, is what
           // marks the slot for the checker and the emitter.
           | attributes:attribute* ty:type_ref peek(",") -> {
-                FnArg { name: _state.intern(""), ty, mutable: false, span: Span::from(_span), attributes }
+                FnArg { name: _state.intern(""), ty, mutable: false, keep: false, span: Span::from(_span), attributes }
             }
           | attributes:attribute* ty:type_ref peek(")") -> {
-                FnArg { name: _state.intern(""), ty, mutable: false, span: Span::from(_span), attributes }
+                FnArg { name: _state.intern(""), ty, mutable: false, keep: false, span: Span::from(_span), attributes }
             }
 
         rule return_type_arrow -> Type =
@@ -4206,6 +4218,9 @@ grammar! {
         // polarity). `crates/nikaia/tests/reserved_below.rs` is what found it,
         // by writing the word in every position a name may stand.
         rule KW_REF = "ref" not(ident)
+        // Not reserved (ADR-views-3 D13): only the mark before a parameter or
+        // `self` in a parameter list.
+        rule KW_KEEP = "keep" not(ident)
 
         // The four words of `opaque type T released by f`
         // ([ADR-302](../../../../docs/specification/adr/adr-302.md) D7). They

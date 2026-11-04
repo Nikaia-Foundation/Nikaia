@@ -105,7 +105,8 @@ pub enum Item {
         /// name inside an `impl`, called as `Type(…)`.
         name: winnow_grammar::Symbol?,
         generics: Vec[GenericParam], // Kap 4.5: [T]
-        /// Kap 4.2/5.1: `&self`, `&mut self` or `self`, when this is a method.
+        /// Kap 4.2/5.1: `ref self`, `ref mut self`, `mut self`, `keep self` or
+        /// `self`, when this is a method.
         receiver: Receiver?,
         args: Vec[FnArg],
         /// Kap 5.1: what stands after the `;` - options, named at the call and
@@ -1201,6 +1202,13 @@ pub struct FnArg {
     /// A callee that wants a mutable *copy* of an owned parameter writes
     /// `let mut v = x` inside, which is what it writes for any other value.
     pub mutable: bool,
+    /// `keep item: Item`: the callee keeps the argument - stores it into
+    /// something that outlives the call, gives it to a task, or hands it to a
+    /// parameter that keeps it
+    /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D2). The
+    /// check holds it against what the keep inference decides
+    /// (`check_keep_marks.nika`).
+    pub keep: bool,
     /// Where the parameter is written.
     ///
     /// **A declaration needs one of its own**, which a statement's span cannot
@@ -1514,6 +1522,10 @@ pub struct FoldSpec {
 pub struct Receiver {
     pub is_ref: bool,
     pub is_mut: bool,
+    /// `keep self`: the method consumes the object
+    /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D2).
+    /// Taken by value, as a bare `self` is until the migration (#1213 step 6).
+    pub is_keep: bool,
 }
 
 /// What a function declaration takes: an optional subject and the rest.

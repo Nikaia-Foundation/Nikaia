@@ -1,0 +1,65 @@
+// `keep` before a parameter, `mut self` and `keep self` parse and run as
+// today (ADR-views-3 D2, #1213 step 2); `ref self`, `ref mut self`, a bare
+// `self` and a parameter called `keep` (D13) still do.
+
+struct Bag {
+	items: Vec[String],
+}
+
+impl Bag {
+	fn add(mut self, keep item: String) {
+		self.items.push(item)
+	}
+
+	fn count(ref self) -> i64 {
+		self.items.len() as i64
+	}
+
+	fn total(ref self) -> i64 {
+		self.items.len() as i64
+	}
+
+	fn grow(ref mut self, keep: i64) {
+		self.items.push(f"x{keep}")
+	}
+
+	fn done(keep self) -> Vec[String] {
+		self.items
+	}
+}
+
+trait Sink {
+	fn take(mut self, keep item: String)
+	fn seen(ref self) -> i64
+}
+
+impl Sink for Bag {
+	fn take(mut self, keep item: String) {
+		self.items.push(item)
+	}
+
+	fn seen(ref self) -> i64 {
+		self.items.len() as i64
+	}
+}
+
+fn look(s: String) -> i64 {
+	s.len() as i64
+}
+
+fn store(mut into: Vec[String], keep s: String) {
+	into.push(s)
+}
+
+fn main() {
+	let mut bag = Bag { items: [] }
+	bag.add("a")
+	bag.grow(2)
+	bag.take("b")
+	let mut v: Vec[String] = []
+	store(v, "c")
+	let w = "abc"
+	println(f"{bag.count()} {bag.total()} {bag.seen()} {look(w)} {v.len()}")
+	let items = bag.done()
+	println(f"{items.len()}")
+}

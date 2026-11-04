@@ -43,7 +43,7 @@
 10-nikaia-light.md #43 refused (as written) [NK1135]  // file: users.nika
 10-nikaia-light.md #44 refused (a body) [NK1117,NK1173]  let moved = p with { x: p.x + 1 }
 10-nikaia-light.md #45 lowered (as written) [about-a-refusal]  // file: main.nika
-10-nikaia-light.md #46 fragment (as written)  struct Position {
+10-nikaia-light.md #46 lowered (as written)  struct Position {
 10-nikaia-light.md #47 lowered (as written)  enum Shape {
 10-nikaia-light.md #48 lowered (as written)  enum Message {
 10-nikaia-light.md #49 lowered (as written)  enum Expr {
@@ -78,8 +78,8 @@
 10-nikaia-light.md #78 refused (a body) [sketch NK1181]  let db = Shared(postgres::connect("…"))
 10-nikaia-light.md #79 fragment (as written)  keep(Shared(connect(url)))                      // an a…
 10-nikaia-light.md #80 fragment (as written) [sketch]  let kasse: SharedMut[i32] = ...
-10-nikaia-light.md #81 fragment (as written) [sketch]  struct FileHandle {
-10-nikaia-light.md #82 fragment (as written)  use std::fs
+10-nikaia-light.md #81 lowered (as written) [sketch]  struct FileHandle {
+10-nikaia-light.md #82 lowered (as written)  use std::fs
 10-nikaia-light.md #83 lowered (as written)  use std::fs
 10-nikaia-light.md #84 refused (as written) [sketch NK1135]  use std::fs
 10-nikaia-light.md #85 lowered (as written)  struct Expr { n: i64 }
@@ -131,7 +131,7 @@
 20-nikaia-advance.md #16 fragment (as written) [sketch]  grammar Yml {
 20-nikaia-advance.md #17 fragment (as written) [sketch]  pub grammar Json {
 20-nikaia-advance.md #18 fragment (as written) [about-a-refusal sketch]  fn process_image(path: String) -> Image { ... }
-20-nikaia-advance.md #19 fragment (as written)  pub trait Admission {
+20-nikaia-advance.md #19 lowered (as written)  pub trait Admission {
 20-nikaia-advance.md #20 refused (items, then a body) [about-a-refusal NK1117,NK1135]  use std::fs
 20-nikaia-advance.md #21 refused (as written) [NK1135]  fn bonus(score: i32) -> i32 { score * 2 + 1 }   // no `…
 20-nikaia-advance.md #22 refused (a body) [NK1117]  counter.access fn(n) { n + xs.sort_by_key fn(x) { x } }…

@@ -171,8 +171,8 @@ fn wanted_receiver(names: ref winnow_grammar::InternerContext, items: ref Vec[Sp
             else => {}
         }
     }
-    let shared = Receiver { is_ref: true, is_mut: false }
-    let changed = Receiver { is_ref: true, is_mut: true }
+    let shared = Receiver { is_ref: true, is_mut: false, is_keep: false }
+    let changed = Receiver { is_ref: true, is_mut: true, is_keep: false }
     if (trait_name == "Error" && method == "message") || (trait_name == "Eq" && method == "eq") || (trait_name == "Ord" && method == "compare") {
         return Wanted { known: true, receiver: shared }
     }
@@ -187,8 +187,8 @@ fn same_receiver(a: Receiver?, b: Receiver?) -> bool {
     if a == null || b == null {
         return a == null && b == null
     }
-    let one = a ?? Receiver { is_ref: false, is_mut: false }
-    let other = b ?? Receiver { is_ref: false, is_mut: false }
+    let one = a ?? Receiver { is_ref: false, is_mut: false, is_keep: false }
+    let other = b ?? Receiver { is_ref: false, is_mut: false, is_keep: false }
     return one.is_ref == other.is_ref && one.is_mut == other.is_mut
 }
 

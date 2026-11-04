@@ -262,7 +262,7 @@ pub fn default_text(expr: ref Expr) -> String {
 pub fn declared_trait_method(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], trait_name: ref String, method: ref TraitMethod, public: bool) -> DeclaredFn {
     let mut params: Vec[(String, Ty)] = []
     if method.receiver != null {
-        let subject = method.receiver?.clone() ?? Receiver { is_ref: false, is_mut: false }
+        let subject = method.receiver?.clone() ?? Receiver { is_ref: false, is_mut: false, is_keep: false }
         // An extern block's declarations are keyed under an empty name, and
         // their receiver is named by it as well.
         let owner = trait_name.clone()

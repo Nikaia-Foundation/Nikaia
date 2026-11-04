@@ -184,7 +184,7 @@ fn numbers_fn_args(args: Vec[FnArg], mut st: NodeNumbersState) -> Vec[FnArg] {
     let mut out: Vec[FnArg] = []
     for a in args.drain() {
         let attributes = numbers_attributes(a.attributes, st)
-        out.push(FnArg { name: a.name, ty: a.ty, mutable: a.mutable, span: a.span, attributes: attributes })
+        out.push(FnArg { name: a.name, ty: a.ty, mutable: a.mutable, keep: a.keep, span: a.span, attributes: attributes })
     }
     return out
 }

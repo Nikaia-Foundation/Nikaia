@@ -150,7 +150,7 @@ pub(crate) fn numbers_fn_args(args: Vec<FnArg>, st: &mut NodeNumbersState) -> Ve
     let mut out: Vec<FnArg> = vec![];
     for a in args.into_iter() {
         let attributes = numbers_attributes(a.attributes, st);
-        out.push(FnArg { name: a.name, ty: a.ty, mutable: a.mutable, span: a.span, attributes });
+        out.push(FnArg { name: a.name, ty: a.ty, mutable: a.mutable, keep: a.keep, span: a.span, attributes });
     }
     out
 }
