@@ -114,7 +114,6 @@ pub(super) fn hollow() -> Box<CheckState> {
         read_seq: 0,
         task_bindings: Vec::new(),
         changed: Vec::new(),
-        async_changed: BTreeMap::new(),
         drained: BTreeSet::new(),
         said_mut: BTreeSet::new(),
         facts: CheckFacts::empty(),

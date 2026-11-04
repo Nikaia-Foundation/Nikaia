@@ -877,9 +877,6 @@ pub struct CheckState {
     /// away, by their index in `changed` (#905): lowered to `into_iter()`,
     /// such a change asks no `mut` of the binding.
     pub drained: collections::BTreeSet[i64],
-    /// The names each `async` task changed that were bound outside it, by the
-    /// task's node (ADR-async-5 D7): `NK2107` between the tasks of one group.
-    pub async_changed: collections::BTreeMap[i64, collections::BTreeSet[String]],
     /// The bindings (by where they are declared) already said to need `mut`.
     pub said_mut: collections::BTreeSet[i64],
     /// What the emitter reads (`check_facts.nika`).

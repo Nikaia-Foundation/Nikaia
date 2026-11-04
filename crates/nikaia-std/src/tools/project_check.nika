@@ -106,11 +106,12 @@ pub fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -
         let hole_84 = if together == 1 { "" } else { "es" }
         refused.push(f"{together} branch{hole_84} that cannot run beside the others")
     }
-    // **A name a parallel lambda changes** (ADR-235 D2): the way out is a
-    // `map` and a `collect`, or a lock, which is neither line above.
+    // **A name a parallel lambda or an `async` task changes** (ADR-235 D2,
+    // ADR-async-5 D7): the way out is a value combined afterwards, or a
+    // lock, which is neither line above.
     let raced = project_check_count(findings, "NK2107")
     if raced > 0 {
-        refused.push(f"{raced} name{project_check_plural(raced)} changed from a lambda that runs on several cores")
+        refused.push(f"{raced} name{project_check_plural(raced)} changed from code that runs at the same time as other code")
     }
     let tasks = project_check_count(findings, "NK21")
     // **A sequence walked twice is not a place that can fail**

@@ -10,8 +10,6 @@
 // a value's cleanup is `check_crossings_a_value_with_a_cleanup_made`.
 // One function per arm, so a deep expression's frames stay small.
 
-use std::collections
-
 /// The escapes a literal may write (`build_time::ESCAPES`).
 comptime CHECK_CORE_EXPR_ESCAPES: ref String = "\\n \\r \\t \\0 \\\\ \\' \\\" \\xNN \\u{…}"
 
@@ -311,18 +309,17 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             state.flow.async_depth -= 1
             state.flow.loops = loops
             state.flow.barrier = barrier
-            // **What the task changed that was bound outside it** (D7), for
-            // the conflicts between the tasks of its group.
-            let mut outer: collections::BTreeSet[String] = collections::BTreeSet()
+            // **A task changes no name bound outside it** (D7, #1229): it
+            // runs beside everything after its start, whatever else does.
             let mut at = changed_from
             while at < state.changed.len() {
                 let name = state.changed[at].clone()
                 if state.binding(name) != null {
-                    outer.insert(name)
+                    state.a_task_changes_an_outer_name(name, span)
+                    break
                 }
                 at += 1
             }
-            state.async_changed.insert(id_of(expr) as i64, outer)
             if run {
                 // A last value of no known type was asked where it stands in
                 // the body (an open number stands back there), so not again.

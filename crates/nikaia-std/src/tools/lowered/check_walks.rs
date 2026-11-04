@@ -37,8 +37,6 @@ pub(crate) fn check_walks_shared(changed_by: &[collections::BTreeSet<String>], m
 pub(crate) struct CheckWalksTask {
     pub(crate) span: Span,
     pub(crate) until: i64,
-    pub(crate) changed: collections::BTreeSet<String>,
-    pub(crate) mentioned: collections::BTreeSet<String>,
     pub(crate) operations: Option<Vec<Operation>>,
 }
 
@@ -69,12 +67,7 @@ pub(crate) fn check_walks_task(state: &CheckState, world: &CheckWorld<'_, '_, '_
         CheckAsyncWaitAt::BeforeStatement(start) => start,
         CheckAsyncWaitAt::Before(operation) => nikaia_std::index::or(world.here.spans.get(&u32::try_from(operation).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"))).map(|__nikaia_it| __nikaia_it.end), || at.end.into()) as i64,
     };
-    let mut mentioned: collections::BTreeSet<String> = collections::BTreeSet::new();
-    names_in(inner, world.words, &mut mentioned);
-    let mut changed: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let recorded = match state.async_changed.get(&(id as i64)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    for name in recorded.iter() { changed.insert(name.to_string()); }
-    Some(CheckWalksTask { span: Span { start: at.start, end: at.end }, until, changed, mentioned, operations: check_walks_task_operations(inner, world.words, walking) })
+    Some(CheckWalksTask { span: Span { start: at.start, end: at.end }, until, operations: check_walks_task_operations(inner, world.words, walking) })
 }
 
 pub(crate) fn check_walks_task_operations(inner: &Expr, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Option<Vec<Operation>> {
@@ -102,13 +95,6 @@ pub(crate) fn check_walks_task_operations(inner: &Expr, words: &winnow_grammar::
         }
     }
     Some(out)
-}
-
-pub(crate) fn check_walks_task_shared(earlier: &CheckWalksTask, later: &CheckWalksTask) -> Option<(String, bool)> {
-    for name in earlier.changed.iter() { if later.changed.contains(name) { return Some((name.to_string(), true)); } }
-    for name in earlier.changed.iter() { if later.mentioned.contains(name) { return Some((name.to_string(), false)); } }
-    for name in later.changed.iter() { if earlier.mentioned.contains(name) { return Some((name.to_string(), false)); } }
-    None
 }
 
 pub(crate) fn check_walks_task_clash(earlier: &CheckWalksTask, later: &CheckWalksTask) -> Option<Verdict> {
@@ -193,14 +179,6 @@ impl CheckState {
                 let inside = later.span.start >= earlier.span.start && later.span.end <= earlier.span.end;
                 let held = earlier.span.start >= later.span.start && earlier.span.end <= later.span.end;
                 if !before || inside || held || (later.span.start as i64) >= earlier.until { continue; }
-                let shared = check_walks_task_shared(&earlier, &later);
-                if shared.is_some() {
-                    let (name, both) = nikaia_std::index::or(shared, || ("".into(), false.into()));
-                    let message = if both { format!("Two tasks of one group change `{}`.", name) } else { format!("One task of a group changes `{}`, and another one reads it.", name) };
-                    let note = if both { format!("The tasks of a group run at the same time, so both would write `{}` at once.", name) } else { format!("The tasks of a group run at the same time, so one would read `{}` while the other writes it.", name) };
-                    self.findings.push(check_refusal("NK2107", &later.span, message, vec![note], Some(format!("Give each task a value of its own and combine them after the group, or keep `{}` in a `SharedMut` and change it through `update`.", name))));
-                    break;
-                }
                 let clash = check_walks_task_clash(&earlier, &later);
                 if clash.is_some() {
                     let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);

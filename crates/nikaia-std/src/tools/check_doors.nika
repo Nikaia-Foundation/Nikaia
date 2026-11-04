@@ -109,6 +109,16 @@ impl CheckState {
         self.findings.push(check_refusal("NK2107", span, message, [note], help))
     }
 
+    /// `NK2107` for an `async` task (ADR-async-5 D7, #1229): `name`, bound
+    /// outside the task, changed inside it. The task runs beside everything
+    /// after its start, so the refusal does not depend on what runs there.
+    pub fn a_task_changes_an_outer_name(ref mut self, name: ref String, span: ref Span) sync {
+        let message = f"You're changing `{name}` in an `async` task, and `{name}` is bound outside it."
+        let note = f"A task runs at the same time as everything after its start, so it would write `{name}` while the rest of the program reads or writes it."
+        let help = f"Have the task produce a value, `let n = async count()`, and use it after, or keep `{name}` in a `SharedMut` and change it through `update`."
+        self.findings.push(check_refusal("NK2107", span, message, [note], help))
+    }
+
     /// `NK1117`: `a`, `b` or `c` used inside a lambda, where they used to be the
     /// automatic arguments. **Only inside a lambda**, where the three names used
     /// to mean something: a stray `a` in `main` is the general refusal's, and a

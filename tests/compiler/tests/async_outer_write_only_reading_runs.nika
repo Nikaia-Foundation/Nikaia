@@ -1,0 +1,8 @@
+// A task that only reads a name bound outside it runs (ADR-async-5 D7, #1229).
+fn main() {
+	let total = 41
+	let names: Vec[String] = ["a", "b"]
+	let n = async fn { total + names.len() as i64 }
+	println("working")
+	println(f"{n - 1}")
+}

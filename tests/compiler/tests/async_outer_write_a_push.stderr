@@ -1,0 +1,9 @@
+error[NK2107]: You're changing `names` in an `async` task, and `names` is bound outside it.
+  --> tests/async_outer_write_a_push.nika:4:2
+   |
+ 4 | 	async fn { names.push("a") }
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A task runs at the same time as everything after its start, so it would write `names` while the rest of the program reads or writes it.
+   = help: Have the task produce a value, `let n = async count()`, and use it after, or keep `names` in a `SharedMut` and change it through `update`.
+1 name changed from code that runs at the same time as other code

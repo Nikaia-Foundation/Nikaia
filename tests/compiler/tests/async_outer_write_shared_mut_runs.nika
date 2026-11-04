@@ -1,0 +1,7 @@
+// A task that changes a `SharedMut` through `update` runs (ADR-async-5 D7, #1229).
+fn main() {
+	let total = SharedMut(0)
+	async fn { total.update fn(mut v) { v += 1 } }
+	println("working")
+	println(f"{total.get()}")
+}

@@ -1,0 +1,7 @@
+// A task that calls a changing method on a name bound outside it is NK2107 (ADR-async-5 D7, #1229).
+fn main() {
+	let mut names: Vec[String] = []
+	async fn { names.push("a") }
+	println("working")
+	println(f"{names.len()}")
+}

@@ -66,6 +66,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_task_changes_an_outer_name(&mut self, name: &str, span: &Span) {
+        let message = format!("You're changing `{}` in an `async` task, and `{}` is bound outside it.", name, name);
+        let note = format!("A task runs at the same time as everything after its start, so it would write `{}` while the rest of the program reads or writes it.", name);
+        let help = format!("Have the task produce a value, `let n = async count()`, and use it after, or keep `{}` in a `SharedMut` and change it through `update`.", name);
+        self.findings.push(check_refusal("NK2107", span, message, vec![note], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn withdrawn_automatic_name(&mut self, name: &str, span: &Span) -> bool {
         let mut in_a_lambda = false;
         for around in self.repeats.iter() { if around.what == "lambda" { in_a_lambda = true; } }
