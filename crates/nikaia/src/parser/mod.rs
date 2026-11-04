@@ -1882,11 +1882,19 @@ grammar! {
           // belongs to the *result type*. A function whose own promise is meant
           // writes it before the arrow, which `fn_item` accepts already —
           // `fn make() sync -> fn(i64) -> i64`.
-          | KW_FN "(" params:code_params? ")" result:return_type_arrow?
+          //
+          // **A parameter may be named, and the result may write `from`**
+          // (ADR-views-3 D14): `fn(s: String, n: i64) -> String from s`. The
+          // names serve the `from` and the reader; they are not part of the
+          // type. `from` is greedy as the trailing words are.
+          | KW_FN "(" params:code_params? ")" result:result_with_from?
             s:kw_sync? t:kw_throws? -> {
+                let (param_names, generics): (Vec<Option<Symbol>>, Vec<Type>) =
+                    params.unwrap_or_default().into_iter().unzip();
+                let (result, result_from) = result.unwrap_or_default();
                 Type {
                     name: _state.intern("fn"),
-                    generics: params.unwrap_or_default(),
+                    generics,
                     is_view: false,
                     is_tuple: false,
                     is_nullable: false,
@@ -1894,6 +1902,8 @@ grammar! {
                         result: Box::new(result),
                         is_sync: s.is_some(),
                         can_throw: t.is_some(),
+                        param_names,
+                        result_from,
                     })),
                     count: None,
                     is_mut: false,
@@ -1958,23 +1968,27 @@ grammar! {
         // parameters*; #1134): `fn(mut S)` lends the argument at each call as a
         // `mut` parameter of a named function is lent. The word is recorded
         // as `is_mut` without `is_view`, which no other position writes.
-        rule code_params -> Vec<Type> =
+        rule code_params -> Vec<(Option<Symbol>, Type)> =
             head:code_param tail:code_param_tail* -> {
                 let mut params = vec![head];
                 params.extend(tail);
                 params
             }
 
-        rule code_param_tail -> Type = "," t:code_param -> { t }
+        rule code_param_tail -> (Option<Symbol>, Type) = "," t:code_param -> { t }
 
-        rule code_param -> Type =
-            m:kw_mut? t:type_ref -> {
+        rule code_param -> (Option<Symbol>, Type) =
+            m:kw_mut? n:code_param_name? t:type_ref -> {
                 let mut t = t;
                 if m.is_some() {
                     t.is_mut = true;
                 }
-                t
+                (n, t)
             }
+
+        // `s:` in `fn(s: String)` (ADR-views-3 D14). The `not(":")` keeps a
+        // path's `::` (`fn(collections::BTreeSet[i64])`) a type.
+        rule code_param_name -> Symbol = n:NAME ":" not(":") -> { n }
 
         // --- Part II, Kapitel 10: Grammatiken ---
 

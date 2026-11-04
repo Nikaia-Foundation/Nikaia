@@ -65,11 +65,50 @@ pub(crate) fn result_from_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, funct
         let source = *source;
         let named = view.text(source);
         if !nikaia_std::list::contains(&parameters, &named) {
-            out.push(check_refusal("NK1335", at, format!("`{}` writes `from {}`, but `{}` is no parameter of `{}`.", function, named, named, function), vec![String::from("A result's `from` names the parameters its views point into (ADR-views-3 D8).")], Some(format!("Name one of `{}`'s parameters after `from`.", function))));
+            out.push(check_refusal("NK1335", at, result_from_unknown(function, &named), vec![result_from_note()], Some(format!("Name one of `{}`'s parameters after `from`.", function))));
             return true;
         }
     }
     false
+}
+
+pub(crate) fn result_from_unknown(function: &str, named: &str) -> String { format!("`{}` writes `from {}`, but `{}` is no parameter of `{}`.", function, named, named, function) }
+
+pub(crate) fn result_from_note() -> String { String::from("A result's `from` names the parameters its views point into (ADR-views-3 D8).") }
+
+pub fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, span: &Span) -> Option<Finding> {
+    let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if code.result_from.is_empty() { return None; }
+    let mut parameters: Vec<String> = vec![];
+    let mut shown: Vec<String> = vec![];
+    let mut at: i64 = 0;
+    for parameter in ty.generics.iter() {
+        let mut text = written_type(names, parameter);
+        let written: Option<winnow_grammar::Symbol> = if ((at) as usize) < code.param_names.len() { *nikaia_std::index::get(&code.param_names, (at) as usize) } else { None };
+        match written {
+            None => { },
+            Some(symbol) => {
+                let name = names.resolve(symbol).to_string();
+                text = format!("{}: {}", name, text);
+                parameters.push(name);
+            },
+        }
+        shown.push(text);
+        at += 1;
+    }
+    let joined = shown.join(", ");
+    let mut function = format!("fn({})", joined);
+    let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    function = format!("{} -> {}", function, written_type(names, result));
+    for source in code.result_from.iter() {
+        let source = *source;
+        let named = names.resolve(source).to_string();
+        if !nikaia_std::list::contains(&parameters, &named) {
+            let help = if parameters.is_empty() { String::from("Name the function type's parameters, as `fn(s: String) -> String from s`, and write the one the result points into after `from`.") } else { format!("Name one of `{}`'s parameters after `from`.", function) };
+            return Some(refusal("NK1335", span.clone(), result_from_unknown(&function, &named), vec![result_from_note(), String::from("A function type names the parameters its `from` reads; the names do not change the type (ADR-views-3 D14).")], help));
+        }
+    }
+    None
 }
 
 pub(crate) fn result_from_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, owner: Option<String>, reached: &collections::BTreeMap<String, Vec<String>>, out: &mut Vec<CheckFinding>) {

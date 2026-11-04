@@ -2486,7 +2486,7 @@ pub mod check_reports {
 }
 pub mod check_result_from {
     #[allow(unused_imports)]
-    pub use super::{result_from_check, result_from_as_written};
+    pub use super::{result_from_check, result_from_as_written, result_from_of_code};
 }
 pub mod check_scope {
     #[allow(unused_imports)]

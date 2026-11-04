@@ -1,0 +1,14 @@
+// A function type's `from` names its own parameters: a name that is no
+// parameter, or a `from` on a type whose parameters have no names, is
+// refused (ADR-views-3 D14, NK1335).
+fn apply(f: fn(s: ref String) -> ref String from t, s: String) -> String {
+    return f(s).to_uppercase()
+}
+
+fn other(f: fn(ref String) -> ref String from s, s: String) -> String {
+    return f(s).to_uppercase()
+}
+
+fn main() {
+    println("unreached")
+}

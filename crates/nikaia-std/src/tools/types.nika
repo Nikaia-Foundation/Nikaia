@@ -311,7 +311,10 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                 maybe_written(names, method.node.ret_type, here, method.span, out)
                 widths_written_maybe(names, method.node.ret_type, false, method.span, out)
                 types_word_by_ref_maybe(names, method.node.ret_type, plain, method.span, out)
-                types_text_by_ref_maybe(names, method.node.ret_type, "result", views, "", method.span, out)
+                // **A body-less result's `ref` is not redundant** (ADR-views-3
+                // D8, D14, #1224): with no body to infer it from, a written
+                // `ref` is what makes the result a view until the `ref`
+                // migration, and `NK1336` keys on it. So `NK1261` passes it.
             }
         }
         Item::Impl { target, methods, .. } => {
@@ -605,6 +608,13 @@ fn written_at_the_boundary(names: ref winnow_grammar::InternerContext, ty: ref T
     }
     if !ty.is_tuple && ty.code == null && !known.contains(name) && !name.contains("::") {
         out.push(nothing_declares(name, known, span))
+    }
+    // A function type's `from` names its parameters (ADR-views-3 D14).
+    if ty.code != null {
+        let unknown = result_from_of_code(names, ty, span)
+        if unknown != null {
+            out.push(unknown ?? return)
+        }
     }
     for argument in ty.generics {
         written_at(names, argument, known, false, span, out)

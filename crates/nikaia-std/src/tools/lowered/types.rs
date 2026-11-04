@@ -240,7 +240,6 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
                 maybe_written(names, (method.node.ret_type).as_ref(), &here, &method.span, out);
                 widths_written_maybe(names, (method.node.ret_type).as_ref(), false, &method.span, out);
                 types_word_by_ref_maybe(names, (method.node.ret_type).as_ref(), plain, &method.span, out);
-                types_text_by_ref_maybe(names, (method.node.ret_type).as_ref(), "result", views, "", &method.span, out);
             }
         },
         Item::Impl { target, methods, .. } => {
@@ -437,6 +436,10 @@ pub(crate) fn written_at_the_boundary(names: &winnow_grammar::InternerContext, t
         return;
     }
     if !ty.is_tuple && (*ty.code).is_none() && !known.contains(&name) && !name.contains("::") { out.push(nothing_declares(&name, known, span)); }
+    if (*ty.code).is_some() {
+        let unknown = result_from_of_code(names, ty, span);
+        if unknown.is_some() { out.push(match unknown { Some(__nikaia_value) => __nikaia_value, None => return }); }
+    }
     for argument in ty.generics.iter() { written_at(names, argument, known, false, span, out); }
     maybe_written(names, (*ty.code).as_ref().and_then(|__nikaia_it| (*__nikaia_it.result).as_ref()), known, span, out);
 }

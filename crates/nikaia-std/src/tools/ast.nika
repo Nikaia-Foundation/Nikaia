@@ -1015,6 +1015,14 @@ pub struct Code {
     pub result: Type?,
     pub is_sync: bool,
     pub can_throw: bool,
+    /// `fn(s: String, n: i64)`: each parameter's name, in `generics`' order,
+    /// `null` where none is written. The names are part of nothing but the
+    /// `from` and documentation: two function types that differ only in them
+    /// are the same type (ADR-views-3 D14).
+    pub param_names: Vec[winnow_grammar::Symbol?],
+    /// `-> String from s`: the parameters the result's views point into
+    /// (D8, D14); a name that is no parameter is `NK1335`.
+    pub result_from: Vec[winnow_grammar::Symbol],
 }
 
 /// One variant of an enum (Kap 4.4).

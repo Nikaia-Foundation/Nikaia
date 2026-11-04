@@ -1,0 +1,23 @@
+// The names in a function type are part of nothing but its `from` and the
+// reader: `fn(s: String, n: i64) -> String` and `fn(String, i64) -> String`
+// are the same type, either way round (ADR-views-3 D14).
+fn named(f: fn(s: String, n: i64) -> String, s: String) -> String {
+    return f(s, 2)
+}
+
+fn plain(f: fn(String, i64) -> String, s: String) -> String {
+    return f(s, 3)
+}
+
+fn tag(s: String, n: i64) -> String {
+    return f"{s}{n}"
+}
+
+fn main() {
+    let g: fn(String, i64) -> String = tag
+    let h: fn(text: String, times: i64) -> String = tag
+    println(named(g, "ab"))
+    println(plain(h, "c"))
+    let back: fn(String, i64) -> String = h
+    println(back("d", 1))
+}

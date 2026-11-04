@@ -1,0 +1,17 @@
+// A function type may name its parameters and write its result's `from`
+// (ADR-views-3 D14): `fn(s: ref String, n: i64) -> ref String from s`.
+fn apply(f: fn(s: ref String, n: i64) -> ref String from s, s: String) -> String {
+    let r = f(s, 1)
+    return r.to_uppercase()
+}
+
+fn first(s: ref String, n: i64) -> ref String {
+    if n > 0 {
+        return s.trim()
+    }
+    return s
+}
+
+fn main() {
+    println(apply(first, "  hi  "))
+}

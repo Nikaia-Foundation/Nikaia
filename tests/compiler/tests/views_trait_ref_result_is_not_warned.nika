@@ -1,0 +1,15 @@
+// A trait's method has no body: until the `ref` migration its written `ref`
+// result is what makes the result a view, so `NK1261` does not call it
+// redundant (ADR-views-3 D8, D14, #1224). A body's `-> ref String` is still
+// warned.
+trait Pick {
+    fn pick(a: ref String) -> ref String from a
+}
+
+fn first(s: String) -> ref String {
+    return s.trim()
+}
+
+fn main() {
+    println(first("  word  "))
+}

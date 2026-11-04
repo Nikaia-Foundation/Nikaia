@@ -109,11 +109,61 @@ fn result_from_names(view: ref ParsedView, function: ref String, at: ref Span, r
     for source in ret_from {
         let named = view.text(source)
         if !parameters.contains(named) {
-            out.push(check_refusal("NK1335", at, f"`{function}` writes `from {named}`, but `{named}` is no parameter of `{function}`.", ["A result's `from` names the parameters its views point into (ADR-views-3 D8)."], f"Name one of `{function}`'s parameters after `from`."))
+            out.push(check_refusal("NK1335", at, result_from_unknown(function, named), [result_from_note()], f"Name one of `{function}`'s parameters after `from`."))
             return true
         }
     }
     return false
+}
+
+/// `NK1335`'s words for a `from` that names no parameter.
+fn result_from_unknown(function: ref String, named: ref String) -> String {
+    return f"`{function}` writes `from {named}`, but `{named}` is no parameter of `{function}`."
+}
+
+fn result_from_note() -> String {
+    return "A result's `from` names the parameters its views point into (ADR-views-3 D8)."
+}
+
+/// **A function type's `from` names its own parameters** (ADR-views-3 D14):
+/// `fn(s: String, n: i64) -> String from s`. A name that is no parameter of
+/// the type, or a `from` on a type whose parameters have no names, is
+/// `NK1335`. The types inside it are walked by the caller
+/// (`types.nika`, `written_at_the_boundary`).
+pub fn result_from_of_code(names: ref winnow_grammar::InternerContext, ty: ref Type, span: ref Span) -> Finding? {
+    let code = ty.code ?? return null
+    if code.result_from.is_empty() {
+        return null
+    }
+    let mut parameters: Vec[String] = []
+    let mut shown: Vec[String] = []
+    let mut at = 0
+    for parameter in ty.generics {
+        let mut text = written_type(names, parameter)
+        let written: winnow_grammar::Symbol? = if at < code.param_names.len() { code.param_names[at] } else { null }
+        match written {
+            null => {},
+            symbol => {
+                let name = names.resolve(symbol).clone()
+                text = f"{name}: {text}"
+                parameters.push(name)
+            },
+        }
+        shown.push(text)
+        at += 1
+    }
+    let joined = shown.join(", ")
+    let mut function = f"fn({joined})"
+    let result = code.result ?? return null
+    function = f"{function} -> {written_type(names, result)}"
+    for source in code.result_from {
+        let named = names.resolve(source).clone()
+        if !parameters.contains(named) {
+            let help = if parameters.is_empty() { "Name the function type's parameters, as `fn(s: String) -> String from s`, and write the one the result points into after `from`." } else { f"Name one of `{function}`'s parameters after `from`." }
+            return refusal("NK1335", span.clone(), result_from_unknown(function, named), [result_from_note(), "A function type names the parameters its `from` reads; the names do not change the type (ADR-views-3 D14)."], help)
+        }
+    }
+    return null
 }
 
 /// **A body against its written `from`** (D8): every parameter its ways out

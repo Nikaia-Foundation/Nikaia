@@ -218,6 +218,8 @@ pub struct Code {
     pub result: Box<Option<Type>>,
     pub is_sync: bool,
     pub can_throw: bool,
+    pub param_names: Vec<Option<winnow_grammar::Symbol>>,
+    pub result_from: Vec<winnow_grammar::Symbol>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

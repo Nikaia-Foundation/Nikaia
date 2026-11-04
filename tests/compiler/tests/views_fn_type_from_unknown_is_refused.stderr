@@ -1,0 +1,19 @@
+error[NK1335]: `fn(s: ref String) -> ref String` writes `from t`, but `t` is no parameter of `fn(s: ref String) -> ref String`.
+  --> tests/views_fn_type_from_unknown_is_refused.nika:4:1
+   |
+ 4 | fn apply(f: fn(s: ref String) -> ref String from t, s: String) -> String {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A result's `from` names the parameters its views point into (ADR-views-3 D8).
+   = note: A function type names the parameters its `from` reads; the names do not change the type (ADR-views-3 D14).
+   = help: Name one of `fn(s: ref String) -> ref String`'s parameters after `from`.
+error[NK1335]: `fn(ref String) -> ref String` writes `from s`, but `s` is no parameter of `fn(ref String) -> ref String`.
+  --> tests/views_fn_type_from_unknown_is_refused.nika:8:1
+   |
+ 8 | fn other(f: fn(ref String) -> ref String from s, s: String) -> String {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A result's `from` names the parameters its views point into (ADR-views-3 D8).
+   = note: A function type names the parameters its `from` reads; the names do not change the type (ADR-views-3 D14).
+   = help: Name the function type's parameters, as `fn(s: String) -> String from s`, and write the one the result points into after `from`.
+2 type errors
