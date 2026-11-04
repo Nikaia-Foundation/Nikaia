@@ -71,8 +71,8 @@ let count = 7
 let status = if count > 5 { "big" } else { "small" }
 ```
 
-`if`, `match` and a `{ … }` block all give a value: the value of their last line. You can
-assign it to a variable or use it in a calculation, which is why there is no ternary operator.
+`if`, `match` and a `{ … }` block each give the value of their last line. You can assign it
+to a variable or use it in a calculation, which is why there is no ternary operator.
 
 **Specification:** [Part I, §3.1 Expressions and blocks](../docs/specification/10-nikaia-light.md#31-expressions-and-blocks) · [§3.2 if / else](../docs/specification/10-nikaia-light.md#32-conditional-logic-if--else)
 
