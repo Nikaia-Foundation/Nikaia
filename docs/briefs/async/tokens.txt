@@ -5,3 +5,5 @@
 /home/user/Nikaia/docs/briefs/async/a3-async-group-runtime.md 346841 9
 /home/user/Nikaia/docs/briefs/async/a4-async-value-check.md 6089271 91
 /home/user/Nikaia/docs/briefs/async/a4-async-value-check.md 353310 5
+/home/user/Nikaia/docs/briefs/async/a5-async-value-lowering.md 6551992 91
+/home/user/Nikaia/docs/briefs/async/a5b-async-fixes-and-lowering.md 5184900 82
