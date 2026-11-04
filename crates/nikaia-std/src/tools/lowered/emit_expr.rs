@@ -209,7 +209,7 @@ impl EmitState {
             Expr::Variable(name, _) => {
                 let name = *name;
                 let handle = walk.async_handles.get(&emit_text(world, name));
-                if handle.is_some() { out.push(&format!("{}.join_now()?", nikaia_std::index::or(handle, || ""))); } else { self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope)?; }
+                if handle.is_some() { out.push(nikaia_std::index::or(handle, || "")); } else { self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope)?; }
             },
             Expr::Path(segments, _) => {
                 if self.facts.reflected_names.contains(&at) {

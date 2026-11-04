@@ -1,0 +1,17 @@
+// Tasks whose calls pause, as the arguments of a call, are each polled to
+// their end before the call (ADR-async-5 D6, D20, #1226).
+use std::time
+
+fn size_of(n: i64) -> i64 {
+	time::sleep(1.millis())
+	return n * 10
+}
+
+fn add(a: i64, b: i64) -> i64 {
+	return a + b
+}
+
+fn main() {
+	let s = add(async size_of(4), async size_of(2))
+	println(f"{s}")
+}

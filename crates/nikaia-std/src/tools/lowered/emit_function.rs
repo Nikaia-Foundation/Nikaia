@@ -685,20 +685,32 @@ impl EmitState {
                     },
                     None => {
                         let group = self.emit_async_body_group(body);
-                        if group == 0 { self.emit_function_body(world, walk, out, host, body, depth, throws_, returns_value, &awaited, &key, &channel, host.counts_steps(), host.skip_free_at_exit())?; } else {
+                        let outer_pausing = walk.async_pausing;
+                        walk.async_pausing = pausing != "";
+                        if group == 0 {
+                            self.emit_function_body(world, walk, out, host, body, depth, throws_, returns_value, &awaited, &key, &channel, host.counts_steps(), host.skip_free_at_exit())?;
+                            walk.async_pausing = outer_pausing;
+                        } else {
                             let mut inner = EmitOut::empty();
                             let outer_groups = walk.async_groups.to_owned();
                             walk.async_groups = vec![group];
                             self.emit_function_body(world, walk, &mut inner, host, body, depth, throws_, returns_value, &awaited, &key, &channel, host.counts_steps(), host.skip_free_at_exit())?;
                             walk.async_groups = outer_groups;
+                            walk.async_pausing = outer_pausing;
                             walk.async_pending = vec![];
                             walk.async_handles = collections::BTreeMap::new();
-                            if pausing != "" || inner.buf.contains(".await") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet in a function that pauses (#988)."), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
+                            if pausing == "" && inner.buf.contains(".await") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet in a function that pauses (#988)."), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
                             let name = emit_async_group_name(group);
                             if throws_ { emit_async_channel_holds_a_crash(&channel, Some(nikaia_std::index::get(&body.stmts, 0).span.start as i64))?; }
-                            if throws_ { out.push(&format!("{{ nikaia_std::task::group::<_, {}>(|{}|{} ", channel, name, ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, ret)); }
-                            out.append(inner);
-                            out.push(") }");
+                            if pausing != "" {
+                                if throws_ { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {}>({}, (async ||{} ", name, channel, name, ret)); } else { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, (async ||{} ", name, name, ret)); }
+                                out.append(inner);
+                                out.push(")()).await }");
+                            } else {
+                                if throws_ { out.push(&format!("{{ nikaia_std::task::group::<_, {}>(|{}|{} ", channel, name, ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, ret)); }
+                                out.append(inner);
+                                out.push(") }");
+                            }
                         }
                     },
                 }

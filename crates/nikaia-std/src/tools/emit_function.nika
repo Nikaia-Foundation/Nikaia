@@ -1107,8 +1107,13 @@ impl EmitState {
                     },
                     null => {
                         let group = self.emit_async_body_group(body)
+                        // An `async { }` of a function that pauses may pause
+                        // too (D20, #1226).
+                        let outer_pausing = walk.async_pausing
+                        walk.async_pausing = pausing != ""
                         if group == 0 {
                             self.emit_function_body(world, walk, out, host, body, depth, throws_, returns_value, awaited, key, channel, host.counts_steps(), host.skip_free_at_exit())
+                            walk.async_pausing = outer_pausing
                         } else {
                             // **The body is the group of its `async e`** (ADR-async-5
                             // D9, D21, #988): it runs as `task::group`'s function,
@@ -1119,22 +1124,36 @@ impl EmitState {
                             walk.async_groups = [group]
                             self.emit_function_body(world, walk, inner, host, body, depth, throws_, returns_value, awaited, key, channel, host.counts_steps(), host.skip_free_at_exit())
                             walk.async_groups = outer_groups
+                            walk.async_pausing = outer_pausing
                             walk.async_pending = []
                             walk.async_handles = collections::BTreeMap()
-                            if pausing != "" || inner.buf.contains(".await") {
+                            if pausing == "" && inner.buf.contains(".await") {
                                 throw EmitRefused { message: "The compiler can't translate `async e` yet in a function that pauses (#988).", at: body.stmts[0].span.start }
                             }
                             let name = emit_async_group_name(group)
                             if throws_ {
                                 emit_async_channel_holds_a_crash(channel, body.stmts[0].span.start as i64)
                             }
-                            if throws_ {
-                                out.push(f"{{ nikaia_std::task::group::<_, {channel}>(|{name}|{ret} ")
+                            if pausing != "" {
+                                // **A function that pauses** (D20, #1226): its
+                                // body is a future over the group, polled
+                                // where the function is awaited.
+                                if throws_ {
+                                    out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {channel}>({name}, (async ||{ret} ")
+                                } else {
+                                    out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({name}, (async ||{ret} ")
+                                }
+                                out.append(inner)
+                                out.push(")()).await }")
                             } else {
-                                out.push(f"{{ nikaia_std::task::group_plain(|{name}|{ret} ")
+                                if throws_ {
+                                    out.push(f"{{ nikaia_std::task::group::<_, {channel}>(|{name}|{ret} ")
+                                } else {
+                                    out.push(f"{{ nikaia_std::task::group_plain(|{name}|{ret} ")
+                                }
+                                out.append(inner)
+                                out.push(") }")
                             }
-                            out.append(inner)
-                            out.push(") }")
                         }
                     },
                 }

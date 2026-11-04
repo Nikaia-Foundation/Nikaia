@@ -1393,6 +1393,81 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
         ran(&mut seen, at, body);
         self.seen.borrow_mut().absorb(seen);
     }
+
+    /// **`async e` whose task pauses** (ADR-async-5 D6, D20, #1226): it starts
+    /// here and runs to its first pause; the handle holds the rest, polled
+    /// where the checker waits (`join`). It may borrow what lives shorter
+    /// than the group, as [`Scope::start_here`]'s task may.
+    pub async fn start_paused<'g, T: 'g, F>(
+        &'g self,
+        body: impl FnOnce() -> F + 'g,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'g,
+        F: std::future::Future<Output = Result<T, E>> + 'g,
+    {
+        ChildHandle::held(self, body).await
+    }
+
+    /// **`async e` as a statement whose task pauses** (D9, D20, #1226): it
+    /// runs here to its end, in sequence at both settings until the group
+    /// polls its statement tasks; its value is dropped, its failure waits for
+    /// the group's end, its crash cancels the tasks after it.
+    pub async fn spawn_paused_here<F, R: Outcome<E>>(&self, body: impl FnOnce() -> F)
+    where
+        F: std::future::Future<Output = R>,
+    {
+        let Some(at) = self.seen.borrow_mut().start() else {
+            return;
+        };
+        let mut seen = Group::new();
+        match caught_paused(body).await {
+            Err(crash) => seen.crash(at, crash),
+            Ok(outcome) => {
+                if let Some(error) = outcome.failed() {
+                    seen.failed.push((at, error));
+                }
+            }
+        }
+        self.seen.borrow_mut().absorb(seen);
+    }
+}
+
+impl<E> Scope<'_, '_, E> {
+    /// **A group whose function pauses** (ADR-async-5 D9, D20, #1226), made by
+    /// its caller and run by [`group_paused`]: its tasks borrow it for as
+    /// long as they run.
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Scope {
+            seen: std::cell::RefCell::new(Group::new()),
+            scope: std::marker::PhantomData,
+            env: std::marker::PhantomData,
+        }
+    }
+}
+
+/// **A pausing body run to its end, a panic in it its crash** (#1226): each
+/// poll is caught as [`caught`] catches a call.
+async fn caught_paused<F: std::future::Future>(
+    body: impl FnOnce() -> F,
+) -> Result<F::Output, Crashed> {
+    let mut body = Some(body);
+    let mut running: Option<std::pin::Pin<Box<F>>> = None;
+    std::future::poll_fn(|cx| {
+        let mut polled = std::task::Poll::Pending;
+        let crash = caught(|| {
+            let task = running.get_or_insert_with(|| {
+                Box::pin(body.take().expect("a task's body is made once")())
+            });
+            polled = task.as_mut().poll(cx);
+        });
+        match crash {
+            Err(crash) => std::task::Poll::Ready(Err(crash)),
+            Ok(()) => polled.map(Ok),
+        }
+    })
+    .await
 }
 
 /// The scope as its handles see it: one thread, a `RefCell`.
@@ -1445,6 +1520,34 @@ pub fn group<'env, T, E: From<Crashed> + crate::error::Joined>(
         Ok(value) => ended(value, failed),
         Err(first) => Err(group::left(first, failed)),
     }
+}
+
+/// **[`group`] where the group's function pauses** (ADR-async-5 D9, D20,
+/// D21, #1226): `body` is the function as a future over `scope`, which its
+/// caller made with [`Scope::new`]; the group ends after it and every task.
+/// A pausing task of `async e` is polled where it is waited for, inside
+/// `body`, so every task has ended when `body` has.
+pub async fn group_paused<T, E: From<Crashed> + crate::error::Joined>(
+    scope: &Scope<'_, '_, E>,
+    body: impl std::future::Future<Output = Result<T, E>>,
+) -> Result<T, E> {
+    let value = body.await;
+    let failed = std::mem::take(&mut scope.seen.borrow_mut().failed);
+    match value {
+        Ok(value) => ended(value, failed),
+        Err(first) => Err(group::left(first, failed)),
+    }
+}
+
+/// [`group_paused`] where nothing can fail but a crash: the group's value, or
+/// the crash raised again.
+pub async fn group_paused_plain<T>(
+    scope: &Scope<'_, '_, Crashed>,
+    body: impl std::future::Future<Output = T>,
+) -> T {
+    let value = body.await;
+    let failed = std::mem::take(&mut scope.seen.borrow_mut().failed);
+    unfailing(ended(value, failed))
 }
 
 /// [`group`] where nothing can fail but a crash: the group's value, or the

@@ -1,0 +1,24 @@
+// A binding's task whose call pauses starts where it is written, runs to its
+// first pause, and is polled to its end where the main line waits for it
+// (ADR-async-5 D6, D20, #1226); a binding named in another task alone is
+// waited for in that task (D8).
+use std::time
+
+fn slow(n: i64) -> i64 {
+	time::sleep(1.millis())
+	return n * 2
+}
+
+fn enrich(n: i64) -> i64 {
+	time::sleep(1.millis())
+	return n + 1
+}
+
+fn main() {
+	let a = async slow(20)
+	println("between")
+	println(f"{a}")
+	let b = async slow(3)
+	let c = async enrich(b)
+	println(f"{c}")
+}

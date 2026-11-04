@@ -555,6 +555,11 @@ pub(crate) fn emit_async_joined(handle: &str, channel: &str) -> String {
     format!("{}.join_now()?", handle)
 }
 
+pub(crate) fn emit_async_joined_paused(handle: &str, channel: &str) -> String {
+    if channel == "nikaia_std::task::Crashed" { return format!("nikaia_std::task::unfailing({}.join().await)", handle); }
+    format!("{}.join().await?", handle)
+}
+
 pub(crate) fn emit_call_not_computed_yet() -> &'static str { "a default not computed yet" }
 
 pub(crate) fn emit_call_owned_text(ty: &Ty) -> bool {
@@ -738,7 +743,7 @@ impl EmitState {
         emit_async_channel_holds_a_crash(&channel, emit_async_at(flow.statement))?;
         let mut owner: String = String::from("");
         if channel == scope.channel { owner = scope.function.to_string(); }
-        let failing = EmitFlow { in_lambda: true, can_throw: true, ..EmitFlow::plain().at(flow.statement) };
+        let failing = EmitFlow { in_lambda: !walk.async_pausing, can_throw: true, ..EmitFlow::plain().at(flow.statement) };
         let inner = EmitScope { origin: scope.origin.to_string(), function: owner.to_string(), channel: channel.to_string(), changed: scope.changed.to_owned(), tasks_channel: channel.to_string(), tasks_function: owner.to_string(), ..EmitScope::plain() };
         let mut body = EmitOut::empty();
         let mut ran = false;
@@ -752,8 +757,16 @@ impl EmitState {
             _ => { },
         }
         if !ran { self.emit_expr(world, walk, &mut body, host, task, depth, failing, &inner)?; }
-        if body.buf.contains(".await") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet where the task pauses (#988)."), at: emit_async_at(flow.statement) }, &"emit_async_task")); }
         let name = emit_async_group_name(group);
+        if body.buf.contains(".await") {
+            if kind == "spawn" {
+                out.push(&format!("{}.spawn_paused_here(async || -> Result<(), {}> {{ let _ = {}; Ok(()) }}).await", name, channel, body.buf));
+                return Ok(());
+            }
+            let held = format!("{}.start_paused(async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }}).await", name, channel, body.buf);
+            if kind == "join" { out.push(&emit_async_joined_paused(&held, &channel)); } else { out.push(&held); }
+            return Ok(());
+        }
         if kind == "spawn" {
             out.push(&format!("{}.spawn_here(|| -> Result<(), {}> {{ let _ = {}; Ok(()) }})", name, channel, body.buf));
             return Ok(());
@@ -800,10 +813,18 @@ impl EmitState {
         if channel == "nikaia_std::task::Crashed" { self.emit_core_block(world, walk, &mut body, host, block, depth, flow, scope, EmitTail::Value)?; } else {
             let mut owner: String = String::from("");
             if channel == scope.channel { owner = scope.function.to_string(); }
-            self.emit_call_scope_body(world, walk, &mut body, host, block, depth, flow, scope, &channel, &owner, false)?;
+            self.emit_call_scope_body(world, walk, &mut body, host, block, depth, flow, scope, &channel, &owner, walk.async_pausing)?;
         }
         walk.async_groups.pop();
-        if body.buf.contains("return ") || body.buf.contains(".await") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async { … }` yet where it holds a `return` or a pause (#988)."), at: emit_async_at(flow.statement) }, &"emit_async_group")); }
+        if body.buf.contains("return ") || body.buf.contains(".await") && !walk.async_pausing { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async { … }` yet where it holds a `return` or a pause (#988)."), at: emit_async_at(flow.statement) }, &"emit_async_group")); }
+        if walk.async_pausing {
+            if channel == "nikaia_std::task::Crashed" {
+                out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, async {}).await }}", name, name, body.buf));
+                return Ok(());
+            }
+            out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {}>({}, (async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }})()).await? }}", name, channel, name, channel, body.buf));
+            return Ok(());
+        }
         if channel == "nikaia_std::task::Crashed" {
             out.push(&format!("nikaia_std::task::group_plain(|{}| {})", name, body.buf));
             return Ok(());
@@ -848,25 +869,32 @@ impl EmitState {
             if kind != "handle" && kind != "spawn" { return Ok(false); }
             if kind == "handle" { waits = self.emit_async_waits_before(each.1); }
         }
-        if !whole { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate a tuple of `async e` and other parts yet (#988): bind each part with a `let` of its own."), at: emit_async_at(flow.statement) }, &"emit_async_binding")); }
+        if !whole { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate a tuple of `async e` and other parts yet (#988): bind each part with a `let` of its own."), at: Some(span.start as i64) }, &"emit_async_binding")); }
         let channel = emit_call_tasks_channel(&flow, scope);
+        let here = flow.at(span.start as i64);
         let mut first = true;
+        let mut joins: Vec<String> = vec![];
         for each in tasks.iter() {
             let handle = format!("__task_{}", each.1);
             if !first { out.push(" "); }
             first = false;
             out.push(&format!("let {} = ", handle));
-            self.emit_async_task(world, walk, out, host, &each.0, each.1, "handle", depth, flow, scope)?;
+            let mut started = EmitOut::empty();
+            self.emit_async_task(world, walk, &mut started, host, &each.0, each.1, "handle", depth, here, scope)?;
+            let mut joined = emit_async_joined(&handle, &channel);
+            if started.buf.ends_with(".await") { joined = emit_async_joined_paused(&handle, &channel); }
+            out.append(started);
             out.push(";");
-            walk.async_joining.insert(each.1, emit_async_joined(&handle, &channel));
+            walk.async_joining.insert(each.1, joined.to_string());
+            joins.push(joined);
         }
         if waits < 0 {
             walk.async_joining = collections::BTreeMap::new();
-            if named != "" { walk.async_handles.insert(named, format!("__task_{}", nikaia_std::index::get(&tasks, 0).1)); }
+            if named != "" { walk.async_handles.insert(named, (*nikaia_std::index::get(&joins, 0)).to_string()); }
             return Ok(true);
         }
         let mut kept = EmitOut::empty();
-        self.emit_stmt_written(world, walk, &mut kept, host, node, span, depth, tail, flow, scope)?;
+        self.emit_stmt_written(world, walk, &mut kept, host, node, span, depth, tail, here, scope)?;
         walk.async_joining = collections::BTreeMap::new();
         walk.async_pending.push((kept.buf.to_string(), named, waits));
         Ok(true)

@@ -252,6 +252,50 @@ async fn paused_task<'g, T: 'g, E: 'g, F>(
     settle(group, &slot, at, end);
 }
 
+/// **A pausing task of `async e` as its handle polls it** (D20, #1226): as
+/// [`paused_task`], and a panic in its body is its crash, which the group sees
+/// as well (ADR-328 D8), since no group's poll catches it.
+async fn held_task<'g, T: 'g, E: 'g, F>(
+    group: &'g dyn Receiver<E>,
+    slot: Shared<T, E>,
+    at: usize,
+    body: impl FnOnce() -> F + 'g,
+) where
+    F: std::future::Future<Output = Result<T, E>> + 'g,
+{
+    let _unended = Unended(slot.clone());
+    let mut body = Some(body);
+    let mut running: Option<std::pin::Pin<Box<F>>> = None;
+    let outcome = std::future::poll_fn(|cx| {
+        if locked(&slot).cancel {
+            return std::task::Poll::Ready(Ok(None));
+        }
+        let mut polled = std::task::Poll::Pending;
+        let crash = caught(|| {
+            let task = running.get_or_insert_with(|| {
+                Box::pin(body.take().expect("a task's body is made once")())
+            });
+            polled = task.as_mut().poll(cx).map(Some);
+        });
+        match crash {
+            Err(crash) => std::task::Poll::Ready(Err(crash)),
+            Ok(()) => polled.map(Ok),
+        }
+    })
+    .await;
+    drop(running);
+    let end = match outcome {
+        Err(crash) => {
+            group.crashed(at, crash.clone());
+            Ended::Crashed(crash)
+        }
+        Ok(None) => Ended::Cancelled,
+        Ok(Some(Ok(value))) => Ended::Value(value),
+        Ok(Some(Err(error))) => Ended::Failed(error),
+    };
+    settle(group, &slot, at, end);
+}
+
 /// **`task::ChildHandle[T]`** (D11): the handle of a child task, bound to its
 /// group. It has `join()` and `cancel()`, both of which take it, and
 /// `start()` where it is deferred (D12). One dropped neither joined nor
@@ -279,6 +323,10 @@ pub struct ChildHandle<'g, T, E> {
     is_deferred: bool,
     /// Joined or cancelled: its end is nobody else's.
     claimed: bool,
+    /// **The rest of a pausing task of `async e`** (ADR-async-5 D6, D20,
+    /// #1226), after its first pause: polled where the checker waits, its
+    /// `join`. Dropped unjoined, the task is cancelled at that pause.
+    held: Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'g>>>,
 }
 
 impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
@@ -290,7 +338,33 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             deferred: None,
             is_deferred: false,
             claimed: false,
+            held: None,
         }
+    }
+
+    /// **A handle to a pausing task of `async e`** (ADR-async-5 D6, D20,
+    /// #1226): the task starts here, in written order, and runs to its first
+    /// pause; the handle holds the rest, which its `join` polls. A crash
+    /// before it cancelled it.
+    pub(super) async fn held<F>(group: &'g dyn Receiver<E>, body: impl FnOnce() -> F + 'g) -> Self
+    where
+        F: std::future::Future<Output = Result<T, E>> + 'g,
+    {
+        let mut handle = ChildHandle::new(group, empty_slot());
+        let Some(at) = group.place() else {
+            locked(&handle.slot).ended = Some(Ended::Cancelled);
+            return handle;
+        };
+        handle.at = Some(at);
+        let mut task: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'g>> =
+            Box::pin(held_task(group, handle.slot.clone(), at, body));
+        let ended =
+            std::future::poll_fn(|cx| std::task::Poll::Ready(task.as_mut().poll(cx).is_ready()))
+                .await;
+        if !ended {
+            handle.held = Some(task);
+        }
+        handle
     }
 
     /// **A handle to a task that never pauses**, which runs now, to its end
@@ -386,7 +460,15 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
             "a deferred task was joined before its start()"
         );
         let slot = self.slot.clone();
+        let mut rest = self.held.take();
         let end = std::future::poll_fn(|cx| {
+            // A pausing task of `async e` is polled here, where it is waited
+            // for (#1226).
+            if let Some(task) = rest.as_mut()
+                && task.as_mut().poll(cx).is_ready()
+            {
+                rest = None;
+            }
             let mut held = locked(&slot);
             match held.ended.take() {
                 Some(end) => std::task::Poll::Ready(end),

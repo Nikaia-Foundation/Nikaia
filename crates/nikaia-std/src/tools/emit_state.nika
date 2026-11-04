@@ -293,11 +293,14 @@ pub struct EmitWalk {
     /// The join each `async e` of a binding is written as, by its node, while
     /// its `let` is kept for the statement that waits (D6); empty elsewhere.
     pub async_joining: collections::BTreeMap[i64, String],
+    /// **The function whose group this is pauses** (D20, #1226): its tasks
+    /// may pause too, polled where they are waited for.
+    pub async_pausing: bool,
 }
 
 impl EmitWalk {
     /// Nothing written yet.
     pub fn fresh() -> EmitWalk {
-        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_members: [], grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", dyn_code: false, nonnegative: collections::BTreeMap(), specialising: null, slotted: false, at_field: null, field_names: collections::BTreeMap(), field_types: collections::BTreeMap(), field_owners: collections::BTreeMap(), field_copy: null, type_names: collections::BTreeMap(), code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1, path_types: "", async_groups: [], async_pending: [], async_handles: collections::BTreeMap(), async_joining: collections::BTreeMap() }
+        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_members: [], grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", dyn_code: false, nonnegative: collections::BTreeMap(), specialising: null, slotted: false, at_field: null, field_names: collections::BTreeMap(), field_types: collections::BTreeMap(), field_owners: collections::BTreeMap(), field_copy: null, type_names: collections::BTreeMap(), code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1, path_types: "", async_groups: [], async_pending: [], async_handles: collections::BTreeMap(), async_joining: collections::BTreeMap(), async_pausing: false }
     }
 }

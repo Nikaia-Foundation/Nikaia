@@ -929,6 +929,15 @@ fn emit_async_joined(handle: ref String, channel: ref String) -> String {
     return f"{handle}.join_now()?"
 }
 
+/// **The join of a task that pauses** (D6, D20, #1226): it polls the rest of
+/// the task until it ends.
+fn emit_async_joined_paused(handle: ref String, channel: ref String) -> String {
+    if channel == "nikaia_std::task::Crashed" {
+        return f"nikaia_std::task::unfailing({handle}.join().await)"
+    }
+    return f"{handle}.join().await?"
+}
+
 /// A default that stands in a run that computes another one (#468); the text
 /// is `comptime_run::NOT_COMPUTED_YET`.
 fn emit_call_not_computed_yet() -> String {
@@ -1203,7 +1212,9 @@ impl EmitState {
         if channel == scope.channel {
             owner = scope.function.clone()
         }
-        let failing = EmitFlow::plain().at(flow.statement) with { in_lambda: true, can_throw: true }
+        // In a function that pauses, the task's own pauses are polled where it
+        // is waited for (D20, #1226).
+        let failing = EmitFlow::plain().at(flow.statement) with { in_lambda: !walk.async_pausing, can_throw: true }
         let inner = EmitScope::plain() with { origin: scope.origin.clone(), function: owner.clone(), channel: channel.clone(), changed: scope.changed.clone(), tasks_channel: channel.clone(), tasks_function: owner.clone() }
         let mut body = EmitOut::empty()
         let mut ran = false
@@ -1219,12 +1230,24 @@ impl EmitState {
         if !ran {
             self.emit_expr(world, walk, body, host, task, depth, failing, inner)
         }
-        // **A task that pauses is polled by its group's future** (D20): not
-        // built yet.
-        if body.buf.contains(".await") {
-            throw EmitRefused { message: "The compiler can't translate `async e` yet where the task pauses (#988).", at: emit_async_at(flow.statement) }
-        }
         let name = emit_async_group_name(group)
+        // **A task that pauses is polled by its group's future** (D20,
+        // #1226): it starts here and runs to its first pause; its handle holds
+        // the rest, polled where it is waited for. A statement's task runs to
+        // its end here.
+        if body.buf.contains(".await") {
+            if kind == "spawn" {
+                out.push(f"{name}.spawn_paused_here(async || -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await")
+                return
+            }
+            let held = f"{name}.start_paused(async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+            if kind == "join" {
+                out.push(emit_async_joined_paused(held, channel))
+            } else {
+                out.push(held)
+            }
+            return
+        }
         if kind == "spawn" {
             out.push(f"{name}.spawn_here(|| -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }})")
             return
@@ -1286,11 +1309,21 @@ impl EmitState {
             if channel == scope.channel {
                 owner = scope.function.clone()
             }
-            self.emit_call_scope_body(world, walk, body, host, block, depth, flow, scope, channel, owner, false)
+            self.emit_call_scope_body(world, walk, body, host, block, depth, flow, scope, channel, owner, walk.async_pausing)
         }
         walk.async_groups.pop()
-        if body.buf.contains("return ") || body.buf.contains(".await") {
+        if body.buf.contains("return ") || (body.buf.contains(".await") && !walk.async_pausing) {
             throw EmitRefused { message: "The compiler can't translate `async { … }` yet where it holds a `return` or a pause (#988).", at: emit_async_at(flow.statement) }
+        }
+        // **A group in a function that pauses** (D20, #1226): its function is
+        // a future over the group, which its tasks borrow.
+        if walk.async_pausing {
+            if channel == "nikaia_std::task::Crashed" {
+                out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({name}, async {body.buf}).await }}")
+                return
+            }
+            out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {channel}>({name}, (async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})()).await? }}")
+            return
         }
         if channel == "nikaia_std::task::Crashed" {
             out.push(f"nikaia_std::task::group_plain(|{name}| {body.buf})")
@@ -1345,10 +1378,14 @@ impl EmitState {
             }
         }
         if !whole {
-            throw EmitRefused { message: "The compiler can't translate a tuple of `async e` and other parts yet (#988): bind each part with a `let` of its own.", at: emit_async_at(flow.statement) }
+            throw EmitRefused { message: "The compiler can't translate a tuple of `async e` and other parts yet (#988): bind each part with a `let` of its own.", at: span.start as i64 }
         }
         let channel = emit_call_tasks_channel(flow, scope)
+        // The task's refusals stand at the `let` (#1226): the walk of a
+        // statement knows no start of its own here.
+        let here = flow.at(span.start as i64)
         let mut first = true
+        let mut joins: Vec[String] = []
         for each in tasks {
             let handle = f"__task_{each.1}"
             if !first {
@@ -1356,20 +1393,27 @@ impl EmitState {
             }
             first = false
             out.push(f"let {handle} = ")
-            self.emit_async_task(world, walk, out, host, each.0, each.1, "handle", depth, flow, scope)
+            let mut started = EmitOut::empty()
+            self.emit_async_task(world, walk, started, host, each.0, each.1, "handle", depth, here, scope)
+            let mut joined = emit_async_joined(handle, channel)
+            if started.buf.ends_with(".await") {
+                joined = emit_async_joined_paused(handle, channel)
+            }
+            out.append(started)
             out.push(";")
-            walk.async_joining.insert(each.1, emit_async_joined(handle, channel))
+            walk.async_joining.insert(each.1, joined.clone())
+            joins.push(joined)
         }
         if waits < 0 {
             // Named in another task alone (D8): that task waits for it.
             walk.async_joining = collections::BTreeMap()
             if named != "" {
-                walk.async_handles.insert(named, f"__task_{tasks[0].1}")
+                walk.async_handles.insert(named, joins[0].clone())
             }
             return true
         }
         let mut kept = EmitOut::empty()
-        self.emit_stmt_written(world, walk, kept, host, node, span, depth, tail, flow, scope)
+        self.emit_stmt_written(world, walk, kept, host, node, span, depth, tail, here, scope)
         walk.async_joining = collections::BTreeMap()
         walk.async_pending.push((kept.buf.clone(), named, waits))
         return true

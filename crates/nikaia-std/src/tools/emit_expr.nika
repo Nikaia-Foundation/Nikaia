@@ -317,10 +317,11 @@ impl EmitState {
             Expr::LitNull(_) => out.push("None"),
             Expr::Variable(name, _) => {
                 // A binding of `async e` only other tasks name is waited for in
-                // the task that names it (ADR-async-5 D8).
+                // the task that names it (ADR-async-5 D8); the map holds the
+                // join itself.
                 let handle = walk.async_handles.get(emit_text(world, name))
                 if handle != null {
-                    out.push(f"{handle ?? ""}.join_now()?")
+                    out.push(handle ?? "")
                 } else {
                     self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope)
                 }
