@@ -222,7 +222,7 @@ optimization = "remove-bounds-checks:on,remove-overflow-checks:on"</code></pre><
     <div class="safe-tiles">
       <a class="safe-tile safe-tile-a" href="{{ "/easy/#async" | relative_url }}">
         <span class="safe-chip safe-chip-build">Plain calls</span>
-        <h3>Code that waits needs no marking</h3>
+        <h3>The program waits where it needs the value</h3>
         <p>The compiler finds where a function pauses, so a call that waits is written like any other, and its callers stay as they are.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let a = async count_words(first)    // starts at once
 let b = async count_words(second)   // runs beside the first

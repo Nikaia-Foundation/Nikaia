@@ -24,8 +24,8 @@ description: >-
   <div class="home-inner home-split">
     <div class="home-split-text">
       <span class="safe-chip safe-chip-build">Plain calls</span>
-      <h2>Code that waits needs no marking</h2>
-      <p>You do not need <code>await</code>, because the compiler finds where a function pauses. A call that waits pauses its function while the program goes on with other work, and it is written like any other call. A function that starts to wait leaves its callers as they are. A function marked <code>sync</code> is held to never waiting, and may call only other <code>sync</code> functions.</p>
+      <h2>The program waits where it needs the value</h2>
+      <p>A call that reads a file or waits for the network is written like any other call. Its function pauses there until the result is ready, and the program goes on with other work in the meantime. The compiler finds where a function pauses, so a function that starts to wait leaves its callers as they are. A function marked <code>sync</code> does not pause; the compiler holds it to that, and it may call only other <code>sync</code> functions.</p>
       <p>To run things beside each other, a program puts <code>async</code> before an expression: it starts at once, and the program waits for the value where it is first needed. A task&rsquo;s error is thrown at that point, and an <code>async { … }</code> group ends only when every task in it has ended. Handles, detached tasks and tasks whose calls pause are specified and still being built (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/988">#988</a>).</p>
     </div>
     <div class="home-code-side">

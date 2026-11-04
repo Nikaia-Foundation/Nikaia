@@ -34,9 +34,10 @@ tasks that would both write to standard output at once, and it does not refuse
 where it cannot tell what a call touches. Every task has a memory budget, and memory that
 a Rust crate or a C library allocates for itself is not counted in it.
 
-Phrasing is positive. Rather than "there is no `await`", the text says that a
-program does not need `await`, because the compiler finds where a function
-pauses. A missing feature is described by what takes its place.
+Phrasing is positive. Rather than "there is no `await`" or "you do not need
+`await`", the text says where the program waits: at a call that reads a file,
+and for a value started with `async`, where the value is first used. A missing
+feature is described by what takes its place.
 
 Concepts are explained through what the reader already knows: ideas every
 programmer has met, such as a file, a network call or a value that changes, and

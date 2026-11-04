@@ -162,8 +162,9 @@ Below are the main design choices. Each is specified, and each links to the deci
 that argues it.
 
 **1. Functions have no colour.**
-There is no `async` and no `await`. Any function may pause on I/O; the compiler builds the
-state machine. So there is no split of the ecosystem into a sync half and an async half,
+Any function may pause on I/O, and the compiler builds the state machine. The program waits
+where it needs a value: at the call itself, or, for work started with `async`, where the
+value is first used. So there is no split of the ecosystem into a sync half and an async half,
 where every library has to exist twice.
 → [Spec Part I](docs/specification/10-nikaia-light.md)
 
