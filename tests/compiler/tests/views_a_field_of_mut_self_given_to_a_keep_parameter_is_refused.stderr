@@ -1,0 +1,18 @@
+error[NK1131]: You can't give away `self.items` here: this method only borrows `self`.
+   --> tests/views_a_field_of_mut_self_given_to_a_keep_parameter_is_refused.nika:14:3
+    |
+ 14 | 		let k = kept_field_keeper(self.items)
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `self` and `mut self` borrow the value, and `items` is a `Vec[i64]`. Giving it away would take a piece out of something this method doesn't own.
+    = help: Write `self.items.clone()` for a copy, or take `keep self` if the method is meant to use up its value.
+error[NK2106]: `self.items` is passed to `kept_field_keeper`, which keeps it, but `self` is only borrowed here.
+   --> tests/views_a_field_of_mut_self_given_to_a_keep_parameter_is_refused.nika:14:3
+    |
+ 14 | 		let k = kept_field_keeper(self.items)
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `self` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), so you can't give a part of it away.
+    = note: Nikaia never makes a copy behind your back.
+    = help: Hand over a copy: `self.items.clone()`.
+1 type error

@@ -50,6 +50,13 @@ pub(crate) fn check_core_args_reads(callee: Option<&FnContract>, at: i64) -> boo
     false
 }
 
+pub(crate) fn check_core_args_lent(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, callee: Option<&FnContract>, at: i64) -> bool {
+    let contract = match callee { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if signature.takes_a_receiver() { return false; }
+    lends_in(contract, at, &vec![world.library])
+}
+
 pub(crate) fn check_core_args_is_lambda(arg: &Expr, expected: &[Ty], at: i64) -> bool {
     if at >= expected.len() as i64 { return false; }
     let mut closure = false;
@@ -198,6 +205,7 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
             _ => { },
         }
     }
+    if !lends { lends = check_core_args_lent(world, callee, at); }
     if !lends {
         check_core_a_field_of_a_borrowed_subject_given(state, world, host, arg, span, "passed", check_core_args_reads(callee, at));
         if at < expected.len() as i64 && !wants_fn && !(*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).is_unknown() && !check_core_args_changes(callee, at) { check_core_a_lent_place_passed(state, world, host, arg, !check_core_args_runs(callee, at), span); }

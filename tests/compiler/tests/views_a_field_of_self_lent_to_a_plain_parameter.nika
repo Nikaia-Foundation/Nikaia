@@ -1,0 +1,29 @@
+// ADR-views-3 D2, #1213: a plain parameter is lent, so a field of `self`,
+// `ref self` or `mut self` handed to one stays where it is (NK1131 refused
+// it before).
+
+struct LentFieldBag {
+	items: Vec[i64],
+}
+
+fn lent_field_count(v: Vec[i64]) -> i64 {
+	return v.len()
+}
+
+impl LentFieldBag {
+	fn size(ref self) -> i64 {
+		return lent_field_count(self.items)
+	}
+
+	fn add(mut self, x: i64) -> i64 {
+		self.items.push(x)
+		return lent_field_count(self.items) + self.size()
+	}
+}
+
+fn main() {
+	let mut b = LentFieldBag { items: [] }
+	println(f"{b.add(1)}")
+	println(f"{b.add(2)}")
+	println(f"{b.size()}")
+}

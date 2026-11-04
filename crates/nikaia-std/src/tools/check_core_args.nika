@@ -74,6 +74,18 @@ fn check_core_args_reads(callee: ref FnContract?, at: i64) -> bool {
     return false
 }
 
+/// Whether a free function lends the parameter at `at`: the call writes the
+/// reference, so a field of `self` handed to it stays where it is. A method's
+/// plain parameter is not inferred lent yet (`lends_in`).
+fn check_core_args_lent(world: ref CheckWorld, callee: ref FnContract?, at: i64) -> bool {
+    let contract = callee ?? return false
+    let signature = contract.signature ?? return false
+    if signature.takes_a_receiver() {
+        return false
+    }
+    return lends_in(contract, at, [world.library])
+}
+
 /// Whether `arg` is a lambda landing in a parameter of a function type.
 fn check_core_args_is_lambda(arg: ref Expr, expected: ref Vec[Ty], at: i64) -> bool {
     if at >= expected.len() as i64 {
@@ -259,6 +271,12 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
             }
             else => {}
         }
+    }
+    // **Nor one the callee lends** (ADR-views-3 D2): a plain parameter of a
+    // function that does not keep it, where the call writes the reference,
+    // as `lends_in` answers for the emitter.
+    if !lends {
+        lends = check_core_args_lent(world, callee, at)
     }
     if !lends {
         check_core_a_field_of_a_borrowed_subject_given(state, world, host, arg, span, "passed", check_core_args_reads(callee, at))

@@ -41,10 +41,10 @@ pub fn check_core_a_field_of_a_borrowed_subject_given[H: CheckHost](mut state: C
     if read && is_text_type(ty) {
         return
     }
-    let notes: Vec[String] = [f"`ref self` borrows the value, and `{field}` is a `{ty.text()}`. Giving it away would take a piece out of something this method doesn't own."]
-    let mut help: String = f"Write `self.{field}.clone()` for a copy, or take `self` instead of `ref self` if the method is meant to use up its value."
+    let notes: Vec[String] = [f"`self` and `mut self` borrow the value, and `{field}` is a `{ty.text()}`. Giving it away would take a piece out of something this method doesn't own."]
+    let mut help: String = f"Write `self.{field}.clone()` for a copy, or take `keep self` if the method is meant to use up its value."
     if what == "handed back" {
-        help = f"Declare the result `ref {ty.text()}` to return a view of it, write `self.{field}.clone()` for a copy, or take `self` instead of `ref self` if the method is meant to use up its value."
+        help = f"Declare the result `ref {ty.text()}` to return a view of it, write `self.{field}.clone()` for a copy, or take `keep self` if the method is meant to use up its value."
     }
     state.findings.push(check_refusal("NK1131", span, f"You can't give away `self.{field}` here: this method only borrows `self`.", notes, help))
 }

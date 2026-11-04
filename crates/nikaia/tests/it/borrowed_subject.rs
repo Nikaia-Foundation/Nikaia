@@ -115,8 +115,7 @@ fn every_by_value_position_is_refused() {
             refusal
                 .help
                 .as_deref()
-                .is_some_and(|h| h.contains("self.name.clone()")
-                    && h.contains("take `self` instead of `ref self`")),
+                .is_some_and(|h| h.contains("self.name.clone()") && h.contains("take `keep self`")),
             "and names both ways out: {:?}",
             refusal.help
         );
@@ -199,7 +198,7 @@ fn main() {
             .help
             .as_deref()
             .is_some_and(|h| h.contains("self.tags.clone()")
-                && h.contains("take `self` instead of `ref self`")
+                && h.contains("take `keep self`")
                 && h.contains("Declare the result `ref Vec[i64]`")
                 && !h.contains("&self.tags")),
         "the ways out, and no `&` for the author to write: {:?}",

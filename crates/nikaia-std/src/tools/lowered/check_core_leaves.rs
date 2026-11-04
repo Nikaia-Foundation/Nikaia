@@ -23,9 +23,9 @@ pub fn check_core_a_field_of_a_borrowed_subject_given<H: CheckHost>(state: &mut 
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_unknown() || copies_plainly(&ty) { return; }
     if read && is_text_type(&ty) { return; }
-    let notes: Vec<String> = vec![format!("`ref self` borrows the value, and `{}` is a `{}`. Giving it away would take a piece out of something this method doesn't own.", field, ty.text())];
-    let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `self` instead of `ref self` if the method is meant to use up its value.", field);
-    if what == "handed back" { help = format!("Declare the result `ref {}` to return a view of it, write `self.{}.clone()` for a copy, or take `self` instead of `ref self` if the method is meant to use up its value.", ty.text(), field); }
+    let notes: Vec<String> = vec![format!("`self` and `mut self` borrow the value, and `{}` is a `{}`. Giving it away would take a piece out of something this method doesn't own.", field, ty.text())];
+    let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", field);
+    if what == "handed back" { help = format!("Declare the result `ref {}` to return a view of it, write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", ty.text(), field); }
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `self.{}` here: this method only borrows `self`.", field), notes, Some(help)));
 }
 

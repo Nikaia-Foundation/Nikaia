@@ -1,0 +1,22 @@
+// ADR-views-3 D2, #1213: a `keep` parameter takes its argument, so a field of
+// `mut self` handed to one is still NK1131, and the way out names `keep self`.
+
+struct KeptFieldBag {
+	items: Vec[i64],
+}
+
+fn kept_field_keeper(keep v: Vec[i64]) -> Vec[i64] {
+	return v
+}
+
+impl KeptFieldBag {
+	fn give(mut self) -> i64 {
+		let k = kept_field_keeper(self.items)
+		return k.len()
+	}
+}
+
+fn main() {
+	let mut b = KeptFieldBag { items: [] }
+	println(f"{b.give()}")
+}
