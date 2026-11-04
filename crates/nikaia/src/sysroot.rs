@@ -1210,7 +1210,11 @@ mod tests {
             root: dir.join("cache"),
             compiler: Some("iface-test".into()),
         };
-        std::fs::write(&b, "fn ifb_two(x: i64) -> i64 sync { ifa_one(x) + 2 }\n").unwrap();
+        std::fs::write(
+            &b,
+            "fn ifb_two(mut v: Vec[String], s: String) sync { ifa_one(v, s) }\n",
+        )
+        .unwrap();
         let run = |a_text: &str| -> usize {
             std::fs::write(&a, a_text).unwrap();
             let mut reused = 0;
@@ -1224,24 +1228,31 @@ mod tests {
             .unwrap();
             reused
         };
-        assert_eq!(run("fn ifa_one(x: i64) -> i64 sync { x + 1 }\n"), 0);
         assert_eq!(
-            run("fn ifa_one(x: i64) -> i64 sync { x + 1 }\n"),
+            run("fn ifa_one(mut v: Vec[String], s: String) sync { v.push(s.clone() + \"1\") }\n"),
+            0
+        );
+        assert_eq!(
+            run("fn ifa_one(mut v: Vec[String], s: String) sync { v.push(s.clone() + \"1\") }\n"),
             2,
             "unchanged"
         );
         assert_eq!(
-            run("fn ifa_one(x: i64) -> i64 sync { x + 3 }\n"),
+            run("fn ifa_one(mut v: Vec[String], s: String) sync { v.push(s.clone() + \"3\") }\n"),
             1,
             "a body change lowers A only"
         );
         assert_eq!(
-            run("fn ifa_one(x: i64) -> i64 sync { x + 3 }\nfn ifa_new() -> i64 sync { 0 }\n"),
+            run(
+                "fn ifa_one(mut v: Vec[String], s: String) sync { v.push(s.clone() + \"3\") }\nfn ifa_new() -> i64 sync { 0 }\n"
+            ),
             0,
             "a signature change lowers both"
         );
         assert_eq!(
-            run("fn ifa_one(x: i64) -> i64 sync { x }\nfn ifa_new() -> i64 sync { 0 }\n"),
+            run(
+                "fn ifa_one(mut v: Vec[String], s: String) sync { v.push(s) }\nfn ifa_new() -> i64 sync { 0 }\n"
+            ),
             0,
             "a change to the inferred contract lowers both"
         );
