@@ -1,0 +1,42 @@
+// A trait method whose result says `from` lowers with one named lifetime
+// shared by the parameters it names and the result (ADR-views-3 D2, D8, D14,
+// #1230): a plain `a: String` is lent as `ref String` is, a result with `from`
+// is a view with or without a written `ref`, and `from a | b` is one lifetime
+// over both, whatever the receiver.
+trait Pick {
+    fn pick(self, a: String) -> ref String from a
+    fn either(self, a: String, b: String, n: i64) -> String from a | b
+    fn first(ref mut self, a: ref String, b: String) -> String from a | b
+}
+
+struct P { n: i64 }
+
+impl Pick for P {
+    fn pick(self, a: String) -> ref String from a {
+        return a.trim()
+    }
+    fn either(self, a: String, b: String, n: i64) -> String from a | b {
+        if n > self.n {
+            return a.trim()
+        }
+        return b.trim()
+    }
+    fn first(ref mut self, a: ref String, b: String) -> String from a | b {
+        self.n += 1
+        if self.n > 1 {
+            return b.trim()
+        }
+        return a.trim()
+    }
+}
+
+fn main() {
+    let s = "  hi  "
+    let r = P { n: 1 }.pick(s)
+    println(f"[{r}]")
+    let e = P { n: 1 }.either(" ho ", " hu ", 2)
+    println(f"[{e}]")
+    let mut p = P { n: 0 }
+    let f = p.first(" one ", " two ")
+    println(f"[{f}]")
+}

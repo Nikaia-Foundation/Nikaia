@@ -3057,7 +3057,7 @@ fn rsrc_seed(unit: ref Unit, asked: ref Asked, subject: ref Type?, item: ref Ite
 // One function. The answer is stored in `known`; true where it grew.
 fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_name: ref winnow_grammar::Symbol?, at: ref Span, item: ref Item, own_buffer: fn(ref Expr) -> bool sync, mut known: collections::BTreeMap[String, ResultSrcKnown], mut out: Vec[Finding], report: bool) -> bool {
     match item {
-        Item::Fn { name, receiver, args, config, ret_type, body, .. } => {
+        Item::Fn { name, receiver, args, config, ret_type, body, ret_from, .. } => {
             if !buffered(unit, asked, ret_type) {
                 return false
             }
@@ -3159,7 +3159,7 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
                 for way in flow.ways {
                     plain_ways.push(ResultSrcWay { span: Span { start: way.span.start, end: way.span.end }, reach: rsrc_plain(way.reach) })
                 }
-                rsrc_report(asked, of, sources, declared_views, plain_ways, rsrc_plain(reach), receiver, trait_name, at, out)
+                rsrc_report(asked, of, sources, declared_views, plain_ways, rsrc_plain(reach), receiver, trait_name, !ret_from.is_empty(), at, out)
             }
             return changed
         }
@@ -3194,7 +3194,7 @@ fn rsrc_tail(body: ref Block, tail: ref collections::BTreeSet[String], mut flow:
     }
 }
 
-fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], declared_views: ref Vec[String], ways: ref Vec[ResultSrcWay], reach: ref collections::BTreeSet[String], receiver: ref Receiver?, trait_name: ref winnow_grammar::Symbol?, at: ref Span, mut out: Vec[Finding]) {
+fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], declared_views: ref Vec[String], ways: ref Vec[ResultSrcWay], reach: ref collections::BTreeSet[String], receiver: ref Receiver?, trait_name: ref winnow_grammar::Symbol?, written_from: bool, at: ref Span, mut out: Vec[Finding]) {
     for way in ways {
         for each in way.reach {
             if each.starts_with("!") {
@@ -3216,8 +3216,10 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
     // Two or more parameters reached is no refusal (ADR-views-3 D8): the
     // result points into each of them, and the ledger writes them all.
     // An `impl` of a trait hands back what the trait's declaration names
-    // (D26): the receiver, else the only view.
-    if trait_name == null {
+    // (D26): the receiver, else the only view. A result that writes `from`
+    // names its sources itself, and the body is checked against that (D8,
+    // D14, #1230: `fn pick(self, a: String) -> String from a`).
+    if trait_name == null || written_from {
         return
     }
     // The receiver, else the declaration's only view; a plain parameter the

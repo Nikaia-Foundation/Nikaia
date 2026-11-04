@@ -446,7 +446,10 @@ impl EmitState {
                 // **A value holding views of several parameters at once**
                 // (ADR-352).
                 let mut several_at: Vec[i64] = []
-                let receiver_is_shared = receiver == null || ((receiver?.is_ref ?? false) && !(receiver?.is_mut ?? false))
+                // A receiver the result does not view, by value or `ref mut`,
+                // takes no part in the lifetime (#1230: `fn pick(self, a, b) ->
+                // String from a | b`).
+                let receiver_is_shared = receiver == null || !named.contains("self") || ((receiver?.is_ref ?? false) && !(receiver?.is_mut ?? false))
                 if has_borrows && plain_signature && named.len() >= 2 && receiver_is_shared && !has_kept && source_at == null {
                     let mut wanted: Vec[String] = []
                     for each in named {

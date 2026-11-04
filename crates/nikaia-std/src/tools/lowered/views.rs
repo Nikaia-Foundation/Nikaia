@@ -2225,7 +2225,7 @@ pub(crate) fn rsrc_seed(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>, trait_name: Option<&winnow_grammar::Symbol>, at: &Span, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>, report: bool) -> bool {
     match item {
-        Item::Fn { name, receiver, args, config, ret_type, body, .. } => {
+        Item::Fn { name, receiver, args, config, ret_type, body, ret_from, .. } => {
             let name = *name;
             if !buffered(unit, asked, (ret_type).as_ref()) { return false; }
             let function = function_name(asked.names, name);
@@ -2305,7 +2305,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
                 let of = of_what((owner).as_deref(), &function);
                 let mut plain_ways: Vec<ResultSrcWay> = vec![];
                 for way in flow.ways.iter() { plain_ways.push(ResultSrcWay { span: Span { start: way.span.start, end: way.span.end }, reach: rsrc_plain(&way.reach) }); }
-                rsrc_report(asked, &of, &sources, &declared_views, &plain_ways, &rsrc_plain(&reach), (receiver).as_ref(), trait_name, at, out);
+                rsrc_report(asked, &of, &sources, &declared_views, &plain_ways, &rsrc_plain(&reach), (receiver).as_ref(), trait_name, !ret_from.is_empty(), at, out);
             }
             return changed;
         },
@@ -2334,7 +2334,7 @@ pub(crate) fn rsrc_tail(body: &Block, tail: &collections::BTreeSet<String>, flow
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String], declared_views: &[String], ways: &[ResultSrcWay], reach: &collections::BTreeSet<String>, receiver: Option<&Receiver>, trait_name: Option<&winnow_grammar::Symbol>, at: &Span, out: &mut Vec<Finding>) {
+pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String], declared_views: &[String], ways: &[ResultSrcWay], reach: &collections::BTreeSet<String>, receiver: Option<&Receiver>, trait_name: Option<&winnow_grammar::Symbol>, written_from: bool, at: &Span, out: &mut Vec<Finding>) {
     for way in ways.iter() {
         for each in way.reach.iter() {
             if each.starts_with('!') {
@@ -2349,7 +2349,7 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
     }
     let mut named: Vec<String> = vec![];
     for source in sources.iter() { if reach.contains(source) { named.push(source.to_string()); } }
-    if trait_name.is_none() { return; }
+    if trait_name.is_none() || written_from { return; }
     let mut allowed: String = String::from("");
     if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if declared_views.len() == 1 { allowed = (*nikaia_std::index::get(&declared_views, 0)).to_string(); } else if declared_views.len() > 1 { return; }
     for source in named.iter() {

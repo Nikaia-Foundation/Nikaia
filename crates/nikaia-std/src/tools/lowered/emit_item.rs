@@ -72,6 +72,15 @@ pub(crate) fn emit_item_trait_method(world: &EmitWorld<'_, '_, '_, '_>, trait_na
     None
 }
 
+pub(crate) fn emit_item_lent_view(world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> Option<Type> {
+    if (*ty.code).is_some() || ty.is_slice { return None; }
+    if ty.is_view { return Some(ty.clone()); }
+    if emit_text(world, ty.name) != "String" || !ty.generics.is_empty() || ty.is_nullable || ty.is_mut { return None; }
+    let mut viewed = ty.clone();
+    viewed.is_view = true;
+    Some(viewed)
+}
+
 pub(crate) fn emit_item_receiver(given: Option<&Receiver>) -> String {
     let receiver = match given { Some(__nikaia_value) => __nikaia_value, None => return String::from("self") };
     if receiver.is_ref && receiver.is_mut { return String::from("&mut self"); }
@@ -415,16 +424,34 @@ impl EmitState {
     pub(crate) fn emit_trait_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, trait_name: &str, method: &TraitMethod, is_sync: bool, foreign: bool) -> Result<(), Box<dyn std::error::Error>> {
         walk.floor = true;
         let key = format!("{}::{}", trait_name, emit_text(world, method.name));
+        let mut from_names: Vec<String> = vec![];
+        if !foreign {
+            for source in method.ret_from.iter() {
+                let source = *source;
+                from_names.push(emit_text(world, source).to_string());
+            }
+        }
+        let mut shares_a_lifetime = false;
         let mut params: Vec<String> = vec![];
         let mut at: i64 = 0;
         if method.receiver.is_some() {
-            params.push(emit_item_receiver(Option::as_ref(&method.receiver)));
+            let mut receiver = emit_item_receiver(Option::as_ref(&method.receiver));
+            if nikaia_std::list::contains(&from_names, &"self") && receiver.starts_with('&') {
+                receiver = format!("&'r {}", nikaia_std::index::or(receiver.strip_prefix('&'), || ""));
+                shares_a_lifetime = true;
+            }
+            params.push(receiver);
             at = 1;
         }
         for arg in method.args.iter() {
             let mut reference = if arg.mutable && !foreign { "&mut " } else { "" };
             let mut written: String = String::from("");
-            if foreign { written = self.emit_foreign_ty(world, walk, host, &arg.ty); } else if (*arg.ty.code).is_some() && !arg.mutable && !arg.ty.is_view {
+            let lent_source = if !arg.mutable && from_names.contains(&emit_text(world, arg.name)) { emit_item_lent_view(world, &arg.ty) } else { None };
+            if lent_source.is_some() {
+                let source = nikaia_std::index::or(lent_source, || arg.ty.clone().into());
+                written = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, &source, EmitLifetimes::Shared));
+                shares_a_lifetime = true;
+            } else if foreign { written = self.emit_foreign_ty(world, walk, host, &arg.ty); } else if (*arg.ty.code).is_some() && !arg.mutable && !arg.ty.is_view {
                 let held = walk.code_parameter_runs;
                 let inside = walk.in_parameter;
                 walk.code_parameter_runs = self.own_contracts.functions.contains_key(&key) && !self.emit_fn_keeps(&key, &emit_text(world, arg.name));
@@ -443,7 +470,17 @@ impl EmitState {
             at += 1;
         }
         for option in method.config.iter() { params.push(format!("{}: {}", escaped_name(&emit_text(world, option.name)), self.emit_item_ty(world, walk, host, &option.ty, EmitLifetimes::Elided))); }
-        let returned = self.emit_trait_returned(world, walk, host, (method.ret_type).as_ref(), foreign);
+        let mut returned = self.emit_trait_returned(world, walk, host, (method.ret_type).as_ref(), foreign);
+        if !from_names.is_empty() {
+            match &method.ret_type {
+                Some(ty) => {
+                    let viewed = nikaia_std::index::or(emit_item_lent_view(world, ty), || ty.clone().into());
+                    returned = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, &viewed, EmitLifetimes::Shared));
+                    shares_a_lifetime = shares_a_lifetime || returned.contains("'r");
+                },
+                None => { },
+            }
+        }
         let mut outcome = returned.to_string();
         if method.can_throw { outcome = format!("Result<{}, Box<dyn std::error::Error>>", returned); }
         let mut ret: String = String::from("");
@@ -452,6 +489,7 @@ impl EmitState {
             ret = format!(" -> impl std::future::Future<Output = {}>{}", outcome, send);
         } else if method.ret_type.is_some() || method.can_throw { ret = format!(" -> {}", outcome); }
         let mut generics: Vec<String> = vec![];
+        if shares_a_lifetime { generics.push(String::from("'r")); }
         for g in method.generics.iter() { generics.push(emit_bounded(world, g)); }
         out.push(&format!("fn {}{}({}){};\n", escaped_name(&emit_text(world, method.name)), emit_angled(&generics), params.join(", "), ret));
         walk.floor = false;

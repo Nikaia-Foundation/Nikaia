@@ -48,7 +48,13 @@ fn lends_with(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger], o
             if ty.is_a_view() {
                 return true
             }
-            return (!signature.takes_a_receiver() || (own && a_function_value(ty))) && moves(ty) && !a_ledger_copies(ty, copying) && !contract.keeps.contains(name)
+            // **A method's parameter its result is written to view is lent**
+            // (ADR-views-3 D2, D14, #1230): `fn pick(self, a: String) -> String
+            // from a` hands back a view of the caller's `a`, at the trait's
+            // entry and every impl's alike, so the entry a call goes to does
+            // not change the answer.
+            let viewed_by_the_result = contract.borrows.contains(name)
+            return (!signature.takes_a_receiver() || (own && a_function_value(ty)) || viewed_by_the_result) && moves(ty) && !a_ledger_copies(ty, copying) && !contract.keeps.contains(name)
         }
         position += 1
     }

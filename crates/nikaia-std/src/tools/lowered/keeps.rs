@@ -885,11 +885,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple65041| {
-                            let (at, arg) = __nikaia_tuple65041; let at = nikaia_std::num::value(at);
-                            by_value(arg) && (*arg.ty.code).is_none()
-                        }).map(|__nikaia_tuple65101| {
-                            let (at, arg) = __nikaia_tuple65101;
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple65110| {
+                            let (at, arg) = __nikaia_tuple65110; let at = nikaia_std::num::value(at);
+                            by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name)
+                        }).map(|__nikaia_tuple65214| {
+                            let (at, arg) = __nikaia_tuple65214;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);
@@ -946,7 +946,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let owner = view.text(name);
                     for method in methods.iter() {
                         let mut uses = no_uses();
-                        for arg in method.node.args.iter() { if by_value(arg) && (*arg.ty.code).is_none() { uses.kept.insert(view.text(arg.name)); } }
+                        for arg in method.node.args.iter() { if by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) { uses.kept.insert(view.text(arg.name)); } }
                         let called = view.text(method.node.name);
                         graph.insert(format!("{}::{}", owner, called), uses);
                     }

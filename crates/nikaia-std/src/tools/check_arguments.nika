@@ -326,6 +326,13 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 // each literal is text of its own, as in an all-literal one.
                 found_here = state.text_literal(world, literal_wants, value, kept) ?? state.tuple_literal(world, found_here, literal_wants, value) ?? found_here.clone()
             }
+            // **A text literal a method lends is the view it is** (ADR-282
+            // D5, ADR-views-3 D2, #1230): a method call walks its arguments
+            // against the parameter's type (ADR-288), which made the literal
+            // text of its own before the position was known to be lent.
+            if lent && a_text_literal_expr(value) {
+                state.facts.owned_texts.remove(id_of(value) as i64)
+            }
             // **An integer literal handed where no integer goes** (#471,
             // #703) is the `i64` it would be, and the mismatch says so.
             if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(want) {

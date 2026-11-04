@@ -1327,7 +1327,8 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
     // **An `impl`'s method keeps what its trait's method keeps**, by position
     // (ADR-277 D11), keyed by the trait method's ledger name. For a by-value
     // **data** parameter the trait's column is still the seed *by value means
-    // kept* (#1012 step 3 computes it); a `fn` parameter's is computed in the
+    // kept* (#1012 step 3 computes it), but for one the result's `from` names,
+    // which is lent (#1230); a `fn` parameter's is computed in the
     // fixpoint below (D17). Read once, from every unit, before the walk: the
     // trait may be declared after its `impl`.
     let mut trait_keeps: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
@@ -1337,7 +1338,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                 Item::Trait { name, methods, .. } => {
                     let owner = view.text(name)
                     for method in methods {
-                        let positions: Vec[i64] = method.node.args.iter().enumerate().filter(fn((at, arg)) { by_value(arg) && arg.ty.code == null }).map(fn((at, arg)) { at }).collect()
+                        let positions: Vec[i64] = method.node.args.iter().enumerate().filter(fn((at, arg)) { by_value(arg) && arg.ty.code == null && !method.node.ret_from.contains(arg.name) }).map(fn((at, arg)) { at }).collect()
                         let called = view.text(method.node.name)
                         trait_keeps.insert(f"{owner}::{called}", positions)
                     }
@@ -1409,13 +1410,14 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                 // own evidence is empty (a trait method has no body); the
                 // edges to its impls are added below. A by-value **data**
                 // parameter keeps the seed *by value means kept* until #1012
-                // step 3.
+                // step 3, except one the result's `from` names: the result is
+                // a view of it, so it is lent (ADR-views-3 D2, D14, #1230).
                 Item::Trait { name, methods, .. } => {
                     let owner = view.text(name)
                     for method in methods {
                         let mut uses = no_uses()
                         for arg in method.node.args {
-                            if by_value(arg) && arg.ty.code == null {
+                            if by_value(arg) && arg.ty.code == null && !method.node.ret_from.contains(arg.name) {
                                 uses.kept.insert(view.text(arg.name))
                             }
                         }

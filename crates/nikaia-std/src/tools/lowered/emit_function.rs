@@ -291,7 +291,7 @@ impl EmitState {
                     }
                 }
                 let mut several_at: Vec<i64> = vec![];
-                let receiver_is_shared = receiver.is_none() || nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false) && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
+                let receiver_is_shared = receiver.is_none() || !nikaia_std::list::contains(&named, &"self") || nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false) && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
                 if has_borrows && plain_signature && named.len() >= 2 && receiver_is_shared && !has_kept && source_at.is_none() {
                     let mut wanted: Vec<String> = vec![];
                     for each in named.iter() { if receiver.is_none() || each != "self" { wanted.push(each.to_string()); } }

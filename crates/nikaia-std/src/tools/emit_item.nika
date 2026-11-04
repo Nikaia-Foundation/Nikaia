@@ -97,6 +97,25 @@ fn emit_item_trait_method(world: ref EmitWorld, trait_name: ref String, wanted: 
     return null
 }
 
+/// A trait method's parameter or result that `from` names, as the view it is
+/// lowered as (ADR-views-3 D2, D14): text written plain is lent, as `ref` text
+/// is; a type already a view stays one. Null for anything else, which keeps
+/// its ordinary lowering.
+fn emit_item_lent_view(world: ref EmitWorld, ty: ref Type) -> Type? {
+    if ty.code != null || ty.is_slice {
+        return null
+    }
+    if ty.is_view {
+        return ty.clone()
+    }
+    if emit_text(world, ty.name) != "String" || !ty.generics.is_empty() || ty.is_nullable || ty.is_mut {
+        return null
+    }
+    let mut viewed = ty.clone()
+    viewed.is_view = true
+    return viewed
+}
+
 /// The receiver, as a declaration writes it.
 fn emit_item_receiver(given: ref Receiver?) -> String {
     let receiver = given ?? return "self"
@@ -556,17 +575,39 @@ impl EmitState {
     fn emit_trait_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, trait_name: ref String, method: ref TraitMethod, is_sync: bool, foreign: bool) sync throws {
         walk.floor = true
         let key = f"{trait_name}::{emit_text(world, method.name)}"
+        // **A result that says `from` shares one named lifetime with the
+        // parameters it names** (ADR-views-3 D2, D8, D14, #1230): a plain
+        // parameter is lent, so `a: String` there is `&'r str` as `ref String`
+        // is, and the result is a view of them even without a written `ref`.
+        // A union `from a | b` is one lifetime over all of them (D8).
+        let mut from_names: Vec[String] = []
+        if !foreign {
+            for source in method.ret_from {
+                from_names.push(emit_text(world, source).clone())
+            }
+        }
+        let mut shares_a_lifetime = false
         let mut params: Vec[String] = []
         let mut at = 0
         if method.receiver != null {
-            params.push(emit_item_receiver(method.receiver))
+            let mut receiver = emit_item_receiver(method.receiver)
+            if from_names.contains("self") && receiver.starts_with("&") {
+                receiver = f"&'r {receiver.strip_prefix("&") ?? ""}"
+                shares_a_lifetime = true
+            }
+            params.push(receiver)
             at = 1
         }
         for arg in method.args {
             // **`mut` lowers to `&mut T` here as it does in the impl** (ADR-094 D3).
             let mut reference = if arg.mutable && !foreign { "&mut " } else { "" }
             let mut written: String = ""
-            if foreign {
+            let lent_source = if !arg.mutable && from_names.contains(emit_text(world, arg.name)) { emit_item_lent_view(world, arg.ty) } else { null }
+            if lent_source != null {
+                let source = lent_source ?? arg.ty.clone()
+                written = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, source, EmitLifetimes::Shared))
+                shares_a_lifetime = true
+            } else if foreign {
                 written = self.emit_foreign_ty(world, walk, host, arg.ty)
             } else if arg.ty.code != null && !arg.mutable && !arg.ty.is_view {
                 // **Run is the absence of `keeps`** (ADR-277 D11, D17), read
@@ -599,7 +640,17 @@ impl EmitState {
         for option in method.config {
             params.push(f"{escaped_name(emit_text(world, option.name))}: {self.emit_item_ty(world, walk, host, option.ty, EmitLifetimes::Elided)}")
         }
-        let returned = self.emit_trait_returned(world, walk, host, method.ret_type, foreign)
+        let mut returned = self.emit_trait_returned(world, walk, host, method.ret_type, foreign)
+        if !from_names.is_empty() {
+            match method.ret_type {
+                ty => {
+                    let viewed = emit_item_lent_view(world, ty) ?? ty.clone()
+                    returned = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, viewed, EmitLifetimes::Shared))
+                    shares_a_lifetime = shares_a_lifetime || returned.contains("'r")
+                },
+                null => {},
+            }
+        }
         let mut outcome = returned.clone()
         if method.can_throw {
             outcome = f"Result<{returned}, Box<dyn std::error::Error>>"
@@ -614,6 +665,9 @@ impl EmitState {
             ret = f" -> {outcome}"
         }
         let mut generics: Vec[String] = []
+        if shares_a_lifetime {
+            generics.push("'r")
+        }
         for g in method.generics {
             generics.push(emit_bounded(world, g))
         }
