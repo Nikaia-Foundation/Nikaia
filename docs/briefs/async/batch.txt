@@ -1,1 +1,2 @@
-a6-docs-teach-async.md
+a7-async-pausing-tasks.md
+a8-async-conflicts.md
