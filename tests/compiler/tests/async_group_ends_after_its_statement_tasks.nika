@@ -6,10 +6,15 @@ fn work(n: i64) -> i64 {
 	return n
 }
 
+// Only one task of a group may write to stdout (ADR-async-5 D7, #1227).
+fn quiet(n: i64) -> i64 {
+	return n
+}
+
 fn main() {
 	let n = async {
 		async work(1)
-		async work(2)
+		async quiet(2)
 		3
 	}
 	println(f"after the group: {n}")

@@ -1,0 +1,9 @@
+error[NK2107]: Two tasks of one group change `names`.
+  --> tests/async_conflict_two_push_to_names.nika:5:2
+   |
+ 5 | 	async fn { names.push("b") }
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: The tasks of a group run at the same time, so both would write `names` at once.
+   = help: Give each task a value of its own and combine them after the group, or keep `names` in a `SharedMut` and change it through `update`.
+1 name changed from a lambda that runs on several cores

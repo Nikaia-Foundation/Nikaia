@@ -2361,6 +2361,7 @@ fn check_core_stmt_code_parameter(world: ref CheckWorld, func: ref Expr, at: i64
 }
 
 pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block) -> Ty sync {
+    let ends_group = check_async_group_ended(state, block)
     check_async_block(state, world, block)
     state.scope.push([])
     let mut tail = check_core_stmt_unit()
@@ -2399,7 +2400,27 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
         state.views_end(state.scope.len() as i64 - 1, block.stmts[count - 1].span.end as i64)
     }
     state.scope.pop()
+    if ends_group != null {
+        state.tasks_meet_on_nothing(world, block, ends_group ?? 0)
+    }
     return tail
+}
+
+/// The group a block is, read before `check_async_block` takes the mark:
+/// the `async { }` it is the body of, else the block itself where no `async
+/// { }` around it in the function holds its tasks (D9); `null` for a block
+/// whose tasks are an enclosing group's, or one with no statements.
+fn check_async_group_ended(state: ref CheckState, block: ref Block) -> i64? sync {
+    if block.stmts.len() == 0 {
+        return null
+    }
+    if state.flow.async_group_block != null {
+        return state.flow.async_group_block
+    }
+    if state.flow.async_group != null {
+        return null
+    }
+    return -1 - block.stmts[0].span.start as i64
 }
 
 /// **The wait points of the tasks one block starts** (ADR-async-5 D6, D7,

@@ -1,0 +1,7 @@
+// Two tasks of one group change `total` at once: NK2107 (ADR-async-5 D7, #1227).
+fn main() {
+	let mut total = 0
+	async fn { total += 1 }
+	async fn { total += 1 }
+	println(f"{total}")
+}

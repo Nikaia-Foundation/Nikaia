@@ -1,0 +1,5 @@
+// Two tasks of one group both write to standard output: NK2104 (ADR-async-5 D7, #1227).
+fn main() {
+	async fn { println("x") }
+	async fn { println("y") }
+}

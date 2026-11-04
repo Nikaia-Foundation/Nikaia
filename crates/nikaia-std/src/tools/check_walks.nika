@@ -69,6 +69,132 @@ fn check_walks_shared(changed_by: ref Vec[collections::BTreeSet[String]], mentio
     return null
 }
 
+/// **One task of an `async` group** (ADR-async-5 D7), for the conflicts
+/// between the tasks of the group: where it stands, the position it runs
+/// until (where it is waited for), the names bound outside it that it changes
+/// and the names it mentions, and the operations it performs, `null` where it
+/// cannot be accounted for (it is then not refused, Part III C.4).
+struct CheckWalksTask {
+    span: Span,
+    until: i64,
+    changed: collections::BTreeSet[String],
+    mentioned: collections::BTreeSet[String],
+    operations: Vec[Operation]?,
+}
+
+/// The tasks of `group` started in `block`: in its own statements, and for an
+/// `async { }` (a group's node is never negative) in the blocks nested in it
+/// too, by the group `check_async_block` recorded for each.
+fn check_walks_tasks_in(state: ref CheckState, world: ref CheckWorld, walking: ref Walking, block: ref Block, group: i64, mut out: Vec[CheckWalksTask]) {
+    for stmt in block.stmts {
+        for each in check_visit_stmt(stmt.node) {
+            match each {
+                Expr::Async(inner, _) => {
+                    let wait = state.facts.async_waits.get(id_of(each) as i64) ?? continue
+                    if wait.group == group {
+                        let task = check_walks_task(state, world, walking, id_of(each), inner) ?? continue
+                        out.push(task)
+                    }
+                },
+                else => {},
+            }
+        }
+        if group >= 0 {
+            for nested in check_visit_stmt_blocks(stmt.node) {
+                check_walks_tasks_in(state, world, walking, nested, group, out)
+            }
+        }
+    }
+}
+
+/// One task, the `async` node `id` with the expression `inner` it runs.
+fn check_walks_task(state: ref CheckState, world: ref CheckWorld, walking: ref Walking, id: u32, inner: ref Expr) -> CheckWalksTask? {
+    let at = world.here.spans.get(id) ?? return null
+    let wait = state.facts.async_waits.get(id as i64) ?? return null
+    let until: i64 = match wait.at {
+        CheckAsyncWaitAt::GroupEnd => 4611686018427387904,
+        CheckAsyncWaitAt::BeforeStatement(start) => start,
+        CheckAsyncWaitAt::Before(operation) => (world.here.spans.get(operation as u32)?.end ?? at.end) as i64,
+    }
+    let mut mentioned: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(inner, world.words, mentioned)
+    let mut changed: collections::BTreeSet[String] = collections::BTreeSet()
+    // Every task the walk reached has its entry.
+    let recorded = state.async_changed.get(id as i64) ?? return null
+    for name in recorded {
+        changed.insert(name.clone())
+    }
+    return CheckWalksTask { span: Span { start: at.start, end: at.end }, until: until, changed: changed, mentioned: mentioned, operations: check_walks_task_operations(inner, world.words, walking) }
+}
+
+/// What a task performs, one operation per statement of a run lambda or the
+/// one of its expression; `null` where a part cannot be accounted for. Each is
+/// read as an expression statement: what a task binds is its own.
+fn check_walks_task_operations(inner: ref Expr, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Vec[Operation]? {
+    let mut values: Vec[Expr] = []
+    match inner {
+        Expr::Closure { body, .. } => {
+            for stmt in body.stmts {
+                match stmt.node {
+                    Stmt::Let { value, .. } => values.push(value.clone()),
+                    Stmt::Expr(value) => values.push(value.clone()),
+                    Stmt::Assign { value, .. } => values.push(value.clone()),
+                    else => return null,
+                }
+            }
+        },
+        else => values.push(inner.clone()),
+    }
+    let mut out: Vec[Operation] = []
+    for value in values.drain() {
+        let found = accounted(Stmt::Expr(value), words, walking)
+        match found {
+            Accounted::Operation(operation) => out.push(operation.clone()),
+            Accounted::NotAnOperation => {},
+            else => return null,
+        }
+    }
+    return out
+}
+
+/// The first name two tasks meet on, where one of them changes it and the
+/// other names it: `(name, both change it)`. `null` for none.
+fn check_walks_task_shared(earlier: ref CheckWalksTask, later: ref CheckWalksTask) -> (String, bool)? {
+    for name in earlier.changed {
+        if later.changed.contains(name) {
+            return (name.clone(), true)
+        }
+    }
+    for name in earlier.changed {
+        if later.mentioned.contains(name) {
+            return (name.clone(), false)
+        }
+    }
+    for name in later.changed {
+        if earlier.mentioned.contains(name) {
+            return (name.clone(), false)
+        }
+    }
+    return null
+}
+
+/// Whether two tasks meet on a resource one of them writes, and the verdict
+/// that says so; `null` where either cannot be accounted for or they meet on
+/// nothing.
+fn check_walks_task_clash(earlier: ref CheckWalksTask, later: ref CheckWalksTask) -> Verdict? {
+    let first = earlier.operations ?? return null
+    let second = later.operations ?? return null
+    for a in first {
+        for b in second {
+            let found = verdict(a, b)
+            if !found.is_overlap() {
+                return found
+            }
+        }
+    }
+    return null
+}
+
 impl CheckState {
     /// **The branches of an `overlap` meet on nothing** (`NK2104`, ADR-292 D2):
     /// a branch that binds is refused on its own, and two that depend on each
@@ -118,6 +244,58 @@ impl CheckState {
                     // One finding per branch: a branch that meets two others has
                     // one thing wrong with it, and three messages about it is
                     // the same mistake told three times.
+                    break
+                }
+            }
+        }
+    }
+
+    /// **The tasks of one `async` group meet on nothing** (ADR-async-5 D7):
+    /// two that run at the same time - the later one starts before the
+    /// earlier one is waited for - may not share a name one of them changes
+    /// (`NK2107`) nor a resource one of them writes (`NK2104`). One finding
+    /// per task, at the later one; a task inside another is that task's.
+    pub fn tasks_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, group: i64) sync {
+        let mut count = 0
+        for (_, wait) in self.facts.async_waits {
+            if wait.group == group {
+                count += 1
+            }
+        }
+        if count < 2 {
+            return
+        }
+        let walking = Walking { own: world.own, library: world.library, into: Going::Ours }
+        let mut tasks: Vec[CheckWalksTask] = []
+        check_walks_tasks_in(self, world, walking, block, group, tasks)
+        for j in 0..<tasks.len() {
+            for i in 0..<tasks.len() {
+                if i == j {
+                    continue
+                }
+                let earlier = tasks[i]
+                let later = tasks[j]
+                // Only a task started before this one, still running where
+                // this one starts, and not holding it.
+                let before = earlier.span.start < later.span.start || (earlier.span.start == later.span.start && i < j)
+                let inside = later.span.start >= earlier.span.start && later.span.end <= earlier.span.end
+                let held = earlier.span.start >= later.span.start && earlier.span.end <= later.span.end
+                if !before || inside || held || later.span.start as i64 >= earlier.until {
+                    continue
+                }
+                let shared = check_walks_task_shared(earlier, later)
+                if shared != null {
+                    let (name, both) = shared ?? ("", false)
+                    let message = if both { f"Two tasks of one group change `{name}`." } else { f"One task of a group changes `{name}`, and another one reads it." }
+                    let note = if both { f"The tasks of a group run at the same time, so both would write `{name}` at once." } else { f"The tasks of a group run at the same time, so one would read `{name}` while the other writes it." }
+                    self.findings.push(check_refusal("NK2107", later.span, message, [note], f"Give each task a value of its own and combine them after the group, or keep `{name}` in a `SharedMut` and change it through `update`."))
+                    break
+                }
+                let clash = check_walks_task_clash(earlier, later)
+                if clash != null {
+                    let verdict = clash ?? Verdict::NotAccountedFor
+                    let why = capitalised(verdict.why())
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: later.span.clone(), code: "NK2104", message: "These two tasks can't run at the same time.", notes: [f"{why}.", "The tasks of a group run at the same time, so they can't depend on each other."], help: "If they should run in order, wait for the first before the second starts, or write them without `async`.", labels: [] })
                     break
                 }
             }

@@ -1,0 +1,12 @@
+// Tasks of one group that only read the same values run together (ADR-async-5 D7, #1227).
+
+fn size(names: ref Vec[String], total: i64) -> i64 {
+	return names.len() as i64 + total
+}
+
+fn main() {
+	let total = 2
+	let names: Vec[String] = ["a", "b"]
+	let sum = async size(names, total) + async size(names, total * 2)
+	println(f"{sum}")
+}

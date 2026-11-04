@@ -1733,6 +1733,7 @@ pub(crate) fn check_core_stmt_code_parameter(world: &CheckWorld<'_, '_, '_, '_, 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Block) -> Ty {
+    let ends_group = check_async_group_ended(&state, block);
     check_async_block(state, world, block);
     state.scope.push(vec![]);
     let mut tail = check_core_stmt_unit();
@@ -1759,7 +1760,17 @@ pub fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     state.failing_cleanups_settled();
     if count > 0 { state.views_end(state.scope.len() as i64 - 1, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(count - 1)).span.end as i64); }
     state.scope.pop();
+    if ends_group.is_some() { state.tasks_meet_on_nothing(world, block, nikaia_std::index::or(ends_group, || 0)); }
     tail
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_async_group_ended(state: &CheckState, block: &Block) -> Option<i64> {
+    if block.stmts.is_empty() { return None; }
+    if state.flow.async_group_block.is_some() { return std::convert::identity(state.flow.async_group_block); }
+    if state.flow.async_group.is_some() { return None; }
+    Some(-1 - nikaia_std::index::get(&block.stmts, 0).span.start as i64)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

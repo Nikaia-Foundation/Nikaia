@@ -361,6 +361,7 @@ pub struct CheckState {
     pub task_bindings: Vec<Vec<(String, Ty, i64)>>,
     pub changed: Vec<String>,
     pub drained: collections::BTreeSet<i64>,
+    pub async_changed: collections::BTreeMap<i64, collections::BTreeSet<String>>,
     pub said_mut: collections::BTreeSet<i64>,
     pub facts: CheckFacts,
     pub rule_results: collections::BTreeMap<String, Ty>,

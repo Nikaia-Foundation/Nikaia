@@ -33,6 +33,96 @@ pub(crate) fn check_walks_shared(changed_by: &[collections::BTreeSet<String>], m
     None
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CheckWalksTask {
+    pub(crate) span: Span,
+    pub(crate) until: i64,
+    pub(crate) changed: collections::BTreeSet<String>,
+    pub(crate) mentioned: collections::BTreeSet<String>,
+    pub(crate) operations: Option<Vec<Operation>>,
+}
+
+pub(crate) fn check_walks_tasks_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walking: &Walking<'_, '_>, block: &Block, group: i64, out: &mut Vec<CheckWalksTask>) {
+    for stmt in block.stmts.iter() {
+        for each in check_visit_stmt(&stmt.node) {
+            match each {
+                Expr::Async(inner, _) => {
+                    let inner = nikaia_std::boxed::open(inner);
+                    let wait = match state.facts.async_waits.get(&(id_of(each) as i64)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if wait.group == group {
+                        let task = match check_walks_task(state, world, walking, id_of(each), inner) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        out.push(task);
+                    }
+                },
+                _ => { },
+            }
+        }
+        if group >= 0 { for nested in check_visit_stmt_blocks(&stmt.node) { check_walks_tasks_in(state, world, walking, nested, group, out); } }
+    }
+}
+
+pub(crate) fn check_walks_task(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walking: &Walking<'_, '_>, id: u32, inner: &Expr) -> Option<CheckWalksTask> {
+    let at = match world.here.spans.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let wait = match state.facts.async_waits.get(&(id as i64)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let until: i64 = match wait.at {
+        CheckAsyncWaitAt::GroupEnd => 4611686018427387904i64,
+        CheckAsyncWaitAt::BeforeStatement(start) => start,
+        CheckAsyncWaitAt::Before(operation) => nikaia_std::index::or(world.here.spans.get(&u32::try_from(operation).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"))).map(|__nikaia_it| __nikaia_it.end), || at.end.into()) as i64,
+    };
+    let mut mentioned: collections::BTreeSet<String> = collections::BTreeSet::new();
+    names_in(inner, world.words, &mut mentioned);
+    let mut changed: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let recorded = match state.async_changed.get(&(id as i64)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    for name in recorded.iter() { changed.insert(name.to_string()); }
+    Some(CheckWalksTask { span: Span { start: at.start, end: at.end }, until, changed, mentioned, operations: check_walks_task_operations(inner, world.words, walking) })
+}
+
+pub(crate) fn check_walks_task_operations(inner: &Expr, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Option<Vec<Operation>> {
+    let mut values: Vec<Expr> = vec![];
+    match inner {
+        Expr::Closure { body, .. } => {
+            for stmt in body.stmts.iter() {
+                match &stmt.node {
+                    Stmt::Let { value, .. } => { values.push(value.clone()); },
+                    Stmt::Expr(value) => { values.push(value.clone()); },
+                    Stmt::Assign { value, .. } => { values.push(value.clone()); },
+                    _ => { return None; },
+                }
+            }
+        },
+        _ => { values.push(inner.clone()); },
+    }
+    let mut out: Vec<Operation> = vec![];
+    for value in values.into_iter() {
+        let found = accounted(&Stmt::Expr(value), words, walking);
+        match found {
+            Accounted::Operation(ref operation) => { out.push(operation.clone()); },
+            Accounted::NotAnOperation => { },
+            _ => { return None; },
+        }
+    }
+    Some(out)
+}
+
+pub(crate) fn check_walks_task_shared(earlier: &CheckWalksTask, later: &CheckWalksTask) -> Option<(String, bool)> {
+    for name in earlier.changed.iter() { if later.changed.contains(name) { return Some((name.to_string(), true)); } }
+    for name in earlier.changed.iter() { if later.mentioned.contains(name) { return Some((name.to_string(), false)); } }
+    for name in later.changed.iter() { if earlier.mentioned.contains(name) { return Some((name.to_string(), false)); } }
+    None
+}
+
+pub(crate) fn check_walks_task_clash(earlier: &CheckWalksTask, later: &CheckWalksTask) -> Option<Verdict> {
+    let first = match earlier.operations.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let second = match later.operations.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    for a in first.iter() {
+        for b in second.iter() {
+            let found = verdict(a, b);
+            if !found.is_overlap() { return Some(found); }
+        }
+    }
+    None
+}
+
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -77,6 +167,45 @@ impl CheckState {
                     let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
                     let why = capitalised(&verdict.why());
                     self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![format!("{}.", why), String::from("`overlap` runs its branches at once, so they can't depend on each other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![] });
+                    break;
+                }
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn tasks_meet_on_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, group: i64) {
+        let mut count = 0;
+        for (_, wait) in self.facts.async_waits.iter() {
+            let wait = *wait;
+            if wait.group == group { count += 1; }
+        }
+        if count < 2 { return; }
+        let walking = Walking { own: world.own, library: world.library, into: Going::Ours };
+        let mut tasks: Vec<CheckWalksTask> = vec![];
+        check_walks_tasks_in(self, world, &walking, block, group, &mut tasks);
+        for j in 0..tasks.len() as i64 {
+            for i in 0..tasks.len() as i64 {
+                if i == j { continue; }
+                let earlier = nikaia_std::index::get(&tasks, (i) as usize);
+                let later = nikaia_std::index::get(&tasks, (j) as usize);
+                let before = earlier.span.start < later.span.start || earlier.span.start == later.span.start && i < j;
+                let inside = later.span.start >= earlier.span.start && later.span.end <= earlier.span.end;
+                let held = earlier.span.start >= later.span.start && earlier.span.end <= later.span.end;
+                if !before || inside || held || (later.span.start as i64) >= earlier.until { continue; }
+                let shared = check_walks_task_shared(&earlier, &later);
+                if shared.is_some() {
+                    let (name, both) = nikaia_std::index::or(shared, || ("".into(), false.into()));
+                    let message = if both { format!("Two tasks of one group change `{}`.", name) } else { format!("One task of a group changes `{}`, and another one reads it.", name) };
+                    let note = if both { format!("The tasks of a group run at the same time, so both would write `{}` at once.", name) } else { format!("The tasks of a group run at the same time, so one would read `{}` while the other writes it.", name) };
+                    self.findings.push(check_refusal("NK2107", &later.span, message, vec![note], Some(format!("Give each task a value of its own and combine them after the group, or keep `{}` in a `SharedMut` and change it through `update`.", name))));
+                    break;
+                }
+                let clash = check_walks_task_clash(&earlier, &later);
+                if clash.is_some() {
+                    let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
+                    let why = capitalised(&verdict.why());
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: later.span.clone(), code: String::from("NK2104"), message: String::from("These two tasks can't run at the same time."), notes: vec![format!("{}.", why), String::from("The tasks of a group run at the same time, so they can't depend on each other.")], help: Some(String::from("If they should run in order, wait for the first before the second starts, or write them without `async`.")), labels: vec![] });
                     break;
                 }
             }

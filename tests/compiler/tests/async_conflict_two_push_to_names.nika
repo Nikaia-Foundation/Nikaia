@@ -1,0 +1,7 @@
+// Two tasks of one group push to `names` at once: NK2107 (ADR-async-5 D7, #1227).
+fn main() {
+	let mut names: Vec[String] = []
+	async fn { names.push("a") }
+	async fn { names.push("b") }
+	println(f"{names.len()}")
+}

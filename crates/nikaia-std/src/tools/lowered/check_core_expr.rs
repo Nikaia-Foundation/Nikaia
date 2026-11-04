@@ -235,6 +235,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             state.flow.barrier = Some(String::from("task"));
             state.flow.async_depth += 1;
             state.flow.async_started += 1;
+            let changed_from = state.changed.len() as i64;
             let mut run = false;
             match inner {
                 Expr::Closure { params, .. } => {
@@ -260,6 +261,14 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             state.flow.async_depth -= 1;
             state.flow.loops = loops;
             state.flow.barrier = barrier;
+            let mut outer: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut at = changed_from;
+            while at < state.changed.len() as i64 {
+                let name = (*nikaia_std::index::get(&state.changed, nikaia_std::index::at(at))).to_string();
+                if state.binding(&name).is_some() { outer.insert(name); }
+                at += 1;
+            }
+            state.async_changed.insert(id_of(expr) as i64, outer);
             if run {
                 let tail = nikaia_std::index::or(match state.flow.lambda_tail.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),

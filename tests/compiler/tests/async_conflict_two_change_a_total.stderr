@@ -1,0 +1,9 @@
+error[NK2107]: Two tasks of one group change `total`.
+  --> tests/async_conflict_two_change_a_total.nika:5:2
+   |
+ 5 | 	async fn { total += 1 }
+   |  ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: The tasks of a group run at the same time, so both would write `total` at once.
+   = help: Give each task a value of its own and combine them after the group, or keep `total` in a `SharedMut` and change it through `update`.
+1 name changed from a lambda that runs on several cores
