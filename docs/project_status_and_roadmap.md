@@ -109,13 +109,22 @@ Some errors still arrive in `rustc`'s words (class 3 above), pointed at your
 The order is set by the score in [`priorities.md`](priorities.md). Current
 direction, in short:
 
-* **Self-hosting first** (owner, 2026-10-27): until the compiler holds no logic
-  in Rust, every round moves code into Nikaia, largest files first. The road and
-  what is left: [`selfhosting-plan.md`](selfhosting-plan.md) and the issues.
+* **The specification first** (owner, 2026-11-03,
+  [#1214](https://github.com/Nikaia-Foundation/Nikaia/issues/1214)): the
+  compiler is brought to what the specification says before self-hosting goes
+  on. A specification is only a claim until a compiler does what it says; with
+  the two close together every rule can be tried in a program, and the concepts
+  are shown to work rather than described. Built first: views as the
+  specification states them
+  ([#1213](https://github.com/Nikaia-Foundation/Nikaia/issues/1213)) and the
+  task model ([#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983)):
+  parser, checker, runtime and lowering of `async`, then `overlap`,
+  `task::scope` and `spawn` are removed.
+* **Self-hosting after that** (owner, 2026-10-27): until the compiler holds no
+  logic in Rust, every round moves code into Nikaia, largest files first. The
+  road and what is left: [`bootstrap.md`](bootstrap.md),
+  [`selfhosting-plan.md`](selfhosting-plan.md) and the issues.
 * **Compiler defects** a move or a package runs into are fixed as they are met.
-* **The task model** ([#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983)):
-  parser, checker, runtime and lowering of `async`, then `overlap`, `task::scope`
-  and `spawn` are removed.
 * **The `yaml` package**, also as a drop-in Rust crate, with streaming input
   ([#928](https://github.com/Nikaia-Foundation/Nikaia/issues/928)).
 * **Later, decided and not scheduled**: `std::db` and the query DSL, WebAssembly,
