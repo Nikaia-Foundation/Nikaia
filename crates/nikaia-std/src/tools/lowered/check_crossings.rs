@@ -7,6 +7,7 @@ pub enum CheckCrossingsPath {
     Gone,
     Left,
     Falls,
+    Live,
 }
 
 pub(crate) fn check_crossings_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmt: &Stmt) -> bool {
@@ -42,7 +43,134 @@ pub(crate) fn check_crossings_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
     CheckCrossingsPath::Falls
 }
 
+pub(crate) fn check_crossings_keeping_join(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall { receiver, method, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if format!("{}", world.words.resolve(method)) != "join" { return false; }
+            let on: bool = match receiver {
+                Expr::Variable(word, _) => { let word = *word; format!("{}", world.words.resolve(word)) == name },
+                _ => false,
+            };
+            if !on { return false; }
+            let mut within = false;
+            let mut cancels = false;
+            for option in config.iter() {
+                let option_name: String = format!("{}", world.words.resolve(option.name));
+                if option_name == "within" { within = true; }
+                if option_name == "on_timeout" { cancels = check_crossings_names_cancel(world, &option.value); }
+            }
+            return within && !cancels;
+        },
+        _ => return false,
+    }
+}
+
+pub(crate) fn check_crossings_names_cancel(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::Path(parts, _) => {
+            let count = parts.len() as i64;
+            if count < 2 { return false; }
+            return format!("{}", world.words.resolve(*nikaia_std::index::get(&parts, nikaia_std::index::at(count - 1)))) == "Cancel" && format!("{}", world.words.resolve(*nikaia_std::index::get(&parts, nikaia_std::index::at(count - 2)))) == "OnTimeout";
+        },
+        _ => return false,
+    }
+}
+
+pub(crate) fn check_crossings_timed_out(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, in_loop: bool) -> Option<CheckCrossingsPath> {
+    match expr {
+        Expr::TryCatch { expr: tried, handler, .. } => {
+            let tried = nikaia_std::boxed::open(tried);
+            if !check_crossings_keeping_join(world, name, tried) { return None; }
+            let flow = check_crossings_handler_path(world, name, &handler.stmts, in_loop);
+            if flow == CheckCrossingsPath::Taken || flow == CheckCrossingsPath::Gone { return Some(CheckCrossingsPath::Taken); }
+            return Some(CheckCrossingsPath::Live);
+        },
+        Expr::Try(tried, _) => {
+            let tried = nikaia_std::boxed::open(tried);
+            if check_crossings_keeping_join(world, name, tried) { return Some(CheckCrossingsPath::Live); }
+            return None;
+        },
+        _ => {
+            if check_crossings_keeping_join(world, name, expr) { return Some(CheckCrossingsPath::Live); }
+            return None;
+        },
+    }
+}
+
+pub(crate) fn check_crossings_handler_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], in_loop: bool) -> CheckCrossingsPath {
+    for stmt in stmts.iter() {
+        let mut flow = CheckCrossingsPath::Falls;
+        let mut matched = false;
+        match &stmt.node {
+            Stmt::Expr(e) => {
+                let arms: Option<CheckCrossingsPath> = check_crossings_error_arms(world, name, e, in_loop);
+                if arms.is_some() {
+                    flow = nikaia_std::index::or(arms, || CheckCrossingsPath::Falls);
+                    matched = true;
+                }
+            },
+            Stmt::Let { value, .. } => {
+                let arms: Option<CheckCrossingsPath> = check_crossings_error_arms(world, name, value, in_loop);
+                if arms.is_some() {
+                    flow = nikaia_std::index::or(arms, || CheckCrossingsPath::Falls);
+                    matched = true;
+                }
+            },
+            _ => { },
+        }
+        if !matched { flow = check_crossings_step(world, name, &stmt.node, in_loop); }
+        if flow != CheckCrossingsPath::Falls { return flow; }
+    }
+    CheckCrossingsPath::Falls
+}
+
+pub(crate) fn check_crossings_error_arms(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, in_loop: bool) -> Option<CheckCrossingsPath> {
+    match expr {
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            let on_error: bool = match value {
+                Expr::Variable(word, _) => { let word = *word; format!("{}", world.words.resolve(word)) == "error" },
+                _ => false,
+            };
+            if !on_error { return None; }
+            let mut branches: Vec<CheckCrossingsPath> = vec![];
+            let mut whole = false;
+            for arm in arms.iter() {
+                if !whole && check_crossings_reaches_timed_out(world, &arm.pattern) {
+                    branches.push(check_crossings_arm(world, name, arm, in_loop));
+                    if arm.guard.is_none() { whole = true; }
+                }
+            }
+            return Some(check_crossings_joined(&branches, !whole));
+        },
+        _ => return None,
+    }
+}
+
+pub(crate) fn check_crossings_reaches_timed_out(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Otherwise => return true,
+        MatchPattern::Path(parts) => {
+            let count = parts.len() as i64;
+            if count == 1 { return true; }
+            return format!("{}", world.words.resolve(*nikaia_std::index::get(&parts, nikaia_std::index::at(count - 1)))) == "TimedOut";
+        },
+        MatchPattern::Or(choices) => {
+            for choice in choices.iter() { if check_crossings_reaches_timed_out(world, choice) { return true; } }
+            return false;
+        },
+        _ => return false,
+    }
+}
+
 pub(crate) fn check_crossings_step(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmt: &Stmt, in_loop: bool) -> CheckCrossingsPath {
+    let timed_out: Option<CheckCrossingsPath> = match stmt {
+        Stmt::Expr(e) => check_crossings_timed_out(world, name, e, in_loop),
+        Stmt::Let { value, .. } => check_crossings_timed_out(world, name, value, in_loop),
+        _ => None,
+    };
+    if timed_out.is_some() { return nikaia_std::index::or(timed_out, || CheckCrossingsPath::Left); }
     match stmt {
         Stmt::Return(value) => { return check_crossings_returned(world, name, (value).as_ref()); },
         Stmt::Break | Stmt::Continue if !in_loop => { return CheckCrossingsPath::Left; },
@@ -64,7 +192,7 @@ pub(crate) fn check_crossings_step(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 
 pub(crate) fn check_crossings_loop_body(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, body: &Block) -> CheckCrossingsPath {
     let flow = check_crossings_path(world, name, &body.stmts, 0, true);
-    if flow == CheckCrossingsPath::Left { return CheckCrossingsPath::Left; }
+    if flow == CheckCrossingsPath::Left || flow == CheckCrossingsPath::Live { return flow; }
     if flow == CheckCrossingsPath::Gone { return CheckCrossingsPath::Taken; }
     for stmt in body.stmts.iter() { if check_crossings_named(world, name, &stmt.node) { return CheckCrossingsPath::Taken; } }
     CheckCrossingsPath::Falls
@@ -150,7 +278,7 @@ pub fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &C
         if spawned.is_some() {
             let name: String = nikaia_std::index::or(spawned, || "".into());
             let flow = check_crossings_path(world, &name, &block.stmts, at, false);
-            if flow != CheckCrossingsPath::Taken && flow != CheckCrossingsPath::Gone { state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: String::from("NK2109"), message: format!("The task handle `{}` is never joined, cancelled or detached.", name), notes: vec![String::from("An error of a task nobody waits for would be lost, so a bound handle is used up before its scope ends.")], help: Some(format!("Write `{}.join()` to wait for the task, or `{}.detach()` if nobody waits for it.", name, name)), labels: vec![] }); }
+            if flow == CheckCrossingsPath::Live { state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: String::from("NK2109"), message: format!("The task handle `{}` is still live where its `join(within:)` timed out.", name), notes: vec![String::from("Without `on_timeout: task::OnTimeout::Cancel` the task keeps running when the time runs out, and the handle is taken only where the join succeeds; the handler of `task::TimedOut` must take it on every path.")], help: Some(format!("In the handler, write `{}.join()` to wait on, or `{}.detach()` if nobody waits for it; or pass `on_timeout: task::OnTimeout::Cancel`.", name, name)), labels: vec![] }); } else if flow != CheckCrossingsPath::Taken && flow != CheckCrossingsPath::Gone { state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: String::from("NK2109"), message: format!("The task handle `{}` is never joined, cancelled or detached.", name), notes: vec![String::from("An error of a task nobody waits for would be lost, so a bound handle is used up before its scope ends.")], help: Some(format!("Write `{}.join()` to wait for the task, or `{}.detach()` if nobody waits for it.", name, name)), labels: vec![] }); }
         }
     }
 }

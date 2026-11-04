@@ -121,6 +121,18 @@ pub(crate) fn check_core_method_witness(world: &CheckWorld<'_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn check_core_method_on_timeout(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg], witness: i64) -> i64 {
+    if method != "join" || witness < 0 { return -1; }
+    let mut at: i64 = 0;
+    while at < config.len() as i64 {
+        if world.words.resolve(nikaia_std::index::get(&config, (at) as usize).name) == "on_timeout" { return at; }
+        at += 1;
+    }
+    -1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_method_literal(state: &mut CheckState, receiver: &Expr, on: Ty) -> Ty {
     let unknown = matches!(on, Ty::Unknown);
     if !unknown { return on; }
@@ -690,9 +702,10 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         check_core_method_map_opened(state, &opened);
     }
     let witness = check_core_method_witness(world, &name, config);
+    let on_timeout = check_core_method_on_timeout(world, &name, config, witness);
     let mut at: i64 = 0;
     while at < config.len() as i64 {
-        if at != witness { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(at)).value, span); }
+        if at != witness && at != on_timeout { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(at)).value, span); }
         at += 1;
     }
     let entered: Option<String> = state.grammar_entry(world, receiver, method);
@@ -811,6 +824,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     let within = witness >= 0 && check_core_method_task_handle(&on) && name == "join";
     let door = witness >= 0 && locked_content_of(&on).is_some() && name == "set";
     if witness >= 0 && !within && !door { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+    if on_timeout >= 0 && !within { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(on_timeout)).value, span); }
     if door {
         state.the_witness_takes_no_reference(&nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span);
         state.facts.witnessed_sets.insert(span.start as i64);
@@ -821,6 +835,10 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     if within {
         let mut given: Vec<Expr> = args.to_owned();
         given.push(nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value.clone());
+        if on_timeout >= 0 {
+            given.push(nikaia_std::index::get(&config, nikaia_std::index::at(on_timeout)).value.clone());
+            return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "join(within, on_timeout)", span);
+        }
         return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "join(within)", span);
     }
     check_core_method_called(state, world, host, expr, on, receiver, method, args, &name, span)

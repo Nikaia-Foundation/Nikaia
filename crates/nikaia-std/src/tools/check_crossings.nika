@@ -21,6 +21,9 @@ pub enum CheckCrossingsPath {
     Left,
     /// The path goes on to the next statement.
     Falls,
+    /// A `join(within:)` timed out and the path left with the handle still
+    /// live (ADR-async-5 D17).
+    Live,
 }
 
 /// Whether `name` is mentioned in `stmt`.
@@ -70,8 +73,181 @@ fn check_crossings_path(world: ref CheckWorld, name: ref String, stmts: ref Vec[
     return CheckCrossingsPath::Falls
 }
 
+/// **`name.join(within: d)` that keeps the task on time-out**
+/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D17): a
+/// `join` with `within:` and without `on_timeout: task::OnTimeout::Cancel`
+/// written, called on `name` itself.
+fn check_crossings_keeping_join(world: ref CheckWorld, name: ref String, expr: ref Expr) -> bool {
+    match expr {
+        Expr::MethodCall { receiver, method, config, .. } => {
+            if f"{world.words.resolve(method)}" != "join" {
+                return false
+            }
+            let on: bool = match receiver {
+                Expr::Variable(word, _) => f"{world.words.resolve(word)}" == name,
+                else => false,
+            }
+            if !on {
+                return false
+            }
+            let mut within = false
+            let mut cancels = false
+            for option in config {
+                let option_name: String = f"{world.words.resolve(option.name)}"
+                if option_name == "within" {
+                    within = true
+                }
+                if option_name == "on_timeout" {
+                    cancels = check_crossings_names_cancel(world, option.value)
+                }
+            }
+            return within && !cancels
+        }
+        else => return false,
+    }
+}
+
+/// Whether an `on_timeout:` value is written as `task::OnTimeout::Cancel`.
+fn check_crossings_names_cancel(world: ref CheckWorld, value: ref Expr) -> bool {
+    match value {
+        Expr::Path(parts, _) => {
+            let count = parts.len() as i64
+            if count < 2 {
+                return false
+            }
+            return f"{world.words.resolve(parts[count - 1])}" == "Cancel" && f"{world.words.resolve(parts[count - 2])}" == "OnTimeout"
+        }
+        else => return false,
+    }
+}
+
+/// **The path where a keeping `join(within:)` threw `task::TimedOut`**
+/// (ADR-async-5 D17, `NK2109`): the success path takes the handle, the
+/// time-out path leaves it live, so the handler of a `catch` directly around
+/// the join must take it on every path out; with no such `catch` the error
+/// leaves the scope with the handle. Null where `expr` is no such join.
+fn check_crossings_timed_out(world: ref CheckWorld, name: ref String, expr: ref Expr, in_loop: bool) -> CheckCrossingsPath? {
+    match expr {
+        Expr::TryCatch { expr: tried, handler, .. } => {
+            if !check_crossings_keeping_join(world, name, tried) {
+                return null
+            }
+            let flow = check_crossings_handler_path(world, name, handler.stmts, in_loop)
+            if flow == CheckCrossingsPath::Taken || flow == CheckCrossingsPath::Gone {
+                return CheckCrossingsPath::Taken
+            }
+            return CheckCrossingsPath::Live
+        }
+        Expr::Try(tried, _) => {
+            if check_crossings_keeping_join(world, name, tried) {
+                return CheckCrossingsPath::Live
+            }
+            return null
+        }
+        else => {
+            if check_crossings_keeping_join(world, name, expr) {
+                return CheckCrossingsPath::Live
+            }
+            return null
+        }
+    }
+}
+
+/// The statements of a handler on the time-out path: a `match error` there
+/// runs only the arms `task::TimedOut` can reach.
+fn check_crossings_handler_path(world: ref CheckWorld, name: ref String, stmts: ref Vec[Spanned[Stmt]], in_loop: bool) -> CheckCrossingsPath {
+    for stmt in stmts {
+        let mut flow = CheckCrossingsPath::Falls
+        let mut matched = false
+        match stmt.node {
+            Stmt::Expr(e) => {
+                let arms: CheckCrossingsPath? = check_crossings_error_arms(world, name, e, in_loop)
+                if arms != null {
+                    flow = arms ?? CheckCrossingsPath::Falls
+                    matched = true
+                }
+            }
+            Stmt::Let { value, .. } => {
+                let arms: CheckCrossingsPath? = check_crossings_error_arms(world, name, value, in_loop)
+                if arms != null {
+                    flow = arms ?? CheckCrossingsPath::Falls
+                    matched = true
+                }
+            }
+            else => {}
+        }
+        if !matched {
+            flow = check_crossings_step(world, name, stmt.node, in_loop)
+        }
+        if flow != CheckCrossingsPath::Falls {
+            return flow
+        }
+    }
+    return CheckCrossingsPath::Falls
+}
+
+/// A `match error`: its arms that `task::TimedOut` can reach, in order, up to
+/// the first that takes it whatever it is, joined. Null for anything else.
+fn check_crossings_error_arms(world: ref CheckWorld, name: ref String, expr: ref Expr, in_loop: bool) -> CheckCrossingsPath? {
+    match expr {
+        Expr::Match { value, arms, .. } => {
+            let on_error: bool = match value {
+                Expr::Variable(word, _) => f"{world.words.resolve(word)}" == "error",
+                else => false,
+            }
+            if !on_error {
+                return null
+            }
+            let mut branches: Vec[CheckCrossingsPath] = []
+            let mut whole = false
+            for arm in arms {
+                if !whole && check_crossings_reaches_timed_out(world, arm.pattern) {
+                    branches.push(check_crossings_arm(world, name, arm, in_loop))
+                    if arm.guard == null {
+                        whole = true
+                    }
+                }
+            }
+            return check_crossings_joined(branches, !whole)
+        }
+        else => return null,
+    }
+}
+
+/// Whether an arm's pattern can match `task::TimedOut`: `else`, a binding, a
+/// path ending in `TimedOut`, or a choice holding one.
+fn check_crossings_reaches_timed_out(world: ref CheckWorld, pattern: ref MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Otherwise => return true,
+        MatchPattern::Path(parts) => {
+            let count = parts.len() as i64
+            if count == 1 {
+                return true
+            }
+            return f"{world.words.resolve(parts[count - 1])}" == "TimedOut"
+        }
+        MatchPattern::Or(choices) => {
+            for choice in choices {
+                if check_crossings_reaches_timed_out(world, choice) {
+                    return true
+                }
+            }
+            return false
+        }
+        else => return false,
+    }
+}
+
 /// One statement of `check_crossings_path`.
 fn check_crossings_step(world: ref CheckWorld, name: ref String, stmt: ref Stmt, in_loop: bool) -> CheckCrossingsPath {
+    let timed_out: CheckCrossingsPath? = match stmt {
+        Stmt::Expr(e) => check_crossings_timed_out(world, name, e, in_loop),
+        Stmt::Let { value, .. } => check_crossings_timed_out(world, name, value, in_loop),
+        else => null,
+    }
+    if timed_out != null {
+        return timed_out ?? CheckCrossingsPath::Left
+    }
     match stmt {
         Stmt::Return(value) => return check_crossings_returned(world, name, value),
         Stmt::Break | Stmt::Continue if !in_loop => return CheckCrossingsPath::Left,
@@ -101,8 +277,8 @@ fn check_crossings_step(world: ref CheckWorld, name: ref String, stmt: ref Stmt,
 /// before any mention leaves it.
 fn check_crossings_loop_body(world: ref CheckWorld, name: ref String, body: ref Block) -> CheckCrossingsPath {
     let flow = check_crossings_path(world, name, body.stmts, 0, true)
-    if flow == CheckCrossingsPath::Left {
-        return CheckCrossingsPath::Left
+    if flow == CheckCrossingsPath::Left || flow == CheckCrossingsPath::Live {
+        return flow
     }
     if flow == CheckCrossingsPath::Gone {
         return CheckCrossingsPath::Taken
@@ -232,7 +408,9 @@ pub fn check_crossings_a_bound_handle_is_taken(mut state: CheckState, world: ref
         if spawned != null {
             let name: String = spawned ?? ""
             let flow = check_crossings_path(world, name, block.stmts, at, false)
-            if flow != CheckCrossingsPath::Taken && flow != CheckCrossingsPath::Gone {
+            if flow == CheckCrossingsPath::Live {
+                state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: "NK2109", message: f"The task handle `{name}` is still live where its `join(within:)` timed out.", notes: ["Without `on_timeout: task::OnTimeout::Cancel` the task keeps running when the time runs out, and the handle is taken only where the join succeeds; the handler of `task::TimedOut` must take it on every path."], help: f"In the handler, write `{name}.join()` to wait on, or `{name}.detach()` if nobody waits for it; or pass `on_timeout: task::OnTimeout::Cancel`.", labels: [] })
+            } else if flow != CheckCrossingsPath::Taken && flow != CheckCrossingsPath::Gone {
                 state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: "NK2109", message: f"The task handle `{name}` is never joined, cancelled or detached.", notes: ["An error of a task nobody waits for would be lost, so a bound handle is used up before its scope ends."], help: f"Write `{name}.join()` to wait for the task, or `{name}.detach()` if nobody waits for it.", labels: [] })
             }
         }

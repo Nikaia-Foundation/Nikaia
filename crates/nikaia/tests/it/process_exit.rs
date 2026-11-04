@@ -336,11 +336,12 @@ fn a_typed_error_crosses_the_pool() {
     }
 }
 
-/// ADR-346 D4: `join(within: d)` hands the value back in time, and throws
+/// ADR-346 D4, ADR-async-5 D17: `join(within: d, on_timeout:
+/// task::OnTimeout::Cancel)` hands the value back in time, and throws
 /// `task::TimedOut` (the task cancelled) once `d` ran out.
 #[test]
 fn join_within_times_out() {
-    let source = "use std::time\n\nfn slow() -> i64 {\n    time::sleep(5.seconds())\n    return 1\n}\n\nfn quick() -> i64 {\n    return 2\n}\n\nfn main() throws {\n    let a = spawn fn { quick() }\n    let x = a.join(within: 2.seconds())\n    let b = spawn fn { slow() }\n    let y = b.join(within: 10.millis()) catch {\n        match error {\n            task::TimedOut => 9,\n            else => 0,\n        }\n    }\n    println(f\"{x} {y}\")\n}\n";
+    let source = "use std::time\n\nfn slow() -> i64 {\n    time::sleep(5.seconds())\n    return 1\n}\n\nfn quick() -> i64 {\n    return 2\n}\n\nfn main() throws {\n    let a = spawn fn { quick() }\n    let x = a.join(within: 2.seconds(), on_timeout: task::OnTimeout::Cancel)\n    let b = spawn fn { slow() }\n    let y = b.join(within: 10.millis(), on_timeout: task::OnTimeout::Cancel) catch {\n        match error {\n            task::TimedOut => 9,\n            else => 0,\n        }\n    }\n    println(f\"{x} {y}\")\n}\n";
     let (out, err, code) = ran("spawn-join-within", source, Build::default());
     assert_eq!(code, Some(0), "{err}");
     assert_eq!(out.trim(), "2 9");

@@ -168,6 +168,22 @@ fn check_core_method_witness(world: ref CheckWorld, method: ref String, config: 
     return -1
 }
 
+/// Where `join`'s `on_timeout:` stands among the options, or -1: only beside
+/// a `within:` (ADR-async-5 D17).
+pub fn check_core_method_on_timeout(world: ref CheckWorld, method: ref String, config: ref Vec[ConfigArg], witness: i64) -> i64 sync {
+    if method != "join" || witness < 0 {
+        return -1
+    }
+    let mut at = 0
+    while at < config.len() as i64 {
+        if world.words.resolve(config[at].name) == "on_timeout" {
+            return at
+        }
+        at += 1
+    }
+    return -1
+}
+
 /// **A number written as a receiver takes the first type that holds it**
 /// (Part I 2.4, #417), written on the literal.
 fn check_core_method_literal(mut state: CheckState, receiver: ref Expr, on: Ty) -> Ty sync {
@@ -934,10 +950,14 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // `join(within: d)` is `TaskHandle::join(within)` the same way (ADR-346
     // D4).
     let witness = check_core_method_witness(world, name, config)
+    // **`on_timeout:` goes with the witness of `join`** (ADR-async-5 D17):
+    // typed as `join(within, on_timeout)`'s argument once the receiver is a
+    // `TaskHandle`, walked as any option otherwise.
+    let on_timeout = check_core_method_on_timeout(world, name, config, witness)
     // ADR-296 D5: a DSL's deferred parameters are walked like any other.
     let mut at = 0
     while at < config.len() as i64 {
-        if at != witness {
+        if at != witness && at != on_timeout {
             check_core_expr(state, world, host, config[at].value, span)
         }
         at += 1
@@ -1120,6 +1140,9 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
         // Not a lock after all, so it was an option like any other.
         check_core_expr(state, world, host, config[witness].value, span)
     }
+    if on_timeout >= 0 && !within {
+        check_core_expr(state, world, host, config[on_timeout].value, span)
+    }
     if door {
         state.the_witness_takes_no_reference(config[witness].value, span)
         state.facts.witnessed_sets.insert(span.start as i64)
@@ -1130,6 +1153,10 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     if within {
         let mut given: Vec[Expr] = args.clone()
         given.push(config[witness].value.clone())
+        if on_timeout >= 0 {
+            given.push(config[on_timeout].value.clone())
+            return check_core_method_called(state, world, host, expr, on, receiver, method, given, "join(within, on_timeout)", span)
+        }
         return check_core_method_called(state, world, host, expr, on, receiver, method, given, "join(within)", span)
     }
     return check_core_method_called(state, world, host, expr, on, receiver, method, args, name, span)

@@ -1024,6 +1024,8 @@ pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     let within = witness >= 0 && check_core_call_on_task_handle(&inner) && name == "join";
     let door = witness >= 0 && locked_content_of(&inner).is_some() && name == "set";
     if witness >= 0 && !within && !door { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+    let timeout_at = check_core_method_on_timeout(world, &name, config, witness);
+    if timeout_at >= 0 && !within { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(timeout_at)).value, span); }
     let mut given: Vec<Expr> = args.to_owned();
     let mut written: String = name.to_string();
     if door {
@@ -1034,6 +1036,10 @@ pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     } else if within {
         given.push(nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value.clone());
         written = String::from("join(within)");
+        if timeout_at >= 0 {
+            given.push(nikaia_std::index::get(&config, nikaia_std::index::at(timeout_at)).value.clone());
+            written = String::from("join(within, on_timeout)");
+        }
     }
     let mut candidates = 0;
     let mut all_read = true;

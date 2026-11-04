@@ -1,0 +1,10 @@
+// A keeping `join(within:)` with no `catch` around it lets `task::TimedOut`
+// leave with the handle still live (ADR-async-5 D17): `NK2109`.
+
+use std::time
+
+fn main() throws {
+	let h = async(detached) fn { 1 }
+	let v = h.join(within: 1.seconds())
+	println(f"{v}")
+}

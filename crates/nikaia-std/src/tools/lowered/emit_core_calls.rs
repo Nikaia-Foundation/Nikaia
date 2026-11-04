@@ -845,7 +845,12 @@ impl EmitState {
         if !witness.is_empty() {
             out.push(", &");
             self.emit_core_postfix_base(world, walk, out, host, nikaia_std::index::get(&witness, 0), depth, flow, scope)?;
-        } else if !limit.is_empty() { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&limit, 0), depth, flow, scope)?; } else {
+        } else if !limit.is_empty() {
+            self.emit_expr(world, walk, out, host, nikaia_std::index::get(&limit, 0), depth, flow, scope)?;
+            let on_timeout = emit_call_option_named(world, config, "on_timeout");
+            out.push(", ");
+            if !on_timeout.is_empty() { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&on_timeout, 0), depth, flow, scope)?; } else { out.push("nikaia_std::task::OnTimeout::Keep"); }
+        } else {
             self.emit_core_dsl_parameters(world, walk, out, host, &name, args.len() as i64, config, depth, flow, scope)?;
             self.emit_core_method_options(world, walk, out, host, method, on_node, args.len() as i64, config, depth, flow, scope)?;
         }
@@ -1052,8 +1057,8 @@ pub(crate) fn emit_pure_place(expr: &Expr) -> bool {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple77691| {
-        let (i, word) = __nikaia_tuple77691;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple78208| {
+        let (i, word) = __nikaia_tuple78208;
         format!("__nikaia_tuple.{}.{}()", i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

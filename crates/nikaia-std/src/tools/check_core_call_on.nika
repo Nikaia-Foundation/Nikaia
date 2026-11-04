@@ -1356,6 +1356,10 @@ pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref Ch
     if witness >= 0 && !within && !door {
         check_core_expr(state, world, host, config[witness].value, span)
     }
+    let timeout_at = check_core_method_on_timeout(world, name, config, witness)
+    if timeout_at >= 0 && !within {
+        check_core_expr(state, world, host, config[timeout_at].value, span)
+    }
     let mut given: Vec[Expr] = args.clone()
     let mut written: String = name.clone()
     if door {
@@ -1366,6 +1370,10 @@ pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref Ch
     } else if within {
         given.push(config[witness].value.clone())
         written = "join(within)"
+        if timeout_at >= 0 {
+            given.push(config[timeout_at].value.clone())
+            written = "join(within, on_timeout)"
+        }
     }
     // **The receiver is lent to the call where the call changes nothing**
     // (ADR-278 D2, D16, D3): asked of every candidate for the name.

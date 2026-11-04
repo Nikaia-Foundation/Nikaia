@@ -1,0 +1,9 @@
+error[NK2109]: The task handle `h` is still live where its `join(within:)` timed out.
+   --> tests/async_join_within_drops_the_handle.nika:13:2
+    |
+ 13 | 	let h = async(detached) fn { slow() }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Without `on_timeout: task::OnTimeout::Cancel` the task keeps running when the time runs out, and the handle is taken only where the join succeeds; the handler of `task::TimedOut` must take it on every path.
+    = help: In the handler, write `h.join()` to wait on, or `h.detach()` if nobody waits for it; or pass `on_timeout: task::OnTimeout::Cancel`.
+

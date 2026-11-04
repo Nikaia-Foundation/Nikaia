@@ -1,0 +1,31 @@
+// `on_timeout: task::OnTimeout::Cancel` cancels the task when the wait runs
+// out (ADR-async-5 D17): it never reaches its last line, and the handle is
+// used up, so the handler need not take it (`NK2109` is not asked).
+
+use std::time
+
+fn slow() -> i64 {
+	time::sleep(200.millis())
+	println("not reached: the task was cancelled")
+	return 7
+}
+
+fn main() {
+	let h = async(detached) fn { slow() }
+	let v = h.join(within: 10.millis(), on_timeout: task::OnTimeout::Cancel) catch {
+		match error {
+			task::TimedOut => 0,
+			else => 1,
+		}
+	}
+	time::sleep(400.millis())
+	println(f"{v}")
+	let quick = async(detached) fn { 5 }
+	let w = quick.join(within: 2.seconds(), on_timeout: task::OnTimeout::Keep) catch {
+		match error {
+			task::TimedOut => quick.join() catch { -1 },
+			else => -1,
+		}
+	}
+	println(f"{w}")
+}

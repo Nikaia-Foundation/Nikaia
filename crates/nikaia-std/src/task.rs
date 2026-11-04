@@ -308,6 +308,13 @@ impl<T> TaskHandle<T> {
     /// ask with. It also means a cancelled task is never joined, so nothing
     /// waits for a value that is not coming.
     pub fn cancel(self) {
+        self.ask_to_stop();
+    }
+
+    /// The request [`cancel`](TaskHandle::cancel) makes, without taking the
+    /// handle: a timed-out `join(within:, on_timeout: task::OnTimeout::Cancel)`
+    /// makes it from a handle it only lends (ADR-async-5 D17).
+    fn ask_to_stop(&self) {
         self.asked
             .asked
             .store(true, std::sync::atomic::Ordering::Release);
@@ -443,8 +450,9 @@ impl<T: 'static, E: 'static + From<Crashed>> FailingTask<T, E> {
 }
 
 /// **What `join(within:)` throws when the time ran out**
-/// ([ADR-346](../../../docs/specification/adr/adr-346.md) D4): the task was
-/// cancelled, and its cleanups ran.
+/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D17, changing
+/// ADR-346 D4): by default the task keeps running and the handle stays live;
+/// with [`OnTimeout::Cancel`] the task was cancelled and its cleanups ran.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimedOut;
 
@@ -455,6 +463,17 @@ impl std::fmt::Display for TimedOut {
 }
 
 impl std::error::Error for TimedOut {}
+
+/// **What a `join(within:)` does with the task when its time ran out**
+/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D17):
+/// `Keep`, the default, lets it run on and leaves the handle live; `Cancel`
+/// cancels it as `cancel()` does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum OnTimeout {
+    #[default]
+    Keep,
+    Cancel,
+}
 
 /// The two ways `TaskHandle::join(within:)` fails; a channel holding both takes
 /// it apart.
@@ -476,8 +495,15 @@ impl std::fmt::Display for Late {
 impl std::error::Error for Late {}
 
 impl<T> TaskHandle<T> {
-    /// Wait for the slot, at most `span`; on time-out, cancel the task.
-    async fn within(self, span: std::time::Duration) -> Option<Result<T, Crashed>> {
+    /// Wait for the slot, at most `span`; on time-out, cancel the task where
+    /// `on_timeout` says so (ADR-async-5 D17). **It lends the handle**: on
+    /// time-out with [`OnTimeout::Keep`] the handle stays live and is joined
+    /// again, cancelled or detached; the checker asks for it there (`NK2109`).
+    async fn within(
+        &self,
+        span: std::time::Duration,
+        on_timeout: OnTimeout,
+    ) -> Option<Result<T, Crashed>> {
         use std::future::Future;
         let mut waiting = std::pin::pin!(crate::rt::exec::Waiting::on(self.slot.clone()));
         let mut sleeping = std::pin::pin!(crate::time::sleep(span));
@@ -491,16 +517,21 @@ impl<T> TaskHandle<T> {
             std::task::Poll::Pending
         })
         .await;
-        if outcome.is_none() {
-            self.cancel();
+        if outcome.is_none() && on_timeout == OnTimeout::Cancel {
+            self.ask_to_stop();
         }
         outcome
     }
 
-    /// **`join(within: d)`** (ADR-346 D4): the value, or [`Crashed`], or
-    /// [`TimedOut`] once `span` ran out, the task cancelled.
-    pub async fn join_within(self, span: std::time::Duration) -> Result<T, Late> {
-        match self.within(span).await {
+    /// **`join(within: d, on_timeout: o)`** (ADR-async-5 D17): the value, or
+    /// [`Crashed`], or [`TimedOut`] once `span` ran out - the task running on
+    /// with [`OnTimeout::Keep`], cancelled with [`OnTimeout::Cancel`].
+    pub async fn join_within(
+        &self,
+        span: std::time::Duration,
+        on_timeout: OnTimeout,
+    ) -> Result<T, Late> {
+        match self.within(span, on_timeout).await {
             Some(Ok(value)) => Ok(value),
             Some(Err(crashed)) => Err(Late::Crashed(crashed)),
             None => Err(Late::TimedOut(TimedOut)),
@@ -509,13 +540,29 @@ impl<T> TaskHandle<T> {
 }
 
 impl<T: 'static, E: 'static + From<Crashed> + From<TimedOut>> FailingTask<T, E> {
-    /// `join(within:)` of a task whose body can fail.
-    pub async fn join_within(self, span: std::time::Duration) -> Result<T, E> {
-        self.watch.disarm();
-        match self.handle.within(span).await {
-            Some(Ok(outcome)) => outcome,
-            Some(Err(crashed)) => Err(E::from(crashed)),
-            None => Err(E::from(TimedOut)),
+    /// `join(within:)` of a task whose body can fail. **Nobody is waiting
+    /// any more after a time-out that keeps the task**, so the watch stays
+    /// armed there (ADR-346 D6): a handle detached after it still reports.
+    pub async fn join_within(
+        &self,
+        span: std::time::Duration,
+        on_timeout: OnTimeout,
+    ) -> Result<T, E> {
+        match self.handle.within(span, on_timeout).await {
+            Some(Ok(outcome)) => {
+                self.watch.disarm();
+                outcome
+            }
+            Some(Err(crashed)) => {
+                self.watch.disarm();
+                Err(E::from(crashed))
+            }
+            None => {
+                if on_timeout == OnTimeout::Cancel {
+                    self.watch.disarm();
+                }
+                Err(E::from(TimedOut))
+            }
         }
     }
 }
@@ -684,13 +731,17 @@ impl<T: Send + 'static> BoxedTask<T> {
         }
     }
 
-    /// `join(within:)` of such a task.
+    /// `join(within:)` of such a task, as [`FailingTask::join_within`].
     pub async fn join_within(
-        self,
+        &self,
         span: std::time::Duration,
+        on_timeout: OnTimeout,
     ) -> Result<T, Box<dyn std::error::Error>> {
-        self.watch.disarm();
-        match self.handle.within(span).await {
+        let outcome = self.handle.within(span, on_timeout).await;
+        if outcome.is_some() || on_timeout == OnTimeout::Cancel {
+            self.watch.disarm();
+        }
+        match outcome {
             Some(Ok(Ok(value))) => Ok(value),
             Some(Ok(Err(carried))) => Err(carried.into_box()),
             Some(Err(crashed)) => Err(Box::new(crashed)),

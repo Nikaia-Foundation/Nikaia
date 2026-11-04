@@ -1,0 +1,22 @@
+// A `join(within:)` that keeps the task on time-out takes the handle only
+// where it succeeds (ADR-async-5 D17): a handler of `task::TimedOut` that
+// does not take it leaves the task live, and that is `NK2109`.
+
+use std::time
+
+fn slow() -> i64 {
+	time::sleep(300.millis())
+	return 7
+}
+
+fn main() throws {
+	let h = async(detached) fn { slow() }
+	let v = h.join(within: 10.millis()) catch {
+		match error {
+			task::Crashed { .. } => h.join(),
+			task::TimedOut => 0,
+			else => throw error,
+		}
+	}
+	println(f"{v}")
+}
