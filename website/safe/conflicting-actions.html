@@ -21,34 +21,14 @@ description: >-
         <p>The message names the ways out. Give each task a value of its own and combine the results afterwards, keep the balance in a <code>SharedMut</code> and change it through <code>update</code>, which takes the lock for you, or, where the order matters, write the two changes as ordinary statements one after the other.</p>
         <h3>Where the check stops</h3>
         <p>The compiler refuses what it can see. Where it cannot tell what a call touches, for example code in a Rust crate or a C library that starts threads of its own, it does not refuse, so the check is not a proof that every race is found. At such a boundary you hand over a copy rather than shared data. Today it also does not tell two writes to the same file from writes to two files: both are accepted.</p>
-        <h3>Today's form and the design being built</h3>
-        <p>The program below uses <code>overlap</code>, which the compiler accepts today. The specification replaces it with <code>async</code> written before an expression, which runs that expression beside the code after it (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/983">#983</a>, not built yet). The same check then runs between a task and everything that runs beside it, other tasks included:</p>
+        <h3>What it looks like with <code>async</code></h3>
+        <p>A task is started with <code>async</code> written before an expression, which runs that expression beside the code after it. The check runs between a task and everything that runs beside it, other tasks included, so the specification refuses the second task below:</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let mut balance = 100
-let deposit = async fn { balance = balance + 50 }
-let charge = async fn { balance = balance - 30 }   // refused (NK2104): both change `balance`</code></pre></div>
-
-        <details class="limit-details home-code markdown-body" open>
-          <summary>Show the program and what Nikaia says today</summary>
-<pre><code class="language-nika">fn main() throws {
-    let mut balance = 100
-    overlap {
-        balance = balance + 50
-        balance = balance - 30
-    }
-    println(f"{balance}")
-}
-</code></pre>
-<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
-<span class="d-error">error[NK2104]</span><b>: These two branches can't run at the same time.</b>
-<span class="d-gutter">  --&gt;</span> main.nika:5:9
-<span class="d-gutter">   |</span>
-<span class="d-gutter"> 5 |</span>         balance = balance - 30
-<span class="d-gutter">   |</span>         <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^</span>
-<span class="d-gutter">   |</span>
-<span class="d-gutter">   =</span> <span class="d-note">note:</span> Both change `balance`.
-<span class="d-gutter">   =</span> <span class="d-note">note:</span> `overlap` runs its branches at once, so a binding one changes can't be touched by the other.
-<span class="d-gutter">   =</span> <span class="d-help">help:</span> If they should run in order, write them as ordinary statements.</code></pre>
-        </details>
+async {
+    async fn { balance = balance + 50 }
+    async fn { balance = balance - 30 }   // refused (NK2104): both change `balance`
+}</code></pre></div>
+        <p>The compiler already builds <code>async</code> tasks and groups, but this check between them is still being built (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/988">#988</a>): today it accepts the program above, so it is shown here as the specification describes it and not as a run. Older programs written with <code>overlap</code> get the check today, with the same <code>NK2104</code> message.</p>
       </div>
     <div class="safe-reading">
       <h2>Go deeper</h2>

@@ -118,15 +118,14 @@ description: >-
     <p class="safe-lead home-intro">Many bugs follow patterns. Nikaia checks for those patterns before they reach your users, and says where it cannot.</p>
     <div class="safe-tiles">
       <a class="safe-tile safe-tile-b" href="{{ "/safe/#conflicts" | relative_url }}">
-        <span class="safe-chip safe-chip-build">Refused when built</span>
+        <span class="safe-chip safe-chip-part">Partly checked</span>
         <h3>Conflicting actions</h3>
         <p>Two tasks change the same value at once. One update overwrites the other.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">overlap {
-    balance = balance + 50
-    balance = balance - 30
-}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error[NK2104]</span><b>: These two branches can't run at the same time.</b>
-<span class="d-note">note:</span> Both change `balance`.</code></pre></div>
-        
+<div class="home-code markdown-body"><pre><code class="language-nika">async {
+    async fn { balance = balance + 50 }
+    async fn { balance = balance - 30 }   // refused: both change `balance`
+}</code></pre></div>
+        <p class="safe-note">The specification refuses this; for <code>async</code> tasks the check is being built (#988).</p>
         <span class="safe-more">Read more →</span>
       </a>
       <a class="safe-tile safe-tile-b" href="{{ "/safe/#stuck" | relative_url }}">
@@ -225,11 +224,10 @@ optimization = "remove-bounds-checks:on,remove-overflow-checks:on"</code></pre><
         <span class="safe-chip safe-chip-build">Plain calls</span>
         <h3>Code that waits needs no marking</h3>
         <p>The compiler finds where a function pauses, so a call that waits is written like any other, and its callers stay as they are.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">let user = async db::load_user(id)
-let rights = async db::load_rights(id)
-let prefs = cache::load_prefs(id)
-render(user, rights, prefs)   // waits for both</code></pre></div>
-        <p class="safe-note">The <code>async</code> form is the design being built (#983); today the same is written with <code>overlap</code>.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let a = async count_words(first)    // starts at once
+let b = async count_words(second)   // runs beside the first
+println("both counts have started")
+println(f"{a + b} words")           // waits for both</code></pre></div>
         <span class="safe-more">Read more →</span>
       </a>
       <a class="safe-tile safe-tile-a" href="{{ "/easy/#errors" | relative_url }}">

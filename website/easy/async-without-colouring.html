@@ -15,38 +15,44 @@ description: >-
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/easy/#async" | relative_url }}">Easy to understand</a></p>
     <h1 class="home-heading">Code that waits needs no marking</h1>
     <div class="limit-class">
+        <h3>Running two things at once</h3>
+        <p>Lines run in the order they are written. To run work beside the code after it, a program writes <code>async</code> before an expression. <code>async e</code> starts <code>e</code> at once, and the program waits for its value where the value is first needed. In the program below both counts run while the first <code>println</code> does its work, and <code>a + b</code> waits for both. It compiles with today&rsquo;s compiler and prints <code>both counts have started</code>, then <code>caught: 5 words is too long</code> and <code>0 words</code>.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">struct TooLong { words: int }
+impl Error for TooLong {
+    fn message(ref self) -&gt; String {
+        return f"{self.words} words is too long"
+    }
+}
+
+fn short_count(text: String) -&gt; int throws {
+    let n = text.split(" ").count()
+    if n &gt; 4 {
+        throw TooLong { words: n }
+    }
+    return n
+}
+
+fn total(first: String, second: String) -&gt; int throws {
+    let a = async short_count(first)     // starts at once
+    let b = async short_count(second)    // runs beside the first
+    println("both counts have started")
+    return a + b                         // waits for both; an error is thrown here
+}
+
+fn main() {
+    let n = total("the quick brown fox", "jumps over the lazy dog") catch {
+        println(f"caught: {error}")
+        0
+    }
+    println(f"{n} words")
+}</code></pre></div>
+        <p>A task&rsquo;s error is thrown where the program waits for the task, and the compiler asks for it to be handled there, as for any call that can fail: here <code>total</code> says <code>throws</code> and <code>main</code> catches it. In the same way <code>f(async g(), async h())</code> runs <code>g</code> and <code>h</code> beside each other and calls <code>f</code> when both are done, and <code>f</code> receives plain values, so its signature does not change. Written as a statement, <code>async e</code> starts a task without a value, and <code>async { … }</code> is a group that ends only when every task started in it has ended, also when the function leaves it early with a <code>return</code>. A failure nobody reads is thrown at the end of its group. Older programs use <code>overlap</code> and <code>spawn</code>, which the compiler still accepts; <code>async</code> replaces both.</p>
         <h3>A call that waits is an ordinary call</h3>
         <p>In JavaScript, Python or C#, a function that waits for a file or the network is marked <code>async</code>, every call to it says <code>await</code>, and when a function starts to wait, its callers have to change as well. In Nikaia you do not need <code>await</code>, because the compiler finds where a function pauses. A call that waits pauses its function, the program goes on with other work, and the call is written like any other. A function that starts to wait leaves its callers as they are. Where a piece of code must not wait, the function says <code>sync</code>; the compiler holds it to that, and it may call only other <code>sync</code> functions.</p>
-        <h3>Running two things at once today</h3>
-        <p>Lines run in the order they are written. To read two files at the same time, the program below puts both reads in an <code>overlap</code> block, which runs its lines together and waits for all of them. It compiles with today&rsquo;s compiler. If one read fails, its error is thrown out of the block, and the compiler asks for it to be handled there, as for any call that can fail: here by <code>throws</code> on <code>main</code>.</p>
-        <h3>The design being built</h3>
-        <p>The specification replaces <code>overlap</code> and <code>spawn</code> with one word, <code>async</code>, written before an expression (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/983">#983</a>, not built yet). <code>async e</code> starts <code>e</code> at once, and the program waits for its value where the value is first needed:</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">let user = async db::load_user(id)
-let rights = async db::load_rights(id)
-let prefs = cache::load_prefs(id)      // runs while both loads are in flight
-render(user, rights, prefs)            // waits for both first</code></pre></div>
-        <p>In the same way <code>f(async g(), async h())</code> runs <code>g</code> and <code>h</code> beside each other and calls <code>f</code> when both are done, and a <code>catch</code> written after an <code>async</code> expression is its fallback. A task that is to be joined or cancelled later is started with <code>async(handle)</code>, and one that may outlive the function that started it with <code>async(detached)</code>, which takes the place of <code>spawn</code>; a task is cancelled only through such a handle. Work over every element of a list is <code>xs.par_iter()</code>, whose lambdas may pause. The option names <code>handle</code>, <code>deferred</code> and <code>detached</code> are placeholders until the names are settled.</p>
+        <h3>What is still being built</h3>
+        <p>Some of the design is specified and not built yet (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/988">#988</a>, <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/983">#983</a>). A task whose call pauses, such as reading a file, is not yet translated. A task that is to be joined or cancelled later is to be started with <code>async(handle)</code>, one that starts only when asked to with <code>async(deferred)</code>, and one that may outlive the function that started it with <code>async(detached)</code>; a task is cancelled only through such a handle. The options <code>limit:</code>, <code>within:</code> and <code>admission:</code> are to bound how many tasks run at once, how long they may take and when they start, and work over every element of a list is to be <code>xs.par_iter()</code>, whose lambdas may pause. With <code>user_parallelism: yes</code> the tasks of a group still run one after another for now.</p>
         <h3>What the compiler checks about tasks</h3>
-        <p>Two tasks that would change the same value at once, or both write to standard output, are refused, naming what they share (<a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a>); where the compiler cannot tell what a call touches, it does not refuse. A task&rsquo;s error is thrown where the program waits for the task. A task handle that is never joined, cancelled or detached is refused, and the tasks a block starts are waited for at its end. Each task is to get a memory budget of its own, so that a task that uses it up ends with <code>task::OverBudget</code> and the rest of the program runs on; that is specified and not built yet, and memory a Rust crate or a C library allocates for itself is not counted (<a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a>).</p>
-
-        <details class="limit-details home-code markdown-body" open>
-          <summary>Reading two files at once, as it compiles today</summary>
-<pre><code class="language-nika">use std::fs
-
-fn size_of(path: String) -&gt; int throws {
-    let text = fs::read_to_string(path, fs::Root::Anywhere)
-    return text.len()
-}
-
-fn main() throws {
-    let (a, b) = overlap {
-        size_of("a.txt")
-        size_of("b.txt")
-    }
-    println(f"{a + b} characters in both files")
-}
-</code></pre>
-        </details>
+        <p>An <code>async</code> whose value is needed in the very next line is refused, because nothing runs beside it, and the message suggests removing the word. A jump such as <code>return</code> out of a task is refused, and so is a group that starts no task. The specification also refuses two tasks that would change the same value at once, or both write to standard output, naming what they share (<a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a>); for <code>async</code> this check is still being built, and where the compiler cannot tell what a call touches, it does not refuse. Each task is to get a memory budget of its own, so that a task that uses it up ends with <code>task::OverBudget</code> and the rest of the program runs on; that is specified and not built yet, and memory a Rust crate or a C library allocates for itself is not counted (<a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a>).</p>
       </div>
     <div class="safe-reading">
       <h2>Go deeper</h2>
