@@ -1,0 +1,7 @@
+error: The compiler can't translate a tuple of `async e` and other parts yet (#988): bind each part with a `let` of its own.
+  --> tests/async_binding_refusal_stands_at_its_let.nika:9:2
+   |
+ 9 | 	let (a, b) = (async load(1), 2)
+   |  ^
+   |
+

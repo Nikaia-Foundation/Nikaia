@@ -1,0 +1,12 @@
+// A refusal of a binding's `async e` stands at the `let` that binds it
+// (ADR-async-5 D6, #1226): here a tuple of a task and another part.
+
+fn load(n: i64) -> i64 {
+	return n * 2
+}
+
+fn main() {
+	let (a, b) = (async load(1), 2)
+	println("between")
+	println(f"{a} {b}")
+}
