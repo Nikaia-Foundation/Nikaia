@@ -761,7 +761,7 @@ pub(crate) fn tr_rewrite_body(words: &winnow_grammar::InternerContext, intern: &
                 Some(ref last) => tr_span(&last.span),
             };
             let end = Span { start: at.end, end: at.end };
-            body.stmts.extend(tr_leaving_asserts(words, intern, renew, &checked, &kept, &type_name, &base, end));
+            body.stmts.extend(tr_leaving_asserts(words, intern, renew, &checked, &kept, &type_name, &base, &end));
         }
     }
     let mut given: Vec<Spanned<Stmt>> = vec![];
@@ -792,7 +792,7 @@ pub(crate) fn tr_leaving_id(e: &Expr) -> Option<u32> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn tr_leaving_asserts(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, checked: &TrRuled, kept: &TrRuled, type_name: &str, base: &Expr, at: Span) -> Vec<Spanned<Stmt>> {
+pub(crate) fn tr_leaving_asserts(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, checked: &TrRuled, kept: &TrRuled, type_name: &str, base: &Expr, at: &Span) -> Vec<Spanned<Stmt>> {
     let mut out = tr_asserts_as(words, intern, renew, checked, type_name, base, &at, false, true);
     out.extend(tr_asserts_as(words, intern, renew, kept, type_name, base, &at, true, true));
     out
@@ -844,7 +844,7 @@ pub(crate) fn tr_plain_fields(fields: &[FieldInit], words: &winnow_grammar::Inte
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn tr_checked_literal(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, rules: &TrRuled, type_name: &str, literal: Expr, values: Option<collections::BTreeMap<String, Expr>>, at: Span) -> Vec<Spanned<Stmt>> {
+pub(crate) fn tr_checked_literal(words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span, rules: &TrRuled, type_name: &str, literal: Expr, values: Option<collections::BTreeMap<String, Expr>>, at: &Span) -> Vec<Spanned<Stmt>> {
     let binding = Expr::Variable(rules.binding, node_id::NodeId::fresh());
     let checks = tr_asserts(words, &intern, &renew, rules, type_name, &binding, &at, false);
     match values {
@@ -1213,7 +1213,7 @@ pub(crate) fn tr_leaves(e: &Expr, words: &winnow_grammar::InternerContext, in_la
 pub(crate) fn tr_leaving(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, spans: &collections::BTreeMap<u32, Span>, span: &Span, checked: &TrRuled, kept: &TrRuled, type_name: &str, base: &Expr, in_lambdas: &collections::BTreeSet<u32>) {
     if !tr_leaves(&expr, words, in_lambdas) { return; }
     let at = tr_at(spans, id_of(&expr), span);
-    let mut stmts = tr_leaving_asserts(words, intern, renew, checked, kept, type_name, base, tr_span(&at));
+    let mut stmts = tr_leaving_asserts(words, intern, renew, checked, kept, type_name, base, &tr_span(&at));
     match expr {
         Expr::MethodCall { .. } => {
             let Expr::MethodCall { receiver, method, args, config, id } = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let receiver = nikaia_std::boxed::open(receiver);
@@ -1256,7 +1256,7 @@ pub(crate) fn tr_literal(expr: &mut Expr, words: &winnow_grammar::InternerContex
         Expr::StructLit { .. } => {
             let Expr::StructLit { name, fields, id } = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") };
             let literal = Expr::StructLit { name, fields, id };
-            *expr = Expr::Block(Block { stmts: tr_checked_literal(words, &intern, &renew, ruled, spans, span, rules, &type_name, literal, values, at) }, node_id::NodeId::fresh());
+            *expr = Expr::Block(Block { stmts: tr_checked_literal(words, &intern, &renew, ruled, spans, span, rules, &type_name, literal, values, &at) }, node_id::NodeId::fresh());
         },
         _ => { },
     }

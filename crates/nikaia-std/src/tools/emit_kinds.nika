@@ -305,35 +305,35 @@ impl EmitFlow {
         return EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1, subject_copies: false }
     }
 
-    pub fn inside_a_loop(self) -> EmitFlow {
+    pub fn inside_a_loop(keep self) -> EmitFlow {
         return self with { in_loop: true }
     }
 
-    pub fn guarded(self) -> EmitFlow {
+    pub fn guarded(keep self) -> EmitFlow {
         return self with { caught: true }
     }
 
-    pub fn joined_here(self) -> EmitFlow {
+    pub fn joined_here(keep self) -> EmitFlow {
         return self with { caught: true, handled_here: true }
     }
 
-    pub fn place(self) -> EmitFlow {
+    pub fn place(keep self) -> EmitFlow {
         return self with { in_a_place: true }
     }
 
-    pub fn handling(self, named: bool) -> EmitFlow {
+    pub fn handling(keep self, named: bool) -> EmitFlow {
         return self with { caught_named: named }
     }
 
-    pub fn at(self, statement: i64) -> EmitFlow {
+    pub fn at(keep self, statement: i64) -> EmitFlow {
         return self with { statement: statement }
     }
 
-    pub fn widened(self) -> EmitFlow {
+    pub fn widened(keep self) -> EmitFlow {
         return self with { widen: true }
     }
 
-    pub fn inferred(self) -> EmitFlow {
+    pub fn inferred(keep self) -> EmitFlow {
         return self with { inferred: true }
     }
 }

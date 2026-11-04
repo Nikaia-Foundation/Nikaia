@@ -25,7 +25,7 @@ impl ReentrancyCheck {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn is_on(self) -> bool { matches!(self, ReentrancyCheck::Yes) }
+    pub fn is_on(&self) -> bool { matches!(self, ReentrancyCheck::Yes) }
 }
 
 impl UserParallelism {
@@ -41,10 +41,10 @@ impl UserParallelism {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn is_concurrent(self) -> bool { matches!(self, UserParallelism::Yes) }
+    pub fn is_concurrent(&self) -> bool { matches!(self, UserParallelism::Yes) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn parallelism(self, has_threads: bool) -> String {
+    pub fn parallelism(&self, has_threads: bool) -> String {
         if !has_threads { return String::from("Parallelism::Off"); }
         match self {
             UserParallelism::No => String::from("Parallelism::Off"),
@@ -90,7 +90,7 @@ impl Target {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn is_bare_metal(self) -> bool {
+    pub fn is_bare_metal(&self) -> bool {
         match self {
             Target::Rust(_) => {
                 let triple = self.triple();
@@ -101,7 +101,7 @@ impl Target {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn name(self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
             Target::X86_64Linux => "x86_64-linux",
             Target::Aarch64Linux => "aarch64-linux",
@@ -111,17 +111,17 @@ impl Target {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn triple(self) -> &'static str {
+    pub fn triple(&self) -> &'static str {
         match self {
             Target::X86_64Linux => "x86_64-unknown-linux-gnu",
             Target::Aarch64Linux => "aarch64-unknown-linux-gnu",
             Target::Wasm32Unknown => "wasm32-unknown-unknown",
-            Target::Rust(known) => *nikaia_std::index::get(&emit_build_rust_targets(), nikaia_std::index::at(known)),
+            Target::Rust(known) => { let known = *known; *nikaia_std::index::get(&emit_build_rust_targets(), nikaia_std::index::at(known)) },
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn has_threads(self) -> bool {
+    pub fn has_threads(&self) -> bool {
         match self {
             Target::X86_64Linux | Target::Aarch64Linux => true,
             Target::Wasm32Unknown => false,
@@ -130,10 +130,10 @@ impl Target {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn has_runtime(self) -> bool { self.has_threads() }
+    pub fn has_runtime(&self) -> bool { self.has_threads() }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn unbuildable(self) -> Option<String> {
+    pub fn unbuildable(&self) -> Option<String> {
         match self {
             Target::Wasm32Unknown => Some(String::from("`std` reaches for a memory mapping and a thread pool, and neither exists on wasm32-unknown-unknown; what `std::fs` offers there is undecided")),
             Target::Rust(_) if self.is_bare_metal() => Some(String::from("there is no operating system under a program here, so no `std` to build on; how such a program starts and waits (a loop, interrupts) is a build profile's, which does not exist yet (ADR-037 D9)")),
@@ -164,7 +164,7 @@ impl BoundsChecks {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn name(self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
             BoundsChecks::Kept => "off",
             BoundsChecks::Removed => "on",
@@ -190,7 +190,7 @@ impl OverflowChecks {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn name(self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
             OverflowChecks::Kept => "off",
             OverflowChecks::Removed => "on",

@@ -247,7 +247,7 @@ impl Settings {
 
     /// What Cargo is told for the CPU level (ADR-002 D6, ADR-325).
     pub fn cpu_config(&self) -> Vec<String> {
-        project_settings::cpu_config(&self.words, self.build.target)
+        project_settings::cpu_config(&self.words, &self.build.target)
     }
 
     /// **`--cpu` against the user's `RUSTFLAGS`** (#753, ADR-002 D6, Part III

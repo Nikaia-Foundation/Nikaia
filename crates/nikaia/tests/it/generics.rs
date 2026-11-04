@@ -98,7 +98,7 @@ struct Pair[T] {
 }
 
 impl Pair[T] {
-    fn swapped(self) -> Pair[T] {
+    fn swapped(keep self) -> Pair[T] {
         return Pair { first: self.second, second: self.first }
     }
 }
@@ -436,7 +436,7 @@ struct Holder[T] {
 }
 
 impl Holder[T] {
-    fn taken(self) -> T {
+    fn taken(keep self) -> T {
         return self.value
     }
 

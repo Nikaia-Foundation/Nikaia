@@ -27,7 +27,7 @@ pub(crate) struct BoundsReportWalk {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::InternerContext, source: &str, path: &str, facts: &BoundsReportFacts, bounds: BoundsChecks, overflow: OverflowChecks, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> String {
+pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::InternerContext, source: &str, path: &str, facts: &BoundsReportFacts, bounds: &BoundsChecks, overflow: &OverflowChecks, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> String {
     let mut walk = BoundsReportWalk { seen: collections::BTreeSet::new(), sites: vec![] };
     let none: Vec<FnArg> = vec![];
     for item in program.items.iter() {

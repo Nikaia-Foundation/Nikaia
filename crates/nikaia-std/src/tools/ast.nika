@@ -1541,7 +1541,7 @@ pub struct Receiver {
     pub is_mut: bool,
     /// `keep self`: the method consumes the object
     /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D2).
-    /// Taken by value, as a bare `self` is until the migration (#1213 step 6).
+    /// The only receiver taken by value: a bare `self` is lent (D1).
     pub is_keep: bool,
 }
 

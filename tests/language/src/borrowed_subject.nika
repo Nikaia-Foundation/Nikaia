@@ -45,7 +45,7 @@ struct BorrowedSubjectOwnedRow {
 }
 
 impl BorrowedSubjectOwnedRow {
-    fn into_name(self) -> String {
+    fn into_name(keep self) -> String {
         return self.name
     }
 }

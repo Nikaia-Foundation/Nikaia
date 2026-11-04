@@ -388,7 +388,7 @@ impl Summary {
         self.total += other.total
     }
 
-    pub fn joined(self, other: Summary) -> Summary {
+    pub fn joined(keep self, other: Summary) -> Summary {
         return Summary { n: self.n + other.n, total: self.total + other.total }
     }
 }

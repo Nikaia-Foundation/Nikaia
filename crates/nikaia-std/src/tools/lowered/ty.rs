@@ -425,11 +425,11 @@ pub enum Provenance {
 }
 
 impl Provenance {
-    pub fn join(self, other: Provenance) -> Provenance {
-        if self == Provenance::Untrusted || other == Provenance::Untrusted { return Provenance::Untrusted; }
+    pub fn join(&self, other: Provenance) -> Provenance {
+        if *self == Provenance::Untrusted || other == Provenance::Untrusted { return Provenance::Untrusted; }
         Provenance::Trusted
     }
-    pub fn as_str(self) -> String {
+    pub fn as_str(&self) -> String {
         match self {
             Provenance::Trusted => String::from("trusted"),
             Provenance::Untrusted => String::from("untrusted"),
@@ -459,10 +459,10 @@ pub enum Lock {
 }
 
 impl Lock {
-    pub fn holds(self) -> bool { self == Lock::Holds }
-    pub fn or(self, other: Lock) -> Lock {
-        if self == Lock::Holds || other == Lock::Holds { return Lock::Holds; }
-        if self == Lock::Undecided || other == Lock::Undecided { return Lock::Undecided; }
+    pub fn holds(&self) -> bool { *self == Lock::Holds }
+    pub fn or(&self, other: Lock) -> Lock {
+        if *self == Lock::Holds || other == Lock::Holds { return Lock::Holds; }
+        if *self == Lock::Undecided || other == Lock::Undecided { return Lock::Undecided; }
         Lock::No
     }
 }
@@ -475,8 +475,8 @@ pub enum Crosses {
 }
 
 impl Crosses {
-    pub fn may(self) -> bool { self == Crosses::May }
-    pub fn may_not(self) -> bool { self == Crosses::MayNot }
+    pub fn may(&self) -> bool { *self == Crosses::May }
+    pub fn may_not(&self) -> bool { *self == Crosses::MayNot }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -487,8 +487,8 @@ pub enum Threads {
 }
 
 impl Threads {
-    pub fn may(self) -> bool { self == Threads::May }
-    pub fn may_not(self) -> bool { self == Threads::MayNot }
+    pub fn may(&self) -> bool { *self == Threads::May }
+    pub fn may_not(&self) -> bool { *self == Threads::MayNot }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -517,7 +517,7 @@ pub enum State {
 }
 
 impl State {
-    pub fn as_str(self) -> String {
+    pub fn as_str(&self) -> String {
         match self {
             State::Borrowed => String::from("borrowed"),
             State::Tethered => String::from("tethered"),
@@ -529,8 +529,8 @@ impl State {
         if word == "tethered" { return Some(State::Tethered); }
         None
     }
-    pub fn or(self, other: State) -> State {
-        if self == State::Tethered || other == State::Tethered { return State::Tethered; }
+    pub fn or(&self, other: State) -> State {
+        if *self == State::Tethered || other == State::Tethered { return State::Tethered; }
         State::Borrowed
     }
 }
@@ -553,19 +553,19 @@ pub enum Count {
 }
 
 impl Count {
-    pub fn join(self, other: Count) -> Count {
-        if self == Count::Atomic || other == Count::Atomic { return Count::Atomic; }
-        if self == Count::Word || other == Count::Word { return Count::Word; }
+    pub fn join(&self, other: Count) -> Count {
+        if *self == Count::Atomic || other == Count::Atomic { return Count::Atomic; }
+        if *self == Count::Word || other == Count::Word { return Count::Word; }
         Count::Plain
     }
-    pub fn rank(self) -> i64 {
+    pub fn rank(&self) -> i64 {
         match self {
             Count::Plain => 0,
             Count::Word => 1,
             Count::Atomic => 2,
         }
     }
-    pub fn as_str(self) -> String {
+    pub fn as_str(&self) -> String {
         match self {
             Count::Plain => String::from("plain"),
             Count::Word => String::from("word"),

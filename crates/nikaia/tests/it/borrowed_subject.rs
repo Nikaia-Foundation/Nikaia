@@ -319,7 +319,7 @@ fn the_third_way_out_is_named_only_where_the_result_is() {
 
 /// **And a subject that is not borrowed has nothing to lend.**
 ///
-/// `fn m(self) -> ref String` takes the subject by value, so it dies at the end
+/// `fn m(keep self) -> ref String` takes the subject by value, so it dies at the end
 /// of the call and a view into it cannot leave. The refusal is `NK1104`'s — the
 /// value is a `String` where a `ref String` was declared — and not a silent
 /// reference the language below would then report about a file nobody wrote.
@@ -330,7 +330,7 @@ fn a_subject_taken_by_value_lends_nothing() {
 struct Row { name: String }
 
 impl Row {
-    fn m(self) -> ref String {
+    fn m(keep self) -> ref String {
         return self.name
     }
 }

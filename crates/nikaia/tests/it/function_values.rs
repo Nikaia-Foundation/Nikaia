@@ -241,7 +241,7 @@ fn a_method_named_where_a_function_value_is_kept_runs() {
          \x20   fn add(ref self, n: i64) -> i64 {\n\
          \x20       return self.base + n\n\
          \x20   }\n\
-         \x20   fn slowly(self, n: i64) -> i64 {\n\
+         \x20   fn slowly(keep self, n: i64) -> i64 {\n\
          \x20       time::sleep(1.millis())\n\
          \x20       return self.base * n\n\
          \x20   }\n\
@@ -263,16 +263,16 @@ fn a_method_named_where_a_function_value_is_kept_runs() {
          \x20   f: fn(ref P, i64) -> i64 sync,\n\
          \x20   g: fn(ref P, i64) -> i64 sync,\n\
          }\n\
-         fn keep(f: fn(ref P, i64) -> i64 sync) -> One {\n\
+         fn keep(keep f: fn(ref P, i64) -> i64 sync) -> One {\n\
          \x20   return One { f: f }\n\
          }\n\
-         fn keep_own(f: fn(P, i64) -> i64) -> Own {\n\
+         fn keep_own(keep f: fn(P, i64) -> i64) -> Own {\n\
          \x20   return Own { f: f }\n\
          }\n\
-         fn keep_slow(f: fn(i64) -> i64) -> Slow {\n\
+         fn keep_slow(keep f: fn(i64) -> i64) -> Slow {\n\
          \x20   return Slow { f: f }\n\
          }\n\
-         fn keep_two(f: fn(ref P, i64) -> i64 sync, g: fn(ref P, i64) -> i64 sync) -> Two {\n\
+         fn keep_two(keep f: fn(ref P, i64) -> i64 sync, keep g: fn(ref P, i64) -> i64 sync) -> Two {\n\
          \x20   return Two { f: f, g: g }\n\
          }\n\
          fn main() {\n\

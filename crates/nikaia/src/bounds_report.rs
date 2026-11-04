@@ -90,8 +90,8 @@ pub fn report_checked(
         source,
         path,
         &facts,
-        bounds,
-        overflow,
+        &bounds,
+        &overflow,
         &|e: &crate::ast::Expr| crate::emit::literal_expressions(parsed, e),
     )
 }

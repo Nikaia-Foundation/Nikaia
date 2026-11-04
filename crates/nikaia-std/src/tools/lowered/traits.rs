@@ -160,7 +160,7 @@ pub(crate) fn receiver_text(receiver: Option<Receiver>) -> &'static str {
     if taken.is_ref && taken.is_mut { return "`ref mut self`"; }
     if taken.is_ref { return "`ref self`"; }
     if taken.is_mut { return "`mut self`"; }
-    "`self`"
+    "`keep self`"
 }
 
 pub(crate) fn pausing(own: &Ledger, trait_name: &str, target: &str, method: &str, span: Span) -> Vec<Finding> {

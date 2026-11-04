@@ -1,0 +1,18 @@
+// `self` looks (ADR-views-3 D1, #1213): a bare `self` is lent, so the object
+// is still there after the call, and called again.
+
+struct Box {
+	name: String,
+}
+
+impl Box {
+	fn show(self) -> i64 {
+		return self.name.len()
+	}
+}
+
+fn main() {
+	let b = Box { name: "hi" }
+	println(b.show())
+	println(b.show())
+}

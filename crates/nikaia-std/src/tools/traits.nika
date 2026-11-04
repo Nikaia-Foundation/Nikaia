@@ -204,7 +204,8 @@ fn receiver_text(receiver: Receiver?) -> String {
     if taken.is_mut {
         return "`mut self`"
     }
-    return "`self`"
+    // The only receiver taken by value (ADR-views-3 D1).
+    return "`keep self`"
 }
 
 /// **`NK1129`: the implementation pauses and the declaration says `sync`**

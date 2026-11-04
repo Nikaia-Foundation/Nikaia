@@ -299,7 +299,7 @@ impl CheckMultiLock {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn written(self) -> String {
+    pub fn written(&self) -> String {
         match self {
             CheckMultiLock::Reading => String::from("access_all"),
             CheckMultiLock::Writing => String::from("update_all"),

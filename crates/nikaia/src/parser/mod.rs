@@ -1463,10 +1463,9 @@ grammar! {
                 Receiver { is_ref: true, is_mut: true, is_keep: false }
             }
           | KW_REF KW_SELF -> { Receiver { is_ref: true, is_mut: false, is_keep: false } }
-          // **`mut self` changes the object, `keep self` consumes it**
-          // (ADR-views-3 D2). Until the migration (#1213 step 6) `mut self`
-          // is what `ref mut self` is, and `keep self` what a bare `self` is;
-          // a bare `self` stays by value until then.
+          // **`self` looks, `mut self` changes the object, `keep self`
+          // consumes it** (ADR-views-3 D1, D2): a bare `self` is lent, as
+          // `ref self` is, and `mut self` is what `ref mut self` is.
           | KW_MUT KW_SELF -> { Receiver { is_ref: true, is_mut: true, is_keep: false } }
           | KW_KEEP KW_SELF -> { Receiver { is_ref: false, is_mut: false, is_keep: true } }
           // Before the bare arm: `self: i64` is a parameter somebody named
@@ -1487,8 +1486,8 @@ grammar! {
           | KW_SELF ":" fail(
                 "A parameter can't be called `self`. `self` is the value a method is \
                  called on, written `self`, `ref self` or `ref mut self`, without a type."
-            ) -> { Receiver { is_ref: false, is_mut: false, is_keep: false } }
-          | KW_SELF -> { Receiver { is_ref: false, is_mut: false, is_keep: false } }
+            ) -> { Receiver { is_ref: true, is_mut: false, is_keep: false } }
+          | KW_SELF -> { Receiver { is_ref: true, is_mut: false, is_keep: false } }
 
         // Kap 9.2: use std::fs
         rule use_item -> Item =

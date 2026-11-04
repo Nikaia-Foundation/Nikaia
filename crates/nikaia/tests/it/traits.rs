@@ -934,7 +934,7 @@ fn a_method_takes_self_the_way_its_trait_declares() {
                 }\n\
                 \n\
                 impl Named for P {\n\
-                \x20   fn name(self) -> String {\n\
+                \x20   fn name(keep self) -> String {\n\
                 \x20       return self.n\n\
                 \x20   }\n\
                 }\n\
@@ -950,7 +950,7 @@ fn a_method_takes_self_the_way_its_trait_declares() {
     assert!(
         found[0]
             .message
-            .contains("`Named`'s `name` takes `ref self`, but this one takes `self`"),
+            .contains("`Named`'s `name` takes `ref self`, but this one takes `keep self`"),
         "{}",
         found[0].message
     );
@@ -960,7 +960,7 @@ fn a_method_takes_self_the_way_its_trait_declares() {
                     }\n\
                     \n\
                     impl Error for Missing {\n\
-                    \x20   fn message(self) -> String {\n\
+                    \x20   fn message(keep self) -> String {\n\
                     \x20       return self.what\n\
                     \x20   }\n\
                     }\n\

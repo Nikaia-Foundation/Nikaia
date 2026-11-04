@@ -375,8 +375,8 @@ pub enum BinaryOp {
 }
 
 impl BinaryOp {
-    pub fn is_bitwise(self) -> bool { matches!(self, BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor | BinaryOp::Shl | BinaryOp::Shr) }
-    pub fn is_comparison(self) -> bool { matches!(self, BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge) }
+    pub fn is_bitwise(&self) -> bool { matches!(self, BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor | BinaryOp::Shl | BinaryOp::Shr) }
+    pub fn is_comparison(&self) -> bool { matches!(self, BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge) }
 }
 
 #[derive(Debug, Clone, PartialEq)]

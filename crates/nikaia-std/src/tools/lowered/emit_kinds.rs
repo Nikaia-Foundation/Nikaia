@@ -9,9 +9,9 @@ pub enum EmitTail {
 }
 
 impl EmitTail {
-    pub fn is_value(self) -> bool { !matches!(self, EmitTail::Statement) }
-    pub fn at(self, i: i64, last: i64) -> EmitTail {
-        if i == last { return self; }
+    pub fn is_value(&self) -> bool { !matches!(self, EmitTail::Statement) }
+    pub fn at(&self, i: i64, last: i64) -> EmitTail {
+        if i == last { return *self; }
         EmitTail::Statement
     }
 }
@@ -45,7 +45,7 @@ pub enum EmitLifetimes {
 }
 
 impl EmitLifetimes {
-    pub fn reference(self) -> String {
+    pub fn reference(&self) -> String {
         match self {
             EmitLifetimes::Named => String::from("&'a "),
             EmitLifetimes::Elided => String::from("&"),
@@ -67,7 +67,7 @@ impl EmitLifetimes {
             _ => String::from("&'a "),
         }
     }
-    pub fn params(self) -> String {
+    pub fn params(&self) -> String {
         match self {
             EmitLifetimes::Named => String::from("'a"),
             EmitLifetimes::Elided => String::from("'_"),
@@ -95,7 +95,7 @@ impl EmitLifetimes {
             EmitLifetimes::Call => String::from("'call"),
         }
     }
-    pub fn over_the_input(self) -> EmitLifetimes {
+    pub fn over_the_input(&self) -> EmitLifetimes {
         match self {
             EmitLifetimes::Elided => EmitLifetimes::Inner,
             EmitLifetimes::Static => EmitLifetimes::StaticIn,
@@ -114,7 +114,7 @@ impl EmitLifetimes {
             _ => EmitLifetimes::Named,
         }
     }
-    pub fn of_the_input(self) -> EmitLifetimes {
+    pub fn of_the_input(&self) -> EmitLifetimes {
         match self {
             EmitLifetimes::Elided => EmitLifetimes::OfInputElided,
             EmitLifetimes::Static => EmitLifetimes::OfInputStatic,

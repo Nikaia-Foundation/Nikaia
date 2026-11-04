@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn an_operation_of_one_type(op: BinaryOp) -> bool { !op.is_comparison() && op != BinaryOp::And && op != BinaryOp::Or }
+pub fn an_operation_of_one_type(op: &BinaryOp) -> bool { !op.is_comparison() && *op != BinaryOp::And && *op != BinaryOp::Or }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -199,7 +199,7 @@ impl CheckState {
             Expr::Match { .. } => { for tail in nikaia_std::index::or(number_branches(expr), || vec![].into()) { out.extend(self.open_numbers_in(world, tail)); } },
             Expr::Binary { op, lhs, rhs, .. } => {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-                if an_operation_of_one_type(*op) {
+                if an_operation_of_one_type(op) {
                     out.extend(self.open_numbers_in(world, lhs));
                     if *op != BinaryOp::Shl && *op != BinaryOp::Shr { out.extend(self.open_numbers_in(world, rhs)); }
                 }
@@ -236,7 +236,7 @@ impl CheckState {
             Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver) || self.flow.open_items.contains_key(&(id_of(expr) as i64)) || world.words.resolve(method) == "or_insert" && check_core_call_on_entry_values(self, world, receiver) >= 0 },
             Expr::If { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Match { .. } => self.a_choice_of_numbers(world, expr),
-            Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); an_operation_of_one_type(*op) && self.number_shaped(world, lhs) && self.number_shaped(world, rhs) },
+            Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); an_operation_of_one_type(op) && self.number_shaped(world, lhs) && self.number_shaped(world, rhs) },
             Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); (*op == UnaryOp::Neg || *op == UnaryOp::Not) && self.number_shaped(world, expr) },
             Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); self.a_map_read_of_numbers(world, value, fallback) },
             _ => false,

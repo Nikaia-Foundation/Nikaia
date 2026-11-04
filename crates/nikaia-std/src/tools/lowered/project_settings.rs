@@ -82,7 +82,7 @@ pub fn artifact(word: String) -> Result<String, nikaia_std::error::Thrown<Projec
     })
 }
 
-pub fn cpu_config(words: &ProjectWords, target: Target) -> Vec<String> {
+pub fn cpu_config(words: &ProjectWords, target: &Target) -> Vec<String> {
     match match words.cpu.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
