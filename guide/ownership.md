@@ -83,8 +83,8 @@ Hello, Ada
 36
 ```
 
-In Rust the call would read `greet(&ada)`; in Nikaia the function decides, and the compiler
-writes the reference. A `ref` written at the call is refused as unnecessary
+The call does not say how `ada` is passed: the function decides, and the compiler writes
+the reference. A `ref` written at the call is refused as unnecessary
 ([`NK1137`](#nk1137-a-ref-written-at-a-call)).
 
 **Specification:** [Part I, §6.5 References and borrowing](../docs/specification/10-nikaia-light.md#65-references-and-borrowing)

@@ -1,9 +1,8 @@
 # A Tour of the Syntax
 
-This page is for readers who already program in another language (Python, JavaScript,
-TypeScript, Go, Java, C#, Kotlin or Swift) and want to see what Nikaia looks like before
-they read the specification. It covers the parts you will write every day, one short
-example each, and says where Nikaia behaves differently from what you probably expect.
+This page shows what Nikaia looks like, for readers who already program and want to see
+the language before they read the specification. It covers the parts you will write every
+day, one short example each.
 
 Every snippet here compiles and runs with the current compiler, except a line marked
 `does not compile`, which shows what the compiler refuses. To try one, put it in
@@ -185,10 +184,9 @@ println(greet("Nika"))                       // Hello, Nika!
 println(greet("Nika"; greeting: "Hallo"))    // Hallo, Nika!
 ```
 
-The semicolon in the parameter list is the unusual part. Parameters before it are the
-data the function works on and are passed by position. Parameters after it are options:
-they always have a default, and they are always passed by name, like keyword arguments
-in Python. On `main` the same split is the command line: positional words and `--name`
+The semicolon divides the parameter list. Parameters before it are the data the function
+works on and are passed by position. Parameters after it are options: they always have a
+default, and they are always passed by name. On `main` the same split is the command line: positional words and `--name`
 options ([The command line](command-line.md)).
 
 A `String` parameter needs nothing more: whether the function gets a view of the caller's
@@ -238,9 +236,8 @@ println(f"{p.length_squared()}")    // 25
 let moved = p with { x: 5 }         // a copy with one field changed
 ```
 
-There are no classes and no inheritance. A `struct` holds the data, and an `impl`
-block adds behaviour to it, as in Go or Rust. Shared behaviour across types is a
-`trait` (an interface).
+A `struct` holds the data, and an `impl` block adds behaviour to it. Behaviour that
+several types share is a `trait`.
 
 Everything is private unless it says `pub`.
 
@@ -380,10 +377,10 @@ both counts have started
 9 words again
 ```
 
-In JavaScript, Python or C#, a function that waits is marked `async` and its calls say
-`await`. In Nikaia you do not need either, because the compiler finds which functions can
-pause. Reading a file pauses the function without blocking the program, you write it as an
-ordinary call, and a function that starts to wait leaves its callers as they are.
+A function that waits is written like any other function, and a call to it like any other
+call, because the compiler finds which functions can pause. Reading a file pauses the
+function without blocking the program, and a function that starts to wait leaves its
+callers as they are.
 
 Lines run in the order they are written. To run work beside the code after it, you write
 `async` before an expression. `async e` starts `e` at once, and the program waits for its
