@@ -1,9 +1,10 @@
 # Writing for readers outside the project
 
 This guide is for the website, `README.md` and the guide (`guide/`), the text a
-newcomer reads before deciding whether Nikaia is worth a closer look. The owner
-set these rules on 2026-10-30. The specification follows other measures, set
-out in the last section.
+newcomer reads before deciding whether Nikaia is worth a closer look, and later
+reads to learn the language. The owner set these rules on 2026-10-30 and added
+the ones on other languages and on teaching on 2026-11-04. The specification
+follows other measures, set out in the last section.
 
 ## What we lead with
 
@@ -18,9 +19,10 @@ Simplicity is not something we can prove, so we do not argue it with claims.
 Readers find it out for themselves, and the documentation supports that by
 showing clear examples. Where something can be measured, such as how much less
 a program has to write (in tokens, `docs/measuring.md`), the
-measurement may be quoted. Not having to colour functions is a real advantage
-and can be said plainly: the compiler finds where a function pauses, so nobody
-has to rework the callers of a function that starts to wait.
+measurement may be quoted. Not having to mark functions that wait is a real
+advantage and can be said plainly, by what it does in Nikaia: the compiler
+finds where a function pauses, so a function that starts to wait leaves its
+callers as they are.
 
 ## How claims are phrased
 
@@ -36,10 +38,47 @@ Phrasing is positive. Rather than "there is no `await`", the text says that a
 program does not need `await`, because the compiler finds where a function
 pauses. A missing feature is described by what takes its place.
 
-Concepts are explained through what a programmer already knows. A task's error,
-for instance, is thrown where the program waits for the task, and the compiler
+Concepts are explained through what the reader already knows: ideas every
+programmer has met, such as a file, a network call or a value that changes, and
+what earlier pages of our own documentation have taught. A task's error, for
+instance, is thrown where the program waits for the task, and the compiler
 points out that it has to be handled, just as it does for any call that can
-fail.
+fail. What the reader knows from another language is not the starting point
+(next section).
+
+## Nikaia is explained on its own terms
+
+The text says what Nikaia does, and does not compare it with other languages.
+It does not say what one has to do in another language ("in JavaScript a
+function that waits is marked `async`"), what Nikaia is like ("as in Go or
+Rust") or what it is not like ("unlike Python"). A reader who knows the
+compared language learns little from such a sentence, a reader who does not
+learns nothing, and both read further before reaching what the page is about.
+A page is written for someone who can program, without assuming which language
+they come from, and it does not address readers of particular languages.
+
+Three kinds of text name another language and stay. A measurement against
+another language names it, because that is what was measured
+(`docs/measuring.md`, the pages under `website/fast/`). Rust and C are named
+where a program actually meets them: a Rust crate or a C library it calls, and
+a message that still comes from the Rust compiler underneath. The decision
+records and the manifesto argue for the language and may compare; the guide,
+the website and `README.md` link to them rather than repeat the comparison.
+
+The tone is that of Go's documentation: short sentences, the plain word, and
+the thing itself from the first line. A section of the guide opens with what
+the reader can write or do, not with background, history or a promise.
+
+## How a page teaches
+
+The guide teaches the way a good book on a language does, one idea after
+another, each building on the ones before. A section shows a short program that
+runs, says what it does, and then shows the mistake a reader is likely to make
+with the same idea: the program, marked as one the compiler refuses, the
+compiler's message in full, exactly as the current compiler prints it, and a
+few sentences that read the message with the reader and arrive at the fix. A
+page that introduces a check shows at least one such refusal, because the
+message is where a reader meets the check in practice.
 
 ## How the text reads
 
