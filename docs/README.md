@@ -64,7 +64,11 @@ is normative and nothing may depend on it to know what a program means.
   be done with it - `ready` (decided; can be built now), `decision` (needs the
   owner first), `blocked` (waits on another issue being built, named in it),
   `note` (a hint, a measurement still to take, or an issue that only collects
-  others) - and **Priority** and **Effort** give the order. Big pieces are issues with sub-issues. A closed issue stays: every entry the old `open-work.md` ever carried, closed ones included, is an issue, and the citations of its `§N.M` numbers in the CHANGELOG, the ADRs and code comments name the issue they mean. "The former backlog file" in old text means that file as a whole.
+  others) - and **Priority** and **Effort** give the order. The label
+  [`future`](https://github.com/Nikaia-Language/Nikaia/issues?q=is%3Aopen+label%3Afuture)
+  sits beside the status label and marks an issue for a later version of the
+  language: a feature request, or a question that need not be decided before
+  then. To see only what matters now, filter with `-label:future`. Big pieces are issues with sub-issues. A closed issue stays: every entry the old `open-work.md` ever carried, closed ones included, is an issue, and the citations of its `§N.M` numbers in the CHANGELOG, the ADRs and code comments name the issue they mean. "The former backlog file" in old text means that file as a whole.
 * **Open questions for the owner** are issues labelled
   [`decision`](https://github.com/Nikaia-Language/Nikaia/issues?q=is%3Aopen+label%3Adecision):
   each says what is blocked by it, the options, and a recommendation, and is
