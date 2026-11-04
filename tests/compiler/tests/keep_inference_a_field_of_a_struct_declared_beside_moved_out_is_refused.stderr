@@ -1,0 +1,10 @@
+error[NK2302]: `named` keeps `ty`, but `ty` is not marked `keep`.
+  --> tests/keep_inference_a_field_of_a_struct_declared_beside_moved_out_is_refused.nika:6:2
+   |
+ 6 | 	return ty.name
+   |  ^^^^^^^^^^^^^^
+   |
+   = note: A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).
+   = note: Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).
+   = help: Write `keep ty` in the signature of `named`.
+1 view kept past the call that was given it

@@ -871,6 +871,16 @@ pub struct KeepsFound {
 
 pub(crate) fn by_value(arg: &FnArg) -> bool { !arg.ty.is_view && !arg.mutable }
 
+pub(crate) fn keeps_a_copied_scalar(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && KEEPS_SCALARS.iter().any(|one| { one == name }) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); keeps_a_copied_scalar(inner) },
+        _ => false,
+    }
+}
+
+pub(crate) const KEEPS_SCALARS: [&str; 15] = ["i8", "i16", "i32", "i64", "isize", "usize", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char", "scalar"];
+
 pub(crate) fn no_uses() -> Uses { Uses { kept: collections::BTreeSet::new(), passed: vec![] } }
 
 pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>, indexes: &KeepsIndexes<'_, '_>, host: &H) -> KeepsColumn {
@@ -885,11 +895,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple65110| {
-                            let (at, arg) = __nikaia_tuple65110; let at = nikaia_std::num::value(at);
-                            by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name)
-                        }).map(|__nikaia_tuple65214| {
-                            let (at, arg) = __nikaia_tuple65214;
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple65793| {
+                            let (at, arg) = __nikaia_tuple65793; let at = nikaia_std::num::value(at);
+                            by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
+                        }).map(|__nikaia_tuple65969| {
+                            let (at, arg) = __nikaia_tuple65969;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);
@@ -1134,6 +1144,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
             for a in args.iter() {
                 if a.ty.is_view || a.mutable { lent.insert(view.text(a.name)); }
                 if a.mutable { unkept.insert(view.text(a.name)); }
+                if by_value(a) && keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &a.ty)) { unkept.insert(view.text(a.name)); }
             }
             for c in config.iter() { if c.ty.is_view { lent.insert(view.text(c.name)); } }
             if is_method && nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false) {
@@ -1153,7 +1164,16 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                         found = true;
                     }
                 }
-                if found { fields.insert(view.text(arg.name), of); }
+                if found {
+                    fields.insert(view.text(arg.name), of);
+                    continue;
+                }
+                let written = view.text(arg.ty.name);
+                let contract = match *nikaia_std::index::get(&ledger.types, &written) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&library.types, &written) { Some(__nikaia_value) => __nikaia_value, None => continue } };
+                if contract.fields.is_empty() { continue; }
+                let mut of: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+                for field in contract.fields.iter() { of.insert(field.name.to_string(), field.ty.clone()); }
+                fields.insert(view.text(arg.name), of);
             }
             let mut unresolved = false;
             if resolved.contains_key(&key) {

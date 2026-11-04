@@ -1,0 +1,4 @@
+/// A struct declared in its own file, whose fields
+/// `keeps_beside_lent.nika` and
+/// `tests/keep_inference_reads_a_struct_declared_beside.nika` read (#1213).
+pub struct KeepsBesideType { pub name: String, pub is_slice: bool, pub is_mut: bool }

@@ -1,0 +1,30 @@
+use compiler_tests
+
+/// Keep inference reads the fields of a struct another file declares
+/// (#1213): `src/keeps_beside_lent.nika` lends its parameters of
+/// `KeepsBesideType`, declared in `src/keeps_beside.nika`, and so does this
+/// file of another package. Each file writes `keep`, so each is checked.
+fn shown(ty: compiler_tests::KeepsBesideType) -> String {
+	if ty.is_mut {
+		return f"{ty.name} changes"
+	}
+	return f"{ty.name} stays"
+}
+
+fn taken(keep ty: compiler_tests::KeepsBesideType) -> String {
+	return ty.name
+}
+
+fn main() {
+	let t = compiler_tests::KeepsBesideType { name: "slice", is_slice: true, is_mut: false }
+	let p = compiler_tests::keeps_beside_pointer(t) ?? return
+	match p {
+		compiler_tests::KeepsBesidePointer::Run { mutable } => println(f"run {mutable}"),
+		else => println("other"),
+	}
+	let changed = compiler_tests::keeps_beside_flag(t, true)
+	println(shown(changed))
+	println(shown(t))
+	println(compiler_tests::keeps_beside_name(changed))
+	println(taken(t))
+}

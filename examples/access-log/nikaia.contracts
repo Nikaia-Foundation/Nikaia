@@ -11,7 +11,6 @@ version = 4
 
 [fn."Counts::add"]
 sync = true
-keeps = ["bytes"]
 touches = []
 signature = "(ref mut self, bytes: i64)"
 
@@ -24,7 +23,6 @@ signature = "(ref mut self, other: ref Counts)"
 [fn."Counts::new"]
 pub = true
 sync = true
-keeps = ["bytes"]
 touches = []
 signature = "(bytes: i64) -> Counts"
 

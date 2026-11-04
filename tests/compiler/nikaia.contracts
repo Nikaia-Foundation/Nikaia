@@ -46,6 +46,27 @@ locks = "?"
 views = ["known: borrowed"]
 signature = "(n: i64, known: fn(ref String) -> i64? sync) -> i64"
 
+[fn."keeps_beside_flag"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["ty: borrowed"]
+signature = "(ty: ref KeepsBesideType, mutable: bool) -> KeepsBesideType"
+
+[fn."keeps_beside_name"]
+pub = true
+sync = "inferred"
+keeps = ["ty"]
+touches = []
+signature = "(ty: KeepsBesideType) -> String"
+
+[fn."keeps_beside_pointer"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["ty: borrowed"]
+signature = "(ty: ref KeepsBesideType) -> KeepsBesidePointer?"
+
 [fn."main"]
 sync = "inferred"
 touches = []
@@ -89,6 +110,14 @@ signature = "[T](x: T) -> T"
 [type."Branching"]
 pub = true
 variants = ["Leaf(i64)", "Fork { left: Branching, right: Branching, id: i64 }"]
+
+[type."KeepsBesidePointer"]
+pub = true
+variants = ["Run { mutable: bool }", "Plain"]
+
+[type."KeepsBesideType"]
+pub = true
+fields = ["pub name: String", "pub is_slice: bool", "pub is_mut: bool"]
 
 [type."Nest"]
 pub = true

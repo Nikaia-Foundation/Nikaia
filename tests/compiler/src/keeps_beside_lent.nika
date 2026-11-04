@@ -1,0 +1,20 @@
+/// Reads the fields of a struct another file of the package declares: the
+/// parameter is lent, so no `keep` is asked for it (#1213).
+pub enum KeepsBesidePointer { Run { mutable: bool }, Plain }
+
+pub fn keeps_beside_pointer(ty: ref KeepsBesideType) -> KeepsBesidePointer? {
+	if ty.is_slice {
+		return KeepsBesidePointer::Run { mutable: ty.is_mut }
+	}
+	return null
+}
+
+/// A copied scalar stored into the result is not kept.
+pub fn keeps_beside_flag(ty: ref KeepsBesideType, mutable: bool) -> KeepsBesideType {
+	return KeepsBesideType { name: ty.name.clone(), is_slice: ty.is_slice, is_mut: mutable }
+}
+
+/// The `keep` that opts this file into the check.
+pub fn keeps_beside_name(keep ty: KeepsBesideType) -> String {
+	return ty.name
+}

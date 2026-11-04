@@ -25,7 +25,6 @@ signature = "(ref mut self)"
 [fn."Tally::new"]
 pub = true
 sync = true
-keeps = ["first"]
 touches = []
 signature = "(first: i64) -> Tally"
 

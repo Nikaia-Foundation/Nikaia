@@ -1300,6 +1300,19 @@ fn by_value(arg: ref FnArg) -> bool {
     return !arg.ty.is_view && !arg.mutable
 }
 
+/// **A number, a `bool`, a `char` or a `scalar`**, or such a value that may
+/// be `null`: copied wherever it goes, so keeping one keeps no caller's value
+/// (#1213). A type with a handle inside (`Shared`) is not one, though it copies.
+fn keeps_a_copied_scalar(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && args.is_empty() && KEEPS_SCALARS.iter().any(fn(one) { one == name }),
+        Ty::Nullable(inner) => keeps_a_copied_scalar(inner),
+        else => false,
+    }
+}
+
+comptime KEEPS_SCALARS: Array[ref String, 15] = ["i8", "i16", "i32", "i64", "isize", "usize", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char", "scalar"]
+
 fn no_uses() -> Uses {
     return Uses { kept: collections::BTreeSet(), passed: [] }
 }
@@ -1338,7 +1351,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                 Item::Trait { name, methods, .. } => {
                     let owner = view.text(name)
                     for method in methods {
-                        let positions: Vec[i64] = method.node.args.iter().enumerate().filter(fn((at, arg)) { by_value(arg) && arg.ty.code == null && !method.node.ret_from.contains(arg.name) }).map(fn((at, arg)) { at }).collect()
+                        let positions: Vec[i64] = method.node.args.iter().enumerate().filter(fn((at, arg)) { by_value(arg) && arg.ty.code == null && !method.node.ret_from.contains(arg.name) && !keeps_a_copied_scalar(written_ty(view.words, view.aliases, arg.ty)) }).map(fn((at, arg)) { at }).collect()
                         let called = view.text(method.node.name)
                         trait_keeps.insert(f"{owner}::{called}", positions)
                     }
@@ -1712,6 +1725,11 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                 if a.mutable {
                     unkept.insert(view.text(a.name))
                 }
+                // **A copied scalar is never a view** (#1213): storing one
+                // stores a copy, so no caller is asked to hand it over.
+                if by_value(a) && keeps_a_copied_scalar(written_ty(view.words, view.aliases, a.ty)) {
+                    unkept.insert(view.text(a.name))
+                }
             }
             for c in config {
                 if c.ty.is_view {
@@ -1751,7 +1769,21 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                 }
                 if found {
                     fields.insert(view.text(arg.name), of)
+                    continue
                 }
+                // **A struct of another file of the package** (#1213), or of
+                // a package this one uses: its fields are in the ledger's
+                // `types`, which the item loop filled before this walk.
+                let written = view.text(arg.ty.name)
+                let contract = ledger.types[written] ?? library.types[written] ?? continue
+                if contract.fields.is_empty() {
+                    continue
+                }
+                let mut of: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+                for field in contract.fields {
+                    of.insert(field.name.clone(), field.ty.clone())
+                }
+                fields.insert(view.text(arg.name), of)
             }
 
             // **Whether this body's method calls resolved at all.** A receiver

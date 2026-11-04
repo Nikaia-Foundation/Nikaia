@@ -8,6 +8,8 @@ inference = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies"
 
 [sources]
 "cycle_beside.nika" = "eb73e68a35da6e3c2ce5e00000dcc42c18c2f632873df2b8891836dfca576aa3"
+"keeps_beside.nika" = "769b83c893cbb5eb2fc03e5067ef432dd85b8f6e70ba907a28494b99a37001ab"
+"keeps_beside_lent.nika" = "c41cf4f74bf26ce194051a79cb9db79c1fde4a392bfba803d8df0455fc004482"
 "main.nika" = "8f9f4e8adb0f228d212c370c9b9d25bb1482ddfc4cf81b20ffe48d63b6f64cbe"
 "nest_beside.nika" = "864b137d3bece77cd85814f2cf81951a0c2e8d04c13838f8516379e870f67efe"
 "taking_beside.nika" = "46b1e0e303cf0d96b4c8e00961d2d64aa5359697ad8c2fdda5129bd5a3eea923"

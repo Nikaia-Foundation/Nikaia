@@ -1,0 +1,18 @@
+use compiler_tests
+
+/// Handing out a moving field of a struct another package declares keeps the
+/// parameter (#1213): reading that struct's fields does not lend it.
+fn named(ty: compiler_tests::KeepsBesideType) -> String {
+	return ty.name
+}
+
+fn taken(keep ty: compiler_tests::KeepsBesideType) -> String {
+	return ty.name
+}
+
+fn main() {
+	let t = compiler_tests::KeepsBesideType { name: "a", is_slice: false, is_mut: false }
+	let u = compiler_tests::KeepsBesideType { name: "b", is_slice: false, is_mut: false }
+	println(named(t))
+	println(taken(u))
+}

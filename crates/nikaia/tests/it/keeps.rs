@@ -127,9 +127,9 @@ fn a_parameter_put_into_a_struct_is_kept() {
 fn a_parameter_assigned_into_a_place_is_kept() {
     assert_eq!(
         keeps(
-            "struct Stats { min: i64 }\n\
+            "struct Stats { min: String }\n\
              impl Stats {\n\
-             \x20   fn add(ref mut self, temp: i64) { self.min = temp }\n\
+             \x20   fn add(ref mut self, temp: String) { self.min = temp }\n\
              }",
             "Stats::add"
         ),
@@ -192,10 +192,8 @@ fn a_parameter_a_task_names_is_kept() {
         "the one the task names, and not the one beside it"
     );
 
-    // **And `return n` would keep `n`**, which is not a quirk of copy types
-    // being missed — it is the rule being applied: the value leaves the call.
-    // What a *copy* type costs when it is kept is the emitter's question and is
-    // step 3's; this column says what the body does.
+    // **And `return n` does not keep `n`**: a number is copied wherever it
+    // goes, so the column never asks `keep` for one (v11, #1213).
     assert_eq!(
         keeps(
             "fn start(text: String, n: i64) -> i64 {\n\
@@ -204,7 +202,7 @@ fn a_parameter_a_task_names_is_kept() {
              }",
             "start"
         ),
-        ["n", "text"]
+        ["text"]
     );
 }
 
