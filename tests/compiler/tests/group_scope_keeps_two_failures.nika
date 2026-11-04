@@ -1,0 +1,42 @@
+// ADR-async-5 D21 (#987): two failures nobody reads are both kept until the
+// group's end, and the first in start order is the one thrown there, whichever
+// task ended first; the second joins it (a program does not read the joined
+// ones, Part I 7.1: an uncaught failure shows them under the first). Every
+// task ran: a failure does not cancel its siblings.
+use std::task
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Oops(n) => f"task {n} failed",
+		}
+	}
+}
+
+fn work(n: i64, ran: ref SharedMut[bool]) -> i64 throws {
+	ran.set(true)
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n
+}
+
+fn main() throws {
+	let first: SharedMut[bool] = SharedMut(false)
+	let ok: SharedMut[bool] = SharedMut(false)
+	let second: SharedMut[bool] = SharedMut(false)
+	let r = task::scope fn(s) {
+		s.spawn fn { work(9, first) }
+		s.spawn fn { work(2, ok) }
+		s.spawn fn { work(8, second) }
+		1
+	} catch {
+		match error {
+			Bad::Oops(n) => n,
+			else => 0,
+		}
+	}
+	println(f"thrown: task {r}")
+	println(f"ran: {first.get()} {ok.get()} {second.get()}")
+}

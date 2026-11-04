@@ -1,0 +1,31 @@
+// ADR-async-5 D1, D3, D9 (#987): a group waits for every task it started, so
+// each task's result is there, in start order, once the group has ended.
+use std::task
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n * 10
+}
+
+fn main() throws {
+	let a: SharedMut[i64] = SharedMut(0)
+	let b: SharedMut[i64] = SharedMut(0)
+	let c: SharedMut[i64] = SharedMut(0)
+	let ended = task::scope fn(s) {
+		s.spawn fn { a.set(work(1)) }
+		s.spawn fn { b.set(work(2)) }
+		s.spawn fn { c.set(work(3)) }
+		"every task ended"
+	}
+	println(ended)
+	println(f"{a.get()} {b.get()} {c.get()}")
+}

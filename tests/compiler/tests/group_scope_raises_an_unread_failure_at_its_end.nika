@@ -1,0 +1,32 @@
+// ADR-async-5 D21 (#987): a task's failure nobody reads waits for the group's
+// end: the group's own function runs on after it, and the failure is thrown
+// where the group ends, to the `catch` around it.
+use std::task
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Oops(n) => f"task {n} failed",
+		}
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n
+}
+
+fn main() throws {
+	let r = task::scope fn(s) {
+		s.spawn fn { work(7) }
+		println("the group's function runs on")
+		1
+	} catch {
+		println(f"caught at the group's end: {error}")
+		0
+	}
+	println(f"value {r}")
+}

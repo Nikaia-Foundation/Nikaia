@@ -4895,6 +4895,40 @@ pub = true
 sync = true
 signature = "[T](self: TaskHandle[T])"
 
+# **The handle of a child task** (ADR-async-5 D11): bound to its group, which
+# waits for it if nobody joins it; its failure is then the group's, as an
+# unread one (D21). No `detach`: it does not outlive its group (`NK2122`, #986).
+# The runtime is `nikaia_std::task::ChildHandle`; the forms that make one,
+# `async(handle)` and `async(deferred)`, are lowered onto it by #988.
+# The handle of a task started in a group, which waits for it.
+[type."task::ChildHandle"]
+pub = true
+
+# Wait for the task and take what it produced, or its failure.
+#
+# Joining takes the handle. A task that panicked makes this throw `task::Crashed`.
+[fn."task::ChildHandle::join"]
+pub = true
+signature = "[T](self: task::ChildHandle[T]) -> T"
+throws = ["task::Crashed"]
+
+# **The only way to cancel a task** (ADR-async-5 D14): it stops at its current
+# pause and its end, a failure included, is dropped; the group still waits for
+# it to stop.
+# Stop the task, and drop what it ends with.
+[fn."task::ChildHandle::cancel"]
+pub = true
+sync = true
+signature = "[T](self: task::ChildHandle[T])"
+
+# **A deferred handle's start** (ADR-async-5 D12): the task runs only from here.
+# A second `start()` panics at run time; at compile time it is `NK2121` (#986).
+# Start a deferred task; the handle stays.
+[fn."task::ChildHandle::start"]
+pub = true
+sync = true
+signature = "[T](mut self: ref task::ChildHandle[T])"
+
 # A value several parts of a program own at once.
 #
 # A caller is not meant to notice it: a function taking `ref Connection` accepts a
