@@ -315,7 +315,16 @@ impl EmitState {
             // Part I 2.3: `null` has no type of its own, so the type beside it
             // says what it is the absence of.
             Expr::LitNull(_) => out.push("None"),
-            Expr::Variable(name, _) => self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope),
+            Expr::Variable(name, _) => {
+                // A binding of `async e` only other tasks name is waited for in
+                // the task that names it (ADR-async-5 D8).
+                let handle = walk.async_handles.get(emit_text(world, name))
+                if handle != null {
+                    out.push(f"{handle ?? ""}.join_now()?")
+                } else {
+                    self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope)
+                }
+            },
             Expr::Path(segments, _) => {
                 // **`T::name` is text known while building** (ADR-330 D2).
                 if self.facts.reflected_names.contains(at) {
@@ -413,15 +422,20 @@ impl EmitState {
             Expr::Continue(_) => self.emit_core_jump(out, false, flow),
             Expr::Throw(inner, _) => self.emit_core_throw(world, walk, out, host, inner, depth, flow, scope),
             Expr::Spawn { body, .. } => self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope),
-            // Part I 8.1.2 (ADR-async-5 D6, D9): the checker takes `async e` and
-            // `async { … }` (#986); their lowering onto the group runtime is
-            // the next step.
-            Expr::Async(_, _) => {
-                throw EmitRefused { message: "The compiler can't translate `async e` yet (#986): the checker takes it, the lowering onto tasks isn't built yet", at: flow.statement }
+            // Part I 8.1.2 (ADR-async-5 D6, D9, #988): a task of its group,
+            // waited for where the checker recorded; and the group.
+            Expr::Async(task, id) => {
+                let kind = self.emit_async_kind(id.get())
+                let joining = walk.async_joining.get(id.get() as i64)
+                if joining != null {
+                    out.push(joining ?? "")
+                } else if kind == "join" || kind == "spawn" {
+                    self.emit_async_task(world, walk, out, host, task, id.get(), kind, depth, flow, scope)
+                } else {
+                    throw EmitRefused { message: "The compiler can't translate `async e` yet where its value is waited for at a later statement but it is not a `let` of its own (#988).", at: emit_async_at(flow.statement) }
+                }
             },
-            Expr::AsyncGroup(_, _) => {
-                throw EmitRefused { message: "The compiler can't translate `async { … }`, the group, yet (#986): the checker takes it, the lowering onto tasks isn't built yet", at: flow.statement }
-            },
+            Expr::AsyncGroup(block, id) => self.emit_async_group(world, walk, out, host, block, id.get(), depth, flow, scope),
             else => {
                 throw EmitRefused { message: "The compiler can't translate this expression yet: an `asm` block in expression position", at: flow.statement }
             },

@@ -85,6 +85,17 @@ pub(crate) fn emit_is_inner(lifetimes: EmitLifetimes) -> bool { matches!(lifetim
 
 pub(crate) fn emit_is_kept(lifetimes: EmitLifetimes) -> bool { matches!(lifetimes, EmitLifetimes::Kept) }
 
+impl EmitState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_async_body_group(&self, body: &Block) -> i64 {
+        if body.stmts.is_empty() { return 0; }
+        let group = -1 - nikaia_std::index::get(&body.stmts, 0).span.start as i64;
+        if self.facts.async_waits.values().any(|wait| { wait.group == group }) { return group; }
+        0
+    }
+}
+
 pub(crate) fn emit_fn_signature(vis: &str, pausing: &str, name: &str, declared: &[String], params: &[String], ret: &str) -> String { format!("{}{}fn {}{}({}){} ", vis, pausing, name, emit_angled(declared), params.join(", "), ret) }
 
 impl EmitState {
@@ -672,7 +683,24 @@ impl EmitState {
                             out.push(&format!(", &{}).await }}", rust_string(origin)));
                         } else { out.push(").await }"); }
                     },
-                    None => { self.emit_function_body(world, walk, out, host, body, depth, throws_, returns_value, &awaited, &key, &channel, host.counts_steps(), host.skip_free_at_exit())?; },
+                    None => {
+                        let group = self.emit_async_body_group(body);
+                        if group == 0 { self.emit_function_body(world, walk, out, host, body, depth, throws_, returns_value, &awaited, &key, &channel, host.counts_steps(), host.skip_free_at_exit())?; } else {
+                            let mut inner = EmitOut::empty();
+                            let outer_groups = walk.async_groups.to_owned();
+                            walk.async_groups = vec![group];
+                            self.emit_function_body(world, walk, &mut inner, host, body, depth, throws_, returns_value, &awaited, &key, &channel, host.counts_steps(), host.skip_free_at_exit())?;
+                            walk.async_groups = outer_groups;
+                            walk.async_pending = vec![];
+                            walk.async_handles = collections::BTreeMap::new();
+                            if pausing != "" || inner.buf.contains(".await") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet in a function that pauses (#988)."), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
+                            let name = emit_async_group_name(group);
+                            if throws_ { emit_async_channel_holds_a_crash(&channel, Some(nikaia_std::index::get(&body.stmts, 0).span.start as i64))?; }
+                            if throws_ { out.push(&format!("{{ nikaia_std::task::group::<_, {}>(|{}|{} ", channel, name, ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, ret)); }
+                            out.append(inner);
+                            out.push(") }");
+                        }
+                    },
                 }
                 walk.unpinned = outer_unpinned;
                 match pending {

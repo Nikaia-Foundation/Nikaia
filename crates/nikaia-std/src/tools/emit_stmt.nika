@@ -241,6 +241,7 @@ impl EmitState {
                 }
             }
             out.push(inner_pad)
+            self.emit_async_joins(walk, out, block.stmts[i].span.start as i64, inner_pad)
             let st = out.mark()
             self.emit_stmt(world, walk, out, host, block.stmts[i].node, block.stmts[i].span, depth + 1, tail.at(i, last), flow, scope)
             out.record(block.stmts[i].span, st)
@@ -255,6 +256,9 @@ impl EmitState {
     /// since its `join` throws `task::Crashed` alone (ADR-328 D8).
     pub fn emit_stmt[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let mark = out.buf.len()
+        if self.emit_async_binding(world, walk, out, host, node, span, depth, tail, flow, scope) {
+            return
+        }
         self.emit_stmt_written(world, walk, out, host, node, span, depth, tail, flow, scope)
         match node {
             Stmt::Let { names, value, .. } => {
@@ -1156,11 +1160,11 @@ impl EmitState {
             out.push(")")
         }
         // `if x { … };` is legal and noisy; a block-shaped statement ends where
-        // its brace does.
+        // its brace does. `async { … }` is not one: it is written as the call
+        // of `task::group` (ADR-async-5 D9), which a `;` ends.
         let block_shaped = match expr {
             Expr::If { .. } => true,
             Expr::Block(_, _) => true,
-            Expr::AsyncGroup(_, _) => true,
             Expr::Unsafe(_, _) => true,
             Expr::Overlap(_, _) => true,
             else => false,

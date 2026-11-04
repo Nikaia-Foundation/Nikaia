@@ -95,6 +95,16 @@ pub(super) fn ended<T, E: crate::error::Joined>(
     }
 }
 
+/// **A group left by a failure** (D21): the failure, with the ones nobody read
+/// joined to it in start order.
+pub(super) fn left<E: crate::error::Joined>(mut first: E, mut failed: Vec<(usize, E)>) -> E {
+    failed.sort_by_key(|(at, _)| *at);
+    for (_, later) in failed {
+        first.joined_by(later);
+    }
+    first
+}
+
 /// One task of a group run where it starts: its crash or its error recorded
 /// as unread, since a task started this way has no other receiver.
 pub(super) fn ran<E: From<Crashed>, R: Outcome<E>>(
@@ -387,15 +397,28 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
             }
         })
         .await;
-        match end {
-            Ended::Value(value) => Ok(value),
-            Ended::Failed(error) => Err(error),
-            Ended::Crashed(crash) => Err(E::from(crash)),
-            Ended::Cancelled | Ended::OverBudget => Err(E::from(Crashed {
-                message: "a task before it in its group crashed, which cancelled it".to_string(),
-                site: String::new(),
-            })),
-        }
+        joined_end(end)
+    }
+
+    /// **`h.join()` of a task that never pauses** (D6, #988): it has ended
+    /// where it started, so its end is there now.
+    pub fn join_now(mut self) -> Result<T, E> {
+        self.claimed = true;
+        let end = locked(&self.slot).ended.take();
+        joined_end(end.expect("a task that pauses was joined where the main line cannot wait"))
+    }
+}
+
+/// What `join` hands back for a task's end.
+fn joined_end<T, E: From<Crashed>>(end: Ended<T, E>) -> Result<T, E> {
+    match end {
+        Ended::Value(value) => Ok(value),
+        Ended::Failed(error) => Err(error),
+        Ended::Crashed(crash) => Err(E::from(crash)),
+        Ended::Cancelled | Ended::OverBudget => Err(E::from(Crashed {
+            message: "a task before it in its group crashed, which cancelled it".to_string(),
+            site: String::new(),
+        })),
     }
 }
 

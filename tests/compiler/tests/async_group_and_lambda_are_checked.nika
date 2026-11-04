@@ -1,6 +1,6 @@
 // `async { … }`, a group, with an `async e` statement in it, and
 // `async fn { … }`, whose value is the lambda's result (ADR-async-5 D9, D10,
-// #986): the checker takes both; the lowering says it is not built yet.
+// #986): both run on the group runtime (#988).
 
 fn work(n: i64) {
 	println(f"{n}")

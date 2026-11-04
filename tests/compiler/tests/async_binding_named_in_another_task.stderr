@@ -1,7 +1,0 @@
-error: The compiler can't translate `async e` yet (#986): the checker takes it, the lowering onto tasks isn't built yet.
-   --> tests/async_binding_named_in_another_task.nika:15:2
-    |
- 15 | 	let a = async load(1)
-    |  ^
-    |
-

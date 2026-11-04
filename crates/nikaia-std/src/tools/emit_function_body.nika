@@ -170,6 +170,8 @@ impl EmitState {
             // **The keeps a statement needs are declared before it** (ADR-283),
             // and before the `Ok(` a tail is wrapped in.
             self.write_keep_prelude(walk, out, key, stmt.span.start as i64, depth + 1)
+            // The bindings of `async e` this statement waits for (ADR-async-5 D6).
+            self.emit_async_joins(walk, out, stmt.span.start as i64, inner_pad)
             let st = out.mark()
             if wrap {
                 if binds {

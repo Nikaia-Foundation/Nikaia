@@ -1,6 +1,6 @@
 // `let x = async e` is waited for just before the first statement of its
 // block that names `x`, nested in an `if` too (ADR-async-5 D6, #986): the
-// checker takes it, and the lowering says it is not built yet.
+// task is joined before the `if` (#988).
 
 fn load(n: i64) -> i64 {
 	return n * 2

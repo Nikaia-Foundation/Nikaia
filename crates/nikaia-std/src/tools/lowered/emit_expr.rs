@@ -206,7 +206,11 @@ impl EmitState {
                 if b { out.push("true"); } else { out.push("false"); }
             },
             Expr::LitNull(_) => { out.push("None"); },
-            Expr::Variable(name, _) => { let name = *name; self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope)?; },
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let handle = walk.async_handles.get(&emit_text(world, name));
+                if handle.is_some() { out.push(&format!("{}.join_now()?", nikaia_std::index::or(handle, || ""))); } else { self.emit_expr_variable(world, walk, out, host, node, name, depth, flow, scope)?; }
+            },
             Expr::Path(segments, _) => {
                 if self.facts.reflected_names.contains(&at) {
                     out.push(&self.type_named(world, &walk, &emit_text(world, *nikaia_std::index::get(&segments, 0))).quoted());
@@ -276,8 +280,13 @@ impl EmitState {
             Expr::Continue(_) => { self.emit_core_jump(out, false, flow)?; },
             Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.emit_core_throw(world, walk, out, host, inner, depth, flow, scope)?; },
             Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope)?; },
-            Expr::Async(_, _) => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet (#986): the checker takes it, the lowering onto tasks isn't built yet"), at: Some(flow.statement) }, &"emit_expr_written")); },
-            Expr::AsyncGroup(_, _) => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async { … }`, the group, yet (#986): the checker takes it, the lowering onto tasks isn't built yet"), at: Some(flow.statement) }, &"emit_expr_written")); },
+            Expr::Async(task, id) => {
+                let task = nikaia_std::boxed::open(task); let id = *id;
+                let kind = self.emit_async_kind(i64::from(id.get()));
+                let joining = walk.async_joining.get(&(id.get() as i64));
+                if joining.is_some() { out.push(nikaia_std::index::or(joining, || "")); } else if kind == "join" || kind == "spawn" { self.emit_async_task(world, walk, out, host, task, i64::from(id.get()), &kind, depth, flow, scope)?; } else { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet where its value is waited for at a later statement but it is not a `let` of its own (#988)."), at: emit_async_at(flow.statement) }, &"emit_expr_written")); }
+            },
+            Expr::AsyncGroup(block, id) => { let id = *id; self.emit_async_group(world, walk, out, host, block, i64::from(id.get()), depth, flow, scope)?; },
             _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate this expression yet: an `asm` block in expression position"), at: Some(flow.statement) }, &"emit_expr_written")); },
         }
         Ok(())

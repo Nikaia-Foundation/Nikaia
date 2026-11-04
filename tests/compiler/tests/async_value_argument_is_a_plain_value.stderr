@@ -1,7 +1,0 @@
-error: The compiler can't translate `async e` yet (#986): the checker takes it, the lowering onto tasks isn't built yet.
-   --> tests/async_value_argument_is_a_plain_value.nika:14:2
-    |
- 14 | 	let s: i64 = add(async load(1), load(2))
-    |  ^
-    |
-

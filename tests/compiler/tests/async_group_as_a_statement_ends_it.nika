@@ -1,0 +1,16 @@
+// `async { … }` as a statement ends the statement like any block statement
+// (ADR-async-5 D9, #988): the next statement follows on its own line, with no
+// `;`, and runs after both tasks of the group have ended.
+
+fn work(n: i64) -> i64 {
+	println(f"task {n}")
+	return n
+}
+
+fn main() {
+	async {
+		async work(1)
+		async work(2)
+	}
+	println("after the group")
+}

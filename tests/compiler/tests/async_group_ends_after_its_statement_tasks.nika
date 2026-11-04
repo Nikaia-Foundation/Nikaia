@@ -1,0 +1,16 @@
+// Two statement tasks of an `async { … }` both end before the line after it
+// (ADR-async-5 D9, #988); their values are dropped.
+
+fn work(n: i64) -> i64 {
+	println(f"task {n}")
+	return n
+}
+
+fn main() {
+	let n = async {
+		async work(1)
+		async work(2)
+		3
+	}
+	println(f"after the group: {n}")
+}

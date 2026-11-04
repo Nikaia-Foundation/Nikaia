@@ -1,7 +1,0 @@
-error: The compiler can't translate `async { … }`, the group, yet (#986): the checker takes it, the lowering onto tasks isn't built yet.
-   --> tests/async_group_and_lambda_are_checked.nika:10:2
-    |
- 10 | 	let n = async {
-    |  ^
-    |
-

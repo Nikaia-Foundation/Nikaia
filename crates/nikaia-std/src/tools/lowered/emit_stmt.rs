@@ -165,6 +165,7 @@ impl EmitState {
                 }
             }
             out.push(&inner_pad);
+            self.emit_async_joins(walk, out, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64, &inner_pad);
             let st = out.mark();
             self.emit_stmt(world, walk, out, host, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, depth + 1, tail.at(i, last), flow, scope)?;
             out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
@@ -180,6 +181,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_stmt<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mark = out.buf.len() as i64;
+        if self.emit_async_binding(world, walk, out, host, node, span, depth, tail, flow, scope)? { return Ok(()); }
         self.emit_stmt_written(world, walk, out, host, node, span, depth, tail, flow, scope)?;
         match node {
             Stmt::Let { names, value, .. } => {
@@ -845,7 +847,7 @@ impl EmitState {
         if is_return && self.facts.lent_returns.contains(&at) { out.push("&"); }
         self.emit_expr(world, walk, out, host, expr, depth, flow, scope)?;
         if either { out.push(")"); }
-        let block_shaped = matches!(expr, Expr::If { .. } | Expr::Block(_, _) | Expr::AsyncGroup(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _));
+        let block_shaped = matches!(expr, Expr::If { .. } | Expr::Block(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _));
         if !tail.is_value() && !block_shaped { out.push(";"); }
         Ok(())
     }

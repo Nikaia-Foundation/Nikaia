@@ -1,7 +1,7 @@
 // A pending binding named in another task is waited for in that task, so the
 // main line waits where it names it itself, here at the group's end
 // (ADR-async-5 D6, #986): the next statement starting a task that reads `a`
-// is no wait of the main line, and `a` has `b`'s start beside it.
+// is no wait of the main line, and `b`'s task waits for `a` (#988).
 
 fn load(n: i64) -> i64 {
 	return n * 2

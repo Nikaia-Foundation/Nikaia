@@ -1,6 +1,6 @@
 // A task as an argument, an operand and a tuple part (ADR-async-5 D6, #986):
 // `add` takes a plain `i64`, the callee never sees a pending value. The
-// checker takes it; the lowering says it is not built yet.
+// tasks run in the group of `main`'s body (#988).
 
 fn load(n: i64) -> i64 {
 	return n * 2

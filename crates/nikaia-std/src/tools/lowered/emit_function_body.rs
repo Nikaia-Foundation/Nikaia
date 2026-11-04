@@ -96,6 +96,7 @@ impl EmitState {
             let wrap = emit_is_a_return_tail(here) && !emit_is_a_throw(&stmt.node);
             let binds = wrap && self.a_tail_that_enters_a_grammar(world, &stmt.node);
             self.write_keep_prelude(walk, out, key, stmt.span.start as i64, depth + 1);
+            self.emit_async_joins(walk, out, stmt.span.start as i64, &inner_pad);
             let st = out.mark();
             if wrap { if binds { out.push("let __nikaia_value = "); } else { out.push("Ok("); } }
             self.emit_stmt(world, walk, out, host, &stmt.node, &stmt.span, depth + 1, here, flow, &scope)?;

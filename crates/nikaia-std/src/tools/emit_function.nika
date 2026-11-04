@@ -140,6 +140,22 @@ fn emit_is_kept(lifetimes: EmitLifetimes) -> bool {
 
 /// The signature line: visibility, `async`, name, declared parameters, the
 /// parameters and the result.
+impl EmitState {
+    /// **The group a function's body is** (ADR-async-5 D9): the checker's `-1 -`
+    /// its first statement's start, where a task of `async e` in it has no
+    /// `async { }` nearer; `0` where none has.
+    fn emit_async_body_group(ref self, body: ref Block) -> i64 sync {
+        if body.stmts.len() == 0 {
+            return 0
+        }
+        let group = -1 - body.stmts[0].span.start as i64
+        if self.facts.async_waits.values().any(fn(wait) { wait.group == group }) {
+            return group
+        }
+        return 0
+    }
+}
+
 fn emit_fn_signature(vis: ref String, pausing: ref String, name: ref String, declared: ref Vec[String], params: ref Vec[String], ret: ref String) -> String {
     return f"{vis}{pausing}fn {name}{emit_angled(declared)}({params.join(", ")}){ret} "
 }
@@ -1090,7 +1106,36 @@ impl EmitState {
                         }
                     },
                     null => {
-                        self.emit_function_body(world, walk, out, host, body, depth, throws_, returns_value, awaited, key, channel, host.counts_steps(), host.skip_free_at_exit())
+                        let group = self.emit_async_body_group(body)
+                        if group == 0 {
+                            self.emit_function_body(world, walk, out, host, body, depth, throws_, returns_value, awaited, key, channel, host.counts_steps(), host.skip_free_at_exit())
+                        } else {
+                            // **The body is the group of its `async e`** (ADR-async-5
+                            // D9, D21, #988): it runs as `task::group`'s function,
+                            // so a `return` or a failure leaves only after every
+                            // task it started has ended.
+                            let mut inner = EmitOut::empty()
+                            let outer_groups = walk.async_groups.clone()
+                            walk.async_groups = [group]
+                            self.emit_function_body(world, walk, inner, host, body, depth, throws_, returns_value, awaited, key, channel, host.counts_steps(), host.skip_free_at_exit())
+                            walk.async_groups = outer_groups
+                            walk.async_pending = []
+                            walk.async_handles = collections::BTreeMap()
+                            if pausing != "" || inner.buf.contains(".await") {
+                                throw EmitRefused { message: "The compiler can't translate `async e` yet in a function that pauses (#988).", at: body.stmts[0].span.start }
+                            }
+                            let name = emit_async_group_name(group)
+                            if throws_ {
+                                emit_async_channel_holds_a_crash(channel, body.stmts[0].span.start as i64)
+                            }
+                            if throws_ {
+                                out.push(f"{{ nikaia_std::task::group::<_, {channel}>(|{name}|{ret} ")
+                            } else {
+                                out.push(f"{{ nikaia_std::task::group_plain(|{name}|{ret} ")
+                            }
+                            out.append(inner)
+                            out.push(") }")
+                        }
                     },
                 }
                 walk.unpinned = outer_unpinned

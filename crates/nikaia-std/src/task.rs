@@ -1369,6 +1369,30 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
     ) -> ChildHandle<'scope, T, E> {
         ChildHandle::deferred_now(self, body)
     }
+
+    /// **`async e` whose task never pauses** (ADR-async-5 D6, D20, #988): it
+    /// runs now, to its end, so it may borrow what lives shorter than the
+    /// group; the handle holds its end until the wait point.
+    pub fn start_here<'g, T: 'g>(
+        &'g self,
+        body: impl FnOnce() -> Result<T, E> + 'g,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'g,
+    {
+        ChildHandle::now(self, body)
+    }
+
+    /// **`async e` as a statement whose task never pauses** (D9): it runs
+    /// now; its value is dropped, its failure waits for the group's end.
+    pub fn spawn_here<R: Outcome<E>>(&self, body: impl FnOnce() -> R) {
+        let Some(at) = self.seen.borrow_mut().start() else {
+            return;
+        };
+        let mut seen = Group::new();
+        ran(&mut seen, at, body);
+        self.seen.borrow_mut().absorb(seen);
+    }
 }
 
 /// The scope as its handles see it: one thread, a `RefCell`.
@@ -1400,6 +1424,44 @@ pub fn scope<'env, T, E: From<Crashed> + crate::error::Joined>(
     let value = body(&scope);
     let failed = std::mem::take(&mut scope.seen.borrow_mut().failed);
     ended(value, failed)
+}
+
+/// **`async { }`, and the innermost block as a group** (ADR-async-5 D9, D21,
+/// #988): `body` runs with the group, and the group ends after it and every
+/// task. Where `body` failed, its failure is what this throws, the unread ones
+/// joined to it in start order; else the first unread failure, the later ones
+/// joined to it.
+pub fn group<'env, T, E: From<Crashed> + crate::error::Joined>(
+    body: impl for<'scope> FnOnce(&'scope Scope<'scope, 'env, E>) -> Result<T, E>,
+) -> Result<T, E> {
+    let scope = Scope {
+        seen: std::cell::RefCell::new(Group::new()),
+        scope: std::marker::PhantomData,
+        env: std::marker::PhantomData,
+    };
+    let value = body(&scope);
+    let failed = std::mem::take(&mut scope.seen.borrow_mut().failed);
+    match value {
+        Ok(value) => ended(value, failed),
+        Err(first) => Err(group::left(first, failed)),
+    }
+}
+
+/// [`group`] where nothing can fail but a crash: the group's value, or the
+/// crash raised again.
+pub fn group_plain<'env, T>(
+    body: impl for<'scope> FnOnce(&'scope Scope<'scope, 'env, Crashed>) -> T,
+) -> T {
+    unfailing(scope(body))
+}
+
+/// A task's end where only a crash can fail it: its value, or the crash
+/// raised again in the main line.
+pub fn unfailing<T>(joined: Result<T, Crashed>) -> T {
+    match joined {
+        Ok(value) => value,
+        Err(crash) => panic!("{crash}"),
+    }
 }
 
 /// **The same scope where tasks run on every core** (`user_parallelism = yes`):
