@@ -1,0 +1,8 @@
+// A named function whose parameters are a `String` and a number is accepted
+// for a function type of that signature (#1231).
+fn tag(s: String, n: i64) -> String { return s.repeat(n) }
+
+fn main() {
+    let g: fn(String, i64) -> String = tag
+    println(g("ab", 2))
+}
