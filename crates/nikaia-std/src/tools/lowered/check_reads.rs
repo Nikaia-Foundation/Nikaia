@@ -69,6 +69,10 @@ impl CheckState {
                 for tail in block_tail(block) { self.a_map_read_kept(world, found, want, tail, span); }
                 return;
             },
+            Expr::AsyncGroup(block, _) => {
+                for tail in block_tail(block) { self.a_map_read_kept(world, found, want, tail, span); }
+                return;
+            },
             _ => { },
         }
         let node = id_of(value) as i64;

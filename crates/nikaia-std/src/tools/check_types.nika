@@ -426,6 +426,10 @@ pub fn check_peeled(value: ref Expr) -> ref Expr {
             let tail = tail_value_of(block) ?? return value
             check_peeled(tail)
         }
+        Expr::AsyncGroup(block, _) => {
+            let tail = tail_value_of(block) ?? return value
+            check_peeled(tail)
+        }
         else => value,
     }
 }

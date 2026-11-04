@@ -150,6 +150,7 @@ pub fn emit_tethered_type(world: &EmitWorld<'_, '_, '_, '_>, ty: Option<&Type>, 
     }
     match value {
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return emit_tethered_call(world, inner) },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); return emit_tethered_call(world, inner) },
         _ => return emit_tethered_call(world, value),
     }
 }

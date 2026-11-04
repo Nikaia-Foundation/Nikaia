@@ -529,6 +529,7 @@ pub(crate) fn map_named(receiver: &Expr, words: &winnow_grammar::InternerContext
 pub(crate) fn tm_walk_expr(expr: &Expr, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, classes: &mut MapClasses, walk: &mut MapWalk) {
     match expr {
         Expr::Block(b, _) => { tm_walk_block(b, words, library, env, classes, walk); },
+        Expr::AsyncGroup(b, _) => { tm_walk_block(b, words, library, env, classes, walk); },
         Expr::Unsafe(b, _) => { tm_walk_block(b, words, library, env, classes, walk); },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
@@ -578,6 +579,7 @@ pub(crate) fn tm_walk_expr(expr: &Expr, words: &winnow_grammar::InternerContext,
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tm_walk_expr(expr, words, library, env, classes, walk); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tm_walk_expr(expr, words, library, env, classes, walk); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tm_walk_expr(inner, words, library, env, classes, walk); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); tm_walk_expr(inner, words, library, env, classes, walk); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); tm_walk_expr(inner, words, library, env, classes, walk); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); tm_walk_expr(base, words, library, env, classes, walk); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); tm_walk_expr(base, words, library, env, classes, walk); },

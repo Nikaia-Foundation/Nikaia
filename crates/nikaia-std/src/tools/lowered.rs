@@ -2346,7 +2346,7 @@ pub mod check_exprs {
 pub mod check_extern {}
 pub mod check_facts {
     #[allow(unused_imports)]
-    pub use super::{FactWrap, FactKeyForm, FactViewed, FactNarrowing, FactPausing, FactClaim, CheckFacts, check_claims_report};
+    pub use super::{FactWrap, FactKeyForm, FactViewed, FactNarrowing, FactPausing, FactClaim, CheckAsyncWaitAt, CheckAsyncWait, CheckFacts, check_claims_report};
 }
 pub mod check_fallible {
     #[allow(unused_imports)]

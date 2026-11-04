@@ -754,6 +754,7 @@ pub(crate) fn grammar_types_walk_expr(expr: &mut Expr, words: &winnow_grammar::I
         },
         Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
         Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); grammar_types_walk_maybe(&mut *value, words, &intern, walk); },
@@ -807,6 +808,7 @@ pub(crate) fn grammar_types_walk_expr(expr: &mut Expr, words: &winnow_grammar::I
             grammar_types_walk_fields(&mut *fields, words, &intern, walk);
         },
         Expr::Block(block, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
+        Expr::AsyncGroup(block, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
         Expr::Unsafe(block, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
         Expr::Overlap(block, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
         Expr::Closure { body, .. } => { grammar_types_walk_block(&mut *body, words, &intern, walk); },

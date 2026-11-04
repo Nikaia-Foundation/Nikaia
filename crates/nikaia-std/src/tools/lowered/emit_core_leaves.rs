@@ -125,6 +125,7 @@ impl EmitState {
                 Expr::Match { .. } => true,
                 Expr::SafeMethod { .. } => true,
                 Expr::Block(_, _) => true,
+                Expr::AsyncGroup(_, _) => true,
                 Expr::Unsafe(_, _) => true,
                 Expr::Closure { .. } => true,
                 Expr::TryCatch { .. } => true,

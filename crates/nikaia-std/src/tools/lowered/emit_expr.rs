@@ -276,6 +276,8 @@ impl EmitState {
             Expr::Continue(_) => { self.emit_core_jump(out, false, flow)?; },
             Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.emit_core_throw(world, walk, out, host, inner, depth, flow, scope)?; },
             Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope)?; },
+            Expr::Async(_, _) => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet (#986): the checker takes it, the lowering onto tasks isn't built yet"), at: Some(flow.statement) }, &"emit_expr_written")); },
+            Expr::AsyncGroup(_, _) => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async { … }`, the group, yet (#986): the checker takes it, the lowering onto tasks isn't built yet"), at: Some(flow.statement) }, &"emit_expr_written")); },
             _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate this expression yet: an `asm` block in expression position"), at: Some(flow.statement) }, &"emit_expr_written")); },
         }
         Ok(())

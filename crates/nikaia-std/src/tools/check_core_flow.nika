@@ -203,6 +203,7 @@ fn check_core_flow_arm_discarded(mut state: CheckState, body: ref Expr) sync {
     state.discarded.insert(id_of(check_peeled(body)) as i64)
     match body {
         Expr::Block(block, _) => check_core_stmt_body_discarded(state, block),
+        Expr::AsyncGroup(block, _) => check_core_stmt_body_discarded(state, block),
         else => {},
     }
 }

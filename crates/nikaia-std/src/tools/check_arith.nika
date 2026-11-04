@@ -273,6 +273,7 @@ fn arith_structural(expr: ref Expr) -> bool {
         Expr::Unary { .. } => true,
         Expr::If { .. } => true,
         Expr::Block(_, _) => true,
+        Expr::AsyncGroup(_, _) => true,
         Expr::Match { .. } => true,
         Expr::Select(_, _) => true,
         Expr::Return(_, _) => true,

@@ -33,6 +33,10 @@ impl CheckState {
                 let tail = tail_value_of(block) ?? return out
                 out.extend(self.value_leaves(world, tail))
             },
+            Expr::AsyncGroup(block, _) => {
+                let tail = tail_value_of(block) ?? return out
+                out.extend(self.value_leaves(world, tail))
+            },
             else => out.push(value),
         }
         return out
@@ -62,6 +66,10 @@ impl CheckState {
                 }
             },
             Expr::Block(block, _) => {
+                let tail = tail_value_of(block) ?? return out
+                out.extend(self.choice_nodes(world, tail))
+            },
+            Expr::AsyncGroup(block, _) => {
                 let tail = tail_value_of(block) ?? return out
                 out.extend(self.choice_nodes(world, tail))
             },
@@ -440,6 +448,7 @@ impl CheckState {
                 }
             },
             Expr::Block(block, _) => self.narrowed_reads_given_back_in(block),
+            Expr::AsyncGroup(block, _) => self.narrowed_reads_given_back_in(block),
             Expr::Match { arms, .. } => {
                 for each in arms {
                     self.narrowed_reads_given_back(each.body)
@@ -497,6 +506,10 @@ impl CheckState {
                 return
             },
             Expr::Block(block, _) => {
+                self.hands_over_in(world, block, ty, to, span)
+                return
+            },
+            Expr::AsyncGroup(block, _) => {
                 self.hands_over_in(world, block, ty, to, span)
                 return
             },
@@ -765,6 +778,7 @@ impl CheckState {
 fn check_arm_leaves_a_block(value: ref Expr) -> bool sync {
     return match value {
         Expr::Block(_, _) => true,
+        Expr::AsyncGroup(_, _) => true,
         else => false,
     }
 }

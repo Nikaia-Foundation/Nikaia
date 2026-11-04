@@ -199,6 +199,7 @@ pub(crate) fn calls_in(expr: &Expr, span: &Span, words: &winnow_grammar::Interne
             for arg in args.iter() { calls_in(arg, span, words, bound, takers, found); }
         },
         Expr::Block(block, _) => { calls_in_block(block, span, words, bound, takers, found); },
+        Expr::AsyncGroup(block, _) => { calls_in_block(block, span, words, bound, takers, found); },
         Expr::Overlap(block, _) => { calls_in_block(block, span, words, bound, takers, found); },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
@@ -213,6 +214,7 @@ pub(crate) fn calls_in(expr: &Expr, span: &Span, words: &winnow_grammar::Interne
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); calls_in(expr, span, words, bound, takers, found); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); calls_in(inner, span, words, bound, takers, found); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); calls_in(inner, span, words, bound, takers, found); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); calls_in(base, span, words, bound, takers, found); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); calls_in(base, span, words, bound, takers, found); },
         Expr::TryCatch { expr, handler, .. } => {
@@ -270,6 +272,7 @@ pub(crate) fn statements_in(expr: &Expr, words: &winnow_grammar::InternerContext
             for arg in args.iter() { statements_in(arg, words, out); }
         },
         Expr::Block(block, _) => { statements_in_block(block, words, out); },
+        Expr::AsyncGroup(block, _) => { statements_in_block(block, words, out); },
         Expr::Overlap(block, _) => { statements_in_block(block, words, out); },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
@@ -284,6 +287,7 @@ pub(crate) fn statements_in(expr: &Expr, words: &winnow_grammar::InternerContext
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); statements_in(expr, words, out); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); statements_in(inner, words, out); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); statements_in(inner, words, out); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); statements_in(base, words, out); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); statements_in(base, words, out); },
         Expr::TryCatch { expr, handler, .. } => {

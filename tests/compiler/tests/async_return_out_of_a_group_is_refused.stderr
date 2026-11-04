@@ -1,0 +1,9 @@
+error[NK1132]: `return` leaves the function, but it stands inside an `async` form.
+   --> tests/async_return_out_of_a_group_is_refused.nika:12:3
+    |
+ 12 | 		return
+    |   ^^^^^^
+    |
+    = note: A task is a boundary no jump leaves, and an `async { … }` waits for its tasks at its end.
+    = help: For a task of several steps that can end early, write `async fn { … }`: `return` in it ends the task with its value.
+1 type error

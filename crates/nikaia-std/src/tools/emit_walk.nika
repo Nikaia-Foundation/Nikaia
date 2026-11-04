@@ -65,6 +65,7 @@ pub fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
     let mut out: Vec[ref Expr] = [expr]
     match expr {
         Expr::Block(block, _) => out.extend(visited_in_block(block)),
+        Expr::AsyncGroup(block, _) => out.extend(visited_in_block(block)),
         Expr::Unsafe(block, _) => out.extend(visited_in_block(block)),
         Expr::Overlap(block, _) => out.extend(visited_in_block(block)),
         Expr::If { cond, then_branch, else_branch, .. } => {
@@ -110,6 +111,7 @@ pub fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
             out.extend(visited_in_expr(rhs))
         },
         Expr::Try(inner, _) => out.extend(visited_in_expr(inner)),
+        Expr::Async(inner, _) => out.extend(visited_in_expr(inner)),
         Expr::Throw(inner, _) => out.extend(visited_in_expr(inner)),
         Expr::Return(value, _) => out.extend(visited_in_maybe(value)),
         Expr::Index { base, index, .. } => {

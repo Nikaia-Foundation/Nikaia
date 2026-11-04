@@ -33,6 +33,7 @@ pub fn check_visit_children(expr: &Expr) -> Vec<&Expr> {
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.push(expr); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.push(inner); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.push(inner); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.push(inner); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.push(expr); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); out.push(base); },
@@ -116,6 +117,10 @@ pub fn check_visit_expr_blocks(expr: &Expr) -> Vec<&Block> {
     let mut out: Vec<&Block> = vec![];
     match expr {
         Expr::Block(block, _) => {
+            out.push(block);
+            return out;
+        },
+        Expr::AsyncGroup(block, _) => {
             out.push(block);
             return out;
         },

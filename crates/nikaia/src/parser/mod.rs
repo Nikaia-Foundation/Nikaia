@@ -2437,7 +2437,6 @@ grammar! {
           | t:throw_stmt -> { Spanned::new(t, Span::from(_span)) }
           | w:while_stmt -> { Spanned::new(w, Span::from(_span)) }
           | f:for_stmt -> { Spanned::new(f, Span::from(_span)) }
-          | s:async_stmt -> { Spanned::new(s, Span::from(_span)) }
           | a:assign_stmt -> { Spanned::new(a, Span::from(_span)) }
           | e:expr_stmt -> { Spanned::new(e, Span::from(_span)) }
           | b:break_stmt -> { Spanned::new(b, Span::from(_span)) }
@@ -3787,18 +3786,21 @@ grammar! {
 
         // **Part I 8.1.2: `async`, the prefix that starts a task**
         // ([ADR-async-5](../../../../docs/specification/adr/adr-async-5.md)
-        // D5-D15, D22). Of its forms only `async(detached) fn { … }` has a node
-        // the checker and the lowering handle: it is `spawn fn { … }` (D13), so
-        // it parses into `Expr::Spawn`, and a lambda that names an argument
-        // meets `NK2103` there. Every other form is refused here, by name, until
-        // the checker handles it (#986) - the way `immutable_item` refuses
-        // (ADR-389 D4): a reader gets the sentence, not a parse error at the
-        // word, and no form is silently taken for another.
+        // D5-D15, D22). `async(detached) fn { … }` is `spawn fn { … }` (D13),
+        // so it parses into `Expr::Spawn`, and a lambda that names an argument
+        // meets `NK2103` there. `async e` (`async fn { … }` its lambda form,
+        // and the statement `expr_stmt` reads) is `Expr::Async`, `async { … }`
+        // `Expr::AsyncGroup`: the checker computes their wait points and groups
+        // (#986), the lowering refuses them until a5. The handle forms, the
+        // options and a `catch` after the form are refused here, by name - the
+        // way `immutable_item` refuses (ADR-389 D4): a reader gets the
+        // sentence, not a parse error at the word.
         //
         // The parse error that is reported is the one that reached furthest,
         // so each `fail` stands where the form shows, and no earlier than where
         // another arm stops: on what follows `async`, or on the option it names.
-        // A list of several options not built yet names the first.
+        // A list of several options not built yet names the first. The task of
+        // `async e` is a unary operand, so `async a() + async b()` is two tasks.
         rule async_expr -> Expr =
             KW_ASYNC "(" OPT_DETACHED ")" body:trailing_lambda not(KW_CATCH) -> {
                 Expr::Spawn { body: Box::new(body), written_async: true, id: NodeId::parsed() }
@@ -3815,16 +3817,24 @@ grammar! {
                 "An `async` option is `handle`, `deferred`, `detached`, `limit:`, `within:` or \
                  `admission:`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
-          | KW_ASYNC peek(KW_FN) not(async_named_fn) fail(
-                "`async fn { … }` isn't built yet (#986). `async(detached) fn { … }` is, for a \
-                 task that takes what it uses."
+          | KW_ASYNC peek("{") b:block not(KW_CATCH) -> { Expr::AsyncGroup(b, NodeId::parsed()) }
+          | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") e:unary_expr not(KW_CATCH) -> {
+                Expr::Async(Box::new(e), NodeId::parsed())
+            }
+          | KW_ASYNC peek(KW_FN) not(async_named_fn) l:trailing_lambda not(KW_CATCH) -> {
+                Expr::Async(Box::new(l), NodeId::parsed())
+            }
+          | KW_ASYNC peek(KW_FN) not(async_named_fn) trailing_lambda peek(KW_CATCH) fail(
+                "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
+                 the task's lambda."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
-          | KW_ASYNC peek("{") fail(
-                "`async { … }`, the group, isn't built yet (#986). `overlap { … }` runs each of \
-                 its statements beside the others."
+          | KW_ASYNC peek("{") block peek(KW_CATCH) fail(
+                "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
+                 the group."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
-          | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) fail(
-                "`async e`, a value computed beside the code after it, isn't built yet (#986)."
+          | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") unary_expr peek(KW_CATCH) fail(
+                "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
+                 a lambda, `async fn { … }`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
 
         // `async` before a function's declaration is `NK2115` (D5,
@@ -3839,16 +3849,6 @@ grammar! {
             KW_ASYNC peek(KW_LET) -> { _state.user().a_misplaced_async(_span.start, "let") }
           | KW_ASYNC peek(KW_FOR) -> { _state.user().a_misplaced_async(_span.start, "for") }
           | KW_ASYNC peek(KW_WHILE) -> { _state.user().a_misplaced_async(_span.start, "while") }
-
-        // `async e` as a statement (D9), refused for the reason `async_expr`
-        // gives. Tried before `expr_stmt`, so a statement gets its own
-        // sentence; the forms with a `(`, a `{` or a lambda after the word go on
-        // to `async_expr`, which names each of them, and `async` before a `let`
-        // or a loop is `NK2115` (`async_before_stmt`).
-        rule async_stmt -> Stmt =
-            KW_ASYNC not("(") not("{") not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) fail(
-                "`async e` as a statement isn't built yet (#986)."
-            ) -> { Stmt::Expr(Expr::ListLit { items: Vec::new(), id: NodeId::parsed() }) }
 
         // The options after `async(` up to the first one not built yet, which
         // `async_unbuilt_option` names: of the built ones only `detached` stands

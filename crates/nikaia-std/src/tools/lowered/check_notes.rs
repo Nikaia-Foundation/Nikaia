@@ -206,6 +206,7 @@ impl CheckState {
                 _ => return None,
             } },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.the_one_error(world, inner) },
+            Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.the_one_error(world, inner) },
             _ => return None,
         };
         let key = world.here.unaliased(&name);

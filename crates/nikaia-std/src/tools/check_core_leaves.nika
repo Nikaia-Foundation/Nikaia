@@ -635,6 +635,11 @@ fn check_core_lambda_held(ty: ref Ty) -> Ty {
 /// declares, after the refusals of giving away what is only borrowed
 /// (ADR-083), and a view of the subject is lent rather than given (D1).
 pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, span: ref Span, in_an_expression: bool) sync {
+    // **No jump leaves an `async` form** (ADR-async-5 D10); a lambda's
+    // `return`, `async fn { … }`'s included, ends the lambda.
+    if state.flow.async_depth > 0 {
+        state.a_return_out_of_an_async_form(span)
+    }
     let mut lending = false
     let mut closure = false
     let mut refused = false

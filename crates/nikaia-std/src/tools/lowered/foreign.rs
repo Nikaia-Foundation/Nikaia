@@ -129,6 +129,7 @@ pub(crate) fn expression_paths(expr: &Expr, span: &Span, names: &winnow_grammar:
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); expression_paths(expr, span, names, unaliased, holes_of, root_at, found); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); expression_paths(inner, span, names, unaliased, holes_of, root_at, found); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); expression_paths(inner, span, names, unaliased, holes_of, root_at, found); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); expression_paths(inner, span, names, unaliased, holes_of, root_at, found); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); expression_paths(expr, span, names, unaliased, holes_of, root_at, found); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); expression_paths(base, span, names, unaliased, holes_of, root_at, found); },
@@ -196,6 +197,7 @@ pub(crate) fn statement_blocks(stmt: &Stmt, names: &winnow_grammar::InternerCont
 pub(crate) fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) {
     match expr {
         Expr::Block(block, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
+        Expr::AsyncGroup(block, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
         Expr::Unsafe(block, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
         Expr::Overlap(block, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
         Expr::Closure { body, .. } => { block_names(body, names, &unaliased, &holes_of, &root_at, found); },
@@ -249,6 +251,7 @@ pub(crate) fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerCon
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); expression_blocks(expr, names, unaliased, holes_of, root_at, found); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); expression_blocks(inner, names, unaliased, holes_of, root_at, found); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); expression_blocks(inner, names, unaliased, holes_of, root_at, found); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); expression_blocks(inner, names, unaliased, holes_of, root_at, found); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); expression_blocks(expr, names, unaliased, holes_of, root_at, found); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); expression_blocks(base, names, unaliased, holes_of, root_at, found); },

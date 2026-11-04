@@ -303,6 +303,7 @@ impl CheckState {
                 else => return null,
             },
             Expr::Try(inner, _) => return self.the_one_error(world, inner),
+            Expr::Async(inner, _) => return self.the_one_error(world, inner),
             else => return null,
         }
         let key = world.here.unaliased(name)

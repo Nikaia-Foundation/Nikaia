@@ -1168,6 +1168,7 @@ pub(crate) fn prover_arm_guard(walk: &mut ProverWalk, guard: Option<&Expr>, span
 pub(crate) fn prover_arm_body(walk: &mut ProverWalk, body: &Expr, span: Span, scope: &mut ProverScope, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
     match body {
         Expr::Block(block, _) => prover_block(walk, block, scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition),
+        Expr::AsyncGroup(block, _) => prover_block(walk, block, scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition),
         _ => prover_expr_stmt(walk, body, span, scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition),
     }
 }
@@ -1177,6 +1178,7 @@ pub(crate) fn prover_arm_body(walk: &mut ProverWalk, body: &Expr, span: Span, sc
 pub(crate) fn prover_arm_assigns(body: &Expr, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     match body {
         Expr::Block(block, _) => assigned_in(block, words),
+        Expr::AsyncGroup(block, _) => assigned_in(block, words),
         _ => assigned_in_expr(body, words),
     }
 }
@@ -1186,6 +1188,7 @@ pub(crate) fn prover_arm_assigns(body: &Expr, words: &winnow_grammar::InternerCo
 pub(crate) fn prover_arm_lengths_changed(changed: &mut collections::BTreeSet<String>, body: &Expr, scope: &ProverScope, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) {
     match body {
         Expr::Block(block, _) => { prover_lengths_changed(changed, block, scope, readers, words); },
+        Expr::AsyncGroup(block, _) => { prover_lengths_changed(changed, block, scope, readers, words); },
         _ => { for m in scope.mutables.iter() { if m.ends_with(".len()") && changes_length_in_expr(body, &nikaia_std::index::or(m.strip_suffix(".len()"), || "").to_string(), readers, words) { changed.insert(m.to_string()); } } },
     }
 }
@@ -1195,6 +1198,7 @@ pub(crate) fn prover_arm_lengths_changed(changed: &mut collections::BTreeSet<Str
 pub(crate) fn prover_arm_own_names(body: &Expr, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     match body {
         Expr::Block(block, _) => prover_own_names(block, words),
+        Expr::AsyncGroup(block, _) => prover_own_names(block, words),
         _ => collections::BTreeSet::new(),
     }
 }
@@ -1378,6 +1382,7 @@ pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, sc
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_calls_in(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_calls_in(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); prover_calls_in(walk, base, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
@@ -1436,6 +1441,7 @@ pub(crate) fn prover_calls_in_maybe(walk: &mut ProverWalk, expr: Option<&Expr>, 
 pub(crate) fn prover_blocks_in(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     match expr {
         Expr::Block(block, _) => { if prover_claims_then_value(block, words) { prover_block(walk, block, &mut scope.clone(), &at.inside(false), program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); } else { prover_nested(walk, block, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); } },
+        Expr::AsyncGroup(block, _) => { if prover_claims_then_value(block, words) { prover_block(walk, block, &mut scope.clone(), &at.inside(false), program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); } else { prover_nested(walk, block, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); } },
         Expr::Unsafe(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); },
         Expr::Overlap(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition); },
         Expr::Closure { params, mutable, body, .. } => {

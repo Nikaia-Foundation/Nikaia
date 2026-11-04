@@ -892,6 +892,7 @@ pub fn named_handle(expr: ref Expr, names: ref winnow_grammar::InternerContext, 
     return match expr {
         Expr::Variable(name, _) => a_handle_in_scope(names.resolve(name), scope),
         Expr::Block(block, _) => a_handle_at_the_tail(block, names, scope),
+        Expr::AsyncGroup(block, _) => a_handle_at_the_tail(block, names, scope),
         else => null,
     }
 }
@@ -1299,6 +1300,7 @@ fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -
             sharing_block(body, asked, holes_of, ty_of, walk)
         }
         Expr::Block(block, _) => sharing_block(block, asked, holes_of, ty_of, walk),
+        Expr::AsyncGroup(block, _) => sharing_block(block, asked, holes_of, ty_of, walk),
         Expr::Overlap(block, _) => sharing_block(block, asked, holes_of, ty_of, walk),
         Expr::If { cond, then_branch, else_branch, .. } => {
             sharing_expression(cond, asked, holes_of, ty_of, walk)
@@ -1317,6 +1319,7 @@ fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -
         }
         Expr::Unary { expr, .. } => sharing_expression(expr, asked, holes_of, ty_of, walk),
         Expr::Try(inner, _) => sharing_expression(inner, asked, holes_of, ty_of, walk),
+        Expr::Async(inner, _) => sharing_expression(inner, asked, holes_of, ty_of, walk),
         Expr::Throw(inner, _) => sharing_expression(inner, asked, holes_of, ty_of, walk),
         Expr::Cast { expr, .. } => sharing_expression(expr, asked, holes_of, ty_of, walk),
         Expr::Field { base, .. } => sharing_expression(base, asked, holes_of, ty_of, walk),

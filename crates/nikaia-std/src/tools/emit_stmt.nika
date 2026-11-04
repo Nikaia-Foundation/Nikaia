@@ -1160,6 +1160,7 @@ impl EmitState {
         let block_shaped = match expr {
             Expr::If { .. } => true,
             Expr::Block(_, _) => true,
+            Expr::AsyncGroup(_, _) => true,
             Expr::Unsafe(_, _) => true,
             Expr::Overlap(_, _) => true,
             else => false,

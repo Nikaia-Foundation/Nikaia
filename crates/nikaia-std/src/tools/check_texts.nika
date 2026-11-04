@@ -92,6 +92,7 @@ pub fn ends_in_text(expr: ref Expr) -> bool sync {
         Expr::If { then_branch, else_branch, .. } => if else_branch == null { false } else { both_tails_text(then_branch, else_branch ?? return false) },
         Expr::Match { arms, .. } => all_arms_text(arms),
         Expr::Block(block, _) => tail_is_text(block),
+        Expr::AsyncGroup(block, _) => tail_is_text(block),
         else => false,
     }
 }
@@ -122,6 +123,7 @@ pub fn ends_in_null(expr: ref Expr) -> bool sync {
     return match expr {
         Expr::LitNull(_) => true,
         Expr::Block(block, _) => tail_is_null(block),
+        Expr::AsyncGroup(block, _) => tail_is_null(block),
         else => false,
     }
 }
@@ -177,6 +179,10 @@ fn check_texts_ends_in_literal(expr: ref Expr, text: bool) -> bool sync {
             return true
         },
         Expr::Block(block, _) => {
+            let ends = block_tail(block)
+            return ends.len() == 1 && check_texts_ends_in_literal(ends[0], text)
+        },
+        Expr::AsyncGroup(block, _) => {
             let ends = block_tail(block)
             return ends.len() == 1 && check_texts_ends_in_literal(ends[0], text)
         },
@@ -289,6 +295,13 @@ impl CheckState {
                 }
                 return null
             },
+            Expr::AsyncGroup(block, _) => {
+                let ends = block_tail(block)
+                if ends.len() == 1 && check_texts_ends_in_literal(ends[0], true) {
+                    return self.text_literal(world, want, ends[0], owned)
+                }
+                return null
+            },
             // **A list of text written out, or of tuples of it, is text of
             // its own** (ADR-282 D4): `[("A", "1")]` handed to a
             // `Vec[(String, String)]` builds each `String` where it is kept
@@ -355,6 +368,14 @@ impl CheckState {
                 self.facts.some_tails.insert(text_key(arm))
             },
             Expr::Block(block, _) => {
+                let tail = block_tail(block)
+                if tail.len() == 1 {
+                    self.some_at_the_tails(tail[0])
+                } else if !check_texts_ends_in_a_jump(block) {
+                    self.facts.some_tails.insert(text_key(arm))
+                }
+            },
+            Expr::AsyncGroup(block, _) => {
                 let tail = block_tail(block)
                 if tail.len() == 1 {
                     self.some_at_the_tails(tail[0])
@@ -551,6 +572,13 @@ pub fn tuple_ends(expr: ref Expr) -> Vec[ref Expr] sync {
             }
         },
         Expr::Block(block, _) => {
+            let tail = block_tail(block)
+            if tail.len() != 1 {
+                return []
+            }
+            return tuple_ends(tail[0])
+        },
+        Expr::AsyncGroup(block, _) => {
             let tail = block_tail(block)
             if tail.len() != 1 {
                 return []

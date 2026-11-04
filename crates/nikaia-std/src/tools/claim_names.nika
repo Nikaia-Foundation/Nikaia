@@ -68,6 +68,7 @@ fn collect_names(expr: ref Expr, words: ref winnow_grammar::InternerContext, hol
         },
         Expr::Unary { expr, .. } => collect_names(expr, words, holes_of, names),
         Expr::Try(inner, _) => collect_names(inner, words, holes_of, names),
+        Expr::Async(inner, _) => collect_names(inner, words, holes_of, names),
         Expr::Throw(inner, _) => collect_names(inner, words, holes_of, names),
         Expr::Cast { expr, .. } => collect_names(expr, words, holes_of, names),
         Expr::Field { base, .. } => collect_names(base, words, holes_of, names),

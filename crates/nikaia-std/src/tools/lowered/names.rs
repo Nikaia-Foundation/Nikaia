@@ -37,6 +37,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); names_in(expr, words, out); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); names_in(inner, words, out); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); names_in(inner, words, out); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); names_in(expr, words, out); },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
@@ -77,6 +78,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
             }
         },
         Expr::Block(block, _) => { names_in_block(block, words, out); },
+        Expr::AsyncGroup(block, _) => { names_in_block(block, words, out); },
         Expr::Unsafe(block, _) => { names_in_block(block, words, out); },
         Expr::Overlap(block, _) => { names_in_block(block, words, out); },
         Expr::Closure { body, .. } => { names_in_block(body, words, out); },

@@ -639,6 +639,7 @@ pub(crate) fn list_shaped(value: &Expr) -> bool {
             true
         },
         Expr::Block(block, _) => list_shaped_block(block),
+        Expr::AsyncGroup(block, _) => list_shaped_block(block),
         _ => false,
     }
 }
@@ -790,6 +791,7 @@ pub(crate) fn handed_back(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, 
             for arm in arms.iter() { handed_back(unit, asked, &arm.body, span, own_buffer, here); }
         },
         Expr::Block(block, _) => { walk_block(unit, asked, block, true, &own_buffer, here); },
+        Expr::AsyncGroup(block, _) => { walk_block(unit, asked, block, true, &own_buffer, here); },
         _ => { stores(unit, asked, value, span, &own_buffer, here); },
     }
 }
@@ -1079,6 +1081,7 @@ pub(crate) fn root(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, expr: &E
         Expr::SafeMethod { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); root(unit, asked, here, receiver) },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); root(unit, asked, here, base) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); root(unit, asked, here, inner) },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); root(unit, asked, here, inner) },
         _ => Root::Elsewhere,
     }
 }
@@ -1101,6 +1104,7 @@ pub(crate) fn mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, node
         Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); mentions(unit, asked, here, lhs) || mentions(unit, asked, here, rhs) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); mentions(unit, asked, here, expr) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); mentions(unit, asked, here, inner) },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); mentions(unit, asked, here, inner) },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); mentions(unit, asked, here, inner) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); mentions(unit, asked, here, expr) },
         Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); mentions(unit, asked, here, body) },
@@ -1115,6 +1119,7 @@ pub(crate) fn mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, node
         Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); mentions(unit, asked, here, value) || arms_mention(unit, asked, here, arms) },
         Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); mentions(unit, asked, here, cond) || block_mentions(unit, asked, here, then_branch) || maybe_block_mentions(unit, asked, here, (else_branch).as_ref()) },
         Expr::Block(block, _) => block_mentions(unit, asked, here, block),
+        Expr::AsyncGroup(block, _) => block_mentions(unit, asked, here, block),
         Expr::Unsafe(block, _) => block_mentions(unit, asked, here, block),
         Expr::Overlap(block, _) => block_mentions(unit, asked, here, block),
         Expr::Closure { body, .. } => block_mentions(unit, asked, here, body),
@@ -1224,6 +1229,7 @@ pub(crate) fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span:
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); stores(unit, asked, expr, span, &own_buffer, here); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); stores(unit, asked, inner, span, &own_buffer, here); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); stores(unit, asked, inner, span, &own_buffer, here); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); stores(unit, asked, inner, span, &own_buffer, here); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); stores(unit, asked, expr, span, &own_buffer, here); },
         Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); stores(unit, asked, body, span, &own_buffer, here); },
@@ -1263,6 +1269,7 @@ pub(crate) fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span:
             walk_maybe_block(unit, asked, (else_branch).as_ref(), &own_buffer, here);
         },
         Expr::Block(block, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
+        Expr::AsyncGroup(block, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
         Expr::Unsafe(block, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
         Expr::Overlap(block, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
         Expr::Closure { body, .. } => { walk_block(unit, asked, body, false, &own_buffer, here); },
@@ -1571,7 +1578,7 @@ pub(crate) fn rsrc_eval(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kno
     rsrc_derived(&reach)
 }
 
-pub(crate) fn rsrc_passes_whole(node: &Expr) -> bool { matches!(node, Expr::Variable(_, _) | Expr::Block(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _) | Expr::If { .. } | Expr::Match { .. } | Expr::Coalesce { .. } | Expr::Return(_, _)) }
+pub(crate) fn rsrc_passes_whole(node: &Expr) -> bool { matches!(node, Expr::Variable(_, _) | Expr::Block(_, _) | Expr::AsyncGroup(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _) | Expr::If { .. } | Expr::Match { .. } | Expr::Coalesce { .. } | Expr::Return(_, _)) }
 
 pub(crate) fn rsrc_derived(reach: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut out = rsrc_none();
@@ -1587,6 +1594,7 @@ pub(crate) fn rsrc_eval_node(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); rsrc_index(unit, asked, here, known, &own_buffer, base, index, flow) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_eval(unit, asked, here, known, &own_buffer, expr, flow) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_eval(unit, asked, here, known, &own_buffer, inner, flow) },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_eval(unit, asked, here, known, &own_buffer, inner, flow) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_eval(unit, asked, here, known, &own_buffer, expr, flow) },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_nothing(unit, asked, here, known, &own_buffer, inner, flow) },
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); rsrc_both(unit, asked, here, known, &own_buffer, value, fallback, flow) },
@@ -1602,6 +1610,7 @@ pub(crate) fn rsrc_eval_node(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here
         Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); rsrc_call(unit, asked, here, known, &own_buffer, func, args, config, flow) },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); rsrc_return(unit, asked, here, known, &own_buffer, (value).as_ref(), flow) },
         Expr::Block(block, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
+        Expr::AsyncGroup(block, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
         Expr::Unsafe(block, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
         Expr::Overlap(block, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
         Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); rsrc_if(unit, asked, here, known, &own_buffer, cond, then_branch, (else_branch).as_ref(), flow) },

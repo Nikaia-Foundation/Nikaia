@@ -845,7 +845,7 @@ impl EmitState {
         if is_return && self.facts.lent_returns.contains(&at) { out.push("&"); }
         self.emit_expr(world, walk, out, host, expr, depth, flow, scope)?;
         if either { out.push(")"); }
-        let block_shaped = matches!(expr, Expr::If { .. } | Expr::Block(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _));
+        let block_shaped = matches!(expr, Expr::If { .. } | Expr::Block(_, _) | Expr::AsyncGroup(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _));
         if !tail.is_value() && !block_shaped { out.push(";"); }
         Ok(())
     }

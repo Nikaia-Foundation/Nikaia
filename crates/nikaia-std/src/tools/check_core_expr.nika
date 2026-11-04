@@ -273,6 +273,80 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             check_core_expr(state, world, host, inner, span)
             Ty::Unknown
         },
+        // **`async e`** (ADR-async-5 D6, D10): the value is `e`'s, a lambda's
+        // the lambda's result, since the lambda is run as the task; no jump
+        // leaves it (`NK1132`). Its wait point is the block's (`check_async_block`).
+        Expr::Async(inner, _) => {
+            if state.flow.loops > 0 {
+                state.an_async_inside_a_loop(span)
+            }
+            let loops = state.flow.loops
+            let barrier = state.flow.barrier?.clone()
+            state.flow.loops = 0
+            state.flow.barrier = "task"
+            state.flow.async_depth += 1
+            state.flow.async_started += 1
+            let mut run = false
+            match inner {
+                Expr::Closure { params, .. } => {
+                    state.a_task_takes_no_arguments(world, params, span)
+                    run = true
+                },
+                else => {},
+            }
+            // A run lambda's value is its result, so a type written for the
+            // value is not the lambda's.
+            let expected = state.expected?.clone()
+            if run {
+                state.expected = null
+                state.flow.lambda_expected = null
+                state.flow.lambda_tail = null
+            }
+            // A lambda's own type is not asked (it is run, not bound).
+            let ty = if run { check_core_value_of(state, world, host, inner, span) } else { check_core_expr(state, world, host, inner, span) }
+            state.expected = expected?.clone()
+            state.flow.async_depth -= 1
+            state.flow.loops = loops
+            state.flow.barrier = barrier
+            if run {
+                // A last value of no known type was asked where it stands in
+                // the body (an open number stands back there), so not again.
+                let tail = state.flow.lambda_tail?.clone() ?? Ty::Unknown
+                if tail.is_unknown() {
+                    state.flow.unknown_said += 1
+                }
+                tail
+            } else {
+                ty
+            }
+        },
+        // **`async { … }`, the group** (D9): its value is its block's, and it
+        // starts at least one task (`NK2111`).
+        Expr::AsyncGroup(block, _) => {
+            if state.flow.loops > 0 {
+                state.an_async_inside_a_loop(span)
+            }
+            let loops = state.flow.loops
+            let barrier = state.flow.barrier?.clone()
+            let group = state.flow.async_group
+            let started = state.flow.async_started
+            state.flow.loops = 0
+            state.flow.barrier = "`async { … }`"
+            state.flow.async_depth += 1
+            state.flow.async_group = id_of(expr) as i64
+            state.flow.async_started = 0
+            state.flow.async_group_block = id_of(expr) as i64
+            let ty = check_core_block(state, world, host, block)
+            if state.flow.async_started == 0 {
+                state.a_group_with_no_task(span)
+            }
+            state.flow.async_depth -= 1
+            state.flow.loops = loops
+            state.flow.barrier = barrier
+            state.flow.async_group = group
+            state.flow.async_started = started
+            ty
+        },
         Expr::Throw(inner, _) => check_core_expr_throw(state, world, host, inner, span),
         // **`return`, `break` and `continue` where an expression stands**
         // (ADR-276 D20): each asks exactly what its statement form asks.

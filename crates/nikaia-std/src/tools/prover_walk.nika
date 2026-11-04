@@ -1609,6 +1609,7 @@ fn prover_arm_guard(mut walk: ProverWalk, guard: ref Expr?, span: Span, scope: r
 fn prover_arm_body(mut walk: ProverWalk, body: ref Expr, span: Span, mut scope: ProverScope, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool sync {
     return match body {
         Expr::Block(block, _) => prover_block(walk, block, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
+        Expr::AsyncGroup(block, _) => prover_block(walk, block, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
         else => prover_expr_stmt(walk, body, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
     }
 }
@@ -1617,6 +1618,7 @@ fn prover_arm_body(mut walk: ProverWalk, body: ref Expr, span: Span, mut scope: 
 fn prover_arm_assigns(body: ref Expr, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] sync {
     return match body {
         Expr::Block(block, _) => assigned_in(block, words),
+        Expr::AsyncGroup(block, _) => assigned_in(block, words),
         else => assigned_in_expr(body, words),
     }
 }
@@ -1625,6 +1627,7 @@ fn prover_arm_assigns(body: ref Expr, words: ref winnow_grammar::InternerContext
 fn prover_arm_lengths_changed(mut changed: collections::BTreeSet[String], body: ref Expr, scope: ref ProverScope, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) sync {
     match body {
         Expr::Block(block, _) => prover_lengths_changed(changed, block, scope, readers, words),
+        Expr::AsyncGroup(block, _) => prover_lengths_changed(changed, block, scope, readers, words),
         else => {
             for m in scope.mutables {
                 if m.ends_with(".len()") && changes_length_in_expr(body, (m.strip_suffix(".len()") ?? "").clone(), readers, words) {
@@ -1639,6 +1642,7 @@ fn prover_arm_lengths_changed(mut changed: collections::BTreeSet[String], body: 
 fn prover_arm_own_names(body: ref Expr, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] sync {
     return match body {
         Expr::Block(block, _) => prover_own_names(block, words),
+        Expr::AsyncGroup(block, _) => prover_own_names(block, words),
         else => collections::BTreeSet(),
     }
 }
@@ -1878,6 +1882,7 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
         },
         Expr::Unary { expr, .. } => prover_calls_in(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
         Expr::Try(inner, _) => prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
+        Expr::Async(inner, _) => prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
         Expr::Throw(inner, _) => prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
         Expr::Cast { expr, .. } => prover_calls_in(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
         Expr::Field { base, .. } => prover_calls_in(walk, base, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
@@ -1951,6 +1956,13 @@ fn prover_blocks_in(mut walk: ProverWalk, expr: ref Expr, scope: ref ProverScope
         // block of `assert`s and the call changes no name, so it reads what
         // is known where it stands (#776).
         Expr::Block(block, _) => {
+            if prover_claims_then_value(block, words) {
+                prover_block(walk, block, scope.clone(), at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+            } else {
+                prover_nested(walk, block, null, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+            }
+        },
+        Expr::AsyncGroup(block, _) => {
             if prover_claims_then_value(block, words) {
                 prover_block(walk, block, scope.clone(), at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             } else {

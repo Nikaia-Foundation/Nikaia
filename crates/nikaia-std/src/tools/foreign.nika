@@ -216,6 +216,7 @@ fn expression_paths(expr: ref Expr, span: ref Span, names: ref winnow_grammar::I
         }
         Expr::Unary { expr, .. } => expression_paths(expr, span, names, unaliased, holes_of, root_at, found),
         Expr::Try(inner, _) => expression_paths(inner, span, names, unaliased, holes_of, root_at, found),
+        Expr::Async(inner, _) => expression_paths(inner, span, names, unaliased, holes_of, root_at, found),
         Expr::Throw(inner, _) => expression_paths(inner, span, names, unaliased, holes_of, root_at, found),
         Expr::Cast { expr, .. } => expression_paths(expr, span, names, unaliased, holes_of, root_at, found),
         Expr::Field { base, .. } => expression_paths(base, span, names, unaliased, holes_of, root_at, found),
@@ -300,6 +301,7 @@ fn statement_blocks(stmt: ref Stmt, names: ref winnow_grammar::InternerContext, 
 fn expression_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
     match expr {
         Expr::Block(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
+        Expr::AsyncGroup(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
         Expr::Unsafe(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
         Expr::Overlap(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
         Expr::Closure { body, .. } => block_names(body, names, unaliased, holes_of, root_at, found),
@@ -362,6 +364,7 @@ fn expression_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext,
         }
         Expr::Unary { expr, .. } => expression_blocks(expr, names, unaliased, holes_of, root_at, found),
         Expr::Try(inner, _) => expression_blocks(inner, names, unaliased, holes_of, root_at, found),
+        Expr::Async(inner, _) => expression_blocks(inner, names, unaliased, holes_of, root_at, found),
         Expr::Throw(inner, _) => expression_blocks(inner, names, unaliased, holes_of, root_at, found),
         Expr::Cast { expr, .. } => expression_blocks(expr, names, unaliased, holes_of, root_at, found),
         Expr::Field { base, .. } => expression_blocks(base, names, unaliased, holes_of, root_at, found),

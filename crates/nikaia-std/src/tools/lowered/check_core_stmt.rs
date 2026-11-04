@@ -1733,6 +1733,7 @@ pub(crate) fn check_core_stmt_code_parameter(world: &CheckWorld<'_, '_, '_, '_, 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Block) -> Ty {
+    check_async_block(state, world, block);
     state.scope.push(vec![]);
     let mut tail = check_core_stmt_unit();
     let count = block.stmts.len() as i64;
@@ -1760,4 +1761,186 @@ pub fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     state.scope.pop();
     tail
 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) {
+    let own = state.flow.async_group_block;
+    state.flow.async_group_block = None;
+    let count = block.stmts.len() as i64;
+    if count == 0 { return; }
+    let mut group = -1 - nikaia_std::index::get(&block.stmts, 0).span.start as i64;
+    let mut ends_group = true;
+    if own.is_some() { group = nikaia_std::index::or(own, || group.into()); } else if state.flow.async_group.is_some() {
+        group = nikaia_std::index::or(state.flow.async_group, || group.into());
+        ends_group = false;
+    }
+    let mut pending: Vec<i64> = vec![];
+    let mut at: i64 = 0;
+    for stmt in block.stmts.iter() {
+        let mut beside: i64 = 0;
+        for wait in pending.iter() {
+            let wait = nikaia_std::num::value(wait);
+            if wait > at { beside += 1; }
+        }
+        let last = ends_group && at == count - 1;
+        match &stmt.node {
+            Stmt::Let { names, value, .. } => {
+                match value {
+                    Expr::Async(inner, _) => {
+                        let inner = nikaia_std::boxed::open(inner);
+                        pending.push(check_async_binding(state, world, block, at, names, value, group, beside, last, &stmt.span));
+                        check_async_in(state, inner, group, &stmt.span);
+                    },
+                    Expr::Tuple(parts, _) => {
+                        let mut computed: i64 = 0;
+                        for part in parts.iter() { if check_async_computes(part) { computed += 1; } }
+                        for part in parts.iter() {
+                            match part {
+                                Expr::Async(inner, _) => {
+                                    let inner = nikaia_std::boxed::open(inner);
+                                    pending.push(check_async_binding(state, world, block, at, names, part, group, beside + computed - 1, last, &stmt.span));
+                                    check_async_in(state, inner, group, &stmt.span);
+                                },
+                                _ => { check_async_in(state, part, group, &stmt.span); },
+                            }
+                        }
+                    },
+                    _ => { check_async_in(state, value, group, &stmt.span); },
+                }
+            },
+            Stmt::Expr(value) => {
+                match value {
+                    Expr::Async(inner, _) => {
+                        let inner = nikaia_std::boxed::open(inner);
+                        state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
+                        if last && beside == 0 { state.a_task_with_nothing_beside_it(&stmt.span, String::from("it is the last statement of its group, which waits for it at once")); }
+                        pending.push(count);
+                        check_async_in(state, inner, group, &stmt.span);
+                    },
+                    _ => { check_async_in(state, value, group, &stmt.span); },
+                }
+            },
+            Stmt::Comptime { value, .. } => { check_async_in(state, value, group, &stmt.span); },
+            Stmt::Assign { target, value, .. } => {
+                check_async_in(state, target, group, &stmt.span);
+                check_async_in(state, value, group, &stmt.span);
+            },
+            Stmt::For { iter, .. } => { check_async_in(state, iter, group, &stmt.span); },
+            Stmt::While { cond, .. } => { check_async_in(state, cond, group, &stmt.span); },
+            Stmt::Return(value) => { if value.is_some() { check_async_in(state, match value { Some(__nikaia_value) => __nikaia_value, None => return }, group, &stmt.span); } },
+            Stmt::Break => { },
+            Stmt::Continue => { },
+        }
+        at += 1;
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_async_binding(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], task: &Expr, group: i64, others: i64, last: bool, span: &Span) -> i64 {
+    let count = block.stmts.len() as i64;
+    let mut wanted: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in names.iter() {
+        let name = *name;
+        wanted.insert(world.words.resolve(name).to_string());
+    }
+    let mut named = count;
+    let mut index: i64 = 0;
+    for stmt in block.stmts.iter() {
+        if index > at && named == count && !starts_a_task(&stmt.node) {
+            let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+            names_in_statement(&stmt.node, world.words, &mut seen);
+            for name in wanted.iter() { if seen.contains(name) { named = index; } }
+        }
+        index += 1;
+    }
+    if named == count {
+        state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
+        if last && others == 0 { state.a_task_with_nothing_beside_it(span, String::from("nothing names its binding, and it is the last statement of its group, which waits for it at once")); }
+        return count;
+    }
+    state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::BeforeStatement(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(named)).span.start as i64), group });
+    if named == at + 1 && others == 0 { state.a_task_with_nothing_beside_it(span, String::from("its binding is named in the very next statement, which waits for it")); }
+    named
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn starts_a_task(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::Let { value, .. } => matches!(value, Expr::Async(_, _)),
+        Stmt::Expr(value) => matches!(value, Expr::Async(_, _)),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_async_in(state: &mut CheckState, expr: &Expr, group: i64, span: &Span) {
+    match expr {
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let mut parts: Vec<&Expr> = vec![func];
+            for arg in args.iter() { parts.push(arg); }
+            check_async_operands(state, &parts, id_of(expr) as i64, group, span);
+        },
+        Expr::MethodCall { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            let mut parts: Vec<&Expr> = vec![receiver];
+            for arg in args.iter() { parts.push(arg); }
+            check_async_operands(state, &parts, id_of(expr) as i64, group, span);
+        },
+        Expr::SafeMethod { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            let mut parts: Vec<&Expr> = vec![receiver];
+            for arg in args.iter() { parts.push(arg); }
+            check_async_operands(state, &parts, id_of(expr) as i64, group, span);
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            let parts: Vec<&Expr> = vec![lhs, rhs];
+            check_async_operands(state, &parts, id_of(expr) as i64, group, span);
+        },
+        Expr::Tuple(items, _) => {
+            let mut parts: Vec<&Expr> = vec![];
+            for item in items.iter() { parts.push(item); }
+            check_async_operands(state, &parts, id_of(expr) as i64, group, span);
+        },
+        Expr::Async(inner, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(id_of(expr) as i64), group });
+            state.a_task_with_nothing_beside_it(span, String::from("where it stands, its value is needed at once"));
+            check_async_in(state, inner, group, span);
+        },
+        _ => { for child in child_exprs_of(expr) { check_async_in(state, child, group, span); } },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_async_operands(state: &mut CheckState, parts: &[&Expr], at: i64, group: i64, span: &Span) {
+    let mut computed = 0;
+    for part in parts.iter() {
+        let part = *part;
+        if check_async_computes(part) { computed += 1; }
+    }
+    for part in parts.iter() {
+        let part = *part;
+        match part {
+            Expr::Async(inner, _) => {
+                let inner = nikaia_std::boxed::open(inner);
+                state.facts.async_waits.insert(id_of(part) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(at), group });
+                if computed < 2 { state.a_task_with_nothing_beside_it(span, String::from("nothing beside it in the same call or operation is computed while it runs")); }
+                check_async_in(state, inner, group, span);
+            },
+            _ => { check_async_in(state, part, group, span); },
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_async_computes(expr: &Expr) -> bool { !matches!(expr, Expr::LitInt { .. } | Expr::LitStr { .. } | Expr::LitChar(_, _) | Expr::LitBool(_, _) | Expr::LitFloat(_, _) | Expr::LitNull(_) | Expr::Variable(_, _) | Expr::Path(_, _)) }
 

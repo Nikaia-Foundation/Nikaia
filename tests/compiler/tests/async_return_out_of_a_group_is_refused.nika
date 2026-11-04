@@ -1,0 +1,19 @@
+// No jump leaves an `async` form (ADR-async-5 D10, `NK1132`): `return` in
+// an `async { … }` is refused; in `async fn { … }` it ends the task.
+
+fn work(n: i64) -> i64 {
+	return n
+}
+
+fn main() {
+	async {
+		async work(1)
+		work(2)
+		return
+	}
+	let x = async fn {
+		return 3
+	}
+	println("x")
+	println(f"{x}")
+}

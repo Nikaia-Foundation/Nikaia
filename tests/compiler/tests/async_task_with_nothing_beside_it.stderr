@@ -1,0 +1,25 @@
+error[NK2110]: This `async` starts a task with nothing beside it: nothing beside it in the same call or operation is computed while it runs.
+   --> tests/async_task_with_nothing_beside_it.nika:14:2
+    |
+ 14 | 	let r = load(async load(1))
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A task runs beside the code between its start and its wait point; here that is nothing, so it would only be waited for.
+    = help: Remove the word `async`: the expression runs on the main line with the same value.
+error[NK2110]: This `async` starts a task with nothing beside it: its binding is named in the very next statement, which waits for it.
+   --> tests/async_task_with_nothing_beside_it.nika:15:2
+    |
+ 15 | 	let a = async load(2)
+    |  ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A task runs beside the code between its start and its wait point; here that is nothing, so it would only be waited for.
+    = help: Remove the word `async`: the expression runs on the main line with the same value.
+error[NK2110]: This `async` starts a task with nothing beside it: it is the last statement of its group, which waits for it at once.
+   --> tests/async_task_with_nothing_beside_it.nika:17:2
+    |
+ 17 | 	async work(4)
+    |  ^^^^^^^^^^^^^
+    |
+    = note: A task runs beside the code between its start and its wait point; here that is nothing, so it would only be waited for.
+    = help: Remove the word `async`: the expression runs on the main line with the same value.
+

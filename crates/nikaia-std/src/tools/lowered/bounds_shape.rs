@@ -393,6 +393,7 @@ pub(crate) fn look_expr(expr: &Expr, look: Look, deferred: bool, around: &Around
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); look_expr(expr, look, deferred, around, words, seen); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, look, deferred, around, words, seen); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, look, deferred, around, words, seen); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, look, deferred, around, words, seen); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); look_expr(expr, look, deferred, around, words, seen); },
         Expr::TryCatch { expr, handler, .. } => {
@@ -421,6 +422,7 @@ pub(crate) fn look_expr(expr: &Expr, look: Look, deferred: bool, around: &Around
             for arm in arms.iter() { look_block(&arm.body, look, true, around, words, seen); }
         },
         Expr::Block(b, _) => { look_block(b, look, deferred, around, words, seen); },
+        Expr::AsyncGroup(b, _) => { look_block(b, look, deferred, around, words, seen); },
         Expr::Overlap(b, _) => { look_block(b, look, true, around, words, seen); },
         Expr::Unsafe(b, _) => { look_block(b, look, deferred, around, words, seen); },
         Expr::Closure { body, .. } => { look_block(body, look, true, around, words, seen); },

@@ -145,6 +145,7 @@ pub(crate) fn nn_every(body: &Block, visited: &[&Expr], state: &mut NnState) {
         let expr = *expr;
         match expr {
             Expr::Block(inner, _) => { blocks.push(inner); },
+            Expr::AsyncGroup(inner, _) => { blocks.push(inner); },
             Expr::Unsafe(inner, _) => { blocks.push(inner); },
             Expr::Overlap(inner, _) => { blocks.push(inner); },
             Expr::If { then_branch, else_branch, .. } => {

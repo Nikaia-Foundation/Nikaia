@@ -45,6 +45,7 @@ pub fn child_exprs_of(expr: ref Expr) -> Vec[ref Expr] {
         }
         Expr::Unary { expr, .. } => out.push(expr),
         Expr::Try(inner, _) => out.push(inner),
+        Expr::Async(inner, _) => out.push(inner),
         Expr::Throw(inner, _) => out.push(inner),
         Expr::Cast { expr, .. } => out.push(expr),
         Expr::Field { base, .. } => out.push(base),
@@ -130,6 +131,10 @@ pub fn blocks_of_expr(expr: ref Expr) -> Vec[ref Block] {
         // (ADR-302 D3): it makes no boundary of its own, so what it calls,
         // the function calls.
         Expr::Block(block, _) => {
+            out.push(block)
+            return out
+        }
+        Expr::AsyncGroup(block, _) => {
             out.push(block)
             return out
         }

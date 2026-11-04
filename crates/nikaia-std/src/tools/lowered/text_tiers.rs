@@ -664,6 +664,7 @@ pub(crate) fn flow_tuple_parts(going: &TierGoing, value: &Expr, kinds: &Kinds, a
             return true;
         },
         Expr::Block(block, _) => { return flow_tuple_tail(going, block, kinds, ask, walk); },
+        Expr::AsyncGroup(block, _) => { return flow_tuple_tail(going, block, kinds, ask, walk); },
         Expr::If { then_branch, else_branch, .. } => {
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
             flow_tuple_tail(going, then_branch, kinds, ask, walk);
@@ -844,6 +845,11 @@ pub(crate) fn read_through(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk
             return;
         },
         Expr::Try(inner, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            read_through(inner, ask, walk, out);
+            return;
+        },
+        Expr::Async(inner, _) => {
             let inner = nikaia_std::boxed::open(inner);
             read_through(inner, ask, walk, out);
             return;
@@ -1300,6 +1306,7 @@ pub(crate) fn lent_whole(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: 
 pub(crate) fn still_sources(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
     match value {
         Expr::Block(block, _) => { still_tail(block, ask, walk, out); },
+        Expr::AsyncGroup(block, _) => { still_tail(block, ask, walk, out); },
         Expr::If { then_branch, else_branch, .. } => {
             still_tail(then_branch, ask, walk, out);
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -1520,6 +1527,7 @@ pub(crate) fn source_of(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); called_result(func, ask, &walk) },
         Expr::MethodCall { method, .. } => { let method = *method; method_result(ask.names.resolve(method), &walk) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); source_of(inner, ask, walk) },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); source_of(inner, ask, walk) },
         _ => None,
     }
 }
@@ -1848,6 +1856,7 @@ pub(crate) fn a_literal_text(value: &Expr) -> bool {
     match value {
         Expr::LitStr { .. } => true,
         Expr::Block(block, _) => a_literal_tail(block),
+        Expr::AsyncGroup(block, _) => a_literal_tail(block),
         Expr::If { then_branch, else_branch, .. } => {
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
             a_literal_tail(then_branch) && a_literal_tail(otherwise)
@@ -2069,6 +2078,7 @@ pub(crate) fn ties_of(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mu
         },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return ties_of(base, ask, walk); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return ties_of(inner, ask, walk); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); return ties_of(inner, ask, walk); },
         Expr::ListLit { items, .. } => { for item in items.iter() { for tie in ties_of(item, ask, walk) { out.push(tie); } } },
         Expr::Tuple(items, _) => { for item in items.iter() { for tie in ties_of(item, ask, walk) { out.push(tie); } } },
         Expr::StructLit { fields, .. } => {
@@ -2256,6 +2266,7 @@ pub(crate) fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, wal
         Expr::Variable(name, _) => { let name = *name; struct_of_local(ask.names.resolve(name), &walk) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tier_struct_of(expr, ask, walk) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tier_struct_of(inner, ask, walk) },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); tier_struct_of(inner, ask, walk) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; field_struct_or_bytes(base, ask.names.resolve(name), ask, walk) },
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); cut_bytes(base, index, ask, walk) },
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); called_struct(func, ask, &walk) },
@@ -2790,6 +2801,7 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
             late_choice_closed(leaf, held, late);
         },
         Expr::Block(block, _) => { late_block(block, leaf, ask, late); },
+        Expr::AsyncGroup(block, _) => { late_block(block, leaf, ask, late); },
         Expr::Unsafe(block, _) => { late_block(block, false, ask, late); },
         Expr::Overlap(block, _) => { late_block(block, false, ask, late); },
         Expr::LitInterpolated { parts, .. } => {
@@ -2884,6 +2896,7 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
             late_expr(rhs, false, ask, late);
         },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); late_expr(inner, false, ask, late); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); late_expr(inner, false, ask, late); },
         Expr::Throw(inner, _) => {
             let inner = nikaia_std::boxed::open(inner);
             late.leaving += 1;
@@ -2975,6 +2988,7 @@ pub(crate) fn late_sources(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, late
             }
         },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return late_sources(inner, ask, late); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); return late_sources(inner, ask, late); },
         _ => { late_read_off(value, ask, late, &mut out); },
     }
     out
@@ -3054,6 +3068,7 @@ pub(crate) fn late_made(value: &Expr) -> &Expr {
     match value {
         Expr::Coalesce { value: first, .. } => { let first = nikaia_std::boxed::open(first); late_made(first) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); late_made(inner) },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); late_made(inner) },
         _ => value,
     }
 }
@@ -3281,6 +3296,10 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
             walk.tail_back = back;
             tier_block(block, ask, walk)
         },
+        Expr::AsyncGroup(block, _) => {
+            walk.tail_back = back;
+            tier_block(block, ask, walk)
+        },
         Expr::Unsafe(block, _) => tier_block(block, ask, walk),
         Expr::Overlap(block, _) => tier_block(block, ask, walk),
         Expr::Closure { body, .. } => {
@@ -3320,6 +3339,7 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
             kinds_joined(&out, &tier_block(handler, ask, walk))
         },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tier_expr(inner, ask, walk) },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); tier_expr(inner, ask, walk) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tier_expr(expr, ask, walk) },
         Expr::Throw(inner, _) => {
             let inner = nikaia_std::boxed::open(inner);
@@ -4501,6 +4521,7 @@ pub(crate) fn a_keeping_target(function: &FnDecl, at: i64, ask: &TierAsk<'_, '_,
 pub(crate) fn param_arm_leaves(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     match value {
         Expr::Block(block, _) => { param_arm_tail(block, ask, walk); },
+        Expr::AsyncGroup(block, _) => { param_arm_tail(block, ask, walk); },
         Expr::If { then_branch, else_branch, .. } => {
             param_arm_tail(then_branch, ask, walk);
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -4856,6 +4877,7 @@ pub(crate) fn tw_lets_expr(expr: &mut Expr, job: &TwLets) {
         },
         Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
         Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); tw_lets_maybe(&mut *value, job); },
@@ -4909,6 +4931,7 @@ pub(crate) fn tw_lets_expr(expr: &mut Expr, job: &TwLets) {
             tw_lets_fields(&mut *fields, job);
         },
         Expr::Block(block, _) => { tw_lets_block(&mut *block, job); },
+        Expr::AsyncGroup(block, _) => { tw_lets_block(&mut *block, job); },
         Expr::Unsafe(block, _) => { tw_lets_block(&mut *block, job); },
         Expr::Overlap(block, _) => { tw_lets_block(&mut *block, job); },
         Expr::Closure { body, .. } => { tw_lets_block(&mut *body, job); },

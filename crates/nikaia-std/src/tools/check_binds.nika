@@ -14,6 +14,9 @@ pub struct CheckBoundary {
     pub barrier: String?,
     pub handed: CheckHanded?,
     pub promised: String?,
+    pub async_group: i64?,
+    pub async_started: i64,
+    pub async_depth: i64,
 }
 
 impl CheckState {
@@ -260,8 +263,11 @@ impl CheckState {
     /// seen to do stops here too (ADR-277 D7), and so does the enclosing `sync`
     /// (ADR-277 D2).
     pub fn enter_boundary(ref mut self, what: ref String) -> CheckBoundary sync {
-        let saved = CheckBoundary { loops: self.flow.loops, barrier: self.flow.barrier?.clone(), handed: self.handed_over?.clone(), promised: self.inside_a_sync_function?.clone() }
+        let saved = CheckBoundary { loops: self.flow.loops, barrier: self.flow.barrier?.clone(), handed: self.handed_over?.clone(), promised: self.inside_a_sync_function?.clone(), async_group: self.flow.async_group, async_started: self.flow.async_started, async_depth: self.flow.async_depth }
         self.flow.loops = 0
+        self.flow.async_group = null
+        self.flow.async_started = 0
+        self.flow.async_depth = 0
         self.flow.barrier = what.clone()
         self.narrowing.walls.push(self.scope.len() as i64)
         self.handed_over = null
@@ -275,6 +281,9 @@ impl CheckState {
         self.handed_over = saved.handed?.clone()
         self.flow.loops = saved.loops
         self.flow.barrier = saved.barrier?.clone()
+        self.flow.async_group = saved.async_group
+        self.flow.async_started = saved.async_started
+        self.flow.async_depth = saved.async_depth
         self.narrowing.walls.pop()
     }
 }

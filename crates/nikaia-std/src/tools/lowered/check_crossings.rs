@@ -80,6 +80,7 @@ pub(crate) fn check_crossings_expr_path(world: &CheckWorld<'_, '_, '_, '_, '_, '
         },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); return check_crossings_returned(world, name, (value).as_ref()); },
         Expr::Block(b, _) => { return check_crossings_path(world, name, &b.stmts, 0, in_loop); },
+        Expr::AsyncGroup(b, _) => { return check_crossings_path(world, name, &b.stmts, 0, in_loop); },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
             if check_crossings_named_in(world, name, cond) { return CheckCrossingsPath::Taken; }

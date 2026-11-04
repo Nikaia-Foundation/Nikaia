@@ -2361,6 +2361,7 @@ fn check_core_stmt_code_parameter(world: ref CheckWorld, func: ref Expr, at: i64
 }
 
 pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block) -> Ty sync {
+    check_async_block(state, world, block)
     state.scope.push([])
     let mut tail = check_core_stmt_unit()
     let count = block.stmts.len() as i64
@@ -2399,4 +2400,241 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
     }
     state.scope.pop()
     return tail
+}
+
+/// **The wait points of the tasks one block starts** (ADR-async-5 D6, D7,
+/// D9), into `facts.async_waits` by the `async` node, and `NK2110` where a
+/// task's window is empty. The group is the `async { }` this block is the body
+/// of, else the innermost one around it in the function, else the block
+/// itself. A task in a nested block is that block's, asked when it is walked.
+fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Block) sync {
+    let own = state.flow.async_group_block
+    state.flow.async_group_block = null
+    let count = block.stmts.len() as i64
+    if count == 0 {
+        return
+    }
+    let mut group = -1 - block.stmts[0].span.start as i64
+    let mut ends_group = true
+    if own != null {
+        group = own ?? group
+    } else if state.flow.async_group != null {
+        group = state.flow.async_group ?? group
+        ends_group = false
+    }
+    // Where each task this block's statements started is waited for, by the
+    // statement's index (`count` for the group's end): one still running
+    // after a start stands beside it.
+    let mut pending: Vec[i64] = []
+    let mut at = 0
+    for stmt in block.stmts {
+        let mut beside = 0
+        for wait in pending {
+            if wait > at {
+                beside += 1
+            }
+        }
+        let last = ends_group && at == count - 1
+        match stmt.node {
+            Stmt::Let { names, value, .. } => {
+                match value {
+                    Expr::Async(inner, _) => {
+                        pending.push(check_async_binding(state, world, block, at, names, value, group, beside, last, stmt.span))
+                        check_async_in(state, inner, group, stmt.span)
+                    },
+                    Expr::Tuple(parts, _) => {
+                        let mut computed = 0
+                        for part in parts {
+                            if check_async_computes(part) {
+                                computed += 1
+                            }
+                        }
+                        for part in parts {
+                            match part {
+                                Expr::Async(inner, _) => {
+                                    pending.push(check_async_binding(state, world, block, at, names, part, group, beside + computed - 1, last, stmt.span))
+                                    check_async_in(state, inner, group, stmt.span)
+                                },
+                                else => check_async_in(state, part, group, stmt.span),
+                            }
+                        }
+                    },
+                    else => check_async_in(state, value, group, stmt.span),
+                }
+            },
+            Stmt::Expr(value) => {
+                match value {
+                    Expr::Async(inner, _) => {
+                        state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
+                        if last && beside == 0 {
+                            state.a_task_with_nothing_beside_it(stmt.span, "it is the last statement of its group, which waits for it at once")
+                        }
+                        pending.push(count)
+                        check_async_in(state, inner, group, stmt.span)
+                    },
+                    else => check_async_in(state, value, group, stmt.span),
+                }
+            },
+            Stmt::Comptime { value, .. } => check_async_in(state, value, group, stmt.span),
+            Stmt::Assign { target, value, .. } => {
+                check_async_in(state, target, group, stmt.span)
+                check_async_in(state, value, group, stmt.span)
+            },
+            Stmt::For { iter, .. } => check_async_in(state, iter, group, stmt.span),
+            Stmt::While { cond, .. } => check_async_in(state, cond, group, stmt.span),
+            Stmt::Return(value) => {
+                if value != null {
+                    check_async_in(state, value ?? return, group, stmt.span)
+                }
+            },
+            Stmt::Break => {},
+            Stmt::Continue => {},
+        }
+        at += 1
+    }
+}
+
+/// One task a binding waits for (D6): before the first statement after `at`
+/// naming any of `names`, nested anywhere; one nothing names at its group's
+/// end. `others` counts what runs beside it. Gives back the statement's index,
+/// the block's length for the group's end.
+fn check_async_binding(mut state: CheckState, world: ref CheckWorld, block: ref Block, at: i64, names: ref Vec[winnow_grammar::Symbol], task: ref Expr, group: i64, others: i64, last: bool, span: ref Span) -> i64 sync {
+    let count = block.stmts.len() as i64
+    let mut wanted: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in names {
+        wanted.insert(world.words.resolve(name).clone())
+    }
+    let mut named = count
+    let mut index = 0
+    for stmt in block.stmts {
+        if index > at && named == count && !starts_a_task(stmt.node) {
+            let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+            names_in_statement(stmt.node, world.words, seen)
+            for name in wanted {
+                if seen.contains(name) {
+                    named = index
+                }
+            }
+        }
+        index += 1
+    }
+    if named == count {
+        state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
+        if last && others == 0 {
+            state.a_task_with_nothing_beside_it(span, "nothing names its binding, and it is the last statement of its group, which waits for it at once")
+        }
+        return count
+    }
+    state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::BeforeStatement(block.stmts[named].span.start as i64), group: group })
+    if named == at + 1 && others == 0 {
+        state.a_task_with_nothing_beside_it(span, "its binding is named in the very next statement, which waits for it")
+    }
+    return named
+}
+
+/// Whether a statement starts a task as a whole, `let x = async e` or `async
+/// e`: a pending binding it names is waited for in that task, so the main line
+/// waits where another statement names it (D6).
+fn starts_a_task(stmt: ref Stmt) -> bool sync {
+    return match stmt {
+        Stmt::Let { value, .. } => match value {
+            Expr::Async(_, _) => true,
+            else => false,
+        },
+        Stmt::Expr(value) => match value {
+            Expr::Async(_, _) => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// The tasks in one expression, outside its blocks and lambdas: an argument
+/// waits before its call, an operand before its operation, a part before its
+/// tuple (D6); one standing anywhere else is waited for where it stands.
+fn check_async_in(mut state: CheckState, expr: ref Expr, group: i64, span: ref Span) sync {
+    match expr {
+        Expr::Call { func, args, .. } => {
+            let mut parts: Vec[ref Expr] = [func]
+            for arg in args {
+                parts.push(arg)
+            }
+            check_async_operands(state, parts, id_of(expr) as i64, group, span)
+        },
+        Expr::MethodCall { receiver, args, .. } => {
+            let mut parts: Vec[ref Expr] = [receiver]
+            for arg in args {
+                parts.push(arg)
+            }
+            check_async_operands(state, parts, id_of(expr) as i64, group, span)
+        },
+        Expr::SafeMethod { receiver, args, .. } => {
+            let mut parts: Vec[ref Expr] = [receiver]
+            for arg in args {
+                parts.push(arg)
+            }
+            check_async_operands(state, parts, id_of(expr) as i64, group, span)
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            let parts: Vec[ref Expr] = [lhs, rhs]
+            check_async_operands(state, parts, id_of(expr) as i64, group, span)
+        },
+        Expr::Tuple(items, _) => {
+            let mut parts: Vec[ref Expr] = []
+            for item in items {
+                parts.push(item)
+            }
+            check_async_operands(state, parts, id_of(expr) as i64, group, span)
+        },
+        Expr::Async(inner, _) => {
+            state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(id_of(expr) as i64), group: group })
+            state.a_task_with_nothing_beside_it(span, "where it stands, its value is needed at once")
+            check_async_in(state, inner, group, span)
+        },
+        else => {
+            for child in child_exprs_of(expr) {
+                check_async_in(state, child, group, span)
+            }
+        },
+    }
+}
+
+/// The arguments of one call, the operands of one operation or the parts of
+/// one tuple: a task among them waits before `at`, and is refused (`NK2110`)
+/// where nothing else among them is computed beside it.
+fn check_async_operands(mut state: CheckState, parts: ref Vec[ref Expr], at: i64, group: i64, span: ref Span) sync {
+    let mut computed = 0
+    for part in parts {
+        if check_async_computes(part) {
+            computed += 1
+        }
+    }
+    for part in parts {
+        match part {
+            Expr::Async(inner, _) => {
+                state.facts.async_waits.insert(id_of(part) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(at), group: group })
+                if computed < 2 {
+                    state.a_task_with_nothing_beside_it(span, "nothing beside it in the same call or operation is computed while it runs")
+                }
+                check_async_in(state, inner, group, span)
+            },
+            else => check_async_in(state, part, group, span),
+        }
+    }
+}
+
+/// Whether an expression beside a task computes (D7): a literal or a name
+/// does not; a call, an operation or another task does.
+fn check_async_computes(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::LitInt { .. } => false,
+        Expr::LitStr { .. } => false,
+        Expr::LitChar(_, _) => false,
+        Expr::LitBool(_, _) => false,
+        Expr::LitFloat(_, _) => false,
+        Expr::LitNull(_) => false,
+        Expr::Variable(_, _) => false,
+        Expr::Path(_, _) => false,
+        else => true,
+    }
 }

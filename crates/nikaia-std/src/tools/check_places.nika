@@ -89,6 +89,23 @@ impl CheckState {
         self.findings.push(check_refusal("NK2120", span, "This `async` stands inside a loop's body, but `async` starts only tasks whose number stands in the source.", ["A loop would start one task each time round, and a group's tasks are counted where they are written."], "To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`."))
     }
 
+    /// **`NK2110`: a task with nothing beside it** (ADR-async-5 D7): nothing
+    /// runs between its start and its wait point; `why` says which shape.
+    pub fn a_task_with_nothing_beside_it(ref mut self, span: ref Span, why: String) sync {
+        self.findings.push(check_refusal("NK2110", span, f"This `async` starts a task with nothing beside it: {why}.", ["A task runs beside the code between its start and its wait point; here that is nothing, so it would only be waited for."], "Remove the word `async`: the expression runs on the main line with the same value."))
+    }
+
+    /// **`NK2111`: an `async { … }` that starts no task** (ADR-async-5 D9).
+    pub fn a_group_with_no_task(ref mut self, span: ref Span) sync {
+        self.findings.push(check_refusal("NK2111", span, "This `async { … }` starts no task, so it waits for nothing.", ["Its statements run in order, as any block's; only an `async` inside it starts a task its end waits for."], "Remove the word `async`. For one task of several steps, write `async fn { … }`."))
+    }
+
+    /// **`NK1132`: a `return` that would leave an `async` form** (ADR-async-5
+    /// D10): a task is a boundary no jump leaves.
+    pub fn a_return_out_of_an_async_form(ref mut self, span: ref Span) sync {
+        self.findings.push(check_refusal("NK1132", span, "`return` leaves the function, but it stands inside an `async` form.", ["A task is a boundary no jump leaves, and an `async { … }` waits for its tasks at its end."], "For a task of several steps that can end early, write `async fn { … }`: `return` in it ends the task with its value."))
+    }
+
     /// What a value's own type arguments bind its declaration's parameters to:
     /// `Pair[i64]` against `struct Pair[T]` gives `T = i64`, positionally.
     pub fn arguments_of(ref self, on: ref Ty) -> collections::BTreeMap[String, Ty] sync {

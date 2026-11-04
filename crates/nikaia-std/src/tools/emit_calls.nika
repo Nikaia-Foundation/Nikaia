@@ -105,6 +105,9 @@ pub fn call_callee_name(words: ref winnow_grammar::InternerContext, aliases: ref
         Expr::Try(inner, _) => {
             return call_callee_name(words, aliases, inner)
         },
+        Expr::Async(inner, _) => {
+            return call_callee_name(words, aliases, inner)
+        },
         else => {},
     }
     return null

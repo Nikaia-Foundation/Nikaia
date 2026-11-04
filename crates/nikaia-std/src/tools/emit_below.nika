@@ -369,7 +369,9 @@ impl EmitState {
             Expr::TryCatch { handler, .. } => return self.emit_handler_can_fail(world, statement, handler),
             Expr::Throw(_, _) => return true,
             Expr::Block(block, _) => return self.emit_block_can_fail(world, statement, block),
+            Expr::AsyncGroup(block, _) => return self.emit_block_can_fail(world, statement, block),
             Expr::Try(inner, _) => return self.branch_can_fail(world, statement, inner),
+            Expr::Async(inner, _) => return self.branch_can_fail(world, statement, inner),
             Expr::Unary { expr, .. } => return self.branch_can_fail(world, statement, expr),
             Expr::Binary { lhs, rhs, .. } => {
                 return self.branch_can_fail(world, statement, lhs) || self.branch_can_fail(world, statement, rhs)

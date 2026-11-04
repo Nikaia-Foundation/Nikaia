@@ -99,6 +99,7 @@ fn leaves_within(expr: ref Expr, throwing: fn(ref Expr) -> bool sync, holes_of: 
         Expr::Binary { lhs, rhs, .. } => leaves_within(lhs, throwing, holes_of, with_continue) || leaves_within(rhs, throwing, holes_of, with_continue),
         Expr::Unary { expr, .. } => leaves_within(expr, throwing, holes_of, with_continue),
         Expr::Try(inner, _) => leaves_within(inner, throwing, holes_of, with_continue),
+        Expr::Async(inner, _) => leaves_within(inner, throwing, holes_of, with_continue),
         Expr::Throw(inner, _) => leaves_within(inner, throwing, holes_of, with_continue),
         Expr::Cast { expr, .. } => leaves_within(expr, throwing, holes_of, with_continue),
         Expr::Field { base, .. } => leaves_within(base, throwing, holes_of, with_continue),
@@ -182,6 +183,7 @@ fn fields_leave_within(fields: ref Vec[FieldInit], throwing: fn(ref Expr) -> boo
 fn blocks_leave(expr: ref Expr, throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, with_continue: bool) -> bool {
     return match expr {
         Expr::Block(block, _) => leaves_block(block, throwing, holes_of, with_continue),
+        Expr::AsyncGroup(block, _) => leaves_block(block, throwing, holes_of, with_continue),
         Expr::Unsafe(block, _) => leaves_block(block, throwing, holes_of, with_continue),
         Expr::Overlap(block, _) => leaves_block(block, throwing, holes_of, with_continue),
         Expr::Closure { body, .. } => leaves_block(body, throwing, holes_of, with_continue),

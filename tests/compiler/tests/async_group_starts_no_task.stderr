@@ -1,0 +1,9 @@
+error[NK2111]: This `async { … }` starts no task, so it waits for nothing.
+  --> tests/async_group_starts_no_task.nika:9:2
+   |
+ 9 | 	async {
+   |  ^^^^^^^
+   |
+   = note: Its statements run in order, as any block's; only an `async` inside it starts a task its end waits for.
+   = help: Remove the word `async`. For one task of several steps, write `async fn { … }`.
+

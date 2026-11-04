@@ -69,6 +69,10 @@ pub fn call_callee_name(words: &winnow_grammar::InternerContext, aliases: &colle
             let inner = nikaia_std::boxed::open(inner);
             return call_callee_name(words, aliases, inner);
         },
+        Expr::Async(inner, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            return call_callee_name(words, aliases, inner);
+        },
         _ => { },
     }
     None

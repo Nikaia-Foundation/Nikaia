@@ -532,6 +532,10 @@ impl CheckState {
                 is_block = true;
                 empty = block.stmts.is_empty();
             },
+            Expr::AsyncGroup(block, _) => {
+                is_block = true;
+                empty = block.stmts.is_empty();
+            },
             _ => { },
         }
         if !is_block {
@@ -549,6 +553,7 @@ impl CheckState {
                     if lent.contains(world.words.resolve(name)) { named.insert(node_key(expr)); }
                 },
                 Expr::Block(inner, _) => { if lent_binds_again(world, inner, lent) { bound_again = true; } },
+                Expr::AsyncGroup(inner, _) => { if lent_binds_again(world, inner, lent) { bound_again = true; } },
                 Expr::LitInterpolated { .. } => { pending.extend(host.literal_holes(expr)); },
                 _ => { },
             }
@@ -564,6 +569,7 @@ impl CheckState {
                         if lent.contains(world.words.resolve(name)) { named.insert(node_key(expr)); }
                     },
                     Expr::Block(inner, _) => { if lent_binds_again(world, inner, lent) { bound_again = true; } },
+                    Expr::AsyncGroup(inner, _) => { if lent_binds_again(world, inner, lent) { bound_again = true; } },
                     Expr::LitInterpolated { .. } => { pending.extend(host.literal_holes(expr)); },
                     _ => { },
                 }
@@ -593,6 +599,7 @@ impl CheckState {
                     if lent.contains(world.words.resolve(name)) { named.insert(node_key(expr)); }
                 },
                 Expr::Block(inner, _) => { if lent_binds_again(world, inner, lent) { bound_again = true; } },
+                Expr::AsyncGroup(inner, _) => { if lent_binds_again(world, inner, lent) { bound_again = true; } },
                 _ => { },
             }
         }

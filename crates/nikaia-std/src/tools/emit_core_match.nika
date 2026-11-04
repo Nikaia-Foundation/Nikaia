@@ -685,6 +685,7 @@ impl EmitState {
                     Expr::LitBool(_, _) => true,
                     Expr::Variable(_, _) => true,
                     Expr::Block(_, _) => true,
+                    Expr::AsyncGroup(_, _) => true,
                     Expr::Tuple(_, _) => true,
                     Expr::ListLit { .. } => true,
                     else => false,
@@ -779,6 +780,10 @@ impl EmitState {
                     self.emit_core_block(world, walk, out, host, block, depth, inside, scope, EmitTail::Statement)
                     return
                 },
+                Expr::AsyncGroup(block, _) => {
+                    self.emit_core_block(world, walk, out, host, block, depth, inside, scope, EmitTail::Statement)
+                    return
+                },
                 else => {}
             }
         }
@@ -822,6 +827,22 @@ impl EmitState {
         // one.
         match body {
             Expr::Block(block, _) => {
+                let mut opening = taken_apart.clone()
+                for name in opened {
+                    opening.push_str(f"let {name} = nikaia_std::boxed::open({name}); ")
+                }
+                for copy in copied {
+                    opening.push_str(copy)
+                }
+                for name in cloned {
+                    opening.push_str(f"let {name} = {name}.clone(); ")
+                }
+                let tail = if statements { EmitTail::Statement } else { EmitTail::Value }
+                let trimmed: String? = opening.trim_end().clone()
+                self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, tail, trimmed)
+                return
+            },
+            Expr::AsyncGroup(block, _) => {
                 let mut opening = taken_apart.clone()
                 for name in opened {
                     opening.push_str(f"let {name} = nikaia_std::boxed::open({name}); ")

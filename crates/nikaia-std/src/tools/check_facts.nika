@@ -72,6 +72,22 @@ pub struct FactClaim {
     pub assumed: bool,
 }
 
+/// **Where a task of `async e` is waited for** (ADR-async-5 D6), for the
+/// lowering onto tasks (#986): before a call or an operation (its node), before
+/// a statement of the binding's block (its span's start), or at its group's end.
+pub enum CheckAsyncWaitAt {
+    Before(i64),
+    BeforeStatement(i64),
+    GroupEnd,
+}
+
+/// One task's wait point and its group (D9): an `async { }`'s node, or for the
+/// innermost block holding the form `-1 -` its first statement's start.
+pub struct CheckAsyncWait {
+    pub at: CheckAsyncWaitAt,
+    pub group: i64,
+}
+
 pub struct CheckFacts {
     /// What a task binds and still holds at a pause (ADR-055 D6): seen by the tests.
     pub held_across_a_pause: collections::BTreeSet[(i64, String)],
@@ -211,6 +227,9 @@ pub struct CheckFacts {
     pub lent_map_fallbacks: collections::BTreeSet[i64],
     pub optional_fallbacks: collections::BTreeSet[i64],
     pub flat_reads: collections::BTreeSet[i64],
+    /// **Where each `async e` task is waited for**, by the `async` node
+    /// (ADR-async-5 D6, D9): what the lowering joins it at.
+    pub async_waits: collections::BTreeMap[i64, CheckAsyncWait],
     /// **`m.get(k)` on a map**, by the call: an `Option<&T>` below already,
     /// so a nullable view it is lent to opens nothing.
     pub map_gets: collections::BTreeSet[i64],
@@ -566,6 +585,7 @@ impl CheckFacts {
             map_gets: collections::BTreeSet(),
             optional_fallbacks: collections::BTreeSet(),
             flat_reads: collections::BTreeSet(),
+            async_waits: collections::BTreeMap(),
             copied_reads: collections::BTreeSet(),
             text_in_lists: collections::BTreeSet(),
             owned_patterns: collections::BTreeSet(),

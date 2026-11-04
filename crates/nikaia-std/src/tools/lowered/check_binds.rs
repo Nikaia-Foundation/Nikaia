@@ -7,6 +7,9 @@ pub struct CheckBoundary {
     pub barrier: Option<String>,
     pub handed: Option<CheckHanded>,
     pub promised: Option<String>,
+    pub async_group: Option<i64>,
+    pub async_started: i64,
+    pub async_depth: i64,
 }
 
 impl CheckState {
@@ -196,8 +199,11 @@ impl CheckState {
         }, promised: match self.inside_a_sync_function.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        } };
+        }, async_group: self.flow.async_group, async_started: self.flow.async_started, async_depth: self.flow.async_depth };
         self.flow.loops = 0;
+        self.flow.async_group = None;
+        self.flow.async_started = 0;
+        self.flow.async_depth = 0;
         self.flow.barrier = Some(what.to_string());
         self.narrowing.walls.push(self.scope.len() as i64);
         self.handed_over = None;
@@ -220,6 +226,9 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         };
+        self.flow.async_group = saved.async_group;
+        self.flow.async_started = saved.async_started;
+        self.flow.async_depth = saved.async_depth;
         self.narrowing.walls.pop();
     }
 }

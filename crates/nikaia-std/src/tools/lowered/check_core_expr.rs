@@ -223,6 +223,76 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             check_core_expr(state, world, host, inner, span);
             Ty::Unknown
         },
+        Expr::Async(inner, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            if state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
+            let loops = state.flow.loops;
+            let barrier = match state.flow.barrier.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            state.flow.loops = 0;
+            state.flow.barrier = Some(String::from("task"));
+            state.flow.async_depth += 1;
+            state.flow.async_started += 1;
+            let mut run = false;
+            match inner {
+                Expr::Closure { params, .. } => {
+                    state.a_task_takes_no_arguments(world, params, span);
+                    run = true;
+                },
+                _ => { },
+            }
+            let expected = match state.expected.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            if run {
+                state.expected = None;
+                state.flow.lambda_expected = None;
+                state.flow.lambda_tail = None;
+            }
+            let ty = if run { check_core_value_of(state, world, host, inner, span) } else { check_core_expr(state, world, host, inner, span) };
+            state.expected = match expected.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            state.flow.async_depth -= 1;
+            state.flow.loops = loops;
+            state.flow.barrier = barrier;
+            if run {
+                let tail = nikaia_std::index::or(match state.flow.lambda_tail.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || Ty::Unknown);
+                if tail.is_unknown() { state.flow.unknown_said += 1; }
+                tail
+            } else { ty }
+        },
+        Expr::AsyncGroup(block, _) => {
+            if state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
+            let loops = state.flow.loops;
+            let barrier = match state.flow.barrier.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            let group = state.flow.async_group;
+            let started = state.flow.async_started;
+            state.flow.loops = 0;
+            state.flow.barrier = Some(String::from("`async { … }`"));
+            state.flow.async_depth += 1;
+            state.flow.async_group = Some(id_of(expr) as i64);
+            state.flow.async_started = 0;
+            state.flow.async_group_block = Some(id_of(expr) as i64);
+            let ty = check_core_block(state, world, host, block);
+            if state.flow.async_started == 0 { state.a_group_with_no_task(span); }
+            state.flow.async_depth -= 1;
+            state.flow.loops = loops;
+            state.flow.barrier = barrier;
+            state.flow.async_group = group;
+            state.flow.async_started = started;
+            ty
+        },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); check_core_expr_throw(state, world, host, inner, span) },
         Expr::Return(value, _) => {
             let value = nikaia_std::boxed::open(value);

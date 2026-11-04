@@ -139,6 +139,7 @@ pub fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>, words:
         Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); from_outside(lhs, tainted, words, library, holes_of) || from_outside(rhs, tainted, words, library, holes_of) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); from_outside(expr, tainted, words, library, holes_of) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); from_outside(inner, tainted, words, library, holes_of) },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); from_outside(inner, tainted, words, library, holes_of) },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); from_outside(inner, tainted, words, library, holes_of) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); from_outside(expr, tainted, words, library, holes_of) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); from_outside(base, tainted, words, library, holes_of) },

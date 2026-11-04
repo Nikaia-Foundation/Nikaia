@@ -501,6 +501,7 @@ fn block_types(names: ref winnow_grammar::InternerContext, block: ref Block, kno
 fn blocks_types(names: ref winnow_grammar::InternerContext, expr: ref Expr, known: ref collections::BTreeSet[String], views: ref collections::BTreeSet[String], plain: ref collections::BTreeSet[String], mut out: Vec[Finding]) {
     match expr {
         Expr::Block(block, _) => block_types(names, block, known, views, plain, out),
+        Expr::AsyncGroup(block, _) => block_types(names, block, known, views, plain, out),
         Expr::Unsafe(block, _) => block_types(names, block, known, views, plain, out),
         Expr::Overlap(block, _) => block_types(names, block, known, views, plain, out),
         Expr::Closure { body, .. } => block_types(names, body, known, views, plain, out),

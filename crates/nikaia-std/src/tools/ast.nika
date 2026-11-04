@@ -568,6 +568,20 @@ pub enum Expr {
         id: node_id::NodeId,
     },
 
+    /// Part I 8.1.2: `async e` - **a task that evaluates `e`, started at once
+    /// and waited for where its value is first needed**
+    /// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D6),
+    /// whether it stands as a value or as a statement (D9). `async fn { … }`
+    /// holds the lambda, which is run as the task, not bound (D10). Where the
+    /// task is waited for the checker records by this node's id
+    /// (`CheckFacts::async_waits`).
+    Async(Expr, node_id::NodeId),
+
+    /// Part I 8.1.2: `async { … }`, **the group** (ADR-async-5 D9): its
+    /// statements run on the main line, and the tasks started in it are waited
+    /// for at its end. Its value is its last expression's.
+    AsyncGroup(Block, node_id::NodeId),
+
     // Part II, Kap 10.5: dsl sql db { ... }
     Dsl {
         target: winnow_grammar::Symbol,          // z.B. sql
@@ -810,6 +824,8 @@ pub fn id_of(expr: ref Expr) -> u32 sync {
         Expr::If { id, .. } => id.get(),
         Expr::Call { id, .. } => id.get(),
         Expr::Spawn { id, .. } => id.get(),
+        Expr::Async(_, id) => id.get(),
+        Expr::AsyncGroup(_, id) => id.get(),
         Expr::Dsl { id, .. } => id.get(),
         Expr::MethodCall { id, .. } => id.get(),
         Expr::Field { id, .. } => id.get(),

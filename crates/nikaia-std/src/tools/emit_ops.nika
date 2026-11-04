@@ -97,6 +97,7 @@ pub fn jumps_at_the_end(expr: ref Expr) -> bool {
     return match expr {
         Expr::Coalesce { fallback, .. } => jumps_at_the_end(fallback),
         Expr::Block(block, _) => block_jumps_at_the_end(block),
+        Expr::AsyncGroup(block, _) => block_jumps_at_the_end(block),
         else => jumps(expr),
     }
 }
@@ -131,6 +132,7 @@ pub fn never_a_value(expr: ref Expr) -> bool {
         },
         Expr::If { then_branch, else_branch, .. } => if else_branch == null { false } else { block_never_a_value(then_branch) && block_never_a_value(else_branch ?? return false) },
         Expr::Block(block, _) => block_never_a_value(block),
+        Expr::AsyncGroup(block, _) => block_never_a_value(block),
         else => jumps_at_the_end(expr),
     }
 }

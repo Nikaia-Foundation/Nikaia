@@ -72,6 +72,7 @@ pub fn names_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut 
         }
         Expr::Unary { expr, .. } => names_in(expr, words, out),
         Expr::Try(inner, _) => names_in(inner, words, out),
+        Expr::Async(inner, _) => names_in(inner, words, out),
         Expr::Cast { expr, .. } => names_in(expr, words, out),
         Expr::Index { base, index, .. } => {
             names_in(base, words, out)
@@ -117,6 +118,7 @@ pub fn names_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut 
             }
         }
         Expr::Block(block, _) => names_in_block(block, words, out),
+        Expr::AsyncGroup(block, _) => names_in_block(block, words, out),
         Expr::Unsafe(block, _) => names_in_block(block, words, out),
         Expr::Overlap(block, _) => names_in_block(block, words, out),
         Expr::Closure { body, .. } => names_in_block(body, words, out),

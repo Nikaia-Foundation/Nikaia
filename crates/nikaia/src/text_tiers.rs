@@ -272,6 +272,7 @@ pub(crate) fn visit_expr_mut(
         }
         Expr::Unary { expr, .. }
         | Expr::Try(expr, _)
+        | Expr::Async(expr, _)
         | Expr::Throw(expr, _)
         | Expr::Cast { expr, .. } => visit_expr_mut(expr, f, s),
         Expr::Return(value, _) => {
@@ -341,9 +342,10 @@ pub(crate) fn visit_expr_mut(
                 }
             }
         }
-        Expr::Block(block, _) | Expr::Unsafe(block, _) | Expr::Overlap(block, _) => {
-            visit_block_mut(block, f, s)
-        }
+        Expr::Block(block, _)
+        | Expr::Unsafe(block, _)
+        | Expr::Overlap(block, _)
+        | Expr::AsyncGroup(block, _) => visit_block_mut(block, f, s),
         Expr::Closure { body, .. } => visit_block_mut(body, f, s),
         Expr::Spawn { body, .. } => visit_expr_mut(body, f, s),
         _ => {}

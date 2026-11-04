@@ -413,6 +413,15 @@ impl EmitState {
             Expr::Continue(_) => self.emit_core_jump(out, false, flow),
             Expr::Throw(inner, _) => self.emit_core_throw(world, walk, out, host, inner, depth, flow, scope),
             Expr::Spawn { body, .. } => self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope),
+            // Part I 8.1.2 (ADR-async-5 D6, D9): the checker takes `async e` and
+            // `async { … }` (#986); their lowering onto the group runtime is
+            // the next step.
+            Expr::Async(_, _) => {
+                throw EmitRefused { message: "The compiler can't translate `async e` yet (#986): the checker takes it, the lowering onto tasks isn't built yet", at: flow.statement }
+            },
+            Expr::AsyncGroup(_, _) => {
+                throw EmitRefused { message: "The compiler can't translate `async { … }`, the group, yet (#986): the checker takes it, the lowering onto tasks isn't built yet", at: flow.statement }
+            },
             else => {
                 throw EmitRefused { message: "The compiler can't translate this expression yet: an `asm` block in expression position", at: flow.statement }
             },

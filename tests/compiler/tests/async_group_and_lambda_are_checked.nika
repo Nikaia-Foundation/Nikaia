@@ -1,0 +1,18 @@
+// `async { … }`, a group, with an `async e` statement in it, and
+// `async fn { … }`, whose value is the lambda's result (ADR-async-5 D9, D10,
+// #986): the checker takes both; the lowering says it is not built yet.
+
+fn work(n: i64) {
+	println(f"{n}")
+}
+
+fn main() {
+	let n = async {
+		async work(1)
+		work(2)
+		3
+	}
+	let v: i64 = async fn { 4 }
+	let w = work(5)
+	println(f"{n} {v}")
+}

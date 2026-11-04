@@ -180,6 +180,7 @@ pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, 
         Expr::If { .. } => return check_overflow_ends_into_nullables(state, given, found, want),
         Expr::Match { .. } => return check_overflow_ends_into_nullables(state, given, found, want),
         Expr::Block(_, _) => return check_overflow_ends_into_nullables(state, given, found, want),
+        Expr::AsyncGroup(_, _) => return check_overflow_ends_into_nullables(state, given, found, want),
         _ => return false,
     };
     let wants_nullable = match want {

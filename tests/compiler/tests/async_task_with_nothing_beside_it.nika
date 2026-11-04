@@ -1,0 +1,18 @@
+// A task whose window is empty is refused (ADR-async-5 D7, `NK2110`): an
+// argument with nothing else computed beside it, a binding named in the very
+// next statement, and an `async` statement that ends its group.
+
+fn load(n: i64) -> i64 {
+	return n * 2
+}
+
+fn work(n: i64) {
+	println(f"{n}")
+}
+
+fn main() {
+	let r = load(async load(1))
+	let a = async load(2)
+	println(f"{a} {r}")
+	async work(4)
+}

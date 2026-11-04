@@ -159,6 +159,16 @@ pub struct CheckFlow {
     /// The nearest boundary a jump may not cross (a lambda, a task, an
     /// `overlap` branch).
     pub barrier: String?,
+    /// **The innermost `async { }` around the expression in this function**
+    /// (ADR-async-5 D9), by its node; a lambda starts again with none.
+    pub async_group: i64?,
+    /// The `async { }` whose own block the next `check_core_block` walks.
+    pub async_group_block: i64?,
+    /// How many tasks the innermost `async { }` started so far (`NK2111`).
+    pub async_started: i64,
+    /// How many `async` forms stand around the expression in this function:
+    /// a `return` inside one would leave it (`NK1132`, D10).
+    pub async_depth: i64,
     /// Method calls whose callee's contract says it can fail, and the ones
     /// where that could not be established.
     pub fallible_methods: collections::BTreeSet[i64],
@@ -302,6 +312,9 @@ pub struct CheckFlow {
     pub walk_lent: bool,
     /// The `fn` type the place a lambda stands in declares (#497).
     pub lambda_expected: Ty?,
+    /// The last value of the lambda walked last (`async fn { … }`'s value,
+    /// ADR-async-5 D10: the lambda is run).
+    pub lambda_tail: Ty?,
     /// The `fn` type a lambda bound by the `let` about to be checked is first
     /// handed to (#997), found by the block it stands in.
     pub let_lambda_use: Ty?,
@@ -377,6 +390,10 @@ impl CheckFlow {
             guarded: null,
             loops: 0,
             barrier: null,
+            async_group: null,
+            async_group_block: null,
+            async_started: 0,
+            async_depth: 0,
             fallible_methods: collections::BTreeSet(),
             opaque_methods: collections::BTreeSet(),
             pausing_methods: collections::BTreeSet(),
@@ -428,6 +445,7 @@ impl CheckFlow {
             lent_text_params: collections::BTreeSet(),
             walk_lent: false,
             lambda_expected: null,
+            lambda_tail: null,
             let_lambda_use: null,
             lent_tail_leaves: collections::BTreeSet(),
             open_calls: collections::BTreeMap(),

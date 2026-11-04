@@ -368,6 +368,7 @@ pub(crate) fn block_types(names: &winnow_grammar::InternerContext, block: &Block
 pub(crate) fn blocks_types(names: &winnow_grammar::InternerContext, expr: &Expr, known: &collections::BTreeSet<String>, views: &collections::BTreeSet<String>, plain: &collections::BTreeSet<String>, out: &mut Vec<Finding>) {
     match expr {
         Expr::Block(block, _) => { block_types(names, block, known, views, plain, out); },
+        Expr::AsyncGroup(block, _) => { block_types(names, block, known, views, plain, out); },
         Expr::Unsafe(block, _) => { block_types(names, block, known, views, plain, out); },
         Expr::Overlap(block, _) => { block_types(names, block, known, views, plain, out); },
         Expr::Closure { body, .. } => { block_types(names, body, known, views, plain, out); },

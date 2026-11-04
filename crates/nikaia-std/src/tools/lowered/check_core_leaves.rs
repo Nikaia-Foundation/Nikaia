@@ -522,6 +522,7 @@ pub(crate) fn check_core_lambda_held(ty: &Ty) -> Ty {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, span: &Span, in_an_expression: bool) {
+    if state.flow.async_depth > 0 { state.a_return_out_of_an_async_form(span); }
     let mut lending = false;
     let mut closure = false;
     let mut refused = false;

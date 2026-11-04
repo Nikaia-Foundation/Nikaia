@@ -81,12 +81,14 @@ pub(crate) fn expression(e: &Expr, words: &winnow_grammar::InternerContext, debu
             out.push(String::from("[Nikaia Runtime] Spawning Task (Async -> Sync Simulation)..."));
             match body {
                 Expr::Block(b, _) => { block(b, words, &debug, &format_of, out); },
+                Expr::AsyncGroup(b, _) => { block(b, words, &debug, &format_of, out); },
                 _ => { expression(body, words, debug, format_of, out); },
             }
         },
         Expr::LitStr { .. } => { },
         Expr::LitInterpolated { .. } => { },
         Expr::Block(b, _) => { block(b, words, &debug, &format_of, out); },
+        Expr::AsyncGroup(b, _) => { block(b, words, &debug, &format_of, out); },
         Expr::Dsl { target, .. } => { let target = *target; out.push(format!("[Nikaia Runtime] DSL Block '{}' (Skipped)", words.resolve(target))); },
         _ => { out.push(format!("[Nikaia Runtime] Eval: {}", debug(e))); },
     }

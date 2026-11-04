@@ -83,6 +83,8 @@ fn id_slot(expr: &mut Expr) -> &mut NodeId {
         | Expr::Select(_, slot)
         | Expr::Path(_, slot)
         | Expr::Try(_, slot)
+        | Expr::Async(_, slot)
+        | Expr::AsyncGroup(_, slot)
         | Expr::Throw(_, slot)
         | Expr::Return(_, slot)
         | Expr::LitFloat(_, slot)

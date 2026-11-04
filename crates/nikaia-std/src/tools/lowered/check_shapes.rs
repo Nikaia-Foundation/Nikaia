@@ -10,6 +10,7 @@ pub fn roots_in_a_binding(expr: &Expr) -> bool {
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); roots_in_a_binding(base) },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); roots_in_a_binding(base) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); roots_in_a_binding(inner) },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); roots_in_a_binding(inner) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); roots_in_a_binding(expr) },
         _ => false,
     }
@@ -201,6 +202,7 @@ impl CheckState {
             Expr::Throw(_, _) => true,
             Expr::Return(_, _) => true,
             Expr::Block(block, _) => self.block_exits(world, block),
+            Expr::AsyncGroup(block, _) => self.block_exits(world, block),
             _ => self.a_panic(world, expr),
         }
     }
@@ -220,6 +222,7 @@ impl CheckState {
         if self.jumps(world, expr) { return true; }
         match expr {
             Expr::Block(block, _) => self.block_leaves(world, block),
+            Expr::AsyncGroup(block, _) => self.block_leaves(world, block),
             _ => false,
         }
     }

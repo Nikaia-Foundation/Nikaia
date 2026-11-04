@@ -403,6 +403,10 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st);
             return Expr::Block(numbers_block(block, st), id2);
         },
+        Expr::AsyncGroup(block, id) => {
+            let id2 = numbers_id(id, st);
+            return Expr::AsyncGroup(numbers_block(block, st), id2);
+        },
         Expr::Overlap(block, id) => {
             let id2 = numbers_id(id, st);
             return Expr::Overlap(numbers_block(block, st), id2);
@@ -497,6 +501,11 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let inner = nikaia_std::boxed::open(inner);
             let id2 = numbers_id(id, st);
             return Expr::Try(Box::new(numbers_expr(inner, st)), id2);
+        },
+        Expr::Async(inner, id) => {
+            let inner = nikaia_std::boxed::open(inner);
+            let id2 = numbers_id(id, st);
+            return Expr::Async(Box::new(numbers_expr(inner, st)), id2);
         },
         Expr::Throw(inner, id) => {
             let inner = nikaia_std::boxed::open(inner);

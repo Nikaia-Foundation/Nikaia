@@ -489,6 +489,10 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st)
             return Expr::Block(numbers_block(block, st), id2)
         },
+        Expr::AsyncGroup(block, id) => {
+            let id2 = numbers_id(id, st)
+            return Expr::AsyncGroup(numbers_block(block, st), id2)
+        },
         Expr::Overlap(block, id) => {
             let id2 = numbers_id(id, st)
             return Expr::Overlap(numbers_block(block, st), id2)
@@ -576,6 +580,10 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
         Expr::Try(inner, id) => {
             let id2 = numbers_id(id, st)
             return Expr::Try(numbers_expr(inner, st), id2)
+        },
+        Expr::Async(inner, id) => {
+            let id2 = numbers_id(id, st)
+            return Expr::Async(numbers_expr(inner, st), id2)
         },
         Expr::Throw(inner, id) => {
             let id2 = numbers_id(id, st)

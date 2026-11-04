@@ -63,6 +63,7 @@ pub fn ends_in_text(expr: &Expr) -> bool {
         Expr::If { then_branch, else_branch, .. } => if else_branch.is_none() { false } else { both_tails_text(then_branch, match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false }) },
         Expr::Match { arms, .. } => all_arms_text(arms),
         Expr::Block(block, _) => tail_is_text(block),
+        Expr::AsyncGroup(block, _) => tail_is_text(block),
         _ => false,
     }
 }
@@ -92,6 +93,7 @@ pub fn ends_in_null(expr: &Expr) -> bool {
     match expr {
         Expr::LitNull(_) => true,
         Expr::Block(block, _) => tail_is_null(block),
+        Expr::AsyncGroup(block, _) => tail_is_null(block),
         _ => false,
     }
 }
@@ -143,6 +145,10 @@ pub(crate) fn check_texts_ends_in_literal(expr: &Expr, text: bool) -> bool {
             return true;
         },
         Expr::Block(block, _) => {
+            let ends = block_tail(block);
+            return ends.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&ends, 0), text);
+        },
+        Expr::AsyncGroup(block, _) => {
             let ends = block_tail(block);
             return ends.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&ends, 0), text);
         },
@@ -237,6 +243,11 @@ impl CheckState {
                 if ends.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&ends, 0), true) { return self.text_literal(world, want, *nikaia_std::index::get(&ends, 0), owned); }
                 return None;
             },
+            Expr::AsyncGroup(block, _) => {
+                let ends = block_tail(block);
+                if ends.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&ends, 0), true) { return self.text_literal(world, want, *nikaia_std::index::get(&ends, 0), owned); }
+                return None;
+            },
             Expr::ListLit { items, .. } => {
                 let element: Ty = match want {
                     Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown },
@@ -287,6 +298,10 @@ impl CheckState {
                 self.facts.some_tails.insert(text_key(arm));
             },
             Expr::Block(block, _) => {
+                let tail = block_tail(block);
+                if tail.len() == 1 { self.some_at_the_tails(*nikaia_std::index::get(&tail, 0)); } else if !check_texts_ends_in_a_jump(block) { self.facts.some_tails.insert(text_key(arm)); }
+            },
+            Expr::AsyncGroup(block, _) => {
                 let tail = block_tail(block);
                 if tail.len() == 1 { self.some_at_the_tails(*nikaia_std::index::get(&tail, 0)); } else if !check_texts_ends_in_a_jump(block) { self.facts.some_tails.insert(text_key(arm)); }
             },
@@ -422,6 +437,11 @@ pub fn tuple_ends(expr: &Expr) -> Vec<&Expr> {
         },
         Expr::Match { arms, .. } => { for arm in arms.iter() { for end in tuple_ends(&arm.body) { out.push(end); } } },
         Expr::Block(block, _) => {
+            let tail = block_tail(block);
+            if tail.len() != 1 { return vec![]; }
+            return tuple_ends(*nikaia_std::index::get(&tail, 0));
+        },
+        Expr::AsyncGroup(block, _) => {
             let tail = block_tail(block);
             if tail.len() != 1 { return vec![]; }
             return tuple_ends(*nikaia_std::index::get(&tail, 0));

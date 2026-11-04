@@ -177,6 +177,7 @@ impl CheckState {
 pub(crate) fn check_walks_form(expr: &Expr) -> &'static str {
     match expr {
         Expr::Spawn { .. } => "starts a task",
+        Expr::Async(_, _) => "starts a task",
         Expr::Select(_, _) => "waits in a `select`",
         Expr::Overlap(_, _) => "runs an `overlap`",
         Expr::Dsl { .. } => "runs a `dsl` block",
@@ -189,6 +190,7 @@ pub(crate) fn check_walks_form(expr: &Expr) -> &'static str {
         Expr::Break(_) => "jumps",
         Expr::Continue(_) => "jumps",
         Expr::Block(_, _) => "contains a block, which might change something",
+        Expr::AsyncGroup(_, _) => "waits for a group of tasks",
         Expr::If { .. } => "contains a block, which might change something",
         Expr::Match { .. } => "contains a block, which might change something",
         Expr::Closure { .. } => "contains a block, which might change something",

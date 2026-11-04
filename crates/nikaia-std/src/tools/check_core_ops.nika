@@ -1102,6 +1102,7 @@ pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref Ch
     state.a_map_read_handed_back(world, walked, body)
     let tail = check_core_lambda_leave(state, outer, walked, body)
     check_core_ops_lambda_tail_wrapped(state, world, host, declared, tail, body)
+    state.flow.lambda_tail = tail.clone()
     state.leave_boundary(saved)
     state.scope.pop()
     state.repeats.pop()

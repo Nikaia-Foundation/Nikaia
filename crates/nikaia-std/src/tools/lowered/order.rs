@@ -426,6 +426,7 @@ pub(crate) fn holds_throw(expr: &Expr, bound: bool) -> bool {
     match expr {
         Expr::Throw(_, _) => true,
         Expr::Block(block, _) => diverts_within(&block.stmts, bound),
+        Expr::AsyncGroup(block, _) => diverts_within(&block.stmts, bound),
         Expr::Overlap(block, _) => diverts_within(&block.stmts, bound),
         Expr::If { then_branch, else_branch, .. } => diverts_within(&then_branch.stmts, bound) || else_diverts((else_branch).as_ref(), bound),
         Expr::Match { arms, .. } => an_arm_throws(arms, bound),

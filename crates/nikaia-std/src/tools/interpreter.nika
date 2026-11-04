@@ -96,6 +96,7 @@ fn expression(e: ref Expr, words: ref winnow_grammar::InternerContext, debug: fn
             // The body is usually an Expr::Block because of `spawn({ ... })` syntax.
             match body {
                 Expr::Block(b, _) => block(b, words, debug, format_of, out),
+                Expr::AsyncGroup(b, _) => block(b, words, debug, format_of, out),
                 else => expression(body, words, debug, format_of, out),
             }
         },
@@ -107,6 +108,7 @@ fn expression(e: ref Expr, words: ref winnow_grammar::InternerContext, debug: fn
         // D7): nothing here overlaps anything, so `seq` asks for what it
         // already does.
         Expr::Block(b, _) => block(b, words, debug, format_of, out),
+        Expr::AsyncGroup(b, _) => block(b, words, debug, format_of, out),
         Expr::Dsl { target, .. } => out.push(f"[Nikaia Runtime] DSL Block '{words.resolve(target)}' (Skipped)"),
         else => out.push(f"[Nikaia Runtime] Eval: {debug(e)}"),
     }

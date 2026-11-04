@@ -297,6 +297,10 @@ pub fn check_peeled(value: &Expr) -> &Expr {
             let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return value };
             check_peeled(tail)
         },
+        Expr::AsyncGroup(block, _) => {
+            let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return value };
+            check_peeled(tail)
+        },
         _ => value,
     }
 }

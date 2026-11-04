@@ -51,6 +51,7 @@ pub(crate) fn collect_names(expr: &Expr, words: &winnow_grammar::InternerContext
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); collect_names(expr, words, holes_of, names); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); collect_names(inner, words, holes_of, names); },
+        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); collect_names(inner, words, holes_of, names); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); collect_names(inner, words, holes_of, names); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); collect_names(expr, words, holes_of, names); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); collect_names(base, words, holes_of, names); },

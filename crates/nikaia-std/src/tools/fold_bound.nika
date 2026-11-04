@@ -511,6 +511,10 @@ fn fb_expr_blocks(expr: ref Expr) -> Vec[ref Block] {
             out.push(block)
             return out
         },
+        Expr::AsyncGroup(block, _) => {
+            out.push(block)
+            return out
+        },
         Expr::Unsafe(block, _) => {
             out.push(block)
             return out

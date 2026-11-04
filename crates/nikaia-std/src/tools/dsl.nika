@@ -284,6 +284,7 @@ fn calls_in(expr: ref Expr, span: ref Span, words: ref winnow_grammar::InternerC
             }
         }
         Expr::Block(block, _) => calls_in_block(block, span, words, bound, takers, found),
+        Expr::AsyncGroup(block, _) => calls_in_block(block, span, words, bound, takers, found),
         Expr::Overlap(block, _) => calls_in_block(block, span, words, bound, takers, found),
         Expr::If { cond, then_branch, else_branch, .. } => {
             calls_in(cond, span, words, bound, takers, found)
@@ -296,6 +297,7 @@ fn calls_in(expr: ref Expr, span: ref Span, words: ref winnow_grammar::InternerC
         }
         Expr::Unary { expr, .. } => calls_in(expr, span, words, bound, takers, found),
         Expr::Try(inner, _) => calls_in(inner, span, words, bound, takers, found),
+        Expr::Async(inner, _) => calls_in(inner, span, words, bound, takers, found),
         Expr::Field { base, .. } => calls_in(base, span, words, bound, takers, found),
         Expr::SafeField { base, .. } => calls_in(base, span, words, bound, takers, found),
         Expr::TryCatch { expr, handler, .. } => {
@@ -357,6 +359,7 @@ fn statements_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut
             }
         }
         Expr::Block(block, _) => statements_in_block(block, words, out),
+        Expr::AsyncGroup(block, _) => statements_in_block(block, words, out),
         Expr::Overlap(block, _) => statements_in_block(block, words, out),
         Expr::If { cond, then_branch, else_branch, .. } => {
             statements_in(cond, words, out)
@@ -369,6 +372,7 @@ fn statements_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut
         }
         Expr::Unary { expr, .. } => statements_in(expr, words, out),
         Expr::Try(inner, _) => statements_in(inner, words, out),
+        Expr::Async(inner, _) => statements_in(inner, words, out),
         Expr::Field { base, .. } => statements_in(base, words, out),
         Expr::SafeField { base, .. } => statements_in(base, words, out),
         Expr::TryCatch { expr, handler, .. } => {

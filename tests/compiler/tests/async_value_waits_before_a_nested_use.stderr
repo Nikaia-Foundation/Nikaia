@@ -1,0 +1,7 @@
+error: The compiler can't translate `async e` yet (#986): the checker takes it, the lowering onto tasks isn't built yet.
+   --> tests/async_value_waits_before_a_nested_use.nika:10:2
+    |
+ 10 | 	let a = async load(1)
+    |  ^
+    |
+
