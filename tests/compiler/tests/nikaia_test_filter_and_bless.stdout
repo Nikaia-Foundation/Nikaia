@@ -10,3 +10,11 @@ program "beta" (tests/beta.nika) ... ok
 test result: ok. 2 passed; 0 failed
 -- no test matches: exit 1
 no tests: no test's name holds any of the `--filter` texts gamma
+-- loud blessed: exit 0
+program "loud" (tests/loud.nika) ... ok
+test result: ok. 1 passed; 0 failed
+loud.stderr made: false
+-- loud blessed with stderr: exit 0
+program "loud" (tests/loud.nika) ... blessed
+test result: ok. 1 passed; 0 failed
+loud.stderr: loud

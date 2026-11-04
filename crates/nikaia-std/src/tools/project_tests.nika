@@ -584,10 +584,11 @@ pub fn project_tests_blessed_line(label: String, blessed: ref ProjectTestsBlesse
 
 /// `--bless` for a test program: `NAME.stdout` and `NAME.stderr` are written
 /// from what happened, a refusal into `NAME.stderr` only, `NAME.stdout` made where the
-/// test has none and printed something (#1238), and the `--bounds`
+/// test has none and printed something (#1238), `NAME.stderr` made likewise
+/// where `stderr` (`--bless-stderr`) says so, and the `--bounds`
 /// reports into the `NAME.bounds` and `NAME.loops.bounds` there are (#1069). A program that
 /// built and ended unsuccessfully, or whose settings disagree, is not blessed.
-pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(String, ProjectTestsOutcome)]) -> ProjectTestsBlessed throws {
+pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(String, ProjectTestsOutcome)], stderr: bool) -> ProjectTestsBlessed throws {
     if outcomes.is_empty() {
         return ProjectTestsBlessed::Unchanged
     }
@@ -603,16 +604,17 @@ pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(
         return ProjectTestsBlessed::Refused("the program did not end successfully")
     }
     // A test with no `.stdout` passes whatever it prints: what it printed
-    // becomes its expectation (#1238). A new `.stderr` is never made, so
-    // warnings are never blessed (Part III 14.1).
+    // becomes its expectation (#1238). A new `.stderr` for warnings or what
+    // the program wrote there is made only at `--bless-stderr`.
     let new_stdout = !refused && program.stdout == null && !first.stdout.is_empty()
-    if first.passed && !new_stdout {
+    let new_stderr = stderr && !refused && program.stderr == null && !first.stderr.is_empty()
+    if first.passed && !new_stdout && !new_stderr {
         return ProjectTestsBlessed::Unchanged
     }
     if !refused && (program.stdout != null || new_stdout) {
         fs::write(program.dir.join(f"{program.name}.stdout"), fs::Root::Anywhere, first.stdout.clone())
     }
-    if refused || program.stderr != null {
+    if refused || program.stderr != null || new_stderr {
         fs::write(program.dir.join(f"{program.name}.stderr"), fs::Root::Anywhere, first.stderr.bytes)
     }
     for (name, _, got) in first.bounds {
@@ -719,15 +721,15 @@ pub trait ProjectTestsHost {
     /// Runs the test programs, each one's line said by
     /// `project_tests_program_done` in the order of the programs; the ones
     /// that failed.
-    fn program_failures(ref self, bless: bool) -> Vec[ProjectTestsFailed] sync throws
+    fn program_failures(ref self, bless: bool, stderr: bool) -> Vec[ProjectTestsFailed] sync throws
 }
 
-/// **One test program's line**, blessed where `bless` says: the failure,
-/// where it failed.
-pub fn project_tests_program_done(program: ref ProgramTest, outcomes: Vec[(String, ProjectTestsOutcome)], bless: bool) -> ProjectTestsFailed? throws {
+/// **One test program's line**, blessed where `bless` says (and a new
+/// `NAME.stderr` made where `stderr` does): the failure, where it failed.
+pub fn project_tests_program_done(program: ref ProgramTest, outcomes: Vec[(String, ProjectTestsOutcome)], bless: bool, stderr: bool) -> ProjectTestsFailed? throws {
     let label = project_tests_program_label(program)
     if bless {
-        let blessed = project_tests_bless_program(program, outcomes)
+        let blessed = project_tests_bless_program(program, outcomes, stderr)
         if !project_tests_blessed_line(label, blessed) {
             return ProjectTestsFailed { label: label, outcomes: outcomes, output: null }
         }
@@ -786,7 +788,7 @@ pub fn project_tests_report_failures(failed: ref Vec[ProjectTestsFailed]) {
 /// because the meaning of a program is the same at both (Part I 1.2) and a
 /// difference is a fault of this compiler. A failing test does not stop the
 /// others.
-pub fn project_tests_run[H: ProjectTestsHost](host: ref H, blocks: ref Vec[(String, fs::Path, i64)], test_builds: ref Vec[(String, fs::Path)], outputs: ref Vec[OutputTest], programs: ref Vec[(String, fs::Path)], program_tests: i64, root: ref fs::Path, bless: bool) -> Vec[ProjectTestsFailed] throws {
+pub fn project_tests_run[H: ProjectTestsHost](host: ref H, blocks: ref Vec[(String, fs::Path, i64)], test_builds: ref Vec[(String, fs::Path)], outputs: ref Vec[OutputTest], programs: ref Vec[(String, fs::Path)], program_tests: i64, root: ref fs::Path, bless: bool, stderr: bool) -> Vec[ProjectTestsFailed] throws {
     let total = blocks.len() + outputs.len() + program_tests
     project_tests_running(total)
     let mut failed: Vec[ProjectTestsFailed] = []
@@ -817,7 +819,7 @@ pub fn project_tests_run[H: ProjectTestsHost](host: ref H, blocks: ref Vec[(Stri
             failed.push(ProjectTestsFailed { label: label, outcomes: outcomes, output: output.clone() })
         }
     }
-    for program in host.program_failures(bless) {
+    for program in host.program_failures(bless, stderr) {
         failed.push(program)
     }
     return failed

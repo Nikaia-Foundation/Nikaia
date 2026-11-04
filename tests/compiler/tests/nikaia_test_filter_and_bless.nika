@@ -1,6 +1,7 @@
 // #1238: `nikaia test --filter TEXT` runs only the tests whose name holds
 // TEXT (several add up, none matching is an error), and `--bless` gives a
-// test program with no `.stdout` the one it printed, never a new `.stderr`.
+// test program with no `.stdout` the one it printed, never a new `.stderr`;
+// `--bless-stderr` makes the missing `.stderr` too.
 use std::fs
 use std::process
 
@@ -34,5 +35,10 @@ fn main() throws {
     println(f"alpha.stderr made: {fs::exists(f"{tmp}/tests/alpha.stderr", fs::Root::Anywhere)}")
     run_test(nikaia, tmp, "two filters", ["test", "--filter", "alp", "--filter", "bet"])
     run_test(nikaia, tmp, "no test matches", ["test", "--filter", "gamma"])
+    fs::write(f"{tmp}/tests/loud.nika", fs::Root::Anywhere, "fn main() {\n    eprintln(\"loud\")\n}\n")
+    run_test(nikaia, tmp, "loud blessed", ["test", "--filter", "loud", "--bless"])
+    println(f"loud.stderr made: {fs::exists(f"{tmp}/tests/loud.stderr", fs::Root::Anywhere)}")
+    run_test(nikaia, tmp, "loud blessed with stderr", ["test", "--filter", "loud", "--bless-stderr"])
+    println(f"loud.stderr: {fs::read_to_string(f"{tmp}/tests/loud.stderr", fs::Root::Anywhere).trim()}")
     process::run("rm", ["-rf", tmp])
 }

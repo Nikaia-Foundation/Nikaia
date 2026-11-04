@@ -2399,6 +2399,8 @@ pub struct Suite<'a> {
     pub settings: &'a [String],
     /// `--bless` ([ADR-247](../../docs/specification/adr/adr-247.md) D3).
     pub bless: bool,
+    /// `--bless-stderr`: a missing `NAME.stderr` is made too.
+    pub bless_stderr: bool,
 }
 
 /// **Run each test in a process and a directory of its own, and say how each
@@ -2427,6 +2429,7 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
         suite.programs_of_their_own.len() as i64,
         suite.root,
         suite.bless,
+        suite.bless_stderr,
     )) {
         Ok(failed) => failed,
         Err(error) => {
@@ -2498,11 +2501,15 @@ impl project_tests::ProjectTestsHost for TestsHost<'_> {
         })())
     }
 
-    fn program_failures(&self, bless: bool) -> HostResult<Vec<project_tests::ProjectTestsFailed>> {
+    fn program_failures(
+        &self,
+        bless: bool,
+        stderr: bool,
+    ) -> HostResult<Vec<project_tests::ProjectTestsFailed>> {
         let mut failed = Vec::new();
         let ran = run_program_tests(self.suite, |program, outcomes| {
             let done = block_on(project_tests::project_tests_program_done(
-                program, outcomes, bless,
+                program, outcomes, bless, stderr,
             ))
             .map_err(|e| anyhow!("{e}"))?;
             failed.extend(done);

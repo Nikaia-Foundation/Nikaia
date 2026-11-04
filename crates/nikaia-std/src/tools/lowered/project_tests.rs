@@ -444,7 +444,7 @@ pub fn project_tests_blessed_line(label: &str, blessed: &ProjectTestsBlessed) ->
     true
 }
 
-pub async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(String, ProjectTestsOutcome)], stderr: bool) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     if outcomes.is_empty() { return Ok(ProjectTestsBlessed::Unchanged); }
     if !project_tests_agree(outcomes) { return Ok(ProjectTestsBlessed::Refused(String::from("the settings disagree"))); }
     let first = &nikaia_std::index::get(&outcomes, 0).1;
@@ -452,9 +452,10 @@ pub async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(Str
     if !first.ended_well && !refused && first.stderr.starts_with("the program does not compile") { return Ok(ProjectTestsBlessed::Refused(String::from("the program does not compile"))); }
     if !first.ended_well && !refused { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not end successfully"))); }
     let new_stdout = !refused && program.stdout.is_none() && !first.stdout.is_empty();
-    if first.passed && !new_stdout { return Ok(ProjectTestsBlessed::Unchanged); }
+    let new_stderr = stderr && !refused && program.stderr.is_none() && !first.stderr.is_empty();
+    if first.passed && !new_stdout && !new_stderr { return Ok(ProjectTestsBlessed::Unchanged); }
     if !refused && (program.stdout.is_some() || new_stdout) { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stdout", program.name)))), &fs::Root::Anywhere, first.stdout.copy_of(), false, true).await?; }
-    if refused || program.stderr.is_some() { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stderr", program.name)))), &fs::Root::Anywhere, nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; }
+    if refused || program.stderr.is_some() || new_stderr { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stderr", program.name)))), &fs::Root::Anywhere, nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; }
     for (name, _, got) in first.bounds.iter() { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(name))), &fs::Root::Anywhere, got.copy_of(), false, true).await?; }
     Ok(ProjectTestsBlessed::Written)
 }
@@ -522,13 +523,13 @@ pub struct ProjectTestsFailed {
 pub trait ProjectTestsHost {
     fn block_outcome(&self, binary: &std::path::Path, k: i64) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>>;
     fn output_outcome(&self, binary: &std::path::Path, output: &OutputTest) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>>;
-    fn program_failures(&self, bless: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>>;
+    fn program_failures(&self, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>>;
 }
 
-pub async fn project_tests_program_done(program: &ProgramTest, outcomes: Vec<(String, ProjectTestsOutcome)>, bless: bool) -> Result<Option<ProjectTestsFailed>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub async fn project_tests_program_done(program: &ProgramTest, outcomes: Vec<(String, ProjectTestsOutcome)>, bless: bool, stderr: bool) -> Result<Option<ProjectTestsFailed>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let label = project_tests_program_label(program);
     if bless {
-        let blessed = project_tests_bless_program(program, &outcomes).await?;
+        let blessed = project_tests_bless_program(program, &outcomes, stderr).await?;
         if !project_tests_blessed_line(&label, &blessed) { return Ok(Some(ProjectTestsFailed { label, outcomes, output: None })); }
         return Ok(None);
     }
@@ -561,7 +562,7 @@ pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>> {
+pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>> {
     let total = blocks.len() as i64 + outputs.len() as i64 + program_tests;
     project_tests_running(total);
     let mut failed: Vec<ProjectTestsFailed> = vec![];
@@ -582,7 +583,7 @@ pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String,
         }
         if !project_tests_verdict(&label, &outcomes) { failed.push(ProjectTestsFailed { label, outcomes, output: Some(output.clone()) }); }
     }
-    for program in host.program_failures(bless)? { failed.push(program); }
+    for program in host.program_failures(bless, stderr)? { failed.push(program); }
     Ok(failed)
 }
 

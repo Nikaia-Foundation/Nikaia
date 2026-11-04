@@ -357,6 +357,11 @@ pub enum Command {
         /// two runs agree. Review the change in version control.
         #[arg(long)]
         bless: bool,
+        /// `--bless`, and a test program with no `NAME.stderr` that wrote
+        /// something there, warnings included, gets one: for testing the
+        /// warnings and errors a program gives.
+        #[arg(long)]
+        bless_stderr: bool,
         /// Run only the tests whose name holds this text; given more than
         /// once, the tests that hold any of them (#1238).
         #[arg(long = "filter", value_name = "TEXT")]
@@ -702,8 +707,18 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             project,
             both_settings,
             bless,
+            bless_stderr,
             filters,
-        } => return test_command(args, project.clone(), *both_settings, *bless, filters),
+        } => {
+            return test_command(
+                args,
+                project.clone(),
+                *both_settings,
+                *bless || *bless_stderr,
+                *bless_stderr,
+                filters,
+            );
+        }
         Command::LowerStd { sysroot } if args.bounds || args.asserts => {
             return lower_std_bounds(
                 sysroot.clone(),
@@ -777,6 +792,7 @@ fn test_command(
     directory: Option<PathBuf>,
     both_settings: bool,
     bless: bool,
+    bless_stderr: bool,
     filters: &[String],
 ) -> Result<i32> {
     let start = match directory {
@@ -822,6 +838,7 @@ fn test_command(
         !host.program_tests.is_empty(),
         both_settings,
         bless,
+        bless_stderr,
         &filters,
     );
     done.map_err(|error| refusal(error, &host.failed))
@@ -915,6 +932,7 @@ impl cli_commands::CliTestHost for TestHost<'_> {
         programs: &[(String, PathBuf)],
         settings: &[String],
         bless: bool,
+        bless_stderr: bool,
     ) -> std::result::Result<i32, Box<dyn std::error::Error>> {
         let suite = project::Suite {
             tests: &self.tests,
@@ -925,6 +943,7 @@ impl cli_commands::CliTestHost for TestHost<'_> {
             programs_of_their_own: &self.program_tests,
             settings,
             bless,
+            bless_stderr,
         };
         held(project::run_tests(&suite), &self.failed)
     }

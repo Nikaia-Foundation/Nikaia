@@ -26,13 +26,13 @@ impl std::error::Error for CliCommandsRefusal {}
 
 pub trait CliTestHost {
     fn build(&self, setting: &str, testing: bool, variant: &str) -> Result<(i32, Option<fs::Path>), Box<dyn std::error::Error>>;
-    fn run_tests(&self, test_builds: &[(String, fs::Path)], programs: &[(String, fs::Path)], settings: &[String], bless: bool) -> Result<i32, Box<dyn std::error::Error>>;
+    fn run_tests(&self, test_builds: &[(String, fs::Path)], programs: &[(String, fs::Path)], settings: &[String], bless: bool, stderr: bool) -> Result<i32, Box<dyn std::error::Error>>;
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn cli_commands_test<H: CliTestHost>(host: &H, root: &std::path::Path, user_parallelism: &str, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool, filters: &[String]) -> Result<i32, Box<dyn std::error::Error>> {
+pub fn cli_commands_test<H: CliTestHost>(host: &H, root: &std::path::Path, user_parallelism: &str, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool, stderr: bool, filters: &[String]) -> Result<i32, Box<dyn std::error::Error>> {
     if !blocks && !outputs && !own && !filters.is_empty() {
         println!("no tests: no test's name holds any of the `--filter` texts {}", filters.join(", "));
         return Ok(1);
@@ -73,7 +73,7 @@ pub fn cli_commands_test<H: CliTestHost>(host: &H, root: &std::path::Path, user_
             }
         }
     }
-    Ok(host.run_tests(&test_builds, &programs, &settings, bless)?)
+    Ok(host.run_tests(&test_builds, &programs, &settings, bless, stderr)?)
 }
 
 #[derive(Debug, Clone, PartialEq)]

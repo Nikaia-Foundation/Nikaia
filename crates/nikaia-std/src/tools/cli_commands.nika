@@ -40,7 +40,7 @@ pub trait CliTestHost {
     fn build(ref self, setting: ref String, testing: bool, variant: ref String) -> (i32, fs::Path?) sync throws
     /// Runs every test against the test builds and the programs, each a
     /// setting and the binary kept for it: the exit code.
-    fn run_tests(ref self, test_builds: ref Vec[(String, fs::Path)], programs: ref Vec[(String, fs::Path)], settings: ref Vec[String], bless: bool) -> i32 sync throws
+    fn run_tests(ref self, test_builds: ref Vec[(String, fs::Path)], programs: ref Vec[(String, fs::Path)], settings: ref Vec[String], bless: bool, stderr: bool) -> i32 sync throws
 }
 
 /// **`nikaia test`** ([ADR-269](../../../../docs/specification/adr/adr-269.md)
@@ -50,7 +50,7 @@ pub trait CliTestHost {
 /// programs; `root` is the project's root, `user_parallelism` the setting a
 /// single run builds at; `filters` are the `--filter` texts the tests
 /// were chosen by, empty for all.
-pub fn cli_commands_test[H: CliTestHost](host: ref H, root: ref fs::Path, user_parallelism: String, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool, filters: ref Vec[String]) -> i32 sync throws {
+pub fn cli_commands_test[H: CliTestHost](host: ref H, root: ref fs::Path, user_parallelism: String, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool, stderr: bool, filters: ref Vec[String]) -> i32 sync throws {
     if !blocks && !outputs && !own && !filters.is_empty() {
         println(f"no tests: no test's name holds any of the `--filter` texts {filters.join(", ")}")
         return 1
@@ -92,7 +92,7 @@ pub fn cli_commands_test[H: CliTestHost](host: ref H, root: ref fs::Path, user_p
             }
         }
     }
-    return host.run_tests(test_builds, programs, settings, bless)
+    return host.run_tests(test_builds, programs, settings, bless, stderr)
 }
 
 /// **What `nikaia describe` wrote** (`describe.rs`'s `Written`), as its
