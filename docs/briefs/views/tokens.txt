@@ -4,3 +4,4 @@
 /home/user/Nikaia/docs/briefs/views/v2-inferred-views.md 2043064 40
 /home/user/Nikaia/docs/briefs/views/v3-keep-marks.md 594774 6
 /home/user/Nikaia/docs/briefs/views/v4-result-from.md 638673 12
+/home/user/Nikaia/docs/briefs/views/v5-view-fields-anchored.md 2441127 44
