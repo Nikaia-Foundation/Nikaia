@@ -583,7 +583,8 @@ pub fn project_tests_blessed_line(label: String, blessed: ref ProjectTestsBlesse
 }
 
 /// `--bless` for a test program: `NAME.stdout` and `NAME.stderr` are written
-/// from what happened, a refusal into `NAME.stderr` only, and the `--bounds`
+/// from what happened, a refusal into `NAME.stderr` only, `NAME.stdout` made where the
+/// test has none and printed something (#1238), and the `--bounds`
 /// reports into the `NAME.bounds` and `NAME.loops.bounds` there are (#1069). A program that
 /// built and ended unsuccessfully, or whose settings disagree, is not blessed.
 pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(String, ProjectTestsOutcome)]) -> ProjectTestsBlessed throws {
@@ -601,10 +602,14 @@ pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(
     if !first.ended_well && !refused {
         return ProjectTestsBlessed::Refused("the program did not end successfully")
     }
-    if first.passed {
+    // A test with no `.stdout` passes whatever it prints: what it printed
+    // becomes its expectation (#1238). A new `.stderr` is never made, so
+    // warnings are never blessed (Part III 14.1).
+    let new_stdout = !refused && program.stdout == null && !first.stdout.is_empty()
+    if first.passed && !new_stdout {
         return ProjectTestsBlessed::Unchanged
     }
-    if !refused && (program.stdout != null || !first.stdout.is_empty()) {
+    if !refused && (program.stdout != null || new_stdout) {
         fs::write(program.dir.join(f"{program.name}.stdout"), fs::Root::Anywhere, first.stdout.clone())
     }
     if refused || program.stderr != null {
@@ -816,4 +821,11 @@ pub fn project_tests_run[H: ProjectTestsHost](host: ref H, blocks: ref Vec[(Stri
         failed.push(program)
     }
     return failed
+}
+
+/// **Whether `nikaia test --filter` runs the test named `name`** (#1238):
+/// every test where no filter is given, else the ones whose name holds one of
+/// the texts.
+pub fn project_tests_wanted(name: ref String, filters: ref Vec[String]) -> bool {
+    return filters.is_empty() || filters.iter().any(fn(text) { name.contains(text) })
 }

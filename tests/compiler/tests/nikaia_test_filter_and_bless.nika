@@ -1,0 +1,38 @@
+// #1238: `nikaia test --filter TEXT` runs only the tests whose name holds
+// TEXT (several add up, none matching is an error), and `--bless` gives a
+// test program with no `.stdout` the one it printed, never a new `.stderr`.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn run_test(nikaia: String, tmp: String, label: String, args: Vec[String]) throws {
+    let out = process::run(nikaia, args; dir: tmp.clone())
+    println(f"-- {label}: exit {out.code}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.starts_with("program ") || line.starts_with("no tests") || line.starts_with("test result") {
+            println(line)
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"filtered\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")
+    fs::write(f"{tmp}/tests/alpha.nika", fs::Root::Anywhere, "fn main() {\n    println(\"alpha\")\n}\n")
+    fs::write(f"{tmp}/tests/beta.nika", fs::Root::Anywhere, "fn main() {\n    println(\"beta\")\n}\n")
+    run_test(nikaia, tmp, "alpha blessed alone", ["test", "--filter", "alp", "--bless"])
+    println(f"alpha.stdout: {fs::read_to_string(f"{tmp}/tests/alpha.stdout", fs::Root::Anywhere).trim()}")
+    println(f"beta.stdout made: {fs::exists(f"{tmp}/tests/beta.stdout", fs::Root::Anywhere)}")
+    println(f"alpha.stderr made: {fs::exists(f"{tmp}/tests/alpha.stderr", fs::Root::Anywhere)}")
+    run_test(nikaia, tmp, "two filters", ["test", "--filter", "alp", "--filter", "bet"])
+    run_test(nikaia, tmp, "no test matches", ["test", "--filter", "gamma"])
+    process::run("rm", ["-rf", tmp])
+}

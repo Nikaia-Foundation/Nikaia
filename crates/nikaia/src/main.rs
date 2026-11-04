@@ -14,6 +14,7 @@ use nikaia::project::{self, Project, Settings};
 use nikaia::sysroot::{self, Sysroot};
 use nikaia::{diagnostics, interpreter, parser, refuse};
 use nikaia_std::tools::cli_commands::{self, CliCommandsRefusal};
+use nikaia_std::tools::project_tests;
 
 /// The Nikaia compiler: `nikaia build` for a project, `nikaia lower` for one
 /// file.
@@ -356,6 +357,10 @@ pub enum Command {
         /// two runs agree. Review the change in version control.
         #[arg(long)]
         bless: bool,
+        /// Run only the tests whose name holds this text; given more than
+        /// once, the tests that hold any of them (#1238).
+        #[arg(long = "filter", value_name = "TEXT")]
+        filters: Vec<String>,
     },
     /// Re-lower the sysroot's `std` from its `.nika` sources (ADR-002 D4).
     ///
@@ -697,7 +702,8 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             project,
             both_settings,
             bless,
-        } => return test_command(args, project.clone(), *both_settings, *bless),
+            filters,
+        } => return test_command(args, project.clone(), *both_settings, *bless, filters),
         Command::LowerStd { sysroot } if args.bounds || args.asserts => {
             return lower_std_bounds(
                 sysroot.clone(),
@@ -771,6 +777,7 @@ fn test_command(
     directory: Option<PathBuf>,
     both_settings: bool,
     bless: bool,
+    filters: &[String],
 ) -> Result<i32> {
     let start = match directory {
         Some(directory) => directory,
@@ -787,17 +794,22 @@ fn test_command(
         args.refuted_claims.as_deref(),
         args.unproved_claims.as_deref(),
     )?;
+    let filters = filters.to_vec();
+    let wanted = |name: &String| project_tests::project_tests_wanted(name, &filters);
+    let mut tests =
+        nikaia::modules::Program::read_for_tests(&project.entry(), &project.packages()?, true)?
+            .tests;
+    tests.retain(|test| wanted(&test.title));
+    let mut outputs = project::output_tests(&project.root)?;
+    outputs.retain(|output| wanted(&output.name));
+    let mut program_tests = project::program_tests(&project.root)?;
+    program_tests.retain(|program| wanted(&program.name));
     let host = TestHost {
         args,
         start: &start,
-        tests: nikaia::modules::Program::read_for_tests(
-            &project.entry(),
-            &project.packages()?,
-            true,
-        )?
-        .tests,
-        outputs: project::output_tests(&project.root)?,
-        program_tests: project::program_tests(&project.root)?,
+        tests,
+        outputs,
+        program_tests,
         root: &project.root,
         failed: RefCell::new(None),
     };
@@ -810,6 +822,7 @@ fn test_command(
         !host.program_tests.is_empty(),
         both_settings,
         bless,
+        &filters,
     );
     done.map_err(|error| refusal(error, &host.failed))
 }

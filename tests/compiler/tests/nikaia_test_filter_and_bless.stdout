@@ -1,0 +1,12 @@
+-- alpha blessed alone: exit 0
+program "alpha" (tests/alpha.nika) ... blessed
+test result: ok. 1 passed; 0 failed
+alpha.stdout: alpha
+beta.stdout made: false
+alpha.stderr made: false
+-- two filters: exit 0
+program "alpha" (tests/alpha.nika) ... ok
+program "beta" (tests/beta.nika) ... ok
+test result: ok. 2 passed; 0 failed
+-- no test matches: exit 1
+no tests: no test's name holds any of the `--filter` texts gamma

@@ -48,8 +48,13 @@ pub trait CliTestHost {
 /// for, then every test run against them. `blocks`, `outputs` and `own` say
 /// whether the package has `test` blocks, `NAME.stdout` tests and test
 /// programs; `root` is the project's root, `user_parallelism` the setting a
-/// single run builds at.
-pub fn cli_commands_test[H: CliTestHost](host: ref H, root: ref fs::Path, user_parallelism: String, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool) -> i32 sync throws {
+/// single run builds at; `filters` are the `--filter` texts the tests
+/// were chosen by, empty for all.
+pub fn cli_commands_test[H: CliTestHost](host: ref H, root: ref fs::Path, user_parallelism: String, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool, filters: ref Vec[String]) -> i32 sync throws {
+    if !blocks && !outputs && !own && !filters.is_empty() {
+        println(f"no tests: no test's name holds any of the `--filter` texts {filters.join(", ")}")
+        return 1
+    }
     if !blocks && !outputs && !own {
         println("no tests: nothing in this package is a `test \"…\" { … }` block, and `tests/` holds no `NAME.stdout` and no `NAME.out/`")
         return 0

@@ -451,8 +451,9 @@ pub async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(Str
     let refused = !first.ended_well && is_refusal(&first.stderr);
     if !first.ended_well && !refused && first.stderr.starts_with("the program does not compile") { return Ok(ProjectTestsBlessed::Refused(String::from("the program does not compile"))); }
     if !first.ended_well && !refused { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not end successfully"))); }
-    if first.passed { return Ok(ProjectTestsBlessed::Unchanged); }
-    if !refused && (program.stdout.is_some() || !first.stdout.is_empty()) { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stdout", program.name)))), &fs::Root::Anywhere, first.stdout.copy_of(), false, true).await?; }
+    let new_stdout = !refused && program.stdout.is_none() && !first.stdout.is_empty();
+    if first.passed && !new_stdout { return Ok(ProjectTestsBlessed::Unchanged); }
+    if !refused && (program.stdout.is_some() || new_stdout) { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stdout", program.name)))), &fs::Root::Anywhere, first.stdout.copy_of(), false, true).await?; }
     if refused || program.stderr.is_some() { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.stderr", program.name)))), &fs::Root::Anywhere, nikaia_std::bytes::Bytes::from(first.stderr.as_bytes()), false, true).await?; }
     for (name, _, got) in first.bounds.iter() { fs::write(&nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(name))), &fs::Root::Anywhere, got.copy_of(), false, true).await?; }
     Ok(ProjectTestsBlessed::Written)
@@ -584,4 +585,6 @@ pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String,
     for program in host.program_failures(bless)? { failed.push(program); }
     Ok(failed)
 }
+
+pub fn project_tests_wanted(name: &str, filters: &[String]) -> bool { filters.is_empty() || filters.iter().any(|text| { name.contains(text) }) }
 
