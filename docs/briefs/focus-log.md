@@ -15,3 +15,4 @@
 2026-11-03 17:03 bugs briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 1237163 cost 3.61 queue 1
 2026-11-03 19:57 selfhosting briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 6277415 cost 2.84 queue 0
 2026-11-03 22:08 views briefs 2 done 1 partial 1 blocked 0 noop 0 tokens 3881782 cost 5.04 queue 2
+2026-11-04 07:09 async briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 5184900 cost 5.61 queue 1
