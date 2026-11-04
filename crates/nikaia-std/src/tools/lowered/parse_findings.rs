@@ -44,6 +44,17 @@ pub fn parse_findings_mut_name_in_a_tuple(at: i64) -> Finding {
     Finding { code: String::from("NK1307"), span, message: String::from("`mut` in front of one name of a tuple pattern isn't supported yet."), notes: vec![String::from("This is not refused on purpose: the form is left for later, and a program that spells it today would change meaning if it were added in a hurry.")], help: Some(String::from("Write `mut` in front of the whole pattern, which marks every name in it: `let mut (tx, rx) = …`, `for mut (a, b) in pairs`.")), warning: false, labels: vec![CheckLabel { span, word: String::from("mut"), text: String::from("not supported yet"), main: true }] }
 }
 
+pub fn parse_findings_misplaced_async(at: i64, word: &str) -> Finding {
+    let span = Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at + 5).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
+    let finding = match word {
+        "fn" => ("`async` stands before a function's declaration, but whether a function pauses is inferred.", "A function pauses where something it calls pauses, and its callers don't change when it starts to: there is no `await`.", "Remove `async`. To run a call beside the code after it, write `async` before the call: `let x = async f()`."),
+        "let" => ("`async` stands before a `let`, but `async` is a prefix of an expression.", "It starts a task where a value is computed, so it stands on the right of the `=`.", "Write it before the value: `let x = async f()`."),
+        _ => ("`async` stands before a loop, but `async` is a prefix of an expression and no loop has a value.", "`async` starts only tasks whose number stands in the source.", "To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`."),
+    };
+    let (message, note, help) = finding;
+    Finding { code: String::from("NK2115"), span, message: message.to_string(), notes: vec![note.to_string()], help: Some(help.to_string()), warning: false, labels: vec![CheckLabel { span, word: String::from("async"), text: String::from(""), main: true }] }
+}
+
 pub fn parse_findings_refusal(finding: Finding, source: &str) -> ParseFindingsRefusal {
     let end = (finding.span.start as i64).min(source.len() as i64);
     let mut from = end;

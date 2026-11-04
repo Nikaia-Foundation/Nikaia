@@ -433,10 +433,10 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let config2 = numbers_config(config, st);
             return Expr::Call { func: Box::new(func2), args: args2, config: config2, id: id2 };
         },
-        Expr::Spawn { body, is_move, id } => {
+        Expr::Spawn { body, written_async, id } => {
             let body = nikaia_std::boxed::open(body);
             let id2 = numbers_id(id, st);
-            return Expr::Spawn { body: Box::new(numbers_expr(body, st)), is_move, id: id2 };
+            return Expr::Spawn { body: Box::new(numbers_expr(body, st)), written_async, id: id2 };
         },
         Expr::Dsl { target, package, context, content, id } => { return Expr::Dsl { target, package, context, content, id: numbers_id(id, st) }; },
         Expr::Path(segments, id) => { return Expr::Path(segments, numbers_id(id, st)); },

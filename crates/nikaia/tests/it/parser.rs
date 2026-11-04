@@ -46,10 +46,10 @@ fn test_advanced_hello_world_compilation() {
         match &body.stmts[1].node {
             Stmt::Expr(Expr::Spawn {
                 body: spawn_body,
-                is_move,
+                written_async,
                 ..
             }) => {
-                assert!(!is_move, "Should not be move by default");
+                assert!(!written_async, "`spawn` is not written `async`");
                 // The body is the lambda of Part I 8.2 - one form, and the
                 // trailing lambda of 5.3 is it.
                 if let Expr::Closure {

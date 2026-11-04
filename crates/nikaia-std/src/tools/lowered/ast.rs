@@ -90,7 +90,7 @@ pub enum Expr {
     Select(Vec<SelectArm>, node_id::NodeId),
     If { cond: Box<Expr>, then_branch: Block, else_branch: Option<Block>, id: node_id::NodeId },
     Call { func: Box<Expr>, args: Vec<Expr>, config: Vec<ConfigArg>, id: node_id::NodeId },
-    Spawn { body: Box<Expr>, is_move: bool, id: node_id::NodeId },
+    Spawn { body: Box<Expr>, written_async: bool, id: node_id::NodeId },
     Dsl { target: winnow_grammar::Symbol, package: Option<winnow_grammar::Symbol>, context: Option<winnow_grammar::Symbol>, content: String, id: node_id::NodeId },
     Path(Vec<winnow_grammar::Symbol>, node_id::NodeId),
     MethodCall { receiver: Box<Expr>, method: winnow_grammar::Symbol, args: Vec<Expr>, config: Vec<ConfigArg>, id: node_id::NodeId },

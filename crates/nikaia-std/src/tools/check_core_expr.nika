@@ -296,7 +296,12 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         },
         Expr::Range { start, end, .. } => check_core_range(state, world, host, start, end, span),
         Expr::TryCatch { expr: guarded, handler, .. } => check_core_flow_try_catch(state, world, host, expr, guarded, handler, span),
-        Expr::Spawn { body, .. } => check_core_ops_spawn(state, world, host, body, span),
+        Expr::Spawn { body, written_async, .. } => {
+            if written_async && state.flow.loops > 0 {
+                state.an_async_inside_a_loop(span)
+            }
+            check_core_ops_spawn(state, world, host, body, span)
+        },
         Expr::Dsl { target, package, context, content, .. } => check_core_expr_dsl(state, world, host, expr, target, package, context, content, span),
         // An `asm` block: what it produces is the business of the emitter
         // that compiles it.

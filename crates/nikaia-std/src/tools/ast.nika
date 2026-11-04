@@ -558,11 +558,13 @@ pub enum Expr {
         id: node_id::NodeId,
     },
 
-    // Kap 8.2: spawn({ ... }) oder spawn(move { ... })
-    // Auch Kap 5.2: Block Lambdas
+    // Part I 8.2: `spawn fn { … }`, and `async(detached) fn { … }`, which
+    // is the same task (ADR-async-5 D13).
     Spawn {
-        body: Expr, // Meistens ein Expr::Block
-        is_move: bool,   // Kap 8.3
+        body: Expr, // the task's lambda
+        // Written `async(detached) fn { … }`: the checker refuses it inside a
+        // loop's body (`NK2120`, ADR-async-5 D30), and `spawn` it does not.
+        written_async: bool,
         id: node_id::NodeId,
     },
 

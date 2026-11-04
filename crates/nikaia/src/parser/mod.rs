@@ -45,6 +45,10 @@ pub struct Trivia {
     /// Where a `mut` stood in front of one name of a tuple pattern
     /// (`NK1307`, ADR-views-2 D1): the first one is refused.
     mut_name: Option<usize>,
+    /// Where an `async` stood before a `let`, a loop or a function's
+    /// declaration, and which word followed it (`NK2115`, ADR-async-5 D5):
+    /// the first one is refused.
+    misplaced_async: Option<(usize, &'static str)>,
 }
 
 impl Default for Trivia {
@@ -53,6 +57,7 @@ impl Default for Trivia {
             core: nikaia_std::tools::parser_leaves::pr_trivia(),
             semi_end: 0,
             mut_name: None,
+            misplaced_async: None,
         }
     }
 }
@@ -68,6 +73,14 @@ impl Trivia {
     /// A `mut` stood at this byte in front of one name of a tuple pattern.
     fn a_mut_name(&mut self, at: usize) {
         self.mut_name = Some(self.mut_name.map_or(at, |first| first.min(at)));
+    }
+
+    /// An `async` stood at this byte before `word`: `let`, `for`, `while`
+    /// or `fn` of a declaration.
+    fn a_misplaced_async(&mut self, at: usize, word: &'static str) {
+        if self.misplaced_async.is_none_or(|(first, _)| at < first) {
+            self.misplaced_async = Some((at, word));
+        }
     }
 
     /// A `;` stood at this byte.
@@ -727,6 +740,14 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
         return Err(refuse_parsing(finding, input));
     }
 
+    // **`async` before a `let`, a loop or a function's declaration**
+    // (`NK2115`, ADR-async-5 D5).
+    if let Some((at, word)) = stream.state.user_state.misplaced_async {
+        let finding =
+            nikaia_std::tools::parse_findings::parse_findings_misplaced_async(at as i64, word);
+        return Err(refuse_parsing(finding, input));
+    }
+
     // The generated entry point already refuses leftover input; this is a
     // backstop so a partial parse can never be reported as a success.
     if !stream.input.is_empty() {
@@ -1121,6 +1142,7 @@ grammar! {
         rule trait_method -> Spanned<TraitMethod> @=
             d:doc_here
             a:attribute*
+            async_before_fn?
             KW_FN
             name:NAME
             generics:generic_list?
@@ -1154,6 +1176,13 @@ grammar! {
         rule impl_method -> Spanned<Item> @=
             d:doc_here a:attribute* f:fn_item -> { Spanned::attributed(f, Span::from(_span), d, a) }
 
+        // **`async` before a function's declaration is read and refused**
+        // (`NK2115`, ADR-async-5 D5): whether a function pauses is inferred.
+        // `parse_unrefined` says the refusal once the parse is through, so a
+        // reader gets the reason and not a parse error at the word.
+        rule async_before_fn -> () @=
+            KW_ASYNC peek(KW_FN) -> { _state.user().a_misplaced_async(_span.start, "fn") }
+
         rule kw_sync -> () = KW_SYNC -> { () }
         rule kw_pub -> () = KW_PUB -> { () }
         // `entry rule file` (ADR-296 D25). A word of the grammar sublanguage,
@@ -1178,6 +1207,7 @@ grammar! {
         rule fn_item -> Item =
             vis:kw_pub?
             exported:kw_extern?
+            async_before_fn?
             KW_FN
             head:fn_head
             promise_before_the_arrow?
@@ -2399,7 +2429,8 @@ grammar! {
             new_line s:stmt -> { s }
 
         rule stmt -> Spanned<Stmt> # "statement" @=
-            c:comptime_stmt -> { Spanned::new(c, Span::from(_span)) }
+            async_before_stmt s:stmt -> { s }
+          | c:comptime_stmt -> { Spanned::new(c, Span::from(_span)) }
           | l:let_stmt -> { Spanned::new(l, Span::from(_span)) }
           | i:immutable_stmt -> { Spanned::new(i, Span::from(_span)) }
           | r:return_stmt -> { Spanned::new(r, Span::from(_span)) }
@@ -2408,7 +2439,7 @@ grammar! {
           | f:for_stmt -> { Spanned::new(f, Span::from(_span)) }
           | s:async_stmt -> { Spanned::new(s, Span::from(_span)) }
           | a:assign_stmt -> { Spanned::new(a, Span::from(_span)) }
-          | e:expr_stmt ->{ Spanned::new(e, Span::from(_span)) }
+          | e:expr_stmt -> { Spanned::new(e, Span::from(_span)) }
           | b:break_stmt -> { Spanned::new(b, Span::from(_span)) }
           | c:continue_stmt -> { Spanned::new(c, Span::from(_span)) }
 
@@ -3770,7 +3801,7 @@ grammar! {
         // A list of several options not built yet names the first.
         rule async_expr -> Expr =
             KW_ASYNC "(" OPT_DETACHED ")" body:trailing_lambda not(KW_CATCH) -> {
-                Expr::Spawn { body: Box::new(body), is_move: false, id: NodeId::parsed() }
+                Expr::Spawn { body: Box::new(body), written_async: true, id: NodeId::parsed() }
             }
           | KW_ASYNC "(" async_built_options u:async_unbuilt_option -> { u }
           | KW_ASYNC "(" OPT_DETACHED ")" trailing_lambda peek(KW_CATCH) fail(
@@ -3796,15 +3827,24 @@ grammar! {
                 "`async e`, a value computed beside the code after it, isn't built yet (#986)."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
 
-        // `async` before a function's declaration is the checker's `NK2115`
-        // (D5), not a lambda.
+        // `async` before a function's declaration is `NK2115` (D5,
+        // `async_before_fn`), not a lambda.
         rule async_named_fn = KW_FN NAME -> { () }
+
+        // `async` before a `let` or a loop is read and refused (`NK2115`, D5),
+        // as `async_before_fn` is: `parse_unrefined` says it once the parse is
+        // through. `async` is a prefix of an expression, and no loop has a
+        // value (D30).
+        rule async_before_stmt -> () @=
+            KW_ASYNC peek(KW_LET) -> { _state.user().a_misplaced_async(_span.start, "let") }
+          | KW_ASYNC peek(KW_FOR) -> { _state.user().a_misplaced_async(_span.start, "for") }
+          | KW_ASYNC peek(KW_WHILE) -> { _state.user().a_misplaced_async(_span.start, "while") }
 
         // `async e` as a statement (D9), refused for the reason `async_expr`
         // gives. Tried before `expr_stmt`, so a statement gets its own
         // sentence; the forms with a `(`, a `{` or a lambda after the word go on
         // to `async_expr`, which names each of them, and `async` before a `let`
-        // or a loop is left to the checker's `NK2115`.
+        // or a loop is `NK2115` (`async_before_stmt`).
         rule async_stmt -> Stmt =
             KW_ASYNC not("(") not("{") not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) fail(
                 "`async e` as a statement isn't built yet (#986)."
@@ -3855,7 +3895,7 @@ grammar! {
         // rather than *"expected `fn`"*.
         rule spawn_expr -> Expr =
             KW_SPAWN body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), is_move: false, id: NodeId::parsed() }
+                Expr::Spawn { body: Box::new(body), written_async: false, id: NodeId::parsed() }
             }
           | KW_SPAWN "(" fail("`spawn` takes a lambda. Write `spawn fn { … }`.") -> {
                 Expr::Spawn {
@@ -3864,7 +3904,7 @@ grammar! {
                         mutable: Vec::new(),
                         body: Block { stmts: Vec::new() }, id: NodeId::parsed()
                     }),
-                    is_move: false, id: NodeId::parsed()
+                    written_async: false, id: NodeId::parsed()
                 }
             }
 

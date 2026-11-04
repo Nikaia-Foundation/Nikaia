@@ -1,0 +1,17 @@
+error[NK2120]: This `async` stands inside a loop's body, but `async` starts only tasks whose number stands in the source.
+  --> tests/async_parse_inside_a_loop_is_refused.nika:7:3
+   |
+ 7 | 		let h = async(detached) fn { println("in a for") }
+   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A loop would start one task each time round, and a group's tasks are counted where they are written.
+   = help: To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`.
+error[NK2120]: This `async` stands inside a loop's body, but `async` starts only tasks whose number stands in the source.
+   --> tests/async_parse_inside_a_loop_is_refused.nika:14:4
+    |
+ 14 | 			async(detached) fn { println("in a while") }.join()
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A loop would start one task each time round, and a group's tasks are counted where they are written.
+    = help: To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`.
+

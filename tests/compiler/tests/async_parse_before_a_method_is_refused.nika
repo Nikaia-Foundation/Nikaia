@@ -1,0 +1,16 @@
+// `async` before a method's declaration is refused as before a function's
+// (ADR-async-5 D5, `NK2115`).
+
+struct Store {
+	n: i64,
+}
+
+impl Store {
+	pub async fn load(self) -> i64 {
+		return self.n
+	}
+}
+
+fn main() {
+	println(f"{Store { n: 1 }.load()}")
+}

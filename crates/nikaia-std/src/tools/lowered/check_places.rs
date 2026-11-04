@@ -50,6 +50,9 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn an_async_inside_a_loop(&mut self, span: &Span) { self.findings.push(check_refusal("NK2120", span, String::from("This `async` stands inside a loop's body, but `async` starts only tasks whose number stands in the source."), vec![String::from("A loop would start one task each time round, and a group's tasks are counted where they are written.")], Some(String::from("To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`.")))); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn arguments_of(&self, on: &Ty) -> collections::BTreeMap<String, Ty> {
         let mut bound: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
         match on {

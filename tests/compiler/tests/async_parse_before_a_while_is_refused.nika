@@ -1,0 +1,9 @@
+// `async` before a `while` is refused (ADR-async-5 D5, D30, `NK2115`).
+
+fn main() {
+	let mut i = 0
+	async while i < 2 {
+		i += 1
+	}
+	println(f"{i}")
+}

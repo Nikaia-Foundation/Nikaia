@@ -1,0 +1,8 @@
+error[NK2115]: `async` stands before a loop, but `async` is a prefix of an expression and no loop has a value.
+  --> tests/async_parse_before_a_while_is_refused.nika:5:2
+   |
+ 5 | 	async while i < 2 {
+   |  ^^^^^
+   |
+   = note: `async` starts only tasks whose number stands in the source.
+   = help: To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`.

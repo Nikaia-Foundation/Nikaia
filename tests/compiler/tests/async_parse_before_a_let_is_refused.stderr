@@ -1,0 +1,8 @@
+error[NK2115]: `async` stands before a `let`, but `async` is a prefix of an expression.
+  --> tests/async_parse_before_a_let_is_refused.nika:5:2
+   |
+ 5 | 	async let x = 1
+   |  ^^^^^
+   |
+   = note: It starts a task where a value is computed, so it stands on the right of the `=`.
+   = help: Write it before the value: `let x = async f()`.

@@ -1,0 +1,8 @@
+// `async` before a `for` is refused (ADR-async-5 D5, D30, `NK2115`): there is
+// no `async` loop, and the help names the `par_iter` chain.
+
+fn main() {
+	async for i in [1, 2] {
+		println(f"{i}")
+	}
+}

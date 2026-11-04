@@ -1,0 +1,24 @@
+// An `async` form inside a loop's body is refused (ADR-async-5 D30,
+// `NK2120`), in a nested block of it too. A lambda is a function of its own,
+// so one written in a loop may hold the form; and `spawn` is not asked.
+
+fn main() throws {
+	for i in [1, 2] {
+		let h = async(detached) fn { println("in a for") }
+		h.join()
+	}
+	let mut n = 0
+	while n < 2 {
+		n += 1
+		if n > 0 {
+			async(detached) fn { println("in a while") }.join()
+		}
+	}
+	for i in [1, 2] {
+		[i].iter().for_each fn(x) {
+			async(detached) fn { println("in a lambda") }.detach()
+		}
+		spawn fn { println("spawned") }.join()
+	}
+	async(detached) fn { println("outside") }.join()
+}

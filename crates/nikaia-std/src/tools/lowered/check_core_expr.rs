@@ -244,7 +244,11 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); check_core_range(state, world, host, start, end, span) },
         Expr::TryCatch { expr: guarded, handler, .. } => { let guarded = nikaia_std::boxed::open(guarded); check_core_flow_try_catch(state, world, host, expr, guarded, handler, span) },
-        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); check_core_ops_spawn(state, world, host, body, span) },
+        Expr::Spawn { body, written_async, .. } => {
+            let body = nikaia_std::boxed::open(body); let written_async = *written_async;
+            if written_async && state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
+            check_core_ops_spawn(state, world, host, body, span)
+        },
         Expr::Dsl { target, package, context, content, .. } => { let context = *context; let package = *package; let target = *target; check_core_expr_dsl(state, world, host, expr, target, package, context, content, span) },
         Expr::Asm { .. } => {
             check_core_expr_unanswered(state);

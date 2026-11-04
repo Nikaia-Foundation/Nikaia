@@ -2861,7 +2861,7 @@ pub mod parse_errors {
 }
 pub mod parse_findings {
     #[allow(unused_imports)]
-    pub use super::{ParseFindingsRefusal, parse_findings_too_long, parse_findings_char_of, parse_findings_at, parse_findings_parse_error, parse_findings_failure, parse_findings_mut_name_in_a_tuple, parse_findings_refusal, parse_findings_types_refusal};
+    pub use super::{ParseFindingsRefusal, parse_findings_too_long, parse_findings_char_of, parse_findings_at, parse_findings_parse_error, parse_findings_failure, parse_findings_mut_name_in_a_tuple, parse_findings_misplaced_async, parse_findings_refusal, parse_findings_types_refusal};
 }
 pub mod parse_notes {
     #[allow(unused_imports)]

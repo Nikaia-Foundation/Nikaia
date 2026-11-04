@@ -1,0 +1,8 @@
+error[NK2115]: `async` stands before a function's declaration, but whether a function pauses is inferred.
+  --> tests/async_parse_before_a_method_is_refused.nika:9:6
+   |
+ 9 | 	pub async fn load(self) -> i64 {
+   |      ^^^^^
+   |
+   = note: A function pauses where something it calls pauses, and its callers don't change when it starts to: there is no `await`.
+   = help: Remove `async`. To run a call beside the code after it, write `async` before the call: `let x = async f()`.

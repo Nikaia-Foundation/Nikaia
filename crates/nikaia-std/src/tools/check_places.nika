@@ -80,6 +80,15 @@ impl CheckState {
         self.findings.push(check_refusal("NK1132", span, f"`{word}` {does}, but this isn't inside a loop.", ["It only works inside a `while` or a `for`."], "To leave the function instead, write `return`."))
     }
 
+    /// **`NK2120`: an `async` form inside a loop's body** (ADR-async-5 D30).
+    /// `async` starts only tasks whose number stands in the source; a lambda
+    /// is a function of its own, so one written in a loop may hold the form
+    /// (the count starts again at zero there, `enter_boundary`). `spawn` is
+    /// not asked.
+    pub fn an_async_inside_a_loop(ref mut self, span: ref Span) sync {
+        self.findings.push(check_refusal("NK2120", span, "This `async` stands inside a loop's body, but `async` starts only tasks whose number stands in the source.", ["A loop would start one task each time round, and a group's tasks are counted where they are written."], "To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`."))
+    }
+
     /// What a value's own type arguments bind its declaration's parameters to:
     /// `Pair[i64]` against `struct Pair[T]` gives `T = i64`, positionally.
     pub fn arguments_of(ref self, on: ref Ty) -> collections::BTreeMap[String, Ty] sync {

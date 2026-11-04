@@ -1,0 +1,10 @@
+// `async` before a function's declaration is refused (ADR-async-5 D5,
+// `NK2115`): whether a function pauses is inferred.
+
+async fn load(n: i64) -> i64 {
+	return n
+}
+
+fn main() {
+	println(f"{load(1)}")
+}

@@ -517,9 +517,9 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
             let config2 = numbers_config(config, st)
             return Expr::Call { func: func2, args: args2, config: config2, id: id2 }
         },
-        Expr::Spawn { body, is_move, id } => {
+        Expr::Spawn { body, written_async, id } => {
             let id2 = numbers_id(id, st)
-            return Expr::Spawn { body: numbers_expr(body, st), is_move: is_move, id: id2 }
+            return Expr::Spawn { body: numbers_expr(body, st), written_async: written_async, id: id2 }
         },
         Expr::Dsl { target, package, context, content, id } => {
             return Expr::Dsl { target: target, package: package, context: context, content: content, id: numbers_id(id, st) }
