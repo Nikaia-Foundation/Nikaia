@@ -15,6 +15,9 @@ behaviour, for ordinary programs, with nothing written for the prover's sake,
 and what that demands of the language and of the prover. The internal
 structure the questions lean on is described in
 [How the prover is built](architecture.html).
+Whether a proved check is then left out of the program, and what it takes
+to trust a proof that far, is asked under
+[performance with safety](../performance/).
 
 ## Where it stands
 
