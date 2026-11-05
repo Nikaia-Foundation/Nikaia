@@ -240,6 +240,7 @@ pub mod runtime {
 /// `vc_part_of`, #942).
 #[allow(
     clippy::map_identity,
+    clippy::unnecessary_operation,
     unused_assignments,
     clippy::unnecessary_unwrap,
     clippy::never_loop,

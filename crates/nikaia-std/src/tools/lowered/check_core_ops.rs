@@ -476,6 +476,31 @@ pub(crate) fn check_core_ops_not_plain(inner: &Ty) -> bool {
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_slot_fits(view: &Ty, other: &Ty) -> bool {
+    for held in viewed_from_type(view) { if check_core_ops_same_or_open(&held, other) { return true; } }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_same_or_open(a: &Ty, b: &Ty) -> bool {
+    if a.is_unknown() || b.is_unknown() { return true; }
+    match a {
+        Ty::Named { name, args, view } => { let view = *view; match b {
+            Ty::Named { name: other_name, args: other_args, view: other_view } => {
+                let other_view = *other_view;
+                if name != other_name || view != other_view || (args.len() as i64) != other_args.len() as i64 { return false; }
+                for (x, y) in args.iter().zip(other_args.iter()) { if !check_core_ops_same_or_open(x, y) { return false; } }
+                true
+            },
+            _ => false,
+        } },
+        _ => a == b,
+    }
+}
+
 pub(crate) fn check_core_ops_a_number_written(node: &Expr) -> bool { matches!(node, Expr::LitInt { .. } | Expr::LitFloat { .. }) }
 
 pub(crate) fn check_core_ops_number_written_kind(node: &Expr) -> String {
@@ -618,7 +643,11 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && state.a_package_copy(world, &unviewed_type(&inner)) && state.a_value_written_out(world, fallback) { return unviewed_type(&inner); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && check_core_ops_not_plain(&inner) && state.a_value_written_out(world, fallback) {
-        state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
+        if made_in_the_call(fallback) { state.facts.slot_fallbacks.insert(id_of(expr) as i64, false); } else { Some(state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)); }
+        return inner;
+    }
+    if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && made_in_the_call(fallback) && !state.jumps(world, fallback) && moves(&other) && check_core_ops_slot_fits(&inner, &other) && (check_core_ops_lent_root(&state, world, value) || check_core_ops_behind_a_view(&state, world, value)) {
+        state.facts.slot_fallbacks.insert(id_of(expr) as i64, check_core_ops_plain_text(&other));
         return inner;
     }
     if nullable {

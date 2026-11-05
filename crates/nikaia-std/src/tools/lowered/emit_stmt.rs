@@ -200,12 +200,18 @@ impl EmitState {
     pub fn emit_stmt<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: &EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mark = out.buf.len() as i64;
         let kept = walk.async_kept.len() as i64;
+        let slots = walk.slots.len() as i64;
+        walk.statements_open += 1;
         if self.emit_async_binding(world, walk, out, host, node, span, depth, &tail, flow, scope)? {
+            walk.statements_open -= 1;
             emit_stmt_declare_rests(walk, out, mark, kept);
+            emit_stmt_declare_slots(walk, out, mark, slots);
             return Ok(());
         }
         self.emit_stmt_written(world, walk, out, host, node, span, depth, &tail, flow, scope)?;
+        walk.statements_open -= 1;
         emit_stmt_declare_rests(walk, out, mark, kept);
+        emit_stmt_declare_slots(walk, out, mark, slots);
         match node {
             Stmt::Let { names, value, .. } => {
                 match value {
@@ -882,6 +888,15 @@ pub(crate) fn emit_stmt_declare_rests(walk: &mut EmitWalk, out: &mut EmitOut, ma
         let cell = match walk.async_kept.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         declared = format!("let {} = nikaia_std::task::Rest::new(); {}", cell, declared);
         walk.async_rests.push(cell);
+    }
+    if declared != "" { out.insert_at(mark, &declared); }
+}
+
+pub(crate) fn emit_stmt_declare_slots(walk: &mut EmitWalk, out: &mut EmitOut, mark: i64, slots: i64) {
+    let mut declared = String::from("");
+    while (walk.slots.len() as i64) > slots {
+        let slot = match walk.slots.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        declared = format!("let mut {} = None; {}", slot, declared);
     }
     if declared != "" { out.insert_at(mark, &declared); }
 }

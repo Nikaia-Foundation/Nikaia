@@ -98,6 +98,7 @@ pub fn vc_coalesced(facts: &CheckFacts) -> collections::BTreeSet<i64> {
     ids.extend(facts.text_view_fallbacks.iter().cloned());
     ids.extend(facts.lent_list_reads.iter().cloned());
     ids.extend(facts.lent_map_fallbacks.iter().cloned());
+    ids.extend(facts.slot_fallbacks.keys().copied());
     ids.extend(facts.view_fallbacks.iter().cloned());
     ids.extend(facts.map_read_views.iter().cloned());
     ids

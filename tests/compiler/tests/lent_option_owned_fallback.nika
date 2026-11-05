@@ -1,0 +1,65 @@
+// `??` over a lent option with a value made here as the fallback (#1256):
+// the fallback goes into a slot declared before the statement and filled
+// only on `null`, so it runs only then and the answer is a view of either.
+
+enum Zone {
+    Options(Vec[i64]),
+    Plain,
+}
+
+struct Row {
+    name: String,
+}
+
+fn size_of(z: ref Zone?) -> i64 {
+    match z ?? Zone::Options([]) {
+        Zone::Options(v) => return v.len(),
+        Zone::Plain => return -1,
+    }
+}
+
+fn total(x: ref Vec[i64]?) -> i64 {
+    let v = x ?? []
+    return v.len()
+}
+
+fn fallback() -> Vec[i64] {
+    println("the fallback runs")
+    return [7, 8, 9]
+}
+
+fn lazy(x: ref Vec[i64]?) -> i64 {
+    let v = x ?? fallback()
+    return v.len()
+}
+
+fn label(r: ref Row?, n: i64) -> String {
+    let s = r?.name ?? f"row {n}"
+    return f"<{s}>"
+}
+
+fn inside(xs: ref Vec[i64]?) -> i64 {
+    let mut total = 0
+    for k in 0..3 {
+        if k > 0 {
+            let v = xs ?? [k, k]
+            total += v.len()
+        }
+    }
+    return total
+}
+
+fn main() {
+    let z: Zone? = Zone::Options([1, 2])
+    let plain: Zone? = Zone::Plain
+    println(f"{size_of(z)} {size_of(plain)} {size_of(null)}")
+    let x: Vec[i64]? = [1, 2, 3]
+    println(f"{total(x)} {total(null)}")
+    println("with a value:")
+    println(f"{lazy(x)}")
+    println("with null:")
+    println(f"{lazy(null)}")
+    let r: Row? = Row { name: "a" }
+    println(f"{label(r, 1)} {label(null, 2)}")
+    println(f"{inside(x)} {inside(null)}")
+}

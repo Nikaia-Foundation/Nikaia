@@ -1,0 +1,9 @@
+2 -1 0
+3 0
+with a value:
+3
+with null:
+the fallback runs
+3
+<a> <row 2>
+9 6

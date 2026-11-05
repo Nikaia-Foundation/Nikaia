@@ -547,6 +547,24 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
+        if self.facts.slot_fallbacks.contains_key(&node_key(node)) && walk.statements_open > 0 && !flow.in_lambda {
+            let slot = format!("__nikaia_slot_{}", walk.slot_count);
+            walk.slot_count += 1;
+            walk.slots.push(slot.to_string());
+            let text = nikaia_std::index::or(self.facts.slot_fallbacks.get(&node_key(node)), || false);
+            out.push("match ");
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+            if text {
+                out.push(&format!(" {{ Some(__nikaia_value) => std::convert::AsRef::<str>::as_ref(__nikaia_value), None => {}.insert(", slot));
+                self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
+                out.push(").as_str() }");
+            } else {
+                out.push(&format!(" {{ Some(__nikaia_value) => __nikaia_value, None => &*{}.insert(", slot));
+                self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
+                out.push(") }");
+            }
+            return Ok(());
+        }
         let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(&node_key(fallback)) || self.facts.view_coalesces.contains(&node_key(node));
         if self.facts.optional_fallbacks.contains(&node_key(node)) {
             out.push("nikaia_std::index::or_maybe(");

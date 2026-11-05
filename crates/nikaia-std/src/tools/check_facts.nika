@@ -228,6 +228,11 @@ pub struct CheckFacts {
     /// are made the `String` the answer is.
     pub text_owned_fallbacks: collections::BTreeSet[i64],
     pub lent_map_fallbacks: collections::BTreeSet[i64],
+    /// **The `??`s whose left side holds a view and whose fallback is a value
+    /// made here** (#1256): the answer is a view, and the fallback goes into a
+    /// slot declared before the statement, filled only on `null`; `true`
+    /// where the answer is a view of text.
+    pub slot_fallbacks: collections::BTreeMap[i64, bool],
     pub optional_fallbacks: collections::BTreeSet[i64],
     pub flat_reads: collections::BTreeSet[i64],
     /// **Where each `async e` task is waited for**, by the `async` node
@@ -588,6 +593,7 @@ impl CheckFacts {
             text_view_fallbacks: collections::BTreeSet(),
             text_owned_fallbacks: collections::BTreeSet(),
             lent_map_fallbacks: collections::BTreeSet(),
+            slot_fallbacks: collections::BTreeMap(),
             map_gets: collections::BTreeSet(),
             optional_fallbacks: collections::BTreeSet(),
             flat_reads: collections::BTreeSet(),
