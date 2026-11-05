@@ -1,0 +1,10 @@
+Nothing was built, tested or committed. The run ended with both steps edited but never compiled. There is no report and no commit sha.
+
+1. **What cost the most.** Finding my way through the async pipeline from parser to checker facts to emitter to runtime took most of the turns. I traced how `Expr::Async`/`Expr::Spawn` become `async_waits`, how `emit_async_task` picks between `start_here`, `start_paused` and `spawn_*`, and how `join(within:)` is matched separately in `check_core_method` and `check_core_call_on`. I also designed the "left live" rule myself (an unnamed handle is recorded as `GroupEnd`), plus where `NK2122` fires. I edited about 12 files before the first build. That broke the "build once, early" rhythm, and the run ran out before even one cycle.
+2. **What the brief could have handed me:**
+   - the chain of places a new `async(...)` option touches: the parser's `async_expr`, `ast.nika` and `node_numbers`, `check_core_expr`'s Spawn and AsyncGroup arms, `check_async_block` and `check_async_in`, `CheckAsyncWaitAt` with its `check_walks` number, `emit_async_kind`, the Spawn arm in `emit_expr`, and `check_crossings_spawned`;
+   - that `join(within:)` is keyed on `"TaskHandle"` in two predicates and in the `std.contracts` keys;
+   - that `ChildHandle::join` takes `&mut self` with a non-`Cell` `held`, so racing it against a timer needs interior mutability;
+   - where `NK2122` is specified, and which places count as "leaving the group".
+3. **Checks run and wasted.** I ran no build, `lower-std`, test, clippy or pre-push. I only read code with grep and sed, and copied the old binary to the scratchpad. Nothing was wasted, but nothing was verified.
+4. **The one change that would have saved the most.** Split a brief this size into two runs: step 1 (the `async(handle)` syntax, checker, emitter, left-live, `NK2122`) and step 2 (`join_within` on `ChildHandle`). Give each run a *Locations* list of the async pipeline files and the `TaskHandle` keying points above. Also add a rule to builder.md: "build after the parser+AST edit before touching the checker." Then slips would show up early and a partial step 1 could have been committed.

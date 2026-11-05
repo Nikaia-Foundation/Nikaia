@@ -1,2 +1,3 @@
-a12-async-handle.md
+a14-async-handle.md
+a15-join-within-child.md
 a13-async-within.md
