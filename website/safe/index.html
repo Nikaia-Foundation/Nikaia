@@ -84,7 +84,7 @@ description: >-
 <section class="home-section home-section-alt home-code-section" id="errors">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <span class="safe-chip safe-chip-build">Refused when built</span>
+      <span class="safe-chip safe-chip-build">Caught at compile time</span>
       <h2>Errors that go unhandled</h2>
       <p>When something fails, the program needs a way to deal with it. Functions declare when they can fail, and what they can fail with is worked out from their bodies. A function that calls something that can fail, and neither declares it nor handles it, is rejected when the program is built. Tasks are held to the same rule. A task&rsquo;s error is thrown where the program waits for the task, where its value is first needed, or at the end of its <code>async { … }</code> group when nobody reads it, and the compiler asks for it to be handled there as for any call that can fail. A task handle that is never joined, cancelled or detached is refused (<code>NK2109</code>), so the error has a place to arrive.</p>
       <p>For functions from outside Nikaia that nothing describes, Nikaia cannot know every way they fail. A description of the library closes that gap. The check shows where failures are not accounted for; it does not make the handling itself correct.</p>
@@ -102,7 +102,7 @@ description: >-
 <section class="home-section home-code-section" id="promises">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <span class="safe-chip safe-chip-build">Refused when built</span>
+      <span class="safe-chip safe-chip-build">Caught at compile time</span>
       <h2>Broken promises</h2>
       <p><strong><strong>Every part of a program should be able to rely on what the other parts promise.</strong></strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> You write the expectation as an <code>assert</code> and it becomes a contract. A call that breaks it is rejected when the program is built, a promise about a result is available to the callers, and a contract carries across package boundaries.</p>

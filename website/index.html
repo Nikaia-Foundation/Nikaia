@@ -154,7 +154,7 @@ description: >-
         <a class="safe-more" href="{{ "/safe/#memory" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-build">Refused when built</span>
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3><a href="{{ "/safe/#errors" | relative_url }}">Errors that go unhandled</a></h3>
         <p>Something fails and nothing deals with it.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
@@ -164,7 +164,7 @@ description: >-
         <a class="safe-more" href="{{ "/safe/#errors" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-build">Refused when built</span>
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3><a href="{{ "/safe/#promises" | relative_url }}">Broken promises</a></h3>
         <p>A part of the program is called outside what it was told to expect.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
@@ -193,7 +193,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <a class="safe-more" href="{{ "/fast/#tuned" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-build">One line</span>
+        <span class="safe-chip safe-chip-build">One setting</span>
         <h3><a href="{{ "/fast/#cores" | relative_url }}">One core or all of them</a></h3>
         <p>Whether your code may run on several cores is one line. The code does not change.</p>
 <div class="home-code markdown-body"><pre><code class="language-toml">[build]
@@ -201,14 +201,14 @@ user-parallelism = "no"    # or "yes"</code></pre></div>
         <a class="safe-more" href="{{ "/fast/#cores" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-build">By design</span>
+        <span class="safe-chip safe-chip-build">Built into the language</span>
         <h3><a href="{{ "/fast/#memory" | relative_url }}">No garbage collector, no <code>free</code></a></h3>
         <p>Memory is released at a point you can see in the code, without collector pauses.</p>
 <p class="safe-note">You write no <code>free</code> and no lifetimes. The compiler works out when memory can be released, and the release is a point you can see.</p>
         <a class="safe-more" href="{{ "/fast/#memory" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-part">On request</span>
+        <span class="safe-chip safe-chip-part">Opt-in</span>
         <h3><a href="{{ "/fast/#checks" | relative_url }}">Checks that are proved are dropped</a></h3>
         <p>An index or overflow check that cannot fail is not written, where you ask for it.</p>
 <div class="home-code markdown-body"><pre><code class="language-toml">[build]
@@ -226,7 +226,7 @@ optimization = "remove-bounds-checks:on,remove-overflow-checks:on"</code></pre><
     <p class="safe-lead home-intro">You write what should happen, and Nikaia works out the technical details other fast languages make you spell out. When something is wrong, it tells you in plain words what to change.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-a">
-        <span class="safe-chip safe-chip-build">Plain calls</span>
+        <span class="safe-chip safe-chip-build">No function colouring</span>
         <h3><a href="{{ "/easy/#async" | relative_url }}">Waiting does not split your code in two</a></h3>
         <p>A function that waits for a file or the network is called like any other. No library needs a waiting and a non-waiting version of the same function, and a wait added deep inside leaves every caller as it is. The program waits where it needs the value.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let a = async count_words(first)    // starts at once
@@ -236,7 +236,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
         <a class="safe-more" href="{{ "/easy/#async" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-a">
-        <span class="safe-chip safe-chip-build">Says what to write</span>
+        <span class="safe-chip safe-chip-build">Suggests the fix</span>
         <h3><a href="{{ "/easy/#errors" | relative_url }}">Readable errors</a></h3>
         <p>An error says what you wrote, why it cannot work and what to write instead.</p>
 <div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error[NK1139]</span><b>: You're changing `count`, but it wasn't declared as mutable.</b>
@@ -244,7 +244,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
         <a class="safe-more" href="{{ "/easy/#errors" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-a">
-        <span class="safe-chip safe-chip-build">Grammar in, parser out</span>
+        <span class="safe-chip safe-chip-build">Built-in parser generator</span>
         <h3><a href="{{ "/easy/#grammar" | relative_url }}">Formats are part of the language</a></h3>
         <p>Describe a format as a grammar and the compiler builds the parser.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">grammar Calc {
@@ -268,7 +268,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
     <p class="safe-lead home-intro">Software that fails less hurts fewer people. Programs that do more with less hardware use less energy. And a language anyone can read lets more people build.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-a">
-        <span class="safe-chip safe-chip-build">Public record</span>
+        <span class="safe-chip safe-chip-build">Every decision public</span>
         <h3><a href="{{ "/good/#open" | relative_url }}">Built in the open</a></h3>
         <p>The compiler is moving into Nikaia itself, and every design decision is argued in a public record.</p>
 <p class="safe-note">Each decision is argued in an ADR and accepted by a human. The compiler is being rewritten, part by part, in the language it compiles.</p>

@@ -23,7 +23,7 @@ description: >-
 <section class="home-section home-code-section" id="async">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <span class="safe-chip safe-chip-build">Plain calls</span>
+      <span class="safe-chip safe-chip-build">No function colouring</span>
       <h2>Waiting does not split your code in two</h2>
       <p>A function that waits does not have to be marked as one, and so it does not mark its callers either. Code does not split into a waiting half and a non-waiting half, and no library needs two versions of the same function, one for each. The program waits where it needs the value.</p>
       <p>A call that reads a file or waits for the network is written like any other call. Its function pauses there until the result is ready, and the program goes on with other work in the meantime. The compiler finds where a function pauses, so a function that starts to wait leaves its callers as they are. A function marked <code>sync</code> does not pause; the compiler holds it to that, and it may call only other <code>sync</code> functions.</p>
@@ -42,7 +42,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
 <section class="home-section home-section-alt home-code-section" id="errors">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <span class="safe-chip safe-chip-build">Says what to write</span>
+      <span class="safe-chip safe-chip-build">Suggests the fix</span>
       <h2>Readable errors</h2>
       <p><strong>A compiler message that talks about lifetimes and borrowing sends you away from your own code.</strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> The compiler points at every place the explanation needs: <code>^</code> under the line with the mistake, <code>-</code> under the line that explains it. Then it says what to write instead. Errors point at your <code>.nika</code> line and do not talk about lifetimes or borrowing.</p>
@@ -59,7 +59,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
 <section class="home-section home-code-section" id="grammar">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <span class="safe-chip safe-chip-build">Grammar in, parser out</span>
+      <span class="safe-chip safe-chip-build">Built-in parser generator</span>
       <h2>Formats are part of the language</h2>
       <p><strong>Reading a log, a protocol or a small language usually means a parsing library, or a parser written by hand.</strong></p>
       <p><span class="lead-in">What Nikaia checks.</span> You describe the format as a <code>grammar</code>, and the compiler builds the parser. Precedence and recursion are rules: the order of the rules is the order of binding. The whole calculator is about 100 lines.</p>
