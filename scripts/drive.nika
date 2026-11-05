@@ -33,7 +33,7 @@
 // Output: one line per agent run (`builder done ...`).
 // Escalation: one final line, exit 2, on an OWNER line, an ESCALATE of
 // agent.nika, a stop line (above), `--max` agent runs (default 8), a push
-// rejected after one rebase, a suite still red after 2 QA rounds. A RED line
+// rejected after one merge, a suite still red after 2 QA rounds. A RED line
 // with a builder queued goes on with it (the supervisor's fix-forward brief).
 //
 // `--ignore-ci-red`: a RED line of the cycle (CI red on develop) does not
@@ -87,16 +87,17 @@
 // and when it has waited, `SUITE <sha8> green|red <steps>`. A develop push of a
 // sha CI already passed on a ci/ branch skips the heavy jobs (nikaia.yml).
 // Green: `git push origin <sha>:develop`, exactly the tested commit; when
-// rejected (other sessions push too), `git pull --rebase --autostash` and push
-// HEAD: the rebased commits are CI's to judge. Still rejected: escalate. A
-// conflicted rebase is never left open in the shared checkout (2026-10-31: both
+// rejected (other sessions push too), `git merge --autostash` of
+// `origin/develop` and push HEAD: the merge is CI's to judge (a merge, not a
+// rebase, 2026-11-05: a rebase replays the tested commits). Still rejected:
+// escalate. A conflicted merge is never left open in the shared checkout (2026-10-31: both
 // lanes write docs/briefs/, and the checkout stayed mid-rebase until fixed by
-// hand): the conflicted paths are noted, `git rebase --abort` (HEAD and the
-// autostash restored), and `ESCALATE drive: push rejected, rebase conflicted in
-// <paths>, rebase aborted`; an abort that fails, or leaves a rebase or an
-// unmerged path, escalates with `rebase left open: ...`. Then it prints
+// hand): the conflicted paths are noted, `git merge --abort` (HEAD and the
+// autostash restored), and `ESCALATE drive: push rejected, merge conflicted in
+// <paths>, merge aborted`; an abort that fails, or leaves a merge or an
+// unmerged path, escalates with `merge left open: ...`. Then it prints
 // `PUSHED <sha8>` and drops the N tested lines from unpushed.txt (after a
-// rebased push of HEAD it empties the file). Red: DIR/qa-input.txt gets the
+// merged push of HEAD it empties the file). Red: DIR/qa-input.txt gets the
 // suite's step lines, the whole suite.log (the failed jobs' log tails), `git log
 // origin/develop..HEAD`, and the brief and report of each brief in
 // unpushed.txt; the QA agent runs (role `qa`) on DIR/qa/qa-task.md, a copy of
@@ -280,20 +281,24 @@ fn drive_say(dry: bool, line: String) {
     if dry { println(f"would run: {line}") }
 }
 
-// Pushes the tested commit; rejected, rebases once and pushes HEAD (the
-// rebased commits are CI's to judge). Prints `PUSHED <sha8>`. True when HEAD
-// was pushed (after the rebase), false when exactly `sha`.
+// Pushes the tested commit; rejected, merges `origin/develop` once and pushes
+// HEAD (the merge is CI's to judge; a merge, not a rebase: a rebase replays the
+// tested commits and, on 2026-11-05, deleted every brief a replayed commit had
+// untracked). Prints `PUSHED <sha8>`. True when HEAD was pushed (after the
+// merge), false when exactly `sha`.
 fn drive_push(sha: String) -> bool throws {
     let first = process::run("git", ["push", "origin", f"{sha}:develop"])
     let mut pushed = sha.clone()
     let mut head = false
     if !first.ok {
         // The shared checkout holds other agents' unfinished files and build locks:
-        // they are stashed around the rebase, not a reason to stop (2026-10-28).
-        let pulled = process::run("git", ["pull", "--rebase", "--autostash", "origin", "develop"])
-        if !pulled.ok { drive_rebase_abort() }
+        // they are stashed around the merge, not a reason to stop (2026-10-28).
+        let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
+        if !fetched.ok { drive_escalate("push rejected, and git fetch origin develop failed") }
+        let merged = process::run("git", ["merge", "-q", "--no-edit", "--autostash", "FETCH_HEAD"])
+        if !merged.ok { drive_merge_abort() }
         let second = process::run("git", ["push", "origin", "HEAD:develop"])
-        if !second.ok { drive_escalate("push rejected after one rebase") }
+        if !second.ok { drive_escalate("push rejected after one merge") }
         pushed = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
         head = true
     }
@@ -301,22 +306,27 @@ fn drive_push(sha: String) -> bool throws {
     return head
 }
 
-// A failed `git pull --rebase` must not leave the shared checkout mid-rebase:
-// the conflicted paths are noted, `git rebase --abort` restores HEAD and applies
-// the autostash back, and the check that no rebase is left open and no path is
-// unmerged precedes the escalation. Always escalates.
-fn drive_rebase_abort() throws {
+// A failed merge must not leave the shared checkout mid-merge: the conflicted
+// paths are noted, `git merge --abort` restores HEAD and applies the autostash
+// back, and the check that no merge is left open and no path is unmerged
+// precedes the escalation. Always escalates.
+fn drive_merge_abort() throws {
     let unmerged = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().split("\n").collect().join(" ")
     let paths = if unmerged == "" { "no unmerged path" } else { unmerged.clone() }
-    let aborted = process::run("git", ["rebase", "--abort"])
     let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
-    let open = fs::exists(f"{git_dir}/rebase-merge", fs::Root::Anywhere) || fs::exists(f"{git_dir}/rebase-apply", fs::Root::Anywhere)
-    let left = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().clone()
-    if !aborted.ok || open || left != "" {
-        let why = (aborted.stderr + aborted.stdout).trim().split("\n").collect()[0].clone()
-        drive_escalate(f"rebase left open: push rejected, rebase conflicted in {paths}, and git rebase --abort did not finish ({why}); the shared checkout needs a hand now")
+    let mut why: String = ""
+    let mut aborted = true
+    if fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere) {
+        let abort = process::run("git", ["merge", "--abort"])
+        aborted = abort.ok
+        why = (abort.stderr + abort.stdout).trim().split("\n").collect()[0].clone()
     }
-    drive_escalate(f"push rejected, rebase conflicted in {paths}, rebase aborted")
+    let open = fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere)
+    let left = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().clone()
+    if !aborted || open || left != "" {
+        drive_escalate(f"merge left open: push rejected, merge conflicted in {paths}, and git merge --abort did not finish ({why}); the shared checkout needs a hand now")
+    }
+    drive_escalate(f"push rejected, merge conflicted in {paths}, merge aborted")
 }
 
 fn drive_short(sha: String) -> String throws {
