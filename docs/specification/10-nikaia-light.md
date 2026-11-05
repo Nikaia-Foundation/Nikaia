@@ -2839,8 +2839,9 @@ lowered as `iter_mut()`, and the rule above holds for each turn: a part taken
 out of `p` in `for mut p in v` is given back before the turn ends, and handing
 `p` whole to something that keeps it is `NK1131`. A
 `let` that annotates a `for` binding with the element's type, `let copy: Row = r`,
-is refused with `NK1183`: the binding is a view, so the annotation comes off,
-or `.clone()` makes the copy. A
+is refused with `NK1183` where that type does not copy: the binding is a view,
+so the annotation comes off, or `.clone()` makes the copy. A type that copies
+is copied ([ADR-387](adr/adr-387.md) D1). A
 `let` over a place (`config.name`, `totals.stations[name]`) is a view of it
 where the value would otherwise have to move, and **takes** the part where
 the name is kept (handed to a keeper, returned, or assigned into a place) and
