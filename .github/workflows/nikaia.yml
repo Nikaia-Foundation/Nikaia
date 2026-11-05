@@ -53,6 +53,7 @@ jobs:
       floor: ${{ steps.tested.outputs.floor || steps.decide.outputs.floor }}
       arm64: ${{ steps.tested.outputs.arm64 || steps.decide.outputs.arm64 }}
       docs: ${{ steps.tested.outputs.docs || steps.decide.outputs.docs }}
+      examples: ${{ steps.tested.outputs.examples || steps.decide.outputs.examples }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -76,7 +77,7 @@ jobs:
             --jq '[.workflow_runs[] | select(.name == "Nikaia" and (.head_branch | startswith("ci/")))] | length' || echo 0)
           if [ "${n:-0}" -gt 0 ]; then
             echo "$GITHUB_SHA ran green on a ci/ branch: not tested again"
-            for k in unsafe floor arm64; do echo "$k=false" >>"$GITHUB_OUTPUT"; done
+            for k in unsafe floor arm64 examples; do echo "$k=false" >>"$GITHUB_OUTPUT"; done
             echo "docs=true" >>"$GITHUB_OUTPUT"
             echo "done=true" >>"$GITHUB_OUTPUT"
           fi
@@ -214,6 +215,41 @@ jobs:
             echo "::endgroup::"
           done
 
+  # **A documentation-only change that edits an example** (`scripts/ci-changes.sh`,
+  # `examples`): the compiler is built, and every `nika` example of website/
+  # and guide/ goes through `nikaia check` and `nikaia lower`, compared with
+  # tests/page-examples/EXPECTED.txt. No `rustc` runs on the examples, so after the
+  # build it takes about a minute. A change to the prose alone skips it.
+  examples:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true' && needs.changes.outputs.examples == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install the toolchain the repository names
+        run: rustup show
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-stable-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-stable-
+
+      - name: Build the compiler
+        run: cargo build --release -p nikaia
+
+      - name: The examples of the website and the guide
+        run: |
+          export PATH="$PWD/target/release:$PATH"
+          cd tests/page-examples && nikaia test
+
   # **`main` moves only to a commit `develop` tested** (#437). Every job above
   # ran or was not needed, and none failed: `main` is fast-forwarded to this
   # run's commit - never to `develop`'s tip, which may have moved on during the
@@ -221,7 +257,7 @@ jobs:
   # alone. A push that is not a fast-forward is refused, so a commit that landed
   # on `main` some other way stops the promotion until `develop` has it.
   promote:
-    needs: [changes, arm64, unsafe_crates, bootstrap_compiler]
+    needs: [changes, arm64, unsafe_crates, bootstrap_compiler, examples]
     if: >-
       always() && github.event_name == 'push' && github.ref == 'refs/heads/develop'
       && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
@@ -405,3 +441,10 @@ jobs:
             ./target/release/nikaia interpret "$sample"
             echo "::endgroup::"
           done
+
+      # Every `nika` example of website/ and guide/ against
+      # tests/page-examples/EXPECTED.txt (see the `examples` job).
+      - name: The examples of the website and the guide
+        run: |
+          export PATH="$PWD/target/release:$PATH"
+          cd tests/page-examples && nikaia test

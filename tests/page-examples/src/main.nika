@@ -1,0 +1,337 @@
+// tests/page-examples/src/main.nika
+//
+// **Every `nika` example on the website and in the guide, taken as far as it
+// goes.** A page can show code that a decision has since changed under, and
+// nothing notices: the website's examples were never compiled at all. This
+// takes each block of `website/` and `guide/` - a ```nika fence in Markdown, a
+// `<code class="language-nika">` in HTML - through `nikaia check` and `nikaia
+// lower`, and writes one line per block: `lowered`, `refused` with the codes the
+// checker raised, or `fragment` where no reading of it parses.
+//
+// A page shows bodies without their function, items without a `main` and
+// sketches with `…`, so "every block compiles" is not the property. **Nothing
+// changes without somebody reading the diff** is: the report is compared with
+// `EXPECTED.txt`, and a block that stops lowering, or starts, is a changed line.
+// The readings are those of the specification's `specbook`
+// (`crates/nikaia-std/src/tools/specbook.nika`), which a program outside `std`
+// cannot use.
+//
+//     cd tests/page-examples && nikaia test                   # the check, in CI
+//     cd tests/page-examples && nikaia run > EXPECTED.txt     # the new baseline
+//
+// `nikaia` is looked for on `PATH`. Only `nikaia check` and `nikaia lower` run,
+// never `rustc`, so the whole walk takes seconds.
+
+use std::fs
+use std::process
+
+/// One example: the page it is on, the code, and whether an elision stands
+/// where code would.
+struct Block {
+    page: String,
+    code: String,
+    sketch: bool,
+}
+
+/// The ```nika fences of a Markdown page, in order.
+fn fenced(page: String, text: String) -> Vec[Block] {
+    let mut lines: Vec[String] = []
+    for line in text.split("\n") {
+        lines.push(line.clone())
+    }
+    let mut found: Vec[Block] = []
+    let mut at = 0
+    while at < lines.len() {
+        if lines[at].trim() != "```nika" {
+            at += 1
+            continue
+        }
+        let start = at + 1
+        let mut end = start
+        while end < lines.len() && lines[end].trim() != "```" {
+            end += 1
+        }
+        let mut code: String = ""
+        for k in start..<end {
+            code.push_str(lines[k])
+            code.push('\n')
+        }
+        found.push(Block { page: page.clone(), sketch: is_a_sketch(code), code: code })
+        at = end + 1
+    }
+    return found
+}
+
+/// The `<code class="language-nika">` elements of an HTML page, in order, with
+/// their entities read back.
+fn tagged(page: String, text: String) -> Vec[Block] {
+    let open = "<code class=\"language-nika\">"
+    let mut found: Vec[Block] = []
+    let mut rest = text.clone()
+    while true {
+        let (_, after) = rest.split_once(open) ?? break
+        let (inside, tail) = after.split_once("</code>") ?? break
+        let code = unescaped(inside.clone())
+        rest = tail.clone()
+        // `{% include … %}` brings in a program kept and built elsewhere
+        // (`benches/`, `examples/`); it is not an example written on the page.
+        if code.trim().starts_with("{%") {
+            continue
+        }
+        found.push(Block { page: page.clone(), sketch: is_a_sketch(code), code: code })
+    }
+    return found
+}
+
+/// HTML text with its five entities read back, `&amp;` last.
+fn unescaped(html: String) -> String {
+    return html.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'").replace("&amp;", "&")
+}
+
+/// Whether an elision stands where code would: `…`, or three dots that are
+/// not the typed spread `...name`.
+fn is_a_sketch(code: String) -> bool {
+    let c: Vec[scalar] = code.chars().collect()
+    let mut at = 0
+    while at < c.len() {
+        if c[at] == '…' {
+            return true
+        }
+        if at + 2 < c.len() && c[at] == '.' && c[at + 1] == '.' && c[at + 2] == '.' {
+            let named = at + 3 < c.len() && (c[at + 3].is_alphabetic() || c[at + 3] == '_')
+            if !named {
+                return true
+            }
+            at += 3
+        } else {
+            at += 1
+        }
+    }
+    return false
+}
+
+/// A program a block can be read as, and the name the report gives it.
+struct Reading {
+    name: String,
+    source: String,
+}
+
+/// The readings a block can have, as `specbook` tries them: as written, with
+/// a `main` after it, as the body of a `main`, and as items followed by a body.
+fn readings(code: String) -> Vec[Reading] {
+    let mut all: Vec[Reading] = [Reading { name: "as written", source: code.clone() }]
+    if code.contains("fn main") {
+        return all
+    }
+    all.push(Reading { name: "items and a main", source: f"{code.trim_end()}\n\nfn main() {{\n}}\n" })
+    all.push(Reading { name: "a body", source: wrapped(code) })
+    let parts = split_at_the_first_statement(code)
+    if parts.len() == 2 {
+        all.push(Reading { name: "items, then a body", source: f"{parts[0]}\n\n{wrapped(parts[1])}" })
+    }
+    return all
+}
+
+/// A body inside a `main`, every line that says something indented.
+fn wrapped(body: String) -> String {
+    let mut out: String = "fn main() {\n"
+    for line in body.trim_end().split("\n") {
+        if line.trim().len() > 0 {
+            out.push_str("    ")
+            out.push_str(line)
+        }
+        out.push('\n')
+    }
+    out.push_str("}\n")
+    return out
+}
+
+/// The block's leading items and the statements after them, or nothing: a
+/// line at brace depth zero that opens an item, is a comment or is empty
+/// extends the head, and the first that does not begins the body.
+fn split_at_the_first_statement(code: String) -> Vec[String] {
+    let mut lines: Vec[String] = []
+    for line in code.trim_end().split("\n") {
+        lines.push(line.clone())
+    }
+    let mut head = 0
+    let mut depth = 0
+    for at in 0..<lines.len() {
+        let trimmed = lines[at].trim()
+        if depth == 0 {
+            if !(trimmed.len() == 0 || trimmed.starts_with("//") || an_item(trimmed)) {
+                break
+            }
+            head = at + 1
+        }
+        depth += lines[at].matches("{").count() - lines[at].matches("}").count()
+    }
+    if head == 0 || head >= lines.len() {
+        return []
+    }
+    let mut before: String = ""
+    let mut after: String = ""
+    for at in 0..<lines.len() {
+        if at < head {
+            before.push_str(lines[at])
+            before.push('\n')
+        } else {
+            after.push_str(lines[at])
+            after.push('\n')
+        }
+    }
+    return [before, after]
+}
+
+fn an_item(line: String) -> bool {
+    for word in ["use ", "struct ", "enum ", "impl ", "trait ", "fn ", "grammar ", "const ", "comptime ", "pub ", "test "] {
+        if line.starts_with(word) {
+            return true
+        }
+    }
+    return false
+}
+
+/// How far one reading got: 0 it does not parse, 1 the checker refuses it,
+/// 2 it checks and the lowering fails, 3 it lowers; and the codes raised.
+struct Reached {
+    stage: i64,
+    codes: Vec[String],
+}
+
+/// The `NK` codes of the checker's errors, in order.
+fn codes_in(said: String) -> Vec[String] {
+    let mut codes: Vec[String] = []
+    for line in said.lines() {
+        if line.starts_with("error[NK") {
+            let (code, _) = line.trim_start_matches("error[").split_once("]") ?? continue
+            codes.push(code.clone())
+        }
+    }
+    return codes
+}
+
+/// One reading through `nikaia check` and, if it checks, `nikaia lower`, in
+/// the scratch directory `dir`.
+fn reach(dir: String, root: fs::Root, source: String) -> Reached throws {
+    fs::write("example.nika", root, source)
+    let checked = process::run("nikaia", ["check", "example.nika"]; dir: dir)
+    if !checked.ok {
+        let codes = codes_in(checked.stderr)
+        return Reached { stage: if codes.is_empty() { 0 } else { 1 }, codes: codes }
+    }
+    let lowered = process::run("nikaia", ["lower", "example.nika"]; dir: dir)
+    return Reached { stage: if lowered.ok { 3 } else { 2 }, codes: [] }
+}
+
+/// The stage's word in the report.
+fn word(stage: i64) -> String {
+    return match stage {
+        3 => "lowered",
+        2 => "not-lowered",
+        1 => "refused",
+        else => "fragment",
+    }
+}
+
+/// The block's first line of code, cut, as the thing a reader knows it by.
+fn opening(code: String) -> String {
+    for line in code.split("\n") {
+        let trimmed = line.trim()
+        if trimmed.len() == 0 {
+            continue
+        }
+        let c: Vec[scalar] = trimmed.chars().collect()
+        if c.len() <= 56 {
+            return trimmed.clone()
+        }
+        let mut cut: String = ""
+        for k in 0..<55 {
+            cut.push(c[k])
+        }
+        cut.push('…')
+        return cut
+    }
+    return "(empty)"
+}
+
+/// Every example of the pages under `dir` (`website` or `guide`), page by
+/// page in name order. The site's layouts and includes hold no examples.
+fn examples_under(dir: String) -> Vec[Block] throws {
+    let root = fs::Root::Dir(f"../../{dir}")
+    let mut names: Vec[String] = []
+    for path in fs::walk(".", root) {
+        let name = path.to_text()
+        if name.starts_with("_") || name.contains("/_") {
+            continue
+        }
+        if name.ends_with(".md") || name.ends_with(".html") {
+            names.push(name)
+        }
+    }
+    names.sort()
+    let mut all: Vec[Block] = []
+    for name in names {
+        let text = fs::read_to_string(name, root)
+        let page = f"{dir}/{name}"
+        let found = if name.ends_with(".md") { fenced(page, text) } else { tagged(page, text) }
+        for block in found {
+            all.push(block.clone())
+        }
+    }
+    return all
+}
+
+/// The report: one line per example, addressed by its ordinal in its page,
+/// so a sentence added above a block moves nothing.
+fn report() -> String throws {
+    let root = fs::scratch()
+    let dir = match root.clone() {
+        fs::Root::Dir(path) => path.to_text(),
+        else => panic("fs::scratch() hands back a Dir"),
+    }
+    let mut out: String = ""
+    let mut page: String = ""
+    let mut nth = 0
+    for top in ["guide", "website"] {
+        for block in examples_under(top) {
+            if block.page != page {
+                page = block.page.clone()
+                nth = 0
+            }
+            nth += 1
+            let mut best = Reached { stage: -1, codes: [] }
+            let mut best_name: String = "as written"
+            for reading in readings(block.code) {
+                let reached = reach(dir, root.clone(), reading.source)
+                if reached.stage > best.stage {
+                    best_name = reading.name.clone()
+                    best = reached
+                }
+                if best.stage == 3 {
+                    break
+                }
+            }
+            let mut notes: Vec[String] = []
+            if block.sketch {
+                notes.push("sketch")
+            }
+            if !best.codes.is_empty() {
+                notes.push(best.codes.join(","))
+            }
+            let noted = if notes.is_empty() { "" } else { f" [{notes.join(" ")}]" }
+            out.push_str(f"{block.page} #{nth} {word(best.stage)} ({best_name}){noted}  {opening(block.code)}\n")
+        }
+    }
+    return out
+}
+
+fn main() throws {
+    print(report())
+}
+
+test "the examples of the website and the guide are the ones in EXPECTED.txt" {
+    let expected = fs::read_to_string("EXPECTED.txt", fs::Root::Dir("."))
+    let now = report()
+    assert(now == expected; message: f"the examples of website/ or guide/ and tests/page-examples/EXPECTED.txt have drifted apart. If that is the change you meant, run `nikaia run > EXPECTED.txt` in tests/page-examples and read the diff: a block that stopped lowering is a defect in the page or in the compiler, and one that started is progress worth seeing.\n\nNow:\n{now}")
+}
