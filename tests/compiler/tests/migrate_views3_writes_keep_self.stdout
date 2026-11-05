@@ -1,0 +1,28 @@
+migrated TMP/cart.nika
+struct Cart {
+    items: Vec[String],
+}
+
+impl Cart {
+    fn into_items(keep self) -> Vec[String] {
+        return self.items
+    }
+
+    fn count(self) -> i64 {
+        return self.items.len() as i64
+    }
+
+    fn first(self) -> String {
+        return self.items[0].clone()
+    }
+}
+
+fn main() {
+    let cart = Cart { items: ["a", "b"] }
+    println(cart.count())
+    println(cart.first())
+    let items = cart.into_items()
+    println(items.len())
+}
+-- check: 0
+Checked TMP/cart.nika

@@ -2873,7 +2873,7 @@ pub mod maps {
 }
 pub mod migrate_views3 {
     #[allow(unused_imports)]
-    pub use super::{migrate_views3_code, migrate_views3_nika, migrate_views3_markdown, migrate_views3_keeps};
+    pub use super::{migrate_views3_selves, migrate_views3_code, migrate_views3_nika, migrate_views3_markdown, migrate_views3_keeps};
 }
 pub mod modules {
     #[allow(unused_imports)]

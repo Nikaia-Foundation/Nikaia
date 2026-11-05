@@ -1,0 +1,33 @@
+// #1213 step 6, ADR-views-3 D2: `nikaia migrate views-3` reads a package's
+// `tests/*.nika` as `nikaia test` does, with the package's ledger: a call into
+// the package keeps what the package says, so the tool run over
+// `packages/json` writes no `keep` into its tests (read alone, every call
+// into the package failed closed to `keep`).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    // The test runs in a scratch directory: the repository is where the
+    // toolchain was built, `<root>/target/<profile>/nikaia`.
+    let root = process::run("sh", ["-c", f"cd \"$(dirname {nikaia})/../..\" && pwd"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/json"])
+    process::run("cp", ["-r", f"{root}/packages/json/src", f"{root}/packages/json/tests", f"{root}/packages/json/nikaia.toml", f"{tmp}/json/"])
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/json/tests"])
+    println(f"exit: {out.code}")
+    print(out.stderr.replace(tmp, "TMP"))
+    // A call into the package (`json::parse(text)`) keeps nothing: no
+    // `line(keep text)`. What stays is `show(keep v)`, a `match` over a plain
+    // parameter, which the keep inference still counts as kept (the
+    // checker's rule, v17's finding (1)); it goes when that rule is fixed.
+    let kept = process::run("sh", ["-c", f"cd {tmp}/json/tests && grep -n '\\bkeep\\b' *.nika"]).stdout
+    print(kept)
+    process::run("rm", ["-rf", tmp])
+}

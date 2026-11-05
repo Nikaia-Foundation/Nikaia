@@ -1,0 +1,24 @@
+// #1213 step 6, ADR-views-3 D2: `nikaia migrate views-3` writes `keep self`
+// where the old by-value `self` is consumed by the body, and leaves a `self`
+// that only looks, and a `ref self`, without it.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/cart.nika", fs::Root::Anywhere, "struct Cart {\n    items: Vec[String],\n}\n\nimpl Cart {\n    fn into_items(self) -> Vec[String] {\n        return self.items\n    }\n\n    fn count(ref self) -> i64 {\n        return self.items.len() as i64\n    }\n\n    fn first(self) -> String {\n        return self.items[0].clone()\n    }\n}\n\nfn main() {\n    let cart = Cart { items: [\"a\", \"b\"] }\n    println(cart.count())\n    println(cart.first())\n    let items = cart.into_items()\n    println(items.len())\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/cart.nika"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(f"{tmp}/cart.nika", fs::Root::Anywhere))
+    let checked = process::run(nikaia, ["check", f"{tmp}/cart.nika"])
+    println(f"-- check: {checked.code}")
+    print(f"{checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}

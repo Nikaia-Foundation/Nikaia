@@ -1,0 +1,6 @@
+exit: 0
+errors_carry_position_and_path.nika:3:fn show(keep v: json::Value) -> String {
+kinds.nika:3:fn show(keep v: json::Value) -> String {
+members_keep_their_order.nika:3:fn show(keep v: json::Value) -> String {
+numbers.nika:3:fn show(keep v: json::Value) -> String {
+strings.nika:3:fn show(keep v: json::Value) -> String {

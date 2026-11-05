@@ -231,11 +231,41 @@ pub(crate) fn migrate_extern_end(tokens: &[MigrateToken], at: i64) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn migrate_views3_code(code: &str, keep_at: &[i64]) -> String {
+pub(crate) fn migrate_receivers(tokens: &[MigrateToken]) -> Vec<(i64, bool)> {
+    let mut out: Vec<(i64, bool)> = vec![];
+    let mut pending = false;
+    let mut k: i64 = 0;
+    while ((k) as usize) < tokens.len() {
+        let t = nikaia_std::index::get(&tokens, (k) as usize).text.to_string();
+        if nikaia_std::index::get(&tokens, (k) as usize).kind == MigrateKind::Word && t == "fn" { pending = true; } else if pending && (t == "{" || t == ";" || t == "=") { pending = false; } else if pending && t == "(" {
+            pending = false;
+            let mut j: i64 = k + 1;
+            while j < tokens.len() as i64 && (nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == "ref" || nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == "mut" || nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == "keep") { j += 1; }
+            if j < tokens.len() as i64 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == "self" { out.push((j, j == k + 1)); }
+        }
+        k += 1;
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn migrate_views3_selves(code: &str) -> Vec<bool> {
+    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
+    lexer.run();
+    let mut out: Vec<bool> = vec![];
+    for (_, bare) in migrate_receivers(&lexer.tokens) { out.push(bare); }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool]) -> String {
     let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
     lexer.run();
     let tokens = &lexer.tokens;
     let n = tokens.len() as i64;
+    let receivers = migrate_receivers(&tokens);
     let mut dropped: Vec<bool> = vec![];
     let mut gapless: Vec<bool> = vec![];
     let mut prefix: Vec<&'static str> = vec![];
@@ -294,7 +324,11 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64]) -> String {
         let at = nikaia_std::num::value(at);
         let mut j: i64 = 0;
         while j < n && nikaia_std::index::get(&tokens, (j) as usize).at < at { j += 1; }
-        if j < n && *nikaia_std::index::get(&prefix, (j) as usize) == "" && !*nikaia_std::index::get(&guarded, (j) as usize) && nikaia_std::index::get(&tokens, (j) as usize).text != "keep" && nikaia_std::index::get(&tokens, (j) as usize).text != "mut" { { let __nikaia_stored = "keep "; nikaia_std::index::set(&mut prefix, (j) as usize, __nikaia_stored); } }
+        if j < n && (nikaia_std::index::get(&tokens, (j) as usize).text == "pub" || nikaia_std::index::get(&tokens, (j) as usize).text == "fn") {
+            let mut r: i64 = 0;
+            while ((r) as usize) < receivers.len() && nikaia_std::index::get(&receivers, (r) as usize).0 < j { r += 1; }
+            if ((r) as usize) < receivers.len() && ((r) as usize) < by_value.len() && *nikaia_std::index::get(&by_value, (r) as usize) && nikaia_std::index::get(&receivers, (r) as usize).1 && *nikaia_std::index::get(&prefix, nikaia_std::index::at(nikaia_std::index::get(&receivers, (r) as usize).0)) == "" { { let __nikaia_stored = "keep "; nikaia_std::index::set(&mut prefix, nikaia_std::index::at(nikaia_std::index::get(&receivers, (r) as usize).0), __nikaia_stored); } }
+        } else if j < n && *nikaia_std::index::get(&prefix, (j) as usize) == "" && !*nikaia_std::index::get(&guarded, (j) as usize) && nikaia_std::index::get(&tokens, (j) as usize).text != "keep" && nikaia_std::index::get(&tokens, (j) as usize).text != "mut" { { let __nikaia_stored = "keep "; nikaia_std::index::set(&mut prefix, (j) as usize, __nikaia_stored); } }
     }
     let mut out: String = String::from("");
     let mut j: i64 = 0;
@@ -310,9 +344,10 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64]) -> String {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn migrate_views3_nika(source: &str, keeps_of: &impl Fn(&str) -> Vec<i64>) -> String {
-    let dropped = migrate_views3_code(source, &vec![]);
+    let by_value = migrate_views3_selves(&source.to_string());
+    let dropped = migrate_views3_code(source, &vec![], &vec![]);
     let keep_at = keeps_of(&dropped);
-    migrate_views3_code(&dropped, &keep_at)
+    migrate_views3_code(&dropped, &keep_at, &by_value)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -347,16 +382,16 @@ pub fn migrate_views3_markdown(source: &str, keeps_of: &impl Fn(&str) -> Vec<i64
     out
 }
 
-pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Vec<i64> {
+pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, findings: &[CheckFinding]) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
     for item in view.items.iter() {
         match &item.node {
-            Item::Fn { .. } => { migrate_keeps_of_body(view, item, &None, own, library, &indexes, resolved, holes_of, &mut out); },
+            Item::Fn { .. } => { migrate_keeps_of_body(view, item, &None, own, library, &indexes, resolved, holes_of, findings, &mut out); },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
                 if trait_name.is_none() {
                     let target_name = view.text(target.name);
-                    for method in methods.iter() { migrate_keeps_of_body(view, method, &Some(target_name.to_string()), own, library, &indexes, resolved, holes_of, &mut out); }
+                    for method in methods.iter() { migrate_keeps_of_body(view, method, &Some(target_name.to_string()), own, library, &indexes, resolved, holes_of, findings, &mut out); }
                 }
             },
             _ => { },
@@ -366,11 +401,21 @@ pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Led
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: &Option<String>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, out: &mut Vec<i64>) {
+pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: &Option<String>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, findings: &[CheckFinding], out: &mut Vec<i64>) {
     match &item.node {
-        Item::Fn { args, is_extern, .. } => {
+        Item::Fn { args, is_extern, receiver, .. } => {
             let is_extern = *is_extern;
-            if is_extern || args.is_empty() { return; }
+            if is_extern { return; }
+            let bare = receiver.is_some() && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || true) && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_keep), || true);
+            if bare && target.is_some() {
+                for finding in findings.iter() {
+                    if finding.code == "NK1131" && finding.message.starts_with("You can't give away `self.") && finding.span.start >= item.span.start && finding.span.end <= item.span.end {
+                        out.push(item.span.start as i64);
+                        break;
+                    }
+                }
+            }
+            if args.is_empty() { return; }
             let found = match keeps_uses_of(view, &item.node, &match target.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,

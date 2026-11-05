@@ -322,14 +322,58 @@ fn migrate_extern_end(tokens: Vec[MigrateToken], at: i64) -> i64 sync {
     return tokens.len() - 1
 }
 
+/// **Each method's receiver `self`, in order**: the index of its token, and
+/// whether it is written bare, with no `ref`, `mut` or `keep` before it (the
+/// old by-value `self`). The first `(` after a `fn` opens the parameters.
+fn migrate_receivers(tokens: ref Vec[MigrateToken]) -> Vec[(i64, bool)] sync {
+    let mut out: Vec[(i64, bool)] = []
+    let mut pending = false
+    let mut k = 0
+    while k < tokens.len() {
+        let t = tokens[k].text.clone()
+        if tokens[k].kind == MigrateKind::Word && t == "fn" {
+            pending = true
+        } else if pending && (t == "{" || t == ";" || t == "=") {
+            pending = false
+        } else if pending && t == "(" {
+            pending = false
+            let mut j = k + 1
+            while j < tokens.len() && (tokens[j].text == "ref" || tokens[j].text == "mut" || tokens[j].text == "keep") {
+                j += 1
+            }
+            if j < tokens.len() && tokens[j].text == "self" {
+                out.push((j, j == k + 1))
+            }
+        }
+        k += 1
+    }
+    return out
+}
+
+/// **Which receivers were the old by-value `self`**, in order: read on the
+/// code as written, before `ref` goes, since `ref self` and `self` read
+/// alike after it (ADR-views-3 D2: a consumed one becomes `keep self`).
+pub fn migrate_views3_selves(code: String) -> Vec[bool] sync {
+    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
+    lexer.run()
+    let mut out: Vec[bool] = []
+    for (_, bare) in migrate_receivers(lexer.tokens) {
+        out.push(bare)
+    }
+    return out
+}
+
 /// **The rewrite of one piece of Nikaia code**: `keep_at` are the character
 /// indices of the parameters to mark `keep` (a parameter takes the mark at
-/// its first token at or after the index).
-pub fn migrate_views3_code(code: String, keep_at: Vec[i64]) -> String sync {
+/// its first token at or after the index; a method's `self`, named by where
+/// the method starts, takes it where `by_value` says its receiver was the old
+/// by-value `self`, in `migrate_views3_selves`'s order).
+pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool]) -> String sync {
     let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
     lexer.run()
     let tokens = lexer.tokens
     let n = tokens.len()
+    let receivers = migrate_receivers(tokens)
     let mut dropped: Vec[bool] = []
     let mut gapless: Vec[bool] = []
     let mut prefix: Vec[String] = []
@@ -413,7 +457,16 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64]) -> String sync {
         while j < n && tokens[j].at < at {
             j += 1
         }
-        if j < n && prefix[j] == "" && !guarded[j] && tokens[j].text != "keep" && tokens[j].text != "mut" {
+        if j < n && (tokens[j].text == "pub" || tokens[j].text == "fn") {
+            // A method whose `self` the body keeps.
+            let mut r = 0
+            while r < receivers.len() && receivers[r].0 < j {
+                r += 1
+            }
+            if r < receivers.len() && r < by_value.len() && by_value[r] && receivers[r].1 && prefix[receivers[r].0] == "" {
+                prefix[receivers[r].0] = "keep "
+            }
+        } else if j < n && prefix[j] == "" && !guarded[j] && tokens[j].text != "keep" && tokens[j].text != "mut" {
             prefix[j] = "keep "
         }
     }
@@ -437,9 +490,10 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64]) -> String sync {
 /// inference is asked about the program the checker will check, since a
 /// `ref` still written (a `ref` field, `ref mut self`) changes what it finds.
 pub fn migrate_views3_nika(source: String, keeps_of: fn(ref String) -> Vec[i64] sync) -> String sync {
-    let dropped = migrate_views3_code(source, [])
+    let by_value = migrate_views3_selves(source.clone())
+    let dropped = migrate_views3_code(source, [], [])
     let keep_at = keeps_of(dropped)
-    return migrate_views3_code(dropped, keep_at)
+    return migrate_views3_code(dropped, keep_at, by_value)
 }
 
 /// **A Markdown file**: only a fenced block marked `nika` or `nikaia` is
@@ -481,20 +535,23 @@ pub fn migrate_views3_markdown(source: String, keeps_of: fn(ref String) -> Vec[i
 /// `check_keep_marks.nika`'s `NK2302` without its transition rule): each a
 /// parameter of a free function or an inherent method that the inference
 /// keeps and that says neither `keep` nor `mut`, as the byte offset its
-/// declaration starts at. `self` is not asked, as the checker does not ask
-/// it; an `impl` of a trait takes the trait's marks.
-pub fn migrate_views3_keeps(view: ref ParsedView, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Vec[i64] {
+/// declaration starts at. The inference does not decide `self`; the checker
+/// does: a bare `self` whose body gives a piece of it away (its `NK1131`,
+/// among `findings`) is named by the offset its method starts at, and
+/// `migrate_views3_code` writes `keep self` there where it was the old
+/// by-value `self`. An `impl` of a trait takes the trait's marks.
+pub fn migrate_views3_keeps(view: ref ParsedView, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync, findings: ref Vec[CheckFinding]) -> Vec[i64] {
     let mut out: Vec[i64] = []
     for item in view.items {
         match item.node {
             Item::Fn { .. } => {
-                migrate_keeps_of_body(view, item, null, own, library, indexes, resolved, holes_of, out)
+                migrate_keeps_of_body(view, item, null, own, library, indexes, resolved, holes_of, findings, out)
             },
             Item::Impl { trait_name, target, methods } => {
                 if trait_name == null {
                     let target_name = view.text(target.name)
                     for method in methods {
-                        migrate_keeps_of_body(view, method, target_name.clone(), own, library, indexes, resolved, holes_of, out)
+                        migrate_keeps_of_body(view, method, target_name.clone(), own, library, indexes, resolved, holes_of, findings, out)
                     }
                 }
             },
@@ -504,10 +561,23 @@ pub fn migrate_views3_keeps(view: ref ParsedView, own: ref Ledger, library: ref 
     return out
 }
 
-fn migrate_keeps_of_body(view: ref ParsedView, item: ref Spanned[Item], target: String?, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync, mut out: Vec[i64]) {
+fn migrate_keeps_of_body(view: ref ParsedView, item: ref Spanned[Item], target: String?, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync, findings: ref Vec[CheckFinding], mut out: Vec[i64]) {
     match item.node {
-        Item::Fn { args, is_extern, .. } => {
-            if is_extern || args.is_empty() {
+        Item::Fn { args, is_extern, receiver, .. } => {
+            if is_extern {
+                return
+            }
+            // A bare `self` reads as lent, as `ref self` did (D1).
+            let bare = receiver != null && !(receiver?.is_mut ?? true) && !(receiver?.is_keep ?? true)
+            if bare && target != null {
+                for finding in findings {
+                    if finding.code == "NK1131" && finding.message.starts_with("You can't give away `self.") && finding.span.start >= item.span.start && finding.span.end <= item.span.end {
+                        out.push(item.span.start as i64)
+                        break
+                    }
+                }
+            }
+            if args.is_empty() {
                 return
             }
             let found = keeps_uses_of(view, item.node, target?.clone(), own, library, indexes, resolved, holes_of) ?? return

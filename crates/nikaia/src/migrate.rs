@@ -39,7 +39,11 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
                     nikaia_std::tools::migrate_views3::migrate_views3_nika(&source, &keeps_alone)
                 }
                 Package::Keeps(dropped, keep_at) => {
-                    nikaia_std::tools::migrate_views3::migrate_views3_code(&dropped, &keep_at)
+                    let by_value =
+                        nikaia_std::tools::migrate_views3::migrate_views3_selves(&source);
+                    nikaia_std::tools::migrate_views3::migrate_views3_code(
+                        &dropped, &keep_at, &by_value,
+                    )
                 }
                 Package::Refused(root) => {
                     eprintln!(
@@ -63,7 +67,7 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
 }
 
 enum Package {
-    /// Not a source of a package: the file is read alone.
+    /// Not a source or a test of a package: the file is read alone.
     None,
     /// The file without its `ref`, and where `keep` goes in that, in
     /// characters, read with the package's other files migrated alike.
@@ -75,11 +79,19 @@ enum Package {
 /// infers it: a call into another file of the package keeps what that file's
 /// function keeps. Every file is read with its `ref` already dropped, as
 /// `migrate_views3_nika` reads one alone.
+///
+/// **A package's test** (`tests/*.nika`) is read as `nikaia test` reads it: a
+/// program of its own that reaches the package by its name, so a call into
+/// the package keeps what the package's ledger says (#1213, v17's finding:
+/// read alone, every call into it failed closed to `keep`).
 fn keeps_in_package(file: &Path) -> Result<Package> {
     let layout = Layout::resolve(file);
     let src = layout.root.join("src");
+    let tests = layout.root.join("tests");
     let canonical = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
-    if !layout.in_project || !canonical.starts_with(src.canonicalize().unwrap_or(src.clone())) {
+    let in_src = canonical.starts_with(src.canonicalize().unwrap_or(src.clone()));
+    let in_tests = canonical.starts_with(tests.canonicalize().unwrap_or(tests.clone()));
+    if !layout.in_project || !(in_src || in_tests) {
         return Ok(Package::None);
     }
     let manifest = crate::manifest::Manifest::read(&layout.root.join("nikaia.toml"))?;
@@ -93,7 +105,7 @@ fn keeps_in_package(file: &Path) -> Result<Package> {
     for path in &paths {
         let written = std::fs::read_to_string(path)
             .with_context(|| format!("cannot read {}", path.display()))?;
-        let text = nikaia_std::tools::migrate_views3::migrate_views3_code(&written, &[]);
+        let text = nikaia_std::tools::migrate_views3::migrate_views3_code(&written, &[], &[]);
         match parse_unrefined(&text) {
             Ok(parsed) => units.push(parsed),
             Err(_) => return Ok(Package::None),
@@ -104,13 +116,30 @@ fn keeps_in_package(file: &Path) -> Result<Package> {
     crate::text_tiers::refine_package(&mut refs);
     let shared: Vec<&Parsed> = units.iter().collect();
     let (ledger, checked) = Ledger::infer_package_checked(&shared, std_ledger());
+    if in_tests {
+        let Some(name) = manifest.package_name() else {
+            return Ok(Package::None);
+        };
+        let written = std::fs::read_to_string(file)
+            .with_context(|| format!("cannot read {}", file.display()))?;
+        let text = nikaia_std::tools::migrate_views3::migrate_views3_code(&written, &[], &[]);
+        let Ok(parsed) = parse_to_ast(&text) else {
+            return Ok(Package::None);
+        };
+        let mut library = std_ledger().clone();
+        library.absorb(Some(name), ledger);
+        let (own, mut checked) = Ledger::infer_package_checked(&[&parsed], &library);
+        let bytes = keeps_of(&parsed, &own, &library, &checked.remove(0));
+        let keep_at = characters(&text, &bytes);
+        return Ok(Package::Keeps(text, keep_at));
+    }
     let Some(at) = paths
         .iter()
         .position(|path| path.canonicalize().is_ok_and(|p| p == canonical))
     else {
         return Ok(Package::None);
     };
-    let bytes = keeps_of(&units[at], &ledger, &checked[at]);
+    let bytes = keeps_of(&units[at], &ledger, std_ledger(), &checked[at]);
     let keep_at = characters(&texts[at], &bytes);
     Ok(Package::Keeps(texts.swap_remove(at), keep_at))
 }
@@ -122,12 +151,16 @@ fn keeps_alone(source: &str) -> Vec<i64> {
         return Vec::new();
     };
     let (ledger, checked) = Ledger::infer_checked(&parsed);
-    characters(source, &keeps_of(&parsed, &ledger, &checked))
+    characters(source, &keeps_of(&parsed, &ledger, std_ledger(), &checked))
 }
 
 /// The byte offsets of the parameters the inference keeps and no mark says so.
-fn keeps_of(parsed: &Parsed, own: &Ledger, checked: &crate::check::Checked) -> Vec<i64> {
-    let library = std_ledger();
+fn keeps_of(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+    checked: &crate::check::Checked,
+) -> Vec<i64> {
     let own_methods = nikaia_std::tools::ty::method_index(own);
     let library_methods = nikaia_std::tools::ty::method_index(library);
     nikaia_std::tools::migrate_views3::migrate_views3_keeps(
@@ -140,6 +173,7 @@ fn keeps_of(parsed: &Parsed, own: &Ledger, checked: &crate::check::Checked) -> V
         },
         &checked.methods,
         &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        &checked.findings,
     )
 }
 
