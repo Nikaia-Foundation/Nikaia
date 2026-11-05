@@ -1,14 +1,14 @@
 ---
 agent: builder
 model: opus
-max_turns: 80
-budget_usd: 12
+max_turns: 100
+budget_usd: 16
 effort: medium
 ---
 
-# v18a: a lent parameter passed on to a method's parameter; a `ref` pattern over a lent subject (#1213, split from v18)
+# v18a: a lent parameter passed on to a method's parameter; the `??` fallback kept (#1213, split from v18)
 
-Score: ADR-views-3 (D1: a plain parameter is lent, D4: `ref` leaves the language outside `extern`). Read `v18-matched-lent-param.debrief.md` beside this brief: v18 changed the keep rule of a matched parameter, and the fixpoint then lowered `lowered/` into Rust with 19 rustc errors in three classes. This brief fixes the two classes that are defects on their own, before the keep rule (v18b) comes back.
+Score: ADR-views-3 (D1: a plain parameter is lent, D4: `ref` leaves the language outside `extern`). Read `v18-matched-lent-param.debrief.md` beside this brief: v18 changed the keep rule of a matched parameter, and the fixpoint then lowered `lowered/` into Rust with 19 rustc errors in three classes. This brief fixes the method-parameter class, narrowed after a first run (below).
 
 Facts: Checker and views, Lowering and lower-std, Tests and the gate
 
@@ -48,23 +48,27 @@ fn main() {
 ```
 Cause (v18): `lends_with` never lends a method parameter, but `kept_by` takes the method's column as "not kept". The two must agree: a method parameter that is not kept is lent, as a free function's is.
 
-**(2) Class**: `Some(ref x)` (a `ref` binding in the lowered pattern) against a subject that is already a borrow (`&Option[...]`, a lent parameter) is a rustc error. Cause: `check_core_flow.nika` `by_reference`. Build a probe of a few lines first (a lent `Option[String]` parameter matched with `Some(x) => x.len()`), and pin it as a test. A lent subject binds by view without `ref`.
 
-**Owns:** the checker and lowering files the two rules need (`keeps.nika`'s `lends_with`/`kept_by` side, `check_core_flow.nika`), the lowered files `lower-std` changes, the new tests in `tests/compiler/`.
+## First run (2026-11-05, ran out of turns, nothing committed)
 
-**Not yours:** the keep rule of a matched parameter (`Expr::Match` in `keeps.nika`: v18b), the migration tool (v19), examples.
+Read `v18a-method-param-lent.debrief.md` and the draft report `v18a-method-param-lent.first-run.report.md` beside this brief. Its edits are saved in `v18a-method-param-lent.partial.patch` (lends.nika, keeps.nika, four `&` fixes in Rust callers, two tests, 40 lowered files); the tree is back at HEAD. Applied whole, the rule flipped about 60 tools signatures, and 15 `it` tests failed in two classes: (a) a method parameter whose type holds views and that is stored into `self` lowered to `&Reading<'_>` and rustc asked for a lifetime (`659_field_map`, 1brc); (b) a method used as a function value (`Summary::joined` handed to `fold_merged`, `in_place`) took `&Summary` where `fn(Summary, Summary)` is expected (E0631). Class (2) of the old brief cannot be reached before v18b: it moved there.
 
 ## To build
-1. **(1)**: the method-parameter rule, with the probe as a `tests/compiler/` test. Before any build: one `lower-std`, then `git diff --stat crates/nikaia-std/src/tools/lowered/`. Over about 5 changed files, sort what changed and report before rebuilding. Commit `Part of #1213`.
-2. **(2)**: the `ref` pattern over a lent subject, with its probe as a test; the same `lower-std` count first. Commit `Part of #1213`.
+1. **The `??` fallback** (a defect of its own, from the patch): `keeps_handed` in `keeps.nika` follows the fallback of `??`, so `store(first ?? other)` keeps `other`. The test `a_coalesce_fallback_handed_to_a_keeper_is_kept` (its `.nika` and `.stderr` are in the patch). Commit `Part of #1213`.
+2. **(1), narrowed**: an own method's parameter that `kept_by` finds not kept is lent, except (a) one whose type holds a view, and (b) every parameter of a method that is used as a function value anywhere in the program (that signature stays by value). Take what fits from the patch's `lends_with`. Before any build: one `lower-std`, then `git diff --stat crates/nikaia-std/src/tools/lowered/`, then `cargo check -p nikaia-std --features compiler`; then the `it` tests `accepted_compiles`, `parallel_folds` and `stored_views`. The Rust callers of a now-lent lowered method take a `&` (the patch has four). The probe (1) above as a test (`a_lent_parameter_handed_to_a_method_stays_lent`, in the patch). Commit `Part of #1213`.
 
 `Rs2nika: none`.
 
 ## Done when
-Both probes check and run; the touched tests pass; the fixpoint holds.
+Probe (1) checks and runs; the touched tests and the three `it` tests pass; the fixpoint holds.
 
 ## Stop and report if
-a rule change flips more than about 5 lowered signatures, or makes rustc refuse lowered code in a class this brief does not name: stop with `partial`, the classes and a probe for each.
+any rustc error class outside this brief shows after the first fixpoint: stop with `partial`, the classes and a probe for each. The number of flipped signatures alone is no reason to stop.
+
+**Owns:** the checker and lowering files the two rules need (`keeps.nika`, the Rust callers of a lent lowered method), the lowered files `lower-std` changes, the new tests in `tests/compiler/`.
+
+**Not yours:** the keep rule of a matched parameter (`Expr::Match` in `keeps.nika`: v18b), the `ref` pattern over a lent subject (moved to v18b), the migration tool, examples.
+
 ## Rules (CLAUDE.md; shared checkout)
 * Read `docs/builder-facts.md` first. You work in `/home/user/Nikaia` on `develop` (the shared checkout). Build with `cargo build --profile fast -p nikaia` (incremental on, `bootstrap.md` section 3; `CARGO_INCREMENTAL=0` only under 6 GB free); use only `/home/user/Nikaia/target/fast/nikaia`.
 * `git add <files>` only, never `-a`/`-A`; commit after each step. Never `git reset`, `stash`, `checkout .`, `restore .`; restore only your own files by name. An error in another agent's file is escalated, not touched.

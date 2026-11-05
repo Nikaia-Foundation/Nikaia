@@ -110,6 +110,8 @@ All probes check and run as stated without `ref`; the touched tests and `example
 
 ## Stop and report if
 the keep change makes a std or tools signature refuse a caller the rule cannot tell apart (a real move through a match), or the first rustc cycle shows an error class this brief does not name: stop with `partial` and the probe.
+**Note (supervisor, after the first v18a run):** this brief also takes the class v18a could not reach: `Some(ref x)` (a `ref` binding in the lowered pattern) against a subject that is already a borrow (`&Option[...]`, a lent parameter) is a rustc error. Cause: `check_core_flow.nika` `by_reference`. Build a probe of a few lines first (a lent `Option[String]` parameter matched with `Some(x) => x.len()`) and pin it as a test. A lent subject binds by view without `ref`.
+
 ## Rules (CLAUDE.md; shared checkout)
 * Read `docs/builder-facts.md` first. You work in `/home/user/Nikaia` on `develop` (the shared checkout). Build with `cargo build --profile fast -p nikaia` (incremental on, `bootstrap.md` section 3; `CARGO_INCREMENTAL=0` only under 6 GB free); use only `/home/user/Nikaia/target/fast/nikaia`.
 * `git add <files>` only, never `-a`/`-A`; commit after each step. Never `git reset`, `stash`, `checkout .`, `restore .`; restore only your own files by name. An error in another agent's file is escalated, not touched.
