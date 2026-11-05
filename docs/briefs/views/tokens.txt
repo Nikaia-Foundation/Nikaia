@@ -25,3 +25,4 @@
 /home/user/Nikaia/docs/briefs/views/v19-migrate-tool-tests-self.md 3587744 53 3463505 88679 35454
 /home/user/Nikaia/docs/briefs/views/v18a-method-param-lent.md 5369064 80 5238706 97776 32422
 /home/user/Nikaia/docs/briefs/views/v18a-method-param-lent.md 4727135 77 4565749 124531 36701
+/home/user/Nikaia/docs/briefs/views/qa/qa-task.md 2872557 52 2768295 81648 22510

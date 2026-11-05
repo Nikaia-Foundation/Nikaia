@@ -1,13 +1,15 @@
-1. **Most time:** The 10-minute `nikaia test --both-settings` run on the old binary. It passed, and it told me nothing, because the failure was in a commit older than my HEAD. The slow part of the diagnosis was finding the failing program's name. `qa-input.txt` only had the last 200 log lines, and those were all passing tests. I found the name with `gh run view --log-failed`.
+1. **Time sink.** Most of it went on the `result_source` test. I checked free functions, `keep`, `Vec[String]` and function-value variants one by one to see whether the NK2302 refusal was still reachable. I also lost a few turns to my own mistakes. A glob in `cd` failed, so `c.nika` landed in the repo root, and my grep patterns matched test names instead of failures. The two `cargo build` plus `lower-std` cycles were short, about 2 minutes each.
 
-2. **Lookups the brief could have handed me:**
-   - The CI run's head SHA, and whether it is an ancestor of the current HEAD. This was the actual cause: the run tested `d0855a7a`, before the fix `e95ea023`.
-   - The failing program name. The driver's grep matches `panicked at` and `^error`, but not `program "X" ... FAILED` or the `--- program` block.
-   - The `gh` command that fetches the full failed log.
-   - The fact that 727 + 1 = the 728 committed programs, so the untracked test files in the shared tree don't count.
+2. **Looked up that the brief could have handed me.**
+   - The qa-input only said "arm64 bootstrap_compiler". The three failing test names were buried in `suite.log` around line 165.
+   - I had to work out that the failing tests were not in v18a's listed test set, which skipped `lent_arguments`, `result_source` and `grammar_lowering`.
+   - I had to find where `keeps_named_as_values` is and how `FoldSpec` and `Pattern` are shaped.
+   - Which tools files share a namespace (private fns like `visited_in_maybe` worked across files).
+   - How `commit.nika` handles several commits (it needs one report each).
 
-3. **Checks:**
-   - Useful: the `gh` log grep (found the failing program), the ancestor check (found the cause), and the `cargo build` no-op (showed the binary was current).
-   - Wasted: copying the old binary into the scratchpad, and the full both-settings run, which I started before knowing the CI commit. Reading `agent_facts.nika` and the diffs of `agent_facts.stdout` and `agent_script.nika` was partly wasted for the same reason.
+3. **Checks.**
+   - Useful: the three failing tests, the 332-test rerun, `lower-std` twice for the fixpoint, clippy and pre-push.
+   - Wasted: probes with `$S/old/nikaia`, because that binary already contained v18a and could not show pre-commit behaviour. I could not learn from it why the old test refused.
+   - I did not run the free-function `check` before deciding the test's meaning, which would have saved several probes.
 
-4. **One change:** Have the driver put the CI run's head SHA and the names of the failing programs in `qa-input.txt`. Also add one line to `qa.md`: first run `git merge-base --is-ancestor <fix> <run sha>` for the failing commits. If the red comes from a commit before a later fix, write the report and stop. Do this before any long rerun.
+4. **One change.** Have the driver's `qa-input.txt` list the failing test names and the file or line of the first panic, instead of a log tail. Add a builder.md rule: "when a rule changes what a method or function emits, grep `crates/nikaia/tests/it/` for the old behaviour and run those files". That would have caught all three failures in v18a before the suite did.
