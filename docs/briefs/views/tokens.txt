@@ -15,3 +15,4 @@
 /home/user/Nikaia/docs/briefs/views/v11-keep-cross-file.md 1401326 21
 /home/user/Nikaia/docs/briefs/views/qa/qa-task.md 617187 22
 /home/user/Nikaia/docs/briefs/views/v12-keep-view-copy.md 665985 12
+/home/user/Nikaia/docs/briefs/views/v13-view-result.md 1939514 41
