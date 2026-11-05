@@ -26,3 +26,4 @@
 /home/user/Nikaia/docs/briefs/views/v18a-method-param-lent.md 5369064 80 5238706 97776 32422
 /home/user/Nikaia/docs/briefs/views/v18a-method-param-lent.md 4727135 77 4565749 124531 36701
 /home/user/Nikaia/docs/briefs/views/qa/qa-task.md 2872557 52 2768295 81648 22510
+/home/user/Nikaia/docs/briefs/views/d1-1252-briefs-off-the-tree.md 1043636 18 954680 76231 12689
