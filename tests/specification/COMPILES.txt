@@ -28,6 +28,7 @@
 10-nikaia-light.md #53 compiles
 10-nikaia-light.md #54 compiles
 10-nikaia-light.md #55 compiles
+10-nikaia-light.md #56 compiles
 10-nikaia-light.md #62 compiles
 10-nikaia-light.md #63 compiles
 10-nikaia-light.md #65 compiles
