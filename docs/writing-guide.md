@@ -101,6 +101,11 @@ A page never presents syntax or behaviour as runnable before the compiler
 builds it. Where a page describes a design that is specified but not yet built,
 it says so plainly and links the issue that builds it. Runnable examples are
 checked against the current compiler before they are published.
+`tests/page-examples` takes every `nika` example of `website/` and `guide/`
+through `nikaia check` and `nikaia lower` and compares the result with its
+`EXPECTED.txt`; CI runs it whenever an example changes. After changing one,
+run `nikaia run > EXPECTED.txt` there and read the diff: a block that stopped
+lowering is a defect in the page or in the compiler.
 
 ## The specification is written for a different reader
 

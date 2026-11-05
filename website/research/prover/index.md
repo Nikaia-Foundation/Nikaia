@@ -252,7 +252,7 @@ The question is whether this stays true as the prover grows to the theories
 above, so that checking everything costs a build no more than a fraction of
 its time.
 
-### What can a language model add to the prover?
+### How much can large language models help the prover?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 5 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 7%"></span></span><span class="rq-unknown" style="width: 30%"></span></div></div>
@@ -272,6 +272,35 @@ The question is how much a proposer adds to what
 the compiler finds alone, measured by what is proved with it and without it,
 and whether this keeps the cost of a proof off the person who writes the
 program.
+
+Others have measured parts of this, and their results set the expectations:
+
+* Pei and others, [Can Large Language Models Reason about Program Invariants?](https://proceedings.mlr.press/v202/pei23a.html)
+  (ICML 2023), trained models on code to predict invariants from the source
+  alone, without running it, and found predictions comparable to those of a
+  dynamic analysis that watched five runs.
+* Chakraborty and others, [Ranking LLM-Generated Loop Invariants for Program Verification](https://aclanthology.org/2023.findings-emnlp.614)
+  (Findings of EMNLP 2023), found that models often need many attempts before
+  a correct invariant comes out, and that a learned ranking of the candidates
+  markedly cuts the calls to the verifier.
+* Wu, Barrett and Narodytska, [Lemur: Integrating Large Language Models in Automated Program Verification](https://arxiv.org/abs/2310.04870)
+  (2024), let a model propose invariants as sub-goals that an automated
+  verifier then checks, and prove that this keeps the verification sound, the
+  same division of labour as here.
+* Wei and others, [InvBench: Can LLMs Accelerate Program Verification with Invariant Synthesis?](https://arxiv.org/abs/2509.21629)
+  (2025), check every proposed invariant with a verifier and measure the time
+  it saves. Models help on some programs, do not yet beat the classical
+  verifier UAutomizer overall, and solve little of the hard part.
+* Xin and others, [DeepSeek-Prover-V1.5](https://arxiv.org/abs/2408.08152)
+  (2024), train a model on the feedback of a proof checker (Lean 4) and
+  search over its proof attempts, the same loop of proposing and checking
+  applied to whole proofs.
+* Guessing from runs is older than language models:
+  [Daikon](https://plse.cs.washington.edu/daikon/) reports likely invariants
+  seen in test runs, and [ICE learning](https://doi.org/10.1007/978-3-319-08867-9_5)
+  (Garg and others, CAV 2014) learns an invariant from examples,
+  counterexamples and implications a checker hands back. Both are the kind of
+  proposer the interface takes besides a model.
 
 ### Where should the prover spend its effort?
 

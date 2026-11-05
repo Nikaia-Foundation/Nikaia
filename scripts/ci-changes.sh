@@ -24,6 +24,11 @@
 #   them); the `changes` job runs the cheap checks itself. On a push to develop
 #   the comparison is with `git merge-base origin/main HEAD`, so every change
 #   since the last tested commit counts (#861); pull requests and main use $BASE.
+# * `examples` - with `docs`: a `nika` example of website/ or guide/ changed
+#   (a ```nika fence, or a `<code class="language-nika">`), so the examples
+#   job builds the compiler and compares every example with
+#   tests/page-examples/EXPECTED.txt. A change to the prose around them needs no
+#   compiler. Without `docs` the examples run inside bootstrap_compiler.
 #
 # Everything is on for a manual run, a scheduled one, a first push of a branch
 # (but a `ci/` branch: it is compared with main like develop)
@@ -35,7 +40,33 @@ all() {
     echo "floor=true" >>"$out"
     echo "arm64=true" >>"$out"
     echo "docs=false" >>"$out"
+    echo "examples=false" >>"$out"
     exit 0
+}
+# The `nika` examples of a page, fences and HTML code elements alike, one
+# block after another, each closed by a line `--`.
+examples_of() {
+    awk '
+        /^[ \t]*```nika[ \t]*$/ { fence = 1; next }
+        fence && /^[ \t]*```[ \t]*$/ { fence = 0; print "--"; next }
+        fence { print; next }
+        {
+            line = $0
+            while (1) {
+                if (!tag) {
+                    i = index(line, "<code class=\"language-nika\">")
+                    if (!i) break
+                    line = substr(line, i + 28)
+                    tag = 1
+                }
+                j = index(line, "</code>")
+                if (!j) { print line; break }
+                print substr(line, 1, j - 1)
+                print "--"
+                line = substr(line, j + 7)
+                tag = 0
+            }
+        }'
 }
 case "$EVENT" in
 workflow_dispatch | schedule) all ;;
@@ -71,9 +102,20 @@ if [ -z "$code" ] && [ -z "$code2" ] && [ -n "$changed" ]; then
     echo "documentation only: build and test jobs are skipped"
     for k in unsafe floor arm64; do echo "$k=false" >>"$out"; done
     echo "docs=true" >>"$out"
+    examples=false
+    for f in $(echo "$changed" | grep -E '^(guide|website)/.*\.(md|html)$' || true); do
+        before=$(git show "$BASE:$f" 2>/dev/null | examples_of || true)
+        after=$( [ -f "$f" ] && examples_of <"$f" || true)
+        if [ "$before" != "$after" ]; then
+            echo "an example changed in $f: the examples job runs"
+            examples=true
+        fi
+    done
+    echo "examples=$examples" >>"$out"
     exit 0
 fi
 echo "docs=false" >>"$out"
+echo "examples=false" >>"$out"
 if echo "$changed" | grep -q '^crates/unsafe/\|^scripts/check-unsafe-crates\.sh$'; then
     echo "unsafe=true" >>"$out"
 else

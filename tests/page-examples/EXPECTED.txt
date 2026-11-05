@@ -1,0 +1,106 @@
+guide/command-line.md #1 lowered (as written)  /// Greets someone, a few times.
+guide/command-line.md #2 lowered (as written)  use std::cli
+guide/command-line.md #3 lowered (as written)  fn main(greeting: String, name: String?) {
+guide/command-line.md #4 lowered (as written)  /// Copies files into a directory (only prints what it …
+guide/command-line.md #5 lowered (as written)  fn main(x: int, scale: f64; offset: i32 = 0, level: u8 …
+guide/command-line.md #6 lowered (as written)  fn share(total: int, people: int) -> int {
+guide/contracts.md #1 refused (as written) [NK1207]  fn percent(part: int, whole: int) -> int {
+guide/contracts.md #2 refused (as written) [NK1207]  fn fib(n: int) -> int {
+guide/contracts.md #3 lowered (as written)  fn steps(n: int) -> int {
+guide/contracts.md #4 refused (as written) [NK1300]  fn average(total: int, count: int) -> int {
+guide/contracts.md #5 lowered (as written)  /// Divides 100 by a, a few times.
+guide/contracts.md #6 refused (as written) [NK1202]  use std::process
+guide/contracts.md #7 lowered (as written)  use std::process
+guide/getting-started.md #1 lowered (as written)  // src/main.nika
+guide/grammars.md #1 lowered (as written)  grammar Pairs {
+guide/grammars.md #2 lowered (as written)  grammar Point {
+guide/grammars.md #3 lowered (as written)  grammar Words {
+guide/grammars.md #4 lowered (as written)  enum Value {
+guide/grammars.md #5 lowered (as written)  grammar Lists {
+guide/grammars.md #6 fragment (as written)  rule NUMBER -> i64 =
+guide/grammars.md #7 fragment (as written)  entry rule expr -> i64 =
+guide/grammars.md #8 fragment (as written)  enum Op {
+guide/grammars.md #9 fragment (as written)  rule factor -> i64 # "expression" =
+guide/grammars.md #10 refused (as written) [NK1117,NK1181]  fn main() throws {
+guide/grammars.md #11 lowered (as written)  grammar Point {
+guide/grammars.md #12 lowered (as written)  struct TooBig {
+guide/grammars.md #13 lowered (as written)  grammar Kv {
+guide/grammars.md #14 lowered (as written)  grammar Record {
+guide/grammars.md #15 lowered (as written)  grammar Stmts {
+guide/grammars.md #16 lowered (as written)  use std::text
+guide/grammars.md #17 lowered (as written)  grammar Size {
+guide/ownership.md #1 lowered (as written)  struct File { name: String }
+guide/ownership.md #2 lowered (as written)  struct Person { name: String, age: int }
+guide/ownership.md #3 refused (as written) [NK2105]  struct Person { name: String, age: int }
+guide/ownership.md #4 lowered (as written)  struct Person { name: String, age: int }
+guide/ownership.md #5 lowered (as written)  fn add_guest(mut names: Vec[String]) {
+guide/ownership.md #6 lowered (as written)  struct Person { name: String, age: int }
+guide/ownership.md #7 lowered (as written)  fn words(text: String) -> int {
+guide/ownership.md #8 lowered (as written)  struct Badge { owner: String }
+guide/ownership.md #9 lowered (as written)  struct Config { name: String, retries: int }
+guide/ownership.md #10 lowered (as written)  fn longest(a: String, b: String) -> String {
+guide/ownership.md #11 refused (as written) [NK2305]  fn longest(a: String, b: String) -> String {
+guide/ownership.md #12 lowered (as written)  fn words_of(path: String) -> Vec[String] {
+guide/ownership.md #13 refused (as written) [NK1102]  struct Person { name: String, age: int }
+guide/ownership.md #14 lowered (as written)  struct Person { name: String, age: int }
+guide/ownership.md #15 refused (as written) [NK1138]  fn add_guest(names: Vec[String]) {
+guide/ownership.md #16 lowered (as written)  struct Item { name: String, price: int }
+guide/ownership.md #17 refused (as written) [NK2302]  struct Item { name: String, price: int }
+guide/ownership.md #18 lowered (as written)  fn first_word(s: String) -> String from s {
+guide/prover.md #1 lowered (as written)  fn clamp(n: int, hi: int) -> int {
+guide/prover.md #2 lowered (as written)  fn sum(xs: Vec[int]) -> int {
+guide/prover.md #3 lowered (as written)  fn evens(xs: Vec[int]) -> i64 {
+guide/prover.md #4 lowered (as written)  fn probe(xs: Vec[i64], h: i64) -> i64 {
+guide/prover.md #5 lowered (as written)  fn first(xs: Vec[int]) -> int {
+guide/prover.md #6 refused (as written) [NK1300,NK1300,NK1300,NK1300,NK1300,NK1300]  struct Counter {
+guide/prover.md #7 refused (as written) [NK1300]  fn percent(part: int, whole: int) -> int {
+guide/prover.md #8 refused (as written) [NK1300]  fn is_sorted(xs: Vec[int]) -> bool {
+guide/syntax.md #1 lowered (a body)  let x = 10          // immutable: x cannot be assigned …
+guide/syntax.md #2 lowered (a body)  let name = "Nika"
+guide/syntax.md #3 lowered (a body)  let count = 7
+guide/syntax.md #4 lowered (a body)  for i in 0..<3 {         // 0, 1, 2: `..<` stops before…
+guide/syntax.md #5 lowered (a body)  let mut scores: Vec[int] = [70, 85, 92]
+guide/syntax.md #6 refused (as written) [NK2305]  fn main() {
+guide/syntax.md #7 lowered (as written)  fn main() {
+guide/syntax.md #8 lowered (as written)  fn main() {
+guide/syntax.md #9 lowered (items, then a body)  fn greet(name: String; greeting: String = "Hello") -> S…
+guide/syntax.md #10 lowered (items, then a body)  fn pair_of[T](a: T, b: T) -> Vec[T] {
+guide/syntax.md #11 lowered (items, then a body)  struct Point {
+guide/syntax.md #12 lowered (as written)  enum Shape {
+guide/syntax.md #13 refused (items, then a body) [NK1102]  fn find_nickname(name: String) -> String? {
+guide/syntax.md #14 lowered (items, then a body)  use std::collections
+guide/syntax.md #15 lowered (as written) [sketch]  enum AgeError {
+guide/syntax.md #16 lowered (as written)  fn count_words(text: String) -> int {
+guide/syntax.md #17 lowered (as written)  struct TooLong { words: int }
+guide/syntax.md #18 lowered (as written)  fn main() {
+guide/syntax.md #19 refused (as written) [NK2105]  struct Person { name: String, age: int }
+guide/syntax.md #20 lowered (as written)  // file: src/stock.nika
+guide/syntax.md #21 refused (as written) [NK1135]  // file: src/main.nika
+guide/syntax.md #22 lowered (as written)  grammar Pairs {
+website/easy/async-without-colouring.html #1 lowered (as written)  struct TooLong { words: int }
+website/easy/formats-as-grammar.html #1 fragment (as written)  grammar Calc {
+website/easy/index.html #1 refused (a body) [NK1117,NK1117,NK1117,NK1117]  let a = async count_words(first)    // starts at once
+website/easy/index.html #2 fragment (as written) [sketch]  grammar Calc {
+website/index.html #1 refused (a body) [NK1117,NK1117,NK1117,NK1117]  async {
+website/index.html #2 refused (a body) [NK1117,NK1117]  a.update fn(mut acc) {
+website/index.html #3 refused (as written) [NK1117,NK2605]  fn load() -> String {
+website/index.html #4 refused (items, then a body) [NK1207]  fn percent(n: int) -> int {
+website/index.html #5 refused (a body) [NK1117,NK1117,NK1117,NK1117]  let a = async count_words(first)    // starts at once
+website/index.html #6 fragment (as written) [sketch]  grammar Calc {
+website/safe/broken-promises.html #1 refused (as written) [NK1207]  fn percent(n: int) -> int {
+website/safe/broken-promises.html #2 refused (a body) [NK1117,NK2605]  let out = process::run("git", ["rev-parse", "HEAD"])
+website/safe/broken-promises.html #3 refused (as written) [NK1207]  fn percent(part: int, whole: int) -> int {
+website/safe/broken-promises.html #4 refused (as written) [NK1207]  fn fib(n: int) -> int {
+website/safe/broken-promises.html #5 lowered (as written)  fn steps(n: int) -> int {
+website/safe/broken-promises.html #6 refused (as written) [NK1202]  use std::process
+website/safe/broken-promises.html #7 lowered (as written)  use std::process
+website/safe/broken-promises.html #8 refused (as written) [NK1300]  fn average(total: int, count: int) -> int {
+website/safe/broken-promises.html #9 lowered (as written)  /// Divides 100 by a, a few times.
+website/safe/conflicting-actions.html #1 refused (a body) [NK2107,NK2107]  let mut balance = 100
+website/safe/index.html #1 refused (a body) [NK1117,NK1117,NK1117,NK1117]  async {
+website/safe/index.html #2 refused (a body) [NK1117,NK1117]  a.update fn(mut acc) {
+website/safe/index.html #3 refused (as written) [NK1117,NK2605]  fn load() -> String {
+website/safe/index.html #4 refused (items, then a body) [NK1207]  fn percent(n: int) -> int {
+website/safe/stuck-tasks.html #1 refused (as written) [NK2202]  use std::time
+website/safe/stuck-tasks.html #2 refused (a body) [NK1117,NK1117]  update_all(a, b) fn(mut from, mut to) {
+website/safe/unhandled-errors.html #1 refused (as written) [NK2605]  use std::fs
