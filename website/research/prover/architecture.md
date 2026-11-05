@@ -111,7 +111,7 @@ arena of `u32` words with watch lists that hold a blocking literal (D16).
 The same parts, each with a bar for how far it is built, are under
 [what is being built](./#what-is-being-built).
 
-## Help from outside
+## Invariants proposed from outside, by a language model or another program
 
 A solver inside the compiler is not the only place a proof can come from. An
 outside program, a language model among them, may propose a loop invariant,
@@ -134,7 +134,7 @@ and the compiler uses it only after checking it like one of its own
 The proposer is a child process, as language servers are, so what a provider,
 a model, a key or a prompt is stays out of the compiler. This is decided and
 not yet built, and what it adds is asked under
-[open questions about the prover](./#what-can-outside-help-add).
+[open questions about the prover](./#can-a-language-model-propose-loop-invariants).
 
 ## What the language has to offer the solver
 

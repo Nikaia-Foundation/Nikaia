@@ -17,6 +17,11 @@ structure they lean on is described in
 left out of the program, and what it takes to trust a proof that far, is asked
 under [performance with safety](../performance/).
 
+A language model, or any other program, may propose loop invariants for the
+prover to check, through an interface that is decided and not yet built;
+[how much that adds](#can-a-language-model-propose-loop-invariants) is one of
+the questions below.
+
 ## Where it stands
 
 The compiler's own code written in Nikaia (`tools/*.nika`) is the first test
@@ -252,7 +257,7 @@ The question is whether this stays true as the prover grows to the theories
 above, so that checking everything costs a build no more than a fraction of
 its time.
 
-### What can outside help add?
+### Can a language model propose loop invariants?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 5 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 7%"></span></span><span class="rq-unknown" style="width: 30%"></span></div></div>
