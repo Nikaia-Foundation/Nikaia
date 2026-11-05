@@ -21,3 +21,4 @@
 /home/user/Nikaia/docs/briefs/async/a16-handle-dropped-live.md 4367440 73
 /home/user/Nikaia/docs/briefs/async/a17-duration-integer.md 923008 11
 /home/user/Nikaia/docs/briefs/async/qa/qa-task.md 783768 26
+/home/user/Nikaia/docs/briefs/async/a18-minus-begins-line.md 843195 31
