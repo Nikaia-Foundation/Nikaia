@@ -12,7 +12,7 @@ pub(crate) fn check_core_call_on_base(name: &str) -> String {
 
 pub(crate) fn check_core_call_on_task_handle(ty: &Ty) -> bool {
     match ty {
-        Ty::Named { name, .. } => name == "TaskHandle",
+        Ty::Named { name, .. } => name == "TaskHandle" || name == CHILD_HANDLE,
         _ => false,
     }
 }

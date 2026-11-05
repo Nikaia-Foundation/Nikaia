@@ -4936,6 +4936,33 @@ pub = true
 signature = "[T](self: task::ChildHandle[T]) -> T"
 throws = ["task::Crashed"]
 
+# **`join(within: d)` limits this wait to `d`**
+# ([ADR-async-5](../../docs/specification/adr/adr-async-5.md) D17), as on a
+# `TaskHandle`: on time-out it throws `task::TimedOut`, the task keeps running,
+# and the handle stays live. One left live is waited for at its group's end
+# (Part I 8.2), so `NK2109` does not ask for it.
+# Wait for the task, at most `within`, and take what it produced.
+#
+# When the time runs out first, this throws `task::TimedOut`; the task keeps
+# running, and the handle can be joined again or cancelled.
+[fn."task::ChildHandle::join(within)"]
+pub = true
+signature = "[T](self: task::ChildHandle[T], within: time::Duration) -> T"
+throws = ["task::Crashed", "task::TimedOut"]
+
+# **`join(within: d, on_timeout: o)`** (ADR-async-5 D17): with
+# `task::OnTimeout::Cancel` the task is cancelled on time-out, as `cancel()`
+# cancels it, and the handle is used up.
+# Wait for the task, at most `within`, and take what it produced.
+#
+# When the time runs out first, this throws `task::TimedOut`; with
+# `on_timeout: task::OnTimeout::Cancel` the task is cancelled (its cleanups
+# run), with `task::OnTimeout::Keep` it keeps running.
+[fn."task::ChildHandle::join(within, on_timeout)"]
+pub = true
+signature = "[T](self: task::ChildHandle[T], within: time::Duration, on_timeout: task::OnTimeout) -> T"
+throws = ["task::Crashed", "task::TimedOut"]
+
 # **The only way to cancel a task** (ADR-async-5 D14): it stops at its current
 # pause and its end, a failure included, is dropped; the group still waits for
 # it to stop.

@@ -352,10 +352,12 @@ fn check_core_method_run(on: ref Ty) -> Ty? {
     return null
 }
 
-/// Whether the type is a task's handle.
+/// Whether the type is a task's handle, a `TaskHandle` or a
+/// `task::ChildHandle`: both take `join(within:, on_timeout:)` (ADR-async-5
+/// D17).
 fn check_core_method_task_handle(ty: ref Ty) -> bool {
     return match ty {
-        Ty::Named { name, .. } => name == "TaskHandle",
+        Ty::Named { name, .. } => name == "TaskHandle" || name == CHILD_HANDLE,
         else => false,
     }
 }

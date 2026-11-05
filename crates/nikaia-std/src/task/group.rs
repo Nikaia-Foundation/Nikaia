@@ -15,7 +15,7 @@
 //! handle was dropped neither joined nor cancelled (D11), hands its failure to
 //! the group as an unread one.
 
-use super::{Crashed, Outcome, caught, locked};
+use super::{Crashed, OnTimeout, Outcome, TimedOut, caught, locked};
 
 /// **How a task of a group ended** (D3): with a value, a failure, a crash, a
 /// cancellation its handle asked for (D14), or a full memory block.
@@ -322,11 +322,11 @@ pub struct ChildHandle<'g, T, E> {
     /// Made by `deferred`: `start()` is allowed once.
     is_deferred: bool,
     /// Joined or cancelled: its end is nobody else's.
-    claimed: bool,
+    claimed: std::cell::Cell<bool>,
     /// **The rest of a pausing task of `async e`** (ADR-async-5 D6, D20,
     /// #1226), after its first pause: polled where the checker waits, its
     /// `join`. Dropped unjoined, the task is cancelled at that pause.
-    held: Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'g>>>,
+    held: std::cell::RefCell<Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'g>>>>,
 }
 
 impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
@@ -337,8 +337,8 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             at: None,
             deferred: None,
             is_deferred: false,
-            claimed: false,
-            held: None,
+            claimed: std::cell::Cell::new(false),
+            held: std::cell::RefCell::new(None),
         }
     }
 
@@ -362,7 +362,7 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             std::future::poll_fn(|cx| std::task::Poll::Ready(task.as_mut().poll(cx).is_ready()))
                 .await;
         if !ended {
-            handle.held = Some(task);
+            *handle.held.get_mut() = Some(task);
         }
         handle
     }
@@ -439,8 +439,18 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
     /// deferred one not started never runs. The group's end still waits until
     /// a cancelled pausing task has stopped.
     pub fn cancel(mut self) {
-        self.claimed = true;
         self.deferred = None;
+        self.cancel_here();
+    }
+}
+
+impl<T, E> ChildHandle<'_, T, E> {
+    /// What [`ChildHandle::cancel`] does, on a handle that stays a value: a
+    /// `join(within:)` with [`OnTimeout::Cancel`] uses it up this way. The
+    /// rest of a pausing task of `async e` is dropped here, at its pause.
+    fn cancel_here(&self) {
+        self.claimed.set(true);
+        drop(self.held.take());
         let mut held = locked(&self.slot);
         held.cancel = true;
         held.unclaimed = true;
@@ -453,8 +463,8 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
     /// [`Crashed`] in the group's channel. A suspension point for a pausing
     /// task; ready at once for one that never pauses. A task a crash before it
     /// cancelled throws [`Crashed`] here too, as the group does at its end.
-    pub async fn join(mut self) -> Result<T, E> {
-        self.claimed = true;
+    pub async fn join(self) -> Result<T, E> {
+        self.claimed.set(true);
         assert!(
             self.deferred.is_none(),
             "a deferred task was joined before its start()"
@@ -482,10 +492,71 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
         joined_end(end)
     }
 
+    /// **`h.join(within: d, on_timeout: o)`** (ADR-async-5 D17): the task's
+    /// value, its failure or [`Crashed`] as `join` gives them, or
+    /// [`TimedOut`] once `span` ran out. **It lends the handle**: with
+    /// [`OnTimeout::Keep`] the task runs on and the handle stays live, joined
+    /// again, cancelled, or waited for at its group's end; with
+    /// [`OnTimeout::Cancel`] the task is cancelled as [`ChildHandle::cancel`]
+    /// cancels it and the handle is used up. The error is boxed, whatever the
+    /// group's channel, since a plain group's (`Crashed`) cannot hold a
+    /// [`TimedOut`].
+    pub async fn join_within(
+        &self,
+        span: std::time::Duration,
+        on_timeout: OnTimeout,
+    ) -> Result<T, Box<dyn std::error::Error>>
+    where
+        E: Into<Box<dyn std::error::Error>>,
+    {
+        use std::future::Future;
+        assert!(
+            self.deferred.is_none(),
+            "a deferred task was joined before its start()"
+        );
+        let slot = self.slot.clone();
+        let mut sleeping = std::pin::pin!(crate::time::sleep(span));
+        let mut rest = self.held.take();
+        let end = std::future::poll_fn(|cx| {
+            // A pausing task of `async e` is polled here, as in `join`.
+            if let Some(task) = rest.as_mut()
+                && task.as_mut().poll(cx).is_ready()
+            {
+                rest = None;
+            }
+            let mut held = locked(&slot);
+            if let Some(end) = held.ended.take() {
+                return std::task::Poll::Ready(Some(end));
+            }
+            held.joiner = Some(cx.waker().clone());
+            drop(held);
+            match sleeping.as_mut().poll(cx) {
+                std::task::Poll::Ready(()) => std::task::Poll::Ready(None),
+                std::task::Poll::Pending => std::task::Poll::Pending,
+            }
+        })
+        .await;
+        match end {
+            Some(end) => {
+                self.claimed.set(true);
+                joined_end(end).map_err(Into::into)
+            }
+            None => {
+                // The task runs on: the handle keeps what is left of it.
+                *self.held.borrow_mut() = rest;
+                locked(&self.slot).joiner = None;
+                if on_timeout == OnTimeout::Cancel {
+                    self.cancel_here();
+                }
+                Err(Box::new(TimedOut))
+            }
+        }
+    }
+
     /// **`h.join()` of a task that never pauses** (D6, #988): it has ended
     /// where it started, so its end is there now.
-    pub fn join_now(mut self) -> Result<T, E> {
-        self.claimed = true;
+    pub fn join_now(self) -> Result<T, E> {
+        self.claimed.set(true);
         let end = locked(&self.slot).ended.take();
         joined_end(end.expect("a task that pauses was joined where the main line cannot wait"))
     }
@@ -509,7 +580,7 @@ fn joined_end<T, E: From<Crashed>>(end: Ended<T, E>) -> Result<T, E> {
 /// handed over when the task ends.
 impl<T, E> Drop for ChildHandle<'_, T, E> {
     fn drop(&mut self) {
-        if self.claimed || self.deferred.is_some() {
+        if self.claimed.get() || self.deferred.is_some() {
             return;
         }
         let mut held = locked(&self.slot);

@@ -251,7 +251,7 @@ pub(crate) fn check_core_method_run(on: &Ty) -> Option<Ty> {
 
 pub(crate) fn check_core_method_task_handle(ty: &Ty) -> bool {
     match ty {
-        Ty::Named { name, .. } => name == "TaskHandle",
+        Ty::Named { name, .. } => name == "TaskHandle" || name == CHILD_HANDLE,
         _ => false,
     }
 }

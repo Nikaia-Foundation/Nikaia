@@ -28,10 +28,11 @@ fn check_core_call_on_base(name: ref String) -> String {
     return f"{parts[last]}"
 }
 
-/// Whether a type is a task's handle.
+/// Whether a type is a task's handle, a `TaskHandle` or a
+/// `task::ChildHandle` (ADR-async-5 D17).
 fn check_core_call_on_task_handle(ty: ref Ty) -> bool {
     return match ty {
-        Ty::Named { name, .. } => name == "TaskHandle",
+        Ty::Named { name, .. } => name == "TaskHandle" || name == CHILD_HANDLE,
         else => false,
     }
 }
