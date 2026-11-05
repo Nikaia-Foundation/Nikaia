@@ -17,11 +17,6 @@ structure they lean on is described in
 left out of the program, and what it takes to trust a proof that far, is asked
 under [performance with safety](../performance/).
 
-A language model, or any other program, may propose loop invariants for the
-prover to check, through an interface that is decided and not yet built;
-[how much that adds](#can-a-language-model-propose-loop-invariants) is one of
-the questions below.
-
 ## Where it stands
 
 The compiler's own code written in Nikaia (`tools/*.nika`) is the first test
@@ -257,7 +252,7 @@ The question is whether this stays true as the prover grows to the theories
 above, so that checking everything costs a build no more than a fraction of
 its time.
 
-### Can a language model propose loop invariants?
+### What can a language model add to the prover?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 5 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 7%"></span></span><span class="rq-unknown" style="width: 30%"></span></div></div>
@@ -270,15 +265,8 @@ them, and a proposal is used only after the compiler has checked it
 ([ADR-361](/docs/specification/adr/adr-361.html) D6). Much of Nikaia's own code is written with
 the help of such models.
 
-The interface is decided and not yet built. A proposer is a program named in
-the manifest, and only `nikaia prove --propose` starts it, never `build`,
-`run` or `test`. It reads one line of JSON per loop the build left open, with
-the problem in SMT-LIB, the loop's source and the names it reads, and answers
-with candidate invariants. What passes the check is written to
-`nikaia.proofs`, so the next build uses it without asking anyone, and a wrong
-proposal costs time and nothing else. Which model, provider or prompt is used
-lives in the proposer and not in the compiler, and the program's code leaves
-the machine only through that command and that entry.
+The interface is decided and not yet built; how it works is described under
+[how the prover is built](architecture.html#invariants-from-a-language-model-or-another-program).
 
 The question is how much a proposer adds to what
 the compiler finds alone, measured by what is proved with it and without it,
