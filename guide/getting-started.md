@@ -24,7 +24,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ## 1. Build the compiler
 
 ```sh
-git clone https://github.com/Nikaia-Language/Nikaia.git
+git clone https://github.com/Nikaia-Foundation/Nikaia.git
 cd Nikaia
 cargo build --release -p nikaia        # about a minute; the binary is target/release/nikaia
 export PATH="$PWD/target/release:$PATH"

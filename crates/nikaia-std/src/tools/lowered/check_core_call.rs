@@ -742,7 +742,7 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
     }
     if !needed {
         let note: String = String::from("Brackets after a function's name are allowed while their uses are collected; here the arguments already say the type.");
-        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1233"), message: format!("`{}[…]` names a type the arguments of the call already say.", name), notes: vec![note], help: Some(format!("Leave the brackets out, `{}(…)`, or add your use case to https://github.com/Nikaia-Language/Nikaia/issues/514.", name)), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1233"), message: format!("`{}[…]` names a type the arguments of the call already say.", name), notes: vec![note], help: Some(format!("Leave the brackets out, `{}(…)`, or add your use case to https://github.com/Nikaia-Foundation/Nikaia/issues/514.", name)), labels: vec![] });
     }
     let walked: String = nikaia_std::index::or(match state.walks_fields.get(&name) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),

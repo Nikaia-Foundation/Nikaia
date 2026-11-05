@@ -54,7 +54,7 @@ tried and measured.
 is normative and nothing may depend on it to know what a program means.
 
 * [speed](speed.md) — CI time, green share, tokens per moved line and self-hosting share, one row per round (`scripts/speed.sh`).
-* [the issue tracker](https://github.com/Nikaia-Language/Nikaia/issues) — **the running list**: what is found and
+* [the issue tracker](https://github.com/Nikaia-Foundation/Nikaia/issues) — **the running list**: what is found and
   broken, what an ADR decided and the compiler does not do yet, and which
   specification sentences a later decision made false. Every entry carries its
   reproduction or says it has none. The type says what kind it is (`Bug` for
@@ -65,18 +65,18 @@ is normative and nothing may depend on it to know what a program means.
   owner first), `blocked` (waits on another issue being built, named in it),
   `note` (a hint, a measurement still to take, or an issue that only collects
   others) - and **Priority** and **Effort** give the order. The label
-  [`future`](https://github.com/Nikaia-Language/Nikaia/issues?q=is%3Aopen+label%3Afuture)
+  [`future`](https://github.com/Nikaia-Foundation/Nikaia/issues?q=is%3Aopen+label%3Afuture)
   sits beside the status label and marks an issue for a later version of the
   language: a feature request, or a question that need not be decided before
   then. To see only what matters now, filter with `-label:future`. Big pieces are issues with sub-issues. A closed issue stays: every entry the old `open-work.md` ever carried, closed ones included, is an issue, and the citations of its `§N.M` numbers in the CHANGELOG, the ADRs and code comments name the issue they mean. "The former backlog file" in old text means that file as a whole.
 * **Open questions for the owner** are issues labelled
-  [`decision`](https://github.com/Nikaia-Language/Nikaia/issues?q=is%3Aopen+label%3Adecision):
+  [`decision`](https://github.com/Nikaia-Foundation/Nikaia/issues?q=is%3Aopen+label%3Adecision):
   each says what is blocked by it, the options, and a recommendation, and is
   closed when an ADR answers it.
 * [`handoff.md`](handoff.md) — how to work on the **parser backend**: testing a
   change against Nikaia, what the upstream patch does, and what was tried and
   must not be redone. A guide; the open work that was in it is in
-  [the issue tracker](https://github.com/Nikaia-Language/Nikaia/issues).
+  [the issue tracker](https://github.com/Nikaia-Foundation/Nikaia/issues).
 * [`error-corpus.md`](error-corpus.md) — twenty-six broken `.nika` files and
   what the compiler says about each, before and after.
 * [`stored-views.md`](stored-views.md) — the `E0621` a stored naked view used to

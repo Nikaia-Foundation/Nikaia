@@ -294,7 +294,7 @@ def llms_txt(root, sections):
     out = [f"# {config_value(root, 'title')}", "", f"> {config_value(root, 'description')}", ""]
     out.append(
         "Every page below is published from a Markdown file in "
-        "https://github.com/Nikaia-Language/Nikaia, at the same path."
+        "https://github.com/Nikaia-Foundation/Nikaia, at the same path."
     )
     for section in sections:
         out += ["", f"## {section['title']}", ""]
