@@ -1,12 +1,13 @@
 Result: done
-Cause: 7f77b71d (an integer is never a `time::Duration`): tests/compiler a_sync_function_calls_a_pausing_generic_by_brackets, `time::sleep(1)` now NK1102
-Fixed: the test's sleep takes a span, `time::sleep(1.millis())`; its .stderr is unchanged (same lines and columns)
-Tests: the_compiler_test_package_passes_at_both_settings rerun: the program passes at both settings; the one red left, agent_script ("settings disagree", `tokens.txt` missing in a temp dir), is this checkout's shared tree (scripts/agent.nika run with a fake claude, ok=false), green in CI, not touched by the unpushed commits
-Found: none
-Files: tests/compiler/tests/a_sync_function_calls_a_pausing_generic_by_brackets.nika
-Commit: tests: a sleep in a_sync_function_calls_a_pausing_generic_by_brackets takes a span (the fix for the red of 7f77b71d)
+Cause: 4919b0bf (a `-` that begins a line begins an expression, ADR-390): `cargo test -p nikaia --test it fmt::every_nika_file_formats_to_the_same_tree_and_a_fixed_point`, benches/lowering/source.nika (a long `a + b - c - d` line) was cut before the `-`, so the formatted file parsed as other statements ("would change what the file means")
+Fixed: tools/fmt.nika `fmt_operators` cuts after a `-` instead of before it (lowered/fmt.rs by lower-std); a `+` still leads its line
+Tests: fmt:: 18 ok in the fast profile, including the failing guard test over the repository; a probe of a long `+`/`-` chain formats, runs the guard and is a fixed point; clippy not run (only lowered output changed); fmt, pre-push green
+Found: none (note: a chain mixing `+` and `-` now has `+` leading and `-` trailing lines; the guard test over benches/lowering/source.nika covers it, no new Rust test)
+Files: crates/nikaia-std/src/tools/fmt.nika crates/nikaia-std/src/tools/lowered/fmt.rs
+Commit: fmt: a subtraction is broken after its `-` (the fix for the red of 4919b0bf)
+Body: With ADR-390 a `-` that begins a line begins an expression, so the printer's cut before a binary `-` changed the tree and the formatter's guard refused benches/lowering/source.nika. `fmt_operators` now cuts after a `-`.
 Changelog: none
 Attribution:
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
-Pushed: local 6005d10bc0505479ac70858963ec148b873ab1ea
+Pushed: local bf5c0619809a12d82bab17d239bcb5271349ce14
