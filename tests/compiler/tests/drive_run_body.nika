@@ -1,0 +1,43 @@
+// scripts/drive.nika --run-body DIR BRIEF: the comment that puts a run's
+// numbers, report and debrief on its issue (#1252 steps 1 and 4), built from
+// the files the run left; once with a debrief, once without. The post itself
+// is not run here.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    let a = f"{tmp}/d9-1252-run.md"
+    let b = f"{tmp}/qa-task.md"
+    fs::write(a.clone(), fs::Root::Anywhere, "# d9\n")
+    fs::write(b.clone(), fs::Root::Anywhere, "# qa\n")
+    fs::write(f"{a}.report.md", fs::Root::Anywhere, "Result: done\nTests: drive_run_body\n")
+    fs::write(f"{tmp}/d9-1252-run.debrief.md", fs::Root::Anywhere, "Nothing held it up.\n")
+    fs::write(f"{a}.run.json", fs::Root::Anywhere, "{\"type\":\"result\",\"duration_ms\":1577409,\"num_turns\":3,\"total_cost_usd\":4.5}")
+    fs::write(f"{b}.report.md", fs::Root::Anywhere, "Result: partial (one red left)\n")
+    fs::write(f"{b}.run.json", fs::Root::Anywhere, "{\"duration_ms\":61000,\"num_turns\":12}")
+    fs::write(f"{tmp}/tokens.txt", fs::Root::Anywhere, f"{tmp}/other.md 9 9 1 1 1\n{a} 1000 79 700 200 60\n")
+    fs::write(f"{tmp}/cost.txt", fs::Root::Anywhere, "2026-11-05 4.5\n2026-11-05 0.255\n")
+    for brief in [a, b] {
+        let out = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--run-body", tmp.clone(), brief.clone()]; dir: repo.clone())
+        print(out.stdout.replace(tmp.clone(), "T"))
+        println("====")
+    }
+    process::run("rm", ["-rf", tmp])
+}

@@ -1,6 +1,6 @@
 // scripts/drive.nika `--focus` (owner, 2026-11-01): the focus file's advance
-// (wrap, an empty area skipped, every area empty), the focus log line of a
-// block from three sample reports, and the bug brief with a `Blocks:` line
+// (wrap, an empty area skipped, every area empty), the lane issue of an
+// area line, the comment of a block (its line, #1252) from three sample reports, and the bug brief with a `Blocks:` line
 // that runs before a block. Each through one of the driver's test flags.
 use std::fs
 use std::process
@@ -42,8 +42,10 @@ fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
     let focus = f"{tmp}/focus.txt"
-    fs::write(focus.clone(), fs::Root::Anywhere, "block 3\narea prover docs/briefs/prover\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent prover 2\n")
+    fs::write(focus.clone(), fs::Root::Anywhere, "block 3\narea prover docs/briefs/prover 1213\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent prover 2\n")
     println(f"next: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone()]))}")
+    // An area line's optional fourth word is the lane issue, by name or by DIR.
+    println(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-issue", focus.clone(), "prover", "/abs/docs/briefs/prover", "selfhosting", "nothing"]))
     println(f"skip selfhosting: {current(drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone(), "selfhosting"]))}")
     fs::write(focus.clone(), fs::Root::Anywhere, "block 2\narea prover docs/briefs/prover\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent bugs 1\n")
     let wrapped = drive(nikaia.clone(), repo.clone(), tmp.clone(), ["--focus-next", focus.clone()])

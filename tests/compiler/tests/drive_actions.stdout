@@ -2,6 +2,7 @@
 would run: a batch's suite still running (target/suite.lock/testing): wait for it and handle it (drive_settle) first
 no issue for b1
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
+would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
 would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
 DRY-RUN NEXT b1
@@ -31,6 +32,7 @@ DRY-RUN STOP CUT b1: too big -> SUPERVISOR
 would run: a batch's suite still running (target/suite.lock/testing): wait for it and handle it (drive_settle) first
 no issue for b1
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
+would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
 would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
 DRY-RUN NEXT b1
@@ -49,6 +51,7 @@ DRY-RUN STOP RED aaaa1111 test -> SUPERVISOR
 would run: a batch's suite still running (target/suite.lock/testing): wait for it and handle it (drive_settle) first
 no issue for b1
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
+would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
 would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
 DRY-RUN NEXT b1

@@ -19,6 +19,11 @@
 // supervisor's commit takes it. Before any escalation it resumes the run's
 // session once and writes its answer to what held it up to BRIEF.debrief.md
 // (the cost goes to DIR/cost.txt). `--dry-run` prints the command only.
+// These files are untracked working files (#1252); scripts/drive.nika, which
+// starts this script, reads them after the run and posts the run's result,
+// tokens, cost, time, turns, report and debrief as one comment on the brief's
+// issue (`drive_post_run`; a script cannot `use` another, and the issue lookup
+// is the driver's).
 //
 // A run that was cut off (timeout, a killed driver) is resumed in its own
 // session: BRIEF.session holds `<session id> <cksum of BRIEF>`, written before
