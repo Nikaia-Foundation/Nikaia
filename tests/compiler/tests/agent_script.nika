@@ -36,12 +36,16 @@ fn main() throws {
     fs::write(f"{tmp}/plain.md", fs::Root::Anywhere, "no frontmatter\n")
 
     let dry = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dry-run"]; dir: repo.clone())
-    let words = dry.stdout.trim().split(" ").collect()
-    println(f"qa: {words[7]} {words[8]} {words[9]} {words[10]} {words[11]} {words[12]} {words[13]} {words[14]}")
-    println(f"tools: {words.len() > 20} {words[words.len() - 1]}")
+    let (_, qa_flags) = dry.stdout.trim().split_once(" --agent ") ?? ("", "")
+    let qa_line = "--agent " + qa_flags
+    let words = qa_line.split(" ").collect()
+    println(f"qa: {words[0]} {words[1]} {words[2]} {words[3]} {words[4]} {words[5]} {words[6]} {words[7]}")
+    println(f"tools: {words.len() > 13} {words[words.len() - 1]}")
     let plain = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/plain.md", "--dry-run"]; dir: repo.clone())
-    let pw = plain.stdout.trim().split(" ").collect()
-    println(f"plain: {pw[7]} {pw[8]} {pw[9]} {pw[10]} {pw[11]} {pw[12]} {pw[13]} {pw[14]}")
+    let (_, plain_flags) = plain.stdout.trim().split_once(" --agent ") ?? ("", "")
+    let plain_line = "--agent " + plain_flags
+    let pw = plain_line.split(" ").collect()
+    println(f"plain: {pw[0]} {pw[1]} {pw[2]} {pw[3]} {pw[4]} {pw[5]} {pw[6]} {pw[7]}")
 
     let ran = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--claude", fake.clone()]; dir: repo.clone())
     let line = ran.stdout.trim().split(" ").collect()
