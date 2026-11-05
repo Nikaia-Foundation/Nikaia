@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 
-REPO = "Nikaia-Language/Nikaia"
+REPO = "Nikaia-Foundation/Nikaia"
 API = f"https://api.github.com/repos/{REPO}"
 STATUSES = [
     ("decision", "Waiting for a decision"),

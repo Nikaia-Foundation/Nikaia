@@ -43,7 +43,7 @@ compiler has proved account for the step from 143.4 to 95.0 instructions a
 row. The rest of the gap to `fast-unsafe.nika`, which believes its claims
 about the input instead of checking them, is what the prover still has to
 learn, among it the sums and counts of every slot proved over the whole fold
-([#770](https://github.com/Nikaia-Language/Nikaia/issues/770)). The question is whether this holds beyond one benchmark,
+([#770](https://github.com/Nikaia-Foundation/Nikaia/issues/770)). The question is whether this holds beyond one benchmark,
 whether programs written plainly and the compiler's own code reach the same
 league once their checks are proved, and how much of a program's speed comes
 from proofs, from the language's other guarantees, and from the backend.
@@ -67,7 +67,7 @@ is therefore not the same as being willing to remove them.
 The question is what it takes to make removing them the safe choice, and how
 that is shown. Several steps would each add trust and can each be measured.
 The certificate checker itself can be proved free of run-time errors
-([#1104](https://github.com/Nikaia-Language/Nikaia/issues/1104)). Every proof can also be checked by a checker this
+([#1104](https://github.com/Nikaia-Foundation/Nikaia/issues/1104)). Every proof can also be checked by a checker this
 project did not write, through the Alethe export
 ([ADR-270](/docs/specification/adr/adr-270.html) D6, D8). The same program can be built with and
 without the checks and compared on the whole test suite and on generated
@@ -116,7 +116,7 @@ already has as proofs, such as whether an index is in range, whether two
 references overlap, whether a call touches anything and whether an addition
 can overflow. A backend such as Cranelift is fast because it optimises
 little, so whatever the compiler hands it, it gains in full. The idea in
-[#1235](https://github.com/Nikaia-Language/Nikaia/issues/1235), filed for the future, is that the optimisations that matter
+[#1235](https://github.com/Nikaia-Foundation/Nikaia/issues/1235), filed for the future, is that the optimisations that matter
 are done once, by Nikaia's own optimiser, from facts it already has, and a
 fast backend writes the machine code. The aim is to be faster in compile time
 and in run time than Nikaia over LLVM, Rust over LLVM and Rust over
@@ -139,4 +139,4 @@ bodies of Nikaia's functions cost.
 | A claim about the input may be believed with `assume`, visibly, and is checked in the default build | [ADR-376](/docs/specification/adr/adr-376.html) |
 | A function declares what it keeps and changes, and a value does not change under a view | [ADR-views-3](/docs/specification/adr/adr-views-3.html) |
 | Performance is counted in instructions against tuned Rust and not timed | [measuring](/docs/measuring.html) |
-| Our own optimiser from the facts we have, and a fast backend behind it | [#1235](https://github.com/Nikaia-Language/Nikaia/issues/1235) |
+| Our own optimiser from the facts we have, and a fast backend behind it | [#1235](https://github.com/Nikaia-Foundation/Nikaia/issues/1235) |

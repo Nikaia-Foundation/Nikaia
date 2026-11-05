@@ -970,7 +970,7 @@ fn check_core_call_filled[H: CheckHost](mut state: CheckState, world: ref CheckW
     }
     if !needed {
         let note: String = "Brackets after a function's name are allowed while their uses are collected; here the arguments already say the type."
-        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1233", message: f"`{name}[…]` names a type the arguments of the call already say.", notes: [note], help: f"Leave the brackets out, `{name}(…)`, or add your use case to https://github.com/Nikaia-Language/Nikaia/issues/514.", labels: [] })
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1233", message: f"`{name}[…]` names a type the arguments of the call already say.", notes: [note], help: f"Leave the brackets out, `{name}(…)`, or add your use case to https://github.com/Nikaia-Foundation/Nikaia/issues/514.", labels: [] })
     }
     // The type the function walks decides the copy, as a value of it would.
     let walked: String = state.walks_fields.get(name)?.clone() ?? ""

@@ -21,7 +21,7 @@ under [performance with safety](../performance/).
 
 The compiler's own code written in Nikaia (`tools/*.nika`) is the first test
 bed. The goal that it be free of run-time errors is
-[#796](https://github.com/Nikaia-Language/Nikaia/issues/796), and the work towards it is [#1053](https://github.com/Nikaia-Language/Nikaia/issues/1053). A count taken
+[#796](https://github.com/Nikaia-Foundation/Nikaia/issues/796), and the work towards it is [#1053](https://github.com/Nikaia-Foundation/Nikaia/issues/1053). A count taken
 for #1053 file by file found 965 of 1,821 indexes proved (53 %) and 560 of
 1,381 arithmetic steps (41 %). The issue notes that the count misses sites in
 files the single-file check could not type, so the figure is a lower bound
@@ -70,7 +70,7 @@ cannot be used yet. How the parts fit together is drawn under
 <p class="rq-note">Linear integer arithmetic by Fourier-Motzkin elimination with case splits, the solver every later one is measured against. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D8 step 2)</p>
 </div>
 <div class="rq-comp">
-<div class="rq-comp-head"><span class="rq-comp-name">Loops as Horn clauses</span><span class="rq-stage rq-stage-growing">growing</span></div>
+<div class="rq-comp-head"><span class="rq-comp-name">Loops as Horn clauses</span><span class="rq-stage rq-stage-growing">partly built</span></div>
 <div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Loops as Horn clauses, about 40 % built, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 53%"></span></span><span class="rq-unknown" style="width: 25%"></span></div><span class="rq-pct">40 %</span></div>
 <p class="rq-note">Invariants by closed forms and intervals, each checked, for whole numbers so far. More strategies and outside proposals are decided. (<a href="/docs/specification/adr/adr-361.html">ADR-361</a>)</p>
 </div>
@@ -86,8 +86,8 @@ cannot be used yet. How the parts fit together is drawn under
 <p class="rq-note"><code>u32</code> variables, sparse rows, big numbers where a value outgrows 32 bits, and the one interface every theory sits behind. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D8 step 3, D10-D12)</p>
 </div>
 <div class="rq-comp">
-<div class="rq-comp-head"><span class="rq-comp-name">Fast paths</span><span class="rq-stage rq-stage-then">after that</span></div>
-<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Fast paths, about 0 % built, 20 % held back for what is not yet known"><span class="rq-known" style="width: 80%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 20%"></span></div><span class="rq-pct">0 %</span></div>
+<div class="rq-comp-head"><span class="rq-comp-name">Fast paths for simple claims</span><span class="rq-stage rq-stage-then">after that</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Fast paths for simple claims, about 0 % built, 20 % held back for what is not yet known"><span class="rq-known" style="width: 80%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 20%"></span></div><span class="rq-pct">0 %</span></div>
 <p class="rq-note">The compiler's own questions are tiny, mostly bounds on one variable or the difference of two. These answer them without the general search and without allocating. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D9, D12)</p>
 </div>
 <div class="rq-comp">
@@ -150,7 +150,7 @@ The question is where the ceiling of this lies on real code, and how small
 the set of additional means can be that closes the gap. One such means is
 decided. A named property such as `is_sorted(xs)` is proved by name and
 carried to callers ([ADR-381](/docs/specification/adr/adr-381.html), to be built in
-[#797](https://github.com/Nikaia-Language/Nikaia/issues/797)). The measure is the share of indexes and arithmetic steps
+[#797](https://github.com/Nikaia-Foundation/Nikaia/issues/797)). The measure is the share of indexes and arithmetic steps
 proved, on the compiler's own code first and then on the examples and
 packages, together with the number of lines written only to help a proof.
 
@@ -229,7 +229,7 @@ value otherwise. Equality with uninterpreted functions, built as an e-graph,
 and a theory of arrays carry exactly this. The procedure is decided
 ([ADR-270](/docs/specification/adr/adr-270.html) D13) and not yet built. Beyond it lie claims
 about every element, such as a sorted list or a partition, which need a rule
-over all elements ([#798](https://github.com/Nikaia-Language/Nikaia/issues/798), open for decision) and invariants over
+over all elements ([#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798), open for decision) and invariants over
 list contents that the compiler would have to find by itself. Finding such
 invariants without help is the hardest part of the question "nothing written
 for it", and the place where its limits are most likely to show.
@@ -252,7 +252,7 @@ The question is whether this stays true as the prover grows to the theories
 above, so that checking everything costs a build no more than a fraction of
 its time.
 
-### What can outside help add?
+### What can a language model add to the prover?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 5 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 7%"></span></span><span class="rq-unknown" style="width: 30%"></span></div></div>
@@ -265,15 +265,8 @@ them, and a proposal is used only after the compiler has checked it
 ([ADR-361](/docs/specification/adr/adr-361.html) D6). Much of Nikaia's own code is written with
 the help of such models.
 
-The interface is decided and not yet built. A proposer is a program named in
-the manifest, and only `nikaia prove --propose` starts it, never `build`,
-`run` or `test`. It reads one line of JSON per loop the build left open, with
-the problem in SMT-LIB, the loop's source and the names it reads, and answers
-with candidate invariants. What passes the check is written to
-`nikaia.proofs`, so the next build uses it without asking anyone, and a wrong
-proposal costs time and nothing else. Which model, provider or prompt is used
-lives in the proposer and not in the compiler, and the program's code leaves
-the machine only through that command and that entry.
+The interface is decided and not yet built; how it works is described under
+[how the prover is built](architecture.html#invariants-from-a-language-model-or-another-program).
 
 The question is how much a proposer adds to what
 the compiler finds alone, measured by what is proved with it and without it,
@@ -322,7 +315,7 @@ such properties as facts and proves them once, each program that uses it
 starts from proved pieces instead of proving them again. Part of this is
 decided. A named property such as `is_sorted(xs)` is carried from a promise
 to every caller ([ADR-381](/docs/specification/adr/adr-381.html)), and `sort()` is to promise it,
-with `binary_search` requiring it ([#798](https://github.com/Nikaia-Language/Nikaia/issues/798)). That the length stays the
+with `binary_search` requiring it ([#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798)). That the length stays the
 same is plain arithmetic for the prover. That the result is a permutation of
 the input needs a way to speak about what a list holds as a whole, which is
 not yet decided, and proving the sorting functions themselves against all
@@ -343,4 +336,4 @@ programs above it.
 | A function says what it keeps and changes, and a view of a value forbids changing it | [ADR-views-3](/docs/specification/adr/adr-views-3.html) |
 | The solver is written in Nikaia, untrusted, its proofs checked and committed | [ADR-270](/docs/specification/adr/adr-270.html) |
 | A strategy layer switches engines during a search, and effort is counted in work, not time | [ADR-270](/docs/specification/adr/adr-270.html) D14, D25, [ADR-306](/docs/specification/adr/adr-306.html) |
-| A library promises properties its callers use as facts | [ADR-381](/docs/specification/adr/adr-381.html), [#798](https://github.com/Nikaia-Language/Nikaia/issues/798) |
+| A library promises properties its callers use as facts | [ADR-381](/docs/specification/adr/adr-381.html), [#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798) |

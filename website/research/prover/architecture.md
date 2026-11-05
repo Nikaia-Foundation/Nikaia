@@ -111,7 +111,7 @@ arena of `u32` words with watch lists that hold a blocking literal (D16).
 The same parts, each with a bar for how far it is built, are under
 [what is being built](./#what-is-being-built).
 
-## Help from outside
+## Invariants from a language model or another program
 
 A solver inside the compiler is not the only place a proof can come from. An
 outside program, a language model among them, may propose a loop invariant,
@@ -131,10 +131,13 @@ and the compiler uses it only after checking it like one of its own
   nikaia.proofs     read by the next build, which calls no proposer
 ```
 
-The proposer is a child process, as language servers are, so what a provider,
-a model, a key or a prompt is stays out of the compiler. This is decided and
-not yet built, and what it adds is asked under
-[open questions about the prover](./#what-can-outside-help-add).
+Only `nikaia prove --propose` starts a proposer, never `build`, `run` or
+`test`, so the program's code leaves the machine only through that command
+and the proposer the manifest names. A wrong proposal costs time and nothing
+else. The proposer is a child process, as language servers are, so what a
+provider, a model, a key or a prompt is stays out of the compiler. This is
+decided and not yet built, and what it adds is asked under
+[open questions about the prover](./#what-can-a-language-model-add-to-the-prover).
 
 ## What the language has to offer the solver
 
@@ -143,16 +146,16 @@ language, with arenas of `u32`, flat loops over lists, and in-place changes
 to one field of the solver while another is read. A probe of the forms a
 CDCL(T) core and an e-graph need found most of them working and a few
 defects in how they are lowered, each filed with its probe. They are
-[#1206](https://github.com/Nikaia-Language/Nikaia/issues/1206) (an argument
+[#1206](https://github.com/Nikaia-Foundation/Nikaia/issues/1206) (an argument
 that reads the list whose element a call changes),
-[#1207](https://github.com/Nikaia-Language/Nikaia/issues/1207) (the value
+[#1207](https://github.com/Nikaia-Foundation/Nikaia/issues/1207) (the value
 `or_insert` hands back),
-[#1208](https://github.com/Nikaia-Language/Nikaia/issues/1208) (a part of
+[#1208](https://github.com/Nikaia-Foundation/Nikaia/issues/1208) (a part of
 `mut self` handed to a `keep` parameter),
-[#1209](https://github.com/Nikaia-Language/Nikaia/issues/1209) (a part of a
+[#1209](https://github.com/Nikaia-Foundation/Nikaia/issues/1209) (a part of a
 list handed to a function and changed there),
-[#907](https://github.com/Nikaia-Language/Nikaia/issues/907) (`contains`
+[#907](https://github.com/Nikaia-Foundation/Nikaia/issues/907) (`contains`
 with a computed argument) and
-[#591](https://github.com/Nikaia-Language/Nikaia/issues/591) (a declared
+[#591](https://github.com/Nikaia-Foundation/Nikaia/issues/591) (a declared
 struct as the key of a map). The work on the solver waits for these rather
 than writing around them.

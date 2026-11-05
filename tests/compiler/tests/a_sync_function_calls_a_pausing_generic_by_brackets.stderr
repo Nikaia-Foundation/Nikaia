@@ -5,7 +5,7 @@ warning[NK1233]: `g[…]` names a type the arguments of the call already say.
     |  ^^^^^^^^^^^^^^^^
     |
     = note: Brackets after a function's name are allowed while their uses are collected; here the arguments already say the type.
-    = help: Leave the brackets out, `g(…)`, or add your use case to https://github.com/Nikaia-Language/Nikaia/issues/514.
+    = help: Leave the brackets out, `g(…)`, or add your use case to https://github.com/Nikaia-Foundation/Nikaia/issues/514.
 error[NK2202]: `v` is `sync`, but it calls `g`, which can pause.
    --> tests/a_sync_function_calls_a_pausing_generic_by_brackets.nika:11:9
     |

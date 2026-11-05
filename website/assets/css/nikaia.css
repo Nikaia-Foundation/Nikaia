@@ -1093,46 +1093,6 @@ body {
 .home-code.markdown-body pre.diagnostic .d-help { color: #7ee787; font-weight: 700; }
 .home-code.markdown-body pre.diagnostic .d-gutter { color: #6e7b8f; }
 
-.compare {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
-}
-
-.compare-card {
-  padding: 24px;
-  border: 1px solid var(--nk-border);
-  border-radius: 12px;
-  background-color: var(--nk-bg);
-}
-
-.compare-card h3 {
-  margin: 0;
-  font-size: 19px;
-}
-
-.compare-card p {
-  margin: 0;
-  color: var(--nk-fg-muted);
-  line-height: 1.6;
-}
-
-.compare-card .compare-examples {
-  margin: 2px 0 12px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.compare-card-nikaia {
-  border-color: var(--nk-accent);
-  box-shadow: 0 0 0 1px var(--nk-accent), 0 12px 32px rgba(165, 124, 36, 0.12);
-}
-
-.compare-card-nikaia .compare-examples {
-  color: var(--nk-accent);
-}
-
 .features {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1230,6 +1190,45 @@ body {
   border-color: var(--nk-accent);
   box-shadow: 0 12px 28px rgba(12, 17, 25, 0.12);
 }
+
+/* Only the heading and "Read more" are links, so the text and the code of a
+   tile can be selected and copied, on a phone too. */
+.safe-tile h3 a { color: inherit; text-decoration: none; }
+.safe-tile h3 a:hover { color: var(--nk-accent); }
+a.safe-more { text-decoration: none; align-self: flex-start; }
+a.safe-more:hover { text-decoration: underline; }
+
+/* "Partly checked" opens to say why, split by cause: what is still being
+   built (amber, the language is not finished there) and what lies beyond
+   what a compiler can see (blue, the operating system's or the
+   environment's part, which no compiler checks). */
+.safe-why { align-self: flex-start; max-width: 100%; }
+.safe-why > summary { cursor: pointer; list-style: none; display: inline-block; }
+.safe-why > summary::-webkit-details-marker { display: none; }
+.safe-why > summary::after { content: " ▾"; }
+.safe-why[open] > summary::after { content: " ▴"; }
+.safe-why[open] { align-self: stretch; }
+.safe-why p {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background-color: var(--nk-surface);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--nk-fg-muted);
+}
+.why {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.why-todo { background: #f6e3b4; color: #6b4a00; }
+.why-limit { background: #d6e6f7; color: #123c66; }
+.safe-chip.safe-chip-part { border-color: #c9a227; color: #8a6a00; }
+.safe-chip.safe-chip-run { border-color: #c9a227; color: #8a6a00; }
 
 .safe-tile h3 {
   margin: 0;
@@ -1510,6 +1509,15 @@ body {
   line-height: 1.55;
 }
 
+.next-card p.fit-tag {
+  margin: 0 0 6px;
+  color: var(--nk-accent);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .button, .feature, .next-card { transition: none; }
   .button:hover, .feature:hover, .next-card:hover { transform: none; }
@@ -1534,7 +1542,6 @@ body {
     margin: 0 auto;
   }
 
-  .compare,
   .features,
   .features-four,
   .next {
@@ -2005,3 +2012,9 @@ details.study-card {
    sidebar stands beside the page. */
 .site-nav-title { display: none; margin: 0 0 4px; font-weight: 600; color: var(--nk-fg); }
 @media (min-width: 900px) { .site-nav-title { display: block; } }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="sepia"]) .safe-chip-part,
+  :root:not([data-theme="light"]):not([data-theme="sepia"]) .safe-chip-run { border-color: #c9a227; color: #e3c15a; }
+}
+:root[data-theme="dark"] .safe-chip-part,
+:root[data-theme="dark"] .safe-chip-run { border-color: #c9a227; color: #e3c15a; }

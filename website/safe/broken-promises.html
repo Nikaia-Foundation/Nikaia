@@ -1,6 +1,6 @@
 ---
 layout: home
-title: Broken promises
+title: Calls that break a function's contract
 description: >-
   A part of the program is called outside what it was told to expect.
 ---
@@ -13,7 +13,7 @@ description: >-
 <section class="home-section" id="check">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#promises" | relative_url }}">Very safe</a></p>
-    <h1 class="home-heading">Broken promises</h1>
+    <h1 class="home-heading">Calls that break a function's contract</h1>
     <div class="limit-class">
         <dl class="limit-steps">
           <dt>The problem</dt>
@@ -61,7 +61,7 @@ assert(n == 41)     // proved: the guard above handled the other case
       <h2>Go deeper</h2>
       <ul><li><a href="{{ "/guide/contracts.html" | relative_url }}">Guide: an assert the compiler checks</a></li><li><a href="{{ "/docs/specification/adr/adr-269.html" | relative_url }}">ADR-269: how a claim becomes a contract</a></li><li><a href="{{ "/docs/specification/adr/adr-270.html" | relative_url }}">ADR-270: the prover</a></li><li><a href="{{ "/docs/specification/adr/adr-361.html" | relative_url }}">ADR-361: loops and their invariants</a></li></ul>
     </div>
-    <p class="safe-others">More under Very safe: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a></p>
+    <p class="safe-others">More under Very safe: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a></p>
   </div>
 </section>
 
@@ -164,7 +164,7 @@ fn main() {
   <div class="home-inner home-split">
     <div class="home-split-text">
       <p class="home-eyebrow">Very safe · Loops</p>
-      <h2>A loop needs no invariant.</h2>
+      <h2>Loops are proved without written invariants</h2>
       <p>
         The <code>assert</code> after the loop in <code>steps</code> reads <code>total</code>,
         which the loop changes. Usually a proof tool wants you to write what holds on every turn.
@@ -227,7 +227,7 @@ fn main() {
   <div class="home-inner home-split">
     <div class="home-split-text">
       <p class="home-eyebrow">Very safe · Data from outside</p>
-      <h2>A guard, not an <code>assert</code>.</h2>
+      <h2>Checking outside data with a guard</h2>
       <p>
         What another program prints is not up to your program. If it is not what you expected,
         that is not a bug in your code. It is a case your code has to handle.
@@ -285,7 +285,7 @@ commit 7e84ae5c523c8b9937bb4faacc6d029bf49d4f75</code></pre>
   <div class="home-inner home-split">
     <div class="home-split-text">
       <p class="home-eyebrow">Very safe · The report</p>
-      <h2>Ask what was proved.</h2>
+      <h2>The report of what was proved</h2>
       <p>
         <code>nikaia build --asserts</code> lists every <code>assert</code> and what became of
         it. <em>Proved</em> means no check is left in the program. A <em>precondition</em> is

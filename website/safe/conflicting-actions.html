@@ -1,6 +1,6 @@
 ---
 layout: home
-title: Conflicting actions
+title: Two tasks changing the same value
 description: >-
   Two tasks change the same value at once. One update overwrites the other.
 ---
@@ -13,7 +13,7 @@ description: >-
 <section class="home-section" id="check">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#conflicts" | relative_url }}">Very safe</a></p>
-    <h1 class="home-heading">Conflicting actions</h1>
+    <h1 class="home-heading">Two tasks changing the same value</h1>
     <div class="limit-class">
         <h3>Two tasks that change the same balance</h3>
         <p>Two tasks update the same account balance. When they run at the same time, one update can overwrite the other, and money appears to disappear. Nikaia looks at what each task touches when the program is built. Two tasks that change the same value are refused, and so are two tasks that both write to standard output; standard output and standard error count as one destination, because they often end up in the same place. The message names what the two share. Two tasks that only read the same value are accepted. A lambda of <code>par_iter</code>, which runs on several cores at once, is held to the same rule: one that changes a name outside it is refused.</p>
@@ -34,7 +34,7 @@ async {
       <h2>Go deeper</h2>
       <ul><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II: running at once</a></li><li><a href="{{ "/docs/specification/10-nikaia-light.html#812-running-work-beside-the-code-after-it-async" | relative_url }}">Specification, Part I 8.1.2: running work beside the code after it</a></li><li><a href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5: tasks and <code>async</code></a></li><li><a href="{{ "/docs/specification/30-nikaia-tooling.html" | relative_url }}">Specification, Part III: what a refused crossing looks like</a></li></ul>
     </div>
-    <p class="safe-others">More under Very safe: <a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
+    <p class="safe-others">More under Very safe: <a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Calls that break a function's contract</a></p>
   </div>
 </section>
 
