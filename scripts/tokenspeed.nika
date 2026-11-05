@@ -8,10 +8,14 @@
 //
 //     nikaia run scripts/tokenspeed.nika -- AGENTS_DIR [SINCE_COMMIT]   the two tables
 //     nikaia run scripts/tokenspeed.nika -- --short DIR|FILE            one Runs row
+//     nikaia run scripts/tokenspeed.nika -- --usage FILE                TOKENS CALLS READ WRITE OUT
 //
 // AGENTS_DIR is a session's `subagents` directory under ~/.claude/projects;
 // FILE is one transcript (a headless run's `<session_id>.jsonl`). With a DIR,
 // `--short` prints the row of the agent that ended last.
+// `--usage` sums one transcript over its API calls (a call written as several
+// lines counts once): TOKENS = input + cache read + cache write + output,
+// CALLS = API calls, READ / WRITE = cache read / cache write, OUT = output.
 
 use std::cli
 use std::fs
@@ -26,6 +30,8 @@ struct TsAgent {
     end: i64,
     turns: i64,
     ctx: i64,
+    read: i64,
+    write: i64,
     late300: i64,
     late150: i64,
     out: i64,
@@ -253,7 +259,13 @@ fn ts_agent(path: String, name: String, root: String) -> TsAgent throws {
     let mut stamps: Vec[i64] = []
     let mut turns = 0
     let mut ctx = 0
+    let mut read = 0
+    let mut write = 0
     let mut out = 0
+    // One API call is written as one line per content block, each with the
+    // same message id and usage: a call counts once, with its last line.
+    let mut last_id: String = ""
+    let mut last: Vec[i64] = [0, 0, 0, 0]
     let mut late300 = 0
     let mut late150 = 0
     let mut first: String = ""
@@ -268,15 +280,32 @@ fn ts_agent(path: String, name: String, root: String) -> TsAgent throws {
             first = ts_value(line.clone(), "\"role\":\"user\",\"content\":\"")
         }
         if !line.contains("\"role\":\"assistant\"") { continue }
-        turns += 1
+        let id = ts_value(line.clone(), "\"id\":\"msg_")
+        let again = id != "" && id == last_id
+        if again {
+            ctx -= last[0] + last[1] + last[2]
+            read -= last[1]
+            write -= last[2]
+            out -= last[3]
+            let t0 = last[0] + last[1] + last[2]
+            if t0 > 300000 { late300 -= t0 }
+            if t0 > 150000 { late150 -= t0 }
+        } else {
+            turns += 1
+        }
+        last_id = id
+        last = [0, 0, 0, 0]
         let at = line.find("\"usage\":{"; from: 0) ?? -1
         if at >= 0 {
             let tail = line.bytes[at..<line.len()].text()
-            let t = ts_int(tail.clone(), "\"input_tokens\":") + ts_int(tail.clone(), "\"cache_read_input_tokens\":") + ts_int(tail.clone(), "\"cache_creation_input_tokens\":")
+            last = [ts_int(tail.clone(), "\"input_tokens\":"), ts_int(tail.clone(), "\"cache_read_input_tokens\":"), ts_int(tail.clone(), "\"cache_creation_input_tokens\":"), ts_int(tail, "\"output_tokens\":")]
+            let t = last[0] + last[1] + last[2]
             ctx += t
+            read += last[1]
+            write += last[2]
             if t > 300000 { late300 += t }
             if t > 150000 { late150 += t }
-            out += ts_int(tail, "\"output_tokens\":")
+            out += last[3]
         }
         let chunks = line.split("\"type\":\"tool_use\"").collect()
         for c in 1..<chunks.len() {
@@ -318,6 +347,8 @@ fn ts_agent(path: String, name: String, root: String) -> TsAgent throws {
         end: hi,
         turns: turns,
         ctx: ctx,
+        read: read,
+        write: write,
         late300: late300,
         late150: late150,
         out: out,
@@ -475,12 +506,17 @@ fn main() throws {
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
     if args.len() < 2 {
-        println("usage: nikaia run scripts/tokenspeed.nika -- AGENTS_DIR [SINCE_COMMIT] | --short DIR|FILE")
+        println("usage: nikaia run scripts/tokenspeed.nika -- AGENTS_DIR [SINCE_COMMIT] | --short DIR|FILE | --usage FILE")
         process::exit(2)
     }
     let root = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
     if args[1] == "--short" && args.len() > 2 {
         ts_short(args[2].clone(), root)
+        return
+    }
+    if args[1] == "--usage" && args.len() > 2 {
+        let a = ts_agent(args[2].clone(), "", root)
+        println(f"{a.ctx + a.out} {a.turns} {a.read} {a.write} {a.out}")
         return
     }
     let since = if args.len() > 2 { args[2].clone() } else { "d927f6e~1" }

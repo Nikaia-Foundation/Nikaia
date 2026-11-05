@@ -16,7 +16,8 @@
 // `Gate:` is present and does not start with `green`, or `Found:`/`Deviation:`
 // is not `none` prints `CUT <brief>: <line>`; all done prints `BATCH DONE` and the count of
 // `Changelog:` lines that are not `none`. `--tokens` appends
-// `BRIEF TOKENS CALLS` to `DIR/tokens.txt`.
+// `BRIEF TOKENS CALLS [READ WRITE OUT]` to `DIR/tokens.txt` (the columns of
+// `tokenspeed.nika --usage`; older rows have only the first three).
 
 use std::cli
 use std::fs
@@ -97,7 +98,7 @@ fn main() throws {
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
     if args.len() < 2 {
-        println("usage: nikaia run scripts/batch.nika -- DIR [--tokens BRIEF TOKENS CALLS]")
+        println("usage: nikaia run scripts/batch.nika -- DIR [--tokens BRIEF TOKENS CALLS [READ WRITE OUT]]")
         process::exit(2)
     }
     let dir = args[1].clone()
@@ -105,8 +106,10 @@ fn main() throws {
         let file = f"{dir}/tokens.txt"
         let mut old: String = ""
         if fs::exists(file.clone(), fs::Root::Anywhere) { old = fs::read_to_string(file.clone(), fs::Root::Anywhere) }
-        fs::write(file, fs::Root::Anywhere, old + f"{args[3]} {args[4]} {args[5]}\n")
-        println(f"tokens: {args[3]} {args[4]} {args[5]}")
+        let mut row = args[3].clone()
+        for i in 4..<args.len() { row = row + " " + args[i].clone() }
+        fs::write(file, fs::Root::Anywhere, old + row.clone() + "\n")
+        println(f"tokens: {row}")
         return
     }
     println(batch_run(dir))

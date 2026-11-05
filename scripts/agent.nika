@@ -7,9 +7,10 @@
 // filled in) on one line; `batch.nika` reads it for its `NEXT` line.
 //
 // Reads BRIEF's frontmatter (agent, model, max_turns, budget_usd, effort), runs
-// `claude -p` within 150 minutes (larger steps, owner 2026-10-28), writes BRIEF.run.json, appends the cost to
-// DIR/tokens.txt (through `batch.nika --tokens`) and DIR/cost.txt, and prints
-// `done <sha8> report <path> cost <usd> turns <n>`. A failed run writes
+// `claude -p` within 150 minutes (larger steps, owner 2026-10-28), writes BRIEF.run.json, appends the
+// session's token counts, summed over its transcript (`tokenspeed.nika --usage`),
+// to DIR/tokens.txt (through `batch.nika --tokens`) and the cost to DIR/cost.txt, and prints
+// `done <sha8> report <path> cost <usd> turns <api calls>`. A failed run writes
 // DIR/ESCALATE (one line) and exits 2. A report with `Gate: red ...` writes
 // DIR/RED (empty again after a green one); a second red in a row escalates. After
 // the gate step it appends the run's row (`tokenspeed.nika --short`, read from the
@@ -452,9 +453,20 @@ fn main() throws {
     let json = out.stdout.clone()
     fs::write(f"{abs}.run.json", fs::Root::Anywhere, json.clone())
     let cost = agent_json(json.clone(), "total_cost_usd")
-    let turns = agent_int(json.clone(), "num_turns")
-    let tokens = agent_int(json.clone(), "input_tokens") + agent_int(json.clone(), "output_tokens") + agent_int(json.clone(), "cache_creation_input_tokens") + agent_int(json.clone(), "cache_read_input_tokens")
     let session = agent_json(json.clone(), "session_id")
+    let exe = agent_exe()
+    // The JSON's `usage` and `num_turns` cover only the last turn (a run woken
+    // by a background task has several): the transcript has every API call.
+    let transcript = agent_transcript(session.clone())
+    let mut usage: Vec[String] = []
+    if exe != "" && session != "" && fs::exists(transcript.clone(), fs::Root::Anywhere) {
+        for w in process::run(exe.clone(), ["run", "scripts/tokenspeed.nika", "--", "--usage", transcript.clone()]).stdout.trim().split(" ") { usage.push(w.clone()) }
+    }
+    if usage.len() != 5 {
+        let t = agent_int(json.clone(), "input_tokens") + agent_int(json.clone(), "output_tokens") + agent_int(json.clone(), "cache_creation_input_tokens") + agent_int(json.clone(), "cache_read_input_tokens")
+        usage = [f"{t}", f"{agent_int(json.clone(), "num_turns")}", f"{agent_int(json.clone(), "cache_read_input_tokens")}", f"{agent_int(json.clone(), "cache_creation_input_tokens")}", f"{agent_int(json.clone(), "output_tokens")}"]
+    }
+    let turns = usage[1].clone()
     let reason = agent_json(json.clone(), "terminal_reason")
     let stem = (abs.strip_suffix(".md") ?? "").clone()
     let report = agent_report(abs.clone())
@@ -465,9 +477,10 @@ fn main() throws {
         let old_cost = agent_read(f"{dir}/cost.txt")
         fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, old_cost + f"{today} {cost}\n")
     }
-    let exe = agent_exe()
-    if exe != "" {
-        process::run(exe, ["run", "scripts/batch.nika", "--", dir.clone(), "--tokens", abs.clone(), f"{tokens}", f"{turns}"])
+    // A run cut off by the time limit writes no row: its resume reads the same
+    // transcript and writes the whole session's.
+    if exe != "" && !out.timed_out {
+        process::run(exe.clone(), ["run", "scripts/batch.nika", "--", dir.clone(), "--tokens", abs.clone(), usage[0].clone(), usage[1].clone(), usage[2].clone(), usage[3].clone(), usage[4].clone()])
     }
     // The debrief: the same session, resumed while its cache is warm, answers
     // what held it up, before any escalation stops this script.
@@ -498,7 +511,6 @@ fn main() throws {
     }
     // The run's row for the Runs table of docs/tokenspeed.md (#858), once per agent
     // id. This only writes the file; the supervisor's commit takes it.
-    let transcript = process::run("sh", ["-c", f"echo $HOME/.claude/projects/$(pwd | tr / -)/{session}.jsonl"]).stdout.trim().clone()
     if exe != "" && fs::exists(transcript.clone(), fs::Root::Anywhere) && fs::exists("docs/tokenspeed.md", fs::Root::Anywhere) {
         let row = process::run(exe, ["run", "scripts/tokenspeed.nika", "--", "--short", transcript.clone()]).stdout.trim().clone()
         if row.starts_with("| ") {

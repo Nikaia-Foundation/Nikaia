@@ -1,21 +1,21 @@
 /home/user/Nikaia/docs/briefs/views/v1-views3-spec.md 6462617 91
 /home/user/Nikaia/docs/briefs/views/v1-views3-spec.md 1269342 27
-/home/user/Nikaia/docs/briefs/views/v1b-views3-arrays.md 1838718 42
-/home/user/Nikaia/docs/briefs/views/v2-inferred-views.md 2043064 40
-/home/user/Nikaia/docs/briefs/views/v3-keep-marks.md 594774 6
-/home/user/Nikaia/docs/briefs/views/v4-result-from.md 638673 12
-/home/user/Nikaia/docs/briefs/views/v5-view-fields-anchored.md 2441127 44
+/home/user/Nikaia/docs/briefs/views/v1b-views3-arrays.md 1903366 42 1831791 54406 17083
+/home/user/Nikaia/docs/briefs/views/v2-inferred-views.md 2123606 40 2030927 70540 22059
+/home/user/Nikaia/docs/briefs/views/v3-keep-marks.md 9359167 135 9092147 199264 67488
+/home/user/Nikaia/docs/briefs/views/v4-result-from.md 6672109 104 6463730 160749 47422
+/home/user/Nikaia/docs/briefs/views/v5-view-fields-anchored.md 2536662 43 2429528 85383 21663
 /home/user/Nikaia/docs/briefs/views/qa/qa-task.md 109329 8
-/home/user/Nikaia/docs/briefs/views/v6-from-without-body.md 1024377 10
-/home/user/Nikaia/docs/briefs/views/v7-lowering-lifetimes.md 0 1
-/home/user/Nikaia/docs/briefs/views/v8-finish-v7.md 567570 6
-/home/user/Nikaia/docs/briefs/views/v9-ref-migration.md 5780099 91
-/home/user/Nikaia/docs/briefs/views/v9b-commit-migration-tool.md 673870 22
-/home/user/Nikaia/docs/briefs/views/v10-self-lent.md 5295528 74
-/home/user/Nikaia/docs/briefs/views/v11-keep-cross-file.md 1401326 21
+/home/user/Nikaia/docs/briefs/views/v6-from-without-body.md 5665610 84 5531842 96662 36938
+/home/user/Nikaia/docs/briefs/views/v7-lowering-lifetimes.md 4708271 71 4571990 101706 34435
+/home/user/Nikaia/docs/briefs/views/v8-finish-v7.md 5103730 84 4988223 87384 27953
+/home/user/Nikaia/docs/briefs/views/v9-ref-migration.md 5854047 91 5623968 171310 58587
+/home/user/Nikaia/docs/briefs/views/v9b-commit-migration-tool.md 719517 21 675474 35431 8568
+/home/user/Nikaia/docs/briefs/views/v10-self-lent.md 5409832 73 5266922 103866 38896
+/home/user/Nikaia/docs/briefs/views/v11-keep-cross-file.md 9548922 143 9317433 172715 58488
 /home/user/Nikaia/docs/briefs/views/qa/qa-task.md 617187 22
-/home/user/Nikaia/docs/briefs/views/v12-keep-view-copy.md 665985 12
-/home/user/Nikaia/docs/briefs/views/v13-view-result.md 1939514 41
-/home/user/Nikaia/docs/briefs/views/v14-clone-not-keep.md 1760016 47
-/home/user/Nikaia/docs/briefs/views/v15-bound-self.md 1481754 38
-/home/user/Nikaia/docs/briefs/views/v16-clone-trait.md 671580 7
+/home/user/Nikaia/docs/briefs/views/v12-keep-view-copy.md 5363424 73 5195917 138584 28775
+/home/user/Nikaia/docs/briefs/views/v13-view-result.md 5630688 92 5444842 141097 44565
+/home/user/Nikaia/docs/briefs/views/v14-clone-not-keep.md 1822389 45 1753739 52121 16439
+/home/user/Nikaia/docs/briefs/views/v15-bound-self.md 1540432 39 1479917 48443 11992
+/home/user/Nikaia/docs/briefs/views/v16-clone-trait.md 4604791 68 4478749 98820 27084
