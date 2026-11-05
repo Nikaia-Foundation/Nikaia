@@ -1,4 +1,3 @@
-v19-migrate-tool-tests-self.md
 v18a-method-param-lent.md
 v18b-matched-lent-param.md
 v20-migrate-rest.md

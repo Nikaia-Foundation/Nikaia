@@ -124,3 +124,5 @@ Fields of `docs/architect.md`, *Briefs and reports*: `Result: done|noop|partial|
 Attribution:
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
+
+**Note (supervisor, after v19):** when the rule for a `match` over a plain parameter lands, re-bless `tests/compiler/tests/migrate_views3_reads_package_tests_with_the_package.stdout`: its five `show(keep v: json::Value)` lines go.
