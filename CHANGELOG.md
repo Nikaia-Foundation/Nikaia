@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1346] — 2026-11-05
+
+**async(within: d) on the value form, async { }, async(detached) and async(handle) (ADR-async-5 D16); async(handle) gives a task::ChildHandle bound to its group, with join, cancel, a fallback and NK2122 (8.1.2, D11); task::ChildHandle takes join(within:, on_timeout:) as TaskHandle does (Part I 8.2, ADR-async-5 D17); A live child handle dropped unjoined is waited for at its block's end; checker: an integer is never a `time::Duration` (or any other `std` type) (#1246)**
+- async(within: d) on the value form, async { }, async(detached) and async(handle): the deadline counts from the form's start, on running out the task is cancelled and ends with task::TimedOut, for which a fallback stands in (ADR-async-5 D16).
+- `async(handle) fn { … }` gives a `task::ChildHandle[T]` with `join()` and `cancel()`. A live handle is waited for at its group's end, and a handle that leaves its group is NK2122.
+- `join(within:, on_timeout:)` works on a `task::ChildHandle` as on a `TaskHandle`: on time-out the task keeps running and the handle stays live, or with `task::OnTimeout::Cancel` the task is cancelled.
+- A live `ChildHandle` dropped unjoined is waited for at the end of its block, so a task outliving a `join(within:)` time-out runs to its end and its failure arrives as an unread one (Part I 8.2)
+- The checker refuses an integer where a `time::Duration` (or another `std` type) is expected, NK1102 with the help `20.seconds()` / `20.millis()`; it reached rustc before (#1246).
+
 ## [0.0.1345] — 2026-11-04
 
 **views: a bare `self` is lent, and only `keep self` consumes the object; migrate: `nikaia migrate views-3` drops `ref` and writes `keep` from the ledger (ADR-views-3 D4)**
