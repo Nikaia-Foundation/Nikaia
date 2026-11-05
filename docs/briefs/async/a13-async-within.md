@@ -17,6 +17,29 @@ Surface today: the fallback `catch` after `let x = async e` and after `async(det
 
 **Not yours:** `async(handle)` and `ChildHandle`'s own API (a12; if a12 has committed it, the deadline goes there too), `limit:`, `admission:`, `select`, views.
 
+## An earlier run (read first)
+
+A first run ended before any test or commit. Its uncommitted edits are in
+`docs/briefs/async/a13-async-within.partial.patch` (129 files). Read it as a
+map, apply nothing blind: check each hunk against the current tree.
+
+What that run found:
+
+* **Locations.** The emitter entry points are `emit_async_task`,
+  `emit_async_group`, `emit_flow_task`, `emit_core_spawn_fallback` and
+  `emit_core_try_catch`. Lower the a11 tests with the old binary to see the
+  Rust each form writes (paused, plain, group, detached, fallback).
+* **The throws walk** is `throws.nika` (`thrown_in`, `thrown_in_blocks`);
+  `caught` is what lets a fallback stand in.
+* **A Duration's type text** is `time::Duration`.
+* **The detached task with a fallback** is the hard case: its fallback is a
+  labelled-block `catch` inside the task, and `break 'label` cannot cross an
+  `async` block. The run added a walk field (`async_bound`) so the guarded
+  block itself becomes the future the deadline bounds.
+* **A new AST field** touches patterns in about 60 files. Run `cargo check`
+  on the parser before the first `lower-std` cycle; a typed alternation in
+  `async_built_options` failed the grammar only late.
+
 ## To build
 1. **D16 on the value form and `async { }`**: `async(within: d) e` and `async(within: d) { … }`: `d` counts from the form's start; on running out the task is cancelled as `h.cancel()` cancels it and ends with `task::TimedOut`, arriving where D16 says (with a fallback, the fallback stands in). Tests `tests/compiler/tests/async_within_*`: the value form timing out (its fallback stands in), the value form finishing in time, `async { }` timing out. Replace `async_parse_within_is_not_built_yet`. Commit `Part of #986`.
 2. **D16 on the handle forms built today**: `async(detached, within: d) fn { … }` (and `async(handle, within: d)` if a12's handle is committed): a handle joined after its deadline yields `task::TimedOut`; with a fallback, the fallback's value. Tests `async_within_detached_*`. Commit `Part of #986`.
