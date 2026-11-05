@@ -1,0 +1,44 @@
+// A `String?` a function only reads is lent as the option of a view (#1256):
+// the call hands a literal, a local `String?` and a lent one on, and a name
+// bound from `?? return` reads a map.
+use std::collections
+
+fn is_set(t: String?) -> bool {
+    return t != null
+}
+
+fn shown(t: String?) -> String {
+    return match t {
+        null => "none",
+        else => "some",
+    }
+}
+
+fn handed_on(t: String?) -> bool {
+    return is_set(t)
+}
+
+fn count_of(m: ref collections::HashMap[String, i64], s: ref String?) -> i64 {
+    let n = s ?? return 0
+    return m[n] ?? 0
+}
+
+fn count_lent(m: ref collections::HashMap[String, i64], s: String?) -> i64 {
+    if s == null {
+        return -1
+    }
+    return count_of(m, s)
+}
+
+fn main() {
+    println(f"{is_set("lit")} {shown("lit")} {handed_on("lit")}")
+    let local: String? = "x"
+    println(f"{is_set(local)} {shown(local)} {handed_on(local)}")
+    let none: String? = null
+    println(f"{is_set(none)} {shown(none)} {handed_on(none)}")
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m["a"] = 3
+    let key: String? = "a"
+    println(f"{count_lent(m, key)} {count_lent(m, "b")} {count_lent(m, none)}")
+    println(f"{local ?? ""}")
+}

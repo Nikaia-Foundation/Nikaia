@@ -1,0 +1,39 @@
+// A `Zone?` a function only reads is lent as `Option<&Zone>` (#1256): the
+// call hands a struct, a local option and `null`, and the value stays the
+// caller's.
+struct Zone {
+    name: String,
+}
+
+fn named(z: Zone?) -> bool {
+    return z != null
+}
+
+fn label(z: Zone?) -> String {
+    return match z {
+        null => "none",
+        else => "zone",
+    }
+}
+
+fn handed_on(z: Zone?) -> String {
+    if named(z) {
+        return label(z)
+    }
+    return "-"
+}
+
+fn through(z: ref Zone?) -> String {
+    return label(z)
+}
+
+fn main() {
+    let z = Zone { name: "a" }
+    println(f"{named(z)} {label(z)} {handed_on(z)}")
+    let o: Zone? = Zone { name: "b" }
+    println(f"{named(o)} {label(o)} {handed_on(o)}")
+    let none: Zone? = null
+    println(f"{named(none)} {label(none)} {handed_on(none)}")
+    println(f"{through(z)} {through(o)} {through(none)}")
+    println(f"{z.name} {o?.name ?? ""}")
+}

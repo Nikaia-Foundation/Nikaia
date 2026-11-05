@@ -177,7 +177,8 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         let at = argument.at;
         let given_here: Option<&Expr> = argument.given;
         let name = nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).0.to_string();
-        let want = nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1.clone();
+        let declared = nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1.clone();
+        let mut want = declared.clone();
         let mut found_here = argument.found.clone();
         if is_a_view_of_a_string(&found_here) { found_here = text_view.clone(); }
         if given_here.is_some() {
@@ -214,6 +215,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         let text_method: String = nikaia_std::index::or(key.strip_prefix("str::"), || "").to_string();
         lent = lent || text_method != "" && check_core_method_pattern_at(&text_method) == at;
         let kept = !lent;
+        if own && lent && check_arguments_plain_option(&want) { want = view_of_type(&want); }
         if kept && !want.is_a_view() && !nikaia_std::list::contains(&signature.mutable, &name) && !state.foreign_names.contains(written) && given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             state.hands_over(world, value, &found_here, &format!("passed to `{}`, which keeps it", written), span);
@@ -346,9 +348,23 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             at_span = check_span_at(world, value, span);
         }
-        state.findings.push(check_refusal("NK1102", &at_span, format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, want.text(), found_here.text()), notes, Some(help)));
+        state.findings.push(check_refusal("NK1102", &at_span, format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, declared.text(), found_here.text()), notes, Some(help)));
     }
     signature.result_or_unit()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_arguments_plain_option(ty: &Ty) -> bool {
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { view, .. } => { let view = *view; !view },
+            Ty::Var { view, .. } => { let view = *view; !view },
+            Ty::Tuple(_) => true,
+            _ => false,
+        } },
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

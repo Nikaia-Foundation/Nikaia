@@ -593,12 +593,7 @@ fn defaults_known_from<R>(outer: Option<&crate::contracts::Ledger>, read: impl F
 pub(crate) fn known_default(package: Option<&str>, key: &str, at: usize) -> Option<String> {
     KNOWN.with(|held| {
         held.borrow().as_ref().and_then(|ledger| {
-            nikaia_std::tools::build_eval::bt_known_default(
-                ledger,
-                &package.map(str::to_string),
-                key,
-                at as i64,
-            )
+            nikaia_std::tools::build_eval::bt_known_default(ledger, package, key, at as i64)
         })
     })
 }

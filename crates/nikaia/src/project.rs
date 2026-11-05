@@ -206,12 +206,8 @@ impl Settings {
     /// ([ADR-380](../../docs/specification/adr/adr-380.md) D2), the same way.
     pub fn refutations(&mut self, refuted: Option<&str>, unproved: Option<&str>) -> Result<()> {
         (self.words.refuted_claims, self.words.unproved_claims) =
-            project_settings::project_settings_refutations(
-                &self.words,
-                &refuted.map(str::to_string),
-                &unproved.map(str::to_string),
-            )
-            .map_err(refusal)?;
+            project_settings::project_settings_refutations(&self.words, refuted, unproved)
+                .map_err(refusal)?;
         Ok(())
     }
 
@@ -1799,12 +1795,12 @@ impl Project {
     /// build output: it is regenerated from `nikaia.toml` on every build and
     /// editing it would be editing something the next build overwrites.
     pub fn build_dir(&self) -> PathBuf {
-        project_settings::project_settings_build_dir(&self.root, &self.variant)
+        project_settings::project_settings_build_dir(&self.root, self.variant.as_deref())
     }
 
     /// `target/nikaia/`, or a directory under it of the [`Self::variant`]'s.
     fn own_dir(&self) -> PathBuf {
-        project_settings::project_settings_own_dir(&self.root, &self.variant)
+        project_settings::project_settings_own_dir(&self.root, self.variant.as_deref())
     }
 
     /// Where the emitted Rust goes - **outside** [`Self::build_dir`], and that
@@ -1813,7 +1809,7 @@ impl Project {
     /// the package dirty the moment it was written, and every build would
     /// recompile.
     pub fn gen_dir(&self) -> PathBuf {
-        project_settings::project_settings_gen_dir(&self.root, &self.variant)
+        project_settings::project_settings_gen_dir(&self.root, self.variant.as_deref())
     }
 
     /// **The switches, as a file Cargo can see** (ADR-021 D5).
@@ -1835,7 +1831,7 @@ impl Project {
     /// reason: a file *inside* the path package would make it dirty on every
     /// build rather than on a changed one.
     pub fn switches_path(&self) -> PathBuf {
-        project_settings::project_settings_switches_path(&self.root, &self.variant)
+        project_settings::project_settings_switches_path(&self.root, self.variant.as_deref())
     }
 
     /// The ledger, in the project root (Part III 13.5).
@@ -2234,7 +2230,7 @@ impl Project {
     fn program_name(&self, package: &str) -> String {
         project_settings::project_settings_program_name(
             &self.root,
-            &self.variant,
+            self.variant.as_deref(),
             package.to_string(),
             &SettingsHost,
         )
@@ -2243,15 +2239,24 @@ impl Project {
     /// What sets this project's program apart in the shared directory:
     /// `project_settings_root_tag`.
     fn root_tag(&self) -> String {
-        project_settings::project_settings_root_tag(&self.root, &self.variant, &SettingsHost)
+        project_settings::project_settings_root_tag(
+            &self.root,
+            self.variant.as_deref(),
+            &SettingsHost,
+        )
     }
 
     /// The program a build in the shared directory produced, under the
     /// project's own name: `project_settings_own_copy`, its refusal as an
     /// error.
     fn own_copy(&self, built: &Path) -> Result<PathBuf> {
-        project_settings::project_settings_own_copy(&self.root, &self.variant, built, &SettingsHost)
-            .map_err(refusal)
+        project_settings::project_settings_own_copy(
+            &self.root,
+            self.variant.as_deref(),
+            built,
+            &SettingsHost,
+        )
+        .map_err(refusal)
     }
 }
 
@@ -3319,11 +3324,7 @@ mod tests {
     #[test]
     fn cpu_comes_after_the_users_rustflags() {
         let e = |encoded: Option<&str>, plain: Option<&str>, cpu: &str| {
-            nikaia_std::tools::project_settings::encoded_with_cpu(
-                &encoded.map(String::from),
-                &plain.map(String::from),
-                cpu,
-            )
+            nikaia_std::tools::project_settings::encoded_with_cpu(encoded, plain, cpu)
         };
         assert_eq!(e(None, None, "x86-64-v3"), None);
         assert_eq!(

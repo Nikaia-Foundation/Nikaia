@@ -242,7 +242,8 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         let at = argument.at
         let given_here: ref Expr? = argument.given
         let name = wanted[at].0.clone()
-        let want = wanted[at].1.clone()
+        let declared = wanted[at].1.clone()
+        let mut want = declared.clone()
         // **A view of a `String` is a view of text here** (ADR-233 D4): an
         // element of `words.iter()` is one, and the language below lends it
         // as the `&str` a parameter takes at the call, by itself.
@@ -303,6 +304,11 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         let text_method: String = (key.strip_prefix("str::") ?? "").clone()
         lent = lent || (text_method != "" && check_core_method_pattern_at(text_method) == at)
         let kept = !lent
+        // **A `T?` this program's function only reads is a `ref T?`** (#1256):
+        // the callee lowers it the option of a view, as its frame reads it.
+        if own && lent && check_arguments_plain_option(want) {
+            want = view_of_type(want)
+        }
         // **What the callee keeps, it is given** (ADR-293 D29): no `&` is
         // written for this position, so a name here moves. **Not across the C
         // boundary** (ADR-302 D5).
@@ -533,9 +539,24 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             let value = given_here ?? continue
             at_span = check_span_at(world, value, span)
         }
-        state.findings.push(check_refusal("NK1102", at_span, f"`{key}` expects `{name}` to be `{want.text()}`, but you're passing `{found_here.text()}`.", notes, help))
+        state.findings.push(check_refusal("NK1102", at_span, f"`{key}` expects `{name}` to be `{declared.text()}`, but you're passing `{found_here.text()}`.", notes, help))
     }
     return signature.result_or_unit()
+}
+
+/// Whether a parameter is a `T?` of no view and no code, the shape
+/// `check_function_frame` reads as the option of a view where the function
+/// only reads it (#1256).
+fn check_arguments_plain_option(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Nullable(inner) => match inner {
+            Ty::Named { view, .. } => !view,
+            Ty::Var { view, .. } => !view,
+            Ty::Tuple(_) => true,
+            else => false,
+        },
+        else => false,
+    }
 }
 
 

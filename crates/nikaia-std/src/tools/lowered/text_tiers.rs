@@ -3039,9 +3039,9 @@ pub(crate) fn late_viewing(name: &str, sources: &[String], alias: Option<&str>, 
     late.viewers.insert(key, taken);
 }
 
-pub(crate) fn late_all_moved(values: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) { for value in values.iter() { late_moved(value, &None, ask, late); } }
+pub(crate) fn late_all_moved(values: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) { for value in values.iter() { late_moved(value, None, ask, late); } }
 
-pub(crate) fn late_moved_into(value: &Expr, owner: &TextOwner, written: String, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) { late_moved(value, &Some((position_word(&owner, &no_path()), written)), ask, late); }
+pub(crate) fn late_moved_into(value: &Expr, owner: &TextOwner, written: String, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) { late_moved(value, Some(&(position_word(&owner, &no_path()), written)), ask, late); }
 
 pub(crate) fn late_holding(name: &str, value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
     if late.leaving > 0 { return; }
@@ -3101,7 +3101,7 @@ pub(crate) fn late_held_view(name: &str, value: &Expr, ask: &TierAsk<'_, '_, '_,
     }
 }
 
-pub(crate) fn late_moved(value: &Expr, position: &Option<(String, String)>, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
+pub(crate) fn late_moved(value: &Expr, position: Option<&(String, String)>, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
     if late.leaving > 0 { return; }
     let word = match value {
         Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_string() },

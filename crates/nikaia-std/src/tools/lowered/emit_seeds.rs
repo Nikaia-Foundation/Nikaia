@@ -563,14 +563,14 @@ pub struct EmitSeedsShape {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_seeds_begin<H: EmitHost>(tables: &EmitSeedsTables, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, written: &Item, owner_target: &Option<String>, owner_declared: bool) -> EmitSeedsBegin {
+pub fn emit_seeds_begin<H: EmitHost>(tables: &EmitSeedsTables, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, written: &Item, owner_target: Option<&str>, owner_declared: bool) -> EmitSeedsBegin {
     match written {
         Item::Fn { name, args, ret_type, is_public, .. } => {
             let is_public = *is_public; let name = *name;
             let in_seeded_impl = emit_seeds_within(&walk.place);
             let has_owner = owner_target.is_some();
-            let target: String = nikaia_std::index::or(match owner_target.as_ref() {
-                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            let target: String = nikaia_std::index::or(match owner_target {
+                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                 None => None,
             }, || "".into());
             let mut base: i64 = 0;

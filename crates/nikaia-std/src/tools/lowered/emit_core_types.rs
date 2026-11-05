@@ -76,6 +76,7 @@ impl EmitState {
         if ty.is_tuple {
             let mut parts: Vec<String> = vec![];
             for part in ty.generics.iter() { parts.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, &lifetimes, &count)); }
+            if ty.is_nullable && ty.is_view { return format!("Option<{}({})>", lifetimes.reference(), parts.join(", ")); }
             if ty.is_nullable { return format!("Option<({})>", parts.join(", ")); }
             return format!("({})", parts.join(", "));
         }

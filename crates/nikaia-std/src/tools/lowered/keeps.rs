@@ -939,7 +939,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
         for item in view.items.iter() {
             match &item.node {
                 Item::Fn { .. } => {
-                    let found = match keeps_uses_of(view, &item.node, &None, &ledger, library, &indexes, resolved, &|e| { host.holes(unit, e) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    let found = match keeps_uses_of(view, &item.node, None, &ledger, library, &indexes, resolved, &|e| { host.holes(unit, e) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     graph.insert(found.key.to_string(), found.uses);
                 },
                 Item::Impl { trait_name, target, methods } => {
@@ -950,7 +950,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                         Some(t) => view.text(t),
                     };
                     for method in methods.iter() {
-                        let mut found = match keeps_uses_of(view, &method.node, &Some(target_name.to_string()), &ledger, library, &indexes, resolved, &|e| { host.holes(unit, e) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        let mut found = match keeps_uses_of(view, &method.node, Some(&target_name.to_string()), &ledger, library, &indexes, resolved, &|e| { host.holes(unit, e) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
                         if trait_name.is_some() {
                             match &method.node {
                                 Item::Fn { name, receiver, args, .. } => {
@@ -1271,7 +1271,7 @@ pub(crate) fn copied_keepers(keepers: &[KeepsKeeper]) -> Vec<KeepsKeeper> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, target: &Option<String>, ledger: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<KeepsFound> {
+pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>, ledger: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<KeepsFound> {
     match item {
         Item::Fn { name, receiver, args, config, body, ret_type, .. } => {
             let name = *name;
@@ -1279,8 +1279,8 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                 None => String::from("new"),
                 Some(n) => view.text(n),
             };
-            let target_name = nikaia_std::index::or(match target.as_ref() {
-                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            let target_name = nikaia_std::index::or(match target {
+                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                 None => None,
             }, || "".into());
             let is_method = target.is_some();

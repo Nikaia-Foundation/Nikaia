@@ -51,14 +51,49 @@ fn emit_arg_lends_own(contract: ref FnContract, at: i64, library: ref Ledger, de
     return lends_in_own(contract, at, [library, described])
 }
 
-/// The opening of argument `i` in one contract.
-fn emit_arg_opening_in(contract: ref FnContract, i: i64) -> String {
+/// The opening of argument `i` in one contract: the written `ref T?`'s, or
+/// a plain `T?` the callee only reads, which is lowered the option of a view
+/// all the same (#1256).
+fn emit_arg_opening_in(contract: ref FnContract, i: i64, library: ref Ledger, described: ref Ledger) -> String {
     let signature = contract.signature?.clone() ?? return ""
     let params = call_arguments(signature)
     if i >= params.len() {
         return ""
     }
-    return emit_arg_opening_of(params[i].1)
+    let written = emit_arg_opening_of(params[i].1)
+    if written != "" {
+        return written
+    }
+    let at = if signature.takes_a_receiver() { i + 1 } else { i }
+    if emit_arg_plain_option(params[i].1) && emit_arg_lends_own(contract, at, library, described) {
+        return emit_arg_opening_plain(params[i].1)
+    }
+    return ""
+}
+
+/// Whether a parameter is a `T?` of no view and no code: the shape a callee
+/// that only reads it lowers `Option<&T>` (#1256).
+fn emit_arg_plain_option(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(inner) => match inner {
+            Ty::Named { view, .. } => !view,
+            Ty::Var { view, .. } => !view,
+            Ty::Tuple(_) => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// How an owned `T?` is opened into the `Option<&T>` of such a parameter.
+fn emit_arg_opening_plain(ty: ref Ty) -> String {
+    return match ty {
+        Ty::Nullable(inner) => match inner {
+            Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "Bytes" { ".as_deref()" } else { ".as_ref()" },
+            else => ".as_ref()",
+        },
+        else => "",
+    }
 }
 
 /// Whether the argument is a name, or a field of one.
@@ -229,17 +264,17 @@ impl EmitState {
     /// The opening a lent view gets inside the option a nullable parameter is:
     /// the declaration's own where this unit has the callee, else the one every
     /// method of that name agrees on (#462). Empty where there is none.
-    fn emit_arg_opening(ref self, callee: ref String, i: i64) -> String {
+    fn emit_arg_opening(ref self, world: ref EmitWorld, callee: ref String, i: i64) -> String {
         if self.own_contracts.functions.contains_key(callee) {
             let contract = self.own_contracts.functions.get(callee) ?? return ""
-            return emit_arg_opening_in(contract, i)
+            return emit_arg_opening_in(contract, i, world.library, self.described)
         }
         let candidates = emit_candidates(self.own_contracts, callee)
         let mut first: String = ""
         let mut seen = false
         let mut agree = true
         for candidate in candidates {
-            let each = emit_arg_opening_in(candidate, i)
+            let each = emit_arg_opening_in(candidate, i, world.library, self.described)
             if !seen {
                 first = each
                 seen = true
@@ -421,7 +456,7 @@ impl EmitState {
         // (#1080) is lent in an option made for the call: `&Some(name.clone())`,
         // a place copied in, a value made there moved in. A named function
         // kept there (#1117) is a closure made there, not a place.
-        let lent_option = lend && before == "Some(" && self.emit_arg_opening(callee, i) == ""
+        let lent_option = lend && before == "Some(" && self.emit_arg_opening(world, callee, i) == ""
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(node_key(arg))
         if lent_option || lent_path {
             out.push("&")
@@ -441,7 +476,7 @@ impl EmitState {
         let mut how: String = ""
         let mut has_how = false
         if lend {
-            how = self.emit_arg_opening(callee, i)
+            how = self.emit_arg_opening(world, callee, i)
             has_how = how != ""
         }
         // **A map's read is that option already**: `index::get` answers an

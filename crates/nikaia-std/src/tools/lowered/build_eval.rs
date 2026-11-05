@@ -434,7 +434,7 @@ pub fn bt_may_not_run(contract: &FnContract) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn bt_known_default(ledger: &Ledger, package: &Option<String>, key: &str, at: i64) -> Option<String> {
+pub fn bt_known_default(ledger: &Ledger, package: Option<&str>, key: &str, at: i64) -> Option<String> {
     let k = match package {
         None => key.to_string(),
         Some(package) => format!("{}::{}", package, key),

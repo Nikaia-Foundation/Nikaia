@@ -34,7 +34,7 @@ pub(crate) fn check_program_impl<H: CheckHost>(state: &mut CheckState, world: &C
     for method in methods.iter() {
         state.enclosing = outer.to_owned();
         state.subject_arguments = arguments.to_owned();
-        check_function_function(state, world, host, &method.node, &method.span, &named);
+        check_function_function(state, world, host, &method.node, &method.span, (named).as_deref());
     }
     state.enclosing = collections::BTreeMap::new();
     state.subject_arguments = vec![];
@@ -58,7 +58,7 @@ pub fn check_program_program<H: CheckHost>(state: &mut CheckState, world: &Check
             Item::Fn { .. } => {
                 state.an_entry_point(world, &item.node, &item.span, false);
                 state.main_parameters(world, &item.node, &item.span);
-                check_function_function(state, world, host, &item.node, &item.span, &None);
+                check_function_function(state, world, host, &item.node, &item.span, None);
             },
             Item::Struct { fields, .. } => {
                 for field in fields.iter() { check_defaults_a_field_default(state, world, host, field); }
@@ -118,7 +118,7 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
             None => None,
         };
         state.flow.unrolling = Some(CheckUnrolling { on: on.to_string(), field: field.clone() });
-        check_function_function(state, world, host, item, span, &None);
+        check_function_function(state, world, host, item, span, None);
         state.flow.unrolling = outer;
         let mut already: collections::BTreeSet<(String, u32)> = collections::BTreeSet::new();
         let mut at: i64 = 0;

@@ -119,14 +119,14 @@ pub fn panic_strategy(target: &Target) -> String {
     }
 }
 
-pub fn encoded_with_cpu(encoded: &Option<String>, plain: &Option<String>, cpu: &str) -> Option<String> {
-    let mut flags: Vec<String> = match match encoded.as_ref() {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+pub fn encoded_with_cpu(encoded: Option<&str>, plain: Option<&str>, cpu: &str) -> Option<String> {
+    let mut flags: Vec<String> = match match encoded {
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
         None => None,
     } {
         Some(ref e) => e.split("\x1f").filter(|&f| { !f.is_empty() }).map(|f| { f.to_string() }).collect::<Vec<_>>(),
-        None => match match plain.as_ref() {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => match match plain {
+            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,
         } {
             Some(ref p) => p.split_whitespace().map(|f| { f.to_string() }).collect::<Vec<_>>(),
@@ -206,16 +206,16 @@ pub fn project_settings_from_env<H: ProjectSettingsHost>(default_target: &str, h
     Ok(project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, tests, cpu)?)
 }
 
-pub fn project_settings_refutations(words: &ProjectWords, refuted: &Option<String>, unproved: &Option<String>) -> Result<(String, String), nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
-    let refuted_word = match match refuted.as_ref() {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+pub fn project_settings_refutations(words: &ProjectWords, refuted: Option<&str>, unproved: Option<&str>) -> Result<(String, String), nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+    let refuted_word = match match refuted {
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
         None => None,
     } {
         Some(word) => refuted_claims(word)?,
         None => words.refuted_claims.to_string(),
     };
-    let unproved_word = match match unproved.as_ref() {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+    let unproved_word = match match unproved {
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
         None => None,
     } {
         Some(word) => unproved_claims(word)?,
@@ -247,7 +247,7 @@ pub fn project_settings_cpu_rustflags<H: ProjectSettingsHost>(words: &ProjectWor
     if words.cpu.is_none() { return Ok(None); }
     let encoded = host.env_var("CARGO_ENCODED_RUSTFLAGS");
     let plain = host.env_var("RUSTFLAGS");
-    Ok(encoded_with_cpu(&encoded, &plain, &project_settings_cpu_key(words, triple, host)?))
+    Ok(encoded_with_cpu((encoded).as_deref(), (plain).as_deref(), &project_settings_cpu_key(words, triple, host)?))
 }
 
 pub fn project_settings_as_env(words: &ProjectWords) -> Vec<(String, String)> {
@@ -270,10 +270,10 @@ pub fn project_settings_no_project(start: &std::path::Path) -> String {
 
 pub fn project_settings_unbuildable(triple: &str, missing: &str) -> String { format!("Building for `{}` isn't possible yet: {}", triple, missing) }
 
-pub fn project_settings_own_dir(root: &std::path::Path, variant: &Option<String>) -> fs::Path {
+pub fn project_settings_own_dir(root: &std::path::Path, variant: Option<&str>) -> fs::Path {
     let dir = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("target")))), std::path::Path::new(&("nikaia")));
-    match match variant.as_ref() {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+    match match variant {
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
         None => None,
     } {
         Some(ref named) => nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("variants")))), std::path::Path::new(&(named))),
@@ -281,11 +281,11 @@ pub fn project_settings_own_dir(root: &std::path::Path, variant: &Option<String>
     }
 }
 
-pub fn project_settings_build_dir(root: &std::path::Path, variant: &Option<String>) -> fs::Path { nikaia_std::fs::path::join(&(project_settings_own_dir(root, &variant)), std::path::Path::new(&("build"))) }
+pub fn project_settings_build_dir(root: &std::path::Path, variant: Option<&str>) -> fs::Path { nikaia_std::fs::path::join(&(project_settings_own_dir(root, variant)), std::path::Path::new(&("build"))) }
 
-pub fn project_settings_gen_dir(root: &std::path::Path, variant: &Option<String>) -> fs::Path { nikaia_std::fs::path::join(&(project_settings_own_dir(root, &variant)), std::path::Path::new(&("gen"))) }
+pub fn project_settings_gen_dir(root: &std::path::Path, variant: Option<&str>) -> fs::Path { nikaia_std::fs::path::join(&(project_settings_own_dir(root, variant)), std::path::Path::new(&("gen"))) }
 
-pub fn project_settings_switches_path(root: &std::path::Path, variant: &Option<String>) -> fs::Path { nikaia_std::fs::path::join(&(project_settings_gen_dir(root, &variant)), std::path::Path::new(&("switches"))) }
+pub fn project_settings_switches_path(root: &std::path::Path, variant: Option<&str>) -> fs::Path { nikaia_std::fs::path::join(&(project_settings_gen_dir(root, variant)), std::path::Path::new(&("switches"))) }
 
 pub fn project_settings_ledger_path(root: &std::path::Path) -> fs::Path { nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.contracts"))) }
 
@@ -298,16 +298,16 @@ pub fn project_settings_switches_beside(gen_dir: &std::path::Path) -> Option<fs:
     if found.is_file() { Some(path) } else { None }
 }
 
-pub fn project_settings_program_name<H: ProjectSettingsHost>(root: &std::path::Path, variant: &Option<String>, package: String, host: &H) -> String {
+pub fn project_settings_program_name<H: ProjectSettingsHost>(root: &std::path::Path, variant: Option<&str>, package: String, host: &H) -> String {
     match host.env_var("CARGO_TARGET_DIR") {
-        None => format!("{}-{}", package, project_settings_root_tag(root, &variant, host)),
+        None => format!("{}-{}", package, project_settings_root_tag(root, variant, host)),
         _ => package,
     }
 }
 
-pub fn project_settings_root_tag<H: ProjectSettingsHost>(root: &std::path::Path, variant: &Option<String>, host: &H) -> String {
-    let named = match match variant.as_ref() {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+pub fn project_settings_root_tag<H: ProjectSettingsHost>(root: &std::path::Path, variant: Option<&str>, host: &H) -> String {
+    let named = match match variant {
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
         None => None,
     } {
         Some(ref named) => format!("{}\x1f{}", nikaia_std::fs::path::display(&(root)), named),
@@ -318,14 +318,14 @@ pub fn project_settings_root_tag<H: ProjectSettingsHost>(root: &std::path::Path,
     hex.chars().take(16).collect()
 }
 
-pub fn project_settings_own_copy<H: ProjectSettingsHost>(root: &std::path::Path, variant: &Option<String>, built: &std::path::Path, host: &H) -> Result<fs::Path, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+pub fn project_settings_own_copy<H: ProjectSettingsHost>(root: &std::path::Path, variant: Option<&str>, built: &std::path::Path, host: &H) -> Result<fs::Path, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
     let dir = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("target")))), std::path::Path::new(&("nikaia")))), std::path::Path::new(&("bin")));
     match fs::create_dir(&dir, &fs::Root::Anywhere, true) {
         Ok(_) => {},
         Err(error) => { return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("{}", error)), &"project_settings_own_copy")); },
     };
     let file = match nikaia_std::fs::path::file_name(&(built)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(String::from("a program has a file name")), &"project_settings_own_copy")) };
-    let name = nikaia_std::search::replacen(&nikaia_std::fs::path::display(&(file)), &format!("-{}", project_settings_root_tag(root, &variant, host)), &"", 1);
+    let name = nikaia_std::search::replacen(&nikaia_std::fs::path::display(&(file)), &format!("-{}", project_settings_root_tag(root, variant, host)), &"", 1);
     let own = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name)));
     match fs::remove(&own, &fs::Root::Anywhere, false) {
         Ok(_) => {},

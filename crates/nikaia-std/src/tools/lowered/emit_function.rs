@@ -178,7 +178,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: &Option<String>, owner_declared_by: &Option<String>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<&str>, owner_declared_by: Option<&str>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         match &written.node {
             Item::Fn { name, generics, receiver, args: written_args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;
@@ -186,12 +186,12 @@ impl EmitState {
                 let mut args: Vec<FnArg> = vec![];
                 for each in written_args.iter() { if emit_text(world, each.name) != "" { args.push(each.clone()); } }
                 let has_owner = owner_target.is_some();
-                let target: String = nikaia_std::index::or(match owner_target.as_ref() {
-                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                let target: String = nikaia_std::index::or(match owner_target {
+                    Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                     None => None,
                 }, || "".into());
-                let declared_by: String = nikaia_std::index::or(match owner_declared_by.as_ref() {
-                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                let declared_by: String = nikaia_std::index::or(match owner_declared_by {
+                    Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                     None => None,
                 }, || "".into());
                 let has_declared_by = owner_declared_by.is_some();
@@ -205,10 +205,10 @@ impl EmitState {
                 };
                 let key: String = if has_owner { format!("{}::{}", target, own_name) } else { own_name.to_string() };
                 let standalone = !has_owner && !is_public && generics.is_empty() && name.is_some();
-                let begun = emit_seeds_begin(&self.seeds, world, walk, host, &written.node, &match owner_target.as_ref() {
-                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                let begun = emit_seeds_begin(&self.seeds, world, walk, host, &written.node, (match owner_target {
+                    Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                     None => None,
-                }, has_declared_by);
+                }).as_deref(), has_declared_by);
                 let recv: i64 = if receiver.is_some() { 1 } else { 0 };
                 let mut params: Vec<String> = vec![];
                 if receiver.is_some() {
@@ -375,13 +375,16 @@ impl EmitState {
                     let is_source = nikaia_std::index::or(source_at, || -1) == k || several_at.contains(nikaia_std::index::AsKey::as_key(&k));
                     let pname = emit_text(world, each.name);
                     let at = k + recv;
-                    let written_as_a_view = self.emit_fn_written_as_view(&key, at);
                     let changes = self.emit_fn_changes(&key, &pname);
+                    let lent_option = !changes && each.ty.is_nullable && !each.ty.is_view && !each.ty.is_slice && (*each.ty.code).is_none() && self.emit_fn_lends(world, &key, at);
+                    let written_as_a_view = lent_option || self.emit_fn_written_as_view(&key, at);
+                    let mut ty = each.ty.clone();
+                    if lent_option { ty.is_view = true; }
                     let lifted = is_source && shared && !source_nested;
                     let mut reference: &'static str = "";
                     if changes { if lifted { reference = "&'r mut "; } else if is_source && source_kept { reference = "&'k mut "; } else { reference = "&mut "; } } else if self.emit_fn_lends(world, &key, at) && !written_as_a_view { if !is_source && emit_store_source(&stores, &pname) { reference = "&'a "; } else if lifted { reference = "&'r "; } else if is_source && source_kept { reference = "&'k "; } else { reference = "&"; } }
                     let read_only = changes || self.emit_fn_lends(world, &key, at);
-                    let how = self.emit_how(&sig, each.name, &pname, each.ty.is_view, read_only);
+                    let how = self.emit_how(&sig, each.name, &pname, ty.is_view, read_only);
                     let mut spelled: String = String::from("");
                     if *nikaia_std::index::get(&lengths, nikaia_std::index::at(k)) != "" || *nikaia_std::index::get(&runs, nikaia_std::index::at(k)) {
                         let mut element: String = String::from("u8");
@@ -398,7 +401,7 @@ impl EmitState {
                         let fast = standalone && self.fast_slots.contains(&format!("p:{}:{}", own_name, k));
                         let outer = walk.trusting;
                         walk.trusting = fast;
-                        spelled = self.emit_fn_ty(world, walk, host, &each.ty, &position, &key, &pname);
+                        spelled = self.emit_fn_ty(world, walk, host, &ty, &position, &key, &pname);
                         walk.trusting = outer;
                         if on_a_cycle && runs && reference.starts_with('&') && !reference.starts_with("&mut") && (spelled.starts_with("impl Fn(") || spelled.starts_with("impl for<")) {
                             let bound = nikaia_std::index::or(spelled.strip_prefix("impl "), || "").to_string();

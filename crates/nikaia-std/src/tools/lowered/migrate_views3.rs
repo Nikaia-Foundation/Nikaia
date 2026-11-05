@@ -386,12 +386,12 @@ pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Led
     let mut out: Vec<i64> = vec![];
     for item in view.items.iter() {
         match &item.node {
-            Item::Fn { .. } => { migrate_keeps_of_body(view, item, &None, own, library, &indexes, resolved, holes_of, findings, &mut out); },
+            Item::Fn { .. } => { migrate_keeps_of_body(view, item, None, own, library, &indexes, resolved, holes_of, findings, &mut out); },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
                 if trait_name.is_none() {
                     let target_name = view.text(target.name);
-                    for method in methods.iter() { migrate_keeps_of_body(view, method, &Some(target_name.to_string()), own, library, &indexes, resolved, holes_of, findings, &mut out); }
+                    for method in methods.iter() { migrate_keeps_of_body(view, method, Some(&target_name.to_string()), own, library, &indexes, resolved, holes_of, findings, &mut out); }
                 }
             },
             _ => { },
@@ -401,7 +401,7 @@ pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Led
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: &Option<String>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, findings: &[CheckFinding], out: &mut Vec<i64>) {
+pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: Option<&str>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, findings: &[CheckFinding], out: &mut Vec<i64>) {
     match &item.node {
         Item::Fn { args, is_extern, receiver, .. } => {
             let is_extern = *is_extern;
@@ -416,10 +416,10 @@ pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, i
                 }
             }
             if args.is_empty() { return; }
-            let found = match keeps_uses_of(view, &item.node, &match target.as_ref() {
-                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            let found = match keeps_uses_of(view, &item.node, (match target {
+                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                 None => None,
-            }, own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            }).as_deref(), own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let contract = match *nikaia_std::index::get(&own.functions, &found.key) { Some(__nikaia_value) => __nikaia_value, None => return };
             for arg in args.iter() {
                 let parameter = view.text(arg.name);

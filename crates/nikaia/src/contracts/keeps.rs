@@ -201,7 +201,7 @@ fn keeping_statement(
         let Some(found) = nikaia_std::tools::keeps::keeps_uses_of(
             &view,
             &prefix,
-            &Some(target.to_string()),
+            Some(target),
             ledger,
             library,
             &KeepsIndexes {

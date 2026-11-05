@@ -7,12 +7,12 @@ pub fn keep_marks_check(view: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[Par
     let traits = keep_marks_of_traits(view, beside);
     for item in view.items.iter() {
         match &item.node {
-            Item::Fn { .. } => { keep_marks_of_body(view, item, &None, own, library, &indexes, resolved, holes_of, opted, &mut out); },
+            Item::Fn { .. } => { keep_marks_of_body(view, item, None, own, library, &indexes, resolved, holes_of, opted, &mut out); },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
                 let target_name = view.text(target.name);
                 match trait_name {
-                    None => { for method in methods.iter() { keep_marks_of_body(view, method, &Some(target_name.to_string()), own, library, &indexes, resolved, holes_of, opted, &mut out); } },
+                    None => { for method in methods.iter() { keep_marks_of_body(view, method, Some(&target_name.to_string()), own, library, &indexes, resolved, holes_of, opted, &mut out); } },
                     Some(t) => {
                         let owner = view.text(t);
                         for method in methods.iter() { keep_marks_against_trait(view, method, &owner, &traits, &mut out); }
@@ -121,25 +121,25 @@ pub(crate) fn keep_marks_against_trait(view: &ParsedView<'_, '_, '_, '_, '_, '_>
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: &Option<String>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, opted: bool, out: &mut Vec<CheckFinding>) {
+pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: Option<&str>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, opted: bool, out: &mut Vec<CheckFinding>) {
     match &item.node {
         Item::Fn { args, is_extern, .. } => {
             let is_extern = *is_extern;
             if is_extern || args.is_empty() { return; }
-            let found = match keeps_uses_of(view, &item.node, &match target.as_ref() {
-                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            let found = match keeps_uses_of(view, &item.node, (match target {
+                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                 None => None,
-            }, own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
+            }).as_deref(), own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let contract = match *nikaia_std::index::get(&own.functions, &found.key) { Some(__nikaia_value) => __nikaia_value, None => return };
             for arg in args.iter() {
                 let parameter = view.text(arg.name);
                 if parameter == "" || parameter == "_" { continue; }
                 let kept = nikaia_std::list::contains(&contract.keeps, &parameter);
                 if kept && !arg.keep && opted {
-                    let at = nikaia_std::index::or(keep_marks_keeping_statement(view, item, &match target.as_ref() {
-                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    let at = nikaia_std::index::or(keep_marks_keeping_statement(view, item, (match target {
+                        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                         None => None,
-                    }, &parameter, own, library, &indexes, resolved, holes_of), || arg.span.clone().into());
+                    }).as_deref(), &parameter, own, library, &indexes, resolved, holes_of), || arg.span.clone().into());
                     out.push(check_refusal("NK2302", &at, format!("`{}` keeps `{}`, but `{}` is not marked `keep`.", found.key, parameter, parameter), vec![String::from("A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2)."), String::from("Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).")], Some(format!("Write `keep {}` in the signature of `{}`.", parameter, found.key))));
                 }
                 if arg.keep && !kept {
@@ -154,7 +154,7 @@ pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn keep_marks_keeping_statement(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: &Option<String>, parameter: &str, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
+pub(crate) fn keep_marks_keeping_statement(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: Option<&str>, parameter: &str, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
     let settling: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     match &item.node {
         Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern, ret_from } => {
@@ -169,10 +169,10 @@ pub(crate) fn keep_marks_keeping_statement(view: &ParsedView<'_, '_, '_, '_, '_,
                     Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
                     None => None,
                 }, body: Block { stmts: stmts.to_owned() }, is_sync, sync_by: sync_by.to_owned(), is_public, can_throw, is_extern, ret_from: ret_from.to_owned() };
-                let found = match keeps_uses_of(view, &prefix, &match target.as_ref() {
-                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                let found = match keeps_uses_of(view, &prefix, (match target {
+                    Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                     None => None,
-                }, own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                }).as_deref(), own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if found.uses.kept.contains(parameter) || found.uses.passed.iter().any(|passed| { passed.parameter == parameter && keeps_its(&passed.callee, passed.at, &settling, own, library) }) { return Some(stmt.span.clone()); }
             }
         },

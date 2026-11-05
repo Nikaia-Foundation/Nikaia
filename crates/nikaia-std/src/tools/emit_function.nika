@@ -598,8 +598,16 @@ impl EmitState {
                     let is_source = (source_at ?? -1) == k || several_at.contains(k)
                     let pname = emit_text(world, each.name)
                     let at = k + recv
-                    let written_as_a_view = self.emit_fn_written_as_view(key, at)
                     let changes = self.emit_fn_changes(key, pname)
+                    // **A `T?` the body only reads is the option of a view**
+                    // (#1256): `Option<&T>`, `Option<&str>`, as `ref T?` is
+                    // written, so a caller hands `Some("lit")` or `s.as_deref()`.
+                    let lent_option = !changes && each.ty.is_nullable && !each.ty.is_view && !each.ty.is_slice && each.ty.code == null && self.emit_fn_lends(world, key, at)
+                    let written_as_a_view = lent_option || self.emit_fn_written_as_view(key, at)
+                    let mut ty = each.ty.clone()
+                    if lent_option {
+                        ty.is_view = true
+                    }
                     let lifted = is_source && shared && !source_nested
                     let mut reference: String = ""
                     if changes {
@@ -622,7 +630,7 @@ impl EmitState {
                         }
                     }
                     let read_only = changes || self.emit_fn_lends(world, key, at)
-                    let how = self.emit_how(sig, each.name, pname, each.ty.is_view, read_only)
+                    let how = self.emit_how(sig, each.name, pname, ty.is_view, read_only)
                     let mut spelled: String = ""
                     if lengths[k] != "" || runs[k] {
                         // **An array of any length is written with the length
@@ -651,7 +659,7 @@ impl EmitState {
                         let fast = standalone && self.fast_slots.contains(f"p:{own_name}:{k}")
                         let outer = walk.trusting
                         walk.trusting = fast
-                        spelled = self.emit_fn_ty(world, walk, host, each.ty, position, key, pname)
+                        spelled = self.emit_fn_ty(world, walk, host, ty, position, key, pname)
                         walk.trusting = outer
                         if on_a_cycle && runs && reference.starts_with("&") && !reference.starts_with("&mut") && (spelled.starts_with("impl Fn(") || spelled.starts_with("impl for<")) {
                             let bound = (spelled.strip_prefix("impl ") ?? "").clone()

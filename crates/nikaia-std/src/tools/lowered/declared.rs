@@ -64,7 +64,7 @@ pub(crate) fn written_all(names: &winnow_grammar::InternerContext, aliases: &col
     out
 }
 
-pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, item: &Item, target: &Option<String>, outer: &collections::BTreeSet<String>) -> Option<DeclaredFn> {
+pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, item: &Item, target: Option<&str>, outer: &collections::BTreeSet<String>) -> Option<DeclaredFn> {
     let (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw) = match item {
         Item::Fn { name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw, .. } => { let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw) },
         _ => return None,
@@ -78,8 +78,8 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
     }
     let mut key = own.to_string();
     if target.is_some() {
-        let owner = nikaia_std::index::or(match target.as_ref() {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        let owner = nikaia_std::index::or(match target {
+            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,
         }, || "".into());
         key = format!("{}::{}", owner, own);
@@ -100,8 +100,8 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
     let mut mutates = false;
     if receiver.is_some() {
         let subject = match receiver { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let owner = nikaia_std::index::or(match target.as_ref() {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        let owner = nikaia_std::index::or(match target {
+            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,
         }, || "Self".into());
         let self_name: String = String::from("self");

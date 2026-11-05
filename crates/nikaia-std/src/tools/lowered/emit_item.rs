@@ -122,11 +122,11 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_item_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: &Spanned<Item>, lifetimes: EmitLifetimes, target: &str, declared_by: &Option<String>, bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_item_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: &Spanned<Item>, lifetimes: EmitLifetimes, target: &str, declared_by: Option<&str>, bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let carries = self.emit_item_carries(i64::from(method.span.start));
         let st = out.mark();
         out.push("    ");
-        self.emit_function(world, walk, out, host, method, 1, lifetimes, &carries, &Some(target.to_string()), &declared_by, bridged)?;
+        self.emit_function(world, walk, out, host, method, 1, lifetimes, &carries, Some(&target.to_string()), declared_by, bridged)?;
         out.record(&method.span, st);
         Ok(())
     }
@@ -241,7 +241,7 @@ impl EmitState {
                 let name = *name;
                 if self.emit_item_built(world, name) { out.push("#[allow(dead_code)]\n"); }
                 let carries = self.emit_item_carries(i64::from(at));
-                self.emit_function(world, walk, out, host, written, 0, EmitLifetimes::Elided, &carries, &None, &None, None)?;
+                self.emit_function(world, walk, out, host, written, 0, EmitLifetimes::Elided, &carries, None, None, None)?;
             },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
@@ -319,7 +319,7 @@ impl EmitState {
         let has_trait = trait_name.is_some();
         if has_trait && trait_text == "Error" {
             out.push(&format!("impl{} {}{} {{\n", params, target_name, params));
-            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, &None, None)?; }
+            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, None, None)?; }
             out.push("}\n");
             out.push(&format!("impl{} std::fmt::Display for {}{} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        f.write_str(&self.message())\n    }}\n}}\n", params, target_name, params));
             out.push(&format!("impl{} std::error::Error for {}{} {{}}\n", params, target_name, params));
@@ -341,7 +341,7 @@ impl EmitState {
         }
         if has_trait && trait_text == "Cleanup" {
             out.push(&format!("impl{} {}{} {{\n", declares, target_name, applied));
-            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, &None, None)?; }
+            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, None, None)?; }
             out.push("}\n");
             let awaited = if call_pauses(&self.own_contracts, &format!("{}::cleanup", target_name)) { ".await" } else { "" };
             let mut bridge = "Cleanup";
@@ -355,7 +355,7 @@ impl EmitState {
         }
         if has_trait && (trait_text == "Eq" || trait_text == "Ord") && !emit_item_declares_trait(world, &trait_text) {
             out.push(&format!("impl{} {}{} {{\n", declares, target_name, applied));
-            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, &None, None)?; }
+            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, None, None)?; }
             out.push("}\n");
             let me = format!("{}{}", target_name, applied);
             if trait_text == "Eq" { out.push(&format!("impl{} PartialEq for {} {{\n    fn eq(&self, other: &Self) -> bool {{ {}::eq(self, other) }}\n}}\nimpl{} Eq for {} {{}}\n", declares, me, target_name, declares, me)); } else { out.push(&format!("impl{} PartialOrd for {} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{} Ord for {} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {}::compare(self, other) }}\n}}\n", declares, me, declares, me, target_name)); }
@@ -384,10 +384,10 @@ impl EmitState {
             let mut i: i64 = 0;
             for method in methods.iter() {
                 if (*nikaia_std::index::get(&wider, (i) as usize)).is_some() {
-                    self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, &match declared_by.as_ref() {
+                    self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, (match declared_by.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
-                    }, Some(public))?;
+                    }).as_deref(), Some(public))?;
                 }
                 i += 1;
             }
@@ -403,10 +403,10 @@ impl EmitState {
             i += 1;
             match w {
                 None => {
-                    self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, &match declared_by.as_ref() {
+                    self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, (match declared_by.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
-                    }, None)?;
+                    }).as_deref(), None)?;
                 },
                 Some(ref declared) => {
                     out.push("    ");

@@ -210,7 +210,7 @@ pub fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[
         for (i, item) in view.items.iter().enumerate().map(|(at, item)| (at as i64, item)) {
             match &item.node {
                 Item::Fn { .. } => {
-                    let entry = match declared_function(view.words, view.aliases, &item.node, &None, &collections::BTreeSet::new()) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    let entry = match declared_function(view.words, view.aliases, &item.node, None, &collections::BTreeSet::new()) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     computed_defaults(&mut defaults, &entry.key, u, i, None, view, &item.node);
                     ledger.functions.insert(entry.key, entry.contract);
                 },
@@ -223,7 +223,7 @@ pub fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[
                         Some(name) => { ledger.implementations.entry(String::from(view.text(name))).or_default().insert(target.to_string()); },
                     }
                     for (m, method) in methods.iter().enumerate().map(|(at, item)| (at as i64, item)) {
-                        let entry = match declared_function(view.words, view.aliases, &method.node, &Some(target.clone()), &outer) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        let entry = match declared_function(view.words, view.aliases, &method.node, Some(&target), &outer) { Some(__nikaia_value) => __nikaia_value, None => continue };
                         computed_defaults(&mut defaults, &entry.key, u, i, Some(m), view, &method.node);
                         ledger.functions.insert(entry.key, entry.contract);
                     }

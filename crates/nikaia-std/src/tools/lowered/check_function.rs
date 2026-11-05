@@ -402,15 +402,15 @@ pub(crate) fn check_function_options_lowered(world: &CheckWorld<'_, '_, '_, '_, 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, target: &Option<String>, key: &str, parameters: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
+pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, target: Option<&str>, key: &str, parameters: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
     let mut frame: Vec<CheckLocal> = vec![];
     let mut offset: i64 = 0;
     if receiver.is_some() {
         offset = 1;
         let mut ty = Ty::Unknown;
         if target.is_some() {
-            ty = Ty::Named { name: nikaia_std::index::or(match target.as_ref() {
-                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            ty = Ty::Named { name: nikaia_std::index::or(match target {
+                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                 None => None,
             }, || "".into()), args: state.subject_arguments.to_owned(), view: nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false) };
         }
@@ -422,8 +422,9 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
         let name = world.words.resolve(arg.name).to_string();
         state.nameable(&name, &arg.span, "a parameter");
         let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.is_empty() && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable;
+        let plain_option = arg.ty.is_nullable && !arg.ty.is_view && !arg.ty.is_slice && (*arg.ty.code).is_none() && !arg.mutable;
         let mut ty = Ty::Unknown;
-        if plain_text && check_function_lends(world, key, at + offset) {
+        if (plain_text || plain_option) && check_function_lends(world, key, at + offset) {
             let mut viewed = arg.ty.clone();
             viewed.is_view = true;
             ty = check_walked_declared(state, world, &viewed, &arg.span);
@@ -553,11 +554,11 @@ pub(crate) fn check_function_hands_nothing(state: &mut CheckState, body: &Block,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, at: &Span, target: &Option<String>) {
+pub fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, at: &Span, target: Option<&str>) {
     match item {
         Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, can_throw, is_sync, sync_by, is_extern, .. } => {
             let can_throw = *can_throw; let is_extern = *is_extern; let is_sync = *is_sync; let name = *name; let spread = *spread;
-            check_function_fn(state, world, host, name, generics, (receiver).as_ref(), args, config, spread, (ret_type).as_ref(), body, can_throw, is_sync, sync_by, is_extern, at, &target);
+            check_function_fn(state, world, host, name, generics, (receiver).as_ref(), args, config, spread, (ret_type).as_ref(), body, can_throw, is_sync, sync_by, is_extern, at, target);
         },
         _ => { },
     }
@@ -566,15 +567,15 @@ pub fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &Che
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, ret_type: Option<&Type>, body: &Block, can_throw: bool, is_sync: bool, sync_by: &[winnow_grammar::Symbol], is_extern: bool, at: &Span, target: &Option<String>) {
+pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, ret_type: Option<&Type>, body: &Block, can_throw: bool, is_sync: bool, sync_by: &[winnow_grammar::Symbol], is_extern: bool, at: &Span, target: Option<&str>) {
     let mut own_name: String = String::from("new");
     match name {
         Some(sym) => { own_name = world.words.resolve(sym).to_string(); },
         None => { },
     }
     let key = if target.is_some() {
-        format!("{}::{}", nikaia_std::index::or(match target.as_ref() {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        format!("{}::{}", nikaia_std::index::or(match target {
+            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,
         }, || "".into()), own_name)
     } else { own_name.to_string() };
@@ -613,7 +614,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.borrowing_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false);
     let outer_changing = state.changing_self;
     state.changing_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false) && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_keep), || false);
-    let frame = check_function_frame(state, world, host, receiver, args, config, spread, &target, &key, &parameters);
+    let frame = check_function_frame(state, world, host, receiver, args, config, spread, target, &key, &parameters);
     let mut expected: Option<Ty> = None;
     match ret_type {
         Some(written) => {

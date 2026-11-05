@@ -27,14 +27,40 @@ pub(crate) fn emit_arg_opening_inside(inner: &Ty) -> String {
 
 pub(crate) fn emit_arg_lends_own(contract: &FnContract, at: i64, library: &Ledger, described: &Ledger) -> bool { lends_in_own(contract, at, &vec![library, described]) }
 
-pub(crate) fn emit_arg_opening_in(contract: &FnContract, i: i64) -> String {
+pub(crate) fn emit_arg_opening_in(contract: &FnContract, i: i64, library: &Ledger, described: &Ledger) -> String {
     let signature = match match contract.signature.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
     let params = call_arguments(&signature);
     if i >= params.len() as i64 { return String::from(""); }
-    emit_arg_opening_of(&nikaia_std::index::get(&params, nikaia_std::index::at(i)).1)
+    let written = emit_arg_opening_of(&nikaia_std::index::get(&params, nikaia_std::index::at(i)).1);
+    if written != "" { return written; }
+    let at = if signature.takes_a_receiver() { i + 1 } else { i };
+    if emit_arg_plain_option(&nikaia_std::index::get(&params, nikaia_std::index::at(i)).1) && emit_arg_lends_own(contract, at, library, described) { return emit_arg_opening_plain(&nikaia_std::index::get(&params, nikaia_std::index::at(i)).1); }
+    String::from("")
+}
+
+pub(crate) fn emit_arg_plain_option(ty: &Ty) -> bool {
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { view, .. } => { let view = *view; !view },
+            Ty::Var { view, .. } => { let view = *view; !view },
+            Ty::Tuple(_) => true,
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_arg_opening_plain(ty: &Ty) -> String {
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "Bytes" { String::from(".as_deref()") } else { String::from(".as_ref()") },
+            _ => String::from(".as_ref()"),
+        } },
+        _ => String::from(""),
+    }
 }
 
 pub(crate) fn emit_arg_names_a_place(arg: &Expr) -> bool { matches!(arg, Expr::Variable(_, _) | Expr::Field { .. }) }
@@ -139,17 +165,17 @@ impl EmitState {
         if self.own_contracts.functions.contains_key(callee) { return keeps_its_bytes(match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
         keeps_its_bytes(match world.library.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i)
     }
-    pub(crate) fn emit_arg_opening(&self, callee: &str, i: i64) -> String {
+    pub(crate) fn emit_arg_opening(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, i: i64) -> String {
         if self.own_contracts.functions.contains_key(callee) {
             let contract = match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-            return emit_arg_opening_in(contract, i);
+            return emit_arg_opening_in(contract, i, world.library, &self.described);
         }
         let candidates = emit_candidates(&self.own_contracts, callee);
         let mut first: String = String::from("");
         let mut seen = false;
         let mut agree = true;
         for candidate in candidates.iter() {
-            let each = emit_arg_opening_in(candidate, i);
+            let each = emit_arg_opening_in(candidate, i, world.library, &self.described);
             if !seen {
                 first = each;
                 seen = true;
@@ -271,7 +297,7 @@ impl EmitState {
             }
         }
         let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(&node_key(arg));
-        let lent_option = lend && before == "Some(" && self.emit_arg_opening(callee, i) == "";
+        let lent_option = lend && before == "Some(" && self.emit_arg_opening(world, callee, i) == "";
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if lent_option || lent_path { out.push("&"); }
         out.push(&before);
@@ -281,7 +307,7 @@ impl EmitState {
         let mut how: String = String::from("");
         let mut has_how = false;
         if lend {
-            how = self.emit_arg_opening(callee, i);
+            how = self.emit_arg_opening(world, callee, i);
             has_how = how != "";
         }
         if has_how {

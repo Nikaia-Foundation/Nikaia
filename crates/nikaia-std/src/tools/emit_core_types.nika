@@ -132,7 +132,11 @@ impl EmitState {
             for part in ty.generics {
                 parts.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count))
             }
-            // `(A, B)?` is an `Option<(A, B)>` (ADR-364).
+            // `(A, B)?` is an `Option<(A, B)>` (ADR-364), and a view of one
+            // an `Option<&(A, B)>`, as a lent `T?` is (#1256).
+            if ty.is_nullable && ty.is_view {
+                return f"Option<{lifetimes.reference()}({parts.join(", ")})>"
+            }
             if ty.is_nullable {
                 return f"Option<({parts.join(", ")})>"
             }
