@@ -51,6 +51,9 @@ fn main() {
 
 Owns: the keep inference, the checker's typing of a call's result as a view, the emitter's view result type, their tests, the spec baselines. Not yours: the use-after-`keep self` check (#1241), the spec page text.
 
+
+An earlier run of this brief stopped unfinished; its edits (496 lines, never committed, maybe not built) are in `docs/briefs/views/v13-view-result.partial.patch`: read it as a map, not as code that works; apply nothing blind.
+
 ## To build
 1. **A non-text result handed back from a lent parameter is a view** (D8, D12): the checker types such a call's result as a view with its sources, the inference no longer counts it as keeping, the emitter writes the view result type, callers hold a temporary argument as the text path does. Probes 1 and 2 print as said. Tests in `tests/compiler/`: both probes, and a function that hands back a moving field taken out of its parameter into a place that outlives the call, still refused. Commit `Part of #1213`.
 2. **Spec block #56 lowers again**: Part I, 4.6 (`10-nikaia-light.md` #56) compiles; regenerate `tests/specification/EXPECTED.txt` and `COMPILES.txt` (how: `docs/builder-facts.md`). Commit `Fixes #1239`.
