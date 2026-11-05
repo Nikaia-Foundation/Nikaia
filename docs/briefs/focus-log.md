@@ -20,3 +20,4 @@
 2026-11-04 16:19 views briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 567570 cost 4.47 queue 0
 2026-11-04 22:19 views briefs 1 done 0 partial 1 blocked 0 noop 0 tokens 665985 cost 5.71 queue 1
 2026-11-05 02:07 async briefs 2 done 2 partial 0 blocked 0 noop 0 tokens 9045124 cost 11.14 queue 2
+2026-11-05 04:50 views briefs 1 done 1 partial 0 blocked 0 noop 0 tokens 1481754 cost 1.81 queue 1
