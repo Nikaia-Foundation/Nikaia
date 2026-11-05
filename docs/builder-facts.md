@@ -161,6 +161,10 @@ goes into the section of its topic, in one line, with the run that paid for it.
   for a binary built in a private copy). It lists every refusal of a file: fix
   them all before the next cycle. A new `.nika` needs one `lower-std` run
   before `cargo build`, and a row in `scripts/self_hosting.py`.
+* **A retype of a lowered type needs a probe per shape before the first `lower-std`**
+  (v28): text, struct, tuple and generic `T` are spelled apart in `emit_core_types.nika`;
+  one probe each on the draft binary saves a ten-minute bootstrap cycle. The before-binary
+  is a fresh build of HEAD: after a cut run, `target/fast` may hold the last draft.
 * **`keeps.nika` (`lends_with` in `lends.nika`) drives both the view migration and
   what the tool files lend** (v24): a change to the keep rule rewrites how 20 or
   more tool files lower. Probe first that they still compile under the new rule.
