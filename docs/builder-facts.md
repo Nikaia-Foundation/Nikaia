@@ -85,6 +85,9 @@ goes into the section of its topic, in one line, with the run that paid for it.
   run --profile fast -p nikaia --example specification >
   tests/specification/EXPECTED.txt`), `COMPILES.txt`, and the examples'
   ledgers. Look at `git status` before the commit (v11).
+* **A program that stops at run time cannot be a test**: `nikaia test` does not
+  bless an abort. Test the compile-time refusal instead (a precondition broken,
+  NK1207), or check the abort by hand and name it under `Tests:` (v21).
 * **A use after a move is refused only by rustc today** (#1241): `nikaia test`
   counts it as a failed build, so it cannot be a `.stderr` test yet.
 * **Guard tests scan the whole repository** (`range_spelling`,
@@ -135,6 +138,11 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **Print the `Ty` the checker assigns before writing a predicate on it**
   (v18b): the text view is `Ty::Named { name: "str", view: true }`, not a
   `String` view; own copying enums are lent as `&T`.
+* **An `Array[T]` parameter is decided in five places** (v21): lending in
+  `lends_with` (`lends.nika`), the length generic in `emit_function.nika`, the
+  `&` at a call in `check_arguments.nika` (the lent rule), `&mut` in
+  `lent_to_a_mut_parameter` (`check_references.nika`), a part's length to the
+  prover in `length_given` (`prover_state.nika`).
 * **The argument check is `check_arguments.nika`**; several early `continue`s
   there (about line 353, a view handed to a lent `String`) skip
   `the_compiler_writes_the_reference` (v18b).
