@@ -6870,3 +6870,206 @@ fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64])
     }
     return out
 }
+
+// --- A parameter handed back is a view of it, of any type -------------------
+
+/// **A result that hands back a lent parameter, or a field or an element of
+/// one, is a view of it** (ADR-views-3 D12, D8; Part I, 6.6; #1239). Text is
+/// decided by the walk above; this is every other type: `fn hand[T](x: T) ->
+/// T { return x }` is written as `fn hand[T](x: ref T) -> ref T`, so the
+/// inference does not count `x` as kept, the emitter ties the result to `x`
+/// (`fn hand<'a, T>(x: &'a T) -> &'a T`) and the caller holds a temporary
+/// argument as it holds one for text. Only where every way out is such a
+/// place, rooted in a parameter neither `keep` nor `mut` nor `ref` already;
+/// text, a word copied at a read and a result written with `from` are not
+/// asked. `self` is not asked either: its word says how it is taken. An
+/// `impl` of a trait keeps the trait's signature. A whole parameter handed
+/// back is asked only in a file that writes `keep` (#1213): until the
+/// migration reaches a file, returning a parameter by value keeps it there,
+/// as `NK2302` is raised only in such a file (`check_keep_marks.nika`).
+pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerContext) {
+    let plain = hb_plain_enums(program, words)
+    let opted = keep_marks_opted_in_items(program.items)
+    for mut item in program.items {
+        hb_item(item.node, words, plain, opted)
+    }
+}
+
+fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool) {
+    match item {
+        Item::Fn { .. } => hb_fn(item, words, plain, opted),
+        Item::Impl { trait_name, methods, .. } => {
+            if trait_name == null {
+                for mut method in methods {
+                    hb_fn(method.node, words, plain, opted)
+                }
+            }
+        },
+        else => {},
+    }
+}
+
+fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool) {
+    match item {
+        Item::Fn { args, ret_type, body, is_extern, ret_from, .. } => {
+            if is_extern || ret_from.len() > 0 || !hb_result_may_be_a_view(ret_type, words, plain) {
+                return
+            }
+            let roots = hb_roots(body, args, words, opted) ?? return
+            for mut arg in args {
+                if roots.contains(words.resolve(arg.name)) {
+                    hb_set(arg.ty)
+                }
+            }
+            hb_set_maybe(ret_type)
+        },
+        else => {},
+    }
+}
+
+fn hb_set(mut ty: Type) {
+    ty.is_view = true
+}
+
+fn hb_set_maybe(mut ty: Type?) {
+    if ty != null {
+        hb_set(ty)
+    }
+}
+
+/// A result type a view of a parameter can stand in: not text, not a word
+/// copied at a read, not already a view, nothing a place cannot be.
+fn hb_result_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
+    let t = ty ?? return false
+    if t.is_view || t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || t.code != null || t.count != null || t.either || t.lasting {
+        return false
+    }
+    let name = words.resolve(t.name)
+    if plain.contains(name) {
+        return false
+    }
+    let refused = ["String", "Bytes", "str", "char", "int", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"]
+    return !refused.iter().any(fn(word) { word == name })
+}
+
+/// The parameters every way out of `body` is a place of; `null` where one
+/// way out is anything else, or the whole parameter outside a file that
+/// writes `keep`.
+fn hb_roots(body: ref Block, args: ref Vec[FnArg], words: ref winnow_grammar::InternerContext, opted: bool) -> collections::BTreeSet[String]? {
+    let ways = hb_ways_out(body)
+    if ways.is_empty() {
+        return null
+    }
+    let mut roots: collections::BTreeSet[String] = collections::BTreeSet()
+    for way in ways {
+        let root = hb_place_root(way, words) ?? return null
+        if !opted && hb_a_name(way) {
+            return null
+        }
+        if !args.iter().any(fn(arg) { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && arg.ty.code == null }) {
+            return null
+        }
+        if rebinds(body, root, words) {
+            return null
+        }
+        roots.insert(root)
+    }
+    return roots
+}
+
+fn hb_a_name(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+/// The name a place starts at: `x` of `x`, `x.item`, `x[0].name`.
+fn hb_place_root(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match expr {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        Expr::Field { base, .. } => hb_place_root(base, words),
+        Expr::Index { base, index, .. } => match index {
+            Expr::Range { .. } => null,
+            else => hb_place_root(base, words),
+        },
+        else => null,
+    }
+}
+
+/// Every value `body` hands back: each `return`'s, a lambda's too (which
+/// can only make the answer `null`), and the tail expression's.
+fn hb_ways_out(body: ref Block) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = hb_returns_of(body)
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Return(value, _) => out.extend(hb_maybe(value)),
+            Expr::Block(block, _) => out.extend(hb_returns_of(block)),
+            Expr::AsyncGroup(block, _) => out.extend(hb_returns_of(block)),
+            Expr::Unsafe(block, _) => out.extend(hb_returns_of(block)),
+            Expr::Overlap(block, _) => out.extend(hb_returns_of(block)),
+            Expr::If { then_branch, else_branch, .. } => {
+                out.extend(hb_returns_of(then_branch))
+                out.extend(hb_returns_of_maybe(else_branch))
+            },
+            Expr::Closure { body, .. } => out.extend(hb_returns_of(body)),
+            Expr::TryCatch { handler, .. } => out.extend(hb_returns_of(handler)),
+            else => {},
+        }
+    }
+    match body.stmts.last() {
+        null => {},
+        stmt => out.extend(hb_tail(stmt.node)),
+    }
+    return out
+}
+
+/// The value the last statement hands back, where it is an expression.
+fn hb_tail(stmt: ref Stmt) -> Vec[ref Expr] {
+    return match stmt {
+        Stmt::Expr(tail) => match tail {
+            Expr::Return(_, _) => [],
+            Expr::Throw(_, _) => [],
+            else => [tail],
+        },
+        else => [],
+    }
+}
+
+/// The `return`s that are statements of `block` or of its loops.
+fn hb_returns_of(block: ref Block) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Return(value) => out.extend(hb_maybe(value)),
+            Stmt::For { body, .. } => out.extend(hb_returns_of(body)),
+            Stmt::While { body, .. } => out.extend(hb_returns_of(body)),
+            else => {},
+        }
+    }
+    return out
+}
+
+fn hb_returns_of_maybe(block: ref Block?) -> Vec[ref Expr] {
+    return hb_returns_of(block ?? return [])
+}
+
+fn hb_maybe(expr: ref Expr?) -> Vec[ref Expr] {
+    return [expr ?? return []]
+}
+
+/// The enums whose variants hold nothing: copied at a read, never a view.
+fn hb_plain_enums(program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut plain: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in program.items {
+        match item.node {
+            Item::Enum { name, variants, .. } => {
+                if variants.iter().all(fn(variant) { variant.fields == VariantFields::Unit }) {
+                    plain.insert(words.resolve(name).clone())
+                }
+            },
+            else => {},
+        }
+    }
+    return plain
+}

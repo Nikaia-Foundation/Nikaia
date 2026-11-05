@@ -791,7 +791,27 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
             state.facts.list_indices.insert(id_of(func) as i64)
         }
     }
+    // **A view of a parameter bound to a copied word is read at the call**
+    // (ADR-views-3 D12, D4, #1239): `hand(3)` of `fn hand[T](x: T) -> T` hands
+    // back a view of `x`, and a view of a number is the number (ADR-279 D8);
+    // so is a view of an open number, whose type its uses decide (#497).
+    let open = args.len() > 0 && state.flow.open_calls.contains_key(id_of(args[0]) as i64)
+    if check_core_call_hands_back_a_variable(contract) && (copies_as_a_view(made) || open) {
+        state.facts.copied_results.insert(id_of(func) as i64)
+        return unviewed_type(made)
+    }
     return made
+}
+
+/// The result is a view of a type parameter: `ref T`, as a parameter handed
+/// back is written (`text_tiers.nika`, `tier_hand_back`).
+fn check_core_call_hands_back_a_variable(contract: ref FnContract) -> bool {
+    let signature = contract.signature ?? return false
+    let ty = signature.result ?? return false
+    return match ty {
+        Ty::Var { view, .. } => view,
+        else => false,
+    }
 }
 
 /// **`f(a, b)`, `Stats(first)`, `io::read_to_string()`**: a free call.

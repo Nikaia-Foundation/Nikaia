@@ -1,0 +1,38 @@
+// `hand` hands back its parameter, so its result is a view of the argument,
+// not a keep of it; a view of a number is read where the number is wanted
+// (ADR-views-3 D8, D12, #1239).
+struct Box[T] {
+    item: T,
+}
+
+impl Box[T] {
+    fn get(keep self) -> T {
+        return self.item
+    }
+}
+
+fn hand[T](x: T) -> T {
+    return x
+}
+
+fn twice(n: i64) -> i64 {
+    return n * 2
+}
+
+struct P {
+    n: i64,
+}
+
+fn main() {
+    let b = Box { item: 3 }
+    let y = hand(b.get())
+    println(f"{y}")
+    println(f"{twice(hand(4))}")
+    let mut z = hand(5)
+    z += 1
+    println(f"{z}")
+    let p = P { n: hand(7) }
+    println(f"{p.n}")
+    let c = Box { item: [1, 2] }
+    println(f"{hand(c.item):?}")
+}

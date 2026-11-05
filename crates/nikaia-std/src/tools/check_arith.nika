@@ -470,7 +470,7 @@ impl CheckState {
     /// **`NK1245`: a value whose type nothing can tell**, unless what left it
     /// without one was said elsewhere or stood back for a reason.
     pub fn a_value_of_no_known_type(ref mut self, world: ref CheckWorld, expr: ref Expr, span: ref Span) sync {
-        let open = arith_a_number_literal(expr) || self.number_shaped(world, expr) || self.a_name_of_an_open_comptime(world, expr) || self.a_member_of_an_open_argument(world, expr) || self.a_coalesce_of_numbers(world, expr) || arith_a_named_call(world, expr, "asset")
+        let open = arith_a_number_literal(expr) || self.number_shaped(world, expr) || self.a_call_of_open_members(world, expr) || self.a_name_of_an_open_comptime(world, expr) || self.a_member_of_an_open_argument(world, expr) || self.a_coalesce_of_numbers(world, expr) || arith_a_named_call(world, expr, "asset")
         // **A name is asked where it is bound**: a `let`'s value, a loop's
         // sequence, the place a lambda stands, a declared parameter. Whatever
         // left it without a type was said there, or stood back for.
@@ -530,6 +530,21 @@ impl CheckState {
             Expr::Field { name, .. } => world.words.resolve(name) == "default",
             else => false,
         }
+    }
+
+    /// **A generic call that hands back a member of a value with an open
+    /// argument** (#1239): `hand(b.item)` of `b = Box { item: 3 }` is open as
+    /// `b.item` is (`check_crossings_a_call_that_hands_its_number_back`).
+    fn a_call_of_open_members(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        let args = match expr {
+            Expr::Call { args, .. } => args,
+            else => return false,
+        }
+        if args.len() == 0 {
+            return false
+        }
+        let calls = self.flow.open_calls[id_of(args[0]) as i64] ?? return false
+        return calls.iter().all(fn(at) { self.number_shaped(world, args[at]) || self.a_member_of_an_open_argument(world, args[at]) })
     }
 
     fn a_member_of_an_unknown(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {

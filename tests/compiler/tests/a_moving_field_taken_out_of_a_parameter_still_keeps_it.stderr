@@ -1,0 +1,10 @@
+error[NK2302]: `take` keeps `x`, but `x` is not marked `keep`.
+   --> tests/a_moving_field_taken_out_of_a_parameter_still_keeps_it.nika:10:5
+    |
+ 10 |     return v
+    |     ^^^^^^^^
+    |
+    = note: A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).
+    = note: Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).
+    = help: Write `keep x` in the signature of `take`.
+1 view kept past the call that was given it

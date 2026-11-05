@@ -1,0 +1,23 @@
+// `first` hands back an element of its parameter: a view into `xs`, which
+// stays the caller's (ADR-views-3 D8, D12, #1239).
+fn first(x: Vec[Vec[i64]]) -> Vec[i64] {
+    return x[0]
+}
+
+struct Pair {
+    left: Vec[i64],
+    right: i64,
+}
+
+fn left_of(p: Pair) -> Vec[i64] {
+    return p.left
+}
+
+fn main() {
+    let xs = [[1, 2], [3]]
+    let f = first(xs)
+    println(f"{f:?}")
+    println(f"{xs.len()}")
+    let p = Pair { left: [4], right: 5 }
+    println(f"{left_of(p):?} {p.right}")
+}

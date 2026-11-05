@@ -601,7 +601,21 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
             state.facts.list_indices.insert(id_of(func) as i64);
         }
     }
+    let open = !args.is_empty() && state.flow.open_calls.contains_key(&(id_of(nikaia_std::index::get(&args, 0)) as i64));
+    if check_core_call_hands_back_a_variable(&contract) && (copies_as_a_view(&made) || open) {
+        state.facts.copied_results.insert(id_of(func) as i64);
+        return unviewed_type(&made);
+    }
     made
+}
+
+pub(crate) fn check_core_call_hands_back_a_variable(contract: &FnContract) -> bool {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let ty = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match ty {
+        Ty::Var { view, .. } => { let view = *view; view },
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

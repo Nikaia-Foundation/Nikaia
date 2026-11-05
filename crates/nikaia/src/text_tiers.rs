@@ -123,6 +123,8 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     let decided = text_tiers(&parsed.program, &ask);
     parsed.viewed_arms = decided.viewed_arms.clone();
     parsed.refused_moves = decided.refused_moves.clone();
+    // A parameter handed back is a view of it, of any type (ADR-views-3 D12, #1239).
+    nikaia_std::tools::text_tiers::tier_hand_back(&mut parsed.program, &parsed.interner);
     if decided.tiers.is_empty() && decided.lets.is_empty() && decided.adopted.is_empty() {
         return;
     }

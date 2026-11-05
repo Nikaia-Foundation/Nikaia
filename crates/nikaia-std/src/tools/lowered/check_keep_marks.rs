@@ -25,8 +25,10 @@ pub fn keep_marks_check(view: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[Par
     out
 }
 
-pub(crate) fn keep_marks_opted_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>) -> bool {
-    for item in view.items.iter() {
+pub(crate) fn keep_marks_opted_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>) -> bool { keep_marks_opted_in_items(view.items) }
+
+pub fn keep_marks_opted_in_items(items: &[Spanned<Item>]) -> bool {
+    for item in items.iter() {
         match &item.node {
             Item::Fn { receiver, args, .. } => { if keep_marks_written((receiver).as_ref(), args) { return true; } },
             Item::Impl { methods, .. } => {

@@ -5118,3 +5118,142 @@ pub(crate) fn tw_said(tiers: &collections::BTreeMap<(i64, String, String, i64, V
     out
 }
 
+pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerContext) {
+    let plain = hb_plain_enums(&program, words);
+    let opted = keep_marks_opted_in_items(&program.items);
+    for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, opted); }
+}
+
+pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool) {
+    match item {
+        Item::Fn { .. } => { hb_fn(item, words, plain, opted); },
+        Item::Impl { trait_name, methods, .. } => {
+            let trait_name = *trait_name;
+            if trait_name.is_none() { for method in methods.iter_mut() { hb_fn(&mut (*method).node, words, plain, opted); } }
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool) {
+    match item {
+        Item::Fn { args, ret_type, body, is_extern, ret_from, .. } => {
+            let is_extern = *is_extern;
+            if is_extern || !ret_from.is_empty() || !hb_result_may_be_a_view((ret_type).as_ref(), words, plain) { return; }
+            let roots = match hb_roots(body, &args, words, opted) { Some(__nikaia_value) => __nikaia_value, None => return };
+            for arg in args.iter_mut() { if roots.contains(words.resolve((*arg).name)) { hb_set(&mut (*arg).ty); } }
+            hb_set_maybe(&mut *ret_type);
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn hb_set(ty: &mut Type) { ty.is_view = true; }
+
+pub(crate) fn hb_set_maybe(ty: &mut Option<Type>) { if ty.is_some() { hb_set(ty.as_mut().unwrap()); } }
+
+pub(crate) fn hb_result_may_be_a_view(ty: Option<&Type>, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>) -> bool {
+    let t = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if t.is_view || t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || (*t.code).is_some() || t.count.is_some() || t.either || t.lasting { return false; }
+    let name = words.resolve(t.name);
+    if plain.contains(name) { return false; }
+    let refused = vec!["String", "Bytes", "str", "char", "int", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"];
+    !refused.iter().any(|word| { AsRef::<str>::as_ref(&(word)) == AsRef::<str>::as_ref(&(name)) })
+}
+
+pub(crate) fn hb_roots(body: &Block, args: &[FnArg], words: &winnow_grammar::InternerContext, opted: bool) -> Option<collections::BTreeSet<String>> {
+    let ways = hb_ways_out(body);
+    if ways.is_empty() { return None; }
+    let mut roots: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for way in ways.iter() {
+        let way = *way;
+        let root = match hb_place_root(way, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if !opted && hb_a_name(way) { return None; }
+        if !args.iter().any(|arg| { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && (*arg.ty.code).is_none() }) { return None; }
+        if rebinds(body, &root, words) { return None; }
+        roots.insert(root);
+    }
+    Some(roots)
+}
+
+pub(crate) fn hb_a_name(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
+
+pub(crate) fn hb_place_root(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match expr {
+        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); hb_place_root(base, words) },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match index {
+            Expr::Range { .. } => None,
+            _ => hb_place_root(base, words),
+        } },
+        _ => None,
+    }
+}
+
+pub(crate) fn hb_ways_out(body: &Block) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = hb_returns_of(body);
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); out.extend(hb_maybe((value).as_ref())); },
+            Expr::Block(block, _) => { out.extend(hb_returns_of(block)); },
+            Expr::AsyncGroup(block, _) => { out.extend(hb_returns_of(block)); },
+            Expr::Unsafe(block, _) => { out.extend(hb_returns_of(block)); },
+            Expr::Overlap(block, _) => { out.extend(hb_returns_of(block)); },
+            Expr::If { then_branch, else_branch, .. } => {
+                out.extend(hb_returns_of(then_branch));
+                out.extend(hb_returns_of_maybe((else_branch).as_ref()));
+            },
+            Expr::Closure { body, .. } => { out.extend(hb_returns_of(body)); },
+            Expr::TryCatch { handler, .. } => { out.extend(hb_returns_of(handler)); },
+            _ => { },
+        }
+    }
+    match body.stmts.last() {
+        None => { },
+        Some(ref stmt) => { out.extend(hb_tail(&stmt.node)); },
+    }
+    out
+}
+
+pub(crate) fn hb_tail(stmt: &Stmt) -> Vec<&Expr> {
+    match stmt {
+        Stmt::Expr(tail) => match tail {
+            Expr::Return(_, _) => vec![],
+            Expr::Throw(_, _) => vec![],
+            _ => vec![tail],
+        },
+        _ => vec![],
+    }
+}
+
+pub(crate) fn hb_returns_of(block: &Block) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Return(value) => { out.extend(hb_maybe((value).as_ref())); },
+            Stmt::For { body, .. } => { out.extend(hb_returns_of(body)); },
+            Stmt::While { body, .. } => { out.extend(hb_returns_of(body)); },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn hb_returns_of_maybe(block: Option<&Block>) -> Vec<&Expr> { hb_returns_of(match block { Some(__nikaia_value) => __nikaia_value, None => return vec![] }) }
+
+pub(crate) fn hb_maybe(expr: Option<&Expr>) -> Vec<&Expr> { vec![match expr { Some(__nikaia_value) => __nikaia_value, None => return vec![] }] }
+
+pub(crate) fn hb_plain_enums(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+    let mut plain: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Enum { name, variants, .. } => {
+                let name = *name;
+                if variants.iter().all(|variant| { variant.fields == VariantFields::Unit }) { plain.insert(words.resolve(name).to_string()); }
+            },
+            _ => { },
+        }
+    }
+    plain
+}
+

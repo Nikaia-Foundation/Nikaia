@@ -428,6 +428,9 @@ pub struct CheckFacts {
     pub lent_options: collections::BTreeSet[i64],
     pub wrapped: collections::BTreeMap[i64, FactWrap],
     pub compared_views: collections::BTreeSet[(i64, String)],
+    /// The calls whose result, a view of a parameter of a type bound to a
+    /// copied word, is read at the call (ADR-views-3 D12, #1239).
+    pub copied_results: collections::BTreeSet[i64],
     pub compared_numbers: collections::BTreeSet[(i64, String)],
     /// **Text ordered against text** (#733), and a lambda's lent item
     /// compared with text (#688), by the operator's span: both sides are
@@ -680,6 +683,7 @@ impl CheckFacts {
             lent_options: collections::BTreeSet(),
             wrapped: collections::BTreeMap(),
             compared_views: collections::BTreeSet(),
+            copied_results: collections::BTreeSet(),
             compared_numbers: collections::BTreeSet(),
             ordered_texts: collections::BTreeSet(),
             claims: collections::BTreeMap(),

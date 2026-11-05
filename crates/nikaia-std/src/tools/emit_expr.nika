@@ -379,7 +379,17 @@ impl EmitState {
                 if breaks {
                     out.push("match ")
                 }
+                // A view of a copied word is read at the call (ADR-views-3
+                // D12, #1239): `Clone::clone(hand(&3))`, which leaves the open `3` to
+                // the type its uses decide (#497).
+                let copied = self.facts.copied_results.contains(node_key(func))
+                if copied {
+                    out.push("Clone::clone(")
+                }
                 self.emit_core_call(world, walk, out, host, func, args, config, depth, flow, scope)
+                if copied {
+                    out.push(")")
+                }
                 if breaks {
                     self.emit_expr_break_close(out, flow)
                 }

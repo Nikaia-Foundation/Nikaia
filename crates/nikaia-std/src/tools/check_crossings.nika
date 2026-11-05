@@ -639,7 +639,9 @@ fn check_crossings_known(bound: ref collections::BTreeMap[String, Ty], name: ref
 
 /// **A generic call whose result only an open number binds** (#497):
 /// `hand(7)` for `fn hand[T](x: T) -> T` hands back the `7`, whose type its
-/// uses decide (ADR-285 D1), so the call is that open number.
+/// uses decide (ADR-285 D1), so the call is that open number. So is
+/// `hand(b.item)` of a `b = Box { item: 3 }` (#1239): a member of a value
+/// with an open argument, which stands back as such (`NK1245`).
 pub fn check_crossings_a_call_that_hands_its_number_back(mut state: CheckState, world: ref CheckWorld, contract: ref FnContract, bound: ref collections::BTreeMap[String, Ty], args: ref Vec[Expr]) sync {
     let signature: ref Signature = contract.signature ?? return
     let result: ref Ty = signature.result ?? return
@@ -667,7 +669,7 @@ pub fn check_crossings_a_call_that_hands_its_number_back(mut state: CheckState, 
         return
     }
     for k in at {
-        if !state.number_shaped(world, args[k]) {
+        if !state.number_shaped(world, args[k]) && !state.a_member_of_an_open_argument(world, args[k]) {
             return
         }
     }

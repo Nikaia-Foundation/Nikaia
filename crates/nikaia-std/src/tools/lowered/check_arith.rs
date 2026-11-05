@@ -333,7 +333,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_value_of_no_known_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
-        let open = arith_a_number_literal(expr) || self.number_shaped(world, expr) || self.a_name_of_an_open_comptime(world, expr) || self.a_member_of_an_open_argument(world, expr) || self.a_coalesce_of_numbers(world, expr) || arith_a_named_call(world, expr, "asset");
+        let open = arith_a_number_literal(expr) || self.number_shaped(world, expr) || self.a_call_of_open_members(world, expr) || self.a_name_of_an_open_comptime(world, expr) || self.a_member_of_an_open_argument(world, expr) || self.a_coalesce_of_numbers(world, expr) || arith_a_named_call(world, expr, "asset");
         let said = arith_a_name(expr);
         let structural = arith_structural(expr) || arith_a_named_call(world, expr, "panic") || self.a_standing_member(world, expr);
         let per_call = self.a_drivers_row(world, expr) || self.through_a_package_unread(&world.here, world, expr) || self.refused_where_it_is_lowered(world, expr);
@@ -382,6 +382,17 @@ impl CheckState {
             Expr::Field { name, .. } => { let name = *name; world.words.resolve(name) == "default" },
             _ => false,
         }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_call_of_open_members(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+        let args = match expr {
+            Expr::Call { args, .. } => args,
+            _ => return false,
+        };
+        if args.is_empty() { return false; }
+        let calls = match *nikaia_std::index::get(&self.flow.open_calls, &(id_of(nikaia_std::index::get(&args, 0)) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        calls.iter().copied().all(|at| { self.number_shaped(world, nikaia_std::index::get(&args, nikaia_std::index::at(at))) || self.a_member_of_an_open_argument(world, nikaia_std::index::get(&args, nikaia_std::index::at(at))) })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

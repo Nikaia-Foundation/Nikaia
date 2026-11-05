@@ -465,7 +465,7 @@ pub fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState,
     if at.is_empty() { return; }
     for k in at.iter() {
         let k = nikaia_std::num::value(k);
-        if !state.number_shaped(world, nikaia_std::index::get(&args, nikaia_std::index::at(k))) { return; }
+        if !state.number_shaped(world, nikaia_std::index::get(&args, nikaia_std::index::at(k))) && !state.a_member_of_an_open_argument(world, nikaia_std::index::get(&args, nikaia_std::index::at(k))) { return; }
     }
     state.flow.open_calls.insert(id_of(nikaia_std::index::get(&args, 0)) as i64, at);
 }

@@ -2407,7 +2407,7 @@ pub mod check_items {
 }
 pub mod check_keep_marks {
     #[allow(unused_imports)]
-    pub use super::{keep_marks_check};
+    pub use super::{keep_marks_check, keep_marks_opted_in_items};
 }
 pub mod check_kinds {
     #[allow(unused_imports)]
@@ -3077,7 +3077,7 @@ pub mod tether {
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
-    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write};
+    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back};
 }
 pub mod threads {
     #[allow(unused_imports)]

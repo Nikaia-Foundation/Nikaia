@@ -1,0 +1,21 @@
+// `take` moves a field out of its parameter into a local and hands that
+// back: the result outlives the call, so `take` keeps `x` and must say so
+// (ADR-views-3 D12, #1239).
+struct Box[T] {
+    item: T,
+}
+
+fn take(x: Box[Vec[i64]]) -> Vec[i64] {
+    let v = x.item
+    return v
+}
+
+fn give(keep x: Box[Vec[i64]]) -> Vec[i64] {
+    return x.item
+}
+
+fn main() {
+    let b = Box { item: [1] }
+    println(f"{take(b):?}")
+    println(f"{give(Box { item: [2] }):?}")
+}

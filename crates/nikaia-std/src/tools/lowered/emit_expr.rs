@@ -248,7 +248,10 @@ impl EmitState {
                 let func = nikaia_std::boxed::open(func);
                 let breaks = self.emit_expr_breaks_out(world, node, flow);
                 if breaks { out.push("match "); }
+                let copied = self.facts.copied_results.contains(&node_key(func));
+                if copied { out.push("Clone::clone("); }
                 self.emit_core_call(world, walk, out, host, func, args, config, depth, flow, scope)?;
+                if copied { out.push(")"); }
                 if breaks { self.emit_expr_break_close(out, flow); }
             },
             Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; self.emit_expr_method(world, walk, out, host, node, receiver, method, args, config, depth, flow, scope)?; },
