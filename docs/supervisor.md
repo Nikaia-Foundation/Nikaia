@@ -230,8 +230,8 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
   next step; the bug lane with `--no-bump`). It loops on `cycle.nika`: runs
-  each `NEXT` brief through `agent.nika` and commits the run's files (report,
-  `.run.json`, `cost.txt`, `tokens.txt`, `tokenspeed.md`), applies `BUMP
+  each `NEXT` brief through `agent.nika` (posting the brief once on its issue
+  first; the run's files stay untracked working files, #1252), applies `BUMP
   pending` when CI is green, and on `CUT`, `BATCH DONE` and a `RED` with no
   builder queued waits for the batch's suite and stops (`ESCALATE <stop line>:
   the supervisor writes the next briefs`): the supervisor writes the next
@@ -306,8 +306,9 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
 * **What the main session reads.** Only the one-line answers (builder: `done
   <sha>, report <path>`) and, when writing the next briefs, the reports'
   fields (`Result`, `Found`, `Deviation`, `Needs`, `Changelog`), not their
-  prose. The main session commits `batch.txt` and the run
-  files with `git add DIR/<files>`, never another agent's files.
+  prose. `batch.txt`, the
+  briefs and the run files are untracked working files (#1252): nobody commits
+  them.
 * **Hand-over.** A fresh agent gets the task, the issue numbers, and the two or
   three facts in no file; a fact needed again is written to the repository
   (the *State* below, a doc, a commit message), not carried in prompts.
@@ -411,8 +412,11 @@ unrun brief is skipped. `docs/briefs/focus-log.md` holds one line per block.
 
 ## Briefs and reports
 
-A brief is one file `DIR/<topic>.md`, tracked (never a scratchpad: a fresh
-session has none). `scripts/agent.nika` starts the agent with `Read your brief
+A brief is one file `DIR/<topic>.md` beside the tree: `docs/briefs/` is not
+tracked (#1252; a commit of a brief would start a CI run that tests nothing).
+The driver posts each brief on its issue (the first four-digit part of its
+name) before it runs, so a lost session still finds it there; a brief without
+an issue number in its name is posted nowhere. `scripts/agent.nika` starts the agent with `Read your brief
 at <path>`. It opens with this frontmatter (defaults `builder`, `sonnet`, 120,
 20, `medium`):
 
