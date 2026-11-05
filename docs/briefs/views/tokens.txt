@@ -19,3 +19,4 @@
 /home/user/Nikaia/docs/briefs/views/v14-clone-not-keep.md 1822389 45 1753739 52121 16439
 /home/user/Nikaia/docs/briefs/views/v15-bound-self.md 1540432 39 1479917 48443 11992
 /home/user/Nikaia/docs/briefs/views/v16-clone-trait.md 4604791 68 4478749 98820 27084
+/home/user/Nikaia/docs/briefs/views/v17-migrate-docs-packages.md 4528510 68 4396823 98051 33500
