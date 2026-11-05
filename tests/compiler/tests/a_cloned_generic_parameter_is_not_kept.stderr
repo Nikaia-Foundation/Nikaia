@@ -1,0 +1,9 @@
+error[NK1126]: `T` can be any type the caller picks, so you can't use a method `clone` on it.
+   --> tests/a_cloned_generic_parameter_is_not_kept.nika:17:5
+    |
+ 17 |     return x.clone()
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: A type parameter with no bound can only be moved and passed on, because the body has to work for every type the caller might pick.
+    = help: Use the concrete type the value has instead of `T`. Bounds that limit which types `T` can be aren't available yet.
+1 type error

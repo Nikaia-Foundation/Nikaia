@@ -479,7 +479,8 @@ pub(crate) fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_gra
     let owner = keeps_owner_of(receiver, method, interner, context, own, library);
     let ours = receiver_taken_in(own, context.own_methods, method, (owner).as_deref());
     let theirs = receiver_taken_in(library, context.library_methods, method, (owner).as_deref());
-    if context.unresolved || ours.hit || theirs.hit || !ours.any && !theirs.any { walk.uses.kept.extend(names.iter().cloned()); }
+    let fails_closed = method != "clone" && (context.unresolved || !ours.any && !theirs.any);
+    if fails_closed || ours.hit || theirs.hit { walk.uses.kept.extend(names.iter().cloned()); }
 }
 
 pub(crate) fn keeps_field_root(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> Option<String> {
@@ -895,11 +896,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple65793| {
-                            let (at, arg) = __nikaia_tuple65793; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple66207| {
+                            let (at, arg) = __nikaia_tuple66207; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple65969| {
-                            let (at, arg) = __nikaia_tuple65969;
+                        }).map(|__nikaia_tuple66383| {
+                            let (at, arg) = __nikaia_tuple66383;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);

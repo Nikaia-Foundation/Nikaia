@@ -746,7 +746,13 @@ fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_gr
     let owner = keeps_owner_of(receiver, method, interner, context, own, library)
     let ours = receiver_taken_in(own, context.own_methods, method, owner)
     let theirs = receiver_taken_in(library, context.library_methods, method, owner)
-    if context.unresolved || ours.hit || theirs.hit || (!ours.any && !theirs.any) {
+    // **`.clone()` reads its receiver and makes a copy** (Part I 2.3;
+    // ADR-views-3 D8, D12, #1243): its result reaches nothing of the
+    // receiver, so a body whose calls did not resolve (`x.clone()` of a `T`)
+    // or a call no entry describes is no reason to count it moved. An entry
+    // that does take its receiver by value still says so.
+    let fails_closed = method != "clone" && (context.unresolved || (!ours.any && !theirs.any))
+    if fails_closed || ours.hit || theirs.hit {
         walk.uses.kept.extend(names.clone())
     }
 }

@@ -1,0 +1,22 @@
+// `x.clone()` makes a copy: its result reaches nothing of `x`, so `id` does
+// not keep `x` (ADR-views-3 D8, D12, #1243). With no bound on `T` the call
+// itself is refused (NK1126), and that is the only refusal: no NK2302.
+struct Item {
+    n: i64,
+}
+
+struct Holder {
+    item: Item,
+}
+
+fn hold(keep item: Item) -> Holder {
+    return Holder { item: item }
+}
+
+fn id[T](x: T) -> T {
+    return x.clone()
+}
+
+fn main() {
+    println(f"{id(3)} {hold(Item { n: 4 }).item.n}")
+}

@@ -1,0 +1,36 @@
+// A copy of a lent parameter, or of a field of it, is a value of its own:
+// handing it back keeps nothing of the parameter, so no `keep` is asked for
+// in a file that writes `keep` (ADR-views-3 D8, D12, #1243).
+struct Person {
+    name: String,
+    tags: Vec[String],
+}
+
+struct Holder {
+    p: Person,
+}
+
+fn hold(keep p: Person) -> Holder {
+    return Holder { p: p }
+}
+
+fn name_of(p: Person) -> String {
+    return p.name.clone()
+}
+
+fn tags_of(p: Person) -> Vec[String] {
+    return p.tags.clone()
+}
+
+fn whole(p: Person) -> Person {
+    return p.clone()
+}
+
+fn main() {
+    let p = Person { name: "Ada", tags: ["a"] }
+    let n = name_of(p)
+    let t = tags_of(p)
+    let w = whole(p)
+    let h = hold(Person { name: "Bo", tags: [] })
+    println(f"{n} {t:?} {w.name} {p.name} {h.p.name}")
+}
