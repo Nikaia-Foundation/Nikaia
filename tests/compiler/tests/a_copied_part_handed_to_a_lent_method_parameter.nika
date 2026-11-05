@@ -1,0 +1,43 @@
+// A copied part bound out of a lent value, handed to an own method that
+// lends the position, is passed as the view it is (ADR-views-3 D1).
+
+enum Op {
+    Add,
+    Sub,
+}
+
+enum Expr {
+    Bin(Op, String),
+    Lit(i64),
+}
+
+struct Calc {
+    base: i64,
+}
+
+impl Calc {
+    fn apply(self, op: Op, n: String) -> i64 {
+        if op == Op::Add {
+            return self.base + n.len() as i64
+        }
+        return self.base - n.len() as i64
+    }
+
+    fn total(self, exprs: Vec[Expr]) -> i64 {
+        let mut sum = 0
+        for e in exprs {
+            sum += match e {
+                Expr::Bin(op, n) => self.apply(op, n),
+                Expr::Lit(n) => n,
+            }
+        }
+        return sum
+    }
+}
+
+fn main() {
+    let c = Calc { base: 10 }
+    let exprs = [Expr::Bin(Op::Sub, "abc"), Expr::Bin(Op::Add, "ab"), Expr::Lit(4)]
+    println(c.total(exprs))
+    println(c.total(exprs))
+}
