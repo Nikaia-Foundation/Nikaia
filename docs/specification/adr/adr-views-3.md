@@ -251,6 +251,14 @@ argued from ADR-282: owning needs a length, viewing does not.
   `Array[T, N]`.
 * A `comptime` declared `Array[T]` is a view of data the build fixed; nothing
   allocates. `windows` and `chunks` yield `Array[T]` views.
+* A changeable run, and a list of a `mut` place, change in place with
+  `xs[i] = v`, `swap`, `sort`, `sort_by_key`, `reverse` and `fill(v)`, which
+  lower to the methods of Rust's `[T]`; the argument `xs[a..<b]` to a `mut`
+  parameter lowers to `&mut v[a..b]`. While the part is handed out, the list
+  is not read or changed otherwise (`NK2305`, ADR-views-1 and ADR-views-2), so
+  two changeable parts of one list never overlap; two at once (Rust's
+  `split_at_mut`) need disjointness shown and are not decided here (#1209,
+  added November 5, 2026).
 
 This replaces ADR-184 D3's "under a `ref`" paragraph and the parameter rule for
 lent and changed parameters; its field and result rule and D4 (no `&`) stand.
