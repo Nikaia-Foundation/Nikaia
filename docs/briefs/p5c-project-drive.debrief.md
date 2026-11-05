@@ -1,9 +1,0 @@
-1. **Most turns:** reading `drive_to` (2116-2590) and its callees in pieces to design the host trait. The draft was a schematic `impl Project` with direct calls, so I rebuilt it by hand as a free function with host calls. Before compaction I also spent turns confirming std contracts (`fs::metadata`, `fs::Path`, `env::var`) and how a refusal is downcast (`Raised::inner`).
-2. **Looked up that the brief could have handed me:**
-   - How a thrown refusal reaches Rust: `Box<dyn Error>` → `downcast_ref::<Raised>().inner()`. `Manifests::error` only shows the typed `Thrown` channel.
-   - Which original errors were `refuse!` and which plain `anyhow!`. This decides whether `Refused(String)` alone is enough; I found it is not.
-   - The signatures of `run_fast::compile`, the `Cargo` fields, `run_directly` and `toolchain_can_build_for`, and who else calls it.
-   - The lowering trap: `"".clone()` is refused, `""` gives `ref String` in a closure, and closures cannot declare a return type.
-   - That `toolchain_can_build_for` already held the exact text to move.
-3. **Checks:** the #1060 guard build from HEAD (useful), three `lower-std` rounds (useful, each found a refusal), two `cargo check` runs (useful: the second found the defect), and one small probe that confirmed it. Nothing was wasted, because the defect stopped the run before the full build and tests. In hindsight, a probe of the tuple-in-`return match` shape before writing 500 lines would have found the defect in one turn.
-4. **One change:** a short list in the brief of the shapes the move will use that have no existing pattern in `tools/*.nika`, here `return match` with tuple arms holding `T?`. builder.md would then require one probe program per shape before writing the file. The defect would have stopped the brief at turn 5 instead of after the whole move was written.

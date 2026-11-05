@@ -138,6 +138,8 @@ is withdrawn — never for age by itself. The method and the measurement are
 still true and still cited by ADR number from wherever they are used; only the
 question the page was written to answer is no longer open.
 
+* [`briefs.md`](history/briefs.md) — where the briefs of the finished lanes
+  are: in git, at the commit named there.
 * [`mitigation-hurdles.md`](history/mitigation-hurdles.md) — four hurdles of
   the Rust to Nikaia move; three are built (ADR-283 D25-D26, ADR-010 D10), the
   fourth lives in #581 and ADR-010 D9.
