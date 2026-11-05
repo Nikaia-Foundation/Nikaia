@@ -332,7 +332,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_cast<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, operand: &Expr, ty: &Type, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let into = self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, EmitLifetimes::Elided);
+        let into = self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, &EmitLifetimes::Elided);
         let mut viewed = false;
         match operand {
             Expr::Variable(name, _) => {
@@ -360,7 +360,7 @@ impl EmitState {
                 self.emit_core_nested(world, walk, &mut written, host, operand, 0, depth, flow, scope)?;
                 let open = format!(" as {}", into);
                 let already = written.buf.ends_with(&open);
-                out.append(written);
+                out.append(&written);
                 if already { return Ok(()); }
             } else { self.emit_core_nested(world, walk, out, host, operand, 255, depth, flow, scope)?; }
             out.push(&format!(" as {}", into));

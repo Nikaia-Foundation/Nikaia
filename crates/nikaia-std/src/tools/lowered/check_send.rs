@@ -34,7 +34,7 @@ impl CheckState {
         let mut at: i64 = 0;
         while at < args.len() as i64 && at < found.len() as i64 {
             let (what, path) = names_the_argument(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), at);
-            self.a_value_crosses(world, callee, what, path, nikaia_std::index::get(&found, nikaia_std::index::at(at)), span, why);
+            self.a_value_crosses(world, callee, &what, path, nikaia_std::index::get(&found, nikaia_std::index::at(at)), span, why);
             at = at + 1;
         }
         let mut named: i64 = 0;
@@ -42,22 +42,22 @@ impl CheckState {
             let arg = nikaia_std::index::get(&config, nikaia_std::index::at(named));
             let label = format!("`{}`", world.words.resolve(arg.name));
             let path = dotted_path(world, &arg.value);
-            self.a_value_crosses(world, callee, label, path, &nikaia_std::index::get(&passed, nikaia_std::index::at(named)).1, span, why);
+            self.a_value_crosses(world, callee, &label, path, &nikaia_std::index::get(&passed, nikaia_std::index::at(named)).1, span, why);
             named = named + 1;
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn a_value_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, callee: &str, what: String, path: Option<String>, ty: &Ty, span: &Span, why: &str) {
+    pub(crate) fn a_value_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, callee: &str, what: &str, path: Option<String>, ty: &Ty, span: &Span, why: &str) {
         let verdict = crossing(ty, &Walking { own: world.own, library: world.library, into: Going::Foreign });
         if verdict.refused_part().is_none() { return; }
         if a_lock_refusal(&verdict) {
-            self.reaches_a_lock(callee, &what, (path).as_deref(), &verdict, span);
+            self.reaches_a_lock(callee, what, (path).as_deref(), &verdict, span);
             return;
         }
         let notes: Vec<String> = vec![why.to_string(), nikaia_std::index::or(verdict.note(), || "".into()), same_at_both()];
-        self.findings.push(check_refusal("NK2502", span, format!("{} can't move to another thread, and `{}` might move it.", capitalised(&what), callee), notes, verdict.way_out()));
+        self.findings.push(check_refusal("NK2502", span, format!("{} can't move to another thread, and `{}` might move it.", capitalised(what), callee), notes, verdict.way_out()));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

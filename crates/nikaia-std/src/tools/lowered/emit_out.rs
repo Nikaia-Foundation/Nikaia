@@ -65,7 +65,7 @@ impl EmitOut {
         self.buf.insert_str(nikaia_std::count::of(at), text);
         self.shift_entries(at, text.len() as i64);
     }
-    pub fn append(&mut self, other: EmitOut) {
+    pub fn append(&mut self, other: &EmitOut) {
         let offset = self.buf.len() as i64;
         self.buf.push_str(&other.buf);
         for entry in other.entries.iter() {

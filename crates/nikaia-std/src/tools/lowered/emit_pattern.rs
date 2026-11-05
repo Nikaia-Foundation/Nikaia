@@ -9,7 +9,7 @@ impl EmitState {
         if emit_is_a_binding_text(world, &walk, &pattern.node) {
             match &pattern.node {
                 Pattern::Ref { args, .. } => {
-                    self.emit_text_parts(world, walk, out, host, emit_hidden_text(pattern), args)?;
+                    self.emit_text_parts(world, walk, out, host, &emit_hidden_text(pattern), args)?;
                     out.record(&pattern.span, st);
                     return Ok(());
                 },
@@ -30,9 +30,9 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_patterns<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, patterns: &[Spanned<Pattern>], separator: String) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_patterns<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, patterns: &[Spanned<Pattern>], separator: &str) -> Result<(), Box<dyn std::error::Error>> {
         for i in 0..patterns.len() as i64 {
-            if i > 0 { out.push(&separator); }
+            if i > 0 { out.push(separator); }
             self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&patterns, nikaia_std::index::at(i)))?;
             if separator == " " { emit_texts_a_guard_reads(world, &walk, out, patterns, i); }
         }
@@ -42,8 +42,8 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_pattern_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), Box<dyn std::error::Error>> {
         match &pattern.node {
-            Pattern::Seq(parts) => { self.emit_patterns(world, walk, out, host, parts, String::from(" "))?; },
-            Pattern::Choice(parts) => { self.emit_patterns(world, walk, out, host, parts, String::from(" | "))?; },
+            Pattern::Seq(parts) => { self.emit_patterns(world, walk, out, host, parts, " ")?; },
+            Pattern::Choice(parts) => { self.emit_patterns(world, walk, out, host, parts, " | ")?; },
             Pattern::Bind { name, pat: grouped } => {
                 let grouped = nikaia_std::boxed::open(grouped); let name = *name;
                 let pat = emit_ungrouped(grouped);
@@ -51,7 +51,7 @@ impl EmitState {
                     match &pat.node {
                         Pattern::Ref { args, .. } => {
                             if emit_is_a_binding_span(world, &walk, &pat.node, walk.grammar_nested) {
-                                self.emit_text_parts(world, walk, out, host, emit_text(world, name), args)?;
+                                self.emit_text_parts(world, walk, out, host, &emit_text(world, name), args)?;
                                 return Ok(());
                             }
                             out.push("(");
@@ -65,7 +65,7 @@ impl EmitState {
                 match &pat.node {
                     Pattern::Ref { args, .. } => {
                         if emit_is_a_binding_text(world, &walk, &pat.node) {
-                            self.emit_text_parts(world, walk, out, host, emit_text(world, name), args)?;
+                            self.emit_text_parts(world, walk, out, host, &emit_text(world, name), args)?;
                             return Ok(());
                         }
                     },
@@ -141,7 +141,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_text_parts<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: String, args: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_text_parts<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, args: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
         if args.len() == 1 {
             match &nikaia_std::index::get(&args, 0).node {
                 Pattern::Seq(parts) => {
@@ -156,7 +156,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_text_run<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: String, parts: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_text_run<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, parts: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
         for k in 0..parts.len() as i64 {
             if k > 0 { out.push(" "); }
             let at = if k == 0 { "from" } else if k == parts.len() as i64 - 1 { "to" } else { "" };
@@ -303,7 +303,7 @@ impl EmitState {
             out.push("(");
             self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;
             out.push(")");
-        } else { self.emit_patterns(world, walk, out, host, args, String::from(", "))?; }
+        } else { self.emit_patterns(world, walk, out, host, args, ", ")?; }
         Ok(())
     }
 }

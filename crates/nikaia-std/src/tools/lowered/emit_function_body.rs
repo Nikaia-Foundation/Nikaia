@@ -81,7 +81,7 @@ impl EmitState {
             self.emit_function_block(world, walk, &mut written, host, body, depth, flow, &scope, tail, settled)?;
             if main_ends { written.insert_before_last_brace(main_call); }
             if !first.is_empty() { written.insert_after_first_brace(&format!(" {}", first.join(" "))); }
-            out.append(written);
+            out.append(&written);
             return Ok(());
         }
         let pad = "    ".repeat(nikaia_std::count::of(depth));

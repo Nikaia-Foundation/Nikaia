@@ -1,0 +1,25 @@
+// The fallback of a `??` handed to a callee that keeps it is kept too
+// (ADR-views-3 D1, #1213): `store(first ?? other)` stores `other`, so the
+// caller cannot use `t` after handing it over.
+
+struct Name {
+    text: String,
+}
+
+fn store(text: String) -> Name {
+    let mut n = Name { text: text }
+    n.text.push_str("!")
+    return n
+}
+
+fn either(first: String?, other: String) -> Name {
+    return store(first ?? other)
+}
+
+fn main() {
+    let mut t = " ab ".trim().clone()
+    t.push_str("c")
+    let n = either(null, t)
+    println(n.text)
+    println(t)
+}

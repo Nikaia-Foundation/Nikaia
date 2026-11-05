@@ -425,8 +425,8 @@ pub enum Provenance {
 }
 
 impl Provenance {
-    pub fn join(&self, other: Provenance) -> Provenance {
-        if *self == Provenance::Untrusted || other == Provenance::Untrusted { return Provenance::Untrusted; }
+    pub fn join(&self, other: &Provenance) -> Provenance {
+        if *self == Provenance::Untrusted || *other == Provenance::Untrusted { return Provenance::Untrusted; }
         Provenance::Trusted
     }
     pub fn as_str(&self) -> String {
@@ -460,9 +460,9 @@ pub enum Lock {
 
 impl Lock {
     pub fn holds(&self) -> bool { *self == Lock::Holds }
-    pub fn or(&self, other: Lock) -> Lock {
-        if *self == Lock::Holds || other == Lock::Holds { return Lock::Holds; }
-        if *self == Lock::Undecided || other == Lock::Undecided { return Lock::Undecided; }
+    pub fn or(&self, other: &Lock) -> Lock {
+        if *self == Lock::Holds || *other == Lock::Holds { return Lock::Holds; }
+        if *self == Lock::Undecided || *other == Lock::Undecided { return Lock::Undecided; }
         Lock::No
     }
 }
@@ -529,8 +529,8 @@ impl State {
         if word == "tethered" { return Some(State::Tethered); }
         None
     }
-    pub fn or(&self, other: State) -> State {
-        if *self == State::Tethered || other == State::Tethered { return State::Tethered; }
+    pub fn or(&self, other: &State) -> State {
+        if *self == State::Tethered || *other == State::Tethered { return State::Tethered; }
         State::Borrowed
     }
 }
@@ -553,9 +553,9 @@ pub enum Count {
 }
 
 impl Count {
-    pub fn join(&self, other: Count) -> Count {
-        if *self == Count::Atomic || other == Count::Atomic { return Count::Atomic; }
-        if *self == Count::Word || other == Count::Word { return Count::Word; }
+    pub fn join(&self, other: &Count) -> Count {
+        if *self == Count::Atomic || *other == Count::Atomic { return Count::Atomic; }
+        if *self == Count::Word || *other == Count::Word { return Count::Word; }
         Count::Plain
     }
     pub fn rank(&self) -> i64 {
@@ -708,6 +708,7 @@ pub struct FnContract {
     pub borrows: Vec<String>,
     pub returns: String,
     pub stores: Vec<String>,
+    pub by_value: Vec<String>,
     pub keeps: Vec<String>,
     pub mutates: bool,
     pub touches_a_lock: Lock,
@@ -726,7 +727,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], returns: String::from(""), stores: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

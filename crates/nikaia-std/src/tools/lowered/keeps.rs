@@ -703,6 +703,10 @@ pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerConte
     if part.is_some() { names.push(nikaia_std::index::or(part, || "".into())); }
     for one in keeps_viewed_of(expr, interner, context, own, library, walk) { names.push(one); }
     match expr {
+        Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); names.extend(keeps_handed(fallback, interner, context, own, library, walk)); },
+        _ => { },
+    }
+    match expr {
         Expr::Variable(ident, _) => {
             let ident = *ident;
             let moved = match *nikaia_std::index::get(&walk.aliases, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return names };
@@ -896,11 +900,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple66228| {
-                            let (at, arg) = __nikaia_tuple66228; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple66594| {
+                            let (at, arg) = __nikaia_tuple66594; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple66404| {
-                            let (at, arg) = __nikaia_tuple66404;
+                        }).map(|__nikaia_tuple66770| {
+                            let (at, arg) = __nikaia_tuple66770;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);
@@ -1015,7 +1019,103 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
             contract.keeps = list;
         }
     }
+    keeps_by_value(ledger, units, library);
     column
+}
+
+pub(crate) fn keeps_by_value(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger) {
+    let named = keeps_named_as_values(units, &ledger);
+    let mut found: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    for (key, contract) in ledger.functions.iter() {
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !signature.takes_a_receiver() { continue; }
+        let mut by_value: Vec<String> = vec![];
+        for (name, ty) in signature.params.iter() { if name != "self" && (named.contains(key) || keeps_a_held_view(ty, &ledger, library)) { by_value.push(name.to_string()); } }
+        found.insert(key.to_string(), by_value);
+    }
+    for (key, by_value) in found.iter() {
+        let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        contract.by_value = by_value.to_owned();
+    }
+}
+
+pub(crate) fn keeps_a_held_view(ty: &Ty, own: &Ledger, library: &Ledger) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; view || keeps_a_tethered_type(name, own) || keeps_a_tethered_type(name, library) || keeps_any_held_view(args, own, library) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); keeps_a_held_view(inner, own, library) },
+        Ty::Tuple(parts) => keeps_any_held_view(parts, own, library),
+        _ => false,
+    }
+}
+
+pub(crate) fn keeps_any_held_view(types: &[Ty], own: &Ledger, library: &Ledger) -> bool {
+    for one in types.iter() { if keeps_a_held_view(one, own, library) { return true; } }
+    false
+}
+
+pub(crate) fn keeps_a_tethered_type(name: &str, ledger: &Ledger) -> bool {
+    let described = match *nikaia_std::index::get(&ledger.types, name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !described.tethered.is_empty()
+}
+
+pub(crate) fn keeps_named_as_values(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], ledger: &Ledger) -> collections::BTreeSet<String> {
+    let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for view in units.iter() {
+        for item in view.items.iter() {
+            match &item.node {
+                Item::Fn { body, .. } => { keeps_named_in(view, body, "", ledger, &mut named); },
+                Item::Impl { target, methods, .. } => {
+                    let owner = view.text(target.name);
+                    for method in methods.iter() {
+                        match &method.node {
+                            Item::Fn { body, .. } => { keeps_named_in(view, body, &owner, ledger, &mut named); },
+                            _ => { },
+                        }
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
+    named
+}
+
+pub(crate) fn keeps_named_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, owner: &str, ledger: &Ledger, named: &mut collections::BTreeSet<String>) {
+    let mut seen: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Path(segments, _) => {
+                let key = match keeps_path_text(view, segments, owner) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let count = nikaia_std::index::or(*nikaia_std::index::get(&seen, &key), || 0);
+                seen.insert(key, count + 1);
+            },
+            Expr::Call { func, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                let key = match keeps_path_key(view, func, owner) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let count = nikaia_std::index::or(*nikaia_std::index::get(&seen, &key), || 0);
+                seen.insert(key, count - 1);
+            },
+            _ => { },
+        }
+    }
+    for (key, count) in seen.iter() {
+        let count = nikaia_std::num::value(count);
+        if count > 0 && ledger.functions.contains_key(key) { named.insert(key.to_string()); }
+    }
+}
+
+pub(crate) fn keeps_path_key(view: &ParsedView<'_, '_, '_, '_, '_, '_>, expr: &Expr, owner: &str) -> Option<String> {
+    match expr {
+        Expr::Path(segments, _) => keeps_path_text(view, segments, owner),
+        _ => None,
+    }
+}
+
+pub(crate) fn keeps_path_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol], owner: &str) -> Option<String> {
+    if segments.len() != 2 { return None; }
+    let first = view.text(*nikaia_std::index::get(&segments, 0));
+    let ty = if first == "Self" { owner.to_string() } else { first };
+    Some(format!("{}::{}", ty, view.text(*nikaia_std::index::get(&segments, 1))))
 }
 
 pub(crate) fn trait_positions(keeps: &collections::BTreeMap<String, Vec<i64>>, key: &str) -> Vec<i64> {

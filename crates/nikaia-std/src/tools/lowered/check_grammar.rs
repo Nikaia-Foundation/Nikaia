@@ -310,9 +310,9 @@ impl CheckState {
                 let pat = nikaia_std::boxed::open(pat);
                 self.grammar_values(world, host, gram, pat, rules, scope.to_owned());
                 let whole = pattern_named("i64", false);
-                self.grammar_fixed(world, host, low, whole.clone(), &scope, &pattern.span, "A bound", String::from("A bound counts repetitions: write an `i64`, such as `n` or `n - 1`."));
+                self.grammar_fixed(world, host, low, &whole.clone(), &scope, &pattern.span, "A bound", String::from("A bound counts repetitions: write an `i64`, such as `n` or `n - 1`."));
                 match high {
-                    Some(bound) => { self.grammar_fixed(world, host, bound, whole, &scope, &pattern.span, "A bound", String::from("A bound counts repetitions: write an `i64`, such as `n` or `n - 1`.")); },
+                    Some(bound) => { self.grammar_fixed(world, host, bound, &whole, &scope, &pattern.span, "A bound", String::from("A bound counts repetitions: write an `i64`, such as `n` or `n - 1`.")); },
                     None => { },
                 }
                 return scope;
@@ -325,7 +325,7 @@ impl CheckState {
                 return scope;
             },
             Pattern::Guard { cond, .. } => {
-                self.grammar_fixed(world, host, cond, pattern_named("bool", false), &scope, &pattern.span, "A guard", String::from("A guard is a condition: compare, as in `if(m > n)`."));
+                self.grammar_fixed(world, host, cond, &pattern_named("bool", false), &scope, &pattern.span, "A guard", String::from("A guard is a condition: compare, as in `if(m > n)`."));
                 return scope;
             },
             Pattern::Call { name, args, config } => {
@@ -339,7 +339,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn grammar_fixed<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: Ty, scope: &[CheckLocal], span: &Span, what: &str, help: String) {
+    pub(crate) fn grammar_fixed<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str, help: String) {
         self.scope.push(scope.to_owned());
         let mut word: String = String::from("bound");
         if what == "A guard" { word = String::from("guard"); }
@@ -353,7 +353,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn grammar_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: Ty, scope: &[CheckLocal], span: &Span, what: &str) {
+    pub(crate) fn grammar_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str) {
         self.scope.push(scope.to_owned());
         let found = check_core_expr(&mut *self, world, host, value, span);
         self.scope.pop();
@@ -372,7 +372,7 @@ impl CheckState {
                 if ((i) as usize) < rule.args.len() {
                     let want = host.type_of(&nikaia_std::index::get(&rule.args, (i) as usize).ty);
                     let what = format!("The value for `{}`", world.words.resolve(nikaia_std::index::get(&rule.args, (i) as usize).name));
-                    self.grammar_value(world, host, nikaia_std::index::get(&args, (i) as usize), want, scope, span, &what);
+                    self.grammar_value(world, host, nikaia_std::index::get(&args, (i) as usize), &want, scope, span, &what);
                 }
             }
             for given in config.iter() {
@@ -382,7 +382,7 @@ impl CheckState {
                     if declared.name == given.name {
                         found = true;
                         let what = format!("The option `{}`", option);
-                        self.grammar_value(world, host, &given.value, host.type_of(&declared.ty), scope, span, &what);
+                        self.grammar_value(world, host, &given.value, &host.type_of(&declared.ty), scope, span, &what);
                     }
                 }
                 if !found { self.findings.push(check_refusal("NK1109", span, format!("`{}` has no option called `{}`.", called, option), vec![format!("It is a rule of grammar `{}`; its options are what it declares after its `;`.", grammar_name)], Some(String::from("Name an option the rule declares, or declare it.")))); }

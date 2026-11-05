@@ -61,14 +61,14 @@ pub(crate) struct FbWidths<'a> {
 }
 
 impl<'a> FbWidths<'a> {
-    pub(crate) fn rule(&mut self, words: &'a winnow_grammar::InternerContext, name: String, boundary: u64) -> u64 {
-        let found = self.known.get(&name);
+    pub(crate) fn rule(&mut self, words: &'a winnow_grammar::InternerContext, name: &str, boundary: u64) -> u64 {
+        let found = self.known.get(name);
         if found.is_some() { return nikaia_std::index::or(found, || 0); }
-        if self.open.contains(&name) { return 0u64; }
+        if self.open.contains(name) { return 0u64; }
         self.open.insert(name.to_string());
-        let held = self.rules.get(&name).copied();
+        let held = self.rules.get(name).copied();
         if held.is_none() {
-            self.open.remove(&name);
+            self.open.remove(name);
             return 0u64;
         }
         let rule = match held { Some(__nikaia_value) => __nikaia_value, None => return 0u64 };
@@ -79,7 +79,7 @@ impl<'a> FbWidths<'a> {
             if first || here < w { w = here; }
             first = false;
         }
-        self.open.remove(&name);
+        self.open.remove(name);
         if self.open.is_empty() { self.known.insert(name.to_string(), w); }
         w
     }
@@ -125,13 +125,13 @@ impl<'a> FbWidths<'a> {
             Pattern::Call { name, .. } => {
                 let name = *name;
                 let called = words.resolve(name).to_string();
-                if self.rules.contains_key(&called) { return self.rule(words, called, boundary); }
+                if self.rules.contains_key(&called) { return self.rule(words, &called, boundary); }
                 return 0u64;
             },
             Pattern::Ref { name, args, .. } => {
                 let name = *name;
                 let called = words.resolve(name).to_string();
-                if self.rules.contains_key(&called) { return self.rule(words, called, boundary); }
+                if self.rules.contains_key(&called) { return self.rule(words, &called, boundary); }
                 if args.is_empty() {
                     if called == "digit" || called == "hex_digit" || called == "any" || called == "char" || called == "alpha1" || called == "multispace1" { return 1u64; }
                     if called == "frame_end" { return boundary; }
@@ -161,7 +161,7 @@ pub fn fb_rule_width(source: &FbSource<'_, '_>, def: &GrammarDef, rule: &str) ->
     let written = element.frame.as_ref().and_then(|__nikaia_it| __nikaia_it.boundary.as_deref());
     if written.is_some() { boundary = fb_literal_bytes(match written { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     let mut widths = FbWidths { rules, known: collections::BTreeMap::new(), open: collections::BTreeSet::new() };
-    Some(widths.rule(source.words, rule.to_string(), boundary))
+    Some(widths.rule(source.words, &rule.to_string(), boundary))
 }
 
 pub fn fb_most_steps(width: u64) -> u64 {
@@ -492,23 +492,23 @@ impl<'a> FbIndex<'a, 'a, 'a> {
         }
         ix
     }
-    pub(crate) fn whole_fields(&self, name: String) -> Vec<&FbField<'a>> {
+    pub(crate) fn whole_fields(&self, name: &str) -> Vec<&FbField<'a>> {
         let mut out: Vec<&FbField<'_>> = vec![];
-        let held = self.structs.get(&name);
+        let held = self.structs.get(name);
         if held.is_none() { return out; }
         let fields = match held { Some(__nikaia_value) => __nikaia_value, None => return out };
         for f in fields.iter() { if f.ty.args.is_empty() && fb_is_whole(&f.ty.name.to_string()) { out.push(f); } }
         out
     }
-    pub(crate) fn field_type(&self, of: &'a FbTy, field: String) -> Option<FbTy> {
+    pub(crate) fn field_type(&self, of: &'a FbTy, field: &str) -> Option<FbTy> {
         let held = match self.structs.get(&of.name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         for f in held.iter() { if f.name == field { return Some(f.ty.clone()); } }
         None
     }
-    pub(crate) fn methods_of(&self, ty: Option<&FbTy>, method: String) -> Vec<i64> {
-        if ty.is_none() { return fb_vec_of(&self.by_name, &method); }
+    pub(crate) fn methods_of(&self, ty: Option<&FbTy>, method: &str) -> Vec<i64> {
+        if ty.is_none() { return fb_vec_of(&self.by_name, method); }
         let t = match ty { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-        if self.impls.contains(&t.name) { return fb_vec_of(&self.methods, &fb_key(&t.name.to_string(), &method)); }
+        if self.impls.contains(&t.name) { return fb_vec_of(&self.methods, &fb_key(&t.name.to_string(), method)); }
         vec![]
     }
     pub(crate) fn callees(&self, func: &Expr) -> Vec<i64> {
@@ -636,7 +636,7 @@ impl FbWalk {
             Expr::Field { base, name, .. } => {
                 let base = nikaia_std::boxed::open(base); let name = *name;
                 let held = match self.type_of(ix, base, env) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                return ix.field_type(&held, ix.text(name));
+                return ix.field_type(&held, &ix.text(name));
             },
             Expr::Unary { op, expr, .. } => {
                 let expr = nikaia_std::boxed::open(expr);
@@ -826,7 +826,7 @@ impl FbWalk {
                     let own = env.get("self");
                     if own.is_some() { ty = match own { Some(__nikaia_value) => __nikaia_value, None => return }.name.to_string(); }
                 }
-                for field in ix.whole_fields(ty) {
+                for field in ix.whole_fields(&ty) {
                     let mut amount: Option<FbAmount> = None;
                     let mut written = false;
                     for init in fields.iter() {
@@ -872,7 +872,7 @@ impl FbWalk {
                 _ => { },
             }
         }
-        let callees = ix.methods_of((self.type_of(ix, receiver, env)).as_ref(), name);
+        let callees = ix.methods_of((self.type_of(ix, receiver, env)).as_ref(), &name);
         self.arguments(ix, args, &callees);
         for at in callees.iter() {
             let at = nikaia_std::num::value(at);
@@ -936,7 +936,7 @@ impl FbMerge {
                 _ => { },
             }
             if rebinds { self.broken = true; }
-            let field = self.sum_of_both(ix, &stmt.node, other.to_string());
+            let field = self.sum_of_both(ix, &stmt.node, &other.to_string());
             if field.is_some() {
                 let name = match field { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if summed.contains(&name) { self.bad.insert(name.to_string()); }
@@ -946,7 +946,7 @@ impl FbMerge {
                 self.sites.insert(name, here);
                 continue;
             }
-            if self.entry_wise(host, ix, &stmt.node, &owner, other.to_string()) { continue; }
+            if self.entry_wise(host, ix, &stmt.node, &owner, &other.to_string()) { continue; }
             let mut walk = fb_new_walk();
             let mut env: collections::BTreeMap<String, FbTy> = collections::BTreeMap::new();
             env.insert(String::from("self"), owner.clone());
@@ -958,7 +958,7 @@ impl FbMerge {
         }
         self.stack.pop();
     }
-    pub(crate) fn sum_of_both(&self, ix: &FbIndex<'_, '_, '_>, stmt: &Stmt, other: String) -> Option<String> {
+    pub(crate) fn sum_of_both(&self, ix: &FbIndex<'_, '_, '_>, stmt: &Stmt, other: &str) -> Option<String> {
         match stmt {
             Stmt::Assign { target, op, value } => {
                 if op.is_none() { return None; }
@@ -970,7 +970,7 @@ impl FbMerge {
                             Expr::Field { base: from, name: read, .. } => {
                                 let from = nikaia_std::boxed::open(from); let read = *read;
                                 let field = ix.text(name);
-                                if fb_named(ix.words, into, "self") && fb_named(ix.words, from, &other) && ix.text(read) == field { return Some(field); }
+                                if fb_named(ix.words, into, "self") && fb_named(ix.words, from, other) && ix.text(read) == field { return Some(field); }
                                 return None;
                             },
                             _ => return None,
@@ -982,7 +982,7 @@ impl FbMerge {
             _ => return None,
         }
     }
-    pub(crate) fn entry_wise<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, stmt: &Stmt, owner: &FbTy, other: String) -> bool {
+    pub(crate) fn entry_wise<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, stmt: &Stmt, owner: &FbTy, other: &str) -> bool {
         match stmt {
             Stmt::For { bindings, iter, body, .. } => {
                 if bindings.len() != 2 || body.stmts.len() != 1 { return false; }
@@ -1000,18 +1000,18 @@ impl FbMerge {
                 match source {
                     Expr::Field { base, name, .. } => {
                         let base = nikaia_std::boxed::open(base); let name = *name;
-                        if !fb_named(ix.words, base, &other) { return false; }
-                        let held = match ix.field_type(owner, ix.text(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                        if !fb_named(ix.words, base, other) { return false; }
+                        let held = match ix.field_type(owner, &ix.text(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
                         if !held.is_map() { return false; }
                     },
                     _ => { return false; },
                 }
-                return self.chain(host, ix, &nikaia_std::index::get(&body.stmts, 0).node, owner, key, value);
+                return self.chain(host, ix, &nikaia_std::index::get(&body.stmts, 0).node, owner, &key, &value);
             },
             _ => return false,
         }
     }
-    pub(crate) fn chain<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, stmt: &Stmt, owner: &FbTy, key: String, value: String) -> bool {
+    pub(crate) fn chain<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, stmt: &Stmt, owner: &FbTy, key: &str, value: &str) -> bool {
         match stmt {
             Stmt::Expr(first) => {
                 let mut cur = first;
@@ -1041,7 +1041,7 @@ impl FbMerge {
                 match into_field {
                     Expr::Field { base, name, .. } => {
                         let base = nikaia_std::boxed::open(base); let name = *name;
-                        let map = match ix.field_type(owner, ix.text(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                        let map = match ix.field_type(owner, &ix.text(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
                         if !map.is_map() || !fb_named(ix.words, base, "self") { return false; }
                         if modify.is_empty() { return true; }
                         return self.modified(host, ix, *nikaia_std::index::get(&modify, 0), &map, value);
@@ -1052,18 +1052,18 @@ impl FbMerge {
             _ => return false,
         }
     }
-    pub(crate) fn modified<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, call: &Expr, map: &FbTy, value: String) -> bool {
+    pub(crate) fn modified<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, call: &Expr, map: &FbTy, value: &str) -> bool {
         match call {
             Expr::MethodCall { args, .. } => {
                 match nikaia_std::index::get(&args, 0) {
-                    Expr::Closure { params, body, .. } => return self.merged(host, ix, ix.text(*nikaia_std::index::get(&params, 0)), body, map, value),
+                    Expr::Closure { params, body, .. } => return self.merged(host, ix, &ix.text(*nikaia_std::index::get(&params, 0)), body, map, value),
                     _ => return false,
                 }
             },
             _ => return false,
         }
     }
-    pub(crate) fn merged<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, into: String, body: &Block, map: &FbTy, value: String) -> bool {
+    pub(crate) fn merged<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, into: &str, body: &Block, map: &FbTy, value: &str) -> bool {
         if body.stmts.len() != 1 { return false; }
         match &nikaia_std::index::get(&body.stmts, 0).node {
             Stmt::Expr(call) => {
@@ -1072,9 +1072,9 @@ impl FbMerge {
                         let receiver = nikaia_std::boxed::open(receiver); let method = *method;
                         if args.len() != 1 { return false; }
                         let handed = fb_unref(nikaia_std::index::get(&args, 0));
-                        if !fb_named(ix.words, receiver, &into) || !fb_named(ix.words, handed, &value) { return false; }
+                        if !fb_named(ix.words, receiver, into) || !fb_named(ix.words, handed, value) { return false; }
                         let inner = (*nikaia_std::index::get(&map.args, 1)).clone();
-                        let callees = ix.methods_of(Some(&inner), ix.text(method));
+                        let callees = ix.methods_of(Some(&inner), &ix.text(method));
                         if callees.len() != 1 { return false; }
                         self.function(host, ix, *nikaia_std::index::get(&callees, 0));
                         return true;
@@ -1179,7 +1179,7 @@ impl FbUses {
             Expr::StructLit { name, .. } => {
                 let name = *name;
                 let written = ix.text(name);
-                for f in ix.whole_fields(written.to_string()) { self.touch(f.name.to_string(), owner); }
+                for f in ix.whole_fields(&written.to_string()) { self.touch(f.name.to_string(), owner); }
                 if written == "Self" { for (_, fields) in ix.structs.iter() { for f in fields.iter() { if fb_is_whole(&f.ty.name.to_string()) { self.touch(f.name.to_string(), owner); } } } }
             },
             Expr::With { fields, .. } => { for f in fields.iter() { self.touch(ix.text(f.name), owner); } },
@@ -1274,7 +1274,7 @@ pub(crate) fn fb_merge_callees(ix: &FbIndex<'_, '_, '_>, merging: &Expr, acc: &F
                             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
                             if !fb_is_param(receiver, *nikaia_std::index::get(&params, 0)) || args.len() != 1 { return vec![]; }
                             let handed = fb_unref(nikaia_std::index::get(&args, 0));
-                            if fb_is_param(handed, *nikaia_std::index::get(&params, 1)) { return ix.methods_of(Some(&acc.clone()), ix.text(method)); }
+                            if fb_is_param(handed, *nikaia_std::index::get(&params, 1)) { return ix.methods_of(Some(&acc.clone()), &ix.text(method)); }
                             return vec![];
                         },
                         _ => return vec![],

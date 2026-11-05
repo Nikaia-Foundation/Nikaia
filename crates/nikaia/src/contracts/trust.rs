@@ -207,7 +207,7 @@ fn join(
     let provenance = reasons
         .iter()
         .map(|r| r.provenance)
-        .fold(Provenance::Trusted, |all, one| all.join(one));
+        .fold(Provenance::Trusted, |all, one| all.join(&one));
 
     Trust {
         provenance,

@@ -175,7 +175,7 @@ impl EmitState {
                 Item::Struct { name, generics, fields, .. } => {
                     let name = *name;
                     let bare = world.words.resolve(name);
-                    if self.borrowing.contains(bare) && generics.is_empty() { text = format!("{}{}", text, self.emit_held_struct(world, escaped_name(bare), self.lifetime_args(bare, "'a"), self.lifetime_args(bare, "'_"), self.lifetime_args(bare, "'long"), self.lifetime_args(bare, "'s"), fields)); }
+                    if self.borrowing.contains(bare) && generics.is_empty() { text = format!("{}{}", text, self.emit_held_struct(world, &escaped_name(bare), &self.lifetime_args(bare, "'a"), &self.lifetime_args(bare, "'_"), &self.lifetime_args(bare, "'long"), &self.lifetime_args(bare, "'s"), fields)); }
                 },
                 _ => { },
             }
@@ -183,7 +183,7 @@ impl EmitState {
         text
     }
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_held_struct(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: String, a: String, any: String, long: String, short: String, fields: &[FieldDef]) -> String {
+    pub(crate) fn emit_held_struct(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &str, a: &str, any: &str, long: &str, short: &str, fields: &[FieldDef]) -> String {
         let mut parts: Vec<String> = vec![];
         for field in fields.iter() {
             let field_name = escaped_name(world.words.resolve(field.name));

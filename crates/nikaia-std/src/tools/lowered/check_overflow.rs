@@ -4,9 +4,9 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_operation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, reach: Option<&str>, span: &Span) {
+    pub fn an_operation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, reach: Option<&str>, span: &Span) {
         let here = span.start as i64;
-        if !(op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul || op == BinaryOp::Div || op == BinaryOp::Rem) || self.flow.overflowed.contains(&here) { return; }
+        if !(*op == BinaryOp::Add || *op == BinaryOp::Sub || *op == BinaryOp::Mul || *op == BinaryOp::Div || *op == BinaryOp::Rem) || self.flow.overflowed.contains(&here) { return; }
         let left = match self.constant_of(world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return };
         let right = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
         if left.beyond || right.beyond { return; }
@@ -14,17 +14,17 @@ impl CheckState {
         let b = right.value;
         let mut heading = false;
         let mut folded: Option<Integer> = None;
-        if op == BinaryOp::Add {
+        if *op == BinaryOp::Add {
             folded = integer_sum(&a, &b);
             heading = a.negative;
-        } else if op == BinaryOp::Sub {
+        } else if *op == BinaryOp::Sub {
             folded = integer_difference(&a, &b);
             heading = a.negative;
-        } else if op == BinaryOp::Mul {
+        } else if *op == BinaryOp::Mul {
             folded = integer_product(&a, &b);
             heading = a.negative != b.negative;
-        } else if op == BinaryOp::Div { folded = integer_quotient(&a, &b, false); } else { folded = integer_quotient(&a, &b, true); }
-        let division = op == BinaryOp::Div || op == BinaryOp::Rem;
+        } else if *op == BinaryOp::Div { folded = integer_quotient(&a, &b, false); } else { folded = integer_quotient(&a, &b, true); }
+        let division = *op == BinaryOp::Div || *op == BinaryOp::Rem;
         if folded.is_none() && division { return; }
         let beyond = folded.is_none();
         let fallback = integer(18446744073709551615u64, heading);

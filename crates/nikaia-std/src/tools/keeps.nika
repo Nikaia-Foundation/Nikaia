@@ -1061,6 +1061,13 @@ fn keeps_handed(expr: ref Expr, interner: ref winnow_grammar::InternerContext, c
     for one in keeps_viewed_of(expr, interner, context, own, library, walk) {
         names.push(one)
     }
+    // **The fallback of a `??` is handed on as it stands** (ADR-views-3 D1):
+    // `store(first ?? other)` gives the callee `other` where `first` is null,
+    // so what keeps the result keeps `other`.
+    match expr {
+        Expr::Coalesce { fallback, .. } => names.extend(keeps_handed(fallback, interner, context, own, library, walk)),
+        else => {}
+    }
     // **A name a `let` moved a part of a parameter into is that part** (#665):
     // handed to what keeps it, it keeps the parameter.
     match expr {
@@ -1540,7 +1547,126 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
             contract.keeps = list
         }
     }
+    keeps_by_value(ledger, units, library)
     return column
+}
+
+// **The parameters an own method takes by value though it keeps none of
+// them** (ADR-views-3 D1, #1213), for `lends_in_own`: one whose type holds a
+// view, which a borrow below would need a lifetime for, and every parameter
+// of a method named as a function value anywhere in the package, whose type
+// the `fn(..)` parameter it is handed to fixes (`par`'s merge, `in_place`).
+fn keeps_by_value(mut ledger: Ledger, units: ref Vec[ParsedView], library: ref Ledger) {
+    let named = keeps_named_as_values(units, ledger)
+    let mut found: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for (key, contract) in ledger.functions {
+        let signature = contract.signature ?? continue
+        if !signature.takes_a_receiver() {
+            continue
+        }
+        let mut by_value: Vec[String] = []
+        for (name, ty) in signature.params {
+            if name != "self" && (named.contains(key) || keeps_a_held_view(ty, ledger, library)) {
+                by_value.push(name.clone())
+            }
+        }
+        found.insert(key.clone(), by_value)
+    }
+    for (key, by_value) in found {
+        let mut contract = ledger.functions[key] ?? continue
+        contract.by_value = by_value.clone()
+    }
+}
+
+// Whether a value of this type holds a view: written one, or a type a ledger
+// says has a tethered field or case, or one with such a part.
+fn keeps_a_held_view(ty: ref Ty, own: ref Ledger, library: ref Ledger) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => view || keeps_a_tethered_type(name, own) || keeps_a_tethered_type(name, library) || keeps_any_held_view(args, own, library),
+        Ty::Nullable(inner) => keeps_a_held_view(inner, own, library),
+        Ty::Tuple(parts) => keeps_any_held_view(parts, own, library),
+        else => false,
+    }
+}
+
+fn keeps_any_held_view(types: ref Vec[Ty], own: ref Ledger, library: ref Ledger) -> bool {
+    for one in types {
+        if keeps_a_held_view(one, own, library) {
+            return true
+        }
+    }
+    return false
+}
+
+fn keeps_a_tethered_type(name: ref String, ledger: ref Ledger) -> bool {
+    let described = ledger.types[name] ?? return false
+    return !described.tethered.is_empty()
+}
+
+// The own methods a body names as a value, `Summary::merge` or
+// `Self::merge`, rather than calls: a path counted once more than the calls
+// it stands in.
+fn keeps_named_as_values(units: ref Vec[ParsedView], ledger: ref Ledger) -> collections::BTreeSet[String] {
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    for view in units {
+        for item in view.items {
+            match item.node {
+                Item::Fn { body, .. } => keeps_named_in(view, body, "", ledger, named),
+                Item::Impl { target, methods, .. } => {
+                    let owner = view.text(target.name)
+                    for method in methods {
+                        match method.node {
+                            Item::Fn { body, .. } => keeps_named_in(view, body, owner, ledger, named),
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    return named
+}
+
+fn keeps_named_in(view: ref ParsedView, body: ref Block, owner: ref String, ledger: ref Ledger, mut named: collections::BTreeSet[String]) {
+    let mut seen: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Path(segments, _) => {
+                let key = keeps_path_text(view, segments, owner) ?? continue
+                let count = seen[key] ?? 0
+                seen.insert(key, count + 1)
+            },
+            Expr::Call { func, .. } => {
+                let key = keeps_path_key(view, func, owner) ?? continue
+                let count = seen[key] ?? 0
+                seen.insert(key, count - 1)
+            },
+            else => {},
+        }
+    }
+    for (key, count) in seen {
+        if count > 0 && ledger.functions.contains_key(key) {
+            named.insert(key.clone())
+        }
+    }
+}
+
+fn keeps_path_key(view: ref ParsedView, expr: ref Expr, owner: ref String) -> String? {
+    return match expr {
+        Expr::Path(segments, _) => keeps_path_text(view, segments, owner),
+        else => null,
+    }
+}
+
+// `Type::method` as the ledger names it, `Self` read as the impl's type.
+fn keeps_path_text(view: ref ParsedView, segments: ref Vec[winnow_grammar::Symbol], owner: ref String) -> String? {
+    if segments.len() != 2 {
+        return null
+    }
+    let first = view.text(segments[0])
+    let ty = if first == "Self" { owner.clone() } else { first }
+    return f"{ty}::{view.text(segments[1])}"
 }
 
 fn trait_positions(keeps: ref collections::BTreeMap[String, Vec[i64]], key: ref String) -> Vec[i64] {

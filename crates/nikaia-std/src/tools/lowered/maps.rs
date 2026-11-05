@@ -434,20 +434,20 @@ impl<'a> MpBody<'a> {
             self.expr(e);
             return;
         }
-        self.flows(e, String::from(""));
+        self.flows(e, "");
     }
-    pub(crate) fn targets_of(&self, under: String) -> Vec<i64> {
+    pub(crate) fn targets_of(&self, under: &str) -> Vec<i64> {
         let below = format!("{}.", under);
         let mut targets: Vec<i64> = vec![];
         for (p, id) in self.result.iter() {
             let id = nikaia_std::num::value(id);
-            if *p == under || p.starts_with(&below) { targets.push(id); }
+            if p == under || p.starts_with(&below) { targets.push(id); }
         }
         targets
     }
     pub(crate) fn join_all(&mut self, from: &[i64], targets: &[i64]) { if (from.len() as i64) == targets.len() as i64 { for i in 0..from.len() as i64 { self.union(*nikaia_std::index::get(&from, (i) as usize), *nikaia_std::index::get(&targets, (i) as usize)); } } else { self.doubt(); } }
-    pub(crate) fn flows(&mut self, e: &Expr, under: String) {
-        let targets = self.targets_of(under.to_string());
+    pub(crate) fn flows(&mut self, e: &Expr, under: &str) {
+        let targets = self.targets_of(&under.to_string());
         if targets.is_empty() {
             self.expr(e);
             return;
@@ -468,12 +468,12 @@ impl<'a> MpBody<'a> {
                 for f in fields.iter() {
                     let field = mp_text(self.words, f.name);
                     let part = format!("{}.{}", under, field);
-                    if f.value.is_some() { self.flows_in(Option::as_ref(&&f.value), part); } else {
+                    if f.value.is_some() { self.flows_in(Option::as_ref(&&f.value), &part); } else {
                         let held = match *nikaia_std::index::get(&self.roots, &field) {
                             Some(__nikaia_it) => Some(__nikaia_it.clone()),
                             None => None,
                         };
-                        let ours = self.targets_of(part.to_string());
+                        let ours = self.targets_of(&part.to_string());
                         if ours.is_empty() { continue; }
                         if held.is_none() { self.doubt(); } else {
                             let h = nikaia_std::index::or(held, || vec![].into());
@@ -498,7 +498,7 @@ impl<'a> MpBody<'a> {
             },
         }
     }
-    pub(crate) fn flows_in(&mut self, v: Option<&Expr>, under: String) { self.flows(match v { Some(__nikaia_value) => __nikaia_value, None => return }, under); }
+    pub(crate) fn flows_in(&mut self, v: Option<&Expr>, under: &str) { self.flows(match v { Some(__nikaia_value) => __nikaia_value, None => return }, under); }
     pub(crate) fn flow_from(&mut self, e: &Expr, targets: &[i64]) {
         let from = self.roots_of(e);
         if from.is_none() { self.doubt(); } else { self.join_all(&nikaia_std::index::or(from, || vec![].into()), targets); }

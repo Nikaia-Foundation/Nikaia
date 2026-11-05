@@ -53,7 +53,7 @@ impl CheckState {
                 width = *nikaia_std::index::get(&shape, 0);
                 let refused = self.a_tuple_pattern_that_does_not_fit(found, width, what, span);
             }
-            parts = self.nested_pattern_parts(world, binds_tuple_parts(found, width), shape, names.len() as i64, what, span);
+            parts = self.nested_pattern_parts(world, &binds_tuple_parts(found, width), shape, names.len() as i64, what, span);
         }
         let at = span.start as i64;
         let lent = self.facts.lent_lets.contains(&at) || self.a_tuple_over_a_lent_name(world, value) || self.a_tuple_got_past_a_jump(world, value);
@@ -92,7 +92,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn nested_pattern_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, top: Vec<Ty>, shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
+    pub fn nested_pattern_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, top: &[Ty], shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
         let mut out: Vec<Ty> = vec![];
         if shape.len() == 1 && *nikaia_std::index::get(&shape, 0) == -1 {
             self.findings.push(check_refusal("NK1259", span, format!("{} can't take a variant apart.", site), vec![String::from("A variant may not be the one the value holds, and a binding has no other branch to go to.")], Some(String::from("Take the value apart with a `match`, which has an arm for each case."))));

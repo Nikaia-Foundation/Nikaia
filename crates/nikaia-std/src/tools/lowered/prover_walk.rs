@@ -933,7 +933,7 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
                     leaned = prover_pin_divisors(walk, &cond, &scope, words, &ask, &model);
                     leaned.extend(leaned_notes(&walk.arena, &scope, &names));
                 }
-                let outcome = walk.state.an_assert(&mut walk.arena, words, &cond, written_of(&cond), &names, message, span, scope, at, &ask, &model);
+                let outcome = walk.state.an_assert(&mut walk.arena, words, &cond, &written_of(&cond), &names, message, span, scope, at, &ask, &model);
                 let mut held = outcome.held.clone();
                 let mut findings: Vec<Finding> = vec![];
                 for found in outcome.findings.iter() {

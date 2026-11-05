@@ -629,7 +629,7 @@ impl EmitState {
                     let mut tested = EmitOut::empty();
                     self.emit_core_pattern_written(world, walk, &mut tested, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
                     out.push(&format!("{}#[allow(unused_variables)] crate::{}::{}(error) if nikaia_std::error::handed::<{}>(error.held()).is_some_and(|error| matches!(error, ", pad, sum, variant, ty));
-                    out.append(tested);
+                    out.append(&tested);
                     out.push(&format!(")) => {{ let error = nikaia_std::error::opened::<{}>(Box::new(error.split().0)); #[allow(unreachable_patterns)] match error {{\n{}", ty, inner));
                     self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
                     out.push(" => ");

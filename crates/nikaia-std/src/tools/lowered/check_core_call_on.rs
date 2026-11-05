@@ -866,7 +866,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
             if callers { state.facts.kept_drains.insert(id_of(receiver) as i64); } else {
                 let last = state.changed.len() as i64 - 1;
                 if root == drained && last >= 0 && *nikaia_std::index::get(&state.changed, nikaia_std::index::at(last)) == drained { state.drained.insert(last); }
-                state.hands_over_path(world, drained, on, state.read_seq, "taken away by `drain`", span);
+                state.hands_over_path(world, &drained, on, state.read_seq, "taken away by `drain`", span);
             }
         }
     }

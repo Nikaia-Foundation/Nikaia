@@ -106,18 +106,18 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn divisor_is_not_zero(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp, rhs: &Expr, span: &Span) {
+    pub fn divisor_is_not_zero(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, rhs: &Expr, span: &Span) {
         if !note_a_division(&op) { return; }
         let divisor = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
         if divisor.beyond || divisor.value.magnitude != 0u64 { return; }
         let mut what: &'static str = "takes the remainder";
-        if op == BinaryOp::Div { what = "divides"; }
+        if *op == BinaryOp::Div { what = "divides"; }
         self.findings.push(check_refusal("NK1118", span, format!("This {} by zero.", what), vec![String::from("Dividing by zero would stop the program, and here it's certain to happen.")], Some(String::from("If the divisor can really be zero, check it before dividing."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn shift_count_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, span: &Span) {
-        if op != BinaryOp::Shl && op != BinaryOp::Shr { return; }
+    pub fn shift_count_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, span: &Span) {
+        if *op != BinaryOp::Shl && *op != BinaryOp::Shr { return; }
         let count = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
         let open = self.open_numbers_in(world, lhs);
         if !open.is_empty() {

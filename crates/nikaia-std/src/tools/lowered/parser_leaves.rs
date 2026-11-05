@@ -28,7 +28,7 @@ impl PrTrivia {
         self.newline = newline || carried;
         if self.doc_reaches == start { self.doc_reaches = end; }
     }
-    pub fn comment(&mut self, start: i64, end: i64, body: String) {
+    pub fn comment(&mut self, start: i64, end: i64, body: &str) {
         self.noted(start, end);
         let rest = nikaia_std::index::or(body.strip_prefix('/'), || "").to_string();
         if !body.starts_with('/') || rest.starts_with('/') {

@@ -112,21 +112,21 @@ impl EmitState {
         if foreign && emit_base(&emit_text(world, ty.name)) == "CStr" { return String::from("Option<nikaia_std::foreign::CText>"); }
         if foreign && self.handle_named(world, ty).is_some() { return format!("*mut {}", self.pointed_at(world, ty)); }
         if foreign { return self.emit_foreign_ty(world, walk, host, ty); }
-        let written = self.emit_item_ty(world, walk, host, ty, EmitLifetimes::Elided);
+        let written = self.emit_item_ty(world, walk, host, ty, &EmitLifetimes::Elided);
         if emit_text(world, ty.name) == "Vec" && ty.generics.len() == 1 && !ty.is_nullable && !ty.is_slice { return a_list_read_as_a_slice(written); }
         written
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_item_ty<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: &Type, lifetimes: EmitLifetimes) -> String { self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, lifetimes) }
+    pub(crate) fn emit_item_ty<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: &Type, lifetimes: &EmitLifetimes) -> String { self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, &lifetimes) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_item_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: &Spanned<Item>, lifetimes: EmitLifetimes, target: &str, declared_by: Option<String>, bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_item_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: &Spanned<Item>, lifetimes: EmitLifetimes, target: &str, declared_by: &Option<String>, bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let carries = self.emit_item_carries(i64::from(method.span.start));
         let st = out.mark();
         out.push("    ");
-        self.emit_function(world, walk, out, host, method, 1, lifetimes, &carries, Some(target.to_string()), declared_by, bridged)?;
+        self.emit_function(world, walk, out, host, method, 1, lifetimes, &carries, &Some(target.to_string()), &declared_by, bridged)?;
         out.record(&method.span, st);
         Ok(())
     }
@@ -155,7 +155,7 @@ impl EmitState {
                             let mut i: i64 = 0;
                             for t in types.iter() {
                                 let member = boxed_member(&owner, i, "");
-                                let lowered = self.emit_fn_ty(world, walk, host, t, EmitLifetimes::Named, "<field>", &variant_slot(&enum_name, &owner, i));
+                                let lowered = self.emit_fn_ty(world, walk, host, t, &EmitLifetimes::Named, "<field>", &variant_slot(&enum_name, &owner, i));
                                 parts.push(self.boxed_ty(&enum_name, &member, lowered));
                                 i += 1;
                             }
@@ -165,7 +165,7 @@ impl EmitState {
                             let mut parts: Vec<String> = vec![];
                             for f in fields.iter() {
                                 let member = boxed_member(&owner, -1, &emit_text(world, f.name));
-                                let lowered = self.emit_item_ty(world, walk, host, &f.ty, EmitLifetimes::Named);
+                                let lowered = self.emit_item_ty(world, walk, host, &f.ty, &EmitLifetimes::Named);
                                 parts.push(format!("{}: {}", escaped_name(&emit_text(world, f.name)), self.boxed_ty(&enum_name, &member, lowered)));
                             }
                             out.push(&format!("    {} {{ {} }},\n", vname, parts.join(", ")));
@@ -190,7 +190,7 @@ impl EmitState {
                 for field in fields.iter() {
                     let field_text = emit_text(world, field.name);
                     let slot = format!("{}.{}", text, field_text);
-                    let mut lowered = self.emit_fn_ty(world, walk, host, &field.ty, EmitLifetimes::Named, "<field>", &slot);
+                    let mut lowered = self.emit_fn_ty(world, walk, host, &field.ty, &EmitLifetimes::Named, "<field>", &slot);
                     if lowered.starts_with("&'a Vec<") && lowered.ends_with('>') {
                         let element = nikaia_std::index::or(nikaia_std::index::or(lowered.strip_prefix("&'a Vec<"), || "").strip_suffix('>'), || "");
                         lowered = format!("&'a [{}]", element);
@@ -220,7 +220,7 @@ impl EmitState {
                 for g in generics.iter() { parts.push(emit_bounded(world, g)); }
                 for s in emit_seeds_declared(0, hidden, true) { parts.push(s); }
                 out.push(&format!("{}struct {}{} {{\n", vis, escaped_name(&text), emit_angled(&parts)));
-                out.append(body);
+                out.append(&body);
                 out.push("}\n");
                 if by_hand {
                     let declares = emit_angled(&emit_seeds_declared(0, hidden, false));
@@ -241,7 +241,7 @@ impl EmitState {
                 let name = *name;
                 if self.emit_item_built(world, name) { out.push("#[allow(dead_code)]\n"); }
                 let carries = self.emit_item_carries(i64::from(at));
-                self.emit_function(world, walk, out, host, written, 0, EmitLifetimes::Elided, &carries, None, None, None)?;
+                self.emit_function(world, walk, out, host, written, 0, EmitLifetimes::Elided, &carries, &None, &None, None)?;
             },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
@@ -319,7 +319,7 @@ impl EmitState {
         let has_trait = trait_name.is_some();
         if has_trait && trait_text == "Error" {
             out.push(&format!("impl{} {}{} {{\n", params, target_name, params));
-            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, None, None)?; }
+            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, &None, None)?; }
             out.push("}\n");
             out.push(&format!("impl{} std::fmt::Display for {}{} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        f.write_str(&self.message())\n    }}\n}}\n", params, target_name, params));
             out.push(&format!("impl{} std::error::Error for {}{} {{}}\n", params, target_name, params));
@@ -332,7 +332,7 @@ impl EmitState {
         for g in generics.iter() { head_parts.push(g.to_string()); }
         let mut target_parts: Vec<String> = vec![];
         if borrows { target_parts.push(self.lifetime_args(&target_name, "'a")); }
-        for g in target.generics.iter() { target_parts.push(self.emit_item_ty(world, walk, host, g, EmitLifetimes::Elided)); }
+        for g in target.generics.iter() { target_parts.push(self.emit_item_ty(world, walk, host, g, &EmitLifetimes::Elided)); }
         let mut declares = emit_angled(&head_parts);
         let mut applied = emit_angled(&target_parts);
         if has_trait && trait_text == "Fatal" && !emit_item_declares_trait(world, "Fatal") {
@@ -341,7 +341,7 @@ impl EmitState {
         }
         if has_trait && trait_text == "Cleanup" {
             out.push(&format!("impl{} {}{} {{\n", declares, target_name, applied));
-            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, None, None)?; }
+            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, &None, None)?; }
             out.push("}\n");
             let awaited = if call_pauses(&self.own_contracts, &format!("{}::cleanup", target_name)) { ".await" } else { "" };
             let mut bridge = "Cleanup";
@@ -355,7 +355,7 @@ impl EmitState {
         }
         if has_trait && (trait_text == "Eq" || trait_text == "Ord") && !emit_item_declares_trait(world, &trait_text) {
             out.push(&format!("impl{} {}{} {{\n", declares, target_name, applied));
-            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, None, None)?; }
+            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, &None, None)?; }
             out.push("}\n");
             let me = format!("{}{}", target_name, applied);
             if trait_text == "Eq" { out.push(&format!("impl{} PartialEq for {} {{\n    fn eq(&self, other: &Self) -> bool {{ {}::eq(self, other) }}\n}}\nimpl{} Eq for {} {{}}\n", declares, me, target_name, declares, me)); } else { out.push(&format!("impl{} PartialOrd for {} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{} Ord for {} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {}::compare(self, other) }}\n}}\n", declares, me, declares, me, target_name)); }
@@ -384,7 +384,7 @@ impl EmitState {
             let mut i: i64 = 0;
             for method in methods.iter() {
                 if (*nikaia_std::index::get(&wider, (i) as usize)).is_some() {
-                    self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, match declared_by.as_ref() {
+                    self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, &match declared_by.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     }, Some(public))?;
@@ -403,7 +403,7 @@ impl EmitState {
             i += 1;
             match w {
                 None => {
-                    self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, match declared_by.as_ref() {
+                    self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, &match declared_by.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     }, None)?;
@@ -449,18 +449,18 @@ impl EmitState {
             let lent_source = if !arg.mutable && from_names.contains(&emit_text(world, arg.name)) { emit_item_lent_view(world, &arg.ty) } else { None };
             if lent_source.is_some() {
                 let source = nikaia_std::index::or(lent_source, || arg.ty.clone().into());
-                written = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, &source, EmitLifetimes::Shared));
+                written = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, &source, &EmitLifetimes::Shared));
                 shares_a_lifetime = true;
             } else if foreign { written = self.emit_foreign_ty(world, walk, host, &arg.ty); } else if (*arg.ty.code).is_some() && !arg.mutable && !arg.ty.is_view {
                 let held = walk.code_parameter_runs;
                 let inside = walk.in_parameter;
                 walk.code_parameter_runs = self.own_contracts.functions.contains_key(&key) && !self.emit_fn_keeps(&key, &emit_text(world, arg.name));
                 walk.in_parameter = true;
-                written = self.emit_item_ty(world, walk, host, &arg.ty, EmitLifetimes::Elided);
+                written = self.emit_item_ty(world, walk, host, &arg.ty, &EmitLifetimes::Elided);
                 walk.in_parameter = inside;
                 walk.code_parameter_runs = held;
                 if self.emit_fn_lends(world, &key, at) { reference = "&"; }
-            } else { written = self.emit_item_ty(world, walk, host, &arg.ty, EmitLifetimes::Elided); }
+            } else { written = self.emit_item_ty(world, walk, host, &arg.ty, &EmitLifetimes::Elided); }
             let plain_list = !foreign && emit_text(world, arg.ty.name) == "Vec" && arg.ty.generics.len() == 1 && !arg.ty.is_nullable && !arg.ty.is_slice;
             if plain_list && written.starts_with("&Vec<") && written.ends_with('>') {
                 let element = nikaia_std::index::or(nikaia_std::index::or(written.strip_prefix("&Vec<"), || "").strip_suffix('>'), || "");
@@ -469,13 +469,13 @@ impl EmitState {
             params.push(format!("{}: {}{}", escaped_name(&emit_text(world, arg.name)), reference, written));
             at += 1;
         }
-        for option in method.config.iter() { params.push(format!("{}: {}", escaped_name(&emit_text(world, option.name)), self.emit_item_ty(world, walk, host, &option.ty, EmitLifetimes::Elided))); }
+        for option in method.config.iter() { params.push(format!("{}: {}", escaped_name(&emit_text(world, option.name)), self.emit_item_ty(world, walk, host, &option.ty, &EmitLifetimes::Elided))); }
         let mut returned = self.emit_trait_returned(world, walk, host, (method.ret_type).as_ref(), foreign);
         if !from_names.is_empty() {
             match &method.ret_type {
                 Some(ty) => {
                     let viewed = nikaia_std::index::or(emit_item_lent_view(world, ty), || ty.clone().into());
-                    returned = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, &viewed, EmitLifetimes::Shared));
+                    returned = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, &viewed, &EmitLifetimes::Shared));
                     shares_a_lifetime = shares_a_lifetime || returned.contains("'r");
                 },
                 None => { },
@@ -509,7 +509,7 @@ impl EmitState {
             pointed.is_mut = false;
             return format!("*{} {}", pointing(ty.is_mut), self.emit_foreign_ty(world, walk, host, &pointed));
         }
-        self.emit_item_ty(world, walk, host, ty, EmitLifetimes::Elided)
+        self.emit_item_ty(world, walk, host, ty, &EmitLifetimes::Elided)
     }
     pub(crate) fn emit_declared_wider(&self, world: &EmitWorld<'_, '_, '_, '_>, has_trait: bool, trait_name: &str, target: &str, method: &Item) -> Option<TraitMethod> {
         if !has_trait { return None; }

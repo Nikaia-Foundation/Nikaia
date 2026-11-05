@@ -1214,10 +1214,10 @@ fn another_missing_argument_says_nothing_about_a_root() {
 #[test]
 fn the_join_is_conservative() {
     use Provenance::{Trusted, Untrusted};
-    assert_eq!(Trusted.join(Trusted), Trusted);
-    assert_eq!(Trusted.join(Untrusted), Untrusted);
-    assert_eq!(Untrusted.join(Trusted), Untrusted);
-    assert_eq!(Untrusted.join(Untrusted), Untrusted);
+    assert_eq!(Trusted.join(&Trusted), Trusted);
+    assert_eq!(Trusted.join(&Untrusted), Untrusted);
+    assert_eq!(Untrusted.join(&Trusted), Untrusted);
+    assert_eq!(Untrusted.join(&Untrusted), Untrusted);
 }
 
 /// A source is a source wherever it is called from, including inside a nested

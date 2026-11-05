@@ -102,17 +102,17 @@ impl CheckState {
                 VariantFields::Tuple(types) => {
                     let mut at = 0;
                     for ty in types.iter() {
-                        self.a_variant_field(world, &written, &variant_name, format!("{}", at), ty, &variant.span);
+                        self.a_variant_field(world, &written, &variant_name, &format!("{}", at), ty, &variant.span);
                         at += 1;
                     }
                 },
-                VariantFields::Named(named) => { for field in named.iter() { self.a_variant_field(world, &written, &variant_name, world.words.resolve(field.name).to_string(), &field.ty, &variant.span); } },
+                VariantFields::Named(named) => { for field in named.iter() { self.a_variant_field(world, &written, &variant_name, &world.words.resolve(field.name).to_string(), &field.ty, &variant.span); } },
             }
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_variant_field(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, variant_name: &str, field: String, ty: &Type, at: &Span) {
+    pub(crate) fn a_variant_field(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, variant_name: &str, field: &str, ty: &Type, at: &Span) {
         if a_c_value(&world.here, ty) { return; }
         let shown = world.words.resolve(ty.name).to_string();
         self.findings.push(check_refusal("NK1145", at, format!("`{}::{}.{}` is a `{}`, which is not a C value.", written, variant_name, field, shown), vec![ext_an_enum_note()], Some(String::from("Leave out `extern`: a `pub enum` crosses to C as a handle, read through `_kind` and a getter per field."))));

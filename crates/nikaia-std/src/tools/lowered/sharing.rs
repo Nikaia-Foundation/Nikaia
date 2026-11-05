@@ -473,7 +473,7 @@ pub(crate) fn sites_by_slot(pairs: &[(String, String)]) -> collections::BTreeMap
 pub(crate) fn put_in_class(classes: &mut collections::BTreeMap<String, collections::BTreeMap<i64, Class>>, function: &str, root: i64, member: &str, count: Count) {
     let class = classes.entry(function.to_string()).or_insert(collections::BTreeMap::new()).entry(root).or_insert(Class { members: vec![], count });
     class.members.push(member.to_string());
-    class.count = class.count.join(count);
+    class.count = class.count.join(&count);
 }
 
 pub(crate) fn lock_kept(count: &Count, a_word: bool, held_together: bool) -> Option<String> {

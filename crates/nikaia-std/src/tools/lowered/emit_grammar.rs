@@ -179,7 +179,7 @@ impl EmitState {
         for rule in def.rules.iter() {
             if rule.is_entry {
                 let spec = emit_a_par_fold(rule);
-                if spec.is_some() { self.emit_fold_options(world, walk, out, host, &name, &emit_text(world, rule.name), match spec { Some(__nikaia_value) => __nikaia_value, None => panic("a par_fold") })?; }
+                if spec.is_some() { self.emit_fold_options(world, walk, out, host, &name, &emit_text(world, rule.name), &match spec { Some(__nikaia_value) => __nikaia_value, None => panic("a par_fold") })?; }
             }
         }
         Ok(())
@@ -187,7 +187,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_fold_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, book: &str, rule: &str, spec: FoldSpec) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_fold_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, book: &str, rule: &str, spec: &FoldSpec) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let function = emit_fold_options(book, rule);
         out.push(&format!("\n#[allow(non_snake_case, dead_code)]\npub fn {}() -> nikaia_std::par::FoldOptions {{\n    nikaia_std::par::FoldOptions::new(", function));
         let order = emit_named_option(world, &spec, "order");

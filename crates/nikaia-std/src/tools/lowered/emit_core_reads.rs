@@ -391,7 +391,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_overlap<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub fn emit_core_overlap<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let count = block.stmts.len() as i64;
         if count < 2 { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("An `overlap` block needs at least two branches to run at the same time."), at: Some(flow.statement) }, &"emit_core_overlap")); }
         if count > 8 { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This `overlap` block has {} branches, but at most 8 are supported.", count), at: Some(flow.statement) }, &"emit_core_overlap")); }
@@ -445,7 +445,7 @@ impl EmitState {
             let from = nikaia_std::num::value(from);
             let mut k: i64 = 0;
             for stmt in block.stmts.iter() {
-                if k == from { self.emit_read_branch(world, walk, out, host, stmt, &body, fallible, queued, &wrapper, &channel, depth, flow, scope)?; }
+                if k == from { self.emit_read_branch(world, walk, out, host, stmt, &body, fallible, queued, &wrapper, &channel, depth, &flow, scope)?; }
                 k += 1;
             }
         }
@@ -471,7 +471,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_read_branch<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Spanned<Stmt>, body: &str, fallible: bool, queued: bool, wrapper: &str, channel: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_read_branch<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Spanned<Stmt>, body: &str, fallible: bool, queued: bool, wrapper: &str, channel: &str, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         out.push(body);
         out.push("async { ");
         let inside = EmitFlow { can_throw: fallible, statement: stmt.span.start as i64, ..EmitFlow::plain() };

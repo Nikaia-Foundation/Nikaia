@@ -151,10 +151,10 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_fn_ty<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: &Type, lifetimes: EmitLifetimes, key: &str, value: &str) -> String {
+    pub(crate) fn emit_fn_ty<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: &Type, lifetimes: &EmitLifetimes, key: &str, value: &str) -> String {
         let crossings = host.crossings_are_possible();
         let count = self.count_at(crossings, key, value);
-        let written = self.emit_core_ty_counted(world, walk, crossings, host.overlaps_user_code(), ty, lifetimes, count);
+        let written = self.emit_core_ty_counted(world, walk, crossings, host.overlaps_user_code(), ty, &lifetimes, count);
         emit_seeds_seeded(&self.seeds, walk, self.trusted_input, written)
     }
     pub(crate) fn emit_how(&self, sig: &EmitSig, name: winnow_grammar::Symbol, text: &str, viewed: bool, read_only: bool) -> EmitLifetimes {
@@ -178,7 +178,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<String>, owner_declared_by: Option<String>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: &Option<String>, owner_declared_by: &Option<String>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         match &written.node {
             Item::Fn { name, generics, receiver, args: written_args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;
@@ -216,7 +216,7 @@ impl EmitState {
                     let is_mut = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
                     if is_ref && is_mut { params.push(String::from("&mut self")); } else if is_ref { params.push(String::from("&self")); } else { params.push(String::from("self")); }
                 }
-                let kept = self.kept_lifetimes(&key, lifetimes);
+                let kept = self.kept_lifetimes(&key, &lifetimes);
                 let has_kept = kept.is_some();
                 let kept_lt: EmitLifetimes = nikaia_std::index::or(kept, || EmitLifetimes::Elided);
                 let input_empty = carries_input.is_empty();
@@ -252,7 +252,7 @@ impl EmitState {
                                 if !carries_input.contains(&source) {
                                     for each in args.iter() {
                                         if emit_text(world, each.name) == stored {
-                                            let spelled = self.emit_fn_ty(world, walk, host, &each.ty, EmitLifetimes::Named, &key, &stored);
+                                            let spelled = self.emit_fn_ty(world, walk, host, &each.ty, &EmitLifetimes::Named, &key, &stored);
                                             if spelled.contains("'a") { stores.push(EmitPair { first: stored.to_string(), second: source.to_string() }); }
                                             break;
                                         }
@@ -382,7 +382,7 @@ impl EmitState {
                     let mut spelled: String = String::from("");
                     if *nikaia_std::index::get(&lengths, nikaia_std::index::at(k)) != "" {
                         let mut element: String = String::from("u8");
-                        if !each.ty.generics.is_empty() { element = self.emit_fn_ty(world, walk, host, nikaia_std::index::get(&each.ty.generics, 0), how, &key, &pname); }
+                        if !each.ty.generics.is_empty() { element = self.emit_fn_ty(world, walk, host, nikaia_std::index::get(&each.ty.generics, 0), &how, &key, &pname); }
                         spelled = format!("[{}; {}]", element, *nikaia_std::index::get(&lengths, nikaia_std::index::at(k)));
                     } else {
                         let runs = !self.emit_fn_keeps(&key, &pname);
@@ -395,7 +395,7 @@ impl EmitState {
                         let fast = standalone && self.fast_slots.contains(&format!("p:{}:{}", own_name, k));
                         let outer = walk.trusting;
                         walk.trusting = fast;
-                        spelled = self.emit_fn_ty(world, walk, host, &each.ty, position, &key, &pname);
+                        spelled = self.emit_fn_ty(world, walk, host, &each.ty, &position, &key, &pname);
                         walk.trusting = outer;
                         if on_a_cycle && runs && reference.starts_with('&') && !reference.starts_with("&mut") && (spelled.starts_with("impl Fn(") || spelled.starts_with("impl for<")) {
                             let bound = nikaia_std::index::or(spelled.strip_prefix("impl "), || "").to_string();
@@ -442,7 +442,7 @@ impl EmitState {
                     let mut option_ty = each.ty.clone();
                     if self.emit_fn_lent_option(&key, j) { option_ty.is_view = true; }
                     let local = emit_local_name(&self.facts.comptime_names, &pname);
-                    let spelled = self.emit_fn_ty(world, walk, host, &option_ty, position, &key, &pname);
+                    let spelled = self.emit_fn_ty(world, walk, host, &option_ty, &position, &key, &pname);
                     params.push(format!("{}: {}", local, spelled));
                     j += 1;
                 }
@@ -494,7 +494,7 @@ impl EmitState {
                             let fast = standalone && self.fast_slots.contains(&format!("r:{}", own_name));
                             let outer = walk.trusting;
                             walk.trusting = fast;
-                            returned = self.emit_fn_ty(world, walk, host, ty, result, &key, "<result>");
+                            returned = self.emit_fn_ty(world, walk, host, ty, &result, &key, "<result>");
                             walk.trusting = outer;
                             let plain_list = emit_text(world, ty.name) == "Vec" && ty.generics.len() == 1 && !ty.is_nullable && !ty.is_slice;
                             if plain_list { returned = a_list_read_as_a_slice(returned); }
@@ -677,7 +677,7 @@ impl EmitState {
                         }
                         let kind = emit_settle_kind(host.overlaps_user_code());
                         out.push(&format!("{{ {}::<{}, {}>(async ", settle_fn, kind, rest));
-                        out.append(inner);
+                        out.append(&inner);
                         if failing {
                             let origin = nikaia_std::index::or(key.rsplit("::").next(), || "");
                             out.push(&format!(", &{}).await }}", rust_string(origin)));
@@ -704,11 +704,11 @@ impl EmitState {
                             if throws_ { emit_async_channel_holds_a_crash(&channel, Some(nikaia_std::index::get(&body.stmts, 0).span.start as i64))?; }
                             if pausing != "" {
                                 if throws_ { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {}>({}, (async ||{} ", name, channel, name, ret)); } else { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, (async ||{} ", name, name, ret)); }
-                                out.append(inner);
+                                out.append(&inner);
                                 out.push(")()).await }");
                             } else {
                                 if throws_ { out.push(&format!("{{ nikaia_std::task::group::<_, {}>(|{}|{} ", channel, name, ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, ret)); }
-                                out.append(inner);
+                                out.append(&inner);
                                 out.push(") }");
                             }
                         }

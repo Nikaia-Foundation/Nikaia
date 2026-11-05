@@ -325,9 +325,9 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
         let lanes = state.a_lane_operation(op, &value_of_a_copy(&left.unseen()), rhs, &value_of_a_copy(&right.unseen()), at);
         if lanes.is_some() { return nikaia_std::index::or(lanes, || Ty::Unknown); }
     }
-    state.divisor_is_not_zero(world, op, rhs, span);
-    state.shift_count_fits(world, op, lhs, &value_of_a_copy(&left.unseen()), rhs, span);
-    state.an_operation_that_overflows(world, op, lhs, rhs, (reach).as_deref(), span);
+    state.divisor_is_not_zero(world, &op, rhs, span);
+    state.shift_count_fits(world, &op, lhs, &value_of_a_copy(&left.unseen()), rhs, span);
+    state.an_operation_that_overflows(world, &op, lhs, rhs, (reach).as_deref(), span);
     let stamped = left.is_seen() || right.is_seen();
     if !check_core_ops_equality(op) && !check_core_ops_logical(op) {
         let before = state.findings.len() as i64;
@@ -337,11 +337,11 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
     if op.is_comparison() {
         state.a_bit_operation_beside_a_comparison(world, op, lhs, rhs, at);
         state.two_integer_types_compared(lhs, &left, rhs, &right, at);
-        if check_core_ops_two_floats(&left, &right) { let refused = state.two_number_types(op, lhs, &left, rhs, &right, at); }
+        if check_core_ops_two_floats(&left, &right) { let refused = state.two_number_types(&op, lhs, &left, rhs, &right, at); }
     }
     if !check_core_ops_logical(op) && !check_core_ops_shift(op) { state.an_integer_beside_a_float(world, lhs, &left, rhs, &right, at); }
     let mut common: Option<String> = None;
-    if !op.is_comparison() && !check_core_ops_logical(op) { common = state.two_number_types(op, lhs, &left, rhs, &right, at); }
+    if !op.is_comparison() && !check_core_ops_logical(op) { common = state.two_number_types(&op, lhs, &left, rhs, &right, at); }
     let ask_left = common.is_none();
     let ask_right = common.is_none();
     if !check_core_ops_logical(op) {

@@ -23,16 +23,17 @@ comptime COPIED: Array[ref String, 20] = ["i8", "i16", "i32", "i64", "isize", "u
 /// written as a view - the `&` the author wrote, at a function and at a
 /// method alike - or, at a function, its value **moves**, no ledger in
 /// `copying` says the type copies (ADR-294 D9.1), and the body does not keep
-/// it. A method's inferred lending waits on the emitter knowing which entry a
-/// call goes to (ADR-288); an own method's function value is the one exception (`lends_in_own`).
+/// it. A library method's inferred lending waits on the emitter knowing which
+/// entry a call goes to (ADR-288); an own method's is answered (`lends_in_own`).
 pub fn lends_in(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger]) -> bool {
     return lends_with(contract, at, copying, false)
 }
 
-/// The same, for a contract of **this program's own** method: its function
-/// value is lent as a free function's is, because the declaration is ours and
-/// the type is the same wherever it is handed on, so a method can hand its own
-/// to itself in a loop (`&F` is an `impl Fn` as `F` is).
+/// The same, for a contract of **this program's own** method: a parameter it
+/// does not keep is lent as a free function's is, because the declaration is
+/// ours and `kept_by` reads its column (ADR-views-3 D1), but for the ones
+/// `by_value` names; so a method can also hand its own function value to
+/// itself in a loop (`&F` is an `impl Fn` as `F` is).
 pub fn lends_in_own(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger]) -> bool {
     return lends_with(contract, at, copying, true)
 }
@@ -54,7 +55,16 @@ fn lends_with(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger], o
             // entry and every impl's alike, so the entry a call goes to does
             // not change the answer.
             let viewed_by_the_result = contract.borrows.contains(name)
-            return (!signature.takes_a_receiver() || (own && a_function_value(ty)) || viewed_by_the_result) && moves(ty) && !a_ledger_copies(ty, copying) && !contract.keeps.contains(name)
+            // **An own method's parameter it does not keep is lent**, as a
+            // free function's is (ADR-views-3 D1): the fixpoint of `kept_by`
+            // reads the method's column as "not kept", so a caller hands a
+            // lent value on to it without moving it. `by_value` names the
+            // ones lowered by value all the same: a type that holds a view,
+            // and the parameters of a method named as a function value
+            // (`keeps_by_value`). An impl keeps what its trait method keeps
+            // (D17), so every entry of a trait agrees.
+            let own_lends = own && (a_function_value(ty) || !contract.by_value.contains(name))
+            return (!signature.takes_a_receiver() || own_lends || viewed_by_the_result) && moves(ty) && !a_ledger_copies(ty, copying) && !contract.keeps.contains(name)
         }
         position += 1
     }

@@ -1249,7 +1249,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     }
     if check_core_stmt_a_shift(op) {
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
-        state.shift_count_fits(world, o.clone(), target, &value_of_a_copy(&into.unseen()), value, span);
+        state.shift_count_fits(world, &o.clone(), target, &value_of_a_copy(&into.unseen()), value, span);
     }
     state.assigned_followed(world, target, op, value);
     if op.is_none() {
@@ -1425,7 +1425,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     state.a_sequence_is_walked(iter, &over, span, world);
     let mut elements = elements_walked(&over, width);
     if width > 1 && !stepped_fallibly { let refused = state.a_tuple_pattern_that_does_not_fit(&element_walked(&over, 1), width, "A `for`", span); }
-    if !shape.is_empty() { elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span); }
+    if !shape.is_empty() { elements = state.nested_pattern_parts(world, &elements, shape, bindings.len() as i64, "A `for`", span); }
     if bindings.len() == 1 && state.current.is_some() && check_core_stmt_holds_code(&over) {
         let current: String = nikaia_std::index::or(match state.current.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1848,7 +1848,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
                     Expr::Async(inner, _, _) => {
                         let inner = nikaia_std::boxed::open(inner);
                         state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
-                        if last && beside == 0 { state.a_task_with_nothing_beside_it(&stmt.span, String::from("it is the last statement of its group, which waits for it at once")); }
+                        if last && beside == 0 { state.a_task_with_nothing_beside_it(&stmt.span, "it is the last statement of its group, which waits for it at once"); }
                         pending.push(count);
                         check_async_in(state, inner, group, &stmt.span);
                     },
@@ -1892,11 +1892,11 @@ pub(crate) fn check_async_binding(state: &mut CheckState, world: &CheckWorld<'_,
     }
     if named == count {
         state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
-        if last && others == 0 { state.a_task_with_nothing_beside_it(span, String::from("nothing names its binding, and it is the last statement of its group, which waits for it at once")); }
+        if last && others == 0 { state.a_task_with_nothing_beside_it(span, "nothing names its binding, and it is the last statement of its group, which waits for it at once"); }
         return count;
     }
     state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::BeforeStatement(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(named)).span.start as i64), group });
-    if named == at + 1 && others == 0 { state.a_task_with_nothing_beside_it(span, String::from("its binding is named in the very next statement, which waits for it")); }
+    if named == at + 1 && others == 0 { state.a_task_with_nothing_beside_it(span, "its binding is named in the very next statement, which waits for it"); }
     named
 }
 
@@ -1984,7 +1984,7 @@ pub(crate) fn check_async_in(state: &mut CheckState, expr: &Expr, group: i64, sp
         Expr::Async(inner, _, _) => {
             let inner = nikaia_std::boxed::open(inner);
             state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(id_of(expr) as i64), group });
-            state.a_task_with_nothing_beside_it(span, String::from("where it stands, its value is needed at once"));
+            state.a_task_with_nothing_beside_it(span, "where it stands, its value is needed at once");
             check_async_in(state, inner, group, span);
         },
         _ => { for child in child_exprs_of(expr) { check_async_in(state, child, group, span); } },
@@ -2005,7 +2005,7 @@ pub(crate) fn check_async_operands(state: &mut CheckState, parts: &[&Expr], at: 
             Expr::Async(inner, _, _) => {
                 let inner = nikaia_std::boxed::open(inner);
                 state.facts.async_waits.insert(id_of(part) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(at), group });
-                if computed < 2 { state.a_task_with_nothing_beside_it(span, String::from("nothing beside it in the same call or operation is computed while it runs")); }
+                if computed < 2 { state.a_task_with_nothing_beside_it(span, "nothing beside it in the same call or operation is computed while it runs"); }
                 check_async_in(state, inner, group, span);
             },
             _ => { check_async_in(state, part, group, span); },

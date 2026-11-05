@@ -147,12 +147,12 @@ impl EmitState {
         }, || EmitOut::empty());
         walk.hoisted_lets = None;
         if lets.buf == "" {
-            out.append(inner);
+            out.append(&inner);
             return Ok(());
         }
         out.push("({ ");
-        out.append(lets);
-        out.append(inner);
+        out.append(&lets);
+        out.append(&inner);
         out.push(" })");
         Ok(())
     }
@@ -252,7 +252,7 @@ impl EmitState {
     pub(crate) fn emit_call_checked_callee(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Option<String> {
         match func {
             Expr::Variable(name, _) => { let name = *name; if self.facts.entries.contains_key(&emit_text(world, name)) { Some(emit_text(world, name)) } else { None } },
-            Expr::Path(segments, _) => self.emit_call_required(unaliased_in(world.aliases, &emit_arg_joined(world, segments))),
+            Expr::Path(segments, _) => self.emit_call_required(&unaliased_in(world.aliases, &emit_arg_joined(world, segments))),
             _ => None,
         }
     }
@@ -270,8 +270,8 @@ impl EmitState {
         let reach = match self.facts.reaches.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         matches!(reach.clone(), CallReach::Proved)
     }
-    pub(crate) fn emit_call_required(&self, qualified: String) -> Option<String> {
-        let contract = match self.own_contracts.functions.get(&qualified) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    pub(crate) fn emit_call_required(&self, qualified: &str) -> Option<String> {
+        let contract = match self.own_contracts.functions.get(qualified) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if contract.requires.is_empty() { return None; }
         Some(qualified.to_string())
     }
@@ -404,7 +404,7 @@ impl EmitState {
                 let fails = kept.1;
                 let how = nikaia_std::index::or(self.facts.narrowed_reads.get(&key), || -1);
                 if how >= 0 {
-                    self.emit_expr_narrowed(out, EmitOut { buf: escaped_name(&emit_text(world, name)), entries: vec![] }, how, false);
+                    self.emit_expr_narrowed(out, &EmitOut { buf: escaped_name(&emit_text(world, name)), entries: vec![] }, how, false);
                     out.push("(");
                 } else { out.push(&format!("{}(", escaped_name(&emit_text(world, name)))); }
                 let mut at = 0;
@@ -527,12 +527,12 @@ impl EmitState {
         }, || EmitOut::empty());
         walk.hoisted_lets = None;
         if lets.buf == "" {
-            out.append(inner);
+            out.append(&inner);
             return Ok(());
         }
         out.push("({ ");
-        out.append(lets);
-        out.append(inner);
+        out.append(&lets);
+        out.append(&inner);
         out.push(" })");
         Ok(())
     }
@@ -826,7 +826,7 @@ impl EmitState {
         }
         if kind == 0 { out.push("("); }
         let takes = self.takes_a_handle(world, &name);
-        self.emit_call_hold(world, walk, host, receiver, scope, flow);
+        self.emit_call_hold(world, walk, host, receiver, scope, &flow);
         walk.method_callee = match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -898,7 +898,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_call_hold<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, receiver: Option<&Expr>, scope: &EmitScope, flow: EmitFlow) {
+    pub(crate) fn emit_call_hold<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, receiver: Option<&Expr>, scope: &EmitScope, flow: &EmitFlow) {
         walk.hold_args = None;
         let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return };
         let root = match root_of(world.words, on) { Some(__nikaia_value) => __nikaia_value, None => return };

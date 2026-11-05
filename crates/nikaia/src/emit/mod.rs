@@ -764,7 +764,7 @@ impl<'p> Emitter<'p> {
                 self.build.crossings_are_possible(),
                 self.build.overlaps_user_code(),
                 ty,
-                lifetimes,
+                &lifetimes,
             )
         })
     }

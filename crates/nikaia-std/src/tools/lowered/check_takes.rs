@@ -191,33 +191,33 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn hands_over_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, to: &str, span: &Span) {
         let ty = match self.lookup(name) { Some(__nikaia_value) => __nikaia_value, None => return };
-        self.hands_over_path(world, name.to_string(), &ty, self.read_seq, to, span);
+        self.hands_over_path(world, &name.to_string(), &ty, self.read_seq, to, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn hands_over_path(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: String, ty: &Ty, seq: i64, to: &str, span: &Span) { self.hands_over_path_of(world, -1, path, ty, seq, to, span); }
+    pub fn hands_over_path(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, ty: &Ty, seq: i64, to: &str, span: &Span) { self.hands_over_path_of(world, -1, path, ty, seq, to, span); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn hands_over_path_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, node: i64, path: String, ty: &Ty, seq: i64, to: &str, span: &Span) {
+    pub fn hands_over_path_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, node: i64, path: &str, ty: &Ty, seq: i64, to: &str, span: &Span) {
         if !self.task_bindings.is_empty() { return; }
         if !self.takes_away(world, &ty.unseen()) { return; }
-        let root = a_root_segment(&path);
+        let root = a_root_segment(path);
         if self.an_immutable_binding(&root) {
-            self.a_move_out_of_an_immutable(&path, &root, to, span);
+            self.a_move_out_of_an_immutable(path, &root, to, span);
             return;
         }
         let mut stand_in: Option<String> = None;
-        if node >= 0 { stand_in = self.a_part_taken_out(world, &path, ty); }
+        if node >= 0 { stand_in = self.a_part_taken_out(world, path, ty); }
         if path.contains('.') && self.lent_here(&root) && stand_in.is_none() {
-            self.a_part_of_a_loan_handed_over(&path, &root, to, span);
+            self.a_part_of_a_loan_handed_over(path, &root, to, span);
             return;
         }
         let taken = self.taken(path.to_string(), ty.clone(), seq, to, span);
         self.handed.push(taken);
         if stand_in.is_some() {
             self.facts.taken_parts.insert(node, nikaia_std::index::or(stand_in.as_deref(), || "").to_string());
-            self.a_part_out(&root, &path, self.handed.len() as i64 - 1);
+            self.a_part_out(&root, path, self.handed.len() as i64 - 1);
         }
         let bound = self.frame_of(&root);
         if bound < 0 { return; }
@@ -226,7 +226,7 @@ impl CheckState {
         let what = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(around)).what.to_string();
         let mut again: String = String::from("a lambda may run more than once, and the second run would find it gone");
         if what == "loop" { again = String::from("the next time round the loop it would be handed over again, but it's already gone"); } else if what == "guard" || what == "bound" { again = format!("a {} only reads the labels of its alternative: they stay the alternative's, for its action", what); }
-        let copy = a_copy_said(&path, ty);
+        let copy = a_copy_said(path, ty);
         self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.text(), again), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("Hand over a copy each time: `{}`.", copy))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -532,7 +532,7 @@ impl CheckState {
             if found.is_some() {
                 let at: i64 = match found { Some(__nikaia_value) => __nikaia_value, None => return }.clone();
                 let read = (*nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at))).clone();
-                self.hands_over_path(world, read.path.to_string(), &one.ty, read.seq, "given to `??`", &one.span);
+                self.hands_over_path(world, &read.path.to_string(), &one.ty, read.seq, "given to `??`", &one.span);
             }
         }
     }

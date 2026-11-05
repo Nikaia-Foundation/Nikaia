@@ -1,0 +1,34 @@
+// A lent parameter handed on to an own method that does not keep it stays
+// lent: the method lends it as a free function does (ADR-views-3 D1, #1213).
+
+enum Op {
+    Add,
+    Sub,
+}
+
+struct State {
+    count: i64,
+}
+
+impl State {
+    fn note(mut self, op: Op) {
+        if op == Op::Add {
+            self.count = self.count + 1
+        }
+    }
+}
+
+fn adds(op: Op) -> bool {
+    return op == Op::Add
+}
+
+fn both(mut state: State, op: Op) -> bool {
+    state.note(op)
+    return adds(op)
+}
+
+fn main() {
+    let mut s = State { count: 0 }
+    println(both(s, Op::Add))
+    println(s.count)
+}

@@ -94,7 +94,7 @@ impl EmitState {
             let kind = emit_settle_kind(host.overlaps_user_code());
             let settle = if fails { format!("nikaia_std::cleanup::settle_at::<{}>(&{}).await?", kind, rust_string(&scope.origin)) } else { format!("nikaia_std::cleanup::settle_quietly::<{}>().await", kind) };
             out.push("{ let __nikaia_block = ");
-            out.append(inner);
+            out.append(&inner);
             out.push(&format!("; {}; __nikaia_block }}", settle));
             return Ok(());
         }
@@ -121,7 +121,7 @@ impl EmitState {
             rendered.record(&nikaia_std::index::get(&block.stmts, 0).span, st);
             if !rendered.buf.contains("\n") {
                 out.push("{ ");
-                out.append(rendered);
+                out.append(&rendered);
                 out.push(" }");
                 return Ok(());
             }
@@ -293,8 +293,8 @@ impl EmitState {
                 self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, here.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), None))?;
             },
             Stmt::For { bindings, shape, mutable, iter, body } => { let mutable = *mutable; self.emit_stmt_for(world, walk, out, host, bindings, shape, mutable, iter, body, span, depth, here, scope)?; },
-            Stmt::Break => { self.emit_stmt_jump(out, String::from("break"), here)?; },
-            Stmt::Continue => { self.emit_stmt_jump(out, String::from("continue"), here)?; },
+            Stmt::Break => { self.emit_stmt_jump(out, "break", &here)?; },
+            Stmt::Continue => { self.emit_stmt_jump(out, "continue", &here)?; },
             Stmt::Return(value) => {
                 let is_return = matches!(tail, EmitTail::Return);
                 if value.is_some() {
@@ -316,7 +316,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_stmt_jump(&self, out: &mut EmitOut, word: String, flow: EmitFlow) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_stmt_jump(&self, out: &mut EmitOut, word: &str, flow: &EmitFlow) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if !flow.in_loop { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` only works inside a loop, and there's none here.", word), at: Some(flow.statement) }, &"emit_stmt_jump")); }
         out.push(&format!("{};", word));
         Ok(())
@@ -347,7 +347,7 @@ impl EmitState {
         }
         if kept { return String::from(""); }
         let own = match ty { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-        let mut written = self.emit_core_ty_counted(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), own, EmitLifetimes::Elided, count);
+        let mut written = self.emit_core_ty_counted(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), own, &EmitLifetimes::Elided, count);
         if emit_text(world, own.name) == "Vec" && own.generics.len() == 1 && !own.is_nullable && !own.is_slice { written = a_list_read_as_a_slice(written); }
         format!(": {}", emit_seeds_seeded(&self.seeds, walk, self.trusted_input, written))
     }

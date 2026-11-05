@@ -153,7 +153,7 @@ impl ProverState {
         false
     }
     #[allow(clippy::too_many_arguments)]
-    pub fn an_assert(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, cond: &Expr, written: String, names: &collections::BTreeSet<String>, message: Option<String>, span: Span, scope: &mut ProverScope, at: &ProverWhere, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> AssertOutcome {
+    pub fn an_assert(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, cond: &Expr, written: &str, names: &collections::BTreeSet<String>, message: Option<String>, span: Span, scope: &mut ProverScope, at: &ProverWhere, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> AssertOutcome {
         let mut outcome = AssertOutcome { held: ClaimHeld::ByTheTest, findings: vec![] };
         if self.in_test { return outcome; }
         let claim = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&self.pinned, &scope, name) }, &mut arena.nodes);

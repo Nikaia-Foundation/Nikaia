@@ -103,8 +103,7 @@ impl Trivia {
 
     /// One `//...` comment; `body` is what stands after the two slashes.
     fn comment(&mut self, at: std::ops::Range<usize>, body: &str) {
-        self.core
-            .comment(at.start as i64, at.end as i64, body.to_string());
+        self.core.comment(at.start as i64, at.end as i64, body);
     }
 
     /// The documentation standing immediately before the item at this byte.

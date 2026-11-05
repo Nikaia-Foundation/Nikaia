@@ -46,8 +46,8 @@ pub(crate) fn a_type_named(ty: &Ty, wanted: &str, viewed: bool) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn two_number_types(&mut self, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> Option<String> {
-        if op == BinaryOp::Shl || op == BinaryOp::Shr { return None; }
+    pub fn two_number_types(&mut self, op: &BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> Option<String> {
+        if *op == BinaryOp::Shl || *op == BinaryOp::Shr { return None; }
         let held_left = held_name(left);
         let held_right = held_name(right);
         if held_left.is_some() && held_right.is_some() && !is_a_literal(lhs) && !is_a_literal(rhs) {
@@ -116,7 +116,7 @@ impl CheckState {
         if x == v || is_a_literal(value) { return; }
         let common = common_integer(&x, &v);
         if common.is_none() {
-            self.two_number_types(op, target, into, value, found, span);
+            self.two_number_types(&op, target, into, value, found, span);
             return;
         }
         let joined = nikaia_std::index::or(common.as_deref(), || "").to_string();

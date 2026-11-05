@@ -15,7 +15,8 @@ pub(crate) fn lends_with(contract: &FnContract, at: i64, copying: &[&Ledger], ow
             if nikaia_std::list::contains(&signature.mutable, &name) || name == "self" { return false; }
             if ty.is_a_view() { return true; }
             let viewed_by_the_result = nikaia_std::list::contains(&contract.borrows, &name);
-            return (!signature.takes_a_receiver() || own && a_function_value(ty) || viewed_by_the_result) && moves(ty) && !a_ledger_copies(ty, copying) && !nikaia_std::list::contains(&contract.keeps, &name);
+            let own_lends = own && (a_function_value(ty) || !nikaia_std::list::contains(&contract.by_value, &name));
+            return (!signature.takes_a_receiver() || own_lends || viewed_by_the_result) && moves(ty) && !a_ledger_copies(ty, copying) && !nikaia_std::list::contains(&contract.keeps, &name);
         }
         position += 1;
     }

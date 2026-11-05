@@ -1149,6 +1149,12 @@ pub struct FnContract {
     /// assigned into `mut v`'s place, `self:s` into the receiver's. Worked
     /// out from the body for this unit's own functions; not spelled.
     pub stores: Vec[String],
+    /// **Parameters of this unit's own method lowered by value though the
+    /// body does not keep them** (ADR-views-3 D1, #1213): one whose type holds
+    /// a view, which a borrow would need a lifetime for, and every parameter
+    /// of a method named as a function value, whose type a `fn(..)` parameter
+    /// fixes. Worked out with `keeps`; not spelled.
+    pub by_value: Vec[String],
     pub keeps: Vec[String],
     pub mutates: bool,
     pub touches_a_lock: Lock,
@@ -1205,6 +1211,7 @@ impl FnContract {
             borrows: [],
             returns: "",
             stores: [],
+            by_value: [],
             keeps: [],
             mutates: false,
             touches_a_lock: Lock::No,
