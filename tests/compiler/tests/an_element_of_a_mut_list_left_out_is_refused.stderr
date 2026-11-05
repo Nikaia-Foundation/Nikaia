@@ -1,0 +1,11 @@
+error[NK2108]: This `return` leaves `w` without `w[i]`.
+  --> tests/an_element_of_a_mut_list_left_out_is_refused.nika:9:2
+   |
+ 8 | 	let t = left_out_element_hold(w[i])
+   |                                ---- taken out of `w` here
+ 9 | 	return t.len()
+   |  ^^^^^^ leaves the function with the part still out
+   |
+   = note: `w` is a `mut` parameter, so it is the caller's and is whole whenever the caller can see it. `w[i]` was passed to `left_out_element_hold`, which keeps it, and nothing has put it back.
+   = help: Assign `w` (or the part) before the function is left, or build the value by value with `fn f(w: T) -> T`.
+

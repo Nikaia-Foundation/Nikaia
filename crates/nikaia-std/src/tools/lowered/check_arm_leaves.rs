@@ -356,6 +356,7 @@ impl CheckState {
             _ => { },
         }
         self.a_narrowed_read_given_up(value);
+        if self.an_element_taken_out(world, value, ty, to, span) { return; }
         let at = match self.flow.read_index.get(&(node_key(value), read_at)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
         if !a_name_or_a_field(value) { return; }
         let path = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path.to_string();

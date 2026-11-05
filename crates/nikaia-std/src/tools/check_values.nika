@@ -240,6 +240,13 @@ impl CheckState {
     /// body does not own: the language below said *cannot move out of
     /// `p.name` which is behind a shared reference*, about a file nobody wrote.
     pub fn a_part_of_a_loan_handed_over(ref mut self, path: ref String, root: ref String, to: ref String, span: ref Span) sync {
+        // **`mut self` is changed in place, not only borrowed** (ADR-views-3
+        // D3, #1208): a part reaching here could not be taken out and given
+        // back (inside a lambda, or a type with no stand-in).
+        if root == "self" && self.changing_self {
+            self.findings.push(check_refusal("NK2106", span, f"`{path}` is {to}, but this method takes `mut self`: it changes `self` in place and doesn't own it.", ["`self` belongs to the caller. A part handed to something that keeps it is taken out and given back by assigning it, but not inside a lambda, and not where its type has no empty value or stand-in.", "Nikaia never makes a copy behind your back."], f"Hand over a copy: `{path}.clone()`."))
+            return
+        }
         self.findings.push(check_refusal("NK2106", span, f"`{path}` is {to}, but `{root}` is only borrowed here.", [f"`{root}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), so you can't give a part of it away.", "Nikaia never makes a copy behind your back."], f"Hand over a copy: `{path}.clone()`."))
     }
 }

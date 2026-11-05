@@ -611,6 +611,8 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.type_parameters = declared;
     let outer_borrowing = state.borrowing_self;
     state.borrowing_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false);
+    let outer_changing = state.changing_self;
+    state.changing_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false) && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_keep), || false);
     let frame = check_function_frame(state, world, host, receiver, args, config, spread, &target, &key, &parameters);
     let mut expected: Option<Ty> = None;
     match ret_type {
@@ -705,6 +707,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.flow.throwing = outer_throwing;
     state.type_parameters = outer_declared;
     state.borrowing_self = outer_borrowing;
+    state.changing_self = outer_changing;
     state.current = outer_current;
     state.inside_a_sync_function = outer_sync;
     state.run_code = outer_run_code;

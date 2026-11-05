@@ -89,13 +89,58 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_part_taken_out(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, ty: &Ty) -> Option<String> {
-        if !path.contains('.') { return None; }
+        if !path.contains('.') && !path.contains('[') { return None; }
         for around in self.repeats.iter() { if around.what == "lambda" { return None; } }
         let root = a_root_segment(path);
-        if root == "self" { return None; }
+        if root == "self" {
+            if !self.changing_self { return None; }
+            return self.a_stand_in(world, ty);
+        }
         let local = match self.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if !local.changing && !self.a_changing_view(&root) { return None; }
         self.a_stand_in(world, ty)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_element_taken_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, to: &str, span: &Span) -> bool {
+        if to.starts_with("bound to") || to.starts_with("assigned") || to.starts_with("written into") { return false; }
+        if !self.task_bindings.is_empty() || !self.takes_away(world, &ty.unseen()) { return false; }
+        let path = match self.an_element_path(world, value, true) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let stand_in = match self.a_part_taken_out(world, &path, ty) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let root = a_root_segment(&path);
+        let taken = self.taken(path.to_string(), ty.clone(), self.read_seq, to, span);
+        self.handed.push(taken);
+        self.facts.taken_parts.insert(node_key(value), stand_in);
+        self.a_part_out(&root, &path, self.handed.len() as i64 - 1);
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_element_path(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, read: bool) -> Option<String> {
+        match expr {
+            Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); self.an_element_path_of(world, base, index, read) },
+            _ => None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn an_element_path_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr, index: &Expr, read: bool) -> Option<String> {
+        if read && !self.facts.list_indices.contains(&node_key(base)) { return None; }
+        let list = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let mut at: String = String::from("");
+        match index {
+            Expr::LitInt { value, negative, .. } => {
+                let negative = *negative; let value = *value;
+                if negative { return None; }
+                at = format!("{}", value);
+            },
+            Expr::Variable(name, _) => {
+                let name = *name;
+                at = world.words.resolve(name).to_string();
+            },
+            _ => { return None; },
+        }
+        Some(format!("{}[{}]", list, at))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -249,7 +294,7 @@ impl CheckState {
         let local = match self.binding(root) { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut view: String = String::from("");
         let mut frame: i64 = -1;
-        if !local.changing {
+        if !local.changing && !(root == "self" && self.changing_self) {
             view = self.a_view_described(root);
             frame = self.frame_of(root);
         }
@@ -440,14 +485,18 @@ impl CheckState {
         let mut labels: Vec<CheckLabel> = vec![label];
         if some { labels.push(CheckLabel { span: from.clone(), word: out.part.to_string(), text: format!("taken out of `{}` here", subject), main: false }); }
         let mut kept: String = format!("`{}` is a `mut` parameter, so it is the caller's and is whole whenever the caller can see it. `{}` was {}, and nothing has put it back.", subject, out.part, taken.to);
+        let of_self = !a_view && subject == "self";
+        if of_self { kept = format!("The method takes `mut self`, so `self` is the caller's and is whole whenever the caller can see it. `{}` was {}, and nothing has put it back.", out.part, taken.to); }
         if a_view { kept = format!("`{}` is {}: a change through it reaches the place, so it is whole wherever the place can be seen again. `{}` was {}, and nothing has put it back.", subject, out.view, out.part, taken.to); }
         let mut tail: &'static str = "";
         if fails {
             kept = format!("Between taking {} out of `{}` and giving it back, no call that can fail may stand: the caller would be left a `{}` with a part missing.", part, subject, subject);
+            if of_self { kept = format!("Between taking {} out of `self` and giving it back, no call that can fail may stand: the caller would be left a value with a part missing.", part); }
             if a_view { kept = format!("Between taking {} out of `{}` and giving it back, no call that can fail may stand: the place `{}` stands for would be left with a part missing.", part, subject, subject); }
             tail = " and move the call out from between";
         }
         let mut help: String = format!("Assign `{}` (or the part) before the function is left{}, or build the value by value with `fn f({}: T) -> T`.", subject, tail, subject);
+        if of_self { help = format!("Assign {} before the method is left{}, or take `keep self` and hand the value back.", part, tail); }
         if a_view { help = format!("Assign {} (or the whole `{}`) before its block is left{}.", part, subject, tail); }
         CheckFinding { severity: CheckSeverity::Error, span, code: String::from("NK2108"), message, notes: vec![kept], help: Some(help), labels }
     }
@@ -474,7 +523,8 @@ pub(crate) fn a_copy_said(path: &str, ty: &Ty) -> String {
 
 pub(crate) fn a_root_segment(path: &str) -> String {
     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-    (*nikaia_std::index::get(&parts, 0)).to_string()
+    let first: Vec<&str> = (*nikaia_std::index::get(&parts, 0)).split('[').collect::<Vec<_>>();
+    (*nikaia_std::index::get(&first, 0)).to_string()
 }
 
 pub(crate) fn by_position(ahead: &[(i64, i64, i64)]) -> Vec<(i64, i64, i64)> {

@@ -1192,6 +1192,8 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         state.gives.push(CheckGive { path: written.to_string(), at: span.start as i64, choices });
         state.written_at.push((written, span.start as i64));
     }
+    let element = state.an_element_path(world, target, false);
+    if path.is_none() && element.is_some() { state.gives.push(CheckGive { path: nikaia_std::index::or(element.as_deref(), || "").to_string(), at: span.start as i64, choices: state.branch.to_owned() }); }
     let shared = check_core_stmt_shared(&state, world, target);
     if !shared {
         let rooted = state.rooted_at(world, target);

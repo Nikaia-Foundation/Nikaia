@@ -1,0 +1,15 @@
+// #1208, ADR-views-1 D2: an element of a `mut` list taken by a keeper and
+// not given back before the `return`.
+fn left_out_element_hold(keep ws: Vec[u32]) -> Vec[u32] {
+	return ws
+}
+
+fn left_out_element_stash(mut w: Vec[Vec[u32]], i: i64) -> i64 {
+	let t = left_out_element_hold(w[i])
+	return t.len()
+}
+
+fn main() {
+	let mut w: Vec[Vec[u32]] = [[], [1, 2]]
+	println(f"{left_out_element_stash(w, 1)}")
+}

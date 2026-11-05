@@ -109,7 +109,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_part_of_a_loan_handed_over(&mut self, path: &str, root: &str, to: &str, span: &Span) { self.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but `{}` is only borrowed here.", path, to, root), vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), so you can't give a part of it away.", root), String::from("Nikaia never makes a copy behind your back.")], Some(format!("Hand over a copy: `{}.clone()`.", path)))); }
+    pub fn a_part_of_a_loan_handed_over(&mut self, path: &str, root: &str, to: &str, span: &Span) {
+        if root == "self" && self.changing_self {
+            self.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but this method takes `mut self`: it changes `self` in place and doesn't own it.", path, to), vec![String::from("`self` belongs to the caller. A part handed to something that keeps it is taken out and given back by assigning it, but not inside a lambda, and not where its type has no empty value or stand-in."), String::from("Nikaia never makes a copy behind your back.")], Some(format!("Hand over a copy: `{}.clone()`.", path))));
+            return;
+        }
+        self.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but `{}` is only borrowed here.", path, to, root), vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), so you can't give a part of it away.", root), String::from("Nikaia never makes a copy behind your back.")], Some(format!("Hand over a copy: `{}.clone()`.", path))));
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

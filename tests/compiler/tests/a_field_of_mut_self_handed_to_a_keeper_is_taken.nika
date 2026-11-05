@@ -1,0 +1,24 @@
+// #1208, ADR-views-3 D3, ADR-views-1 D1-D3: a field of `mut self` handed to
+// a keeper is taken out, and assigning it gives it back.
+struct TakenTrail {
+	trail: Vec[u32],
+	saved: Vec[Vec[u32]],
+}
+
+fn taken_trail_hold(keep ws: Vec[u32]) -> Vec[u32] {
+	return ws
+}
+
+impl TakenTrail {
+	fn stash(mut self) {
+		let t = taken_trail_hold(self.trail)
+		self.trail = []
+		self.saved.push(t)
+	}
+}
+
+fn main() {
+	let mut s = TakenTrail { trail: [1, 2], saved: [] }
+	s.stash()
+	println(f"{s.trail.len()} {s.saved[0].len()}")
+}

@@ -158,10 +158,10 @@ impl CheckState {
     /// to something that keeps it. What stands in the place meanwhile: empty
     /// where the type's empty value does, the stand-in otherwise; `null` where
     /// `path` is no such part, or no stand-in exists, and the hand-over stays
-    /// what it was. Not inside a lambda, which is a function of its own; not
-    /// of `self`.
+    /// what it was. Not inside a lambda, which is a function of its own; of
+    /// `self` only where the method takes `mut self` (ADR-views-3 D3, #1208).
     pub fn a_part_taken_out(ref self, world: ref CheckWorld, path: ref String, ty: ref Ty) -> String? sync {
-        if !path.contains(".") {
+        if !path.contains(".") && !path.contains("[") {
             return null
         }
         for around in self.repeats {
@@ -171,13 +171,71 @@ impl CheckState {
         }
         let root = a_root_segment(path)
         if root == "self" {
-            return null
+            if !self.changing_self {
+                return null
+            }
+            return self.a_stand_in(world, ty)
         }
         let local = self.binding(root) ?? return null
         if !local.changing && !self.a_changing_view(root) {
             return null
         }
         return self.a_stand_in(world, ty)
+    }
+
+    /// **An element of a list in a `mut` place, handed to something that
+    /// keeps it, is taken out** (ADR-views-1 D1, D3, #1208): `keep(w[i])`
+    /// with `mut w`, `keep(self.w[i])` in a `mut self` method. `false` where
+    /// it is no such element, or its type has no empty value or stand-in.
+    /// Not where a `let` binds it or an assignment moves it: that taking is
+    /// not decided (#979).
+    pub fn an_element_taken_out(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, to: ref String, span: ref Span) -> bool sync {
+        if to.starts_with("bound to") || to.starts_with("assigned") || to.starts_with("written into") {
+            return false
+        }
+        if self.task_bindings.len() > 0 || !self.takes_away(world, ty.unseen()) {
+            return false
+        }
+        let path = self.an_element_path(world, value, true) ?? return false
+        let stand_in = self.a_part_taken_out(world, path, ty) ?? return false
+        let root = a_root_segment(path)
+        let taken = self.taken(path.clone(), ty.clone(), self.read_seq, to, span)
+        self.handed.push(taken)
+        self.facts.taken_parts.insert(node_key(value), stand_in)
+        self.a_part_out(root, path, self.handed.len() as i64 - 1)
+        return true
+    }
+
+    /// **An element of a list as a place** (ADR-views-1 D1, #1208): `w[1]`,
+    /// `self.w[i]`, where the index is a literal or a name, so that a
+    /// give-back written the same way is seen to be one. Where `read`, only
+    /// a list's element (not a map's entry, not a part).
+    pub fn an_element_path(ref self, world: ref CheckWorld, expr: ref Expr, read: bool) -> String? sync {
+        return match expr {
+            Expr::Index { base, index, .. } => self.an_element_path_of(world, base, index, read),
+            else => null,
+        }
+    }
+
+    fn an_element_path_of(ref self, world: ref CheckWorld, base: ref Expr, index: ref Expr, read: bool) -> String? sync {
+        if read && !self.facts.list_indices.contains(node_key(base)) {
+            return null
+        }
+        let list = dotted_path(world, base) ?? return null
+        let mut at: String = ""
+        match index {
+            Expr::LitInt { value, negative, .. } => {
+                if negative {
+                    return null
+                }
+                at = f"{value}"
+            },
+            Expr::Variable(name, _) => {
+                at = world.words.resolve(name).clone()
+            },
+            else => return null,
+        }
+        return f"{list}[{at}]"
     }
 
     /// **A `let mut` view of a place, or the element of a `for mut`**
@@ -406,7 +464,7 @@ impl CheckState {
         let local = self.binding(root) ?? return
         let mut view: String = ""
         let mut frame: i64 = -1
-        if !local.changing {
+        if !local.changing && !(root == "self" && self.changing_self) {
             view = self.a_view_described(root)
             frame = self.frame_of(root)
         }
@@ -709,18 +767,29 @@ impl CheckState {
             labels.push(CheckLabel { span: from.clone(), word: out.part.clone(), text: f"taken out of `{subject}` here", main: false })
         }
         let mut kept: String = f"`{subject}` is a `mut` parameter, so it is the caller's and is whole whenever the caller can see it. `{out.part}` was {taken.to}, and nothing has put it back."
+        // **`mut self` is the caller's too** (ADR-views-3 D3, #1208).
+        let of_self = !a_view && subject == "self"
+        if of_self {
+            kept = f"The method takes `mut self`, so `self` is the caller's and is whole whenever the caller can see it. `{out.part}` was {taken.to}, and nothing has put it back."
+        }
         if a_view {
             kept = f"`{subject}` is {out.view}: a change through it reaches the place, so it is whole wherever the place can be seen again. `{out.part}` was {taken.to}, and nothing has put it back."
         }
         let mut tail: String = ""
         if fails {
             kept = f"Between taking {part} out of `{subject}` and giving it back, no call that can fail may stand: the caller would be left a `{subject}` with a part missing."
+            if of_self {
+                kept = f"Between taking {part} out of `self` and giving it back, no call that can fail may stand: the caller would be left a value with a part missing."
+            }
             if a_view {
                 kept = f"Between taking {part} out of `{subject}` and giving it back, no call that can fail may stand: the place `{subject}` stands for would be left with a part missing."
             }
             tail = " and move the call out from between"
         }
         let mut help: String = f"Assign `{subject}` (or the part) before the function is left{tail}, or build the value by value with `fn f({subject}: T) -> T`."
+        if of_self {
+            help = f"Assign {part} before the method is left{tail}, or take `keep self` and hand the value back."
+        }
         if a_view {
             help = f"Assign {part} (or the whole `{subject}`) before its block is left{tail}."
         }
@@ -756,7 +825,8 @@ fn a_copy_said(path: ref String, ty: ref Ty) -> String {
 // The first segment of a path: `p` for `p.name`.
 fn a_root_segment(path: ref String) -> String {
     let parts: Vec[ref String] = path.split(".").collect()
-    return parts[0].clone()
+    let first: Vec[ref String] = parts[0].split("[").collect()
+    return first[0].clone()
 }
 
 // Ways out in the order they stand in, the ones at one place in the order they

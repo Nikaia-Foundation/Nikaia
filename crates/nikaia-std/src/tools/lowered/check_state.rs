@@ -320,6 +320,7 @@ pub struct CheckState {
     pub type_parameters: collections::BTreeMap<String, Vec<String>>,
     pub struct_parameters: collections::BTreeMap<String, Vec<String>>,
     pub borrowing_self: bool,
+    pub changing_self: bool,
     pub enclosing: collections::BTreeMap<String, Vec<String>>,
     pub subject_arguments: Vec<Ty>,
     pub declared_bounds: collections::BTreeMap<String, collections::BTreeMap<String, Vec<String>>>,

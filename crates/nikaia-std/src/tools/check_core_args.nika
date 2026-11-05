@@ -86,6 +86,18 @@ fn check_core_args_lent(world: ref CheckWorld, callee: ref FnContract?, at: i64)
     return lends_in(contract, at, [world.library])
 }
 
+/// Whether `arg` is a field of `mut self` that a keeper takes out, to be
+/// given back: one whose type has an empty value or a stand-in
+/// (ADR-views-1 D3, #1208).
+fn check_core_args_taken_from_self[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, span: ref Span) -> bool sync {
+    let field = check_core_field_of_self(world, arg) ?? return false
+    let ty = check_core_expr(state, world, host, arg, span)
+    if ty.is_unknown() {
+        return false
+    }
+    return state.a_part_taken_out(world, f"self.{field}", ty) != null
+}
+
 /// Whether `arg` is a lambda landing in a parameter of a function type.
 fn check_core_args_is_lambda(arg: ref Expr, expected: ref Vec[Ty], at: i64) -> bool {
     if at >= expected.len() as i64 {
@@ -278,7 +290,10 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     if !lends {
         lends = check_core_args_lent(world, callee, at)
     }
-    if !lends {
+    // **A field of `mut self` handed to a keeper is taken out**, to be given
+    // back (ADR-views-3 D3, ADR-views-1 D1, #1208): `NK2108` asks that it is.
+    let taken = !lends && state.changing_self && check_core_args_taken_from_self(state, world, host, arg, span)
+    if !lends && !taken {
         check_core_a_field_of_a_borrowed_subject_given(state, world, host, arg, span, "passed", check_core_args_reads(callee, at))
         // **A part handed to a `mut` parameter is lent to it**, not given
         // away: `walk(s.node)` over `for mut s in …`, whatever file declares

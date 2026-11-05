@@ -79,6 +79,7 @@ pub(super) fn hollow() -> Box<CheckState> {
         type_parameters: BTreeMap::new(),
         struct_parameters: BTreeMap::new(),
         borrowing_self: false,
+        changing_self: false,
         enclosing: BTreeMap::new(),
         subject_arguments: Vec::new(),
         declared_bounds: BTreeMap::new(),

@@ -273,6 +273,17 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_index<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let taken: Option<String> = match self.facts.taken_parts.get(&node_key(node)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if taken.is_some() && !flow.in_a_place {
+            let stand_in = nikaia_std::index::or(taken.as_deref(), || "").to_string();
+            if stand_in == "" { out.push("std::mem::take(&mut "); } else { out.push("std::mem::replace(&mut "); }
+            self.emit_core_index(world, walk, out, host, node, base, index, depth, flow.place(), scope)?;
+            if stand_in == "" { out.push(")"); } else { out.push(&format!(", {})", stand_in)); }
+            return Ok(());
+        }
         if !flow.in_a_place {
             if self.facts.flat_reads.contains(&node_key(node)) {
                 out.take_lend();

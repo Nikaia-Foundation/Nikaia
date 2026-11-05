@@ -655,6 +655,10 @@ pub struct CheckState {
     /// ([ADR-083](../../docs/specification/adr/adr-083.md)). `false` for a free
     /// function, which has no subject to borrow.
     pub borrowing_self: bool,
+    /// Whether the method being walked takes **`mut self`**: a part of
+    /// `self` handed to something that keeps it is taken out, to be given
+    /// back, as from a `mut` parameter (ADR-views-3 D3, ADR-views-1 D1, #1208).
+    pub changing_self: bool,
     /// The `[T]` of the `impl` whose methods are being walked, on its own.
     ///
     /// Separate from the field above because `function` rebuilds that one per

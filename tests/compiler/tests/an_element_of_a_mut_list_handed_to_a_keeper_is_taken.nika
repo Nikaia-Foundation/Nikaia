@@ -1,0 +1,34 @@
+// #1208, ADR-views-1 D1-D3: an element of a `mut` list, or of a list in
+// `mut self`, handed to a keeper is taken out, and assigning it gives it back.
+struct TakenWatches {
+	watches: Vec[Vec[u32]],
+	saved: Vec[Vec[u32]],
+}
+
+fn taken_element_hold(keep ws: Vec[u32]) -> Vec[u32] {
+	return ws
+}
+
+fn taken_element_stash(mut w: Vec[Vec[u32]], mut saved: Vec[Vec[u32]]) {
+	let t = taken_element_hold(w[1])
+	w[1] = []
+	saved.push(t)
+}
+
+impl TakenWatches {
+	fn stash(mut self, lit: i64) {
+		let t = taken_element_hold(self.watches[lit])
+		self.watches[lit] = [7]
+		self.saved.push(t)
+	}
+}
+
+fn main() {
+	let mut w: Vec[Vec[u32]] = [[], [1, 2]]
+	let mut saved: Vec[Vec[u32]] = []
+	taken_element_stash(w, saved)
+	println(f"{w[1].len()} {saved[0].len()}")
+	let mut s = TakenWatches { watches: [[1], [2, 3, 4]], saved: [] }
+	s.stash(1)
+	println(f"{s.watches[1].len()} {s.saved[0].len()}")
+}

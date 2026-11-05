@@ -1,5 +1,6 @@
-// ADR-views-3 D2, #1213: a `keep` parameter takes its argument, so a field of
-// `mut self` handed to one is still NK1131, and the way out names `keep self`.
+// ADR-views-3 D2, D3, #1213, #1208: a `keep` parameter takes its argument, so
+// a field of `mut self` handed to one is taken out, and the `return` that
+// leaves without giving it back is NK2108; the way out names `keep self`.
 
 struct KeptFieldBag {
 	items: Vec[i64],

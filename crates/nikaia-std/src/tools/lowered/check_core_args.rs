@@ -57,6 +57,15 @@ pub(crate) fn check_core_args_lent(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
     lends_in(contract, at, &vec![world.library])
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_args_taken_from_self<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &Expr, span: &Span) -> bool {
+    let field = match check_core_field_of_self(world, arg) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let ty = check_core_expr(state, world, host, arg, span);
+    if ty.is_unknown() { return false; }
+    state.a_part_taken_out(world, &format!("self.{}", field), &ty).is_some()
+}
+
 pub(crate) fn check_core_args_is_lambda(arg: &Expr, expected: &[Ty], at: i64) -> bool {
     if at >= expected.len() as i64 { return false; }
     let mut closure = false;
@@ -206,7 +215,8 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
         }
     }
     if !lends { lends = check_core_args_lent(world, callee, at); }
-    if !lends {
+    let taken = !lends && state.changing_self && check_core_args_taken_from_self(state, world, host, arg, span);
+    if !lends && !taken {
         check_core_a_field_of_a_borrowed_subject_given(state, world, host, arg, span, "passed", check_core_args_reads(callee, at));
         if at < expected.len() as i64 && !wants_fn && !(*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).is_unknown() && !check_core_args_changes(callee, at) { check_core_a_lent_place_passed(state, world, host, arg, !check_core_args_runs(callee, at), span); }
     }

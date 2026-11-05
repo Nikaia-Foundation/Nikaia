@@ -1,0 +1,23 @@
+// #1208, ADR-views-1 D2: a field of `mut self` taken by a keeper and not
+// given back before the method is left.
+struct LeftOutTrail {
+	trail: Vec[u32],
+	saved: Vec[Vec[u32]],
+}
+
+fn left_out_trail_hold(keep ws: Vec[u32]) -> Vec[u32] {
+	return ws
+}
+
+impl LeftOutTrail {
+	fn stash(mut self) {
+		let t = left_out_trail_hold(self.trail)
+		self.saved.push(t)
+	}
+}
+
+fn main() {
+	let mut s = LeftOutTrail { trail: [1, 2], saved: [] }
+	s.stash()
+	println(f"{s.saved.len()}")
+}

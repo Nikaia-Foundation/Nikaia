@@ -10,7 +10,7 @@
 use std::collections
 
 /// The field of `self` that `value` reads, where it is `self.<field>`.
-fn check_core_field_of_self(world: ref CheckWorld, value: ref Expr) -> String? {
+pub fn check_core_field_of_self(world: ref CheckWorld, value: ref Expr) -> String? {
     return match value {
         Expr::Field { base, name, .. } => match base {
             Expr::Variable(subject, _) => if world.words.resolve(subject) == "self" { world.words.resolve(name).clone() } else { null },
@@ -46,7 +46,13 @@ pub fn check_core_a_field_of_a_borrowed_subject_given[H: CheckHost](mut state: C
     if what == "handed back" {
         help = f"Declare the result `ref {ty.text()}` to return a view of it, write `self.{field}.clone()` for a copy, or take `keep self` if the method is meant to use up its value."
     }
-    state.findings.push(check_refusal("NK1131", span, f"You can't give away `self.{field}` here: this method only borrows `self`.", notes, help))
+    // **`mut self` changes `self` in place** (ADR-views-3 D3, #1208): it is
+    // not only borrowed, but it is still not this method's to give away.
+    let mut message: String = f"You can't give away `self.{field}` here: this method only borrows `self`."
+    if state.changing_self {
+        message = f"You can't give away `self.{field}` here: this method takes `mut self`, which changes `self` in place but doesn't own it."
+    }
+    state.findings.push(check_refusal("NK1131", span, message, notes, help))
 }
 
 /// **`NK1131` for a place that is lent here and is not `self`** (ADR-083,

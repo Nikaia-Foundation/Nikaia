@@ -1,0 +1,9 @@
+error[NK2108]: `self` is left without `self.trail`: it was taken out and never given back.
+   --> tests/a_field_of_mut_self_left_out_is_refused.nika:14:31
+    |
+ 14 | 		let t = left_out_trail_hold(self.trail)
+    |                               ^^^^^^^^^^ taken out here and not given back
+    |
+    = note: The method takes `mut self`, so `self` is the caller's and is whole whenever the caller can see it. `self.trail` was passed to `left_out_trail_hold`, which keeps it, and nothing has put it back.
+    = help: Assign `self.trail` before the method is left, or take `keep self` and hand the value back.
+

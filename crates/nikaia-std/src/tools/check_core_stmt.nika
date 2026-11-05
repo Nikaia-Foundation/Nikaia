@@ -1599,6 +1599,12 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         state.gives.push(CheckGive { path: written.clone(), at: span.start as i64, choices: choices })
         state.written_at.push((written, span.start as i64))
     }
+    // **An element assigned gives back one taken out** (ADR-views-1 D1,
+    // #1208): `w[i] = []` after `keep(w[i])`.
+    let element = state.an_element_path(world, target, false)
+    if path == null && element != null {
+        state.gives.push(CheckGive { path: (element ?? "").clone(), at: span.start as i64, choices: state.branch.clone() })
+    }
     // **D3**: an assignment into a parameter says `mut`.
     let shared = check_core_stmt_shared(state, world, target)
     if !shared {
