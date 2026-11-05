@@ -70,7 +70,7 @@ cannot be used yet. How the parts fit together is drawn under
 <p class="rq-note">Linear integer arithmetic by Fourier-Motzkin elimination with case splits, the solver every later one is measured against. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D8 step 2)</p>
 </div>
 <div class="rq-comp">
-<div class="rq-comp-head"><span class="rq-comp-name">Loops as Horn clauses</span><span class="rq-stage rq-stage-growing">growing</span></div>
+<div class="rq-comp-head"><span class="rq-comp-name">Loops as Horn clauses</span><span class="rq-stage rq-stage-growing">partly built</span></div>
 <div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Loops as Horn clauses, about 40 % built, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 53%"></span></span><span class="rq-unknown" style="width: 25%"></span></div><span class="rq-pct">40 %</span></div>
 <p class="rq-note">Invariants by closed forms and intervals, each checked, for whole numbers so far. More strategies and outside proposals are decided. (<a href="/docs/specification/adr/adr-361.html">ADR-361</a>)</p>
 </div>
@@ -86,8 +86,8 @@ cannot be used yet. How the parts fit together is drawn under
 <p class="rq-note"><code>u32</code> variables, sparse rows, big numbers where a value outgrows 32 bits, and the one interface every theory sits behind. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D8 step 3, D10-D12)</p>
 </div>
 <div class="rq-comp">
-<div class="rq-comp-head"><span class="rq-comp-name">Fast paths</span><span class="rq-stage rq-stage-then">after that</span></div>
-<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Fast paths, about 0 % built, 20 % held back for what is not yet known"><span class="rq-known" style="width: 80%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 20%"></span></div><span class="rq-pct">0 %</span></div>
+<div class="rq-comp-head"><span class="rq-comp-name">Fast paths for simple claims</span><span class="rq-stage rq-stage-then">after that</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Fast paths for simple claims, about 0 % built, 20 % held back for what is not yet known"><span class="rq-known" style="width: 80%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 20%"></span></div><span class="rq-pct">0 %</span></div>
 <p class="rq-note">The compiler's own questions are tiny, mostly bounds on one variable or the difference of two. These answer them without the general search and without allocating. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D9, D12)</p>
 </div>
 <div class="rq-comp">

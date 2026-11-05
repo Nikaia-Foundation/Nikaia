@@ -27,7 +27,7 @@ description: >-
 <p><span class="why why-todo">Still being built</span> For <code>async</code> tasks the check is being built (#988), and two writes to the same file are not yet told apart from writes to two files.</p>
 <p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
 </details>
-      <h2>Conflicting actions</h2>
+      <h2>Two tasks changing the same value</h2>
       <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches when the program is built, and refuses two tasks that change the same value or both write to standard output, naming what they share. The way out is in the message: a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
       <p>Where the compiler cannot tell what a call touches, as in a Rust crate or a C library that starts its own threads, it does not refuse, so this is not a proof that every race is found. The compiler builds <code>async</code> tasks today, but this check between them is still being built (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/988">#988</a>): the example shows what the specification refuses. Older programs written with <code>overlap</code> get the check today.</p>
     </div>
@@ -68,7 +68,7 @@ description: >-
     <div class="home-split-text">
       <span class="safe-chip safe-chip-run">Specified, not built yet</span>
       <h2>A memory budget for every task</h2>
-      <p>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine. In most languages nothing stands in its way. Erlang and Elixir are known for isolating work in this way, and Nikaia is specified to do the same.</p>
+      <p>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine. Nikaia is specified to keep such a task from taking the rest of the program down with it.</p>
       <p>In the specification every task gets a memory budget of its own. A task that spends it ends on its own, and the rest of the program, your main application included, runs on. A shared value has a budget of its own too. This is decided and written into the specification. A calculation that runs while the program is built is already bounded in steps and in memory.</p>
       <p>The per-task budget is not built yet, and today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof: Nikaia will not show at build time that a task stays within its budget, it makes sure that a task which does not ends with <code>task::OverBudget</code>, an error like any other, and only that task ends. Memory that a Rust crate or a C library allocates and keeps for itself is in no budget.</p>
     </div>
@@ -103,10 +103,10 @@ description: >-
   <div class="home-inner home-split">
     <div class="home-split-text">
       <span class="safe-chip safe-chip-build">Caught at compile time</span>
-      <h2>Broken promises</h2>
+      <h2>Calls that break a function's contract</h2>
       <p><strong><strong>Every part of a program should be able to rely on what the other parts promise.</strong></strong></p>
-      <p><span class="lead-in">What Nikaia checks.</span> You write the expectation as an <code>assert</code> and it becomes a contract. A call that breaks it is rejected when the program is built, a promise about a result is available to the callers, and a contract carries across package boundaries.</p>
-      <p><span class="lead-in">The limit.</span> A compiler cannot know whether data from files, arguments or the network is valid. Check it where it enters the program; once checked, the rest of the code can rely on it.</p>
+      <p>You write the expectation as an <code>assert</code> and it becomes a contract. A call that breaks it is rejected when the program is built, a promise about a result is available to the callers, and a contract carries across package boundaries.</p>
+      <p>A compiler cannot know whether data from files, arguments or the network is valid. Check it where it enters the program; once checked, the rest of the code can rely on it.</p>
     </div>
     <div class="home-code-side">
 <div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {

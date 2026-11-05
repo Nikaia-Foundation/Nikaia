@@ -39,7 +39,7 @@ page describes what that draft says; where the two differ, the charter counts.
   the founder included, is entitled to project funds for personal use, and
   assets are not distributed privately if the project ends.
 
-## Who decides, honestly
+## Who decides
 
 Anyone may contribute. Contributing does not by itself give membership or a
 vote. Governance members, admitted under a published procedure, may vote,

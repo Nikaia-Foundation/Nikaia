@@ -1,8 +1,8 @@
 ---
 layout: home
-title: Checks that are proved are dropped
+title: Index and overflow checks removed where proved safe
 description: >-
-  An index or overflow check that cannot fail is not written, where you ask for it.
+  When you turn it on, the compiler leaves out the index and overflow checks it has proved cannot fail.
 ---
 <!--
   Level 3: the topic in full. It links on to the specification, the decisions and
@@ -13,7 +13,7 @@ description: >-
 <section class="home-section" id="check">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/fast/#checks" | relative_url }}">Very fast</a></p>
-    <h1 class="home-heading">Checks that are proved are dropped</h1>
+    <h1 class="home-heading">Index and overflow checks removed where proved safe</h1>
     <div class="limit-class">
         <dl class="limit-steps">
           <dt>The problem</dt>
@@ -32,7 +32,7 @@ description: >-
       <h2>Go deeper</h2>
       <ul><li><a href="{{ "/docs/specification/30-nikaia-tooling.html" | relative_url }}">Specification, Part III: build options</a></li><li><a href="{{ "/docs/specification/adr/adr-306.html" | relative_url }}">ADR-306: dropping overflow checks</a></li><li><a href="{{ "/docs/specification/adr/adr-314.html" | relative_url }}">ADR-314: what the prover knows</a></li><li><a href="{{ "/docs/specification/adr/adr-270.html" | relative_url }}">ADR-270: the prover</a></li></ul>
     </div>
-    <p class="safe-others">More under Very fast: <a href="{{ "/fast/against-tuned-rust.html" | relative_url }}">1BRC study: the Nikaia compiler vs. human vs. AI</a><a href="{{ "/fast/one-core-or-all.html" | relative_url }}">One core or all of them</a><a href="{{ "/fast/no-garbage-collector.html" | relative_url }}">No garbage collector, no free</a></p>
+    <p class="safe-others">More under Very fast: <a href="{{ "/fast/against-tuned-rust.html" | relative_url }}">1BRC study: the Nikaia compiler vs. human vs. AI</a><a href="{{ "/fast/one-core-or-all.html" | relative_url }}">One core or all of them</a><a href="{{ "/fast/no-garbage-collector.html" | relative_url }}">Memory released where the code shows it</a></p>
   </div>
 </section>
 

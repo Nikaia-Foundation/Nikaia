@@ -1,6 +1,6 @@
 ---
 layout: home
-title: No garbage collector, no free
+title: Memory released where the code shows it
 description: >-
   Memory is released at a point you can see in the code, without collector pauses.
 ---
@@ -13,7 +13,7 @@ description: >-
 <section class="home-section" id="check">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/fast/#memory" | relative_url }}">Very fast</a></p>
-    <h1 class="home-heading">No garbage collector, no <code>free</code></h1>
+    <h1 class="home-heading">Memory released where the code shows it</h1>
     <div class="limit-class">
         <dl class="limit-steps">
           <dt>The problem</dt>
@@ -32,7 +32,7 @@ description: >-
       <h2>Go deeper</h2>
       <ul><li><a href="{{ "/docs/specification/30-nikaia-tooling.html" | relative_url }}">Specification, Part III: the memory a program holds at its end</a></li><li><a href="{{ "/docs/specification/adr/adr-348.html" | relative_url }}">ADR-348: the memory <code>main</code> still holds at its end</a></li><li><a href="{{ "/docs/specification/adr/adr-282.html" | relative_url }}">ADR-282: text and ownership</a></li></ul>
     </div>
-    <p class="safe-others">More under Very fast: <a href="{{ "/fast/against-tuned-rust.html" | relative_url }}">1BRC study: the Nikaia compiler vs. human vs. AI</a><a href="{{ "/fast/one-core-or-all.html" | relative_url }}">One core or all of them</a><a href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Checks that are proved are dropped</a></p>
+    <p class="safe-others">More under Very fast: <a href="{{ "/fast/against-tuned-rust.html" | relative_url }}">1BRC study: the Nikaia compiler vs. human vs. AI</a><a href="{{ "/fast/one-core-or-all.html" | relative_url }}">One core or all of them</a><a href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Index and overflow checks removed where proved safe</a></p>
   </div>
 </section>
 
