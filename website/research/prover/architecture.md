@@ -108,6 +108,9 @@ arena of `u32` words with watch lists that hold a blocking literal (D16).
 | E-graph, combination, arrays, bit-vectors | D13 | decided, not built |
 | Parallel search within one question | D8 step 7, D18 | not built |
 
+The same parts, each with a bar for how far it is built, are under
+[what is being built](./#what-is-being-built).
+
 ## What the language has to offer the solver
 
 The solver is written in Nikaia, so building it is also a test of the

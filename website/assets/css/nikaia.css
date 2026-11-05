@@ -1959,6 +1959,44 @@ details.study-card {
   .rq-over-row > a { grid-column: 1 / -1; }
   .rq-over-head > span:first-child { grid-column: 1 / -1; }
 }
+/* The prover's parts, one build bar each (website/research/prover/). */
+.rq-machine {
+  margin: 1rem 0 1.5rem;
+  padding: 0.25rem 1rem 0.75rem;
+  border: 1px solid var(--nk-border);
+  border-left: 3px solid var(--nk-link);
+  border-radius: 6px;
+  background: var(--nk-surface);
+}
+.markdown-body .rq-layer {
+  margin: 1rem 0 0.25rem;
+  font-family: var(--nk-font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nk-fg-muted);
+}
+.rq-comp { padding: 0.45rem 0; border-top: 1px dashed var(--nk-border); }
+.rq-comp-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.rq-comp-name { font-weight: 600; }
+.rq-stage {
+  font-family: var(--nk-font-mono, ui-monospace, monospace);
+  font-size: 0.7rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--nk-border);
+  color: var(--nk-fg-muted);
+}
+.rq-stage-built, .rq-stage-growing { border-color: var(--nk-link); color: var(--nk-link); }
+.rq-stage-next { border-color: var(--nk-accent); color: var(--nk-accent); }
+.rq-comp-bar { display: grid; grid-template-columns: 1fr 3rem; align-items: center; gap: 0.6rem; margin: 0.3rem 0 0.1rem; }
+.rq-pct {
+  font-family: var(--nk-font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  text-align: right;
+  color: var(--nk-fg-muted);
+}
+
 /* The roadmap's bar beside a chapter's level (docs/project_status_and_roadmap.md). */
 .rq-inline { display: flex; width: 6rem; height: 8px; margin-top: 0.35rem; }
 

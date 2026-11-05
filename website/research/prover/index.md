@@ -43,6 +43,87 @@ end would be an answer shown by measured figures. Both are the project's
 estimates. Under each question a short note says what they rest on, and they
 change when the work or the evidence does.
 
+## What is being built
+
+The solver that is to follow the reference solver is decided part by part in
+[ADR-270](/docs/specification/adr/adr-270.html), and each step is measured before the next one
+starts (D8). Each part below carries the first bar, which shows how far it is
+built, and says what it would let the prover do. A part shown as not built
+cannot be used yet. How the parts fit together is drawn under
+[how the prover is built](architecture.html#the-solver-today-and-as-decided).
+
+<div class="rq-machine">
+<p class="rq-layer">Foundation</p>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Certificates and their checker</span><span class="rq-stage rq-stage-built">built</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Certificates and their checker, about 90 % built, 10 % held back for what is not yet known"><span class="rq-known" style="width: 90%"><span class="rq-done" style="width: 100%"></span></span><span class="rq-unknown" style="width: 10%"></span></div><span class="rq-pct">90 %</span></div>
+<p class="rq-note">Every proof is replayed step by step before a check is dropped, so no solver has to be trusted. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D1-D5)</p>
+</div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name"><code>nikaia.proofs</code> and <code>--locked</code></span><span class="rq-stage rq-stage-built">built</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="<code>nikaia.proofs</code> and <code>--locked</code>, about 90 % built, 10 % held back for what is not yet known"><span class="rq-known" style="width: 90%"><span class="rq-done" style="width: 100%"></span></span><span class="rq-unknown" style="width: 10%"></span></div><span class="rq-pct">90 %</span></div>
+<p class="rq-note">Proofs are committed with the code, checked when read, and a locked build searches nothing. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D19-D22)</p>
+</div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Reference solver in Nikaia</span><span class="rq-stage rq-stage-built">built</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Reference solver in Nikaia, about 85 % built, 15 % held back for what is not yet known"><span class="rq-known" style="width: 85%"><span class="rq-done" style="width: 100%"></span></span><span class="rq-unknown" style="width: 15%"></span></div><span class="rq-pct">85 %</span></div>
+<p class="rq-note">Linear integer arithmetic by Fourier-Motzkin elimination with case splits, the solver every later one is measured against. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D8 step 2)</p>
+</div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Loops as Horn clauses</span><span class="rq-stage rq-stage-growing">growing</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Loops as Horn clauses, about 40 % built, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 53%"></span></span><span class="rq-unknown" style="width: 25%"></span></div><span class="rq-pct">40 %</span></div>
+<p class="rq-note">Invariants by closed forms and intervals, each checked, for whole numbers so far. More strategies and outside proposals are decided. (<a href="/docs/specification/adr/adr-361.html">ADR-361</a>)</p>
+</div>
+<p class="rq-layer">The engine</p>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Solver foundations</span><span class="rq-stage rq-stage-next">next</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Solver foundations, about 5 % built, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 7%"></span></span><span class="rq-unknown" style="width: 25%"></span></div><span class="rq-pct">5 %</span></div>
+<p class="rq-note"><code>u32</code> variables, sparse rows, big numbers where a value outgrows 32 bits, and the one interface every theory sits behind. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D8 step 3, D10-D12)</p>
+</div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Fast paths</span><span class="rq-stage rq-stage-then">after that</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Fast paths, about 0 % built, 20 % held back for what is not yet known"><span class="rq-known" style="width: 80%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 20%"></span></div><span class="rq-pct">0 %</span></div>
+<p class="rq-note">The compiler's own questions are tiny, mostly bounds on one variable or the difference of two. These answer them without the general search and without allocating. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D9, D12)</p>
+</div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">CDCL(T) skeleton</span><span class="rq-stage rq-stage-then">after that</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="CDCL(T) skeleton, about 0 % built, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 25%"></span></div><span class="rq-pct">0 %</span></div>
+<p class="rq-note">Decisions, unit propagation, conflict analysis, backjumping and learned clauses, so a question with many cases learns from each dead end instead of trying them one after another. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D12, D16)</p>
+</div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Simplex over the integers</span><span class="rq-stage rq-stage-then">after that</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Simplex over the integers, about 0 % built, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 25%"></span></div><span class="rq-pct">0 %</span></div>
+<p class="rq-note">Larger systems of inequalities than elimination handles well, with cuts for whole numbers and certificates the checker can replay. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D5, D11)</p>
+</div>
+<p class="rq-layer">Where theories meet</p>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">E-graph and model-based combination</span><span class="rq-stage rq-stage-later">later</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="E-graph and model-based combination, about 0 % built, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 30%"></span></div><span class="rq-pct">0 %</span></div>
+<p class="rq-note">Equality with uninterpreted functions. Equal inputs give equal results, and theories agree on shared terms through it. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D13)</p>
+</div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Arrays</span><span class="rq-stage rq-stage-later">later</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Arrays, about 0 % built, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 35%"></span></div><span class="rq-pct">0 %</span></div>
+<p class="rq-note">Read-over-write lemmas on demand, the way towards reasoning about what a list holds, such as a sort that keeps its elements and leaves them in order. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D13)</p>
+</div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Bit-vectors</span><span class="rq-stage rq-stage-later">later</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Bit-vectors, about 0 % built, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 30%"></span></div><span class="rq-pct">0 %</span></div>
+<p class="rq-note">Masks, shifts and wrapping arithmetic, blasted into clauses for the CDCL skeleton. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D13)</p>
+</div>
+<p class="rq-layer">Steering</p>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Strategy layer and budgets</span><span class="rq-stage rq-stage-later">later</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Strategy layer and budgets, about 5 % built, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 7%"></span></span><span class="rq-unknown" style="width: 30%"></span></div><span class="rq-pct">5 %</span></div>
+<p class="rq-note">Reads a question's features before the search and signals during it, picks a method, and stops at a counted budget so how long a build searches does not depend on how fast the machine is. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D14, D25)</p>
+</div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Parallel search</span><span class="rq-stage rq-stage-later">later</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Parallel search, about 0 % built, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 30%"></span></div><span class="rq-pct">0 %</span></div>
+<p class="rq-note">One hard question spread across several cores. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D8 step 7, D18)</p>
+</div>
+</div>
+
 ## The questions
 
 ### How far does it reach with nothing written for it?
