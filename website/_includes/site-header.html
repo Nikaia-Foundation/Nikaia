@@ -21,14 +21,11 @@
       <div class="site-header-body">
         <nav class="site-header-links" aria-label="Site">
           <a href="{{ "/guide/getting-started.html" | relative_url }}"{% if here == "/guide/getting-started.html" %} aria-current="page"{% endif %}>Get started</a>
-          <a href="{{ "/guide/syntax.html" | relative_url }}"{% if here == "/guide/syntax.html" %} aria-current="page"{% endif %}>Syntax</a>
           <a href="{{ "/docs/specification/" | relative_url }}"{% if here contains "/docs/specification/" %}{% unless here contains "/adr/" %} aria-current="page"{% endunless %}{% endif %}>Specification</a>
           <a href="{{ "/docs/specification/adr/" | relative_url }}"{% if here contains "/docs/specification/adr/" %} aria-current="page"{% endif %}>Decisions</a>
           <a href="{{ "/docs/project_status_and_roadmap.html" | relative_url }}"{% if here == "/docs/project_status_and_roadmap.html" %} aria-current="page"{% endif %}>Roadmap</a>
           <a href="{{ "/research/" | relative_url }}"{% if here contains "/research/" %} aria-current="page"{% endif %}>Research</a>
           <a href="{{ "/examples/" | relative_url }}"{% if here contains "/examples/" %} aria-current="page"{% endif %}>Examples</a>
-          <a href="{{ "/foundation/" | relative_url }}"{% if here contains "/foundation/" %} aria-current="page"{% endif %}>Foundation</a>
-          <a href="{{ "/issues.html" | relative_url }}"{% if here == "/issues.html" or here contains "/issues/" %} aria-current="page"{% endif %}>Issues</a>
         </nav>
 
         <div class="site-header-tools">

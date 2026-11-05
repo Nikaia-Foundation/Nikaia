@@ -30,38 +30,57 @@
         loading and with JavaScript switched off, and a keyboard reaches it the
         way it reaches any disclosure.
       -->
-      <nav class="site-nav" aria-label="Documentation">
+      {%- comment -%}
+        The section the page belongs to, and only that one: the header is the
+        site's menu, this is the menu of the part being read. The research
+        pages are few and written by hand, so their section is listed here;
+        every other section comes from `_data/nav.json`. A page in no section
+        gets no sidebar.
+      {%- endcomment -%}
+      {%- assign nav_section = nil -%}
+      {%- for section in site.data.nav -%}
+        {%- for item in section.pages -%}
+          {%- if item.url == page.url -%}{%- assign nav_section = section -%}{%- endif -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {%- assign in_research = false -%}
+      {%- if page.url contains "/research/" -%}{%- assign in_research = true -%}{%- endif -%}
+      {%- if nav_section or in_research -%}
+      <nav class="site-nav" aria-label="This section">
        <details class="site-nav-outer" open>
         <!--
-          One line on a narrow screen, where the open section would otherwise
-          be the whole first screenful, and no control at all on a wide one,
+          One line on a narrow screen and no control at all on a wide one,
           where the stylesheet hides this summary and the sidebar is simply
-          there. It ships open, so that a reader with no script gets the menu
-          rather than a line that will not expand; `nav.js` closes it on the
-          widths where it is a control. The sections are nested inside it for
-          that reason and no other.
+          there. It ships open, so that a reader with no script gets the menu;
+          `nav.js` closes it on the widths where it is a control.
         -->
-        <summary>All pages</summary>
+        <summary>In this section: {% if in_research %}Research{% else %}{{ nav_section.title | escape }}{% endif %}</summary>
         <div class="site-nav-body">
-        {% for section in site.data.nav %}
-          {% assign here = false %}
-          {% for item in section.pages %}
-            {% if item.url == page.url %}{% assign here = true %}{% endif %}
-          {% endfor %}
-          <details class="site-nav-section"{% if here %} open{% endif %}>
-            <summary>{{ section.title | escape }}</summary>
+          <details class="site-nav-section" open>
+          {%- if in_research %}
+            <summary>Research</summary>
             <ul>
-              {% for item in section.pages %}
+              {%- assign research_pages = "/research/|Research questions,/research/prover/|The prover,/research/prover/architecture.html|How the prover is built,/research/performance/|Performance with safety" | split: "," -%}
+              {%- for pair in research_pages -%}
+                {%- assign r = pair | split: "|" %}
+                <li><a href="{{ r[0] | relative_url }}"{% if r[0] == page.url %} aria-current="page"{% endif %}>{{ r[1] }}</a></li>
+              {%- endfor %}
+            </ul>
+          {%- else %}
+            <summary>{{ nav_section.title | escape }}</summary>
+            <ul>
+              {% for item in nav_section.pages %}
                 <li>
                   <a href="{{ item.url | relative_url }}"{% if item.url == page.url %} aria-current="page"{% endif %}>{{ item.title | escape }}</a>
                 </li>
               {% endfor %}
             </ul>
+          {%- endif %}
           </details>
-        {% endfor %}
         </div>
        </details>
       </nav>
+      {%- endif %}
 
       <div class="container-lg px-3 my-5 markdown-body">
       {{ content }}
