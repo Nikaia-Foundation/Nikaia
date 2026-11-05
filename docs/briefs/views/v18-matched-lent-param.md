@@ -6,6 +6,8 @@ budget_usd: 12
 effort: medium
 ---
 
+> **Retired (2026-11-05):** the builder crashed without a report; its work is in `v18-matched-lent-param.partial.patch`, the account in `v18-matched-lent-param.debrief.md`. Split into `v18a-method-param-lent.md` and `v18b-matched-lent-param.md`.
+
 # v18: a lent parameter a `match` takes apart stays lent; a lent `String` argument passes as `&str` (#1213, found by v17)
 
 Score: ADR-views-3 (D1: a plain parameter is lent, D4: `ref` leaves the language outside `extern`). Read `v17-migrate-docs-packages.md.report.md` beside this brief, `Found:` (1) and (4).
