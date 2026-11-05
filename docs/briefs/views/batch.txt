@@ -1,6 +1,0 @@
-d1-1252-briefs-off-the-tree.md
-v18b-matched-lent-param.md
-v20-migrate-rest.md
-v21-part-to-lent-param.md
-v22-run-methods.md
-v23-take-from-mut-self.md

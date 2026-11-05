@@ -88,3 +88,7 @@ docs/briefs/**/*.session
 docs/briefs/**/qa-input.txt
 docs/briefs/**/suite.log
 docs/briefs/**/unpushed.txt
+
+# Briefs, reports and a run's numbers live beside the tree and on the issue
+# (#1252): a commit of them would start a CI run that tests nothing.
+/docs/briefs/

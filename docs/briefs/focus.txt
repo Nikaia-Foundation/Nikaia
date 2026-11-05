@@ -1,4 +1,0 @@
-block 3
-area views docs/briefs/views
-area async docs/briefs/async
-current async 0

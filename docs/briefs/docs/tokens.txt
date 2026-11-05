@@ -1,3 +1,0 @@
-/home/user/Nikaia/docs/briefs/docs/d1-ownership-guide.md 3522077 53
-/home/user/Nikaia/docs/briefs/docs/d2-grammar-guide.md 4120509 62
-/home/user/Nikaia/docs/briefs/docs/d3-prover-guide.md 5525052 81
