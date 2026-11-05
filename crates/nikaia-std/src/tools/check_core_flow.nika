@@ -505,7 +505,10 @@ fn check_core_flow_through_a_view(state: ref CheckState, world: ref CheckWorld, 
     }
     let local: CheckLocal = state.binding(name) ?? return false
     // A name a `get` handed back past a jump is a view of the element (#1089).
-    return local.lent || local.ty.is_a_view() || state.a_lent_let(world, root) || state.got_past_a_jump.contains(name)
+    // A place in a parameter the contract lends is one too (ADR-views-3 D1):
+    // `match response.body` binds its parts through the reference, as the
+    // `ref Response` it replaces did.
+    return local.lent || local.ty.is_a_view() || state.a_lent_let(world, root) || state.got_past_a_jump.contains(name) || state.a_lent_parameter(world, root)
 }
 
 /// **A name lent to this function's walk** (`Local::lent`).

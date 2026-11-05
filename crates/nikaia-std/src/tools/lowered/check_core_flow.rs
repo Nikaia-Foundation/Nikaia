@@ -407,7 +407,7 @@ pub(crate) fn check_core_flow_through_a_view(state: &CheckState, world: &CheckWo
     let name = check_core_flow_variable(world, root);
     if name == "" { return false; }
     let local: CheckLocal = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    local.lent || local.ty.is_a_view() || state.a_lent_let(world, root) || state.got_past_a_jump.contains(&name)
+    local.lent || local.ty.is_a_view() || state.a_lent_let(world, root) || state.got_past_a_jump.contains(&name) || state.a_lent_parameter(world, root)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
