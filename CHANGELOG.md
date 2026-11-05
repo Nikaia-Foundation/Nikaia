@@ -8,6 +8,17 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1347] — 2026-11-05
+
+**parser: a `-` that begins a line begins an expression (ADR-390) (#1247); tests: `nikaia fmt` formats every `async` form and is idempotent; parse tests for `async(detached)` without a lambda and an unknown option (ADR-async-5) (#984, #984); async: a function that starts an async task throws `task::Crashed` in its inferred throw set; website: teach `async` instead of `overlap` and `spawn`; async: a binding's refusal stands at its let (#1226); check: NK2101 names async(detached) for a detached task (#1227); spec: Part III's NK2107 row names the async task (ADR-async-5 D7) (#1229)**
+- Parser: a `-` that begins a line begins an expression (ADR-390): a block ending in a line `-1` has the value `-1` instead of subtracting from the line above; a subtraction is broken after its `-`.
+- Two new refusals for async (#984): `NK2115` for `async` before a `let`, a loop or a function's declaration (whether a function pauses is inferred), `NK2120` for an `async` form inside a loop's body, whose help names `xs.par_iter().for_each fn(x) { … }`.
+- Async tasks throw `task::Crashed`: a function that starts `async` tasks has `task::Crashed` in its inferred throw set, and `async e`, its binding and `async { … }` run on the group runtime, joined where the checker waits
+- The guide, README and website teach `async`: `async e`, `f(async g(), async h())` and `async { … }` groups replace `overlap` and `spawn` in every example, and what is still being built (handles, detached tasks, options, `par_iter`, pausing tasks, the conflict check between async tasks) is described with its issue
+- async: a task whose call pauses builds and runs. It starts in place, and where it is waited for it is polled to its end (ADR-async-5 D20, #1226).
+- The tasks of one `async` group are checked against each other: two that change one name are NK2107, and two that write stdout or another resource are NK2104. NK2101 names `async(detached)` for a task started that way.
+- An `async` task that changes a name bound outside it is refused with NK2107, whatever runs beside it (ADR-async-5 D7); reading an outer name and changing a `SharedMut` through `update` stay accepted.
+
 ## [0.0.1346] — 2026-11-05
 
 **async(within: d) on the value form, async { }, async(detached) and async(handle) (ADR-async-5 D16); async(handle) gives a task::ChildHandle bound to its group, with join, cancel, a fallback and NK2122 (8.1.2, D11); task::ChildHandle takes join(within:, on_timeout:) as TaskHandle does (Part I 8.2, ADR-async-5 D17); A live child handle dropped unjoined is waited for at its block's end; checker: an integer is never a `time::Duration` (or any other `std` type) (#1246)**
