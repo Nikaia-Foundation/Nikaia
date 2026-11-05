@@ -1,7 +1,7 @@
 error[NK2105]: You're using `t` again, but it was passed to `keep`, which keeps it.
-   --> tests/takes_an_optional_handed_over_twice_says_its_copy.nika:15:2
+   --> tests/takes_an_optional_handed_over_twice_says_its_copy.nika:18:2
     |
- 15 | 	println(keep(t))
+ 18 | 	println(keep(t))
     |  ^
     |
     = note: `t` is a `Node?`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.

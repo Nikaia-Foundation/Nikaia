@@ -21,11 +21,11 @@ grammar G {
 	}
 }
 
+struct Held { node: Node? }
+
 fn fits(k: ref Node, t: Node?) -> bool sync {
-	return match t {
-		null => true
-		v => k.start < 10
-	}
+	let held = Held { node: t }
+	return k.start < 10 && held.node != null
 }
 
 fn main() {

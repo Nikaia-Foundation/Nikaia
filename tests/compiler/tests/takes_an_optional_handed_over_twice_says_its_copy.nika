@@ -2,8 +2,11 @@
 // copy that compiles, `t?.clone()`, not `t.clone()`.
 struct Node { name: String }
 
+struct Held { node: Node? }
+
 fn keep(t: Node?) -> i64 {
-	return match t {
+	let held = Held { node: t }
+	return match held.node {
 		null => 0
 		v => v.name.len()
 	}

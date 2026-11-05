@@ -635,6 +635,21 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
                 if part_of_a_parameter(value, interner, context) != null && an_arm_hands_on_what_it_binds(arms, interner) {
                     keep_part(value, interner, context, own, library, walk)
                 }
+                // **A name an outer arm bound is a part of the parameter that
+                // arm takes apart**: an inner arm that hands on what it binds
+                // takes the parameter (#1158), as `Ran::Hit(wall) => match
+                // wall { Refused { detail } => detail, .. }` does.
+                if an_arm_hands_on_what_it_binds(arms, interner) {
+                    let aliased = match value {
+                        Expr::Variable(ident, _) => walk.aliases[interner.resolve(ident)]?.clone() ?? collections::BTreeSet(),
+                        else => collections::BTreeSet(),
+                    }
+                    for one in aliased {
+                        if one != "self" && !context.lent.contains(one) {
+                            walk.uses.kept.insert(one.clone())
+                        }
+                    }
+                }
                 return
             }
             let name = parameter_named(value, interner, context) ?? return
