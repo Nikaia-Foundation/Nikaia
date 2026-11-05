@@ -1,0 +1,10 @@
+error[NK2105]: You're using `j` again, but it was passed to `items_of`, which keeps it.
+   --> tests/a_matched_payload_moved_out_keeps.nika:21:5
+    |
+ 21 |     println(items_of(j).len())
+    |     ^
+    |
+    = note: `j` is a `Json`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `j.clone()`.
+

@@ -20,12 +20,12 @@ pub(crate) fn emit_flow_a_jumping_coalesce(world: &EmitWorld<'_, '_, '_, '_>, no
 
 pub(crate) fn emit_flow_is_binary_below(node: &Expr, here: i64) -> bool {
     match node {
-        Expr::Binary { op, .. } => precedence(*op) < here,
+        Expr::Binary { op, .. } => precedence(op) < here,
         _ => false,
     }
 }
 
-pub(crate) fn emit_flow_compared(op: BinaryOp) -> &'static str {
+pub(crate) fn emit_flow_compared(op: &BinaryOp) -> &'static str {
     match op {
         BinaryOp::Lt => ").is_lt()",
         BinaryOp::Le => ").is_le()",
@@ -48,7 +48,7 @@ pub(crate) fn emit_flow_is_whole(ty: &str) -> bool {
     signed || ty == "u8" || ty == "u16" || ty == "u32" || ty == "u64" || ty == "u128" || ty == "usize"
 }
 
-pub(crate) fn emit_flow_proven(op: BinaryOp) -> &'static str {
+pub(crate) fn emit_flow_proven(op: &BinaryOp) -> &'static str {
     match op {
         BinaryOp::Add => "nikaia_std::proven::add",
         BinaryOp::Sub => "nikaia_std::proven::sub",
@@ -195,13 +195,13 @@ impl EmitState {
             out.push(&format!("-> Result<(), {}> {{ ", channel));
             let failing = EmitFlow { can_throw: true, ..inside };
             let failing_scope = EmitScope { origin: scope.origin.to_string(), function: scope.tasks_function.to_string(), channel: channel.to_string(), changed: changed, tasks_channel: channel.to_string(), tasks_function: scope.tasks_function.to_string(), ..EmitScope::plain() };
-            self.emit_core_block(world, walk, out, host, body, depth, failing, &failing_scope, EmitTail::Value)?;
+            self.emit_core_block(world, walk, out, host, body, depth, failing, &failing_scope, &EmitTail::Value)?;
             out.push("; Ok(()) }");
             return Ok(());
         }
         let inside_scope = EmitScope { changed: changed, tasks_channel: scope.tasks_channel.to_string(), tasks_function: scope.tasks_function.to_string(), ..EmitScope::plain() };
         if copied && pauses { out.push(&format!("{{ let mut {} = *__nikaia_slot; async ", *nikaia_std::index::get(&names, 0))); } else if copied { out.push(&format!("{{ let mut {} = *__nikaia_slot; (|| ", *nikaia_std::index::get(&names, 0))); }
-        self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?;
+        self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &EmitTail::Return)?;
         if copied && pauses { out.push(&format!(".await; *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); } else if copied { out.push(&format!(")(); *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); }
         if a_task { out.push(")"); }
         Ok(())
@@ -267,9 +267,9 @@ impl EmitState {
         }
         if fails {
             out.push("{ let __nikaia_done = ");
-            self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Value)?;
+            self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &EmitTail::Value)?;
             out.push("; Ok(__nikaia_done) }");
-        } else { self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?; }
+        } else { self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &EmitTail::Return)?; }
         if pauses {
             if result != "_" { out.push("); __nikaia_future }"); } else { out.push(&format!(") as {}<'_, _>", emit_boxed_future_in(host.overlaps_user_code()))); }
             if block { out.push(" }"); }
@@ -314,7 +314,7 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push(", ");
             self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
-            out.push(emit_flow_compared(op));
+            out.push(emit_flow_compared(&op));
             return Ok(());
         }
         if self.facts.concatenations.contains(&site) {
@@ -336,7 +336,7 @@ impl EmitState {
             if compared { return Ok(()); }
         }
         if self.facts.ordered_texts.contains(&site) {
-            let symbol = binary_op(op);
+            let symbol = binary_op(&op);
             out.push("AsRef::<str>::as_ref(&(");
             self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push(&format!(")) {} AsRef::<str>::as_ref(&(", symbol));
@@ -371,7 +371,7 @@ impl EmitState {
                 out.push(") as u32) }");
                 return Ok(());
             }
-            let name = emit_flow_proven(op);
+            let name = emit_flow_proven(&op);
             out.push(&format!("unsafe {{ {}::<{}>(", name, ty));
             self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push(", ");
@@ -379,10 +379,10 @@ impl EmitState {
             out.push(") }");
             return Ok(());
         }
-        let here = precedence(op);
+        let here = precedence(&op);
         let number_left = self.facts.compared_numbers.contains(&(site, String::from("lhs")));
         let number_right = self.facts.compared_numbers.contains(&(site, String::from("rhs")));
-        let symbol = binary_op(op);
+        let symbol = binary_op(&op);
         if number_left {
             out.push("nikaia_std::num::value(");
             self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
@@ -488,7 +488,7 @@ impl EmitState {
                         let key = self.map_key(index, false);
                         if key.is_some() {
                             let form = match key { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                            self.emit_core_key(world, walk, out, host, form, index, depth, flow, scope)?;
+                            self.emit_core_key(world, walk, out, host, &form, index, depth, flow, scope)?;
                         } else {
                             out.push("nikaia_std::index::at(");
                             self.emit_expr(world, walk, out, host, index, depth, flow, scope)?;
@@ -756,7 +756,7 @@ impl EmitState {
         out.push(&format!("{}{}", pad, handler_takes));
         let mut handler_tail = EmitTail::Value;
         if dropped { handler_tail = EmitTail::Statement; }
-        self.emit_stmt_block_opening_with(world, walk, out, host, handler, depth + 1, inside, &inside_scope, handler_tail, opening)?;
+        self.emit_stmt_block_opening_with(world, walk, out, host, handler, depth + 1, inside, &inside_scope, &handler_tail, opening)?;
         out.push(&format!(",\n{}}}", close));
         Ok(())
     }
@@ -919,7 +919,7 @@ impl EmitState {
             let inside = EmitFlow { statement: flow.statement, can_throw: true, ..EmitFlow::plain() };
             let inside_scope = EmitScope { origin: scope.origin.to_string(), function: scope.function.to_string(), channel: scope.channel.to_string(), ..EmitScope::plain() };
             if fallback_inside { walk.async_bound = String::from("__nikaia_deadline"); }
-            self.emit_core_block(world, walk, &mut inner, host, body, depth, inside, &inside_scope, EmitTail::Value)?;
+            self.emit_core_block(world, walk, &mut inner, host, body, depth, inside, &inside_scope, &EmitTail::Value)?;
             walk.async_bound = String::from("");
             failing = inner.buf.contains('?') || inner.buf.contains("return") || bound_outside;
         }
@@ -942,7 +942,7 @@ impl EmitState {
             let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };
             let inside_scope = EmitScope::plain();
             if fallback_inside { walk.async_bound = String::from("__nikaia_deadline"); }
-            self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?;
+            self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &EmitTail::Return)?;
             walk.async_bound = String::from("");
             out.push(")");
         }

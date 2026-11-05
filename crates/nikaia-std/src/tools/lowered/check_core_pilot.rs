@@ -444,7 +444,7 @@ pub(crate) fn check_reflect_kind_of(state: &mut CheckState, world: &CheckWorld<'
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_reflect_compared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, op: BinaryOp, lhs: &Expr, rhs: &Expr) -> Option<Ty> {
+pub fn check_reflect_compared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, op: &BinaryOp, lhs: &Expr, rhs: &Expr) -> Option<Ty> {
     let equality = matches!(op, BinaryOp::Eq | BinaryOp::Ne);
     if !equality { return None; }
     let left = match check_reflect_kind_of(state, world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return None };

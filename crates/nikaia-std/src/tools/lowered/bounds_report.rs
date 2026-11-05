@@ -112,9 +112,9 @@ pub(crate) fn bounds_report_block(block: &Block, args: &[FnArg], body: &Block, w
     }
 }
 
-pub(crate) fn bounds_report_checked_op(op: BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) }
+pub(crate) fn bounds_report_checked_op(op: &BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) }
 
-pub(crate) fn bounds_report_symbol(op: BinaryOp) -> &'static str {
+pub(crate) fn bounds_report_symbol(op: &BinaryOp) -> &'static str {
     match op {
         BinaryOp::Add => "+",
         BinaryOp::Sub => "-",
@@ -129,11 +129,11 @@ pub(crate) fn bounds_report_stmt(stmt: &Stmt, span: &Span, args: &[FnArg], body:
     match stmt {
         Stmt::Assign { target, op, value } => {
             let which = nikaia_std::index::or(op, || BinaryOp::Div);
-            if bounds_report_checked_op(which) && facts.arithmetic.contains_key(&at) {
+            if bounds_report_checked_op(&which) && facts.arithmetic.contains_key(&at) {
                 let proved = facts.proven_arithmetic.contains(&at);
                 let mut blocked: Option<String> = None;
                 if !proved { blocked = Some(blocked_operation(&which, target, value, args, body, words)); }
-                walk.sites.push(BoundsReportSite { line, text: format!("{} {}= {}", written_expression(words, target), bounds_report_symbol(which), written_expression(words, value)), index: false, proved, blocked });
+                walk.sites.push(BoundsReportSite { line, text: format!("{} {}= {}", written_expression(words, target), bounds_report_symbol(&which), written_expression(words, value)), index: false, proved, blocked });
             }
         },
         _ => { },
@@ -200,7 +200,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
         Expr::Binary { op, lhs, rhs, span, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
             let at = span.start as i64;
-            if bounds_report_checked_op(*op) && facts.arithmetic.contains_key(&at) {
+            if bounds_report_checked_op(op) && facts.arithmetic.contains_key(&at) {
                 let proved = facts.proven_arithmetic.contains(&at);
                 let mut blocked: Option<String> = None;
                 if !proved { blocked = Some(blocked_operation(op, lhs, rhs, args, body, words)); }

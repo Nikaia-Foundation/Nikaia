@@ -194,18 +194,18 @@ impl EmitState {
     }
     pub fn ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
-            Expr::Binary { op, rhs, .. } => { let rhs = nikaia_std::boxed::open(rhs); self.rhs_ends_in_a_cast(world, *op, rhs) },
+            Expr::Binary { op, rhs, .. } => { let rhs = nikaia_std::boxed::open(rhs); self.rhs_ends_in_a_cast(world, op, rhs) },
             _ => self.emits_as_cast(world, expr),
         }
     }
-    pub(crate) fn rhs_ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, outer: BinaryOp, rhs: &Expr) -> bool {
+    pub(crate) fn rhs_ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, outer: &BinaryOp, rhs: &Expr) -> bool {
         match rhs {
-            Expr::Binary { op, .. } => self.inner_ends_in_a_cast(world, outer, *op, rhs),
+            Expr::Binary { op, .. } => self.inner_ends_in_a_cast(world, &outer, op, rhs),
             _ => self.ends_in_a_cast(world, rhs),
         }
     }
-    pub(crate) fn inner_ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, op: BinaryOp, inner: BinaryOp, rhs: &Expr) -> bool {
-        if precedence(inner) < precedence(op) + 1 { return false; }
+    pub(crate) fn inner_ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, op: &BinaryOp, inner: &BinaryOp, rhs: &Expr) -> bool {
+        if precedence(&inner) < precedence(&op) + 1 { return false; }
         self.ends_in_a_cast(world, rhs)
     }
     pub fn map_name(&self, trusting: bool, name: &str) -> String {
@@ -230,7 +230,7 @@ impl EmitWalk {
         match expr {
             Expr::LitInt { negative, .. } => { let negative = *negative; !negative },
             Expr::Variable(name, _) => { let name = *name; self.local_never_negative(world, function, name) },
-            Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.sum_never_negative(world, function, *op, lhs, rhs) },
+            Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.sum_never_negative(world, function, op, lhs, rhs) },
             _ => false,
         }
     }
@@ -238,7 +238,7 @@ impl EmitWalk {
         let set = match self.nonnegative.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
         set.contains(world.words.resolve(name))
     }
-    pub(crate) fn sum_never_negative(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, op: BinaryOp, lhs: &Expr, rhs: &Expr) -> bool {
+    pub(crate) fn sum_never_negative(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, op: &BinaryOp, lhs: &Expr, rhs: &Expr) -> bool {
         let sums = matches!(op, BinaryOp::Add | BinaryOp::Mul);
         sums && self.never_negative(world, function, lhs) && self.never_negative(world, function, rhs)
     }

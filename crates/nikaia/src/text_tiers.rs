@@ -131,7 +131,7 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     let wraps: BTreeMap<usize, usize> = decided
         .wraps
         .iter()
-        .map(|(at, hand)| (*at as usize, hand_number(*hand) as usize))
+        .map(|(at, hand)| (*at as usize, hand_number(hand) as usize))
         .collect();
     let into = [
         parsed.interner.intern_string("into_either"),
@@ -152,7 +152,7 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
                 .map(|wrap| {
                     (
                         crate::check::value_node(&wrap.value) as usize,
-                        hand_number(wrap.hand) as usize,
+                        hand_number(&wrap.hand) as usize,
                     )
                 })
                 .collect();

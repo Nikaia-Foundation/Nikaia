@@ -212,8 +212,8 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::StructLit { name, fields, .. } => { let name = *name; check_core_struct_literal(state, world, host, expr, name, fields, span) },
         Expr::With { base, fields, .. } => { let base = nikaia_std::boxed::open(base); check_core_with(state, world, host, expr, base, fields, span) },
         Expr::Closure { params, mutable, body, .. } => check_core_ops_closure(state, world, host, params, mutable, body, span),
-        Expr::Unary { op, expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); check_core_expr_unary(state, world, host, expr, *op, inner, span) },
-        Expr::Binary { op, lhs, rhs, span: at, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); nikaia_std::index::or(check_reflect_compared(state, world, expr, *op, lhs, rhs), || check_core_ops_binary(state, world, host, *op, lhs, rhs, at, span).into()) },
+        Expr::Unary { op, expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); check_core_expr_unary(state, world, host, expr, op, inner, span) },
+        Expr::Binary { op, lhs, rhs, span: at, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); nikaia_std::index::or(check_reflect_compared(state, world, expr, op, lhs, rhs), || check_core_ops_binary(state, world, host, op, lhs, rhs, at, span).into()) },
         Expr::Cast { expr: inner, ty, .. } => { let inner = nikaia_std::boxed::open(inner); check_core_cast(state, world, host, inner, ty, span) },
         Expr::Tuple(parts, _) => check_core_tuple(state, world, host, parts, span),
         Expr::ListLit { items, .. } => check_core_list_literal(state, world, host, items, span),
@@ -487,7 +487,7 @@ pub(crate) fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, whole: &Expr, op: UnaryOp, inner: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, whole: &Expr, op: &UnaryOp, inner: &Expr, span: &Span) -> Ty {
     let negation = matches!(op, UnaryOp::Neg);
     if negation {
         let reached: Option<String> = match state.flow.reached.as_ref() {

@@ -105,8 +105,8 @@ impl CheckState {
             _ => { },
         }
     }
-    pub fn an_operator_needs_a_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp, left: &Ty, right: &Ty, at: &Span) {
-        let ordering = op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge;
+    pub fn an_operator_needs_a_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, left: &Ty, right: &Ty, at: &Span) {
+        let ordering = *op == BinaryOp::Lt || *op == BinaryOp::Le || *op == BinaryOp::Gt || *op == BinaryOp::Ge;
         for ty in [left.clone(), right.clone()] {
             let name: String = match ty {
                 Ty::Named { ref name, ref args, .. } => if args.is_empty() { name.to_string() } else { String::from("") },
@@ -127,7 +127,7 @@ impl CheckState {
                     BinaryOp::Gt => ">",
                     _ => ">=",
                 };
-            } else if op == BinaryOp::Ne { symbol = "!="; }
+            } else if *op == BinaryOp::Ne { symbol = "!="; }
             self.findings.push(check_refusal("NK1248", at, format!("`{}` needs `{}: {}`.", symbol, name, needs), vec![format!("`{}` can be any type the caller picks, so it can only be compared where a bound says how.", name)], Some(format!("Write `[{}: {}]`.", name, needs))));
             return;
         }
@@ -139,7 +139,7 @@ pub fn an_or_a_named(ty: &str) -> String {
     String::from("a")
 }
 
-pub(crate) fn arith_symbol(op: BinaryOp) -> String {
+pub(crate) fn arith_symbol(op: &BinaryOp) -> String {
     match op {
         BinaryOp::Add => String::from("+"),
         BinaryOp::Sub => String::from("-"),
@@ -247,8 +247,8 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn arithmetic_on_something_that_has_none(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp, left_expr: &Expr, left: &Ty, right_expr: &Expr, right: &Ty, compound: bool, span: &Span) {
-        let symbol = arith_symbol(op);
+    pub fn arithmetic_on_something_that_has_none(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, left_expr: &Expr, left: &Ty, right_expr: &Expr, right: &Ty, compound: bool, span: &Span) {
+        let symbol = arith_symbol(&op);
         let left_collection = is_a_collection_type(left);
         if !left_collection && !is_a_collection_type(right) {
             if declared_with_no_arithmetic(&world.here, left).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, left_expr, left, right_expr, right, 0, compound, span); } else if declared_with_no_arithmetic(&world.here, right).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, right_expr, right, left_expr, left, 1, compound, span); } else if text_or_bool_in_arithmetic(&op, left, right) {
@@ -272,7 +272,7 @@ impl CheckState {
             other = right.text();
             other_unknown = right.is_unknown();
         }
-        let joining = op == BinaryOp::Add && is_a_list_type(left) && is_a_list_type(right);
+        let joining = *op == BinaryOp::Add && is_a_list_type(left) && is_a_list_type(right);
         let extend = arith_extend_text(world, left_expr, right_expr, compound);
         let mut message: String = format!("You can't use `{}` on `{}`.", symbol, side);
         if side_is_a_list { message = format!("You can't use `{}` on a list.", symbol); }

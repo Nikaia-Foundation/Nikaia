@@ -66,7 +66,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_key<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, form: FactKeyForm, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub fn emit_core_key<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, form: &FactKeyForm, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let kind = match form {
             FactKeyForm::Either => 1,
             FactKeyForm::Lent => 2,
@@ -145,8 +145,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_nested<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, needs: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let parenthesise = match node {
-            Expr::Binary { op, .. } => precedence(*op) < needs || needs == precedence(BinaryOp::Lt) && self.ends_in_a_cast(world, node),
-            _ => self.emits_as_cast(world, node) && (needs == 255 || needs == precedence(BinaryOp::Lt)),
+            Expr::Binary { op, .. } => precedence(op) < needs || needs == precedence(&BinaryOp::Lt) && self.ends_in_a_cast(world, node),
+            _ => self.emits_as_cast(world, node) && (needs == 255 || needs == precedence(&BinaryOp::Lt)),
         };
         if parenthesise { out.push("("); }
         self.emit_expr(world, walk, out, host, node, depth, flow, scope)?;
@@ -503,18 +503,18 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, flow, scope, tail, None)?;
+    pub fn emit_core_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: &EmitTail) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, flow, scope, &tail, None)?;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_if_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, condition: &Expr, then_block: &Block, else_block: Option<&Block>, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub fn emit_core_if_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, condition: &Expr, then_block: &Block, else_block: Option<&Block>, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: &EmitTail) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         out.push("if ");
         self.emit_expr(world, walk, out, host, condition, depth, flow, scope)?;
         out.push(" ");
-        self.emit_core_block(world, walk, out, host, then_block, depth, flow, scope, tail)?;
+        self.emit_core_block(world, walk, out, host, then_block, depth, flow, scope, &tail)?;
         if else_block.is_none() { return Ok(()); }
         let block = match else_block { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         out.push(" else ");
@@ -525,7 +525,7 @@ impl EmitState {
                         match inner {
                             Expr::If { cond, then_branch, else_branch, .. } => {
                                 let cond = nikaia_std::boxed::open(cond);
-                                self.emit_core_if_expr(world, walk, out, host, cond, then_branch, (else_branch).as_ref(), depth, flow.at(only.span.start as i64), scope, tail)?;
+                                self.emit_core_if_expr(world, walk, out, host, cond, then_branch, (else_branch).as_ref(), depth, flow.at(only.span.start as i64), scope, &tail)?;
                                 return Ok(());
                             },
                             _ => { },
@@ -535,7 +535,7 @@ impl EmitState {
                 }
             }
         }
-        self.emit_core_block(world, walk, out, host, block, depth, flow, scope, tail)?;
+        self.emit_core_block(world, walk, out, host, block, depth, flow, scope, &tail)?;
         Ok(())
     }
 }

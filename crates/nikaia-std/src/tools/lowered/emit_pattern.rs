@@ -87,7 +87,7 @@ impl EmitState {
                 if group { out.push("("); }
                 self.emit_pattern(world, walk, out, host, pat)?;
                 if group { out.push(")"); }
-                out.push(&repeat_suffix(*rep));
+                out.push(&repeat_suffix(rep));
             },
             Pattern::Group(inner) => {
                 let inner = nikaia_std::boxed::open(inner);

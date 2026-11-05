@@ -1,0 +1,49 @@
+// A plain parameter a `match` takes apart is lent (ADR-views-3 D1): an arm
+// that only reads what it binds keeps nothing, so the caller uses its value
+// again after the call. Variant payloads, a struct variant's fields and a
+// list's rest are all bound as views.
+
+enum Json {
+    Text(String),
+    Array(Vec[Json]),
+    Num(i64),
+}
+
+enum Shape {
+    Named { label: String, size: i64 },
+    Plain(i64),
+}
+
+fn longest(value: Json) -> i64 {
+    match value {
+        Json::Array(items) => return items.len() as i64
+        else => return 0
+    }
+}
+
+fn size_of(shape: Shape) -> i64 {
+    match shape {
+        Shape::Named { label, size } => return size + label.len() as i64
+        Shape::Plain(n) => return n
+    }
+}
+
+fn first(xs: Vec[i64]) -> i64 {
+    match xs {
+        [h, ..rest] => return h + rest.len() as i64
+        else => return 0
+    }
+}
+
+fn main() {
+    let j = Json::Array([Json::Text("ab"), Json::Num(3)])
+    println(longest(j))
+    println(longest(j))
+    let s = Shape::Named { label: "abc", size: 2 }
+    println(size_of(s))
+    println(size_of(s))
+    println(size_of(Shape::Plain(7)))
+    let v = [4, 5]
+    println(first(v))
+    println(first(v))
+}

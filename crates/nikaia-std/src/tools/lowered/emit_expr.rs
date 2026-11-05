@@ -235,15 +235,15 @@ impl EmitState {
                 let name = if package.is_some() { format!("{}::{}", emit_text(world, nikaia_std::index::or(package, || target.into())), target_text) } else { target_text.to_string() };
                 self.emit_core_template(world, walk, out, host, &name, context, content, at, depth, flow, scope)?;
             },
-            Expr::Block(block, _) => { self.emit_core_block(world, walk, out, host, block, depth, flow, scope, EmitTail::Value)?; },
+            Expr::Block(block, _) => { self.emit_core_block(world, walk, out, host, block, depth, flow, scope, &EmitTail::Value)?; },
             Expr::Unsafe(block, _) => {
                 let only_checked_assumes = !self.unchecked_assumes && !prover_assumed_in_unsafe(block, world.words).is_empty();
                 if !only_checked_assumes { out.push("unsafe "); }
-                self.emit_core_block(world, walk, out, host, block, depth, flow, scope, EmitTail::Value)?;
+                self.emit_core_block(world, walk, out, host, block, depth, flow, scope, &EmitTail::Value)?;
             },
             Expr::Overlap(block, _) => { self.emit_core_overlap(world, walk, out, host, block, depth, &flow, scope)?; },
             Expr::Select(arms, _) => { self.emit_core_select(world, walk, out, host, arms, depth, flow, scope)?; },
-            Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); self.emit_core_if_expr(world, walk, out, host, cond, then_branch, (else_branch).as_ref(), depth, flow, scope, EmitTail::Value)?; },
+            Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); self.emit_core_if_expr(world, walk, out, host, cond, then_branch, (else_branch).as_ref(), depth, flow, scope, &EmitTail::Value)?; },
             Expr::Call { func, args, config, .. } => {
                 let func = nikaia_std::boxed::open(func);
                 let breaks = self.emit_expr_breaks_out(world, node, &flow);
@@ -273,7 +273,7 @@ impl EmitState {
             Expr::StructLit { name, fields, .. } => { let name = *name; self.emit_core_struct_lit(world, walk, out, host, node, name, fields, depth, flow, scope)?; },
             Expr::With { base, fields, at: written_at, .. } => { let base = nikaia_std::boxed::open(base); let written_at = *written_at; self.emit_core_with(world, walk, out, host, node, base, fields, written_at, depth, flow, scope)?; },
             Expr::Closure { params, mutable, body, .. } => { self.emit_core_closure(world, walk, out, host, node, params, mutable, body, depth, &flow, scope)?; },
-            Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.emit_expr_unary(world, walk, out, host, node, *op, expr, depth, flow, scope)?; },
+            Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.emit_expr_unary(world, walk, out, host, node, op, expr, depth, flow, scope)?; },
             Expr::Binary { op, lhs, rhs, span, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.emit_core_binary(world, walk, out, host, node, *op, lhs, rhs, span, depth, flow, scope)?; },
             Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); self.emit_core_coalesce(world, walk, out, host, node, value, fallback, depth, flow, scope)?; },
             Expr::TryCatch { expr, handler, id } => { let expr = nikaia_std::boxed::open(expr); let id = *id; match expr {
@@ -410,7 +410,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_expr_unary<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, op: UnaryOp, operand: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_expr_unary<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, op: &UnaryOp, operand: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let negation = matches!(op, UnaryOp::Neg);
         let reference = matches!(op, UnaryOp::Ref);
         if negation {
@@ -445,7 +445,7 @@ impl EmitState {
             out.push(") }");
             return Ok(());
         }
-        out.push(&unary_op(op));
+        out.push(&unary_op(&op));
         self.emit_core_nested(world, walk, out, host, operand, 255, depth, flow, scope)?;
         Ok(())
     }

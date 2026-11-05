@@ -16,8 +16,8 @@ pub enum ReentrancyCheck {
 impl ReentrancyCheck {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn parse(value: String) -> Result<ReentrancyCheck, nikaia_std::error::Thrown<Refused>> {
-        Ok(match &*value {
+    pub fn parse(value: &str) -> Result<ReentrancyCheck, nikaia_std::error::Thrown<Refused>> {
+        Ok(match value {
             "yes" => ReentrancyCheck::Yes,
             "no" => ReentrancyCheck::No,
             other => return Err(nikaia_std::error::throwing(Refused::Because(format!("`reentrancy-check` is `yes` or `no`, not `{}`.", other)), &"parse")),
@@ -31,8 +31,8 @@ impl ReentrancyCheck {
 impl UserParallelism {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn parse(value: String) -> Result<UserParallelism, nikaia_std::error::Thrown<Refused>> {
-        Ok(match &*value {
+    pub fn parse(value: &str) -> Result<UserParallelism, nikaia_std::error::Thrown<Refused>> {
+        Ok(match value {
             "no" => UserParallelism::No,
             "yes" => UserParallelism::Yes,
             other if nikaia_std::index::or(text::parse_u64(other), || 18446744073709551615u64) <= 4294967295u64 => return Err(nikaia_std::error::throwing(Refused::Because(String::from("`user-parallelism` is `yes` or `no`, not a number: the runtime decides how many threads to use.")), &"parse")),
@@ -68,12 +68,12 @@ pub fn emit_build_targets() -> Vec<Target> { vec![Target::X86_64Linux, Target::A
 impl Target {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn parse(name: String) -> Result<Target, nikaia_std::error::Thrown<Refused>> {
+    pub fn parse(name: &str) -> Result<Target, nikaia_std::error::Thrown<Refused>> {
         match emit_build_targets().iter().find(|&target| { target.name() == name }) {
             Some(target) => { return Ok(target.clone()); },
             None => { },
         }
-        let triple = match &*name {
+        let triple = match name {
             "aarch64-android" => "aarch64-linux-android",
             "x86_64-android" => "x86_64-linux-android",
             "armv7-android" => "armv7-linux-androideabi",

@@ -244,7 +244,7 @@ impl EmitState {
             let keyed = self.map_key(arg, false);
             if keyed.is_some() {
                 let form = match keyed { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                self.emit_core_key(world, walk, out, host, form, arg, depth, flow, scope)?;
+                self.emit_core_key(world, walk, out, host, &form, arg, depth, flow, scope)?;
                 return Ok(());
             }
         }
@@ -365,7 +365,7 @@ impl EmitState {
                 let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.to_owned();
                 changed.extend(mutable.iter().cloned());
                 let inner = EmitScope { changed: changed, ..EmitScope::plain() };
-                self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), &inner, EmitTail::Return)?;
+                self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), &inner, &EmitTail::Return)?;
                 if !runs { out.push(")"); }
             },
             _ => { },
@@ -729,7 +729,7 @@ impl EmitState {
     pub(crate) fn emit_call_scope_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: &EmitFlow, scope: &EmitScope, channel: &str, owner: &str, paused: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let failing = EmitFlow { in_lambda: !paused, can_throw: true, ..EmitFlow::plain().at(flow.statement) };
         let inner = EmitScope { origin: scope.origin.to_string(), function: owner.to_string(), channel: channel.to_string(), changed: scope.changed.to_owned(), tasks_channel: channel.to_string(), tasks_function: owner.to_string(), ..EmitScope::plain() };
-        self.emit_core_block(world, walk, out, host, body, depth, failing, &inner, EmitTail::Value)?;
+        self.emit_core_block(world, walk, out, host, body, depth, failing, &inner, &EmitTail::Value)?;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -769,7 +769,7 @@ impl EmitState {
         match task {
             Expr::Closure { params, body: block, .. } => {
                 if params.is_empty() {
-                    self.emit_core_block(world, walk, &mut body, host, block, depth, failing, &inner, EmitTail::Value)?;
+                    self.emit_core_block(world, walk, &mut body, host, block, depth, failing, &inner, &EmitTail::Value)?;
                     ran = true;
                 }
             },
@@ -875,7 +875,7 @@ impl EmitState {
         }
         let mut body = EmitOut::empty();
         walk.async_groups.push(id);
-        if channel == "nikaia_std::task::Crashed" { self.emit_core_block(world, walk, &mut body, host, block, depth, flow, scope, EmitTail::Value)?; } else {
+        if channel == "nikaia_std::task::Crashed" { self.emit_core_block(world, walk, &mut body, host, block, depth, flow, scope, &EmitTail::Value)?; } else {
             let mut owner: String = String::from("");
             if channel == scope.channel { owner = scope.function.to_string(); }
             self.emit_call_scope_body(world, walk, &mut body, host, block, depth, &flow, scope, &channel, &owner, walk.async_pausing)?;
@@ -899,7 +899,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_async_binding<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+    pub fn emit_async_binding<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: &EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         let mut tasks: Vec<(Expr, i64)> = vec![];
         let mut deadlines: Vec<String> = vec![];
         let mut named: String = String::from("");
@@ -983,7 +983,7 @@ impl EmitState {
             return Ok(true);
         }
         let mut kept = EmitOut::empty();
-        self.emit_stmt_written(world, walk, &mut kept, host, node, span, depth, tail, here, scope)?;
+        self.emit_stmt_written(world, walk, &mut kept, host, node, span, depth, &tail, here, scope)?;
         walk.async_joining = collections::BTreeMap::new();
         walk.async_pending.push((kept.buf.to_string(), named, waits));
         Ok(true)
@@ -1016,7 +1016,7 @@ impl EmitState {
                 if channel != "nikaia_std::task::Crashed" {
                     let mut probe = EmitOut::empty();
                     let tried = EmitScope { changed: scope.changed.to_owned(), tasks_channel: channel.to_string(), tasks_function: owner.to_string(), ..EmitScope::plain() };
-                    self.emit_core_block(world, walk, &mut probe, host, body, depth, EmitFlow::plain().at(flow.statement), &tried, EmitTail::Return)?;
+                    self.emit_core_block(world, walk, &mut probe, host, body, depth, EmitFlow::plain().at(flow.statement), &tried, &EmitTail::Return)?;
                     if !probe.buf.contains('?') { channel = String::from("nikaia_std::task::Crashed"); }
                 }
                 let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>";
@@ -1030,7 +1030,7 @@ impl EmitState {
                     return Ok(true);
                 }
                 let inner = EmitScope { changed: scope.changed.to_owned(), tasks_channel: channel, tasks_function: owner, ..EmitScope::plain() };
-                self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(flow.statement), &inner, EmitTail::Return)?;
+                self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(flow.statement), &inner, &EmitTail::Return)?;
                 walk.boxed_scope = boxed;
                 out.push(").await }");
                 return Ok(true);
@@ -1242,7 +1242,7 @@ impl EmitState {
                 if segments.len() != 2 || args.len() != 1 { return Ok(false); }
                 if emit_text(world, *nikaia_std::index::get(&segments, 0)) != "SharedMut" || emit_text(world, *nikaia_std::index::get(&segments, 1)) != "supervised" { return Ok(false); }
                 let count = self.emit_call_hull_count(host, walk, scope);
-                let hulls = match self.hull_new(world, host.crossings_are_possible(), walk.trusting, "SharedMut", count) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+                let hulls = match self.hull_new(world, host.crossings_are_possible(), walk.trusting, "SharedMut", &count) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 if hulls.len() != 2 { return Ok(false); }
                 out.push(&format!("{}::new({}::supervised_kept(", *nikaia_std::index::get(&hulls, 0), *nikaia_std::index::get(&hulls, 1)));
                 self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
@@ -1282,7 +1282,7 @@ impl EmitState {
         }
         if args.len() == 1 {
             let count = self.emit_call_hull_count(host, walk, scope);
-            let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, text, count);
+            let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, text, &count);
             if hulls.is_some() {
                 let paths = match hulls { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 for path in paths.iter() { out.push(&format!("{}::new(", path)); }

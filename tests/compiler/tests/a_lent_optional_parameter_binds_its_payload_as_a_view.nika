@@ -1,0 +1,31 @@
+// A lent optional parameter a `match` takes apart binds its payload as a
+// view, and the caller's value is usable again (ADR-views-3 D1).
+
+fn size(name: String?) -> i64 {
+    return match name {
+        null => 0,
+        text => text.len() as i64,
+    }
+}
+
+fn label(package: String?, key: String) -> String {
+    let k = match package {
+        null => key.clone(),
+        package => f"{package}::{key}",
+    }
+    return k
+}
+
+fn made(word: String) -> String? {
+    let mut built = String()
+    built.push_str(word)
+    return built
+}
+
+fn main() {
+    let n = made("abc")
+    println(size(n))
+    println(size(n))
+    println(label(n, "x"))
+    println(label(null, "y"))
+}

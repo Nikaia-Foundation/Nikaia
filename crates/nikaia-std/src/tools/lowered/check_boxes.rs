@@ -11,10 +11,10 @@ pub enum CheckDepth {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pattern_inside_a_box(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) { self.a_pattern_inside_a_box_at(world, pattern, span, CheckDepth::Arm); }
+    pub fn a_pattern_inside_a_box(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) { self.a_pattern_inside_a_box_at(world, pattern, span, &CheckDepth::Arm); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_pattern_inside_a_box_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span, at: CheckDepth) {
+    pub(crate) fn a_pattern_inside_a_box_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span, at: &CheckDepth) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 let mut written: Vec<String> = vec![];
@@ -24,12 +24,12 @@ impl CheckState {
                 }
                 for index in 0..parts.len() as i64 {
                     let part = nikaia_std::index::get(&parts, nikaia_std::index::at(index));
-                    if !self.boxed_part(world, path, index) || binds_a_part(&part) { self.a_pattern_inside_a_box_at(world, &part, span, at); } else {
+                    if !self.boxed_part(world, path, index) || binds_a_part(&part) { self.a_pattern_inside_a_box_at(world, &part, span, &at); } else {
                         let mut why: &'static str = "";
                         let mut reported = true;
                         match at {
                             CheckDepth::Arm => {
-                                self.a_pattern_inside_a_box_at(world, &part, span, CheckDepth::InsideABox);
+                                self.a_pattern_inside_a_box_at(world, &part, span, &CheckDepth::InsideABox);
                                 reported = false;
                             },
                             CheckDepth::InsideABox => { why = "inside a part that is itself behind a pointer"; },
@@ -42,7 +42,7 @@ impl CheckState {
                     }
                 }
             },
-            MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.a_pattern_inside_a_box_at(world, alternative, span, CheckDepth::InAlternative); } },
+            MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.a_pattern_inside_a_box_at(world, alternative, span, &CheckDepth::InAlternative); } },
             _ => { },
         }
     }

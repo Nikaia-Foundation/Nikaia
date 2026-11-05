@@ -1,0 +1,22 @@
+// An arm that hands on the payload it binds moves it out of the parameter,
+// so the parameter is kept (ADR-views-3 D1): the caller cannot use its value
+// again after the call.
+
+enum Json {
+    Text(String),
+    Array(Vec[Json]),
+    Num(i64),
+}
+
+fn items_of(value: Json) -> Vec[Json] {
+    match value {
+        Json::Array(items) => return items
+        else => return []
+    }
+}
+
+fn main() {
+    let j = Json::Array([Json::Text("ab"), Json::Num(3)])
+    println(items_of(j).len())
+    println(items_of(j).len())
+}

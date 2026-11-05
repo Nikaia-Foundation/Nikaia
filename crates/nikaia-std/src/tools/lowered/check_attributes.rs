@@ -403,7 +403,7 @@ pub(crate) fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, wo
     if check_attributes_is_text(arg) && check_attributes_names_string(&want) { return; }
     if !a_literal(arg) {
         let label = format!("{}.{}", owner, field.name);
-        check_defaults_computed_value(state, world, host, &label, &want, arg, span, CheckComputing::Attribute);
+        check_defaults_computed_value(state, world, host, &label, &want, arg, span, &CheckComputing::Attribute);
         return;
     }
     let found = check_core_expr(state, world, host, arg, span);

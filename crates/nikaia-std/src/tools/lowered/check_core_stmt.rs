@@ -1265,11 +1265,11 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     if op.is_some() { check_core_a_compound_write_to_a_map_slot(state, world, host, target, span); }
     if op.is_some() && is_text_type(&into.unseen()) {
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
-        if check_core_ops_add(o.clone()) { let added = state.facts.appended_texts.insert(span.start as i64); }
+        if check_core_ops_add(&o.clone()) { let added = state.facts.appended_texts.insert(span.start as i64); }
     }
     if op.is_some() && !check_core_stmt_a_shift(std::convert::identity(op)) {
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
-        if !state.an_integer_beside_a_float(world, target, &into, value, &found, span) { state.a_compound_over_two_integer_types(world, o.clone(), target, &into, value, &found, span); }
+        if !state.an_integer_beside_a_float(world, target, &into, value, &found, span) { state.a_compound_over_two_integer_types(world, &o.clone(), target, &into, value, &found, span); }
     }
     if check_core_stmt_add_sub_mul(op) && check_core_stmt_a_name_or_field(target) {
         let plain = check_core_stmt_plain_name(&into.unseen());
@@ -1298,7 +1298,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     }
     if check_core_stmt_arithmetic(op) {
         let arithmetic: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
-        if !(*arithmetic == BinaryOp::Add && is_text_type(&into)) && (check_core_stmt_has_no_arithmetic(world, &into) || check_core_stmt_has_no_arithmetic(world, &found) || text_or_bool_in_arithmetic(&arithmetic.clone(), &into, &found)) { state.arithmetic_on_something_that_has_none(world, arithmetic.clone(), target, &into, value, &found, true, span); }
+        if !(*arithmetic == BinaryOp::Add && is_text_type(&into)) && (check_core_stmt_has_no_arithmetic(world, &into) || check_core_stmt_has_no_arithmetic(world, &found) || text_or_bool_in_arithmetic(&arithmetic.clone(), &into, &found)) { state.arithmetic_on_something_that_has_none(world, &arithmetic.clone(), target, &into, value, &found, true, span); }
     }
     if op.is_none() {
         check_core_stmt_wraps_into_nullable(state, world, host, &found, &into, value, span);

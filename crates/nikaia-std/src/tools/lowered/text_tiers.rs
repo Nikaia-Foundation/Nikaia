@@ -46,11 +46,11 @@ pub(crate) fn tier_of_kinds(kinds: &Kinds) -> Tier {
     Tier::Owned
 }
 
-pub(crate) fn mixed(tier: Tier) -> bool { matches!(tier, Tier::Mixed) }
+pub(crate) fn mixed(tier: &Tier) -> bool { matches!(tier, Tier::Mixed) }
 
-pub(crate) fn lasting_tier(tier: Tier) -> bool { matches!(tier, Tier::Lasting) }
+pub(crate) fn lasting_tier(tier: &Tier) -> bool { matches!(tier, Tier::Lasting) }
 
-pub(crate) fn owned_tier(tier: Tier) -> bool { matches!(tier, Tier::Owned) }
+pub(crate) fn owned_tier(tier: &Tier) -> bool { matches!(tier, Tier::Owned) }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TextOwner {
@@ -97,7 +97,7 @@ pub enum Hand {
     Pairs,
 }
 
-pub fn hand_number(hand: Hand) -> i64 {
+pub fn hand_number(hand: &Hand) -> i64 {
     match hand {
         Hand::Either => 0,
         Hand::Maybe => 1,
@@ -500,7 +500,7 @@ pub(crate) fn tier_at(word: &str, walk: &mut TierWalk) -> Tier {
     found.clone()
 }
 
-pub(crate) fn mixed_at(word: &str, walk: &mut TierWalk) -> bool { mixed(tier_at(word, walk)) }
+pub(crate) fn mixed_at(word: &str, walk: &mut TierWalk) -> bool { mixed(&tier_at(word, walk)) }
 
 pub(crate) fn seen(owner: &TextOwner, path: &[i64], walk: &mut TierWalk) -> String {
     let word = position_word(owner, path);
@@ -1082,7 +1082,7 @@ pub(crate) fn bind_a_payload(part: &MatchPattern, owner: TextOwner, ty: &Type, a
         _ => return false,
     };
     if plain_string(ask.names, ty) {
-        if !lasting_tier(tier_at(&position_word(&owner, &no_path()), walk)) {
+        if !lasting_tier(&tier_at(&position_word(&owner, &no_path()), walk)) {
             let mut local = plain_local(kinds_of(&owner, ty, &mut vec![], ask, walk));
             local.from = Some(seen(&owner, &no_path(), walk));
             bind_tier_local(name, local, walk);
@@ -2128,7 +2128,7 @@ pub(crate) fn call_ties(callee: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_, '
                     let found: TierLocal = nikaia_std::index::or(local, || plain_local(no_kinds()).into());
                     let kinds = found.kinds.clone();
                     let depth = tie_depth(&name, &walk);
-                    if depth >= 0 && !lasting_tier(tier_of_kinds(&kinds)) {
+                    if depth >= 0 && !lasting_tier(&tier_of_kinds(&kinds)) {
                         let word = seen(&TextOwner::Param(callee.to_string(), at), &no_path(), walk);
                         out.push(TextTie { word, depth, through_text: hands_back_text(&function, ask), through_value: hands_back_a_value(&function, ask, &walk) });
                     }
@@ -2440,7 +2440,7 @@ pub(crate) fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk
         if at < function.params.len() as i64 {
             let owner = TextOwner::Param(key.to_string(), at);
             kept_through_a_call(key, at, args, ask, walk);
-            if tier_a_choice(nikaia_std::index::get(&args, nikaia_std::index::at(at))) && mixed(tier_of_kinds(nikaia_std::index::get(&given, nikaia_std::index::at(at)))) && plain_string(ask.names, nikaia_std::index::get(&function.params, nikaia_std::index::at(at))) {
+            if tier_a_choice(nikaia_std::index::get(&args, nikaia_std::index::at(at))) && mixed(&tier_of_kinds(nikaia_std::index::get(&given, nikaia_std::index::at(at)))) && plain_string(ask.names, nikaia_std::index::get(&function.params, nikaia_std::index::at(at))) {
                 let word = seen(&owner, &no_path(), walk);
                 walk.unlent.insert(word);
             }
@@ -3039,9 +3039,9 @@ pub(crate) fn late_viewing(name: &str, sources: &[String], alias: Option<&str>, 
     late.viewers.insert(key, taken);
 }
 
-pub(crate) fn late_all_moved(values: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) { for value in values.iter() { late_moved(value, None, ask, late); } }
+pub(crate) fn late_all_moved(values: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) { for value in values.iter() { late_moved(value, &None, ask, late); } }
 
-pub(crate) fn late_moved_into(value: &Expr, owner: &TextOwner, written: String, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) { late_moved(value, Some((position_word(&owner, &no_path()), written)), ask, late); }
+pub(crate) fn late_moved_into(value: &Expr, owner: &TextOwner, written: String, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) { late_moved(value, &Some((position_word(&owner, &no_path()), written)), ask, late); }
 
 pub(crate) fn late_holding(name: &str, value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
     if late.leaving > 0 { return; }
@@ -3101,7 +3101,7 @@ pub(crate) fn late_held_view(name: &str, value: &Expr, ask: &TierAsk<'_, '_, '_,
     }
 }
 
-pub(crate) fn late_moved(value: &Expr, position: Option<(String, String)>, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
+pub(crate) fn late_moved(value: &Expr, position: &Option<(String, String)>, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
     if late.leaving > 0 { return; }
     let word = match value {
         Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_string() },
@@ -3117,7 +3117,7 @@ pub(crate) fn late_moved(value: &Expr, position: Option<(String, String)>, ask: 
             late_defer(TierLateArm { at: node_key(value), name: viewer.0.to_string(), serial: viewer.1, loops: late.loops, argument: false }, late);
             match position {
                 None => { },
-                Some(ref found) => { late.moved.insert(node_key(value), found.clone()); },
+                Some(found) => { late.moved.insert(node_key(value), found.clone()); },
             }
         }
     }
@@ -3900,7 +3900,7 @@ pub(crate) fn changed_tier_words(a: &collections::BTreeMap<String, Tier>, b: &co
             continue;
         }
         let other = match (*nikaia_std::index::get(&b, word)).copied() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if tier_word(tier) != tier_word(other) { out.insert(word.to_string()); }
+        if tier_word(&tier) != tier_word(&other) { out.insert(word.to_string()); }
     }
     for (word, _) in b.iter() { if !a.contains_key(word) { out.insert(word.to_string()); } }
     out
@@ -4178,7 +4178,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
                     None => None,
                 }, || no_kinds().into()));
                 let published = fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared);
-                if owned_tier(tier) || lasting_tier(tier) && published { owned = true; }
+                if owned_tier(&tier) || lasting_tier(&tier) && published { owned = true; }
             }
             if owned {
                 for word in kept.iter() {
@@ -4186,7 +4186,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     }, || no_kinds().into());
-                    if lasting_tier(tier_of_kinds(&before)) && joins_kinds(word, &kinds_joined(&before, &owned_kinds()), &mut positions) {
+                    if lasting_tier(&tier_of_kinds(&before)) && joins_kinds(word, &kinds_joined(&before, &owned_kinds()), &mut positions) {
                         demoted.insert(word.to_string());
                         changed = true;
                     }
@@ -4221,7 +4221,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
             }
         }
         for (from, to) in flows.read_into.iter() {
-            if fixed.contains(to) && !fixed.contains(from) && mixed(tier_of_kinds(&nikaia_std::index::or(match *nikaia_std::index::get(&positions, from) {
+            if fixed.contains(to) && !fixed.contains(from) && mixed(&tier_of_kinds(&nikaia_std::index::or(match *nikaia_std::index::get(&positions, from) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || no_kinds().into()))) {
@@ -4240,14 +4240,14 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
     for (word, kinds) in positions.iter() {
         let kinds = *kinds;
         let mut tier = tier_of_kinds(&kinds);
-        if mixed(tier) && (fixed.contains(word) || unmixed.contains(word)) { tier = Tier::Owned; }
-        if lasting_tier(tier) && (fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared)) { tier = Tier::Owned; }
-        if !owned_tier(tier) { out.insert(word.to_string(), tier); }
+        if mixed(&tier) && (fixed.contains(word) || unmixed.contains(word)) { tier = Tier::Owned; }
+        if lasting_tier(&tier) && (fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared)) { tier = Tier::Owned; }
+        if !owned_tier(&tier) { out.insert(word.to_string(), tier); }
     }
     let mut only_read: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (word, tier) in out.iter() {
         let tier = *tier;
-        if lasting_tier(tier) && a_parameter_itself(word, flows) && !a_nullable_parameter(word, flows, declared) { only_read.insert(word.to_string()); }
+        if lasting_tier(&tier) && a_parameter_itself(word, flows) && !a_nullable_parameter(word, flows, declared) { only_read.insert(word.to_string()); }
     }
     let mut shrinking = true;
     while shrinking {
@@ -4276,7 +4276,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
         let tier = *tier;
         let at = match *nikaia_std::index::get(&flows.known, word) { Some(__nikaia_value) => __nikaia_value, None => continue };
         match &at.owner {
-            TextOwner::Field(of, _) => { if !owned_tier(tier) && !lasting_tier(tier) { viewing.insert(of.to_string()); } },
+            TextOwner::Field(of, _) => { if !owned_tier(&tier) && !lasting_tier(&tier) { viewing.insert(of.to_string()); } },
             _ => { },
         }
     }
@@ -4290,10 +4290,10 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
         }
     }
     for (from, to) in flows.lent_into.iter() {
-        if lent.contains(from) && !same_tier(nikaia_std::index::or(match *nikaia_std::index::get(&out, to) {
+        if lent.contains(from) && !same_tier(&nikaia_std::index::or(match *nikaia_std::index::get(&out, to) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || Tier::Owned), Tier::View) {
+        }, || Tier::Owned), &Tier::View) {
             unlent.insert(from.to_string());
             lent.remove(from);
         }
@@ -4302,7 +4302,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
     out
 }
 
-pub(crate) fn same_tier(a: Tier, b: Tier) -> bool { tier_word(a) == tier_word(b) }
+pub(crate) fn same_tier(a: &Tier, b: &Tier) -> bool { tier_word(&a) == tier_word(&b) }
 
 pub(crate) fn lent_parameters(flows: &Flows, declared: &TextDeclared, unlent: &collections::BTreeSet<String>, positions: &mut collections::BTreeMap<String, Kinds>) -> collections::BTreeSet<String> {
     let mut lent: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -4314,7 +4314,7 @@ pub(crate) fn lent_parameters(flows: &Flows, declared: &TextDeclared, unlent: &c
         let named = nikaia_std::index::or(*nikaia_std::index::get(&flows.uses, from), || 0);
         let handed = nikaia_std::index::or(*nikaia_std::index::get(&flows.lent_uses, from), || 0);
         let argued = nikaia_std::index::or(*nikaia_std::index::get(&flows.arg_uses, from), || 0);
-        if named == handed + argued && !flows.changed.contains(from) && !unlent.contains(from) && !lasting_tier(tier_of_kinds(&given)) { lent.insert(from.to_string()); }
+        if named == handed + argued && !flows.changed.contains(from) && !unlent.contains(from) && !lasting_tier(&tier_of_kinds(&given)) { lent.insert(from.to_string()); }
     }
     for (from, to) in flows.param_into.iter() { if lent.contains(from) && !flows.lent_into.contains(&(from.to_string(), to.to_string())) && !a_parameter_itself(to, flows) { lent.remove(from); } }
     let mut reading: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -4586,12 +4586,12 @@ pub(crate) fn same_tiers(a: &collections::BTreeMap<String, Tier>, b: &collection
     for (word, tier) in a.iter() {
         let tier = *tier;
         let other = match (*nikaia_std::index::get(&b, word)).copied() { Some(__nikaia_value) => __nikaia_value, None => return false };
-        if tier_word(tier) != tier_word(other) { return false; }
+        if tier_word(&tier) != tier_word(&other) { return false; }
     }
     true
 }
 
-pub(crate) fn tier_word(tier: Tier) -> &'static str {
+pub(crate) fn tier_word(tier: &Tier) -> &'static str {
     match tier {
         Tier::Owned => "owned",
         Tier::View => "view",
@@ -4692,7 +4692,7 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TextT
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || Tier::Owned);
-        if owned_tier(held) {
+        if owned_tier(&held) {
             viewed_arms.remove(&node);
             if found.held.contains(&node) { continue; }
             refused_moves.insert(node.clone(), TierRefusal { position: moved.1.to_string(), forced: match *nikaia_std::index::get(&walk.flows.forced, &moved.0) {
@@ -4755,7 +4755,7 @@ pub(crate) fn tw_tiers(decided: &TextTiers) -> collections::BTreeMap<(i64, Strin
     tiers
 }
 
-pub(crate) fn tw_mark(ty: &mut Type, path: &[i64], from: i64, tier: Tier) {
+pub(crate) fn tw_mark(ty: &mut Type, path: &[i64], from: i64, tier: &Tier) {
     if from >= path.len() as i64 {
         match tier {
             Tier::Owned => { },
@@ -4772,10 +4772,10 @@ pub(crate) fn tw_mark(ty: &mut Type, path: &[i64], from: i64, tier: Tier) {
         return;
     }
     let arg = match ty.generics.get_mut(nikaia_std::count::of(*nikaia_std::index::get(&path, nikaia_std::index::at(from)))) { Some(__nikaia_value) => __nikaia_value, None => return };
-    tw_mark(&mut *arg, path, from + 1, tier);
+    tw_mark(&mut *arg, path, from + 1, &tier);
 }
 
-pub(crate) fn tw_mark_maybe(ty: &mut Option<Type>, path: &[i64], tier: Tier) { if ty.is_some() { tw_mark(ty.as_mut().unwrap(), path, 0, tier); } }
+pub(crate) fn tw_mark_maybe(ty: &mut Option<Type>, path: &[i64], tier: &Tier) { if ty.is_some() { tw_mark(ty.as_mut().unwrap(), path, 0, &tier); } }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TwLets {
@@ -4800,7 +4800,7 @@ pub(crate) fn tw_declare(ty: &mut Option<Type>, at: i64, job: &TwLets) {
     }
     for (wanted, path, tier) in job.marks.iter() {
         let wanted = nikaia_std::num::value(wanted);let tier = *tier;
-        if wanted == at { tw_mark_maybe(ty, path, tier); }
+        if wanted == at { tw_mark_maybe(ty, path, &tier); }
     }
 }
 
@@ -4950,25 +4950,25 @@ pub(crate) fn tw_fn_name(item: &Item, words: &winnow_grammar::InternerContext) -
     }
 }
 
-pub(crate) fn tw_mark_field(item: &mut Item, words: &winnow_grammar::InternerContext, of: &str, field: &str, path: &[i64], tier: Tier) {
+pub(crate) fn tw_mark_field(item: &mut Item, words: &winnow_grammar::InternerContext, of: &str, field: &str, path: &[i64], tier: &Tier) {
     match item {
         Item::Struct { name, fields, .. } => {
             let name = *name;
             if words.resolve(name) != of { return; }
             let j = match fields.iter().position(|f| { words.resolve(f.name) == field }) { Some(__nikaia_value) => __nikaia_value, None => return };
             let declared = match fields.get_mut(nikaia_std::count::of(j)) { Some(__nikaia_value) => __nikaia_value, None => return };
-            tw_mark(&mut declared.ty, path, 0, tier);
+            tw_mark(&mut declared.ty, path, 0, &tier);
         },
         _ => { },
     }
 }
 
-pub(crate) fn tw_mark_fn(item: &mut Item, returned: bool, at: i64, path: &[i64], tier: Tier) {
+pub(crate) fn tw_mark_fn(item: &mut Item, returned: bool, at: i64, path: &[i64], tier: &Tier) {
     match item {
         Item::Fn { args, ret_type, .. } => {
-            if returned { tw_mark_maybe(&mut *ret_type, path, tier); } else {
+            if returned { tw_mark_maybe(&mut *ret_type, path, &tier); } else {
                 let arg = match args.get_mut(nikaia_std::count::of(at)) { Some(__nikaia_value) => __nikaia_value, None => return };
-                tw_mark(&mut arg.ty, path, 0, tier);
+                tw_mark(&mut arg.ty, path, 0, &tier);
             }
         },
         _ => { },
@@ -4976,9 +4976,9 @@ pub(crate) fn tw_mark_fn(item: &mut Item, returned: bool, at: i64, path: &[i64],
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn tw_mark_callable(item: &mut Item, words: &winnow_grammar::InternerContext, target: Option<&str>, own: &str, returned: bool, at: i64, path: &[i64], tier: Tier) {
+pub(crate) fn tw_mark_callable(item: &mut Item, words: &winnow_grammar::InternerContext, target: Option<&str>, own: &str, returned: bool, at: i64, path: &[i64], tier: &Tier) {
     if target.is_none() {
-        if tw_fn_name(&item, words) == own { tw_mark_fn(item, returned, at, path, tier); }
+        if tw_fn_name(&item, words) == own { tw_mark_fn(item, returned, at, path, &tier); }
         return;
     }
     let wanted: String = nikaia_std::index::or(match target {
@@ -4990,38 +4990,38 @@ pub(crate) fn tw_mark_callable(item: &mut Item, words: &winnow_grammar::Interner
             if words.resolve(of.name) != wanted { return; }
             let j = match methods.iter().position(|m| { tw_fn_name(&m.node, words) == own }).map(|at| at as i64) { Some(__nikaia_value) => __nikaia_value, None => return };
             let method = match methods.get_mut(nikaia_std::count::of(j)) { Some(__nikaia_value) => __nikaia_value, None => return };
-            tw_mark_fn(&mut method.node, returned, at, path, tier);
+            tw_mark_fn(&mut method.node, returned, at, path, &tier);
         },
         _ => { },
     }
 }
 
-pub(crate) fn tw_mark_rule(item: &mut Item, j: i64, path: &[i64], tier: Tier) {
+pub(crate) fn tw_mark_rule(item: &mut Item, j: i64, path: &[i64], tier: &Tier) {
     match item {
         Item::Grammar(def) => {
             let rule = match def.rules.get_mut(nikaia_std::count::of(j)) { Some(__nikaia_value) => __nikaia_value, None => return };
-            tw_mark_maybe(&mut rule.ret_type, path, tier);
+            tw_mark_maybe(&mut rule.ret_type, path, &tier);
         },
         _ => { },
     }
 }
 
-pub(crate) fn tw_mark_variant(item: &mut Item, words: &winnow_grammar::InternerContext, of: &str, variant: &str, at: i64, path: &[i64], tier: Tier) {
+pub(crate) fn tw_mark_variant(item: &mut Item, words: &winnow_grammar::InternerContext, of: &str, variant: &str, at: i64, path: &[i64], tier: &Tier) {
     match item {
         Item::Enum { name, variants, .. } => {
             let name = *name;
             if words.resolve(name) != of { return; }
-            for v in variants.iter_mut() { if words.resolve((*v).name) == variant { tw_mark_payload(&mut (*v).fields, at, path, tier); } }
+            for v in variants.iter_mut() { if words.resolve((*v).name) == variant { tw_mark_payload(&mut (*v).fields, at, path, &tier); } }
         },
         _ => { },
     }
 }
 
-pub(crate) fn tw_mark_payload(fields: &mut VariantFields, at: i64, path: &[i64], tier: Tier) {
+pub(crate) fn tw_mark_payload(fields: &mut VariantFields, at: i64, path: &[i64], tier: &Tier) {
     match fields {
         VariantFields::Tuple(parts) => {
             let part = match parts.get_mut(nikaia_std::count::of(at)) { Some(__nikaia_value) => __nikaia_value, None => return };
-            tw_mark(&mut *part, path, 0, tier);
+            tw_mark(&mut *part, path, 0, &tier);
         },
         _ => { },
     }
@@ -5058,10 +5058,10 @@ pub fn tier_write(program: &mut Program, words: &winnow_grammar::InternerContext
     for item in program.items.iter_mut() { tw_lets_item(&mut (*item).node, &job); }
     for (key, tier) in tiers.iter() {
         let tier = *tier;
-        if key.0 == 0 { for item in program.items.iter_mut() { tw_mark_field(&mut (*item).node, words, &key.1, &key.2, &key.4, tier); } } else if key.0 == 1 && rule_keys.contains_key(&key.1) {
+        if key.0 == 0 { for item in program.items.iter_mut() { tw_mark_field(&mut (*item).node, words, &key.1, &key.2, &key.4, &tier); } } else if key.0 == 1 && rule_keys.contains_key(&key.1) {
             let (at, j) = match rule_keys.get(&key.1) { Some(__nikaia_value) => __nikaia_value, None => continue }; let at = nikaia_std::num::value(at); let j = nikaia_std::num::value(j);
             let item = match program.items.get_mut(nikaia_std::count::of(at)) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            tw_mark_rule(&mut item.node, j, &key.4, tier);
+            tw_mark_rule(&mut item.node, j, &key.4, &tier);
         } else if key.0 == 1 || key.0 == 2 {
             let mut target: Option<String> = None;
             let mut own = key.1.to_string();
@@ -5072,8 +5072,8 @@ pub fn tier_write(program: &mut Program, words: &winnow_grammar::InternerContext
                     own = o.to_string();
                 },
             }
-            for item in program.items.iter_mut() { tw_mark_callable(&mut (*item).node, words, (target).as_deref(), &own, key.0 == 1, key.3, &key.4, tier); }
-        } else if key.0 == 4 { for item in program.items.iter_mut() { tw_mark_variant(&mut (*item).node, words, &key.1, &key.2, key.3, &key.4, tier); } }
+            for item in program.items.iter_mut() { tw_mark_callable(&mut (*item).node, words, (target).as_deref(), &own, key.0 == 1, key.3, &key.4, &tier); }
+        } else if key.0 == 4 { for item in program.items.iter_mut() { tw_mark_variant(&mut (*item).node, words, &key.1, &key.2, key.3, &key.4, &tier); } }
     }
     TierWritten { said: tw_said(&tiers), views: tw_views(&tiers) }
 }
@@ -5082,7 +5082,7 @@ pub(crate) fn tw_views(tiers: &collections::BTreeMap<(i64, String, String, i64, 
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (key, tier) in tiers.iter() {
         let tier = *tier;
-        if key.4.is_empty() && !owned_tier(tier) {
+        if key.4.is_empty() && !owned_tier(&tier) {
             out.insert(match key.0 {
                 0 => format!("field {} {}", key.1, key.2),
                 1 => format!("result {}", key.1),

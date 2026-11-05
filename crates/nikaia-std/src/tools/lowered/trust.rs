@@ -7,7 +7,7 @@ pub enum Wrote {
     TheFilesystemRoot,
 }
 
-pub fn spelled(wrote: Wrote) -> String {
+pub fn spelled(wrote: &Wrote) -> String {
     match wrote {
         Wrote::Anywhere => String::from("Anywhere"),
         Wrote::TheFilesystemRoot => String::from("Dir(\"/\") - which is every directory"),
@@ -61,7 +61,7 @@ pub fn render(untrusted: bool, reasons: &[Reason], places: &[Place], path: &str)
     out.push_str(&format!("hash for a map keyed by the input: {}\n", hash));
     out.push_str("file access with no root to check against:\n");
     if places.is_empty() { out.push_str("    none - every path here names a directory it may not leave\n"); }
-    for place in places.iter() { out.push_str(&format!("    {}:{}:{}  {} writes {}\n", path, place.line, place.column, place.entry, spelled(place.wrote))); }
+    for place in places.iter() { out.push_str(&format!("    {}:{}:{}  {} writes {}\n", path, place.line, place.column, place.entry, spelled(&place.wrote))); }
     out
 }
 

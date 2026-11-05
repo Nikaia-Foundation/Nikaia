@@ -21,13 +21,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_maybe_in_an_operation(&mut self, op: BinaryOp, left: &Ty, right: &Ty, span: &Span) {
+    pub fn a_maybe_in_an_operation(&mut self, op: &BinaryOp, left: &Ty, right: &Ty, span: &Span) {
         let mut maybe = left.clone();
         if !a_known_maybe(left) {
             if !a_known_maybe(right) { return; }
             maybe = right.clone();
         }
-        let symbol = binary_op_text(op);
+        let symbol = binary_op_text(&op);
         self.findings.push(check_refusal("NK1102", span, format!("`{}` is given `{}`, which may be `null`.", symbol, maybe.text()), vec![String::from("A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.")], Some(String::from("Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

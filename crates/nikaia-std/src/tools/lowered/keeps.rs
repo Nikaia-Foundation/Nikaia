@@ -132,7 +132,12 @@ pub(crate) fn reached_of(expr: &Expr, interner: &winnow_grammar::InternerContext
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return found };
             reached_by_last(otherwise, interner, context, own, library, walk, through_calls, &mut found);
         },
-        Expr::Match { arms, .. } => { for arm in arms.iter() { found.extend(reached_of(&arm.body, interner, context, own, library, walk, through_calls)); } },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            for arm in arms.iter() { found.extend(reached_of(&arm.body, interner, context, own, library, walk, through_calls)); }
+            let subject = match parameter_named(value, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return found };
+            if !context.lent.contains(&subject) && an_arm_hands_on_what_it_binds(arms, interner) { found.insert(subject); }
+        },
         Expr::Block(block, _) => { reached_by_last(block, interner, context, own, library, walk, through_calls, &mut found); },
         Expr::AsyncGroup(block, _, _) => { reached_by_last(block, interner, context, own, library, walk, through_calls, &mut found); },
         Expr::Variable(ident, _) => {
@@ -145,6 +150,14 @@ pub(crate) fn reached_of(expr: &Expr, interner: &winnow_grammar::InternerContext
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
             if through_calls { found.extend(keeps_viewed_of(base, interner, context, own, library, walk)); }
+            let aliased = match base {
+                Expr::Variable(ident, _) => { let ident = *ident; nikaia_std::index::or(match *nikaia_std::index::get(&walk.aliases, interner.resolve(ident)) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || collections::BTreeSet::new().into()) },
+                _ => collections::BTreeSet::new(),
+            };
+            for one in aliased.iter() { if one != "self" && !a_field_that_copies(one, interner.resolve(name), context) { found.insert(one.to_string()); } }
             let parameter = match parameter_named(base, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return found };
             if parameter != "self" && !a_field_that_copies(&parameter, interner.resolve(name), context) { found.insert(parameter); }
         },
@@ -413,7 +426,14 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
                 return;
             }
             let name = match parameter_named(value, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return };
-            if !context.lent.contains(&name) && !keeps_only_compared(arms) { walk.uses.kept.insert(name); }
+            if context.lent.contains(&name) { return; }
+            let mut whole: collections::BTreeSet<String> = collections::BTreeSet::new();
+            whole.insert(name);
+            for arm in arms.iter() {
+                let mut bound: collections::BTreeSet<String> = collections::BTreeSet::new();
+                names_a_pattern_binds(&arm.pattern, interner, &mut bound);
+                for one in bound.iter() { alias(one.to_string(), &whole, &mut walk.aliases); }
+            }
         },
         Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); keep_what_a_task_names(body, interner, holes_of, context, walk); },
         Expr::Call { func, args, config, .. } => {
@@ -787,6 +807,11 @@ pub(crate) fn names_a_pattern_binds(pattern: &MatchPattern, interner: &winnow_gr
         },
         MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { names_a_pattern_binds(part, interner, bound); } },
         MatchPattern::List(parts) => { for part in parts.iter() { names_a_pattern_binds(part, interner, bound); } },
+        MatchPattern::Named { fields, .. } => { for field in fields.iter() { names_a_pattern_binds(&field.pat, interner, bound); } },
+        MatchPattern::RestNamed(name) => {
+            let name = *name;
+            bound.insert(interner.resolve(name).to_string());
+        },
         MatchPattern::Or(alternatives) => { for part in alternatives.iter() { names_a_pattern_binds(part, interner, bound); } },
         _ => { },
     }
@@ -813,24 +838,6 @@ pub(crate) fn hands_on_a_bound_name(value: &Expr, interner: &winnow_grammar::Int
 pub(crate) fn hands_on_a_bound_tail(block: &Block, interner: &winnow_grammar::InternerContext, bound: &collections::BTreeSet<String>) -> bool {
     for tail in block_tail(block) { if hands_on_a_bound_name(tail, interner, bound) { return true; } }
     false
-}
-
-pub(crate) fn keeps_only_compared(arms: &[MatchArm]) -> bool {
-    for arm in arms.iter() { if !a_comparison(&arm.pattern) { return false; } }
-    true
-}
-
-pub(crate) fn a_comparison(pattern: &MatchPattern) -> bool {
-    match pattern {
-        MatchPattern::Otherwise => true,
-        MatchPattern::Literal(..) => true,
-        MatchPattern::Range { .. } => true,
-        MatchPattern::Or(alternatives) => {
-            for p in alternatives.iter() { if !a_comparison(p) { return false; } }
-            true
-        },
-        _ => false,
-    }
 }
 
 pub trait KeepsHost {
@@ -900,11 +907,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple66594| {
-                            let (at, arg) = __nikaia_tuple66594; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple67717| {
+                            let (at, arg) = __nikaia_tuple67717; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple66770| {
-                            let (at, arg) = __nikaia_tuple66770;
+                        }).map(|__nikaia_tuple67893| {
+                            let (at, arg) = __nikaia_tuple67893;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);
@@ -1285,7 +1292,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                 lent.insert(String::from("self"));
                 unkept.insert(String::from("self"));
             }
-            let returns_a_view = keeps_result_is_a_view((ret_type).as_ref());
+            let returns_a_view = keeps_result_is_a_view((ret_type).as_ref()) || keeps_result_copies(view, (ret_type).as_ref());
             let declared = fields_held(view.words, view.items);
             let mut fields: collections::BTreeMap<String, collections::BTreeMap<String, Ty>> = collections::BTreeMap::new();
             for arg in args.iter() {
@@ -1330,6 +1337,13 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
         _ => { return None; },
     }
     None
+}
+
+pub(crate) fn keeps_result_copies(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ret_type: Option<&Type>) -> bool {
+    let ty = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if (*ty.code).is_some() || ty.is_slice || ty.is_view || ty.is_tuple || !ty.generics.is_empty() { return false; }
+    let name = view.text(ty.name);
+    nikaia_std::list::contains(&vec!["i8", "i16", "i32", "i64", "isize", "usize", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char"], &name)
 }
 
 pub(crate) fn keeps_result_is_a_view(ret_type: Option<&Type>) -> bool {

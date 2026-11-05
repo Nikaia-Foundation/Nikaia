@@ -360,7 +360,7 @@ impl EmitState {
                         if prelude != "" { out.push(&format!("{{ {}", prelude)); }
                         self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?;
                         if prelude != "" { out.push(" }"); }
-                    } else if prelude != "" { self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), EmitTail::Return, Some(prelude))?; } else { self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), EmitTail::Return)?; }
+                    } else if prelude != "" { self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), &EmitTail::Return, Some(prelude))?; } else { self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), &EmitTail::Return)?; }
                     out.push("\n");
                 },
                 None => {
@@ -516,7 +516,7 @@ impl EmitState {
         let mode = if cut { "Cut" } else { "Backtrack" };
         let inside = EmitFlow { can_throw: true, ..EmitFlow::plain() };
         out.push("{ let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = ");
-        self.emit_core_block(world, walk, out, host, action, 3, inside, &EmitScope::plain(), EmitTail::Value)?;
+        self.emit_core_block(world, walk, out, host, action, 3, inside, &EmitScope::plain(), &EmitTail::Value)?;
         out.push("; Ok(__nikaia_done) })(); ");
         out.push(&format!("match __nikaia_acted {{ Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::{}(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) }} }}", mode));
         Ok(())

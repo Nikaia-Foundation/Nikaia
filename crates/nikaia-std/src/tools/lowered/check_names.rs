@@ -45,7 +45,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_bit_operator_on_something_else(&mut self, op: BinaryOp, left: &Ty, right: &Ty, at: &Span) {
+    pub fn a_bit_operator_on_something_else(&mut self, op: &BinaryOp, left: &Ty, right: &Ty, at: &Span) {
         let written: &'static str = match op {
             BinaryOp::BitAnd => "&",
             BinaryOp::BitOr => "|",

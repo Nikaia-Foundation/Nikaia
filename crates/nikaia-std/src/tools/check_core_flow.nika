@@ -1048,7 +1048,14 @@ fn check_core_flow_copied_parts(mut state: CheckState, world: ref CheckWorld, ar
     // `text => …` over a `ref T?` held by value: the name is the payload,
     // which is already the view (`Some(text)` binds the `&T`), and nothing is
     // copied out of it - a view copies, but `*text` would be the text itself.
-    let the_payload = !through_the_reference && check_core_flow_binds_the_payload(arm.pattern, typed)
+    // So is the name over a lent parameter, whose type was made the view
+    // (ADR-views-3 D1): `Some(text)` through the `&Option<String>` binds the
+    // `&String`.
+    let viewed = match typed {
+        Ty::Nullable(inner) => inner.is_a_view(),
+        else => typed.is_a_view(),
+    }
+    let the_payload = (!through_the_reference || viewed) && check_core_flow_binds_the_payload(arm.pattern, typed)
     if the_payload {
         return
     }
@@ -1495,7 +1502,11 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     // of the part: its own arms bind through it as well.
     let in_place_binding = if a_variable { check_core_flow_bound_in_place(state, world, value) } else { -1 }
     let in_place_name = in_place_binding >= 0
-    let through_the_reference = (mut_subject != null && a_variable) || in_place_name
+    // **A parameter the contract lends arrives as a reference** (ADR-views-3
+    // D1), a type that copies as well: its arms bind through it, without
+    // `ref`, and a copied part is read out of it.
+    let a_lent_parameter = a_variable && !typed.is_a_view() && moves_away(typed) && state.a_lent_parameter(world, value)
+    let through_the_reference = (mut_subject != null && a_variable) || in_place_name || a_lent_parameter
     let through_a_view = check_core_flow_through_a_view(state, world, value)
     // **An owned `String` matched against a text literal is matched as a
     // view** (#704): the language below compares a literal with a `&str`,
@@ -1530,6 +1541,15 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     // place (#567).
     let lent_name = check_core_flow_a_lent_name(state, world, value) || state.a_lent_let(world, value)
     if lent_name && !typed.is_a_view() && state.takes_away(world, typed) {
+        typed = view_of_type(typed)
+    }
+    // Its parts are views of it.
+    let a_named_type = match typed {
+        Ty::Named { .. } => true,
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+    if a_lent_parameter && a_named_type {
         typed = view_of_type(typed)
     }
     // **A `match` is a condition too** (ADR-281 D25).

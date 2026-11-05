@@ -73,7 +73,7 @@ impl EmitState {
                     if on_accumulator && mutates {
                         out.push(&format!("|{}: &mut _, {}| {{ ", emit_text(world, accumulator), emit_text(world, item)));
                         for stmt in body.stmts.iter() {
-                            self.emit_stmt(world, walk, out, host, &stmt.node, &stmt.span, 0, EmitTail::Statement, EmitFlow::plain(), &EmitScope::plain())?;
+                            self.emit_stmt(world, walk, out, host, &stmt.node, &stmt.span, 0, &EmitTail::Statement, EmitFlow::plain(), &EmitScope::plain())?;
                             out.push(" ");
                         }
                         out.push("}");

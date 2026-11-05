@@ -254,7 +254,7 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
             contract.signature = check_core_call_on_self_signature((contract.signature).as_ref(), type_name);
             return check_core_call_on_described(state, world, host, &answered, receiver, method, args, entry, &resolved.key, &contract, span);
         }
-        return check_core_call_on(state, world, host, answered, receiver, method, args, entry, span);
+        return check_core_call_on(state, world, host, &answered, receiver, method, args, entry, span);
     }
     if entry == "clone" && args.is_empty() && check_core_call_on_cloned_parameter(&state, world, on) { return on.clone(); }
     if (entry == "compare" || entry == "eq") && args.len() == 1 {
@@ -272,12 +272,12 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
     let stamped: Option<Ty> = check_core_call_on_seen(on);
     if stamped.is_some() {
         let held: Ty = nikaia_std::index::or(stamped, || Ty::Unknown);
-        return check_core_call_on(state, world, host, held, receiver, method, args, entry, span);
+        return check_core_call_on(state, world, host, &held, receiver, method, args, entry, span);
     }
     let through: Option<Ty> = state.seen_through(world, on);
     if through.is_some() {
         let held: Ty = nikaia_std::index::or(through, || Ty::Unknown);
-        if held.unseen() != on.unseen() { return check_core_call_on(state, world, host, held, receiver, method, args, entry, span); }
+        if held.unseen() != on.unseen() { return check_core_call_on(state, world, host, &held, receiver, method, args, entry, span); }
     }
     state.nothing_says_what_a_parameter_can_do(type_name, "method", entry, span);
     state.no_number_has_this_method(type_name, entry, span);
@@ -623,8 +623,17 @@ pub(crate) fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_receiver_offset(contract: &FnContract) -> i64 {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    if signature.takes_a_receiver() { 1 } else { 0 }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, args: &[Expr], found: &[Ty], expected: &[Ty], span: &Span) {
+pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, contract: &FnContract, args: &[Expr], found: &[Ty], expected: &[Ty], span: &Span) {
+    let own = world.own.functions.contains_key(key);
+    let offset = check_core_call_on_receiver_offset(contract);
     let mut i: i64 = 0;
     for given in args.iter() {
         if i >= expected.len() as i64 || i >= found.len() as i64 {
@@ -645,7 +654,8 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
             state.facts.nullable_args.insert(id_of(given) as i64, match how { Some(__nikaia_value) => __nikaia_value, None => continue });
             continue;
         }
-        if state.a_view_copied_out(world, &have, &want, Some(given)) { continue; }
+        let lent_here = own && lends_in_own(contract, i - 1 + offset, &vec![world.library]);
+        if !lent_here && state.a_view_copied_out(world, &have, &want, Some(given)) { continue; }
         if !is_a_literal(given) && an_integer_that_does_not_widen(&have, &want) {
             let at = check_span_at(world, given, span);
             state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
@@ -999,7 +1009,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         if check_core_call_on_owned_text(&keys) && check_core_call_on_text_to_build(world, nikaia_std::index::get(&args, 0), nikaia_std::index::get(&found, 0)) { state.facts.owned_entry_keys.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); }
     }
     state.a_view_kept_where_the_receiver_says_text(world, key, contract, args, &found, &expected, span);
-    check_core_call_on_given(state, world, host, key, args, &found, &expected, span);
+    check_core_call_on_given(state, world, host, key, contract, args, &found, &expected, span);
     check_core_call_on_extended(state, world, key, &bound, args, &found, span);
     check_core_call_on_member(state, world, key, &bound, args, &found, span);
     state.a_pattern_of_owned_text(key, args, &found, span);
@@ -1015,11 +1025,11 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, on: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, span: &Span) -> Ty {
+pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, span: &Span) -> Ty {
     if entry == "full" && args.is_empty() {
         let mut an_error = false;
         match on {
-            Ty::Named { ref name, .. } => { an_error = implements_error(&world.here, &world.beside, name); },
+            Ty::Named { name, .. } => { an_error = implements_error(&world.here, &world.beside, name); },
             _ => { },
         }
         if an_error {
@@ -1050,7 +1060,7 @@ pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         if copied.is_some() { return nikaia_std::index::or(copied, || Ty::Unknown); }
     }
     if on.is_unknown() && state.open_number_typed(world, receiver) {
-        let result = check_core_call_on(state, world, host, check_core_call_on_named("i64"), receiver, method, args, entry, span);
+        let result = check_core_call_on(state, world, host, &check_core_call_on_named("i64"), receiver, method, args, entry, span);
         let same = match result {
             Ty::Named { ref name, args: ref inner, .. } => name == "i64" && inner.is_empty(),
             _ => false,
@@ -1079,7 +1089,7 @@ pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, inner: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], witness: i64, span: &Span) -> Ty {
+pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, inner: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], witness: i64, span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     let within = witness >= 0 && check_core_call_on_task_handle(&inner) && name == "join";
     let door = witness >= 0 && locked_content_of(&inner).is_some() && name == "set";
@@ -1123,7 +1133,7 @@ pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     let inside = state.inside_a_door;
     let called: Option<Ty> = check_core_a_called_field(state, world, host, &inner, receiver, method, &given, inside, span);
     let mut reached: Ty = Ty::Unknown;
-    if called.is_some() { reached = nikaia_std::index::or(called, || Ty::Unknown); } else { reached = check_core_call_on(state, world, host, inner, receiver, method, &given, &written, span); }
+    if called.is_some() { reached = nikaia_std::index::or(called, || Ty::Unknown); } else { reached = check_core_call_on(state, world, host, &inner, receiver, method, &given, &written, span); }
     let mut a_view = reached.is_a_view();
     let mut flattened = false;
     let mut unknown = false;

@@ -19,23 +19,23 @@ pub(crate) fn check_core_ops_a_lent_copy(ty: &Ty) -> bool {
     }
 }
 
-pub(crate) fn check_core_ops_arithmetic(op: BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem) }
+pub(crate) fn check_core_ops_arithmetic(op: &BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem) }
 
-pub(crate) fn check_core_ops_unchecked(op: BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) }
+pub(crate) fn check_core_ops_unchecked(op: &BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) }
 
-pub(crate) fn check_core_ops_logical(op: BinaryOp) -> bool { matches!(op, BinaryOp::And | BinaryOp::Or) }
+pub(crate) fn check_core_ops_logical(op: &BinaryOp) -> bool { matches!(op, BinaryOp::And | BinaryOp::Or) }
 
-pub(crate) fn check_core_ops_and(op: BinaryOp) -> bool { matches!(op, BinaryOp::And) }
+pub(crate) fn check_core_ops_and(op: &BinaryOp) -> bool { matches!(op, BinaryOp::And) }
 
-pub(crate) fn check_core_ops_shift(op: BinaryOp) -> bool { matches!(op, BinaryOp::Shl | BinaryOp::Shr) }
+pub(crate) fn check_core_ops_shift(op: &BinaryOp) -> bool { matches!(op, BinaryOp::Shl | BinaryOp::Shr) }
 
-pub(crate) fn check_core_ops_bits(op: BinaryOp) -> bool { matches!(op, BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor | BinaryOp::Shl | BinaryOp::Shr) }
+pub(crate) fn check_core_ops_bits(op: &BinaryOp) -> bool { matches!(op, BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor | BinaryOp::Shl | BinaryOp::Shr) }
 
-pub(crate) fn check_core_ops_equality(op: BinaryOp) -> bool { matches!(op, BinaryOp::Eq | BinaryOp::Ne) }
+pub(crate) fn check_core_ops_equality(op: &BinaryOp) -> bool { matches!(op, BinaryOp::Eq | BinaryOp::Ne) }
 
-pub(crate) fn check_core_ops_ordering(op: BinaryOp) -> bool { matches!(op, BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge) }
+pub(crate) fn check_core_ops_ordering(op: &BinaryOp) -> bool { matches!(op, BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge) }
 
-pub(crate) fn check_core_ops_add(op: BinaryOp) -> bool { matches!(op, BinaryOp::Add) }
+pub(crate) fn check_core_ops_add(op: &BinaryOp) -> bool { matches!(op, BinaryOp::Add) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -132,9 +132,9 @@ pub(crate) fn check_core_ops_whole_name(side: &Expr, ty: &Ty) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_ops_literal_beside(state: &mut CheckState, op: BinaryOp, side: &Expr, other: &Ty, count: bool) {
+pub(crate) fn check_core_ops_literal_beside(state: &mut CheckState, op: &BinaryOp, side: &Expr, other: &Ty, count: bool) {
     let value = value_of_a_copy(&other.unseen());
-    if count && check_core_ops_shift(op) { return; }
+    if count && check_core_ops_shift(&op) { return; }
     let unsigned: String = match check_core_ops_unsigned(&value) { Some(__nikaia_value) => __nikaia_value, None => return };
     state.literals_are(side, &unsigned);
 }
@@ -152,9 +152,9 @@ pub(crate) fn check_core_ops_proved_expr<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_ops_same(state: &CheckState, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> (Ty, String) {
+pub(crate) fn check_core_ops_same(state: &CheckState, op: &BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> (Ty, String) {
     let mut named: String = String::from("");
-    if check_core_ops_unchecked(op) && check_core_ops_whole(lhs, left) && check_core_ops_whole(rhs, right) {
+    if check_core_ops_unchecked(&op) && check_core_ops_whole(lhs, left) && check_core_ops_whole(rhs, right) {
         let a = check_core_ops_whole_name(lhs, left);
         let b = check_core_ops_whole_name(rhs, right);
         if a != "" && b != "" { if a == b { named = a.to_string(); } } else if a != "" { named = a.to_string(); } else if b != "" { named = b.to_string(); }
@@ -214,12 +214,12 @@ pub(crate) fn check_core_ops_maybe_beside_a_number(state: &mut CheckState, world
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span, span: &Span) -> Ty {
+pub(crate) fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, op: &BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span, span: &Span) -> Ty {
     state.a_pending_coalesce_of_text_is_lent(lhs);
     state.a_pending_coalesce_of_text_is_lent(rhs);
     let asks_for_null = check_core_ops_null(lhs) || check_core_ops_null(rhs);
     if !asks_for_null {
-        state.an_operator_needs_a_bound(world, op, left, right, at);
+        state.an_operator_needs_a_bound(world, &op, left, right, at);
         check_crossings_a_type_that_does_not_compare(state, world, left, right, at);
     }
     if !asks_for_null {
@@ -238,12 +238,12 @@ pub(crate) fn check_core_ops_number_literal(expr: &Expr) -> bool { matches!(expr
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span, span: &Span) -> Ty {
-    if check_core_ops_bits(op) {
-        state.a_bit_operator_on_something_else(op, left, right, at);
+pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, op: &BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span, span: &Span) -> Ty {
+    if check_core_ops_bits(&op) {
+        state.a_bit_operator_on_something_else(&op, left, right, at);
         let l = value_of_a_copy(&left.unseen());
         let r = value_of_a_copy(&right.unseen());
-        if check_core_ops_shift(op) {
+        if check_core_ops_shift(&op) {
             let shifted = check_core_ops_whole_name(lhs, left);
             if shifted != "" && is_whole_number(&shifted) { state.facts.shifts.insert(at.start as i64, shifted); }
             return l;
@@ -251,16 +251,16 @@ pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world
         if l.is_unknown() { return r; }
         return l;
     }
-    if check_core_ops_logical(op) {
+    if check_core_ops_logical(&op) {
         let on_left = check_span_at(world, lhs, span);
         let on_right = check_span_at(world, rhs, span);
         state.expect_bool(left, &on_left, "`&&` and `||` join two `bool`s.");
         state.expect_bool(right, &on_right, "`&&` and `||` join two `bool`s.");
         return check_core_ops_named("bool");
     }
-    if check_core_ops_equality(op) { return check_core_ops_equal(state, world, host, op, lhs, left, rhs, right, at, span); }
-    if check_core_ops_ordering(op) {
-        state.an_operator_needs_a_bound(world, op, left, right, at);
+    if check_core_ops_equality(&op) { return check_core_ops_equal(state, world, host, &op, lhs, left, rhs, right, at, span); }
+    if check_core_ops_ordering(&op) {
+        state.an_operator_needs_a_bound(world, &op, left, right, at);
         state.a_maybe_compared_with_a_value(left, right, span);
         state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at);
         if is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { let added = state.facts.ordered_texts.insert(at.start as i64); }
@@ -270,34 +270,34 @@ pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world
     if check_core_ops_number_literal(lhs) { number_left = check_core_ops_named("i64"); }
     let mut number_right = right.clone();
     if check_core_ops_number_literal(rhs) { number_right = check_core_ops_named("i64"); }
-    if check_core_ops_arithmetic(op) && text_or_bool_in_arithmetic(&op, &number_left, &number_right) {
-        state.arithmetic_on_something_that_has_none(world, op, lhs, &number_left, rhs, &number_right, false, span);
+    if check_core_ops_arithmetic(&op) && text_or_bool_in_arithmetic(&op, &number_left, &number_right) {
+        state.arithmetic_on_something_that_has_none(world, &op, lhs, &number_left, rhs, &number_right, false, span);
         return Ty::Unknown;
     }
-    if check_core_ops_add(op) && (is_text_type(left) || is_text_type(right)) {
+    if check_core_ops_add(&op) && (is_text_type(left) || is_text_type(right)) {
         state.facts.concatenations.insert(at.start as i64);
         return check_core_ops_named("String");
     }
-    if check_core_ops_arithmetic(op) && (check_core_ops_has_no_arithmetic(world, left) || check_core_ops_has_no_arithmetic(world, right)) {
-        state.arithmetic_on_something_that_has_none(world, op, lhs, left, rhs, right, false, span);
+    if check_core_ops_arithmetic(&op) && (check_core_ops_has_no_arithmetic(world, left) || check_core_ops_has_no_arithmetic(world, right)) {
+        state.arithmetic_on_something_that_has_none(world, &op, lhs, left, rhs, right, false, span);
         return Ty::Unknown;
     }
-    if check_core_ops_arithmetic(op) {
+    if check_core_ops_arithmetic(&op) {
         let here = at.start as i64;
         if check_core_ops_a_lent_copy(&left.unseen()) { let added = state.facts.compared_views.insert((here, String::from("lhs"))); }
         if check_core_ops_a_lent_copy(&right.unseen()) { let added = state.facts.compared_views.insert((here, String::from("rhs"))); }
     }
-    let (same, named) = check_core_ops_same(&state, op, lhs, left, rhs, right, at);
-    let found = if check_core_ops_arithmetic(op) { unviewed_type(&same) } else { same };
-    if named != "" { state.facts.arithmetic.insert(at.start as i64, named); } else if check_core_ops_unchecked(op) && check_core_ops_whole_or_open(&state, world, lhs, left) && check_core_ops_whole_or_open(&state, world, rhs, right) { state.open_number_site(world, &vec![lhs, rhs], at.start as i64); }
+    let (same, named) = check_core_ops_same(&state, &op, lhs, left, rhs, right, at);
+    let found = if check_core_ops_arithmetic(&op) { unviewed_type(&same) } else { same };
+    if named != "" { state.facts.arithmetic.insert(at.start as i64, named); } else if check_core_ops_unchecked(&op) && check_core_ops_whole_or_open(&state, world, lhs, left) && check_core_ops_whole_or_open(&state, world, rhs, right) { state.open_number_site(world, &vec![lhs, rhs], at.start as i64); }
     found
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, span: &Span) -> Ty {
-    let arithmetic = check_core_ops_arithmetic(op);
+pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, span: &Span) -> Ty {
+    let arithmetic = check_core_ops_arithmetic(&op);
     let reached: Option<String> = match state.flow.reached.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -315,40 +315,40 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
         None => None,
     };
     let mut walked_right: Ty = Ty::Unknown;
-    if check_core_ops_logical(op) { walked_right = check_core_ops_proved_expr(state, world, host, lhs, check_core_ops_and(op), rhs, span); } else { walked_right = check_core_expr(state, world, host, rhs, span); }
+    if check_core_ops_logical(&op) { walked_right = check_core_ops_proved_expr(state, world, host, lhs, check_core_ops_and(&op), rhs, span); } else { walked_right = check_core_expr(state, world, host, rhs, span); }
     let byte = check_core_ops_named("u8");
     let mut left: Ty = walked_left;
     if value_of_a_copy(&walked_right.unseen()) == byte && state.text_literal(world, &byte, lhs, false).is_some() { left = byte.clone(); }
     let mut right: Ty = walked_right;
     if value_of_a_copy(&left.unseen()) == byte && state.text_literal(world, &byte, rhs, false).is_some() { right = byte.clone(); }
     if !check_simd_kind(&value_of_a_copy(&left.unseen())).is_empty() || !check_simd_kind(&value_of_a_copy(&right.unseen())).is_empty() {
-        let lanes = state.a_lane_operation(op, &value_of_a_copy(&left.unseen()), rhs, &value_of_a_copy(&right.unseen()), at);
+        let lanes = state.a_lane_operation(&op, &value_of_a_copy(&left.unseen()), rhs, &value_of_a_copy(&right.unseen()), at);
         if lanes.is_some() { return nikaia_std::index::or(lanes, || Ty::Unknown); }
     }
     state.divisor_is_not_zero(world, &op, rhs, span);
     state.shift_count_fits(world, &op, lhs, &value_of_a_copy(&left.unseen()), rhs, span);
     state.an_operation_that_overflows(world, &op, lhs, rhs, (reach).as_deref(), span);
     let stamped = left.is_seen() || right.is_seen();
-    if !check_core_ops_equality(op) && !check_core_ops_logical(op) {
+    if !check_core_ops_equality(&op) && !check_core_ops_logical(&op) {
         let before = state.findings.len() as i64;
-        state.a_maybe_in_an_operation(op, &left, &right, at);
+        state.a_maybe_in_an_operation(&op, &left, &right, at);
         check_narrow_a_proof_taken_back(state, lhs, rhs, before);
     }
     if op.is_comparison() {
-        state.a_bit_operation_beside_a_comparison(world, op, lhs, rhs, at);
+        state.a_bit_operation_beside_a_comparison(world, &op, lhs, rhs, at);
         state.two_integer_types_compared(lhs, &left, rhs, &right, at);
         if check_core_ops_two_floats(&left, &right) { let refused = state.two_number_types(&op, lhs, &left, rhs, &right, at); }
     }
-    if !check_core_ops_logical(op) && !check_core_ops_shift(op) { state.an_integer_beside_a_float(world, lhs, &left, rhs, &right, at); }
+    if !check_core_ops_logical(&op) && !check_core_ops_shift(&op) { state.an_integer_beside_a_float(world, lhs, &left, rhs, &right, at); }
     let mut common: Option<String> = None;
-    if !op.is_comparison() && !check_core_ops_logical(op) { common = state.two_number_types(&op, lhs, &left, rhs, &right, at); }
+    if !op.is_comparison() && !check_core_ops_logical(&op) { common = state.two_number_types(&op, lhs, &left, rhs, &right, at); }
     let ask_left = common.is_none();
     let ask_right = common.is_none();
-    if !check_core_ops_logical(op) {
-        if ask_left { check_core_ops_literal_beside(state, op, lhs, &right, false); }
-        if ask_right { check_core_ops_literal_beside(state, op, rhs, &left, true); }
+    if !check_core_ops_logical(&op) {
+        if ask_left { check_core_ops_literal_beside(state, &op, lhs, &right, false); }
+        if ask_right { check_core_ops_literal_beside(state, &op, rhs, &left, true); }
     }
-    if !check_core_ops_logical(op) && !check_core_ops_shift(op) {
+    if !check_core_ops_logical(&op) && !check_core_ops_shift(&op) {
         if ask_left { state.number_asked(world, lhs, &right, at, true); }
         if ask_right { state.number_asked(world, rhs, &left, at, true); }
         let mut both: Vec<i64> = state.open_numbers_in(world, lhs);
@@ -359,7 +359,7 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
         }
         state.open_numbers_joined(&both);
     }
-    let mut outcome = check_core_ops_outcome(state, world, host, op, lhs, &left, rhs, &right, at, span);
+    let mut outcome = check_core_ops_outcome(state, world, host, &op, lhs, &left, rhs, &right, at, span);
     if common.is_some() { outcome = check_core_ops_named(&nikaia_std::index::or(common.as_deref(), || "").to_string()); }
     if stamped { return Ty::Named { name: SEEN.to_string(), args: vec![outcome.unseen()], view: false }; }
     outcome

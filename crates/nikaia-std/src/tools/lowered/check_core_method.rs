@@ -457,7 +457,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.flow.receiver_from_text = state.made_from_text(world, receiver);
     state.flow.walk_open = None;
     state.flow.walk_lent = false;
-    let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span);
+    let value: Ty = check_core_call_on(state, world, host, &on.clone(), receiver, method, args, written, span);
     let summed = check_core_method_summed(&name, &on, &value);
     if summed != "" { state.facts.summed.insert(id_of(receiver) as i64, summed); }
     let walk_open: Option<i64> = state.flow.walk_open;
@@ -740,7 +740,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         match on {
             Ty::Nullable(ref inner) => {
                 let inner = nikaia_std::boxed::open(inner);
-                return check_core_a_safe_call(state, world, host, inner.clone(), receiver, method, args, config, witness, span);
+                return check_core_a_safe_call(state, world, host, &inner.clone(), receiver, method, args, config, witness, span);
             },
             Ty::Unknown => {
                 unknown = true;

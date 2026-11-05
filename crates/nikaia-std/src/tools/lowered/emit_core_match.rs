@@ -515,11 +515,11 @@ impl EmitState {
         if statements && plain {
             match body {
                 Expr::Block(block, _) => {
-                    self.emit_core_block(world, walk, out, host, block, depth, inside, scope, EmitTail::Statement)?;
+                    self.emit_core_block(world, walk, out, host, block, depth, inside, scope, &EmitTail::Statement)?;
                     return Ok(());
                 },
                 Expr::AsyncGroup(block, _, _) => {
-                    self.emit_core_block(world, walk, out, host, block, depth, inside, scope, EmitTail::Statement)?;
+                    self.emit_core_block(world, walk, out, host, block, depth, inside, scope, &EmitTail::Statement)?;
                     return Ok(());
                 },
                 _ => { },
@@ -531,7 +531,7 @@ impl EmitState {
                 Expr::If { cond, then_branch, else_branch, .. } => {
                     let cond = nikaia_std::boxed::open(cond);
                     out.push("{ ");
-                    self.emit_core_if_expr(world, walk, out, host, cond, then_branch, (else_branch).as_ref(), depth, inside, scope, EmitTail::Statement)?;
+                    self.emit_core_if_expr(world, walk, out, host, cond, then_branch, (else_branch).as_ref(), depth, inside, scope, &EmitTail::Statement)?;
                     out.push(" }");
                     return Ok(());
                 },
@@ -557,7 +557,7 @@ impl EmitState {
                 for name in cloned.iter() { opening.push_str(&format!("let {} = {}.clone(); ", name, name)); }
                 let tail = if statements { EmitTail::Statement } else { EmitTail::Value };
                 let trimmed: Option<String> = Some(opening.trim_end().to_string());
-                self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, tail, trimmed)?;
+                self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, &tail, trimmed)?;
                 return Ok(());
             },
             Expr::AsyncGroup(block, _, _) => {
@@ -567,7 +567,7 @@ impl EmitState {
                 for name in cloned.iter() { opening.push_str(&format!("let {} = {}.clone(); ", name, name)); }
                 let tail = if statements { EmitTail::Statement } else { EmitTail::Value };
                 let trimmed: Option<String> = Some(opening.trim_end().to_string());
-                self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, tail, trimmed)?;
+                self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, &tail, trimmed)?;
                 return Ok(());
             },
             _ => { },

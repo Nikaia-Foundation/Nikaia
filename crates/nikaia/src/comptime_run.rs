@@ -595,7 +595,7 @@ pub(crate) fn known_default(package: Option<&str>, key: &str, at: usize) -> Opti
         held.borrow().as_ref().and_then(|ledger| {
             nikaia_std::tools::build_eval::bt_known_default(
                 ledger,
-                package.map(str::to_string),
+                &package.map(str::to_string),
                 key,
                 at as i64,
             )

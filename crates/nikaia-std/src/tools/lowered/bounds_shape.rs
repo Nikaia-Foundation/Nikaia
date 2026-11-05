@@ -36,7 +36,7 @@ pub(crate) struct ShapeSeen {
 pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<String>, around: &Around, words: &winnow_grammar::InternerContext) -> BodyShape {
     let mut seen = ShapeSeen { bound: collections::BTreeMap::new(), shape: BodyShape { constants: collections::BTreeMap::new(), unsigned: collections::BTreeSet::new(), roots: collections::BTreeSet::new(), aliases: collections::BTreeMap::new(), bound: collections::BTreeSet::new(), twice: collections::BTreeSet::new() }, lost: collections::BTreeSet::new() };
     for arg in args.iter() { bind_name(words.resolve(arg.name), &mut seen); }
-    look_block(body, Look::Bound, false, around, words, &mut seen);
+    look_block(body, &Look::Bound, false, around, words, &mut seen);
     for (name, times) in seen.bound.iter() {
         let times = nikaia_std::num::value(times);
         seen.shape.bound.insert(name.to_string());
@@ -46,11 +46,11 @@ pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<Str
         let name = words.resolve(arg.name).to_string();
         if once(&name, &seen) && is_unsigned(&plain_name(&arg.ty, words)) { seen.shape.unsigned.insert(name); }
     }
-    look_block(body, Look::Lets, false, around, words, &mut seen);
-    look_block(body, Look::Aliases, false, around, words, &mut seen);
-    look_block(body, Look::Aliases, false, around, words, &mut seen);
+    look_block(body, &Look::Lets, false, around, words, &mut seen);
+    look_block(body, &Look::Aliases, false, around, words, &mut seen);
+    look_block(body, &Look::Aliases, false, around, words, &mut seen);
     seen.lost.extend(pinned.iter().cloned());
-    look_block(body, Look::Lost, false, around, words, &mut seen);
+    look_block(body, &Look::Lost, false, around, words, &mut seen);
     let mut through: Vec<String> = vec![];
     for name in seen.lost.iter() {
         let key = match seen.shape.aliases.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -225,7 +225,7 @@ pub(crate) fn hands_on(params: Option<&Vec<bool>>, at: i64) -> bool {
     true
 }
 
-pub(crate) fn look_statement_here(stmt: &Stmt, look: Look, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
+pub(crate) fn look_statement_here(stmt: &Stmt, look: &Look, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
     match look {
         Look::Bound => { match stmt {
             Stmt::Let { names, .. } => { bind_all(names, words, seen); },
@@ -258,7 +258,7 @@ pub(crate) fn look_statement_here(stmt: &Stmt, look: Look, words: &winnow_gramma
     }
 }
 
-pub(crate) fn look_expr_here(expr: &Expr, look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
+pub(crate) fn look_expr_here(expr: &Expr, look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
     match look {
         Look::Bound => { match expr {
             Expr::Closure { params, .. } => { bind_all(params, words, seen); },
@@ -293,139 +293,139 @@ pub(crate) fn look_expr_here(expr: &Expr, look: Look, deferred: bool, around: &A
     }
 }
 
-pub(crate) fn look_block(block: &Block, look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for stmt in block.stmts.iter() { look_statement(&stmt.node, look, deferred, around, words, seen); } }
+pub(crate) fn look_block(block: &Block, look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for stmt in block.stmts.iter() { look_statement(&stmt.node, &look, deferred, around, words, seen); } }
 
-pub(crate) fn look_statement(stmt: &Stmt, look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
-    look_statement_here(stmt, look, words, seen);
+pub(crate) fn look_statement(stmt: &Stmt, look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
+    look_statement_here(stmt, &look, words, seen);
     match stmt {
         Stmt::For { iter, body, .. } => {
-            look_expr(iter, look, deferred, around, words, seen);
-            look_block(body, look, deferred, around, words, seen);
+            look_expr(iter, &look, deferred, around, words, seen);
+            look_block(body, &look, deferred, around, words, seen);
         },
         Stmt::While { cond, body } => {
-            look_expr(cond, look, deferred, around, words, seen);
-            look_block(body, look, deferred, around, words, seen);
+            look_expr(cond, &look, deferred, around, words, seen);
+            look_block(body, &look, deferred, around, words, seen);
         },
-        Stmt::Let { value, .. } => { look_expr(value, look, deferred, around, words, seen); },
-        Stmt::Comptime { value, .. } => { look_expr(value, look, deferred, around, words, seen); },
-        Stmt::Expr(value) => { look_expr(value, look, deferred, around, words, seen); },
+        Stmt::Let { value, .. } => { look_expr(value, &look, deferred, around, words, seen); },
+        Stmt::Comptime { value, .. } => { look_expr(value, &look, deferred, around, words, seen); },
+        Stmt::Expr(value) => { look_expr(value, &look, deferred, around, words, seen); },
         Stmt::Assign { target, value, .. } => {
-            look_expr(target, look, deferred, around, words, seen);
-            look_expr(value, look, deferred, around, words, seen);
+            look_expr(target, &look, deferred, around, words, seen);
+            look_expr(value, &look, deferred, around, words, seen);
         },
-        Stmt::Return(value) => { look_maybe((value).as_ref(), look, deferred, around, words, seen); },
+        Stmt::Return(value) => { look_maybe((value).as_ref(), &look, deferred, around, words, seen); },
         _ => { },
     }
 }
 
-pub(crate) fn look_maybe(expr: Option<&Expr>, look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { look_expr(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, look, deferred, around, words, seen); }
+pub(crate) fn look_maybe(expr: Option<&Expr>, look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { look_expr(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, &look, deferred, around, words, seen); }
 
-pub(crate) fn look_all(exprs: &[Expr], look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for e in exprs.iter() { look_expr(e, look, deferred, around, words, seen); } }
+pub(crate) fn look_all(exprs: &[Expr], look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for e in exprs.iter() { look_expr(e, &look, deferred, around, words, seen); } }
 
-pub(crate) fn look_config(config: &[ConfigArg], look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for c in config.iter() { look_expr(&c.value, look, deferred, around, words, seen); } }
+pub(crate) fn look_config(config: &[ConfigArg], look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for c in config.iter() { look_expr(&c.value, &look, deferred, around, words, seen); } }
 
-pub(crate) fn look_fields(fields: &[FieldInit], look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for field in fields.iter() { look_maybe((field.value).as_ref(), look, deferred, around, words, seen); } }
+pub(crate) fn look_fields(fields: &[FieldInit], look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for field in fields.iter() { look_maybe((field.value).as_ref(), &look, deferred, around, words, seen); } }
 
-pub(crate) fn look_expr(expr: &Expr, look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
-    look_expr_here(expr, look, deferred, around, words, seen);
+pub(crate) fn look_expr(expr: &Expr, look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
+    look_expr_here(expr, &look, deferred, around, words, seen);
     match expr {
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
-            look_expr(value, look, deferred, around, words, seen);
+            look_expr(value, &look, deferred, around, words, seen);
             for arm in arms.iter() {
-                look_maybe((arm.guard).as_ref(), look, deferred, around, words, seen);
-                look_expr(&arm.body, look, deferred, around, words, seen);
+                look_maybe((arm.guard).as_ref(), &look, deferred, around, words, seen);
+                look_expr(&arm.body, &look, deferred, around, words, seen);
             }
         },
         Expr::Range { start, end, .. } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
-            look_expr(start, look, deferred, around, words, seen);
-            look_expr(end, look, deferred, around, words, seen);
+            look_expr(start, &look, deferred, around, words, seen);
+            look_expr(end, &look, deferred, around, words, seen);
         },
-        Expr::Tuple(items, _) => { look_all(items, look, deferred, around, words, seen); },
+        Expr::Tuple(items, _) => { look_all(items, &look, deferred, around, words, seen); },
         Expr::ListRepeat { value, count, .. } => {
             let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
-            look_expr(value, look, deferred, around, words, seen);
-            look_expr(count, look, deferred, around, words, seen);
+            look_expr(value, &look, deferred, around, words, seen);
+            look_expr(count, &look, deferred, around, words, seen);
         },
-        Expr::ListLit { items, .. } => { look_all(items, look, deferred, around, words, seen); },
+        Expr::ListLit { items, .. } => { look_all(items, &look, deferred, around, words, seen); },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts.iter() {
                 match part {
-                    FPart::Hole { expr, .. } => { look_expr(expr, look, deferred, around, words, seen); },
+                    FPart::Hole { expr, .. } => { look_expr(expr, &look, deferred, around, words, seen); },
                     _ => { },
                 }
             }
         },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
-            look_expr(cond, look, deferred, around, words, seen);
-            look_block(then_branch, look, deferred, around, words, seen);
+            look_expr(cond, &look, deferred, around, words, seen);
+            look_block(then_branch, &look, deferred, around, words, seen);
             let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
-            look_block(other, look, deferred, around, words, seen);
+            look_block(other, &look, deferred, around, words, seen);
         },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
-            look_expr(func, look, deferred, around, words, seen);
-            look_all(args, look, deferred, around, words, seen);
-            look_config(config, look, deferred, around, words, seen);
+            look_expr(func, &look, deferred, around, words, seen);
+            look_all(args, &look, deferred, around, words, seen);
+            look_config(config, &look, deferred, around, words, seen);
         },
-        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); look_expr(body, look, true, around, words, seen); },
+        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); look_expr(body, &look, true, around, words, seen); },
         Expr::MethodCall { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
-            look_expr(receiver, look, deferred, around, words, seen);
-            look_all(args, look, deferred, around, words, seen);
-            look_config(config, look, deferred, around, words, seen);
+            look_expr(receiver, &look, deferred, around, words, seen);
+            look_all(args, &look, deferred, around, words, seen);
+            look_config(config, &look, deferred, around, words, seen);
         },
         Expr::SafeMethod { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
-            look_expr(receiver, look, deferred, around, words, seen);
-            look_all(args, look, deferred, around, words, seen);
-            look_config(config, look, deferred, around, words, seen);
+            look_expr(receiver, &look, deferred, around, words, seen);
+            look_all(args, &look, deferred, around, words, seen);
+            look_config(config, &look, deferred, around, words, seen);
         },
-        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); look_expr(base, look, deferred, around, words, seen); },
-        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); look_expr(base, look, deferred, around, words, seen); },
-        Expr::StructLit { fields, .. } => { look_fields(fields, look, deferred, around, words, seen); },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); look_expr(base, &look, deferred, around, words, seen); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); look_expr(base, &look, deferred, around, words, seen); },
+        Expr::StructLit { fields, .. } => { look_fields(fields, &look, deferred, around, words, seen); },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
-            look_expr(base, look, deferred, around, words, seen);
-            look_fields(fields, look, deferred, around, words, seen);
+            look_expr(base, &look, deferred, around, words, seen);
+            look_fields(fields, &look, deferred, around, words, seen);
         },
-        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); look_expr(expr, look, deferred, around, words, seen); },
-        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, look, deferred, around, words, seen); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, look, deferred, around, words, seen); },
-        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, look, deferred, around, words, seen); },
-        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); look_expr(expr, look, deferred, around, words, seen); },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); look_expr(expr, &look, deferred, around, words, seen); },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, &look, deferred, around, words, seen); },
+        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, &look, deferred, around, words, seen); },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, &look, deferred, around, words, seen); },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); look_expr(expr, &look, deferred, around, words, seen); },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
-            look_expr(expr, look, deferred, around, words, seen);
-            look_block(handler, look, deferred, around, words, seen);
+            look_expr(expr, &look, deferred, around, words, seen);
+            look_block(handler, &look, deferred, around, words, seen);
         },
         Expr::Binary { lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            look_expr(lhs, look, deferred, around, words, seen);
-            look_expr(rhs, look, deferred, around, words, seen);
+            look_expr(lhs, &look, deferred, around, words, seen);
+            look_expr(rhs, &look, deferred, around, words, seen);
         },
-        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); look_maybe((value).as_ref(), look, deferred, around, words, seen); },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); look_maybe((value).as_ref(), &look, deferred, around, words, seen); },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-            look_expr(base, look, deferred, around, words, seen);
-            look_expr(index, look, deferred, around, words, seen);
+            look_expr(base, &look, deferred, around, words, seen);
+            look_expr(index, &look, deferred, around, words, seen);
         },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
-            look_expr(value, look, deferred, around, words, seen);
-            look_expr(fallback, look, deferred, around, words, seen);
+            look_expr(value, &look, deferred, around, words, seen);
+            look_expr(fallback, &look, deferred, around, words, seen);
         },
         Expr::Select(arms, _) => {
-            for arm in arms.iter() { look_expr(&arm.value, look, deferred, around, words, seen); }
-            for arm in arms.iter() { look_block(&arm.body, look, true, around, words, seen); }
+            for arm in arms.iter() { look_expr(&arm.value, &look, deferred, around, words, seen); }
+            for arm in arms.iter() { look_block(&arm.body, &look, true, around, words, seen); }
         },
-        Expr::Block(b, _) => { look_block(b, look, deferred, around, words, seen); },
-        Expr::AsyncGroup(b, _, _) => { look_block(b, look, deferred, around, words, seen); },
-        Expr::Overlap(b, _) => { look_block(b, look, true, around, words, seen); },
-        Expr::Unsafe(b, _) => { look_block(b, look, deferred, around, words, seen); },
-        Expr::Closure { body, .. } => { look_block(body, look, true, around, words, seen); },
+        Expr::Block(b, _) => { look_block(b, &look, deferred, around, words, seen); },
+        Expr::AsyncGroup(b, _, _) => { look_block(b, &look, deferred, around, words, seen); },
+        Expr::Overlap(b, _) => { look_block(b, &look, true, around, words, seen); },
+        Expr::Unsafe(b, _) => { look_block(b, &look, deferred, around, words, seen); },
+        Expr::Closure { body, .. } => { look_block(body, &look, true, around, words, seen); },
         _ => { },
     }
 }

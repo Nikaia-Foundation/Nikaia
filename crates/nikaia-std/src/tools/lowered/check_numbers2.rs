@@ -110,7 +110,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn a_compound_over_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp, target: &Expr, into: &Ty, value: &Expr, found: &Ty, span: &Span) {
+    pub fn a_compound_over_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, target: &Expr, into: &Ty, value: &Expr, found: &Ty, span: &Span) {
         let x = match an_integer_named(into) { Some(__nikaia_value) => __nikaia_value, None => return };
         let v = match an_integer_named(found) { Some(__nikaia_value) => __nikaia_value, None => return };
         if x == v || is_a_literal(value) { return; }
@@ -125,7 +125,7 @@ impl CheckState {
             return;
         }
         let shown = written_expression(world.words, target);
-        let message = format!("This `{}=` computes in `{}`, but `{}` holds `{}`.", binary_op_text(op), joined, shown, x);
+        let message = format!("This `{}=` computes in `{}`, but `{}` holds `{}`.", binary_op_text(&op), joined, shown, x);
         let note = format!("Two integer types compute in the one that holds every value of both, and a `{}` does not fit every `{}`.", joined, x);
         let help = format!("Convert the value with `as {}`, which stops the program where it does not fit, or make `{}` a `{}`.", x, shown, joined);
         self.findings.push(check_refusal("NK1105", span, message, vec![note], Some(help)));

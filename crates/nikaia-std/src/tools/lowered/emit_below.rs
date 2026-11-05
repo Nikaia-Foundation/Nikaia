@@ -269,20 +269,20 @@ impl EmitState {
         let joined = mapped.join("::");
         unaliased_in(world.aliases, &joined)
     }
-    pub fn written_name(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: Count) -> String {
-        if name == "Shared" { return rust_name(count); }
+    pub fn written_name(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: &Count) -> String {
+        if name == "Shared" { return rust_name(&count); }
         if name == "Locked" {
-            if !crossings { return lock_name(Count::Plain); }
-            return lock_name(count);
+            if !crossings { return lock_name(&Count::Plain); }
+            return lock_name(&count);
         }
         if name == "TaskHandle" && !self.structs.contains(name) && !self.structs_beside.contains(name) && !emit_below_an_enum_named(world, name) { return String::from("nikaia_std::task::TaskHandle"); }
         let mapped = self.mapped_path(trusting, name);
         unaliased_in(world.aliases, &mapped)
     }
-    pub fn hull_new(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: Count) -> Option<Vec<String>> {
-        if name == "Shared" { return Some(vec![self.written_name(world, crossings, trusting, "Shared", count)]); }
-        if name == "Locked" { return Some(vec![self.written_name(world, crossings, trusting, "Locked", count)]); }
-        if name == "SharedMut" { return Some(vec![self.written_name(world, crossings, trusting, "Shared", count), self.written_name(world, crossings, trusting, "Locked", count)]); }
+    pub fn hull_new(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: &Count) -> Option<Vec<String>> {
+        if name == "Shared" { return Some(vec![self.written_name(world, crossings, trusting, "Shared", &count)]); }
+        if name == "Locked" { return Some(vec![self.written_name(world, crossings, trusting, "Locked", &count)]); }
+        if name == "SharedMut" { return Some(vec![self.written_name(world, crossings, trusting, "Shared", &count), self.written_name(world, crossings, trusting, "Locked", &count)]); }
         None
     }
     pub fn attributes_read(&self, world: &EmitWorld<'_, '_, '_, '_>, wanted: &str, args: &[Expr], texts: &[String]) -> String {

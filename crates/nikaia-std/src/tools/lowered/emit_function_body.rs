@@ -34,14 +34,14 @@ pub(crate) fn emit_is_a_throw(stmt: &Stmt) -> bool {
     }
 }
 
-pub(crate) fn emit_is_a_return_tail(tail: EmitTail) -> bool { matches!(tail, EmitTail::Return) }
+pub(crate) fn emit_is_a_return_tail(tail: &EmitTail) -> bool { matches!(tail, EmitTail::Return) }
 
 impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_function_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail, settled: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        if settled { self.emit_stmt_block_plain(world, walk, out, host, body, depth, flow, scope, tail, None)?; } else { self.emit_core_block(world, walk, out, host, body, depth, flow, scope, tail)?; }
+    pub(crate) fn emit_function_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: &EmitTail, settled: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        if settled { self.emit_stmt_block_plain(world, walk, out, host, body, depth, flow, scope, &tail, None)?; } else { self.emit_core_block(world, walk, out, host, body, depth, flow, scope, &tail)?; }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -74,11 +74,11 @@ impl EmitState {
         if !throws_ {
             let settled = self.facts.settle_fns.contains_key(key);
             if first.is_empty() && !main_ends {
-                self.emit_function_block(world, walk, out, host, body, depth, flow, &scope, tail, settled)?;
+                self.emit_function_block(world, walk, out, host, body, depth, flow, &scope, &tail, settled)?;
                 return Ok(());
             }
             let mut written = EmitOut::empty();
-            self.emit_function_block(world, walk, &mut written, host, body, depth, flow, &scope, tail, settled)?;
+            self.emit_function_block(world, walk, &mut written, host, body, depth, flow, &scope, &tail, settled)?;
             if main_ends { written.insert_before_last_brace(main_call); }
             if !first.is_empty() { written.insert_after_first_brace(&format!(" {}", first.join(" "))); }
             out.append(&written);
@@ -95,7 +95,7 @@ impl EmitState {
         for stmt in body.stmts.iter() {
             out.push(&inner_pad);
             let here = tail.at(i, last);
-            let wrap = emit_is_a_return_tail(here) && !emit_is_a_throw(&stmt.node);
+            let wrap = emit_is_a_return_tail(&here) && !emit_is_a_throw(&stmt.node);
             let binds = wrap && self.a_tail_that_enters_a_grammar(world, &stmt.node);
             self.write_keep_prelude(walk, out, key, stmt.span.start as i64, depth + 1);
             self.emit_async_joins(walk, out, stmt.span.start as i64, &inner_pad);
@@ -104,7 +104,7 @@ impl EmitState {
             if ending { out.push("let __nikaia_rested = { "); }
             let st = out.mark();
             if wrap { if binds { out.push("let __nikaia_value = "); } else { out.push("Ok("); } }
-            self.emit_stmt(world, walk, out, host, &stmt.node, &stmt.span, depth + 1, here, flow, &scope)?;
+            self.emit_stmt(world, walk, out, host, &stmt.node, &stmt.span, depth + 1, &here, flow, &scope)?;
             if wrap { if binds { out.push(&format!(";\n{}Ok(__nikaia_value)", inner_pad)); } else { out.push(")"); } }
             out.record(&stmt.span, st);
             if ending { out.push(" };"); }

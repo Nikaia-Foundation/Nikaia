@@ -212,9 +212,17 @@ fn reached_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext, con
             let otherwise = else_branch ?? return found
             reached_by_last(otherwise, interner, context, own, library, walk, through_calls, found)
         }
-        Expr::Match { arms, .. } => {
+        // **An arm that hands on what it binds hands on a part of the
+        // parameter it takes apart** (ADR-views-3 D1): `let model = match asked
+        // { Refuted(model) => model, .. }` binds a part of `asked`, before the
+        // walk of the `match` aliases the arm's own names.
+        Expr::Match { value, arms, .. } => {
             for arm in arms {
                 found.extend(reached_of(arm.body, interner, context, own, library, walk, through_calls))
+            }
+            let subject = parameter_named(value, interner, context) ?? return found
+            if !context.lent.contains(subject) && an_arm_hands_on_what_it_binds(arms, interner) {
+                found.insert(subject)
             }
         }
         Expr::Block(block, _) => reached_by_last(block, interner, context, own, library, walk, through_calls, found),
@@ -230,6 +238,18 @@ fn reached_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext, con
         Expr::Field { base, name, .. } => {
             if through_calls {
                 found.extend(keeps_viewed_of(base, interner, context, own, library, walk))
+            }
+            // **A field of a name bound to a part of a parameter is a part
+            // of it too** (ADR-views-3 D1): `Refuted(model) => model.values`
+            // moves out of the parameter the arm takes apart.
+            let aliased = match base {
+                Expr::Variable(ident, _) => walk.aliases[interner.resolve(ident)]?.clone() ?? collections::BTreeSet(),
+                else => collections::BTreeSet(),
+            }
+            for one in aliased {
+                if one != "self" && !a_field_that_copies(one, interner.resolve(name), context) {
+                    found.insert(one.clone())
+                }
             }
             let parameter = parameter_named(base, interner, context) ?? return found
             if parameter != "self" && !a_field_that_copies(parameter, interner.resolve(name), context) {
@@ -601,10 +621,12 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
                 }
             }
         }
-        // **A parameter a `match` takes apart counts as kept** - the
-        // over-approximation D2's fail-closed clause licenses: Rust matches
-        // through a reference with its default binding modes, and this compiler
-        // writes no `*`. A parameter the author lent is a reference whatever
+        // **A parameter a `match` takes apart stays lent** (ADR-views-3 D1):
+        // Rust matches through the reference with its default binding modes,
+        // so an arm that only reads what it binds keeps nothing. **A name an
+        // arm binds is a part of the parameter**, as a `let` of one is
+        // (#665): handed to what keeps it, returned or bound `mut`, it keeps
+        // the parameter. A parameter the author lent is a reference whatever
         // this column says, so it is not this arm's (issue #173).
         // **A moving part of one an arm hands on keeps it too** (#1092), as
         // `p.node ?? ..` does: `match a.node { x => x }` moves the field out.
@@ -616,8 +638,17 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
                 return
             }
             let name = parameter_named(value, interner, context) ?? return
-            if !context.lent.contains(name) && !keeps_only_compared(arms) {
-                walk.uses.kept.insert(name)
+            if context.lent.contains(name) {
+                return
+            }
+            let mut whole: collections::BTreeSet[String] = collections::BTreeSet()
+            whole.insert(name)
+            for arm in arms {
+                let mut bound: collections::BTreeSet[String] = collections::BTreeSet()
+                names_a_pattern_binds(arm.pattern, interner, bound)
+                for one in bound {
+                    alias(one.clone(), whole, walk.aliases)
+                }
             }
         }
         // **A task keeps everything it names** (ADR-312 D1).
@@ -1145,9 +1176,6 @@ fn name_as_it_is(name: ref String) -> String sync {
     return name.clone()
 }
 
-/// **A scrutinee its arms only compare is read, not kept** (ADR-282 D5/D6, #810):
-/// every arm is a literal, a range, `else`, or an alternative of those, so
-/// nothing is taken out of the value. Any other pattern may bind a part of it.
 /// **An arm that hands on a part it binds** (#1092): its value is a name
 /// its pattern binds, or a field of one.
 fn an_arm_hands_on_what_it_binds(arms: ref Vec[MatchArm], interner: ref winnow_grammar::InternerContext) -> bool {
@@ -1182,6 +1210,14 @@ fn names_a_pattern_binds(pattern: ref MatchPattern, interner: ref winnow_grammar
             for part in parts {
                 names_a_pattern_binds(part, interner, bound)
             }
+        },
+        MatchPattern::Named { fields, .. } => {
+            for field in fields {
+                names_a_pattern_binds(field.pat, interner, bound)
+            }
+        },
+        MatchPattern::RestNamed(name) => {
+            bound.insert(interner.resolve(name).clone())
         },
         MatchPattern::Or(alternatives) => {
             for part in alternatives {
@@ -1219,32 +1255,6 @@ fn hands_on_a_bound_tail(block: ref Block, interner: ref winnow_grammar::Interne
         }
     }
     return false
-}
-
-fn keeps_only_compared(arms: ref Vec[MatchArm]) -> bool {
-    for arm in arms {
-        if !a_comparison(arm.pattern) {
-            return false
-        }
-    }
-    return true
-}
-
-fn a_comparison(pattern: ref MatchPattern) -> bool {
-    return match pattern {
-        MatchPattern::Otherwise => true,
-        MatchPattern::Literal(..) => true,
-        MatchPattern::Range { .. } => true,
-        MatchPattern::Or(alternatives) => {
-            for p in alternatives {
-                if !a_comparison(p) {
-                    return false
-                }
-            }
-            true
-        },
-        else => false,
-    }
 }
 
 // **Which parameters a body keeps, for a whole package** (ADR-094 D2, ADR-277
@@ -1932,7 +1942,10 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             // (ADR-282 D21): an `EitherText` may own its text, so returning a
             // field of one takes it out of the parameter, as returning a
             // `String` field does.
-            let returns_a_view = keeps_result_is_a_view(ret_type)
+            // **Nor does a result that copies** (ADR-views-3 D1): `-> i64`
+            // hands back a number, never the parameter, so an arm's `n =>
+            // return n` over a part of one keeps nothing.
+            let returns_a_view = keeps_result_is_a_view(ret_type) || keeps_result_copies(view, ret_type)
 
             // **The fields of each parameter whose type this file declares.** A
             // parameter of a type from a package or from `std` has none here,
@@ -2030,6 +2043,17 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
         },
     }
     return null
+}
+
+/// Whether a declared result is a number, a `bool` or a `char`, alone or
+/// optional: what it hands back is a copy.
+fn keeps_result_copies(view: ref ParsedView, ret_type: ref Type?) -> bool {
+    let ty = ret_type ?? return false
+    if ty.code != null || ty.is_slice || ty.is_view || ty.is_tuple || !ty.generics.is_empty() {
+        return false
+    }
+    let name = view.text(ty.name)
+    return ["i8", "i16", "i32", "i64", "isize", "usize", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char"].contains(name)
 }
 
 fn keeps_result_is_a_view(ret_type: ref Type?) -> bool {

@@ -47,7 +47,7 @@ pub(crate) fn check_defaults_a_text_for_string(value: &Expr, want: &Ty) -> bool 
 pub fn check_defaults_a_computed_default<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, option: &ConfigParam) {
     let name = world.here.text(option.name);
     let declared = host.type_of(&option.ty);
-    check_defaults_computed_value(state, world, host, &name, &declared, &option.default, &option.default_span, CheckComputing::Option);
+    check_defaults_computed_value(state, world, host, &name, &declared, &option.default, &option.default_span, &CheckComputing::Option);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -62,7 +62,7 @@ pub fn check_defaults_a_field_default<H: CheckHost>(state: &mut CheckState, worl
     let name = world.here.text(field.name);
     let declared = host.type_of(&field.ty);
     if !a_literal(&default.value) {
-        check_defaults_computed_value(state, world, host, &name, &declared, &default.value, &default.span, CheckComputing::Field);
+        check_defaults_computed_value(state, world, host, &name, &declared, &default.value, &default.span, &CheckComputing::Field);
         return;
     }
     let found = check_core_expr(state, world, host, &default.value, &default.span);
@@ -93,7 +93,7 @@ pub fn check_defaults_a_field_default<H: CheckHost>(state: &mut CheckState, worl
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, ty: &Ty, default: &Expr, span: &Span, kind: CheckComputing) {
+pub fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, ty: &Ty, default: &Expr, span: &Span, kind: &CheckComputing) {
     if a_literal(default) { return; }
     let walked_from = state.findings.len() as i64;
     check_core_expr(state, world, host, default, span);

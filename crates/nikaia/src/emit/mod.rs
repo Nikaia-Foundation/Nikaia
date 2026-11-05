@@ -50,7 +50,7 @@ pub use nikaia_std::tools::emit_build::Target;
 /// `None` only for a triple Rust's target list does not know: a build
 /// there has to name its target.
 pub fn host_target() -> Option<Target> {
-    Target::parse(env!("NIKAIA_HOST_TRIPLE").to_string()).ok()
+    Target::parse(env!("NIKAIA_HOST_TRIPLE")).ok()
 }
 
 /// The target a build without `--target` is for: the host, or `x86_64-linux`
@@ -134,11 +134,9 @@ fn switch(thrown: nikaia_std::error::Thrown<nikaia_std::tools::Refused>) -> anyh
 impl Build {
     pub fn parse(target: &str, user_parallelism: &str, reentrancy_check: &str) -> Result<Build> {
         Ok(Build {
-            target: Target::parse(target.to_string()).map_err(switch)?,
-            user_parallelism: UserParallelism::parse(user_parallelism.to_string())
-                .map_err(switch)?,
-            reentrancy_check: ReentrancyCheck::parse(reentrancy_check.to_string())
-                .map_err(switch)?,
+            target: Target::parse(target).map_err(switch)?,
+            user_parallelism: UserParallelism::parse(user_parallelism).map_err(switch)?,
+            reentrancy_check: ReentrancyCheck::parse(reentrancy_check).map_err(switch)?,
             bounds: crate::bounds::BoundsChecks::Kept,
             overflow: crate::bounds::OverflowChecks::Kept,
             skip_free_at_exit: false,
@@ -1102,20 +1100,20 @@ mod target_tests {
     /// triple are one target; a bare-metal one is refused with what is missing.
     #[test]
     fn every_rust_triple_is_a_target() {
-        let android = Target::parse("aarch64-android".to_string()).expect("android");
+        let android = Target::parse("aarch64-android").expect("android");
         assert_eq!(
             android,
-            Target::parse("aarch64-linux-android".to_string()).expect("triple")
+            Target::parse("aarch64-linux-android").expect("triple")
         );
         assert_eq!(android.triple(), "aarch64-linux-android");
         assert!(android.has_threads() && android.unbuildable().is_none());
         assert_eq!(
-            Target::parse("x86_64-unknown-linux-gnu".to_string()).expect("host triple"),
+            Target::parse("x86_64-unknown-linux-gnu").expect("host triple"),
             Target::X86_64Linux
         );
-        let board = Target::parse("thumbv7em-none-eabihf".to_string()).expect("bare metal");
+        let board = Target::parse("thumbv7em-none-eabihf").expect("bare metal");
         assert!(board.is_bare_metal() && !board.has_threads());
         assert!(board.unbuildable().is_some());
-        assert!(Target::parse("z80-spectrum".to_string()).is_err());
+        assert!(Target::parse("z80-spectrum").is_err());
     }
 }

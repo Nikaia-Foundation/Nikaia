@@ -193,7 +193,7 @@ pub fn check_simd_made(wanted: Option<&Ty>, name: &str, args: &[Expr]) -> Ty {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lane_operation(&mut self, op: BinaryOp, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> Option<Ty> {
+    pub fn a_lane_operation(&mut self, op: &BinaryOp, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> Option<Ty> {
         let kind = check_simd_kind(left);
         let other = check_simd_kind(right);
         let vector = if !kind.is_empty() { left.clone() } else { right.clone() };
@@ -208,7 +208,7 @@ impl CheckState {
                 _ => ("%", "", ""),
             };
             let mut help: String = format!("Name what a lane does where the result does not fit: `a.{}(b)` wraps, `a.{}(b)` stops at the nearest value a lane holds.", wrapping, saturating);
-            if op == BinaryOp::Mul { help = String::from("Name what a lane does where the result does not fit: `a.wrapping_mul(b)` keeps the low bits."); }
+            if *op == BinaryOp::Mul { help = String::from("Name what a lane does where the result does not fit: `a.wrapping_mul(b)` keeps the low bits."); }
             if wrapping.is_empty() { help = String::from("A vector has no lane by lane division; divide the lanes one by one with `lane(i)`."); }
             self.findings.push(check_refusal("NK1296", at, format!("`{}` is not a lane operation, and this is a `{}`.", written, shown), vec![String::from("A lane's `+` would either check every lane, which costs the compare and branch the vector exists to avoid, or wrap, which `+` never does elsewhere in Nikaia (ADR-377 D4).")], Some(help)));
             return Some(vector);
@@ -221,7 +221,7 @@ impl CheckState {
             let width = check_simd_bits_of(&check_simd_lane_of(left));
             let count = check_simd_literal(rhs);
             if count < 0 || width > 0 && count >= width {
-                let written = if op == BinaryOp::Shl { "<<" } else { ">>" };
+                let written = if *op == BinaryOp::Shl { "<<" } else { ">>" };
                 self.findings.push(check_refusal("NK1299", at, format!("A lane shift `{}` takes a constant count below the lane's {} bits.", written, width), vec![format!("Every lane of a `{}` is shifted by the same count, and a vector shifts by an immediate (ADR-377 D3).", shown).to_string()], Some(format!("Write the count as a literal from 0 to {}, or choose between shifted values with `simd::select`.", width - 1).to_string())));
             }
             return Some(left.clone());

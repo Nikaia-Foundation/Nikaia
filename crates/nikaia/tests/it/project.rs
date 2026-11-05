@@ -447,11 +447,11 @@ fn the_triple_of_the_target_is_handed_to_cargo() {
 fn aarch64_linux_is_a_target_and_the_default_is_the_host() {
     use nikaia::emit::Target;
 
-    let arm = Target::parse("aarch64-linux".to_string()).expect("a target that exists");
+    let arm = Target::parse("aarch64-linux").expect("a target that exists");
     assert_eq!(arm.triple(), "aarch64-unknown-linux-gnu");
     assert!(arm.has_threads() && arm.has_runtime() && arm.unbuildable().is_none());
 
-    let error = Target::parse("riscv64-linux".to_string()).expect_err("not a target");
+    let error = Target::parse("riscv64-linux").expect_err("not a target");
     assert!(format!("{error:#}").contains("aarch64-linux"), "{error:#}");
 
     let dir = a_project(

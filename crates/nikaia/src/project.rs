@@ -317,8 +317,8 @@ impl Settings {
         Choices::new(
             project_settings::choices_key(
                 &self.words,
-                build.bounds,
-                build.overflow,
+                &build.bounds,
+                &build.overflow,
                 build.skip_free_at_exit,
                 build.prove_through_loops,
                 &cpu_key,
@@ -329,7 +329,7 @@ impl Settings {
 
     /// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.
     fn panic_strategy(&self) -> String {
-        project_settings::panic_strategy(self.build.target)
+        project_settings::panic_strategy(&self.build.target)
     }
 }
 

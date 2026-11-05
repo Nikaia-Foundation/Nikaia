@@ -38,7 +38,7 @@ pub(crate) fn emit_read_turned(op: BinaryOp, counter_first: bool) -> BinaryOp {
     }
 }
 
-pub(crate) fn emit_read_emptiness(op: BinaryOp, n: u64) -> Option<bool> {
+pub(crate) fn emit_read_emptiness(op: &BinaryOp, n: u64) -> Option<bool> {
     let is_zero = n == 0u64;
     let is_one = n == 1u64;
     let empty = match op {
@@ -85,7 +85,7 @@ impl EmitState {
                 let negative = *negative; let value = *value;
                 if !negative && bare.ends_with(".len()") {
                     let receiver = nikaia_std::index::or(bare.strip_suffix(".len()"), || "").to_string();
-                    let empty = emit_read_emptiness(emit_read_turned(op, counter_first), value);
+                    let empty = emit_read_emptiness(&emit_read_turned(op, counter_first), value);
                     if empty.is_some() {
                         let mut not: &'static str = "!";
                         if nikaia_std::index::or(empty, || false) { not = ""; }
@@ -104,7 +104,7 @@ impl EmitState {
             },
             _ => { counted = self.emit_read_counted(world, walk, host, counter, depth, flow, scope)?; },
         }
-        let symbol = binary_op(op);
+        let symbol = binary_op(&op);
         if counter_first { out.push(&format!("{} {} {}", counted, symbol, bare)); } else { out.push(&format!("{} {} {}", bare, symbol, counted)); }
         Ok(true)
     }
@@ -119,7 +119,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_hold_temporaries<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub fn emit_core_hold_temporaries<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Stmt, span: &Span, depth: i64, tail: &EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         self.emit_core_hold_owned_receiver(world, walk, out, host, stmt, depth, flow, scope)?;
         self.emit_core_hold_indices_read_from_the_target(world, walk, out, host, stmt, depth, flow, scope)?;
         if self.facts.held_reaches.is_empty() { return Ok(()); }
@@ -355,7 +355,7 @@ impl EmitState {
         }
         if key.is_some() {
             let form = match key { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-            self.emit_core_key(world, walk, out, host, form, index, depth, flow, scope)?;
+            self.emit_core_key(world, walk, out, host, &form, index, depth, flow, scope)?;
         } else if only_literals(index) && !counts_down { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else if !slicing && walk.never_negative(world, &scope.function, index) {
             out.push("(");
             self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?;
@@ -529,7 +529,7 @@ impl EmitState {
             if fallible && flow.handled_here {
                 out.push(&format!("match __nikaia_won {{\n{}    Err(__nikaia_failed) => Err(__nikaia_failed),\n{}    Ok({}) => {{ let __nikaia_value = ", inner, inner, named));
                 let st = out.mark();
-                self.emit_stmt_block_opening_with(world, walk, out, host, &arm.body, depth + 2, flow, scope, EmitTail::Value, None)?;
+                self.emit_stmt_block_opening_with(world, walk, out, host, &arm.body, depth + 2, flow, scope, &EmitTail::Value, None)?;
                 out.record(&Span { start: arm.at, end: arm.at }, st);
                 out.push(&format!("; Ok(__nikaia_value) }},\n{}}}\n", inner));
                 continue;
@@ -537,7 +537,7 @@ impl EmitState {
             let mut opening: Option<String> = None;
             if fallible { if arm.binding.is_some() { opening = Some(format!("let {} = __nikaia_won?;", named)); } else { opening = Some(String::from("__nikaia_won?;")); } }
             let st = out.mark();
-            self.emit_stmt_block_opening_with(world, walk, out, host, &arm.body, depth + 1, flow, scope, EmitTail::Value, opening)?;
+            self.emit_stmt_block_opening_with(world, walk, out, host, &arm.body, depth + 1, flow, scope, &EmitTail::Value, opening)?;
             out.record(&Span { start: arm.at, end: arm.at }, st);
             out.push("\n");
         }

@@ -81,12 +81,12 @@ pub(crate) fn comptime_bundle_digest(text: &str) -> String {
 }
 
 pub async fn comptime_bundle_bundle<H: ComptimeBundleHost>(host: &H) -> Result<ComptimeBundle, nikaia_std::error::Thrown<ComptimeBundleFailed>> {
-    Ok(comptime_bundle_bundle_of(ComptimeBundleFlavour::BuildTime, host).await?)
+    Ok(comptime_bundle_bundle_of(&ComptimeBundleFlavour::BuildTime, host).await?)
 }
 
 pub async fn comptime_bundle_run_bundle<H: ComptimeBundleHost>(host: &H) -> Result<ComptimeBundle, nikaia_std::error::Thrown<ComptimeBundleFailed>> {
-    let (manifest, source) = comptime_bundle_bundle_text(ComptimeBundleFlavour::Run, host);
-    let at = comptime_bundle_bundle_dir(ComptimeBundleFlavour::Run, &manifest, &source, host);
+    let (manifest, source) = comptime_bundle_bundle_text(&ComptimeBundleFlavour::Run, host);
+    let at = comptime_bundle_bundle_dir(&ComptimeBundleFlavour::Run, &manifest, &source, host);
     let record = nikaia_std::fs::path::join(&(at), std::path::Path::new(&("built")));
     let fingerprint = comptime_bundle_run_fingerprint(host);
     let held = match fs::read_to_string(&record, &fs::Root::Anywhere).await {
@@ -97,7 +97,7 @@ pub async fn comptime_bundle_run_bundle<H: ComptimeBundleHost>(host: &H) -> Resu
         None => { },
         Some(bundle) => { return Ok(bundle); },
     }
-    let bundle = comptime_bundle_bundle_of(ComptimeBundleFlavour::Run, host).await?;
+    let bundle = comptime_bundle_bundle_of(&ComptimeBundleFlavour::Run, host).await?;
     let mut text = format!("{}\n{}\n{}\n{}\n", fingerprint, nikaia_std::fs::path::display(&(bundle.dylib)), nikaia_std::fs::path::display(&(bundle.deps)), nikaia_std::fs::path::display(&(bundle.libdir)));
     for (name, rlib) in bundle.rlibs.iter() { text.push_str(&format!("{}={}\n", name, nikaia_std::fs::path::display(&(rlib)))); }
     comptime_bundle_write_if_changed(&record, &text, &host.unique_beside(&record)).await?;
@@ -158,7 +158,7 @@ pub(crate) fn comptime_bundle_path(text: nikaia_std::either_text::EitherText<'_>
     path
 }
 
-pub(crate) fn comptime_bundle_bundle_text<H: ComptimeBundleHost>(flavour: ComptimeBundleFlavour, host: &H) -> (String, String) {
+pub(crate) fn comptime_bundle_bundle_text<H: ComptimeBundleHost>(flavour: &ComptimeBundleFlavour, host: &H) -> (String, String) {
     let mut manifest = cr_bundle_manifest(&host.runtime_dependencies(&comptime_bundle_named().join(" ")));
     let source = match flavour {
         ComptimeBundleFlavour::BuildTime => cr_bundle_source(),
@@ -170,7 +170,7 @@ pub(crate) fn comptime_bundle_bundle_text<H: ComptimeBundleHost>(flavour: Compti
     (manifest, source)
 }
 
-pub(crate) fn comptime_bundle_bundle_dir<H: ComptimeBundleHost>(flavour: ComptimeBundleFlavour, manifest: &str, source: &str, host: &H) -> fs::Path {
+pub(crate) fn comptime_bundle_bundle_dir<H: ComptimeBundleHost>(flavour: &ComptimeBundleFlavour, manifest: &str, source: &str, host: &H) -> fs::Path {
     let key = comptime_bundle_digest(&format!("{}\n{}", manifest, source));
     let short: String = key.chars().take(16).collect();
     let kind = match flavour {
@@ -194,9 +194,9 @@ pub(crate) fn comptime_bundle_stamp_of(dylib: &std::path::Path, rlibs: &[(String
     Ok(lines.join("\n"))
 }
 
-pub(crate) async fn comptime_bundle_bundle_of<H: ComptimeBundleHost>(flavour: ComptimeBundleFlavour, host: &H) -> Result<ComptimeBundle, nikaia_std::error::Thrown<ComptimeBundleFailed>> {
-    let (manifest, bundle_source) = comptime_bundle_bundle_text(flavour, host);
-    let at = comptime_bundle_bundle_dir(flavour, &manifest, &bundle_source, host);
+pub(crate) async fn comptime_bundle_bundle_of<H: ComptimeBundleHost>(flavour: &ComptimeBundleFlavour, host: &H) -> Result<ComptimeBundle, nikaia_std::error::Thrown<ComptimeBundleFailed>> {
+    let (manifest, bundle_source) = comptime_bundle_bundle_text(&flavour, host);
+    let at = comptime_bundle_bundle_dir(&flavour, &manifest, &bundle_source, host);
     host.use_entry(&at);
     let dir = nikaia_std::fs::path::join(&(at), std::path::Path::new(&("bundle")));
     match fs::create_dir(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("src"))), &fs::Root::Anywhere, true) {

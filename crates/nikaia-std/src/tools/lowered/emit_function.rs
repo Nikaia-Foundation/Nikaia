@@ -79,11 +79,11 @@ pub(crate) fn emit_store_place(stores: &[EmitPair], name: &str) -> bool {
     false
 }
 
-pub(crate) fn emit_is_elided(lifetimes: EmitLifetimes) -> bool { matches!(lifetimes, EmitLifetimes::Elided) }
+pub(crate) fn emit_is_elided(lifetimes: &EmitLifetimes) -> bool { matches!(lifetimes, EmitLifetimes::Elided) }
 
-pub(crate) fn emit_is_inner(lifetimes: EmitLifetimes) -> bool { matches!(lifetimes, EmitLifetimes::Inner) }
+pub(crate) fn emit_is_inner(lifetimes: &EmitLifetimes) -> bool { matches!(lifetimes, EmitLifetimes::Inner) }
 
-pub(crate) fn emit_is_kept(lifetimes: EmitLifetimes) -> bool { matches!(lifetimes, EmitLifetimes::Kept) }
+pub(crate) fn emit_is_kept(lifetimes: &EmitLifetimes) -> bool { matches!(lifetimes, EmitLifetimes::Kept) }
 
 impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -154,7 +154,7 @@ impl EmitState {
     pub(crate) fn emit_fn_ty<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: &Type, lifetimes: &EmitLifetimes, key: &str, value: &str) -> String {
         let crossings = host.crossings_are_possible();
         let count = self.count_at(crossings, key, value);
-        let written = self.emit_core_ty_counted(world, walk, crossings, host.overlaps_user_code(), ty, &lifetimes, count);
+        let written = self.emit_core_ty_counted(world, walk, crossings, host.overlaps_user_code(), ty, &lifetimes, &count);
         emit_seeds_seeded(&self.seeds, walk, self.trusted_input, written)
     }
     pub(crate) fn emit_how(&self, sig: &EmitSig, name: winnow_grammar::Symbol, text: &str, viewed: bool, read_only: bool) -> EmitLifetimes {
@@ -166,8 +166,8 @@ impl EmitState {
             if viewed { return sig.lifetimes.of_the_input(); }
             return sig.lifetimes.over_the_input();
         }
-        if emit_is_inner(sig.lifetimes) && self.emit_fn_result_points_into(&sig.key, text) { return EmitLifetimes::Named; }
-        if emit_is_inner(sig.lifetimes) && read_only { return EmitLifetimes::Elided; }
+        if emit_is_inner(&sig.lifetimes) && self.emit_fn_result_points_into(&sig.key, text) { return EmitLifetimes::Named; }
+        if emit_is_inner(&sig.lifetimes) && read_only { return EmitLifetimes::Elided; }
         sig.lifetimes.clone()
     }
     pub(crate) fn emit_fn_result_points_into(&self, key: &str, name: &str) -> bool {
@@ -221,7 +221,7 @@ impl EmitState {
                 let kept_lt: EmitLifetimes = nikaia_std::index::or(kept, || EmitLifetimes::Elided);
                 let input_empty = carries_input.is_empty();
                 let mut inner_views: Option<winnow_grammar::Symbol> = None;
-                if emit_is_elided(lifetimes) && receiver.is_none() && !has_kept {
+                if emit_is_elided(&lifetimes) && receiver.is_none() && !has_kept {
                     match ret_type {
                         Some(ty) => {
                             if self.carries_a_view(world, ty) && input_empty {
@@ -243,7 +243,7 @@ impl EmitState {
                     }
                 }
                 let mut stores: Vec<EmitPair> = vec![];
-                if emit_is_elided(lifetimes) {
+                if emit_is_elided(&lifetimes) {
                     for entry in self.emit_fn_stores(&key) {
                         match entry.split_once(":") {
                             Some(pair) => {
@@ -268,7 +268,7 @@ impl EmitState {
                     Some(ty) => { result_is_a_view = emit_text(world, ty.name) != "Self::dsl" && self.carries_a_view(world, ty); },
                     None => { },
                 }
-                let plain_signature = (emit_is_elided(lifetimes) || emit_is_inner(lifetimes)) && inner_views.is_none() && input_empty && result_is_a_view;
+                let plain_signature = (emit_is_elided(&lifetimes) || emit_is_inner(&lifetimes)) && inner_views.is_none() && input_empty && result_is_a_view;
                 let result_borrows = self.emit_fn_borrows(&key);
                 let has_borrows = result_borrows.is_some();
                 let named: Vec<String> = nikaia_std::index::or(result_borrows, || vec![].into());
@@ -336,7 +336,7 @@ impl EmitState {
                 let source_kept = source_name.is_some() && has_kept && self.tethered_position(&key, "<result>");
                 let shared = source_name.is_some() && !source_kept;
                 let mut nothing_borrowed = false;
-                if emit_is_elided(lifetimes) && plain_signature && !has_kept && has_borrows && named.is_empty() {
+                if emit_is_elided(&lifetimes) && plain_signature && !has_kept && has_borrows && named.is_empty() {
                     match ret_type {
                         Some(ty) => {
                             if holds_view(ty) {
@@ -464,8 +464,8 @@ impl EmitState {
                     if has_dsl { declared.push(String::from("NikaiaDsl")); }
                     for each in open.iter() { declared.push(each.to_string()); }
                 }
-                if has_kept && emit_is_kept(kept_lt) { declared.insert(0, String::from("'k")); }
-                if emit_is_elided(lifetimes) && (!input_empty || inner_views.is_some() || !stores.is_empty()) { declared.insert(0, String::from("'a")); }
+                if has_kept && emit_is_kept(&kept_lt) { declared.insert(0, String::from("'k")); }
+                if emit_is_elided(&lifetimes) && (!input_empty || inner_views.is_some() || !stores.is_empty()) { declared.insert(0, String::from("'a")); }
                 if shared { declared.insert(0, String::from("'r")); }
                 if !either_first.is_empty() { declared.insert(0, String::from("'e")); }
                 walk.either_prelude = either_first.to_owned();
@@ -486,11 +486,11 @@ impl EmitState {
                                 if self.carries_a_view(world, &each.ty) || self.emit_fn_lowered_as_a_view(world, &key, recv, index, each) { borrows_from_something = true; }
                                 index += 1;
                             }
-                            let widens = emit_is_elided(lifetimes) && !answers_a_trait && self.carries_a_view(world, ty) && (!borrows_from_something || nothing_borrowed);
+                            let widens = emit_is_elided(&lifetimes) && !answers_a_trait && self.carries_a_view(world, ty) && (!borrows_from_something || nothing_borrowed);
                             let mut lifetimes_of_args = false;
                             for each in args.iter() { if self.carries_a_view(world, &each.ty) && !(each.ty.either && each.ty.generics.is_empty()) { lifetimes_of_args = true; } }
                             let mut result: EmitLifetimes = lifetimes;
-                            if has_kept && self.tethered_position(&key, "<result>") { result = kept_lt; } else if shared { result = EmitLifetimes::Shared; } else if widens { result = EmitLifetimes::Static; } else if inner_views.is_some() { result = EmitLifetimes::Named; } else if emit_is_elided(lifetimes) && receiver.is_none() && !walk.either_prelude.is_empty() && !lifetimes_of_args { result = EmitLifetimes::Each; }
+                            if has_kept && self.tethered_position(&key, "<result>") { result = kept_lt; } else if shared { result = EmitLifetimes::Shared; } else if widens { result = EmitLifetimes::Static; } else if inner_views.is_some() { result = EmitLifetimes::Named; } else if emit_is_elided(&lifetimes) && receiver.is_none() && !walk.either_prelude.is_empty() && !lifetimes_of_args { result = EmitLifetimes::Each; }
                             let fast = standalone && self.fast_slots.contains(&format!("r:{}", own_name));
                             let outer = walk.trusting;
                             walk.trusting = fast;
@@ -507,7 +507,7 @@ impl EmitState {
                     let mut borrows_any = receiver.is_some();
                     for each in args.iter() { if self.carries_a_view(world, &each.ty) { borrows_any = true; } }
                     let static_lifetimes = EmitLifetimes::Static;
-                    channel = self.error_channel(world, &key, emit_is_elided(lifetimes), &lifetimes.params(), &static_lifetimes.params(), borrows_any);
+                    channel = self.error_channel(world, &key, emit_is_elided(&lifetimes), &lifetimes.params(), &static_lifetimes.params(), borrows_any);
                 }
                 let returns_text = self.emit_fn_returns(&key);
                 if shared && !source_nested && several_at.len() >= 2 && returns_text.is_some() {

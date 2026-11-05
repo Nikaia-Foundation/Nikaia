@@ -691,7 +691,7 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
     match condition {
         Expr::Binary { op, lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            if check_core_ops_equality(*op) || check_core_ops_ordering(*op) {
+            if check_core_ops_equality(op) || check_core_ops_ordering(op) {
                 left = check_core_shown_operand(world, lhs);
                 right = check_core_shown_operand(world, rhs);
             }

@@ -51,14 +51,14 @@ impl Crossing {
     }
     pub fn way_out(&self) -> Option<String> {
         match self {
-            Crossing::MayNot { why, .. } => Some(way_out_of(*why)),
+            Crossing::MayNot { why, .. } => Some(way_out_of(why)),
             _ => None,
         }
     }
     pub fn note(&self) -> Option<String> {
         match self {
             Crossing::May => None,
-            Crossing::MayNot { part, at, why } => Some(refusal_note(part, (at).as_deref(), *why)),
+            Crossing::MayNot { part, at, why } => Some(refusal_note(part, (at).as_deref(), why)),
             Crossing::Undecided { part } => Some(format!("Nothing says whether `{}` can move to another thread, so the compiler assumes it can't.", part)),
         }
     }
@@ -69,7 +69,7 @@ pub(crate) fn a_copy_of(text: Option<&str>) -> Option<String> {
     Some(there.to_string())
 }
 
-pub(crate) fn way_out_of(why: Refusal) -> String {
+pub(crate) fn way_out_of(why: &Refusal) -> String {
     match why {
         Refusal::Lock => String::from("Open the lock here and pass the value inside it, so the called code gets an ordinary value and no lock."),
         Refusal::Count => String::from("Pass what the shared value holds, a view or a copy, instead of the shared value itself."),
@@ -77,7 +77,7 @@ pub(crate) fn way_out_of(why: Refusal) -> String {
     }
 }
 
-pub(crate) fn refusal_note(part: &str, at: Option<&str>, why: Refusal) -> String {
+pub(crate) fn refusal_note(part: &str, at: Option<&str>, why: &Refusal) -> String {
     let clause = held_clause(at);
     match why {
         Refusal::Lock => format!("`{}`{} holds a lock, and a lock can't be passed to code the compiler knows nothing about.", part, clause),

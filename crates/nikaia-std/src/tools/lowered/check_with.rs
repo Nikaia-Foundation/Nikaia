@@ -21,7 +21,7 @@ impl CheckState {
     pub fn a_with_that_changes_nothing(&mut self, ty: &str, span: &Span) { self.findings.push(check_refusal("NK1174", span, format!("This `with` changes no field, so it's just a copy of the `{}`.", ty), vec![String::from("`with` means \"this value, with these fields different\", so one without fields makes a reader look for a change that isn't there.")], Some(String::from("Name the fields that change, or remove the `with`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_with_over_something_else(&mut self, ty: &str, why: CheckCopyable, span: &Span) {
+    pub fn a_with_over_something_else(&mut self, ty: &str, why: &CheckCopyable, span: &Span) {
         let mut message: String = String::from("");
         let mut note: String = String::from("");
         let mut way_out: String = String::from("");

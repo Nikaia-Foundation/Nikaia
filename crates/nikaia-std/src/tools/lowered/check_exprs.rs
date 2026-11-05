@@ -23,18 +23,18 @@ pub(crate) fn a_plain_str_view(ty: &Ty) -> bool {
 
 pub(crate) fn width_dependent(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str) -> Vec<String> {
     match value {
-        Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); if op.is_bitwise() { width_of_binary(world, *op, lhs, rhs, into) } else { vec![] } },
+        Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); if op.is_bitwise() { width_of_binary(world, op, lhs, rhs, into) } else { vec![] } },
         Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Not { vec![String::from("`!`"), format!("!({} as {})", written_expression(world.words, expr), into)] } else { vec![] } },
         Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; width_of_method(world, receiver, method, into) },
         _ => vec![],
     }
 }
 
-pub(crate) fn width_of_binary(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, into: &str) -> Vec<String> {
-    let sign = binary_op_text(op);
+pub(crate) fn width_of_binary(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, into: &str) -> Vec<String> {
+    let sign = binary_op_text(&op);
     let left = written_expression(world.words, lhs);
     let mut right = written_expression(world.words, rhs);
-    if op != BinaryOp::Shl && op != BinaryOp::Shr { right = format!("({} as {})", right, into); }
+    if *op != BinaryOp::Shl && *op != BinaryOp::Shr { right = format!("({} as {})", right, into); }
     vec![format!("`{}`", sign), format!("({} as {}) {} {}", left, into, sign, right)]
 }
 
@@ -61,7 +61,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
+    pub fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
         let left_bare = a_bare_bit_operation(lhs);
         let right_bare = a_bare_bit_operation(rhs);
         if !left_bare && !right_bare { return; }
@@ -69,7 +69,7 @@ impl CheckState {
         if left_bare { left = format!("({})", left); }
         let mut right = written_expression(world.words, rhs);
         if right_bare { right = format!("({})", right); }
-        let compared = binary_op_text(op);
+        let compared = binary_op_text(&op);
         let note = "Nikaia binds `&`, `|`, `^` and the shifts tighter than a comparison, and C binds them looser, so without parentheses the line can be read two ways.";
         self.findings.push(check_refusal("NK1197", at, String::from("Put parentheses around a bit operation next to a comparison."), vec![note.to_string()], Some(format!("Write `{} {} {}`.", left, compared, right))));
     }

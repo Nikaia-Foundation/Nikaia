@@ -113,19 +113,19 @@ pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dy
                 let r = match claim_term(rhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 Some(built(SolverTerm::Or(vec![l, r]), out))
             },
-            BinaryOp::Lt => compared(*op, lhs, rhs, words, &var, &pinned, out),
-            BinaryOp::Le => compared(*op, lhs, rhs, words, &var, &pinned, out),
-            BinaryOp::Gt => compared(*op, lhs, rhs, words, &var, &pinned, out),
-            BinaryOp::Ge => compared(*op, lhs, rhs, words, &var, &pinned, out),
-            BinaryOp::Eq => compared(*op, lhs, rhs, words, &var, &pinned, out),
-            BinaryOp::Ne => compared(*op, lhs, rhs, words, &var, &pinned, out),
+            BinaryOp::Lt => compared(op, lhs, rhs, words, &var, &pinned, out),
+            BinaryOp::Le => compared(op, lhs, rhs, words, &var, &pinned, out),
+            BinaryOp::Gt => compared(op, lhs, rhs, words, &var, &pinned, out),
+            BinaryOp::Ge => compared(op, lhs, rhs, words, &var, &pinned, out),
+            BinaryOp::Eq => compared(op, lhs, rhs, words, &var, &pinned, out),
+            BinaryOp::Ne => compared(op, lhs, rhs, words, &var, &pinned, out),
             _ => None,
         } },
         _ => None,
     }
 }
 
-pub(crate) fn compared(op: BinaryOp, lhs: &Expr, rhs: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, pinned: &impl Fn(&str) -> Option<i64>, out: &mut Vec<SolverTerm>) -> Option<i64> {
+pub(crate) fn compared(op: &BinaryOp, lhs: &Expr, rhs: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, pinned: &impl Fn(&str) -> Option<i64>, out: &mut Vec<SolverTerm>) -> Option<i64> {
     let a = match lin_term(lhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let b = match lin_term(rhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(match op {

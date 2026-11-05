@@ -176,7 +176,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     if code == 0 {
         match header {
             None => { },
-            Some(ref text) => { project_drive_c_library(host, text, python, node, &messages)?; },
+            Some(ref text) => { project_drive_c_library(host, text, &python, &node, &messages)?; },
         }
     }
     let built = host.executable_in(&messages);
@@ -240,7 +240,7 @@ pub(crate) fn project_drive_cargo_env<H: ProjectDriveHost>(host: &H, link_flags:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &str, python: Option<String>, node: Option<String>, messages: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &str, python: &Option<String>, node: &Option<String>, messages: &str) -> Result<(), Box<dyn std::error::Error>> {
     let made = nikaia_std::fs::path::join(&(host.own_dir()), std::path::Path::new(&("c-library")));
     project_drive_make_dir(&made)?;
     let package = nikaia_std::index::or(host.package_name(), || "program".into());
@@ -249,7 +249,7 @@ pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &st
     if bind == "python" {
         match python {
             None => { },
-            Some(ref text) => {
+            Some(text) => {
                 let module = nikaia_std::fs::path::join(&(made), std::path::Path::new(&(package.replace('-', "_"))));
                 project_drive_make_dir(&module)?;
                 host.write_if_changed(&nikaia_std::fs::path::join(&(module), std::path::Path::new(&("__init__.py"))), text)?;
@@ -260,7 +260,7 @@ pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &st
     if bind == "node" {
         match node {
             None => { },
-            Some(ref text) => {
+            Some(text) => {
                 let module = nikaia_std::fs::path::join(&(made), std::path::Path::new(&("node")));
                 project_drive_make_dir(&module)?;
                 host.write_if_changed(&nikaia_std::fs::path::join(&(module), std::path::Path::new(&(format!("{}.c", package)))), text)?;

@@ -217,9 +217,8 @@ fn items_of(document: &toml::Value) -> Vec<decide::ManifestItem> {
         };
         items.push(item(section, "", "", value, false));
         for (name, entry) in value.as_table().into_iter().flatten() {
-            let machine = section == "build"
-                && entry.is_table()
-                && crate::emit::Target::parse(name.clone()).is_ok();
+            let machine =
+                section == "build" && entry.is_table() && crate::emit::Target::parse(name).is_ok();
             items.push(item(section, name, "", entry, machine));
             for (key, inner) in entry.as_table().into_iter().flatten() {
                 items.push(item(section, name, key, inner, false));

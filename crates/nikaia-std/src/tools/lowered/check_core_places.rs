@@ -577,22 +577,22 @@ pub fn check_core_with<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             view = v;
         },
         _ => {
-            state.a_with_over_something_else(&found.text(), CheckCopyable::Unnamed, span);
+            state.a_with_over_something_else(&found.text(), &CheckCopyable::Unnamed, span);
             return Ty::Unknown;
         },
     }
     let name: String = world.here.unaliased(&written);
     if state.enums.contains_key(&name) {
-        state.a_with_over_something_else(&name, CheckCopyable::AnEnum, span);
+        state.a_with_over_something_else(&name, &CheckCopyable::AnEnum, span);
         return found;
     }
     if view {
-        state.a_with_over_something_else(&name, CheckCopyable::AView, span);
+        state.a_with_over_something_else(&name, &CheckCopyable::AView, span);
         return check_core_places_named(&name);
     }
     let fields_of: Option<Vec<FieldContract>> = state.fields_of(world, &name);
     if fields_of.is_none() {
-        state.a_with_over_something_else(&name, CheckCopyable::NotAStruct, span);
+        state.a_with_over_something_else(&name, &CheckCopyable::NotAStruct, span);
         return found;
     }
     let declared: Vec<FieldContract> = match fields_of { Some(__nikaia_value) => __nikaia_value, None => return found };

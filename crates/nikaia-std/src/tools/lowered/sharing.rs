@@ -258,7 +258,7 @@ pub(crate) fn without_a_view(ty: &str) -> String {
     out
 }
 
-pub fn rust_name(count: Count) -> String {
+pub fn rust_name(count: &Count) -> String {
     match count {
         Count::Plain => String::from("std::rc::Rc"),
         Count::Word => String::from("std::sync::Arc"),
@@ -266,7 +266,7 @@ pub fn rust_name(count: Count) -> String {
     }
 }
 
-pub fn lock_name(count: Count) -> String {
+pub fn lock_name(count: &Count) -> String {
     match count {
         Count::Plain => String::from("nikaia_std::lock::Local"),
         Count::Word => String::from("nikaia_std::lock::Word"),

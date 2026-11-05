@@ -848,7 +848,11 @@ pub(crate) fn check_core_flow_copied_parts(state: &mut CheckState, world: &Check
     let at = id_of(&arm.body) as i64;
     let mut parts = check_core_flow_arm_pattern_parts(&state, world, &arm.pattern, typed, &arm.body);
     state.typed_inside_boxes(world, &arm.pattern, &mut parts);
-    let the_payload = !through_the_reference && check_core_flow_binds_the_payload(&arm.pattern, typed);
+    let viewed = match typed {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.is_a_view() },
+        _ => typed.is_a_view(),
+    };
+    let the_payload = (!through_the_reference || viewed) && check_core_flow_binds_the_payload(&arm.pattern, typed);
     if the_payload { return; }
     for (name, ty) in parts.iter() {
         let a_slice = check_core_flow_a_slice(ty);
@@ -1172,7 +1176,8 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     let a_variable = matches!(value, Expr::Variable(_, _));
     let in_place_binding = if a_variable { check_core_flow_bound_in_place(&state, world, value) } else { -1 };
     let in_place_name = in_place_binding >= 0;
-    let through_the_reference = mut_subject.is_some() && a_variable || in_place_name;
+    let a_lent_parameter = a_variable && !typed.is_a_view() && moves_away(&typed) && state.a_lent_parameter(world, value);
+    let through_the_reference = mut_subject.is_some() && a_variable || in_place_name || a_lent_parameter;
     let through_a_view = check_core_flow_through_a_view(&state, world, value);
     let text = !typed.is_a_view() && check_core_flow_owned_text(&typed) && !shapes_has_a_null_arm(arms) && check_core_flow_text_arms(arms);
     let a_lent_copy = null_arm && !state.takes_away(world, &typed) && check_core_flow_a_struct(&state, world, &typed);
@@ -1194,6 +1199,8 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     }
     let lent_name = check_core_flow_a_lent_name(&state, world, value) || state.a_lent_let(world, value);
     if lent_name && !typed.is_a_view() && state.takes_away(world, &typed) { typed = view_of_type(&typed); }
+    let a_named_type = matches!(typed, Ty::Named { .. } | Ty::Nullable(_));
+    if a_lent_parameter && a_named_type { typed = view_of_type(&typed); }
     let outer_condition = state.stamped_condition;
     if on.is_seen() { state.stamped_condition = Some(span.start as i64); }
     let mut seen = Ty::Unknown;

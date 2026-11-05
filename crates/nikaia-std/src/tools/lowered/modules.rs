@@ -673,13 +673,13 @@ pub(crate) async fn modules_package_at<H: ModulesHost>(entry: &std::path::Path, 
         units.push(modules_read_unit(entry, match package.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, reachable, renames, ModulesStanding::InProject, host).await?);
+        }, reachable, renames, &ModulesStanding::InProject, host).await?);
     }
     for path in beside.iter() {
         units.push(modules_read_unit(path, match package.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, reachable, renames, ModulesStanding::InProject, host).await?);
+        }, reachable, renames, &ModulesStanding::InProject, host).await?);
     }
     modules_one_namespace(&units, host)?;
     Ok(units)
@@ -693,10 +693,10 @@ pub(crate) fn modules_base_of(entry: &std::path::Path) -> fs::Path {
 }
 
 pub async fn modules_collect_one<H: ModulesHost>(entry: &std::path::Path, host: &H) -> Result<Vec<ModulesUnit>, nikaia_std::error::Thrown<ModulesRefusal>> {
-    Ok(vec![modules_read_unit(entry, None, &collections::BTreeSet::new(), &collections::BTreeMap::new(), ModulesStanding::Alone, host).await?])
+    Ok(vec![modules_read_unit(entry, None, &collections::BTreeSet::new(), &collections::BTreeMap::new(), &ModulesStanding::Alone, host).await?])
 }
 
-pub(crate) async fn modules_read_unit<H: ModulesHost>(path: &std::path::Path, package: Option<String>, reachable: &collections::BTreeSet<String>, renames: &collections::BTreeMap<String, String>, standing: ModulesStanding, host: &H) -> Result<ModulesUnit, nikaia_std::error::Thrown<ModulesRefusal>> {
+pub(crate) async fn modules_read_unit<H: ModulesHost>(path: &std::path::Path, package: Option<String>, reachable: &collections::BTreeSet<String>, renames: &collections::BTreeMap<String, String>, standing: &ModulesStanding, host: &H) -> Result<ModulesUnit, nikaia_std::error::Thrown<ModulesRefusal>> {
     let source = match fs::read_to_string(path, &fs::Root::Anywhere).await {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(ModulesRefusal::Unreadable { what: format!("cannot read {}", nikaia_std::fs::path::display(&(path))), why: format!("{}", error) }, &"modules_read_unit")) },
@@ -705,7 +705,7 @@ pub(crate) async fn modules_read_unit<H: ModulesHost>(path: &std::path::Path, pa
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ModulesRefusal::Parse, &"modules_read_unit")) };
-    modules_check_imports(parsed, path, reachable, standing, host)?;
+    modules_check_imports(parsed, path, reachable, &standing, host)?;
     Ok(ModulesUnit { path: nikaia_std::fs::path::clone(&(path)), source, parsed, package, renames: renames.to_owned() })
 }
 
@@ -716,7 +716,7 @@ pub(crate) fn modules_one_namespace<H: ModulesHost>(units: &[ModulesUnit], host:
     return Err(nikaia_std::error::throwing(ModulesRefusal::Refused(message), &"modules_one_namespace"));
 }
 
-pub(crate) fn modules_check_imports<H: ModulesHost>(unit: i64, at: &std::path::Path, reachable: &collections::BTreeSet<String>, standing: ModulesStanding, host: &H) -> Result<(), nikaia_std::error::Thrown<ModulesRefusal>> {
+pub(crate) fn modules_check_imports<H: ModulesHost>(unit: i64, at: &std::path::Path, reachable: &collections::BTreeSet<String>, standing: &ModulesStanding, host: &H) -> Result<(), nikaia_std::error::Thrown<ModulesRefusal>> {
     let alone = match standing {
         ModulesStanding::Alone => true,
         ModulesStanding::InProject => false,

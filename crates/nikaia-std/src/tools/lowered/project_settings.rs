@@ -92,7 +92,7 @@ pub fn cpu_config(words: &ProjectWords, target: &Target) -> Vec<String> {
     }
 }
 
-pub fn choices_key(words: &ProjectWords, bounds: BoundsChecks, overflow: OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: &str) -> String {
+pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: &str) -> String {
     let tests = if words.tests { "/tests" } else { "" };
     let refuted = if words.refuted_claims == "warn" { "/refuted-claims:warn" } else { "" };
     let unproved = if words.unproved_claims == "warn" { "/unproved-claims:warn" } else { "" };
@@ -111,7 +111,7 @@ pub fn choices_key(words: &ProjectWords, bounds: BoundsChecks, overflow: Overflo
     format!("{}/{}/{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, removed_bounds, removed_overflow, skip_free, through_loops, library, cpu)
 }
 
-pub fn panic_strategy(target: Target) -> String {
+pub fn panic_strategy(target: &Target) -> String {
     match target {
         Target::X86_64Linux | Target::Aarch64Linux => String::from("unwind"),
         Target::Wasm32Unknown => String::from("abort"),

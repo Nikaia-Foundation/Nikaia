@@ -323,13 +323,13 @@ impl ProverState {
             given_paths(arena, words, &read, params, args, scope, &self.pinned, &mut given_by);
             let mut goal: Option<i64> = None;
             if every_given(&read, &given_by) { goal = Some(arena.substitute(pre.term, &given_by)); }
-            if goal.is_some() && is_proved(ask(&arena, &scope.facts, nikaia_std::index::or(goal, || 0))) {
+            if goal.is_some() && is_proved(&ask(&arena, &scope.facts, nikaia_std::index::or(goal, || 0))) {
                 if of_std { outcome.held.push(ClaimHeld::Proved); }
                 continue;
             }
             if goal.is_some() && scope.history_reads(&arena, nikaia_std::index::or(goal, || 0)) {
                 self.second_queries += 1;
-                if is_proved(ask(&arena, &scope.with_history(), nikaia_std::index::or(goal, || 0))) {
+                if is_proved(&ask(&arena, &scope.with_history(), nikaia_std::index::or(goal, || 0))) {
                     if of_std { outcome.held.push(ClaimHeld::Proved); }
                     continue;
                 }
@@ -666,7 +666,7 @@ pub struct CallOutcome {
     pub held: Vec<ClaimHeld>,
 }
 
-pub(crate) fn is_proved(answer: SolverAnswer) -> bool { matches!(answer, SolverAnswer::Proved) }
+pub(crate) fn is_proved(answer: &SolverAnswer) -> bool { matches!(answer, SolverAnswer::Proved) }
 
 pub(crate) fn values_given(arena: &TermArena, given_by: &collections::BTreeMap<String, i64>, read: &collections::BTreeSet<String>, values: &collections::BTreeMap<String, i64>) -> collections::BTreeMap<String, i64> {
     let mut out: collections::BTreeMap<String, i64> = collections::BTreeMap::new();

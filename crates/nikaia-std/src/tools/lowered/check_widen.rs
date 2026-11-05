@@ -206,7 +206,7 @@ pub fn views_into_text(found: &Ty, want: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn binary_op_text(op: BinaryOp) -> String {
+pub fn binary_op_text(op: &BinaryOp) -> String {
     match op {
         BinaryOp::Add => String::from("+"),
         BinaryOp::Sub => String::from("-"),

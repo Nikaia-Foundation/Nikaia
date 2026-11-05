@@ -30,15 +30,15 @@ pub struct CheckComparable<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {
 impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
     pub fn of(&self, ty: &'a Ty) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-        self.asking(ty, CompareStrength::Compares, &mut seen)
+        self.asking(ty, &CompareStrength::Compares, &mut seen)
     }
     pub fn totally(&self, ty: &'a Ty) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-        self.asking(ty, CompareStrength::Totally, &mut seen)
+        self.asking(ty, &CompareStrength::Totally, &mut seen)
     }
     pub fn orders(&self, ty: &'a Ty) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-        self.asking(ty, CompareStrength::Orders, &mut seen)
+        self.asking(ty, &CompareStrength::Orders, &mut seen)
     }
     pub fn clones(&self, ty: &'a Ty, bounds: &'a collections::BTreeMap<String, Vec<String>>) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -104,28 +104,28 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         }
         false
     }
-    pub(crate) fn asking(&self, ty: &Ty, how: CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
+    pub(crate) fn asking(&self, ty: &Ty, how: &CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
         match ty {
             Ty::Unknown => true,
             Ty::Var { .. } => true,
             Ty::Count(_) => true,
-            Ty::Tuple(parts) => self.all_of(parts, how, seen),
-            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.asking(inner, how, seen) },
+            Ty::Tuple(parts) => self.all_of(parts, &how, seen),
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.asking(inner, &how, seen) },
             Ty::Seq { .. } => false,
-            Ty::Pointed { item, slice, .. } => { let item = nikaia_std::boxed::open(item); let slice = *slice; slice && self.asking(item, how, seen) },
+            Ty::Pointed { item, slice, .. } => { let item = nikaia_std::boxed::open(item); let slice = *slice; slice && self.asking(item, &how, seen) },
             Ty::Fn { .. } => false,
-            Ty::Named { name, args, .. } => self.named(name, args, how, seen),
+            Ty::Named { name, args, .. } => self.named(name, args, &how, seen),
         }
     }
-    pub(crate) fn all_of(&self, parts: &'a Vec<Ty>, how: CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
-        for part in parts.iter() { if !self.asking(part, how, seen) { return false; } }
+    pub(crate) fn all_of(&self, parts: &'a Vec<Ty>, how: &CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
+        for part in parts.iter() { if !self.asking(part, &how, seen) { return false; } }
         true
     }
-    pub(crate) fn named(&self, name: &'a str, args: &'a Vec<Ty>, how: CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
-        if how == CompareStrength::Orders && nikaia_std::list::contains(&COMPARE_UNORDERED, &name) { return false; }
-        if name == "f32" || name == "f64" { return how == CompareStrength::Compares; }
+    pub(crate) fn named(&self, name: &'a str, args: &'a Vec<Ty>, how: &CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
+        if *how == CompareStrength::Orders && nikaia_std::list::contains(&COMPARE_UNORDERED, &name) { return false; }
+        if name == "f32" || name == "f64" { return *how == CompareStrength::Compares; }
         if nikaia_std::list::contains(&COMPARE_PLAIN, &name) { return true; }
-        if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) { return self.all_of(args, how, seen); }
+        if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) { return self.all_of(args, &how, seen); }
         let mut key = name.to_string();
         if !args.is_empty() {
             let mut written: Vec<String> = vec![];
@@ -136,7 +136,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         seen.insert(key);
         let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || self.beside.contains_key(name);
         if declared {
-            if how == CompareStrength::Orders { return self.implements("Ord", name); }
+            if *how == CompareStrength::Orders { return self.implements("Ord", name); }
             if self.implements("Eq", name) { return true; }
         }
         if self.structs.contains_key(name) {
@@ -152,20 +152,20 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
                 }
             }
             for field in fields.iter() {
-                if bound.is_empty() { if !self.asking(&field.ty, how, seen) { return false; } } else {
+                if bound.is_empty() { if !self.asking(&field.ty, &how, seen) { return false; } } else {
                     let given = substitute(&field.ty, &bound);
-                    if !self.asking(&given, how, seen) { return false; }
+                    if !self.asking(&given, &how, seen) { return false; }
                 }
             }
             return true;
         }
         if self.enums.contains_key(name) {
-            for held in self.payloads_of(name) { if !self.asking(&held, how, seen) { return false; } }
+            for held in self.payloads_of(name) { if !self.asking(&held, &how, seen) { return false; } }
             return true;
         }
         if self.beside.contains_key(name) {
             let parts = match self.beside.get(name) { Some(__nikaia_value) => __nikaia_value, None => return true };
-            return self.all_of(&parts, how, seen);
+            return self.all_of(&parts, &how, seen);
         }
         if nobody_knows(name, self.own, self.library) { return true; }
         for ledger in [self.own, self.library] {
