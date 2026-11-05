@@ -137,7 +137,7 @@ and the proposer the manifest names. A wrong proposal costs time and nothing
 else. The proposer is a child process, as language servers are, so what a
 provider, a model, a key or a prompt is stays out of the compiler. This is
 decided and not yet built, and what it adds is asked under
-[open questions about the prover](./#what-can-a-language-model-add-to-the-prover).
+[open questions about the prover](./#how-much-can-large-language-models-help-the-prover).
 
 ## What the language has to offer the solver
 
