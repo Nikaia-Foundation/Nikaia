@@ -1,3 +1,7 @@
+b44-1206-argument-reads-the-list.md
+b45-1207-or-insert-copy.md
+b46-907-contains-view.md
+b47-591-hashed-keys.md
 r3c-c-match-in-place.md
 b34-557-same-line.md
 b22-1099-fstring-no-hole-braces.md
