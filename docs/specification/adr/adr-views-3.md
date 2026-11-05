@@ -309,6 +309,23 @@ whose result writes `from` names the parameters it reads. Positions (`from 0`)
 are not used: a number says less than a name and means nothing elsewhere in a
 signature.
 
+### D15 — `Bytes` and `comptime` text follow D11: lent or build-fixed, they are views.
+
+*Added November 5, 2026 (#1213), from migrating the examples and tests.*
+
+Two more types had only `ref` to say "a view": `ref Bytes`, the run of bytes
+ADR-373 D4 lowers a read-only parameter to, and `comptime X: ref String`, text
+the build fixed. D11's rule applies to both, one type over:
+
+* A lent parameter `b: Bytes` that the function only reads is ADR-373 D4's run
+  of bytes; one the function keeps is `keep b: Bytes` and takes the `Bytes` with
+  its owner (ADR-373 D1).
+* A `comptime` declared `String` is a view of text the build fixed, as a
+  `comptime` `Array[T]` is (D11); nothing allocates.
+
+The migration writes these by dropping `ref`; it keeps the type, and it does
+not write `keep` for a parameter whose only use is a read.
+
 ## 5. Consequences
 
 A signature now tells a reader what a function does with each argument: kept
