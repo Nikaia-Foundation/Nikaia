@@ -1959,3 +1959,5 @@ details.study-card {
   .rq-over-row > a { grid-column: 1 / -1; }
   .rq-over-head > span:first-child { grid-column: 1 / -1; }
 }
+/* The roadmap's bar beside a chapter's level (docs/project_status_and_roadmap.md). */
+.rq-inline { display: flex; width: 6rem; height: 8px; margin-top: 0.35rem; }
