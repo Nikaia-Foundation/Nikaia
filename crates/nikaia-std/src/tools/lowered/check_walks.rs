@@ -44,7 +44,7 @@ pub(crate) fn check_walks_tasks_in(state: &CheckState, world: &CheckWorld<'_, '_
     for stmt in block.stmts.iter() {
         for each in check_visit_stmt(&stmt.node) {
             match each {
-                Expr::Async(inner, _) => {
+                Expr::Async(inner, _, _) => {
                     let inner = nikaia_std::boxed::open(inner);
                     let wait = match state.facts.async_waits.get(&(id_of(each) as i64)) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     if wait.group == group {
@@ -285,7 +285,7 @@ impl CheckState {
 pub(crate) fn check_walks_form(expr: &Expr) -> &'static str {
     match expr {
         Expr::Spawn { .. } => "starts a task",
-        Expr::Async(_, _) => "starts a task",
+        Expr::Async(_, _, _) => "starts a task",
         Expr::Select(_, _) => "waits in a `select`",
         Expr::Overlap(_, _) => "runs an `overlap`",
         Expr::Dsl { .. } => "runs a `dsl` block",
@@ -298,7 +298,7 @@ pub(crate) fn check_walks_form(expr: &Expr) -> &'static str {
         Expr::Break(_) => "jumps",
         Expr::Continue(_) => "jumps",
         Expr::Block(_, _) => "contains a block, which might change something",
-        Expr::AsyncGroup(_, _) => "waits for a group of tasks",
+        Expr::AsyncGroup(_, _, _) => "waits for a group of tasks",
         Expr::If { .. } => "contains a block, which might change something",
         Expr::Match { .. } => "contains a block, which might change something",
         Expr::Closure { .. } => "contains a block, which might change something",

@@ -1,0 +1,18 @@
+// `async(detached, within: d) fn { … } catch { f }` (Part I 8.1.2,
+// ADR-async-5 D16, D22, #986): the deadline's `task::TimedOut` is a failure,
+// so the fallback stands in for the task's value at its `join`.
+
+use std::time
+
+fn slow() -> i64 {
+	time::sleep(500.millis())
+	return 1
+}
+
+fn main() throws {
+	let h = async(detached, within: 20.millis()) fn { slow() } catch {
+		println(f"fallback: {error}")
+		100
+	}
+	println(f"{h.join()}")
+}

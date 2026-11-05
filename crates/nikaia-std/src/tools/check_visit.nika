@@ -61,7 +61,7 @@ pub fn check_visit_children(expr: ref Expr) -> Vec[ref Expr] {
         },
         Expr::Unary { expr, .. } => out.push(expr),
         Expr::Try(inner, _) => out.push(inner),
-        Expr::Async(inner, _) => out.push(inner),
+        Expr::Async(inner, _, _) => out.push(inner),
         Expr::Throw(inner, _) => out.push(inner),
         Expr::Cast { expr, .. } => out.push(expr),
         Expr::Field { base, .. } => out.push(base),
@@ -190,7 +190,7 @@ pub fn check_visit_expr_blocks(expr: ref Expr) -> Vec[ref Block] {
             out.push(block)
             return out
         },
-        Expr::AsyncGroup(block, _) => {
+        Expr::AsyncGroup(block, _, _) => {
             out.push(block)
             return out
         },

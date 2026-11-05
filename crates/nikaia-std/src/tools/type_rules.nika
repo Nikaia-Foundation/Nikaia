@@ -468,7 +468,7 @@ fn tr_in_expr(expr: ref Expr, targets: bool) -> Vec[ref Expr] {
         },
         Expr::Unary { expr: inner, .. } => out.extend(tr_in_expr(inner, targets)),
         Expr::Try(inner, _) => out.extend(tr_in_expr(inner, targets)),
-        Expr::Async(inner, _) => out.extend(tr_in_expr(inner, targets)),
+        Expr::Async(inner, _, _) => out.extend(tr_in_expr(inner, targets)),
         Expr::Throw(inner, _) => out.extend(tr_in_expr(inner, targets)),
         Expr::Cast { expr: inner, .. } => out.extend(tr_in_expr(inner, targets)),
         Expr::Return(value, _) => out.extend(tr_in_maybe(value, targets)),
@@ -523,7 +523,7 @@ fn tr_in_expr(expr: ref Expr, targets: bool) -> Vec[ref Expr] {
             }
         },
         Expr::Block(block, _) => out.extend(tr_in_block(block, targets)),
-        Expr::AsyncGroup(block, _) => out.extend(tr_in_block(block, targets)),
+        Expr::AsyncGroup(block, _, _) => out.extend(tr_in_block(block, targets)),
         Expr::Unsafe(block, _) => out.extend(tr_in_block(block, targets)),
         Expr::Overlap(block, _) => out.extend(tr_in_block(block, targets)),
         Expr::Closure { body, .. } => out.extend(tr_in_block(body, targets)),
@@ -1114,7 +1114,7 @@ fn tr_nested_returns(words: ref winnow_grammar::InternerContext, intern: fn(ref 
             tr_returns_in_else(words, intern, renew, rules, type_name, base, given, else_branch)
         },
         Expr::Block(block, _) => tr_before_returns(words, intern, renew, rules, type_name, base, given, block),
-        Expr::AsyncGroup(block, _) => tr_before_returns(words, intern, renew, rules, type_name, base, given, block),
+        Expr::AsyncGroup(block, _, _) => tr_before_returns(words, intern, renew, rules, type_name, base, given, block),
         Expr::Unsafe(block, _) => tr_before_returns(words, intern, renew, rules, type_name, base, given, block),
         Expr::Match { arms, .. } => {
             for mut arm in arms {
@@ -1191,7 +1191,7 @@ fn tr_nested_given(words: ref winnow_grammar::InternerContext, intern: fn(ref St
             tr_given_in_else(words, intern, renew, rules, type_name, changing, else_branch)
         },
         Expr::Block(block, _) => tr_given_after_calls(words, intern, renew, rules, type_name, changing, block),
-        Expr::AsyncGroup(block, _) => tr_given_after_calls(words, intern, renew, rules, type_name, changing, block),
+        Expr::AsyncGroup(block, _, _) => tr_given_after_calls(words, intern, renew, rules, type_name, changing, block),
         Expr::Unsafe(block, _) => tr_given_after_calls(words, intern, renew, rules, type_name, changing, block),
         Expr::Match { arms, .. } => {
             for mut arm in arms {
@@ -1373,7 +1373,7 @@ fn tr_walk_expr(mut expr: Expr, words: ref winnow_grammar::InternerContext, inte
         },
         Expr::Unary { expr: inner, .. } => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
         Expr::Try(inner, _) => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
-        Expr::Async(inner, _) => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
+        Expr::Async(inner, _, _) => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
         Expr::Throw(inner, _) => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
         Expr::Cast { expr: inner, .. } => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
         Expr::Return(value, _) => tr_walk_maybe(value, words, intern, renew, ruled, spans, span, job),
@@ -1419,7 +1419,7 @@ fn tr_walk_expr(mut expr: Expr, words: ref winnow_grammar::InternerContext, inte
             tr_walk_fields(fields, words, intern, renew, ruled, spans, span, job)
         },
         Expr::Block(block, _) => tr_walk_block(block, words, intern, renew, ruled, spans, span, job),
-        Expr::AsyncGroup(block, _) => tr_walk_block(block, words, intern, renew, ruled, spans, span, job),
+        Expr::AsyncGroup(block, _, _) => tr_walk_block(block, words, intern, renew, ruled, spans, span, job),
         Expr::Unsafe(block, _) => tr_walk_block(block, words, intern, renew, ruled, spans, span, job),
         Expr::Overlap(block, _) => tr_walk_block(block, words, intern, renew, ruled, spans, span, job),
         Expr::Closure { body, .. } => tr_walk_block(body, words, intern, renew, ruled, spans, span, job),
@@ -1519,7 +1519,7 @@ fn tr_field_read(mut expr: Expr, words: ref winnow_grammar::InternerContext, ren
 fn tr_drop_nested(mut expr: Expr, words: ref winnow_grammar::InternerContext, changed: ref collections::BTreeSet[String]) sync {
     match expr {
         Expr::Block(block, _) => tr_drop_in(block, words, changed),
-        Expr::AsyncGroup(block, _) => tr_drop_in(block, words, changed),
+        Expr::AsyncGroup(block, _, _) => tr_drop_in(block, words, changed),
         Expr::Unsafe(block, _) => tr_drop_in(block, words, changed),
         Expr::Closure { body, .. } => tr_drop_in(body, words, changed),
         Expr::If { then_branch, else_branch, .. } => {

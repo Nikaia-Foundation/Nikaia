@@ -165,7 +165,7 @@ pub(crate) fn check_core_flow_arm_discarded(state: &mut CheckState, body: &Expr)
     state.discarded.insert(id_of(check_peeled(body)) as i64);
     match body {
         Expr::Block(block, _) => { check_core_stmt_body_discarded(state, block); },
-        Expr::AsyncGroup(block, _) => { check_core_stmt_body_discarded(state, block); },
+        Expr::AsyncGroup(block, _, _) => { check_core_stmt_body_discarded(state, block); },
         _ => { },
     }
 }

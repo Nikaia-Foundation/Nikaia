@@ -701,7 +701,7 @@ fn map_named(receiver: ref Expr, words: ref winnow_grammar::InternerContext, wal
 fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut classes: MapClasses, mut walk: MapWalk) {
     match expr {
         Expr::Block(b, _) => tm_walk_block(b, words, library, env, classes, walk),
-        Expr::AsyncGroup(b, _) => tm_walk_block(b, words, library, env, classes, walk),
+        Expr::AsyncGroup(b, _, _) => tm_walk_block(b, words, library, env, classes, walk),
         Expr::Unsafe(b, _) => tm_walk_block(b, words, library, env, classes, walk),
         Expr::If { cond, then_branch, else_branch, .. } => {
             tm_walk_expr(cond, words, library, env, classes, walk)
@@ -763,7 +763,7 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
         Expr::Unary { expr, .. } => tm_walk_expr(expr, words, library, env, classes, walk),
         Expr::Cast { expr, .. } => tm_walk_expr(expr, words, library, env, classes, walk),
         Expr::Try(inner, _) => tm_walk_expr(inner, words, library, env, classes, walk),
-        Expr::Async(inner, _) => tm_walk_expr(inner, words, library, env, classes, walk),
+        Expr::Async(inner, _, _) => tm_walk_expr(inner, words, library, env, classes, walk),
         Expr::Throw(inner, _) => tm_walk_expr(inner, words, library, env, classes, walk),
         Expr::Field { base, .. } => tm_walk_expr(base, words, library, env, classes, walk),
         Expr::SafeField { base, .. } => tm_walk_expr(base, words, library, env, classes, walk),

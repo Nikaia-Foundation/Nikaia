@@ -430,7 +430,8 @@ impl EmitState {
             Expr::TryCatch { expr, handler, id } => match expr {
                 // `async(handle) fn { … } catch { f }`: the fallback runs in
                 // the child task, as the detached one's does (D22).
-                Expr::Spawn { body, child, .. } if child => {
+                Expr::Spawn { body, child, within, .. } if child => {
+                    walk.async_within = self.emit_async_deadline(world, walk, host, within, depth, flow, scope)
                     match body {
                         Expr::Closure { body: block, .. } => {
                             let guarded = Expr::Block(block.clone(), numbered_id(id_of(expr)))
@@ -441,7 +442,10 @@ impl EmitState {
                         else => throw EmitRefused { message: "`async(handle)` takes a lambda. Write `async(handle) fn { … }`.", at: flow.statement },
                     }
                 },
-                Expr::Spawn { body, written_async, .. } if written_async => self.emit_core_spawn_fallback(world, walk, out, host, expr, body, handler, id.get(), depth, flow, scope),
+                Expr::Spawn { body, written_async, within, .. } if written_async => {
+                    walk.async_within = self.emit_async_deadline(world, walk, host, within, depth, flow, scope)
+                    self.emit_core_spawn_fallback(world, walk, out, host, expr, body, handler, id.get(), depth, flow, scope)
+                },
                 else => self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope),
             },
             Expr::Try(inner, _) => self.emit_core_try(world, walk, out, host, inner, depth, flow, scope),
@@ -452,25 +456,30 @@ impl EmitState {
             // `async(handle) fn { … }` (8.1.2, D11): a child task of its
             // group; its `task::ChildHandle`, or one nothing names runs to its
             // end and is waited for at the group's end.
-            Expr::Spawn { body, child, id, .. } if child => {
+            Expr::Spawn { body, child, id, within, .. } if child => {
+                walk.async_within = self.emit_async_deadline(world, walk, host, within, depth, flow, scope)
                 let kind = self.emit_child_kind(id.get() as i64, flow)
                 self.emit_async_task(world, walk, out, host, body, id.get() as i64, kind, depth, flow, scope)
             },
-            Expr::Spawn { body, .. } => self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope),
+            Expr::Spawn { body, within, .. } => {
+                walk.async_within = self.emit_async_deadline(world, walk, host, within, depth, flow, scope)
+                self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope)
+            },
             // Part I 8.1.2 (ADR-async-5 D6, D9, #988): a task of its group,
             // waited for where the checker recorded; and the group.
-            Expr::Async(task, id) => {
+            Expr::Async(task, id, within) => {
                 let kind = self.emit_async_kind(id.get())
                 let joining = walk.async_joining.get(id.get() as i64)
                 if joining != null {
                     out.push(joining ?? "")
                 } else if kind == "join" || kind == "spawn" {
+                    walk.async_within = self.emit_async_deadline(world, walk, host, within, depth, flow, scope)
                     self.emit_async_task(world, walk, out, host, task, id.get(), kind, depth, flow, scope)
                 } else {
                     throw EmitRefused { message: "The compiler can't translate `async e` yet where its value is waited for at a later statement but it is not a `let` of its own (#988).", at: emit_async_at(flow.statement) }
                 }
             },
-            Expr::AsyncGroup(block, id) => self.emit_async_group(world, walk, out, host, block, id.get(), depth, flow, scope),
+            Expr::AsyncGroup(block, id, within) => self.emit_async_group(world, walk, out, host, block, id.get(), within, depth, flow, scope),
             else => {
                 throw EmitRefused { message: "The compiler can't translate this expression yet: an `asm` block in expression position", at: flow.statement }
             },

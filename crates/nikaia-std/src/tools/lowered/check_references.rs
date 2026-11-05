@@ -212,7 +212,7 @@ pub fn check_gives_back_parts(body: &Expr, name: &str, words: &winnow_grammar::I
 pub(crate) fn check_gives_back_parts_into(expr: &Expr, name: &str, words: &winnow_grammar::InternerContext, found: &mut Vec<Vec<String>>) {
     match expr {
         Expr::Block(block, _) => { for tail in block_tail(block) { check_gives_back_parts_into(tail, name, words, found); } },
-        Expr::AsyncGroup(block, _) => { for tail in block_tail(block) { check_gives_back_parts_into(tail, name, words, found); } },
+        Expr::AsyncGroup(block, _, _) => { for tail in block_tail(block) { check_gives_back_parts_into(tail, name, words, found); } },
         Expr::If { then_branch, else_branch, .. } => {
             for tail in block_tail(then_branch) { check_gives_back_parts_into(tail, name, words, found); }
             match else_branch {
@@ -252,7 +252,7 @@ pub(crate) fn check_gives_back_is_name(expr: &Expr, name: &str, words: &winnow_g
 pub(crate) fn check_gives_back_tail(expr: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool {
     match expr {
         Expr::Block(block, _) => check_gives_back_block_tail(block, name, words),
-        Expr::AsyncGroup(block, _) => check_gives_back_block_tail(block, name, words),
+        Expr::AsyncGroup(block, _, _) => check_gives_back_block_tail(block, name, words),
         Expr::If { then_branch, else_branch, .. } => {
             if check_gives_back_block_tail(then_branch, name, words) { return true; }
             if else_branch.is_some() { return check_gives_back_block_tail(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false }, name, words); }
@@ -305,7 +305,7 @@ pub(crate) fn check_gives_back_returns(expr: &Expr, name: &str, words: &winnow_g
                 if value.is_some() && check_gives_back_is_name(match value { Some(__nikaia_value) => __nikaia_value, None => return false }, name, words) { found = true; }
             },
             Expr::Block(block, _) => { if check_gives_back_block_returns(block, name, words) { found = true; } },
-            Expr::AsyncGroup(block, _) => { if check_gives_back_block_returns(block, name, words) { found = true; } },
+            Expr::AsyncGroup(block, _, _) => { if check_gives_back_block_returns(block, name, words) { found = true; } },
             Expr::Unsafe(block, _) => { if check_gives_back_block_returns(block, name, words) { found = true; } },
             Expr::If { then_branch, else_branch, .. } => {
                 if check_gives_back_block_returns(then_branch, name, words) { found = true; }

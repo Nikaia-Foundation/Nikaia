@@ -397,7 +397,7 @@ pub(crate) fn tally_expr(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tally_expr(expr, ask, deferred, words, tally); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tally_expr(inner, ask, deferred, words, tally); },
-        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); tally_expr(inner, ask, deferred, words, tally); },
+        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); tally_expr(inner, ask, deferred, words, tally); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); tally_expr(inner, ask, deferred, words, tally); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tally_expr(expr, ask, deferred, words, tally); },
         Expr::TryCatch { expr, handler, .. } => {
@@ -428,7 +428,7 @@ pub(crate) fn tally_expr(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_
             }
         },
         Expr::Block(b, _) => { tally_block(b, ask, deferred, words, tally); },
-        Expr::AsyncGroup(b, _) => { tally_block(b, ask, deferred, words, tally); },
+        Expr::AsyncGroup(b, _, _) => { tally_block(b, ask, deferred, words, tally); },
         Expr::Overlap(b, _) => { tally_block(b, ask, true, words, tally); },
         Expr::Unsafe(b, _) => { tally_block(b, ask, deferred, words, tally); },
         Expr::Closure { body, .. } => { tally_block(body, ask, true, words, tally); },

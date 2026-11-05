@@ -111,6 +111,7 @@ impl EmitState {
         }
         if block.stmts.len() == 1 && opening.is_none() {
             let declared = walk.preluded.to_owned();
+            let bound = walk.async_bound.to_string();
             let mut rendered = EmitOut::empty();
             let st = rendered.mark();
             self.emit_stmt(world, walk, &mut rendered, host, &nikaia_std::index::get(&block.stmts, 0).node, &nikaia_std::index::get(&block.stmts, 0).span, depth, tail, flow, scope)?;
@@ -122,6 +123,7 @@ impl EmitState {
                 return Ok(());
             }
             walk.preluded = declared;
+            walk.async_bound = bound;
         }
         let pad = "    ".repeat(nikaia_std::count::of(depth));
         let inner_pad = "    ".repeat(nikaia_std::count::of(depth + 1));

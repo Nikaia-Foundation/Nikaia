@@ -120,7 +120,7 @@ pub fn emit_held_in(expr: &Expr, lazy: bool, called: bool) -> (Vec<&Expr>, EmitH
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return emit_held_in(expr, lazy, called); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return emit_held_in(inner, lazy, called); },
-        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); return emit_held_in(inner, lazy, called); },
+        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); return emit_held_in(inner, lazy, called); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return emit_held_in(expr, lazy, called); },
         Expr::Tuple(parts, _) => { return emit_held_all(parts, lazy, called); },
         Expr::ListLit { items, .. } => { return emit_held_all(items, lazy, called); },

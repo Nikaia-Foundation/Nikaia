@@ -258,7 +258,7 @@ pub fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr
         Expr::If { .. } => return check_overflow_ends_into_nullables(state, given, found, want),
         Expr::Match { .. } => return check_overflow_ends_into_nullables(state, given, found, want),
         Expr::Block(_, _) => return check_overflow_ends_into_nullables(state, given, found, want),
-        Expr::AsyncGroup(_, _) => return check_overflow_ends_into_nullables(state, given, found, want),
+        Expr::AsyncGroup(_, _, _) => return check_overflow_ends_into_nullables(state, given, found, want),
         else => return false,
     }
     let wants_nullable = match want {

@@ -1,0 +1,20 @@
+// `async(handle, within: d) fn { … }` (Part I 8.1.2, ADR-async-5 D16, #986):
+// a child task still running at its deadline is cancelled at its pause and its
+// `join` yields `task::TimedOut`; with a fallback, the fallback's value.
+
+use std::time
+
+fn slow() -> i64 {
+	time::sleep(500.millis())
+	return 1
+}
+
+fn main() throws {
+	let h = async(handle, within: 20.millis()) fn { slow() }
+	let k = async(handle, within: 20.millis()) fn { slow() } catch { 100 }
+	let a = h.join() catch {
+		println(f"h: {error}")
+		0
+	}
+	println(f"{a} {k.join()}")
+}

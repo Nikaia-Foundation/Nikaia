@@ -263,7 +263,7 @@ fn counted_children(expr: ref Expr, over: ref Vec[CountedLoop], words: ref winno
         },
         Expr::Unary { expr, .. } => counted_expr(expr, over, words, out),
         Expr::Try(inner, _) => counted_expr(inner, over, words, out),
-        Expr::Async(inner, _) => counted_expr(inner, over, words, out),
+        Expr::Async(inner, _, _) => counted_expr(inner, over, words, out),
         Expr::Throw(inner, _) => counted_expr(inner, over, words, out),
         Expr::Cast { expr, .. } => counted_expr(expr, over, words, out),
         Expr::TryCatch { expr, .. } => counted_expr(expr, over, words, out),
@@ -295,7 +295,7 @@ fn counted_children(expr: ref Expr, over: ref Vec[CountedLoop], words: ref winno
 fn counted_blocks(expr: ref Expr, over: ref Vec[CountedLoop], words: ref winnow_grammar::InternerContext, mut out: collections::BTreeSet[i64]) {
     match expr {
         Expr::Block(b, _) => counted_block(b, copied(over), words, out),
-        Expr::AsyncGroup(b, _) => counted_block(b, copied(over), words, out),
+        Expr::AsyncGroup(b, _, _) => counted_block(b, copied(over), words, out),
         Expr::Overlap(b, _) => counted_block(b, copied(over), words, out),
         Expr::Unsafe(b, _) => counted_block(b, copied(over), words, out),
         Expr::If { then_branch, else_branch, .. } => {
@@ -563,7 +563,7 @@ fn seek_expr(expr: ref Expr, seek: ref Seek, words: ref winnow_grammar::Interner
         Expr::With { base, fields, .. } => seek_expr(base, seek, words) || seek_fields(fields, seek, words),
         Expr::Unary { expr, .. } => seek_expr(expr, seek, words),
         Expr::Try(inner, _) => seek_expr(inner, seek, words),
-        Expr::Async(inner, _) => seek_expr(inner, seek, words),
+        Expr::Async(inner, _, _) => seek_expr(inner, seek, words),
         Expr::Throw(inner, _) => seek_expr(inner, seek, words),
         Expr::Cast { expr, .. } => seek_expr(expr, seek, words),
         Expr::TryCatch { expr, handler, .. } => seek_expr(expr, seek, words) || seek_block(handler, seek, words),
@@ -573,7 +573,7 @@ fn seek_expr(expr: ref Expr, seek: ref Seek, words: ref winnow_grammar::Interner
         Expr::Coalesce { value, fallback, .. } => seek_expr(value, seek, words) || seek_expr(fallback, seek, words),
         Expr::Select(arms, _) => seek_select(arms, seek, words),
         Expr::Block(b, _) => seek_block(b, seek, words),
-        Expr::AsyncGroup(b, _) => seek_block(b, seek, words),
+        Expr::AsyncGroup(b, _, _) => seek_block(b, seek, words),
         Expr::Overlap(b, _) => seek_block(b, seek, words),
         Expr::Unsafe(b, _) => seek_block(b, seek, words),
         Expr::Closure { body, .. } => seek_block(body, seek, words),

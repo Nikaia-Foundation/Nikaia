@@ -276,7 +276,8 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         // **`async e`** (ADR-async-5 D6, D10): the value is `e`'s, a lambda's
         // the lambda's result, since the lambda is run as the task; no jump
         // leaves it (`NK1132`). Its wait point is the block's (`check_async_block`).
-        Expr::Async(inner, _) => {
+        Expr::Async(inner, _, within) => {
+            check_core_async_within(state, world, host, within, span)
             if state.flow.loops > 0 {
                 state.an_async_inside_a_loop(span)
             }
@@ -334,7 +335,8 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         },
         // **`async { … }`, the group** (D9): its value is its block's, and it
         // starts at least one task (`NK2111`).
-        Expr::AsyncGroup(block, _) => {
+        Expr::AsyncGroup(block, _, within) => {
+            check_core_async_within(state, world, host, within, span)
             if state.flow.loops > 0 {
                 state.an_async_inside_a_loop(span)
             }
@@ -385,7 +387,8 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         },
         Expr::Range { start, end, .. } => check_core_range(state, world, host, start, end, span),
         Expr::TryCatch { expr: guarded, handler, .. } => check_core_flow_try_catch(state, world, host, expr, guarded, handler, span),
-        Expr::Spawn { body, written_async, child, .. } => {
+        Expr::Spawn { body, written_async, child, within, .. } => {
+            check_core_async_within(state, world, host, within, span)
             if written_async && state.flow.loops > 0 {
                 state.an_async_inside_a_loop(span)
             }
@@ -733,4 +736,46 @@ fn check_core_expr_dsl[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         return check_core_expr_view("str")
     }
     return Ty::Unknown
+}
+
+/// **`within: d` is a `time::Duration`** (ADR-async-5 D16, #986), counted
+/// from the form's start; it is read before the task starts.
+fn check_core_async_within[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, within: ref Expr?, span: ref Span) sync {
+    let d = within ?? return
+    let found = check_core_expr(state, world, host, d, span)
+    let want = Ty::Named { name: "time::Duration", args: [], view: false }
+    state.expect_type(world, found, want, span, "argument", fn(found_text, wanted_text) { f"This deadline is `{found_text}`, but `within:` takes a `{wanted_text}`." })
+    check_core_async_deadline_fails(state, span)
+}
+
+/// **A deadline can run out** (ADR-async-5 D16, D22): the form fails with
+/// `task::TimedOut`, as a written call that can fail does (`NK2605`), so a
+/// `catch` around it or its fallback has it to handle, and a function that
+/// handles it nowhere says `throws`.
+fn check_core_async_deadline_fails(mut state: CheckState, span: ref Span) sync {
+    let fails: Vec[String] = ["task::TimedOut"]
+    if state.flow.guarded != null {
+        let held: CheckGuarded? = state.flow.guarded?.clone()
+        let mut guarded = held ?? CheckGuarded::nothing()
+        guarded.fallible = true
+        guarded.thrown.extend(fails)
+        state.flow.guarded = guarded
+    }
+    if state.handed_over != null {
+        let handed_held = state.handed_over?.clone() ?? return
+        if !handed_held.caught {
+            let mut handed = handed_held
+            handed.fails = true
+            let may_fail = handed.promised.may_fail
+            state.handed_over = handed
+            if !may_fail {
+                return
+            }
+        }
+    }
+    if state.flow.throwing || state.flow.caught || state.inside_an_action != null {
+        return
+    }
+    let function = state.current?.clone() ?? return
+    state.findings.push(check_refusal("NK2605", span, "This function can fail, because the deadline of `within:` can run out.", ["When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16)."], f"Add `throws` to `{function}`, or write a fallback: `async(within: d) … catch {{ … }}`."))
 }

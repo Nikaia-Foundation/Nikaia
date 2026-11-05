@@ -11,7 +11,7 @@ pub(crate) fn emit_read_a_length(world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr)
 pub(crate) fn emit_read_a_call(expr: &Expr) -> bool {
     match expr {
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); emit_read_is_call(inner) },
-        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); emit_read_is_call(inner) },
+        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); emit_read_is_call(inner) },
         _ => emit_read_is_call(expr),
     }
 }

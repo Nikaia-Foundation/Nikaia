@@ -1,0 +1,20 @@
+// `async(detached, within: d) fn { … }` (Part I 8.1.2, ADR-async-5 D16,
+// #986): a task still running at its deadline is cancelled at its pause, and
+// its `join` yields `task::TimedOut`; one that ends in time yields its value.
+
+use std::time
+
+fn wait_then(span: time::Duration, n: i64) -> i64 {
+	time::sleep(span)
+	return n
+}
+
+fn main() throws {
+	let late = async(detached, within: 20.millis()) fn { wait_then(500.millis(), 1) }
+	let early = async(within: 2.seconds(), detached) fn { wait_then(1.millis(), 2) }
+	let a = late.join() catch {
+		println(f"late: {error}")
+		0
+	}
+	println(f"{a} {early.join()}")
+}

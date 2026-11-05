@@ -222,7 +222,7 @@ pub fn emit_tethered_type(world: ref EmitWorld, ty: ref Type?, value: ref Expr) 
     }
     match value {
         Expr::Try(inner, _) => return emit_tethered_call(world, inner),
-        Expr::Async(inner, _) => return emit_tethered_call(world, inner),
+        Expr::Async(inner, _, _) => return emit_tethered_call(world, inner),
         else => return emit_tethered_call(world, value),
     }
 }

@@ -946,7 +946,7 @@ pub(crate) fn bounding_lin(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFac
                 _ => None,
             };
         },
-        Expr::AsyncGroup(block, _) => {
+        Expr::AsyncGroup(block, _, _) => {
             let last = block.stmts.len() as i64 - 1;
             if last < 0 { return None; }
             for k in 0..last { if !bounding_an_assert(&nikaia_std::index::get(&block.stmts, (k) as usize).node, words) { return None; } }
@@ -2661,7 +2661,7 @@ pub(crate) fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut Boun
             bounding_after_change(walk, facts, &changed);
         },
         Expr::Block(block, _) => { bounding_inner_block(walk, block, facts, context, program, words, &ask); },
-        Expr::AsyncGroup(block, _) => { bounding_inner_block(walk, block, facts, context, program, words, &ask); },
+        Expr::AsyncGroup(block, _, _) => { bounding_inner_block(walk, block, facts, context, program, words, &ask); },
         Expr::Unsafe(block, _) => {
             bounding_inner_block(walk, block, facts, context, program, words, &ask);
             for cond in prover_assumed_in_unsafe(block, words) { bounding_assume(walk, facts, &cond, context, program, words); }
@@ -2901,7 +2901,7 @@ pub(crate) fn bounding_children(walk: &mut BoundsWalk, expr: &Expr, facts: &mut 
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); bounding_expr(walk, expr, facts, context, program, words, &ask); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); bounding_expr(walk, inner, facts, context, program, words, &ask); },
-        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); bounding_expr(walk, inner, facts, context, program, words, &ask); },
+        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); bounding_expr(walk, inner, facts, context, program, words, &ask); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); bounding_expr(walk, inner, facts, context, program, words, &ask); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); bounding_expr(walk, expr, facts, context, program, words, &ask); },
         Expr::TryCatch { expr, handler, .. } => {
@@ -3049,7 +3049,7 @@ pub(crate) fn changed_in_expr(expr: &Expr, context: &BoundsContext, words: &winn
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); changed_in_expr(expr, context, words, out); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
-        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
+        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); changed_in_expr(expr, context, words, out); },
         Expr::TryCatch { expr, handler, .. } => {
@@ -3080,7 +3080,7 @@ pub(crate) fn changed_in_expr(expr: &Expr, context: &BoundsContext, words: &winn
             }
         },
         Expr::Block(b, _) => { changed_in_block(b, context, words, out); },
-        Expr::AsyncGroup(b, _) => { changed_in_block(b, context, words, out); },
+        Expr::AsyncGroup(b, _, _) => { changed_in_block(b, context, words, out); },
         Expr::Overlap(b, _) => { changed_in_block(b, context, words, out); },
         Expr::Unsafe(b, _) => { changed_in_block(b, context, words, out); },
         Expr::Closure { body, .. } => { changed_in_block(body, context, words, out); },

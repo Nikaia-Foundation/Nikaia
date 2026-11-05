@@ -223,8 +223,9 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             check_core_expr(state, world, host, inner, span);
             Ty::Unknown
         },
-        Expr::Async(inner, _) => {
-            let inner = nikaia_std::boxed::open(inner);
+        Expr::Async(inner, _, within) => {
+            let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within);
+            check_core_async_within(state, world, host, (within).as_ref(), span);
             if state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
             let loops = state.flow.loops;
             let barrier = match state.flow.barrier.as_ref() {
@@ -279,7 +280,9 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
                 tail
             } else { ty }
         },
-        Expr::AsyncGroup(block, _) => {
+        Expr::AsyncGroup(block, _, within) => {
+            let within = nikaia_std::boxed::open(within);
+            check_core_async_within(state, world, host, (within).as_ref(), span);
             if state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
             let loops = state.flow.loops;
             let barrier = match state.flow.barrier.as_ref() {
@@ -325,8 +328,9 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); check_core_range(state, world, host, start, end, span) },
         Expr::TryCatch { expr: guarded, handler, .. } => { let guarded = nikaia_std::boxed::open(guarded); check_core_flow_try_catch(state, world, host, expr, guarded, handler, span) },
-        Expr::Spawn { body, written_async, child, .. } => {
-            let body = nikaia_std::boxed::open(body); let child = *child; let written_async = *written_async;
+        Expr::Spawn { body, written_async, child, within, .. } => {
+            let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let child = *child; let written_async = *written_async;
+            check_core_async_within(state, world, host, (within).as_ref(), span);
             if written_async && state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
             if child { state.flow.async_started += 1; }
             check_core_ops_spawn(state, world, host, body, written_async, child, span)
@@ -567,5 +571,50 @@ pub(crate) fn check_core_expr_dsl<H: CheckHost>(state: &mut CheckState, world: &
     if plain && name == "html" && !is_deferred("html", content) { return check_core_expr_named("String"); }
     if plain && deferred { return check_core_expr_view("str"); }
     Ty::Unknown
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_async_within<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, within: Option<&Expr>, span: &Span) {
+    let d = match within { Some(__nikaia_value) => __nikaia_value, None => return };
+    let found = check_core_expr(state, world, host, d, span);
+    let want = Ty::Named { name: String::from("time::Duration"), args: vec![], view: false };
+    state.expect_type(world, &found, &want, span, "argument", &|found_text, wanted_text| { format!("This deadline is `{}`, but `within:` takes a `{}`.", found_text, wanted_text) });
+    check_core_async_deadline_fails(state, span);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_async_deadline_fails(state: &mut CheckState, span: &Span) {
+    let fails: Vec<String> = vec![String::from("task::TimedOut")];
+    if state.flow.guarded.is_some() {
+        let held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
+        guarded.fallible = true;
+        guarded.thrown.extend(fails);
+        state.flow.guarded = Some(guarded);
+    }
+    if state.handed_over.is_some() {
+        let handed_held = match match state.handed_over.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return };
+        if !handed_held.caught {
+            let mut handed = handed_held;
+            handed.fails = true;
+            let may_fail = handed.promised.may_fail;
+            state.handed_over = Some(handed);
+            if !may_fail { return; }
+        }
+    }
+    if state.flow.throwing || state.flow.caught || state.inside_an_action.is_some() { return; }
+    let function = match match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.findings.push(check_refusal("NK2605", span, String::from("This function can fail, because the deadline of `within:` can run out."), vec![String::from("When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).")], Some(format!("Add `throws` to `{}`, or write a fallback: `async(within: d) … catch {{ … }}`.", function))));
 }
 

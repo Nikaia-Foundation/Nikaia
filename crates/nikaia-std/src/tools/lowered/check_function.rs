@@ -161,7 +161,7 @@ pub(crate) fn check_function_ends_in(expr: &Expr, grows: bool) -> bool {
         },
         Expr::Match { arms, .. } => check_function_arms_end_in(arms, grows),
         Expr::Block(block, _) => check_function_block_ends_in(block, grows),
-        Expr::AsyncGroup(block, _) => check_function_block_ends_in(block, grows),
+        Expr::AsyncGroup(block, _, _) => check_function_block_ends_in(block, grows),
         Expr::Field { .. } => !grows,
         _ => grows && check_function_grows(None, expr),
     }
@@ -338,7 +338,7 @@ pub(crate) fn check_function_end_hands_nothing(expr: &Expr) -> bool {
             None => true,
         },
         Expr::Block(block, _) => check_function_tail_hands_nothing(block),
-        Expr::AsyncGroup(block, _) => check_function_tail_hands_nothing(block),
+        Expr::AsyncGroup(block, _, _) => check_function_tail_hands_nothing(block),
         _ => false,
     }
 }
@@ -369,7 +369,7 @@ pub(crate) fn check_function_every_end_is_a_value(expr: &Expr) -> bool {
             return true;
         },
         Expr::Block(block, _) => { return check_function_tail_is_a_value(block); },
-        Expr::AsyncGroup(block, _) => { return check_function_tail_is_a_value(block); },
+        Expr::AsyncGroup(block, _, _) => { return check_function_tail_is_a_value(block); },
         _ => { return true; },
     }
 }
@@ -379,7 +379,7 @@ pub(crate) fn check_function_is_branching(expr: &Expr) -> bool {
         Expr::If { .. } => check_function_every_end_is_a_value(expr),
         Expr::Match { .. } => check_function_every_end_is_a_value(expr),
         Expr::Block(_, _) => check_function_every_end_is_a_value(expr),
-        Expr::AsyncGroup(_, _) => check_function_every_end_is_a_value(expr),
+        Expr::AsyncGroup(_, _, _) => check_function_every_end_is_a_value(expr),
         _ => false,
     }
 }

@@ -202,7 +202,7 @@ pub(crate) fn arith_the_variable_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     }
 }
 
-pub(crate) fn arith_structural(expr: &Expr) -> bool { matches!(expr, Expr::Binary { .. } | Expr::Unary { .. } | Expr::If { .. } | Expr::Block(_, _) | Expr::AsyncGroup(_, _) | Expr::Match { .. } | Expr::Select(_, _) | Expr::Return(_, _) | Expr::Throw(_, _) | Expr::TryCatch { .. } | Expr::Range { .. } | Expr::Continue(_) | Expr::Break(_)) }
+pub(crate) fn arith_structural(expr: &Expr) -> bool { matches!(expr, Expr::Binary { .. } | Expr::Unary { .. } | Expr::If { .. } | Expr::Block(_, _) | Expr::AsyncGroup(_, _, _) | Expr::Match { .. } | Expr::Select(_, _) | Expr::Return(_, _) | Expr::Throw(_, _) | Expr::TryCatch { .. } | Expr::Range { .. } | Expr::Continue(_) | Expr::Break(_)) }
 
 pub(crate) fn arith_a_name(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
 

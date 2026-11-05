@@ -305,7 +305,7 @@ fn check_crossings_expr_path(world: ref CheckWorld, name: ref String, expr: ref 
         }
         Expr::Return(value, _) => return check_crossings_returned(world, name, value),
         Expr::Block(b, _) => return check_crossings_path(world, name, b.stmts, 0, in_loop),
-        Expr::AsyncGroup(b, _) => return check_crossings_path(world, name, b.stmts, 0, in_loop),
+        Expr::AsyncGroup(b, _, _) => return check_crossings_path(world, name, b.stmts, 0, in_loop),
         Expr::If { cond, then_branch, else_branch, .. } => {
             if check_crossings_named_in(world, name, cond) {
                 return CheckCrossingsPath::Taken

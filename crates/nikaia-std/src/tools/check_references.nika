@@ -354,7 +354,7 @@ fn check_gives_back_parts_into(expr: ref Expr, name: ref String, words: ref winn
                 check_gives_back_parts_into(tail, name, words, found)
             }
         },
-        Expr::AsyncGroup(block, _) => {
+        Expr::AsyncGroup(block, _, _) => {
             for tail in block_tail(block) {
                 check_gives_back_parts_into(tail, name, words, found)
             }
@@ -408,7 +408,7 @@ fn check_gives_back_is_name(expr: ref Expr, name: ref String, words: ref winnow_
 fn check_gives_back_tail(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return match expr {
         Expr::Block(block, _) => check_gives_back_block_tail(block, name, words),
-        Expr::AsyncGroup(block, _) => check_gives_back_block_tail(block, name, words),
+        Expr::AsyncGroup(block, _, _) => check_gives_back_block_tail(block, name, words),
         Expr::If { then_branch, else_branch, .. } => {
             if check_gives_back_block_tail(then_branch, name, words) {
                 return true
@@ -480,7 +480,7 @@ fn check_gives_back_returns(expr: ref Expr, name: ref String, words: ref winnow_
                     found = true
                 }
             },
-            Expr::AsyncGroup(block, _) => {
+            Expr::AsyncGroup(block, _, _) => {
                 if check_gives_back_block_returns(block, name, words) {
                     found = true
                 }

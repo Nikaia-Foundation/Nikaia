@@ -489,9 +489,10 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st)
             return Expr::Block(numbers_block(block, st), id2)
         },
-        Expr::AsyncGroup(block, id) => {
+        Expr::AsyncGroup(block, id, within) => {
             let id2 = numbers_id(id, st)
-            return Expr::AsyncGroup(numbers_block(block, st), id2)
+            let within2 = numbers_maybe_expr(within, st)
+            return Expr::AsyncGroup(numbers_block(block, st), id2, within2)
         },
         Expr::Overlap(block, id) => {
             let id2 = numbers_id(id, st)
@@ -521,9 +522,10 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
             let config2 = numbers_config(config, st)
             return Expr::Call { func: func2, args: args2, config: config2, id: id2 }
         },
-        Expr::Spawn { body, written_async, child, id } => {
+        Expr::Spawn { body, written_async, child, within, id } => {
             let id2 = numbers_id(id, st)
-            return Expr::Spawn { body: numbers_expr(body, st), written_async: written_async, child: child, id: id2 }
+            let within2 = numbers_maybe_expr(within, st)
+            return Expr::Spawn { body: numbers_expr(body, st), written_async: written_async, child: child, within: within2, id: id2 }
         },
         Expr::Dsl { target, package, context, content, id } => {
             return Expr::Dsl { target: target, package: package, context: context, content: content, id: numbers_id(id, st) }
@@ -581,9 +583,10 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st)
             return Expr::Try(numbers_expr(inner, st), id2)
         },
-        Expr::Async(inner, id) => {
+        Expr::Async(inner, id, within) => {
             let id2 = numbers_id(id, st)
-            return Expr::Async(numbers_expr(inner, st), id2)
+            let within2 = numbers_maybe_expr(within, st)
+            return Expr::Async(numbers_expr(inner, st), id2, within2)
         },
         Expr::Throw(inner, id) => {
             let id2 = numbers_id(id, st)

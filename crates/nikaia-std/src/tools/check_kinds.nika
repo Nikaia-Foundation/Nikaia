@@ -517,7 +517,7 @@ impl CheckState {
         let name = match guarded {
             Expr::Call { func, .. } => kind_callee_name(world, func) ?? return false,
             Expr::Try(inner, _) => return self.several_arrive(world, inner),
-            Expr::Async(inner, _) => return self.several_arrive(world, inner),
+            Expr::Async(inner, _, _) => return self.several_arrive(world, inner),
             else => return false,
         }
         let key = world.here.unaliased(name)

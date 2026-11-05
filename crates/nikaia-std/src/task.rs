@@ -464,6 +464,47 @@ impl std::fmt::Display for TimedOut {
 
 impl std::error::Error for TimedOut {}
 
+/// **The deadline of `async(within: d)`**
+/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D16): `d`
+/// counted from where the form starts. [`Deadline::bound`] runs a task's body
+/// against it; when it runs out first the body is dropped at its pause, as
+/// `h.cancel()` stops a task, and the task ends with [`TimedOut`], a failure
+/// that meets the handlers as any other does (D22).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Deadline(std::time::Instant);
+
+impl Deadline {
+    /// `span` from now; one too far to count never runs out.
+    pub fn after(span: std::time::Duration) -> Self {
+        let now = std::time::Instant::now();
+        Deadline(
+            now.checked_add(span)
+                .unwrap_or_else(|| now + std::time::Duration::from_secs(u32::MAX.into())),
+        )
+    }
+
+    /// The body's outcome, or [`TimedOut`] in its channel once the deadline
+    /// ran out before it ended.
+    pub async fn bound<T, E: From<TimedOut>>(
+        self,
+        body: impl std::future::Future<Output = Result<T, E>>,
+    ) -> Result<T, E> {
+        use std::future::Future;
+        let mut body = std::pin::pin!(body);
+        let mut sleeping = std::pin::pin!(crate::time::sleep_until(self.0));
+        std::future::poll_fn(|context| {
+            if let std::task::Poll::Ready(outcome) = body.as_mut().poll(context) {
+                return std::task::Poll::Ready(outcome);
+            }
+            if sleeping.as_mut().poll(context).is_ready() {
+                return std::task::Poll::Ready(Err(E::from(TimedOut)));
+            }
+            std::task::Poll::Pending
+        })
+        .await
+    }
+}
+
 /// **What a `join(within:)` does with the task when its time ran out**
 /// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D17):
 /// `Keep`, the default, lets it run on and leaves the handle live; `Cancel`

@@ -1,0 +1,33 @@
+// `async(within: d) { … }` (Part I 8.1.2, ADR-async-5 D16, #986): `d` counts
+// from the group's start; a task of it still running when it runs out is
+// cancelled at its pause and ends with `task::TimedOut`, which arrives at the
+// group's end. A task that ended in time has done its work.
+
+use std::time
+
+fn quick() {
+	time::sleep(1.millis())
+	println("quick done")
+}
+
+fn slow() {
+	time::sleep(500.millis())
+	println("never printed")
+}
+
+fn run() throws {
+	async(within: 50.millis()) {
+		async quick()
+		async slow()
+	}
+	println("never printed either")
+}
+
+fn main() {
+	run() catch {
+		match error {
+			task::TimedOut => println("timed out"),
+			else => println(f"other: {error}"),
+		}
+	}
+}

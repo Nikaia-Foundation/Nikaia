@@ -277,8 +277,9 @@ impl EmitState {
             Expr::Binary { op, lhs, rhs, span, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.emit_core_binary(world, walk, out, host, node, *op, lhs, rhs, span, depth, flow, scope)?; },
             Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); self.emit_core_coalesce(world, walk, out, host, node, value, fallback, depth, flow, scope)?; },
             Expr::TryCatch { expr, handler, id } => { let expr = nikaia_std::boxed::open(expr); let id = *id; match expr {
-                Expr::Spawn { body, child, .. } if { let child = *child; child } => {
-                    let body = nikaia_std::boxed::open(body);
+                Expr::Spawn { body, child, within, .. } if { let child = *child; child } => {
+                    let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within);
+                    walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, flow, scope)?;
                     match body {
                         Expr::Closure { body: block, .. } => {
                             let guarded = Expr::Block(block.clone(), numbered_id(id_of(expr)));
@@ -289,7 +290,11 @@ impl EmitState {
                         _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("`async(handle)` takes a lambda. Write `async(handle) fn { … }`."), at: Some(flow.statement) }, &"emit_expr_written")); },
                     }
                 },
-                Expr::Spawn { body, written_async, .. } if { let written_async = *written_async; written_async } => { let body = nikaia_std::boxed::open(body); self.emit_core_spawn_fallback(world, walk, out, host, expr, body, handler, id.get(), depth, flow, scope)?; },
+                Expr::Spawn { body, written_async, within, .. } if { let written_async = *written_async; written_async } => {
+                    let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within);
+                    walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, flow, scope)?;
+                    self.emit_core_spawn_fallback(world, walk, out, host, expr, body, handler, id.get(), depth, flow, scope)?;
+                },
                 _ => { self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope)?; },
             }; },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.emit_core_try(world, walk, out, host, inner, depth, flow, scope)?; },
@@ -297,19 +302,27 @@ impl EmitState {
             Expr::Break(_) => { self.emit_core_jump(out, true, flow)?; },
             Expr::Continue(_) => { self.emit_core_jump(out, false, flow)?; },
             Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.emit_core_throw(world, walk, out, host, inner, depth, flow, scope)?; },
-            Expr::Spawn { body, child, id, .. } if { let child = *child; child } => {
-                let body = nikaia_std::boxed::open(body); let id = *id;
+            Expr::Spawn { body, child, id, within, .. } if { let child = *child; child } => {
+                let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let id = *id;
+                walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, flow, scope)?;
                 let kind = self.emit_child_kind(id.get() as i64, flow)?;
                 self.emit_async_task(world, walk, out, host, body, id.get() as i64, &kind, depth, flow, scope)?;
             },
-            Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope)?; },
-            Expr::Async(task, id) => {
-                let task = nikaia_std::boxed::open(task); let id = *id;
+            Expr::Spawn { body, within, .. } => {
+                let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within);
+                walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, flow, scope)?;
+                self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope)?;
+            },
+            Expr::Async(task, id, within) => {
+                let task = nikaia_std::boxed::open(task); let within = nikaia_std::boxed::open(within); let id = *id;
                 let kind = self.emit_async_kind(i64::from(id.get()));
                 let joining = walk.async_joining.get(&(id.get() as i64));
-                if joining.is_some() { out.push(nikaia_std::index::or(joining, || "")); } else if kind == "join" || kind == "spawn" { self.emit_async_task(world, walk, out, host, task, i64::from(id.get()), &kind, depth, flow, scope)?; } else { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet where its value is waited for at a later statement but it is not a `let` of its own (#988)."), at: emit_async_at(flow.statement) }, &"emit_expr_written")); }
+                if joining.is_some() { out.push(nikaia_std::index::or(joining, || "")); } else if kind == "join" || kind == "spawn" {
+                    walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, flow, scope)?;
+                    self.emit_async_task(world, walk, out, host, task, i64::from(id.get()), &kind, depth, flow, scope)?;
+                } else { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet where its value is waited for at a later statement but it is not a `let` of its own (#988)."), at: emit_async_at(flow.statement) }, &"emit_expr_written")); }
             },
-            Expr::AsyncGroup(block, id) => { let id = *id; self.emit_async_group(world, walk, out, host, block, i64::from(id.get()), depth, flow, scope)?; },
+            Expr::AsyncGroup(block, id, within) => { let within = nikaia_std::boxed::open(within); let id = *id; self.emit_async_group(world, walk, out, host, block, i64::from(id.get()), (within).as_ref(), depth, flow, scope)?; },
             _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate this expression yet: an `asm` block in expression position"), at: Some(flow.statement) }, &"emit_expr_written")); },
         }
         Ok(())

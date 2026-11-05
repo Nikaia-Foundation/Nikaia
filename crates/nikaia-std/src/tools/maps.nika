@@ -751,7 +751,7 @@ impl MpBody {
                 self.expr(count)
             },
             Expr::Block(b, _) => self.block(b, false),
-            Expr::AsyncGroup(b, _) => self.block(b, false),
+            Expr::AsyncGroup(b, _, _) => self.block(b, false),
             Expr::Unsafe(b, _) => self.block(b, false),
             Expr::If { cond, then_branch, else_branch, .. } => {
                 self.expr(cond)
@@ -841,7 +841,7 @@ impl MpBody {
             Expr::Unary { expr, .. } => self.expr(expr),
             Expr::Cast { expr, .. } => self.expr(expr),
             Expr::Try(inner, _) => self.expr(inner),
-            Expr::Async(inner, _) => self.expr(inner),
+            Expr::Async(inner, _, _) => self.expr(inner),
             Expr::Throw(inner, _) => self.expr(inner),
             Expr::Coalesce { value, fallback, .. } => {
                 self.expr(value)

@@ -557,7 +557,7 @@ fn look_expr(expr: ref Expr, look: Look, deferred: bool, around: ref Around, wor
         },
         Expr::Unary { expr, .. } => look_expr(expr, look, deferred, around, words, seen),
         Expr::Try(inner, _) => look_expr(inner, look, deferred, around, words, seen),
-        Expr::Async(inner, _) => look_expr(inner, look, deferred, around, words, seen),
+        Expr::Async(inner, _, _) => look_expr(inner, look, deferred, around, words, seen),
         Expr::Throw(inner, _) => look_expr(inner, look, deferred, around, words, seen),
         Expr::Cast { expr, .. } => look_expr(expr, look, deferred, around, words, seen),
         Expr::TryCatch { expr, handler, .. } => {
@@ -586,7 +586,7 @@ fn look_expr(expr: ref Expr, look: Look, deferred: bool, around: ref Around, wor
             }
         },
         Expr::Block(b, _) => look_block(b, look, deferred, around, words, seen),
-        Expr::AsyncGroup(b, _) => look_block(b, look, deferred, around, words, seen),
+        Expr::AsyncGroup(b, _, _) => look_block(b, look, deferred, around, words, seen),
         Expr::Overlap(b, _) => look_block(b, look, true, around, words, seen),
         Expr::Unsafe(b, _) => look_block(b, look, deferred, around, words, seen),
         Expr::Closure { body, .. } => look_block(body, look, true, around, words, seen),

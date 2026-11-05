@@ -386,7 +386,7 @@ impl CheckState {
         let name = match guarded {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match kind_callee_name(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false } },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.several_arrive(world, inner) },
-            Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.several_arrive(world, inner) },
+            Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); return self.several_arrive(world, inner) },
             _ => return false,
         };
         let key = world.here.unaliased(&name);

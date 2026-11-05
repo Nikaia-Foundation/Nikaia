@@ -29,7 +29,7 @@ pub(crate) fn number_branches_of_value(value: &Expr) -> Option<Vec<&Expr>> {
         Expr::If { .. } => { return number_branches(value); },
         Expr::Match { .. } => { return number_branches(value); },
         Expr::Block(block, _) => { return number_branches_of_block(block); },
-        Expr::AsyncGroup(block, _) => { return number_branches_of_block(block); },
+        Expr::AsyncGroup(block, _, _) => { return number_branches_of_block(block); },
         _ => { if !number_leaves(value) { out.push(value); } },
     }
     Some(out)
@@ -519,7 +519,7 @@ impl CheckState {
             },
             Expr::Match { arms, .. } => { for arm in arms.iter() { self.literals_are(&arm.body, ty); } },
             Expr::Block(block, _) => { self.literals_in_the_tail(block, ty); },
-            Expr::AsyncGroup(block, _) => { self.literals_in_the_tail(block, ty); },
+            Expr::AsyncGroup(block, _, _) => { self.literals_in_the_tail(block, ty); },
             _ => { },
         }
     }

@@ -1014,7 +1014,7 @@ fn flow_tuple_parts(going: ref TierGoing, value: ref Expr, kinds: ref Kinds, ask
         // **Each way a choice ends** goes in as a value of its own, so that
         // a tuple built in a branch is taken part by part.
         Expr::Block(block, _) => return flow_tuple_tail(going, block, kinds, ask, walk),
-        Expr::AsyncGroup(block, _) => return flow_tuple_tail(going, block, kinds, ask, walk),
+        Expr::AsyncGroup(block, _, _) => return flow_tuple_tail(going, block, kinds, ask, walk),
         Expr::If { then_branch, else_branch, .. } => {
             let otherwise = else_branch ?? return false
             flow_tuple_tail(going, then_branch, kinds, ask, walk)
@@ -1286,7 +1286,7 @@ fn read_through(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk, mut out: 
             read_through(inner, ask, walk, out)
             return
         }
-        Expr::Async(inner, _) => {
+        Expr::Async(inner, _, _) => {
             read_through(inner, ask, walk, out)
             return
         }
@@ -1922,7 +1922,7 @@ fn lent_whole(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
 fn still_sources(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk, mut out: Vec[String]) {
     match value {
         Expr::Block(block, _) => still_tail(block, ask, walk, out),
-        Expr::AsyncGroup(block, _) => still_tail(block, ask, walk, out),
+        Expr::AsyncGroup(block, _, _) => still_tail(block, ask, walk, out),
         Expr::If { then_branch, else_branch, .. } => {
             still_tail(then_branch, ask, walk, out)
             let otherwise = else_branch ?? return
@@ -2225,7 +2225,7 @@ fn source_of(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Declaring
         Expr::Call { func, .. } => called_result(func, ask, walk),
         Expr::MethodCall { method, .. } => method_result(ask.names.resolve(method), walk),
         Expr::Try(inner, _) => source_of(inner, ask, walk),
-        Expr::Async(inner, _) => source_of(inner, ask, walk),
+        Expr::Async(inner, _, _) => source_of(inner, ask, walk),
         else => null,
     }
 }
@@ -2638,7 +2638,7 @@ fn a_literal_text(value: ref Expr) -> bool {
     return match value {
         Expr::LitStr { .. } => true,
         Expr::Block(block, _) => a_literal_tail(block),
-        Expr::AsyncGroup(block, _) => a_literal_tail(block),
+        Expr::AsyncGroup(block, _, _) => a_literal_tail(block),
         Expr::If { then_branch, else_branch, .. } => {
             let otherwise = else_branch ?? return false
             a_literal_tail(then_branch) && a_literal_tail(otherwise)
@@ -2922,7 +2922,7 @@ fn ties_of(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Vec[TextTie
         }
         Expr::Field { base, .. } => return ties_of(base, ask, walk),
         Expr::Try(inner, _) => return ties_of(inner, ask, walk),
-        Expr::Async(inner, _) => return ties_of(inner, ask, walk),
+        Expr::Async(inner, _, _) => return ties_of(inner, ask, walk),
         Expr::ListLit { items, .. } => {
             for item in items {
                 for tie in ties_of(item, ask, walk) {
@@ -3188,7 +3188,7 @@ fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Strin
         Expr::Variable(name, _) => struct_of_local(ask.names.resolve(name), walk),
         Expr::Unary { expr, .. } => tier_struct_of(expr, ask, walk),
         Expr::Try(inner, _) => tier_struct_of(inner, ask, walk),
-        Expr::Async(inner, _) => tier_struct_of(inner, ask, walk),
+        Expr::Async(inner, _, _) => tier_struct_of(inner, ask, walk),
         Expr::Field { base, name, .. } => field_struct_or_bytes(base, ask.names.resolve(name), ask, walk),
         Expr::Index { base, index, .. } => cut_bytes(base, index, ask, walk),
         // **A struct a function of the program returns** (#803): its fields
@@ -3969,7 +3969,7 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             late_choice_closed(leaf, held, late)
         }
         Expr::Block(block, _) => late_block(block, leaf, ask, late),
-        Expr::AsyncGroup(block, _) => late_block(block, leaf, ask, late),
+        Expr::AsyncGroup(block, _, _) => late_block(block, leaf, ask, late),
         Expr::Unsafe(block, _) => late_block(block, false, ask, late),
         Expr::Overlap(block, _) => late_block(block, false, ask, late),
         Expr::LitInterpolated { parts, .. } => {
@@ -4062,7 +4062,7 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             late_expr(rhs, false, ask, late)
         }
         Expr::Try(inner, _) => late_expr(inner, false, ask, late),
-        Expr::Async(inner, _) => late_expr(inner, false, ask, late),
+        Expr::Async(inner, _, _) => late_expr(inner, false, ask, late),
         Expr::Throw(inner, _) => {
             late.leaving += 1
             late_expr(inner, false, ask, late)
@@ -4194,7 +4194,7 @@ fn late_sources(value: ref Expr, ask: ref TierAsk, late: ref TierLate) -> Vec[St
             }
         }
         Expr::Try(inner, _) => return late_sources(inner, ask, late),
-        Expr::Async(inner, _) => return late_sources(inner, ask, late),
+        Expr::Async(inner, _, _) => return late_sources(inner, ask, late),
         else => late_read_off(value, ask, late, out),
     }
     return out
@@ -4297,7 +4297,7 @@ fn late_made(value: ref Expr) -> ref Expr {
     return match value {
         Expr::Coalesce { value: first, .. } => late_made(first),
         Expr::Try(inner, _) => late_made(inner),
-        Expr::Async(inner, _) => late_made(inner),
+        Expr::Async(inner, _, _) => late_made(inner),
         else => value,
     }
 }
@@ -4572,7 +4572,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             walk.tail_back = back
             tier_block(block, ask, walk)
         }
-        Expr::AsyncGroup(block, _) => {
+        Expr::AsyncGroup(block, _, _) => {
             walk.tail_back = back
             tier_block(block, ask, walk)
         }
@@ -4607,7 +4607,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             kinds_joined(out, tier_block(handler, ask, walk))
         }
         Expr::Try(inner, _) => tier_expr(inner, ask, walk),
-        Expr::Async(inner, _) => tier_expr(inner, ask, walk),
+        Expr::Async(inner, _, _) => tier_expr(inner, ask, walk),
         Expr::Unary { expr, .. } => tier_expr(expr, ask, walk),
         Expr::Throw(inner, _) => {
             tier_expr(inner, ask, walk)
@@ -6178,7 +6178,7 @@ fn a_keeping_target(function: ref FnDecl, at: i64, ask: ref TierAsk) -> bool {
 fn param_arm_leaves(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
     match value {
         Expr::Block(block, _) => param_arm_tail(block, ask, walk),
-        Expr::AsyncGroup(block, _) => param_arm_tail(block, ask, walk),
+        Expr::AsyncGroup(block, _, _) => param_arm_tail(block, ask, walk),
         Expr::If { then_branch, else_branch, .. } => {
             param_arm_tail(then_branch, ask, walk)
             let otherwise = else_branch ?? return
@@ -6608,7 +6608,7 @@ fn tw_lets_expr(mut expr: Expr, job: ref TwLets) {
         },
         Expr::Unary { expr: inner, .. } => tw_lets_expr(inner, job),
         Expr::Try(inner, _) => tw_lets_expr(inner, job),
-        Expr::Async(inner, _) => tw_lets_expr(inner, job),
+        Expr::Async(inner, _, _) => tw_lets_expr(inner, job),
         Expr::Throw(inner, _) => tw_lets_expr(inner, job),
         Expr::Cast { expr: inner, .. } => tw_lets_expr(inner, job),
         Expr::Return(value, _) => tw_lets_maybe(value, job),
@@ -6654,7 +6654,7 @@ fn tw_lets_expr(mut expr: Expr, job: ref TwLets) {
             tw_lets_fields(fields, job)
         },
         Expr::Block(block, _) => tw_lets_block(block, job),
-        Expr::AsyncGroup(block, _) => tw_lets_block(block, job),
+        Expr::AsyncGroup(block, _, _) => tw_lets_block(block, job),
         Expr::Unsafe(block, _) => tw_lets_block(block, job),
         Expr::Overlap(block, _) => tw_lets_block(block, job),
         Expr::Closure { body, .. } => tw_lets_block(body, job),
@@ -7005,7 +7005,7 @@ fn hb_ways_out(body: ref Block) -> Vec[ref Expr] {
         match expr {
             Expr::Return(value, _) => out.extend(hb_maybe(value)),
             Expr::Block(block, _) => out.extend(hb_returns_of(block)),
-            Expr::AsyncGroup(block, _) => out.extend(hb_returns_of(block)),
+            Expr::AsyncGroup(block, _, _) => out.extend(hb_returns_of(block)),
             Expr::Unsafe(block, _) => out.extend(hb_returns_of(block)),
             Expr::Overlap(block, _) => out.extend(hb_returns_of(block)),
             Expr::If { then_branch, else_branch, .. } => {

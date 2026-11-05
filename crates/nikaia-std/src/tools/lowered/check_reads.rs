@@ -69,7 +69,7 @@ impl CheckState {
                 for tail in block_tail(block) { self.a_map_read_kept(world, found, want, tail, span); }
                 return;
             },
-            Expr::AsyncGroup(block, _) => {
+            Expr::AsyncGroup(block, _, _) => {
                 for tail in block_tail(block) { self.a_map_read_kept(world, found, want, tail, span); }
                 return;
             },

@@ -465,7 +465,7 @@ impl EmitState {
                 self.emit_expr(world, walk, out, host, &arm.body, depth, body_flow, scope)?;
                 out.push("; }");
             } else {
-                let bare = matches!(arm.body, Expr::LitStr { .. } | Expr::LitInterpolated { .. } | Expr::LitInt { .. } | Expr::LitChar(_, _) | Expr::LitBool(_, _) | Expr::Variable(_, _) | Expr::Block(_, _) | Expr::AsyncGroup(_, _) | Expr::Tuple(_, _) | Expr::ListLit { .. });
+                let bare = matches!(arm.body, Expr::LitStr { .. } | Expr::LitInterpolated { .. } | Expr::LitInt { .. } | Expr::LitChar(_, _) | Expr::LitBool(_, _) | Expr::Variable(_, _) | Expr::Block(_, _) | Expr::AsyncGroup(_, _, _) | Expr::Tuple(_, _) | Expr::ListLit { .. });
                 if !bare { out.push("("); }
                 self.emit_expr(world, walk, out, host, &arm.body, depth, body_flow, scope)?;
                 if !bare { out.push(")"); }
@@ -518,7 +518,7 @@ impl EmitState {
                     self.emit_core_block(world, walk, out, host, block, depth, inside, scope, EmitTail::Statement)?;
                     return Ok(());
                 },
-                Expr::AsyncGroup(block, _) => {
+                Expr::AsyncGroup(block, _, _) => {
                     self.emit_core_block(world, walk, out, host, block, depth, inside, scope, EmitTail::Statement)?;
                     return Ok(());
                 },
@@ -560,7 +560,7 @@ impl EmitState {
                 self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, inside, scope, tail, trimmed)?;
                 return Ok(());
             },
-            Expr::AsyncGroup(block, _) => {
+            Expr::AsyncGroup(block, _, _) => {
                 let mut opening = taken_apart.to_string();
                 for name in opened.iter() { opening.push_str(&format!("let {} = nikaia_std::boxed::open({}); ", name, name)); }
                 for copy in copied.iter() { opening.push_str(copy); }

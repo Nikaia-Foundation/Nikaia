@@ -984,7 +984,7 @@ impl EmitState {
         // the task's value or its failure, in the box.
         let mut fallback = false
         match guarded_expr {
-            Expr::Async(_, _) => {
+            Expr::Async(_, _, _) => {
                 fallback = true
             },
             else => {},
@@ -1001,7 +1001,20 @@ impl EmitState {
             },
             else => {},
         }
-        if nested {
+        // **A fallback's guarded block bound by its task's deadline** (D16,
+        // #986): the block runs as a future the deadline cancels, failing in
+        // the box, so the handler stands in for `task::TimedOut` too.
+        let deadline = walk.async_bound.clone()
+        walk.async_bound = ""
+        let bound_here = deadline != "" && a_block
+        if bound_here {
+            let boxed: String = "Box<dyn std::error::Error>"
+            let bound_flow = guarded with { breaks_to: -1, can_throw: true, in_lambda: false }
+            let bound_scope = EmitScope::plain() with { origin: scope.origin.clone(), channel: boxed.clone() }
+            out.push(f"{deadline}.bound(async {{ let __nikaia_value = ")
+            self.emit_expr(world, walk, out, host, guarded_expr, depth, bound_flow, bound_scope)
+            out.push(f"; Ok::<_, {boxed}>(__nikaia_value) }}).await")
+        } else if nested {
             guarded = guarded with { breaks_to: at }
             if a_block {
                 out.push(f"'__nikaia_caught_{at}: {{ let __nikaia_value = ")
@@ -1013,16 +1026,18 @@ impl EmitState {
         }
         walk.boxed_scope = false
         let bracketed = emit_flow_struct_headed(guarded_expr)
-        if bracketed {
+        if bracketed && !bound_here {
             out.push("(")
         }
-        self.emit_expr(world, walk, out, host, guarded_expr, depth, guarded, scope)
-        if bracketed {
+        if !bound_here {
+            self.emit_expr(world, walk, out, host, guarded_expr, depth, guarded, scope)
+        }
+        if bracketed && !bound_here {
             out.push(")")
         }
-        if nested && a_block {
+        if nested && a_block && !bound_here {
             out.push("; Ok::<_, Box<dyn std::error::Error>>(__nikaia_value) }")
-        } else if nested {
+        } else if nested && !bound_here {
             out.push(") }")
         }
         // Whether the scope's tasks failed in the box, or `Crashed` came alone.
@@ -1376,11 +1391,38 @@ impl EmitState {
         // the body moves is the new handle and the caller's own survives the
         // `spawn`.
         let handles = self.emit_task_handles(task)
-        if handles.len() > 0 {
+        // **A deadline** (ADR-async-5 D16, #986) counts from here, outside
+        // the future; a fallback inside the task binds its guarded block by
+        // it, so `task::TimedOut` reaches the fallback.
+        let deadline = walk.async_within.clone()
+        walk.async_within = ""
+        let mut fallback_inside = false
+        if deadline != "" && body.stmts.len() == 1 {
+            match body.stmts[0].node {
+                Stmt::Expr(only) => match only {
+                    Expr::TryCatch { expr: guarded, .. } => match guarded {
+                        Expr::Block(_, _) => {
+                            fallback_inside = true
+                        },
+                        else => {},
+                    },
+                    else => {},
+                },
+                else => {},
+            }
+        }
+        if handles.len() > 0 || deadline != "" {
             out.push("{ ")
             for name in handles {
                 out.push(f"let {name} = {name}.clone(); ")
             }
+            if deadline != "" {
+                out.push(f"let __nikaia_deadline = {deadline}; ")
+            }
+        }
+        let bound_outside = deadline != "" && !fallback_inside
+        if bound_outside && !flow.can_throw {
+            throw EmitRefused { message: "`async(detached, within: d)` ends with `task::TimedOut` on running out, which the starter must be able to throw.", at: flow.statement }
         }
         // **And which of the two starters**, which is the one place
         // `user_parallelism` reaches a `spawn` (ADR-037 D2).
@@ -1392,8 +1434,12 @@ impl EmitState {
         if flow.can_throw {
             let inside = EmitFlow::plain() with { statement: flow.statement, can_throw: true }
             let inside_scope = EmitScope::plain() with { origin: scope.origin.clone(), function: scope.function.clone(), channel: scope.channel.clone() }
+            if fallback_inside {
+                walk.async_bound = "__nikaia_deadline"
+            }
             self.emit_core_block(world, walk, inner, host, body, depth, inside, inside_scope, EmitTail::Value)
-            failing = inner.buf.contains("?") || inner.buf.contains("return")
+            walk.async_bound = ""
+            failing = inner.buf.contains("?") || inner.buf.contains("return") || bound_outside
         }
         let mut kind: String = "TaskHandle"
         if failing {
@@ -1414,17 +1460,27 @@ impl EmitState {
         // it may hold.
         if failing {
             out.push("{ let __nikaia_task = ")
-            out.append(inner)
+            if bound_outside {
+                out.push("__nikaia_deadline.bound(async { let __nikaia_value = ")
+                out.append(inner)
+                out.push(f"; Ok::<_, {scope.channel}>(__nikaia_value) }}).await?")
+            } else {
+                out.append(inner)
+            }
             out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }}")
             // What its error says in the log if nobody waits (ADR-346 D6).
             out.push(f", |e: &{scope.channel}| {{ use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})")
         } else {
             let inside = EmitFlow::plain() with { statement: flow.statement }
             let inside_scope = EmitScope::plain()
+            if fallback_inside {
+                walk.async_bound = "__nikaia_deadline"
+            }
             self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
+            walk.async_bound = ""
             out.push(")")
         }
-        if self.emit_task_handles(task).len() > 0 {
+        if self.emit_task_handles(task).len() > 0 || deadline != "" {
             out.push(" }")
         }
     }

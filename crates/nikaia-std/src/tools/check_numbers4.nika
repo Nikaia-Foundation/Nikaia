@@ -57,7 +57,7 @@ fn number_branches_of_value(value: ref Expr) -> Vec[ref Expr]? sync {
         Expr::Block(block, _) => {
             return number_branches_of_block(block)
         },
-        Expr::AsyncGroup(block, _) => {
+        Expr::AsyncGroup(block, _, _) => {
             return number_branches_of_block(block)
         },
         else => {
@@ -687,7 +687,7 @@ impl CheckState {
                 }
             },
             Expr::Block(block, _) => self.literals_in_the_tail(block, ty),
-            Expr::AsyncGroup(block, _) => self.literals_in_the_tail(block, ty),
+            Expr::AsyncGroup(block, _, _) => self.literals_in_the_tail(block, ty),
             else => {},
         }
     }

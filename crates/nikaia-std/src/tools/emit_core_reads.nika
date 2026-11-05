@@ -22,7 +22,7 @@ fn emit_read_a_length(world: ref EmitWorld, expr: ref Expr) -> bool {
 fn emit_read_a_call(expr: ref Expr) -> bool {
     return match expr {
         Expr::Try(inner, _) => emit_read_is_call(inner),
-        Expr::Async(inner, _) => emit_read_is_call(inner),
+        Expr::Async(inner, _, _) => emit_read_is_call(inner),
         else => emit_read_is_call(expr),
     }
 }

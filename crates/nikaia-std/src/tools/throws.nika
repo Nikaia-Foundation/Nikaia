@@ -570,12 +570,18 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
         // **A task's crash is an error to whoever waits for it** (Part II
         // 12.7, ADR-328 D8): the function that starts it throws
         // `task::Crashed`, as a `task::scope` in it does.
-        Expr::Async(inner, _) => {
+        Expr::Async(inner, _, within) => {
             if !caught {
                 out.direct.insert("task::Crashed")
             }
+            thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out)
             thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out)
         }
+        // **A deadline that runs out is the failure `task::TimedOut`**
+        // (ADR-async-5 D16, #986): it arrives where the task's own do, so a
+        // fallback stands in for it.
+        Expr::AsyncGroup(_, _, within) => thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out),
+        Expr::Spawn { within, .. } => thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Throw(inner, _) => thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Cast { expr, .. } => thrown_in(expr, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Field { base, .. } => thrown_in(base, names, holes_of, contribution_of, in_a_handler, caught, out),
@@ -653,7 +659,7 @@ fn maybe_thrown_in(expr: ref Expr?, names: ref winnow_grammar::InternerContext, 
 fn thrown_in_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync, in_a_handler: bool, mut out: Thrown) {
     match expr {
         Expr::Block(block, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
-        Expr::AsyncGroup(block, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
+        Expr::AsyncGroup(block, _, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
         Expr::Unsafe(block, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
         Expr::Overlap(block, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
         Expr::Closure { body, .. } => thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out),
@@ -863,4 +869,14 @@ fn pattern_path(pattern: ref MatchPattern) -> Vec[winnow_grammar::Symbol]? {
         else => {},
     }
     return null
+}
+
+// `within: d` of an `async(…)` form (ADR-async-5 D16): `d` itself, and the
+// `task::TimedOut` its running out ends the task with.
+fn thrown_by_a_deadline(within: ref Expr?, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync, in_a_handler: bool, caught: bool, mut out: Thrown) {
+    let d = within ?? return
+    if !caught {
+        out.direct.insert("task::TimedOut")
+    }
+    thrown_in(d, names, holes_of, contribution_of, in_a_handler, caught, out)
 }

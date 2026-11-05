@@ -2463,7 +2463,7 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
             Stmt::Let { names, value, .. } => {
                 match value {
                     Expr::Spawn { child, .. } if child => pending.push(check_child_binding(state, world, block, at, names, value, group)),
-                    Expr::Async(inner, _) => {
+                    Expr::Async(inner, _, _) => {
                         pending.push(check_async_binding(state, world, block, at, names, value, group, beside, last, stmt.span))
                         check_async_in(state, inner, group, stmt.span)
                     },
@@ -2473,7 +2473,7 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
                     Expr::TryCatch { expr: guarded, .. } => {
                         match guarded {
                             Expr::Spawn { child, .. } if child => pending.push(check_child_binding(state, world, block, at, names, guarded, group)),
-                            Expr::Async(inner, _) => {
+                            Expr::Async(inner, _, _) => {
                                 pending.push(check_async_binding(state, world, block, at, names, guarded, group, beside, last, stmt.span))
                                 check_async_in(state, inner, group, stmt.span)
                             },
@@ -2489,7 +2489,7 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
                         }
                         for part in parts {
                             match part {
-                                Expr::Async(inner, _) => {
+                                Expr::Async(inner, _, _) => {
                                     pending.push(check_async_binding(state, world, block, at, names, part, group, beside + computed - 1, last, stmt.span))
                                     check_async_in(state, inner, group, stmt.span)
                                 },
@@ -2512,7 +2512,7 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
                         state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
                         pending.push(count)
                     },
-                    Expr::Async(inner, _) => {
+                    Expr::Async(inner, _, _) => {
                         state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
                         if last && beside == 0 {
                             state.a_task_with_nothing_beside_it(stmt.span, "it is the last statement of its group, which waits for it at once")
@@ -2626,15 +2626,15 @@ fn check_a_child_task(expr: ref Expr) -> bool sync {
 fn starts_a_task(stmt: ref Stmt) -> bool sync {
     return match stmt {
         Stmt::Let { value, .. } => match value {
-            Expr::Async(_, _) => true,
+            Expr::Async(_, _, _) => true,
             Expr::TryCatch { expr, .. } => match expr {
-                Expr::Async(_, _) => true,
+                Expr::Async(_, _, _) => true,
                 else => false,
             },
             else => false,
         },
         Stmt::Expr(value) => match value {
-            Expr::Async(_, _) => true,
+            Expr::Async(_, _, _) => true,
             else => false,
         },
         else => false,
@@ -2682,7 +2682,7 @@ fn check_async_in(mut state: CheckState, expr: ref Expr, group: i64, span: ref S
         Expr::Spawn { child, .. } if child => {
             state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Handle, group: group })
         },
-        Expr::Async(inner, _) => {
+        Expr::Async(inner, _, _) => {
             state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(id_of(expr) as i64), group: group })
             state.a_task_with_nothing_beside_it(span, "where it stands, its value is needed at once")
             check_async_in(state, inner, group, span)
@@ -2707,7 +2707,7 @@ fn check_async_operands(mut state: CheckState, parts: ref Vec[ref Expr], at: i64
     }
     for part in parts {
         match part {
-            Expr::Async(inner, _) => {
+            Expr::Async(inner, _, _) => {
                 state.facts.async_waits.insert(id_of(part) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(at), group: group })
                 if computed < 2 {
                     state.a_task_with_nothing_beside_it(span, "nothing beside it in the same call or operation is computed while it runs")

@@ -1,6 +1,0 @@
-error: `within:` on `async` isn't built yet (#986).
-  --> tests/async_parse_within_is_not_built_yet.nika:7:26
-   |
- 7 | 	let h = async(detached, within: time::Duration::from_secs(1)) fn { 1 }
-   |                          ^^^^^^
-   |

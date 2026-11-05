@@ -575,6 +575,8 @@ pub enum Expr {
         // whose value is a `task::ChildHandle` (Part I 8.1.2, ADR-async-5
         // D11): it takes nothing, may borrow, and its group waits for it.
         child: bool,
+        // `within: d` in its options: the task's deadline (ADR-async-5 D16).
+        within: Expr?,
         id: node_id::NodeId,
     },
 
@@ -585,12 +587,17 @@ pub enum Expr {
     /// holds the lambda, which is run as the task, not bound (D10). Where the
     /// task is waited for the checker records by this node's id
     /// (`CheckFacts::async_waits`).
-    Async(Expr, node_id::NodeId),
+    /// The third field is `d` of `async(within: d) e`, the task's deadline
+    /// counted from its start (D16).
+    Async(Expr, node_id::NodeId, Expr?),
 
     /// Part I 8.1.2: `async { … }`, **the group** (ADR-async-5 D9): its
     /// statements run on the main line, and the tasks started in it are waited
     /// for at its end. Its value is its last expression's.
-    AsyncGroup(Block, node_id::NodeId),
+    /// The third field is `d` of `async(within: d) { … }` (D16): its tasks
+    /// still running when it runs out are cancelled and end with
+    /// `task::TimedOut`.
+    AsyncGroup(Block, node_id::NodeId, Expr?),
 
     // Part II, Kap 10.5: dsl sql db { ... }
     Dsl {
@@ -834,8 +841,8 @@ pub fn id_of(expr: ref Expr) -> u32 sync {
         Expr::If { id, .. } => id.get(),
         Expr::Call { id, .. } => id.get(),
         Expr::Spawn { id, .. } => id.get(),
-        Expr::Async(_, id) => id.get(),
-        Expr::AsyncGroup(_, id) => id.get(),
+        Expr::Async(_, id, _) => id.get(),
+        Expr::AsyncGroup(_, id, _) => id.get(),
         Expr::Dsl { id, .. } => id.get(),
         Expr::MethodCall { id, .. } => id.get(),
         Expr::Field { id, .. } => id.get(),

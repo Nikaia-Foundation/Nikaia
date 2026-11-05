@@ -534,7 +534,7 @@ impl<'a> MpBody<'a> {
                 self.expr(count);
             },
             Expr::Block(b, _) => { self.block(b, false); },
-            Expr::AsyncGroup(b, _) => { self.block(b, false); },
+            Expr::AsyncGroup(b, _, _) => { self.block(b, false); },
             Expr::Unsafe(b, _) => { self.block(b, false); },
             Expr::If { cond, then_branch, else_branch, .. } => {
                 let cond = nikaia_std::boxed::open(cond);
@@ -596,7 +596,7 @@ impl<'a> MpBody<'a> {
             Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.expr(expr); },
             Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.expr(expr); },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner); },
-            Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner); },
+            Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner); },
             Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner); },
             Expr::Coalesce { value, fallback, .. } => {
                 let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);

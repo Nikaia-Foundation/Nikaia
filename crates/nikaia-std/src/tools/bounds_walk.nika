@@ -1420,7 +1420,7 @@ fn bounding_lin(mut walk: BoundsWalk, expr: ref Expr, facts: ref BoundsFacts, co
                 else => null,
             }
         },
-        Expr::AsyncGroup(block, _) => {
+        Expr::AsyncGroup(block, _, _) => {
             let last = block.stmts.len() - 1
             if last < 0 {
                 return null
@@ -3729,7 +3729,7 @@ fn bounding_expr(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsFacts, c
             bounding_after_change(walk, facts, changed)
         },
         Expr::Block(block, _) => bounding_inner_block(walk, block, facts, context, program, words, ask),
-        Expr::AsyncGroup(block, _) => bounding_inner_block(walk, block, facts, context, program, words, ask),
+        Expr::AsyncGroup(block, _, _) => bounding_inner_block(walk, block, facts, context, program, words, ask),
         Expr::Unsafe(block, _) => {
             bounding_inner_block(walk, block, facts, context, program, words, ask)
             // **An `assume` holds past the `unsafe` around it** (ADR-376 D1).
@@ -4065,7 +4065,7 @@ fn bounding_children(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsFact
         },
         Expr::Unary { expr, .. } => bounding_expr(walk, expr, facts, context, program, words, ask),
         Expr::Try(inner, _) => bounding_expr(walk, inner, facts, context, program, words, ask),
-        Expr::Async(inner, _) => bounding_expr(walk, inner, facts, context, program, words, ask),
+        Expr::Async(inner, _, _) => bounding_expr(walk, inner, facts, context, program, words, ask),
         Expr::Throw(inner, _) => bounding_expr(walk, inner, facts, context, program, words, ask),
         Expr::Cast { expr, .. } => bounding_expr(walk, expr, facts, context, program, words, ask),
         Expr::TryCatch { expr, handler, .. } => {
@@ -4229,7 +4229,7 @@ fn changed_in_expr(expr: ref Expr, context: ref BoundsContext, words: ref winnow
         },
         Expr::Unary { expr, .. } => changed_in_expr(expr, context, words, out),
         Expr::Try(inner, _) => changed_in_expr(inner, context, words, out),
-        Expr::Async(inner, _) => changed_in_expr(inner, context, words, out),
+        Expr::Async(inner, _, _) => changed_in_expr(inner, context, words, out),
         Expr::Throw(inner, _) => changed_in_expr(inner, context, words, out),
         Expr::Cast { expr, .. } => changed_in_expr(expr, context, words, out),
         Expr::TryCatch { expr, handler, .. } => {
@@ -4256,7 +4256,7 @@ fn changed_in_expr(expr: ref Expr, context: ref BoundsContext, words: ref winnow
             }
         },
         Expr::Block(b, _) => changed_in_block(b, context, words, out),
-        Expr::AsyncGroup(b, _) => changed_in_block(b, context, words, out),
+        Expr::AsyncGroup(b, _, _) => changed_in_block(b, context, words, out),
         Expr::Overlap(b, _) => changed_in_block(b, context, words, out),
         Expr::Unsafe(b, _) => changed_in_block(b, context, words, out),
         Expr::Closure { body, .. } => changed_in_block(body, context, words, out),

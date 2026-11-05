@@ -68,7 +68,7 @@ pub fn jumps_at_the_end(expr: &Expr) -> bool {
     match expr {
         Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); jumps_at_the_end(fallback) },
         Expr::Block(block, _) => block_jumps_at_the_end(block),
-        Expr::AsyncGroup(block, _) => block_jumps_at_the_end(block),
+        Expr::AsyncGroup(block, _, _) => block_jumps_at_the_end(block),
         _ => jumps(expr),
     }
 }
@@ -93,7 +93,7 @@ pub fn never_a_value(expr: &Expr) -> bool {
         },
         Expr::If { then_branch, else_branch, .. } => if else_branch.is_none() { false } else { block_never_a_value(then_branch) && block_never_a_value(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false }) },
         Expr::Block(block, _) => block_never_a_value(block),
-        Expr::AsyncGroup(block, _) => block_never_a_value(block),
+        Expr::AsyncGroup(block, _, _) => block_never_a_value(block),
         _ => jumps_at_the_end(expr),
     }
 }

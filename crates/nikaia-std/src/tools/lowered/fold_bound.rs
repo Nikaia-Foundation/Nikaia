@@ -344,7 +344,7 @@ pub(crate) fn fb_expr_blocks(expr: &Expr) -> Vec<&Block> {
             out.push(block);
             return out;
         },
-        Expr::AsyncGroup(block, _) => {
+        Expr::AsyncGroup(block, _, _) => {
             out.push(block);
             return out;
         },

@@ -170,7 +170,7 @@ fn nn_every(body: ref Block, visited: ref Vec[ref Expr], mut state: NnState) {
     for expr in visited {
         match expr {
             Expr::Block(inner, _) => blocks.push(inner),
-            Expr::AsyncGroup(inner, _) => blocks.push(inner),
+            Expr::AsyncGroup(inner, _, _) => blocks.push(inner),
             Expr::Unsafe(inner, _) => blocks.push(inner),
             Expr::Overlap(inner, _) => blocks.push(inner),
             Expr::If { then_branch, else_branch, .. } => {

@@ -66,7 +66,7 @@ pub(crate) fn leaves_within(expr: &Expr, throwing: &dyn Fn(&Expr) -> bool, holes
         Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); leaves_within(lhs, throwing, holes_of, with_continue) || leaves_within(rhs, throwing, holes_of, with_continue) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); leaves_within(expr, throwing, holes_of, with_continue) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); leaves_within(inner, throwing, holes_of, with_continue) },
-        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); leaves_within(inner, throwing, holes_of, with_continue) },
+        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); leaves_within(inner, throwing, holes_of, with_continue) },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); leaves_within(inner, throwing, holes_of, with_continue) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); leaves_within(expr, throwing, holes_of, with_continue) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); leaves_within(base, throwing, holes_of, with_continue) },
@@ -124,7 +124,7 @@ pub(crate) fn fields_leave_within(fields: &[FieldInit], throwing: &dyn Fn(&Expr)
 pub(crate) fn blocks_leave(expr: &Expr, throwing: &dyn Fn(&Expr) -> bool, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, with_continue: bool) -> bool {
     match expr {
         Expr::Block(block, _) => leaves_block(block, &throwing, &holes_of, with_continue),
-        Expr::AsyncGroup(block, _) => leaves_block(block, &throwing, &holes_of, with_continue),
+        Expr::AsyncGroup(block, _, _) => leaves_block(block, &throwing, &holes_of, with_continue),
         Expr::Unsafe(block, _) => leaves_block(block, &throwing, &holes_of, with_continue),
         Expr::Overlap(block, _) => leaves_block(block, &throwing, &holes_of, with_continue),
         Expr::Closure { body, .. } => leaves_block(body, &throwing, &holes_of, with_continue),

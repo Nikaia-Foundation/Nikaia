@@ -22,7 +22,7 @@ impl CheckState {
                 let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return out };
                 out.extend(self.value_leaves(world, tail));
             },
-            Expr::AsyncGroup(block, _) => {
+            Expr::AsyncGroup(block, _, _) => {
                 let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return out };
                 out.extend(self.value_leaves(world, tail));
             },
@@ -54,7 +54,7 @@ impl CheckState {
                 let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return out };
                 out.extend(self.choice_nodes(world, tail));
             },
-            Expr::AsyncGroup(block, _) => {
+            Expr::AsyncGroup(block, _, _) => {
                 let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return out };
                 out.extend(self.choice_nodes(world, tail));
             },
@@ -292,7 +292,7 @@ impl CheckState {
         match value {
             Expr::If { then_branch, else_branch, .. } => { if else_branch.is_some() { for block in [then_branch, match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }] { self.narrowed_reads_given_back_in(block); } } },
             Expr::Block(block, _) => { self.narrowed_reads_given_back_in(block); },
-            Expr::AsyncGroup(block, _) => { self.narrowed_reads_given_back_in(block); },
+            Expr::AsyncGroup(block, _, _) => { self.narrowed_reads_given_back_in(block); },
             Expr::Match { arms, .. } => { for each in arms.iter() { self.narrowed_reads_given_back(&each.body); } },
             _ => { self.a_narrowed_read_given_back(value); },
         }
@@ -327,7 +327,7 @@ impl CheckState {
                 self.hands_over_in(world, block, ty, to, span);
                 return;
             },
-            Expr::AsyncGroup(block, _) => {
+            Expr::AsyncGroup(block, _, _) => {
                 self.hands_over_in(world, block, ty, to, span);
                 return;
             },
@@ -522,7 +522,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_arm_leaves_a_block(value: &Expr) -> bool { matches!(value, Expr::Block(_, _) | Expr::AsyncGroup(_, _)) }
+pub(crate) fn check_arm_leaves_a_block(value: &Expr) -> bool { matches!(value, Expr::Block(_, _) | Expr::AsyncGroup(_, _, _)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.

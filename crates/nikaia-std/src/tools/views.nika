@@ -972,7 +972,7 @@ fn list_shaped(value: ref Expr) -> bool {
             true
         }
         Expr::Block(block, _) => list_shaped_block(block),
-        Expr::AsyncGroup(block, _) => list_shaped_block(block),
+        Expr::AsyncGroup(block, _, _) => list_shaped_block(block),
         else => false,
     }
 }
@@ -1201,7 +1201,7 @@ fn handed_back(unit: ref Unit, asked: ref Asked, value: ref Expr, span: ref Span
             }
         }
         Expr::Block(block, _) => walk_block(unit, asked, block, true, own_buffer, here),
-        Expr::AsyncGroup(block, _) => walk_block(unit, asked, block, true, own_buffer, here),
+        Expr::AsyncGroup(block, _, _) => walk_block(unit, asked, block, true, own_buffer, here),
         else => stores(unit, asked, value, span, own_buffer, here),
     }
 }
@@ -1579,7 +1579,7 @@ fn root(unit: ref Unit, asked: ref Asked, here: ref Here, expr: ref Expr) -> Roo
         Expr::SafeMethod { receiver, .. } => root(unit, asked, here, receiver),
         Expr::Index { base, .. } => root(unit, asked, here, base),
         Expr::Try(inner, _) => root(unit, asked, here, inner),
-        Expr::Async(inner, _) => root(unit, asked, here, inner),
+        Expr::Async(inner, _, _) => root(unit, asked, here, inner),
         else => Root::Elsewhere,
     }
 }
@@ -1609,7 +1609,7 @@ fn mentions(unit: ref Unit, asked: ref Asked, here: ref Here, node: ref Expr) ->
         Expr::Binary { lhs, rhs, .. } => mentions(unit, asked, here, lhs) || mentions(unit, asked, here, rhs),
         Expr::Unary { expr, .. } => mentions(unit, asked, here, expr),
         Expr::Try(inner, _) => mentions(unit, asked, here, inner),
-        Expr::Async(inner, _) => mentions(unit, asked, here, inner),
+        Expr::Async(inner, _, _) => mentions(unit, asked, here, inner),
         Expr::Throw(inner, _) => mentions(unit, asked, here, inner),
         Expr::Cast { expr, .. } => mentions(unit, asked, here, expr),
         Expr::Spawn { body, .. } => mentions(unit, asked, here, body),
@@ -1625,7 +1625,7 @@ fn mentions(unit: ref Unit, asked: ref Asked, here: ref Here, node: ref Expr) ->
         Expr::Match { value, arms, .. } => mentions(unit, asked, here, value) || arms_mention(unit, asked, here, arms),
         Expr::If { cond, then_branch, else_branch, .. } => mentions(unit, asked, here, cond) || block_mentions(unit, asked, here, then_branch) || maybe_block_mentions(unit, asked, here, else_branch),
         Expr::Block(block, _) => block_mentions(unit, asked, here, block),
-        Expr::AsyncGroup(block, _) => block_mentions(unit, asked, here, block),
+        Expr::AsyncGroup(block, _, _) => block_mentions(unit, asked, here, block),
         Expr::Unsafe(block, _) => block_mentions(unit, asked, here, block),
         Expr::Overlap(block, _) => block_mentions(unit, asked, here, block),
         Expr::Closure { body, .. } => block_mentions(unit, asked, here, body),
@@ -1773,7 +1773,7 @@ fn descend(unit: ref Unit, asked: ref Asked, node: ref Expr, span: ref Span, own
         }
         Expr::Unary { expr, .. } => stores(unit, asked, expr, span, own_buffer, here),
         Expr::Try(inner, _) => stores(unit, asked, inner, span, own_buffer, here),
-        Expr::Async(inner, _) => stores(unit, asked, inner, span, own_buffer, here),
+        Expr::Async(inner, _, _) => stores(unit, asked, inner, span, own_buffer, here),
         Expr::Throw(inner, _) => stores(unit, asked, inner, span, own_buffer, here),
         Expr::Cast { expr, .. } => stores(unit, asked, expr, span, own_buffer, here),
         Expr::Spawn { body, .. } => stores(unit, asked, body, span, own_buffer, here),
@@ -1809,7 +1809,7 @@ fn descend(unit: ref Unit, asked: ref Asked, node: ref Expr, span: ref Span, own
             walk_maybe_block(unit, asked, else_branch, own_buffer, here)
         }
         Expr::Block(block, _) => walk_block(unit, asked, block, false, own_buffer, here),
-        Expr::AsyncGroup(block, _) => walk_block(unit, asked, block, false, own_buffer, here),
+        Expr::AsyncGroup(block, _, _) => walk_block(unit, asked, block, false, own_buffer, here),
         Expr::Unsafe(block, _) => walk_block(unit, asked, block, false, own_buffer, here),
         Expr::Overlap(block, _) => walk_block(unit, asked, block, false, own_buffer, here),
         Expr::Closure { body, .. } => walk_block(unit, asked, body, false, own_buffer, here),
@@ -2269,7 +2269,7 @@ fn rsrc_passes_whole(node: ref Expr) -> bool {
     return match node {
         Expr::Variable(_, _) => true,
         Expr::Block(_, _) => true,
-        Expr::AsyncGroup(_, _) => true,
+        Expr::AsyncGroup(_, _, _) => true,
         Expr::Unsafe(_, _) => true,
         Expr::Overlap(_, _) => true,
         Expr::If { .. } => true,
@@ -2302,7 +2302,7 @@ fn rsrc_eval_node(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref c
         Expr::Index { base, index, .. } => rsrc_index(unit, asked, here, known, own_buffer, base, index, flow),
         Expr::Unary { expr, .. } => rsrc_eval(unit, asked, here, known, own_buffer, expr, flow),
         Expr::Try(inner, _) => rsrc_eval(unit, asked, here, known, own_buffer, inner, flow),
-        Expr::Async(inner, _) => rsrc_eval(unit, asked, here, known, own_buffer, inner, flow),
+        Expr::Async(inner, _, _) => rsrc_eval(unit, asked, here, known, own_buffer, inner, flow),
         Expr::Cast { expr, .. } => rsrc_eval(unit, asked, here, known, own_buffer, expr, flow),
         Expr::Throw(inner, _) => rsrc_nothing(unit, asked, here, known, own_buffer, inner, flow),
         Expr::Coalesce { value, fallback, .. } => rsrc_both(unit, asked, here, known, own_buffer, value, fallback, flow),
@@ -2318,7 +2318,7 @@ fn rsrc_eval_node(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref c
         Expr::Call { func, args, config, .. } => rsrc_call(unit, asked, here, known, own_buffer, func, args, config, flow),
         Expr::Return(value, _) => rsrc_return(unit, asked, here, known, own_buffer, value, flow),
         Expr::Block(block, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
-        Expr::AsyncGroup(block, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
+        Expr::AsyncGroup(block, _, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
         Expr::Unsafe(block, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
         Expr::Overlap(block, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
         Expr::If { cond, then_branch, else_branch, .. } => rsrc_if(unit, asked, here, known, own_buffer, cond, then_branch, else_branch, flow),

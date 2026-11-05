@@ -403,9 +403,11 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st);
             return Expr::Block(numbers_block(block, st), id2);
         },
-        Expr::AsyncGroup(block, id) => {
+        Expr::AsyncGroup(block, id, within) => {
+            let within = nikaia_std::boxed::open(within);
             let id2 = numbers_id(id, st);
-            return Expr::AsyncGroup(numbers_block(block, st), id2);
+            let within2 = numbers_maybe_expr(within, st);
+            return Expr::AsyncGroup(numbers_block(block, st), id2, Box::new(within2));
         },
         Expr::Overlap(block, id) => {
             let id2 = numbers_id(id, st);
@@ -437,10 +439,11 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let config2 = numbers_config(config, st);
             return Expr::Call { func: Box::new(func2), args: args2, config: config2, id: id2 };
         },
-        Expr::Spawn { body, written_async, child, id } => {
-            let body = nikaia_std::boxed::open(body);
+        Expr::Spawn { body, written_async, child, within, id } => {
+            let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within);
             let id2 = numbers_id(id, st);
-            return Expr::Spawn { body: Box::new(numbers_expr(body, st)), written_async, child, id: id2 };
+            let within2 = numbers_maybe_expr(within, st);
+            return Expr::Spawn { body: Box::new(numbers_expr(body, st)), written_async, child, within: Box::new(within2), id: id2 };
         },
         Expr::Dsl { target, package, context, content, id } => { return Expr::Dsl { target, package, context, content, id: numbers_id(id, st) }; },
         Expr::Path(segments, id) => { return Expr::Path(segments, numbers_id(id, st)); },
@@ -502,10 +505,11 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st);
             return Expr::Try(Box::new(numbers_expr(inner, st)), id2);
         },
-        Expr::Async(inner, id) => {
-            let inner = nikaia_std::boxed::open(inner);
+        Expr::Async(inner, id, within) => {
+            let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within);
             let id2 = numbers_id(id, st);
-            return Expr::Async(Box::new(numbers_expr(inner, st)), id2);
+            let within2 = numbers_maybe_expr(within, st);
+            return Expr::Async(Box::new(numbers_expr(inner, st)), id2, Box::new(within2));
         },
         Expr::Throw(inner, id) => {
             let inner = nikaia_std::boxed::open(inner);

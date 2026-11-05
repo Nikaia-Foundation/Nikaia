@@ -146,7 +146,7 @@ pub fn taken_from(names: &winnow_grammar::InternerContext, value: &Expr) -> Opti
     match value {
         Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; if hands_back_what_it_removes(names.resolve(method)) { root_of(names, receiver) } else { None } },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); taken_from(names, inner) },
-        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); taken_from(names, inner) },
+        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); taken_from(names, inner) },
         Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); taken_from(names, expr) },
         _ => None,
     }

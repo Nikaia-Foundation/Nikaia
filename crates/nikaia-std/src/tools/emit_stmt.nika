@@ -170,6 +170,8 @@ impl EmitState {
             // it declared (ADR-283 D10) are declared again by the rendering
             // that is kept - `println(d())` alone in `main` lost its keep.
             let declared = walk.preluded.clone()
+            // So is the deadline a fallback's guarded block takes (D16).
+            let bound = walk.async_bound.clone()
             let mut rendered = EmitOut::empty()
             let st = rendered.mark()
             self.emit_stmt(world, walk, rendered, host, block.stmts[0].node, block.stmts[0].span, depth, tail, flow, scope)
@@ -181,6 +183,7 @@ impl EmitState {
                 return
             }
             walk.preluded = declared
+            walk.async_bound = bound
         }
 
         let pad = "    ".repeat(depth)

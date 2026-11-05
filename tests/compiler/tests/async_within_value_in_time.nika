@@ -1,0 +1,19 @@
+// `async(within: d) e` (Part I 8.1.2, ADR-async-5 D16, #986): a task that
+// ends before its deadline gives its own value; the fallback does not run.
+
+use std::time
+
+fn quick() -> i64 {
+	time::sleep(5.millis())
+	return 7
+}
+
+fn other() -> i64 {
+	return 1
+}
+
+fn main() {
+	let a = async(within: 2.seconds()) quick() catch { 0 }
+	let b = other()
+	println(f"{a + b}")
+}

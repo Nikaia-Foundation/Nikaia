@@ -1,9 +1,0 @@
-// `within:` on an `async` form (ADR-async-5 D15, D16) is refused until the
-// checker handles it (#986).
-
-use std::time
-
-fn main() {
-	let h = async(detached, within: time::Duration::from_secs(1)) fn { 1 }
-	println(f"{h.join()}")
-}

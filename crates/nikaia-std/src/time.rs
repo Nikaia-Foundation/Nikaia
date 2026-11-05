@@ -181,6 +181,16 @@ pub async fn sleep(span: Duration) {
     .await
 }
 
+/// **Wait until an instant**, as [`sleep`] waits out a span: the deadline of
+/// `async(within: d)` ([`crate::task::Deadline`]) counts from the form's
+/// start, not from the wait.
+pub(crate) async fn sleep_until(until: std::time::Instant) {
+    if until <= std::time::Instant::now() {
+        return;
+    }
+    Sleeping { until }.await
+}
+
 /// The future behind [`sleep`].
 ///
 /// **It stores no waker**, for the reason `rt::io`'s own futures store none:

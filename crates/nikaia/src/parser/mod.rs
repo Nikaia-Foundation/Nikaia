@@ -3840,9 +3840,9 @@ grammar! {
         // `async(detached) fn { … }` is its fallback (D22): it parses as the
         // `Expr::TryCatch` around the form, which the checker and the
         // lowering read as the fallback. `async(handle) fn { … }` is `Expr::Spawn`
-        // with `child` set (D11): the checker binds it to its group. The deferred
-        // form, the options not
-        // built yet and a `catch` after `async { }` are refused here, by name - the
+        // with `child` set (D11): the checker binds it to its group. `within: d`
+        // (D16) is the deadline each of the three forms carries. The deferred
+        // form, the options not built yet and a `catch` after `async { }` are refused here, by name - the
         // way `immutable_item` refuses (ADR-389 D4): a reader gets the
         // sentence, not a parse error at the word.
         //
@@ -3852,11 +3852,20 @@ grammar! {
         // A list of several options not built yet names the first. The task of
         // `async e` is a unary operand, so `async a() + async b()` is two tasks.
         rule async_expr -> Expr =
-            KW_ASYNC "(" OPT_DETACHED ")" body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), written_async: true, child: false, id: NodeId::parsed() }
+            KW_ASYNC "(" h:async_within_head? OPT_DETACHED t:async_within_tail? ")" body:trailing_lambda -> {
+                Expr::Spawn { body: Box::new(body), written_async: true, child: false, within: Box::new(h.or(t)), id: NodeId::parsed() }
             }
-          | KW_ASYNC "(" OPT_HANDLE ")" body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), written_async: true, child: true, id: NodeId::parsed() }
+          | KW_ASYNC "(" h:async_within_head? OPT_HANDLE t:async_within_tail? ")" body:trailing_lambda -> {
+                Expr::Spawn { body: Box::new(body), written_async: true, child: true, within: Box::new(h.or(t)), id: NodeId::parsed() }
+            }
+          | KW_ASYNC "(" OPT_WITHIN ":" d:expr ")" peek("{") b:block not(KW_CATCH) -> {
+                Expr::AsyncGroup(b, NodeId::parsed(), Box::new(Some(d)))
+            }
+          | KW_ASYNC "(" OPT_WITHIN ":" d:expr ")" not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") not("{") e:unary_expr -> {
+                Expr::Async(Box::new(e), NodeId::parsed(), Box::new(Some(d)))
+            }
+          | KW_ASYNC "(" OPT_WITHIN ":" d:expr ")" peek(KW_FN) l:trailing_lambda -> {
+                Expr::Async(Box::new(l), NodeId::parsed(), Box::new(Some(d)))
             }
           | KW_ASYNC "(" OPT_HANDLE ")" fail(
                 "`async(handle)` takes a lambda. Write `async(handle) fn { … }`."
@@ -3869,12 +3878,12 @@ grammar! {
                 "An `async` option is `handle`, `deferred`, `detached`, `limit:`, `within:` or \
                  `admission:`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
-          | KW_ASYNC peek("{") b:block not(KW_CATCH) -> { Expr::AsyncGroup(b, NodeId::parsed()) }
+          | KW_ASYNC peek("{") b:block not(KW_CATCH) -> { Expr::AsyncGroup(b, NodeId::parsed(), Box::new(None)) }
           | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") e:unary_expr -> {
-                Expr::Async(Box::new(e), NodeId::parsed())
+                Expr::Async(Box::new(e), NodeId::parsed(), Box::new(None))
             }
           | KW_ASYNC peek(KW_FN) not(async_named_fn) l:trailing_lambda -> {
-                Expr::Async(Box::new(l), NodeId::parsed())
+                Expr::Async(Box::new(l), NodeId::parsed(), Box::new(None))
             }
           | KW_ASYNC peek("{") block peek(KW_CATCH) fail(
                 "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
@@ -3898,7 +3907,13 @@ grammar! {
         // `async_unbuilt_option` names: of the built ones only `detached` stands
         // before it, so the scan stops there and its `fail` is the furthest any
         // arm of `async_expr` reaches.
-        rule async_built_options = ((OPT_DETACHED | OPT_HANDLE) ",")* -> { () }
+        rule async_built_options = ((OPT_DETACHED | OPT_HANDLE | async_within_option) ",")* -> { () }
+        rule async_within_option = OPT_WITHIN ":" expr -> { () }
+
+        // `within: d` (D16) before or after `detached` / `handle`, in the one
+        // list of options.
+        rule async_within_head -> Expr = OPT_WITHIN ":" d:expr "," -> { d }
+        rule async_within_tail -> Expr = "," OPT_WITHIN ":" d:expr -> { d }
 
         rule async_unbuilt_option -> Expr =
             peek(OPT_DEFERRED) fail(
@@ -3906,9 +3921,6 @@ grammar! {
                  should run, with `async(detached) fn { … }`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
           | peek(OPT_LIMIT) fail("`limit:` on `async` isn't built yet (#986).") -> {
-                Expr::ListLit { items: Vec::new(), id: NodeId::parsed() }
-            }
-          | peek(OPT_WITHIN) fail("`within:` on `async` isn't built yet (#986).") -> {
                 Expr::ListLit { items: Vec::new(), id: NodeId::parsed() }
             }
           | peek(OPT_ADMISSION) fail("`admission:` on `async` isn't built yet (#986).") -> {
@@ -3935,7 +3947,7 @@ grammar! {
         // rather than *"expected `fn`"*.
         rule spawn_expr -> Expr =
             KW_SPAWN body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), written_async: false, child: false, id: NodeId::parsed() }
+                Expr::Spawn { body: Box::new(body), written_async: false, child: false, within: Box::new(None), id: NodeId::parsed() }
             }
           | KW_SPAWN "(" fail("`spawn` takes a lambda. Write `spawn fn { … }`.") -> {
                 Expr::Spawn {
@@ -3944,7 +3956,7 @@ grammar! {
                         mutable: Vec::new(),
                         body: Block { stmts: Vec::new() }, id: NodeId::parsed()
                     }),
-                    written_async: false, child: false, id: NodeId::parsed()
+                    written_async: false, child: false, within: Box::new(None), id: NodeId::parsed()
                 }
             }
 

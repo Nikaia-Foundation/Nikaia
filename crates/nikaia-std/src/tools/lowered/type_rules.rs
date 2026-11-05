@@ -362,7 +362,7 @@ pub(crate) fn tr_in_expr(expr: &Expr, targets: bool) -> Vec<&Expr> {
         },
         Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); out.extend(tr_in_expr(inner, targets)); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.extend(tr_in_expr(inner, targets)); },
-        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.extend(tr_in_expr(inner, targets)); },
+        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); out.extend(tr_in_expr(inner, targets)); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.extend(tr_in_expr(inner, targets)); },
         Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); out.extend(tr_in_expr(inner, targets)); },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); out.extend(tr_in_maybe((value).as_ref(), targets)); },
@@ -419,7 +419,7 @@ pub(crate) fn tr_in_expr(expr: &Expr, targets: bool) -> Vec<&Expr> {
             for field in fields.iter() { out.extend(tr_in_maybe((field.value).as_ref(), targets)); }
         },
         Expr::Block(block, _) => { out.extend(tr_in_block(block, targets)); },
-        Expr::AsyncGroup(block, _) => { out.extend(tr_in_block(block, targets)); },
+        Expr::AsyncGroup(block, _, _) => { out.extend(tr_in_block(block, targets)); },
         Expr::Unsafe(block, _) => { out.extend(tr_in_block(block, targets)); },
         Expr::Overlap(block, _) => { out.extend(tr_in_block(block, targets)); },
         Expr::Closure { body, .. } => { out.extend(tr_in_block(body, targets)); },
@@ -899,7 +899,7 @@ pub(crate) fn tr_nested_returns(words: &winnow_grammar::InternerContext, intern:
             tr_returns_in_else(words, &intern, &renew, rules, type_name, base, given, &mut *else_branch);
         },
         Expr::Block(block, _) => { tr_before_returns(words, &intern, &renew, rules, type_name, base, given, &mut *block); },
-        Expr::AsyncGroup(block, _) => { tr_before_returns(words, &intern, &renew, rules, type_name, base, given, &mut *block); },
+        Expr::AsyncGroup(block, _, _) => { tr_before_returns(words, &intern, &renew, rules, type_name, base, given, &mut *block); },
         Expr::Unsafe(block, _) => { tr_before_returns(words, &intern, &renew, rules, type_name, base, given, &mut *block); },
         Expr::Match { arms, .. } => { for arm in arms.iter_mut() { tr_nested_returns(words, intern, renew, rules, type_name, base, given, &mut (*arm).body); } },
         _ => { },
@@ -964,7 +964,7 @@ pub(crate) fn tr_nested_given(words: &winnow_grammar::InternerContext, intern: &
             tr_given_in_else(words, &intern, &renew, rules, type_name, changing, &mut *else_branch);
         },
         Expr::Block(block, _) => { tr_given_after_calls(words, &intern, &renew, rules, type_name, changing, &mut *block); },
-        Expr::AsyncGroup(block, _) => { tr_given_after_calls(words, &intern, &renew, rules, type_name, changing, &mut *block); },
+        Expr::AsyncGroup(block, _, _) => { tr_given_after_calls(words, &intern, &renew, rules, type_name, changing, &mut *block); },
         Expr::Unsafe(block, _) => { tr_given_after_calls(words, &intern, &renew, rules, type_name, changing, &mut *block); },
         Expr::Match { arms, .. } => { for arm in arms.iter_mut() { tr_nested_given(words, intern, renew, rules, type_name, changing, &mut (*arm).body); } },
         _ => { },
@@ -1121,7 +1121,7 @@ pub(crate) fn tr_walk_expr(expr: &mut Expr, words: &winnow_grammar::InternerCont
         },
         Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job); },
-        Expr::Async(inner, _) => { let inner = nikaia_std::boxed::open(inner); tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job); },
+        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job); },
         Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); tr_walk_expr(&mut *inner, words, intern, renew, ruled, spans, span, job); },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); tr_walk_maybe(&mut *value, words, &intern, &renew, ruled, spans, span, job); },
@@ -1175,7 +1175,7 @@ pub(crate) fn tr_walk_expr(expr: &mut Expr, words: &winnow_grammar::InternerCont
             tr_walk_fields(&mut *fields, words, &intern, &renew, ruled, spans, span, job);
         },
         Expr::Block(block, _) => { tr_walk_block(&mut *block, words, &intern, &renew, ruled, spans, span, job); },
-        Expr::AsyncGroup(block, _) => { tr_walk_block(&mut *block, words, &intern, &renew, ruled, spans, span, job); },
+        Expr::AsyncGroup(block, _, _) => { tr_walk_block(&mut *block, words, &intern, &renew, ruled, spans, span, job); },
         Expr::Unsafe(block, _) => { tr_walk_block(&mut *block, words, &intern, &renew, ruled, spans, span, job); },
         Expr::Overlap(block, _) => { tr_walk_block(&mut *block, words, &intern, &renew, ruled, spans, span, job); },
         Expr::Closure { body, .. } => { tr_walk_block(&mut *body, words, &intern, &renew, ruled, spans, span, job); },
@@ -1281,7 +1281,7 @@ pub(crate) fn tr_field_read(expr: &mut Expr, words: &winnow_grammar::InternerCon
 pub(crate) fn tr_drop_nested(expr: &mut Expr, words: &winnow_grammar::InternerContext, changed: &collections::BTreeSet<String>) {
     match expr {
         Expr::Block(block, _) => { tr_drop_in(&mut *block, words, changed); },
-        Expr::AsyncGroup(block, _) => { tr_drop_in(&mut *block, words, changed); },
+        Expr::AsyncGroup(block, _, _) => { tr_drop_in(&mut *block, words, changed); },
         Expr::Unsafe(block, _) => { tr_drop_in(&mut *block, words, changed); },
         Expr::Closure { body, .. } => { tr_drop_in(&mut *body, words, changed); },
         Expr::If { then_branch, else_branch, .. } => {

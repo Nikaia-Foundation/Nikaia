@@ -1,0 +1,25 @@
+// `async(within: d) e` (Part I 8.1.2, ADR-async-5 D16, #986): `d` counts
+// from the form's start; when it runs out the task is cancelled at its pause
+// and ends with `task::TimedOut`, which arrives where the value is first
+// needed. The fallback stands in for it there.
+
+use std::time
+
+fn slow() -> i64 {
+	time::sleep(500.millis())
+	println("never printed")
+	return 7
+}
+
+fn other() -> i64 {
+	return 1
+}
+
+fn main() {
+	let a = async(within: 20.millis()) slow() catch {
+		println(f"fallback: {error}")
+		0
+	}
+	let b = other()
+	println(f"{a + b}")
+}
