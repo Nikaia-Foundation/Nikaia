@@ -1,0 +1,12 @@
+// ADR-390: a subtraction broken after its `-` still subtracts.
+fn main() {
+    let a = 10
+    let b = 3
+    let d = a -
+        b
+    println(f"{d}")
+    let e = a -
+        b -
+        2
+    println(f"{e}")
+}

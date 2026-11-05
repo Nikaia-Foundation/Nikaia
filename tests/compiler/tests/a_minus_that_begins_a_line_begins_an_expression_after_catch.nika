@@ -1,0 +1,24 @@
+// ADR-390: a `-` that begins a line begins what is written there, so the
+// block's last line is the value `-1`, not `println("x") - 1`.
+struct No {}
+impl Error for No { fn message(ref self) -> String { return "no" } }
+
+fn run(fail: bool) -> i64 throws {
+    if fail {
+        throw No {}
+    }
+    1
+}
+
+fn main() {
+    let n = run(true) catch {
+        println("x")
+        -1
+    }
+    println(f"{n}")
+    let m = run(false) catch {
+        println("y")
+        -1
+    }
+    println(f"{m}")
+}

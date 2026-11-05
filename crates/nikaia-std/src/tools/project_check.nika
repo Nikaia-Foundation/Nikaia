@@ -167,25 +167,25 @@ pub fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -
     if locks > 0 {
         refused.push(f"{locks} mistake{project_check_plural(locks)} with a lock")
     }
-    let others = findings.iter().filter(fn(f) { f.severity == CheckSeverity::Error }).count()
-        - locks
-        - rules
-        - refuted
-        - types
-        - crossings
-        - reaching
-        - undescribed
-        - stale
-        - aliases
-        - changed_under
-        - tethered
-        - untethered
-        - tasks
-        - walked
-        - pausing
-        - paused_in_a_door
-        - pauses_forbidden
-        - under_a_lock
+    let others = findings.iter().filter(fn(f) { f.severity == CheckSeverity::Error }).count() -
+        locks -
+        rules -
+        refuted -
+        types -
+        crossings -
+        reaching -
+        undescribed -
+        stale -
+        aliases -
+        changed_under -
+        tethered -
+        untethered -
+        tasks -
+        walked -
+        pausing -
+        paused_in_a_door -
+        pauses_forbidden -
+        under_a_lock
     if others > 0 {
         refused.push(f"{others} other error{project_check_plural(others)}")
     }

@@ -1,0 +1,12 @@
+// ADR-390: the block's value is its last line, `-1`; `f()` is a statement.
+fn f() {
+    println("f")
+}
+
+fn main() {
+    let n: i64 = {
+        f()
+        -1
+    }
+    println(f"{n}")
+}

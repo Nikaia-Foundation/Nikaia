@@ -2910,7 +2910,7 @@ grammar! {
         // operator that can also begin a statement, so `a ?? 0 - 1` used to be
         // `a ?? 0` and then a statement `-1` that does nothing.
         rule coalesce_fallback -> Expr # "one value, or an expression in brackets" =
-            head:unary_expr tail:coalesce_tail? not("-") -> {
+            head:unary_expr tail:coalesce_tail? not(subtract_minus) -> {
                 match tail {
                     Some(fallback) => Expr::Coalesce {
                         value: Box::new(head),
@@ -2919,7 +2919,7 @@ grammar! {
                     None => head,
                 }
             }
-          | unary_expr coalesce_tail? "-" fail(
+          | unary_expr coalesce_tail? subtract_minus fail(
                 "The fallback after `??` is a single value unless you use brackets. \
                  Put brackets around the part you mean: `(a ?? 0) - 1`, or \
                  `a ?? (0 - 1)`."
@@ -3108,7 +3108,11 @@ grammar! {
 
         rule add_op -> BinaryOp =
             "+" -> { BinaryOp::Add }
-          | "-" -> { BinaryOp::Sub }
+          | subtract_minus -> { BinaryOp::Sub }
+
+        // ADR-390: a subtraction's `-` is on the line of what it subtracts
+        // from; a `-` that begins a line begins what is written there.
+        rule subtract_minus -> () = same_line "-" -> { () }
 
         rule mul_expr -> Expr @=
             e:mul_expr_bare -> { ast::spanned(e, _state.user().cut(_span)) }
