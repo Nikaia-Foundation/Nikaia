@@ -672,7 +672,7 @@ pub(crate) fn fmt_loosest(toks: &[FmtToken], shape: &FmtShape, last: i64) -> i64
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_operators(toks: &[FmtToken], shape: &FmtShape, last: i64, level: i64) -> Vec<i64> {
     let mut cuts: Vec<i64> = vec![];
-    for k in 1..last + 1 { if *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 && fmt_looseness(toks, k) == level { cuts.push(k); } }
+    for k in 1..last + 1 { if *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 && fmt_looseness(toks, k) == level { if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "-" { cuts.push(k + 1); } else { cuts.push(k); } } }
     cuts
 }
 

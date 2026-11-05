@@ -866,12 +866,18 @@ fn fmt_loosest(toks: ref Vec[FmtToken], shape: ref FmtShape, last: i64) -> i64 s
     return loosest
 }
 
-// Where the operators of this looseness outside any bracket stand.
+// Where the operators of this looseness outside any bracket stand: the cut
+// goes before the operator, except for a `-`, which ends its line (ADR-390: a
+// `-` that begins a line begins an expression, not a subtraction).
 fn fmt_operators(toks: ref Vec[FmtToken], shape: ref FmtShape, last: i64, level: i64) -> Vec[i64] sync {
     let mut cuts: Vec[i64] = []
     for k in 1..<last + 1 {
         if shape.depth[k] == 0 && fmt_looseness(toks, k) == level {
-            cuts.push(k)
+            if toks[k].text == "-" {
+                cuts.push(k + 1)
+            } else {
+                cuts.push(k)
+            }
         }
     }
     return cuts
