@@ -1,5 +1,6 @@
 v18-matched-lent-param.md
 v19-migrate-tool-tests-self.md
+v20-migrate-rest.md
 v21-part-to-lent-param.md
 v22-run-methods.md
 v23-take-from-mut-self.md
