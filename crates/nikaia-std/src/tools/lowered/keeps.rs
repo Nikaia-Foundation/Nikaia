@@ -1073,6 +1073,16 @@ pub(crate) fn keeps_named_as_values(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]
                         }
                     }
                 },
+                Item::Grammar(def) => {
+                    let mut exprs: Vec<&Expr> = vec![];
+                    for rule in def.rules.iter() {
+                        for alt in rule.alts.iter() {
+                            exprs.extend(keeps_fold_exprs(&alt.pattern.node));
+                            exprs.extend(visited_in_maybe_block((alt.action).as_ref()));
+                        }
+                    }
+                    keeps_named_among(view, &exprs, "", ledger, &mut named);
+                },
                 _ => { },
             }
         }
@@ -1080,9 +1090,32 @@ pub(crate) fn keeps_named_as_values(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]
     named
 }
 
-pub(crate) fn keeps_named_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, owner: &str, ledger: &Ledger, named: &mut collections::BTreeSet<String>) {
+pub(crate) fn keeps_fold_exprs(pattern: &Pattern) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    match pattern {
+        Pattern::Fold(spec) => {
+            out.extend(visited_in_expr(&spec.init));
+            out.extend(visited_in_expr(&spec.step));
+            out.extend(visited_in_maybe((spec.merge).as_ref()));
+        },
+        Pattern::Seq(all) => { for each in all.iter() { out.extend(keeps_fold_exprs(&each.node)); } },
+        Pattern::Choice(all) => { for each in all.iter() { out.extend(keeps_fold_exprs(&each.node)); } },
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); out.extend(keeps_fold_exprs(&pat.node)); },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); out.extend(keeps_fold_exprs(&pat.node)); },
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); out.extend(keeps_fold_exprs(&inner.node)); },
+        Pattern::Ref { args, .. } => { for each in args.iter() { out.extend(keeps_fold_exprs(&each.node)); } },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); out.extend(keeps_fold_exprs(&pat.node)); },
+        _ => { },
+    }
+    out
+}
+
+pub(crate) fn keeps_named_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, owner: &str, ledger: &Ledger, named: &mut collections::BTreeSet<String>) { keeps_named_among(view, &visited_in_block(body), owner, ledger, named); }
+
+pub(crate) fn keeps_named_among(view: &ParsedView<'_, '_, '_, '_, '_, '_>, exprs: &[&Expr], owner: &str, ledger: &Ledger, named: &mut collections::BTreeSet<String>) {
     let mut seen: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    for expr in visited_in_block(body) {
+    for expr in exprs.iter() {
+        let expr = *expr;
         match expr {
             Expr::Path(segments, _) => {
                 let key = match keeps_path_text(view, segments, owner) { Some(__nikaia_value) => __nikaia_value, None => continue };

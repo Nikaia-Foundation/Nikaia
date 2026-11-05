@@ -1621,6 +1621,20 @@ fn keeps_named_as_values(units: ref Vec[ParsedView], ledger: ref Ledger) -> coll
                         }
                     }
                 },
+                // **A grammar's `fold` and `par_fold` name methods too**: the
+                // merge of `par_fold(LINE, Total, step, Total::merge)` is a
+                // function value handed to the runtime, so `merge` stays by
+                // value, as a method named in a function body does.
+                Item::Grammar(def) => {
+                    let mut exprs: Vec[ref Expr] = []
+                    for rule in def.rules {
+                        for alt in rule.alts {
+                            exprs.extend(keeps_fold_exprs(alt.pattern.node))
+                            exprs.extend(visited_in_maybe_block(alt.action))
+                        }
+                    }
+                    keeps_named_among(view, exprs, "", ledger, named)
+                },
                 else => {},
             }
         }
@@ -1628,9 +1642,47 @@ fn keeps_named_as_values(units: ref Vec[ParsedView], ledger: ref Ledger) -> coll
     return named
 }
 
+// The expressions of the `fold`s and `par_fold`s a pattern holds: initial
+// value, step and merge, and what is inside them.
+fn keeps_fold_exprs(pattern: ref Pattern) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    match pattern {
+        Pattern::Fold(spec) => {
+            out.extend(visited_in_expr(spec.init))
+            out.extend(visited_in_expr(spec.step))
+            out.extend(visited_in_maybe(spec.merge))
+        },
+        Pattern::Seq(all) => {
+            for each in all {
+                out.extend(keeps_fold_exprs(each.node))
+            }
+        },
+        Pattern::Choice(all) => {
+            for each in all {
+                out.extend(keeps_fold_exprs(each.node))
+            }
+        },
+        Pattern::Bind { pat, .. } => out.extend(keeps_fold_exprs(pat.node)),
+        Pattern::Repeat { pat, .. } => out.extend(keeps_fold_exprs(pat.node)),
+        Pattern::Group(inner) => out.extend(keeps_fold_exprs(inner.node)),
+        Pattern::Ref { args, .. } => {
+            for each in args {
+                out.extend(keeps_fold_exprs(each.node))
+            }
+        },
+        Pattern::Counted { pat, .. } => out.extend(keeps_fold_exprs(pat.node)),
+        else => {},
+    }
+    return out
+}
+
 fn keeps_named_in(view: ref ParsedView, body: ref Block, owner: ref String, ledger: ref Ledger, mut named: collections::BTreeSet[String]) {
+    keeps_named_among(view, visited_in_block(body), owner, ledger, named)
+}
+
+fn keeps_named_among(view: ref ParsedView, exprs: ref Vec[ref Expr], owner: ref String, ledger: ref Ledger, mut named: collections::BTreeSet[String]) {
     let mut seen: collections::BTreeMap[String, i64] = collections::BTreeMap()
-    for expr in visited_in_block(body) {
+    for expr in exprs {
         match expr {
             Expr::Path(segments, _) => {
                 let key = keeps_path_text(view, segments, owner) ?? continue
