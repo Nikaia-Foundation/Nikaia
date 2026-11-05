@@ -132,6 +132,15 @@ goes into the section of its topic, in one line, with the run that paid for it.
   `else` (j2).
 * **A loop that takes the elements away** is `for x in v.drain()`; `for x in v`
   over an owned `Vec` only borrows them.
+* **Print the `Ty` the checker assigns before writing a predicate on it**
+  (v18b): the text view is `Ty::Named { name: "str", view: true }`, not a
+  `String` view; own copying enums are lent as `&T`.
+* **The argument check is `check_arguments.nika`**; several early `continue`s
+  there (about line 353, a view handed to a lent `String`) skip
+  `the_compiler_writes_the_reference` (v18b).
+* **A change that flips a tool function's signature breaks its Rust callers**
+  in `crates/nikaia/src` and `tests/it`: `grep` for them before the bootstrap
+  (v18b).
 
 ### Lowering and lower-std
 
