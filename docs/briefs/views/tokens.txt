@@ -18,3 +18,4 @@
 /home/user/Nikaia/docs/briefs/views/v13-view-result.md 1939514 41
 /home/user/Nikaia/docs/briefs/views/v14-clone-not-keep.md 1760016 47
 /home/user/Nikaia/docs/briefs/views/v15-bound-self.md 1481754 38
+/home/user/Nikaia/docs/briefs/views/v16-clone-trait.md 671580 7
