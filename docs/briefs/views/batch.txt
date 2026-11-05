@@ -1,2 +1,1 @@
-v15-bound-self.md
 v16-clone-trait.md
