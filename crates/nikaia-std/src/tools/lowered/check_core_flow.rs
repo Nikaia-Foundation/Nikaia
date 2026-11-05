@@ -1431,7 +1431,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
             if written_async {
                 match answers {
                     Ty::Named { ref name, ref args, .. } => {
-                        if name == "TaskHandle" && args.len() == 1 {
+                        if (name == "TaskHandle" || name == CHILD_HANDLE) && args.len() == 1 {
                             if !state.block_leaves(world, handler) && !(*nikaia_std::index::get(&args, 0)).is_unknown() && value.text() != "()" && !value.fits(nikaia_std::index::get(&args, 0)) { state.expect_type(world, &value.owned(), nikaia_std::index::get(&args, 0), span, "catch", &|found, wanted| { format!("This fallback hands back `{}`, but the task's value is `{}`.", found, wanted) }); }
                             return answers;
                         }

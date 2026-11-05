@@ -1,0 +1,33 @@
+error[NK2122]: A child handle (`async(handle)`) leaves its group here: it is this function's result, and its group ends with the function at the latest.
+  --> tests/async_handle_leaves_its_group.nika:5:1
+   |
+ 5 | fn starts() -> task::ChildHandle[i64] {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A child task is bound to the group it starts in: it may borrow from it, and the group waits for it at its end, so its handle cannot outlive the group.
+   = help: Write `async(detached) fn { … }` for a task whose handle outlives its group.
+error[NK2122]: A child handle (`async(handle)`) leaves its group here: it is the value of this `async { … }`, which ends its group.
+   --> tests/async_handle_leaves_its_group.nika:12:2
+    |
+ 12 | 	let v = async {
+    |  ^^^^^^^^^^^^^^^
+    |
+    = note: A child task is bound to the group it starts in: it may borrow from it, and the group waits for it at its end, so its handle cannot outlive the group.
+    = help: Write `async(detached) fn { … }` for a task whose handle outlives its group.
+error[NK2122]: A child handle (`async(handle)`) leaves its group here: it is assigned to a place, which may outlive its group.
+   --> tests/async_handle_leaves_its_group.nika:18:3
+    |
+ 18 | 		kept = h
+    |   ^^^^^^^^
+    |
+    = note: A child task is bound to the group it starts in: it may borrow from it, and the group waits for it at its end, so its handle cannot outlive the group.
+    = help: Write `async(detached) fn { … }` for a task whose handle outlives its group.
+error[NK2122]: A child handle (`async(handle)`) leaves its group here: it is handed to a call, which may keep it past its group.
+   --> tests/async_handle_leaves_its_group.nika:19:3
+    |
+ 19 | 		all.push(async(handle) fn { 4 })
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A child task is bound to the group it starts in: it may borrow from it, and the group waits for it at its end, so its handle cannot outlive the group.
+    = help: Write `async(detached) fn { … }` for a task whose handle outlives its group.
+

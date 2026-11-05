@@ -1295,7 +1295,19 @@ impl EmitState {
             CheckAsyncWaitAt::Before(_) => "join",
             CheckAsyncWaitAt::BeforeStatement(_) => "handle",
             CheckAsyncWaitAt::GroupEnd => "spawn",
+            CheckAsyncWaitAt::Handle => "handle",
         }
+    }
+
+    /// How the child task (`async(handle)`) of the node `id` starts (8.1.2,
+    /// D11): `handle` for one whose handle is used, `spawn` for one nothing
+    /// names, which runs to its end and is waited for at its group's end.
+    pub fn emit_child_kind(ref self, id: i64, flow: EmitFlow) -> String sync throws {
+        let kind = self.emit_async_kind(id)
+        if kind == "" {
+            throw EmitRefused { message: "The compiler can't translate `async(handle)` here yet: put it in `async { … }` or in the function's own body.", at: emit_async_at(flow.statement) }
+        }
+        return kind
     }
 
     /// The start of the statement the binding's task of the node `id` waits

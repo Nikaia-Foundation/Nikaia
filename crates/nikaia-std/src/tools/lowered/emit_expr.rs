@@ -274,6 +274,18 @@ impl EmitState {
             Expr::Binary { op, lhs, rhs, span, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.emit_core_binary(world, walk, out, host, node, *op, lhs, rhs, span, depth, flow, scope)?; },
             Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); self.emit_core_coalesce(world, walk, out, host, node, value, fallback, depth, flow, scope)?; },
             Expr::TryCatch { expr, handler, id } => { let expr = nikaia_std::boxed::open(expr); let id = *id; match expr {
+                Expr::Spawn { body, child, .. } if { let child = *child; child } => {
+                    let body = nikaia_std::boxed::open(body);
+                    match body {
+                        Expr::Closure { body: block, .. } => {
+                            let guarded = Expr::Block(block.clone(), numbered_id(id_of(expr)));
+                            let caught = Expr::TryCatch { expr: Box::new(guarded), handler: handler.clone(), id: numbered_id(id.get()) };
+                            let kind = self.emit_child_kind(id_of(expr) as i64, flow)?;
+                            self.emit_async_task(world, walk, out, host, &caught, id_of(expr) as i64, &kind, depth, flow, scope)?;
+                        },
+                        _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("`async(handle)` takes a lambda. Write `async(handle) fn { … }`."), at: Some(flow.statement) }, &"emit_expr_written")); },
+                    }
+                },
                 Expr::Spawn { body, written_async, .. } if { let written_async = *written_async; written_async } => { let body = nikaia_std::boxed::open(body); self.emit_core_spawn_fallback(world, walk, out, host, expr, body, handler, id.get(), depth, flow, scope)?; },
                 _ => { self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope)?; },
             }; },
@@ -282,6 +294,11 @@ impl EmitState {
             Expr::Break(_) => { self.emit_core_jump(out, true, flow)?; },
             Expr::Continue(_) => { self.emit_core_jump(out, false, flow)?; },
             Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.emit_core_throw(world, walk, out, host, inner, depth, flow, scope)?; },
+            Expr::Spawn { body, child, id, .. } if { let child = *child; child } => {
+                let body = nikaia_std::boxed::open(body); let id = *id;
+                let kind = self.emit_child_kind(id.get() as i64, flow)?;
+                self.emit_async_task(world, walk, out, host, body, id.get() as i64, &kind, depth, flow, scope)?;
+            },
             Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope)?; },
             Expr::Async(task, id) => {
                 let task = nikaia_std::boxed::open(task); let id = *id;

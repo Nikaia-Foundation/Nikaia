@@ -3839,7 +3839,9 @@ grammar! {
         // (#986). A `catch` written directly after the value form or after
         // `async(detached) fn { … }` is its fallback (D22): it parses as the
         // `Expr::TryCatch` around the form, which the checker and the
-        // lowering read as the fallback. The handle forms, the options not
+        // lowering read as the fallback. `async(handle) fn { … }` is `Expr::Spawn`
+        // with `child` set (D11): the checker binds it to its group. The deferred
+        // form, the options not
         // built yet and a `catch` after `async { }` are refused here, by name - the
         // way `immutable_item` refuses (ADR-389 D4): a reader gets the
         // sentence, not a parse error at the word.
@@ -3851,8 +3853,14 @@ grammar! {
         // `async e` is a unary operand, so `async a() + async b()` is two tasks.
         rule async_expr -> Expr =
             KW_ASYNC "(" OPT_DETACHED ")" body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), written_async: true, id: NodeId::parsed() }
+                Expr::Spawn { body: Box::new(body), written_async: true, child: false, id: NodeId::parsed() }
             }
+          | KW_ASYNC "(" OPT_HANDLE ")" body:trailing_lambda -> {
+                Expr::Spawn { body: Box::new(body), written_async: true, child: true, id: NodeId::parsed() }
+            }
+          | KW_ASYNC "(" OPT_HANDLE ")" fail(
+                "`async(handle)` takes a lambda. Write `async(handle) fn { … }`."
+            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
           | KW_ASYNC "(" async_built_options u:async_unbuilt_option -> { u }
           | KW_ASYNC "(" OPT_DETACHED ")" fail(
                 "`async(detached)` takes a lambda. Write `async(detached) fn { … }`."
@@ -3890,14 +3898,10 @@ grammar! {
         // `async_unbuilt_option` names: of the built ones only `detached` stands
         // before it, so the scan stops there and its `fail` is the furthest any
         // arm of `async_expr` reaches.
-        rule async_built_options = (OPT_DETACHED ",")* -> { () }
+        rule async_built_options = ((OPT_DETACHED | OPT_HANDLE) ",")* -> { () }
 
         rule async_unbuilt_option -> Expr =
-            peek(OPT_HANDLE) fail(
-                "`async(handle) fn { … }` isn't built yet (#986). `async(detached) fn { … }` \
-                 is: it starts a free task and hands back its handle."
-            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
-          | peek(OPT_DEFERRED) fail(
+            peek(OPT_DEFERRED) fail(
                 "`async(deferred) fn { … }` isn't built yet (#986). Start the task where it \
                  should run, with `async(detached) fn { … }`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
@@ -3931,7 +3935,7 @@ grammar! {
         // rather than *"expected `fn`"*.
         rule spawn_expr -> Expr =
             KW_SPAWN body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), written_async: false, id: NodeId::parsed() }
+                Expr::Spawn { body: Box::new(body), written_async: false, child: false, id: NodeId::parsed() }
             }
           | KW_SPAWN "(" fail("`spawn` takes a lambda. Write `spawn fn { … }`.") -> {
                 Expr::Spawn {
@@ -3940,7 +3944,7 @@ grammar! {
                         mutable: Vec::new(),
                         body: Block { stmts: Vec::new() }, id: NodeId::parsed()
                     }),
-                    written_async: false, id: NodeId::parsed()
+                    written_async: false, child: false, id: NodeId::parsed()
                 }
             }
 

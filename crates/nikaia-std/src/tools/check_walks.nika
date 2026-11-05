@@ -111,6 +111,7 @@ fn check_walks_task(state: ref CheckState, world: ref CheckWorld, walking: ref W
     let wait = state.facts.async_waits.get(id as i64) ?? return null
     let until: i64 = match wait.at {
         CheckAsyncWaitAt::GroupEnd => 4611686018427387904,
+        CheckAsyncWaitAt::Handle => 4611686018427387904,
         CheckAsyncWaitAt::BeforeStatement(start) => start,
         CheckAsyncWaitAt::Before(operation) => (world.here.spans.get(operation as u32)?.end ?? at.end) as i64,
     }

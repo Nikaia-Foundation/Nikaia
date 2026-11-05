@@ -792,11 +792,13 @@ pub(crate) fn check_core_ops_lambda_tail_wrapped<H: CheckHost>(state: &mut Check
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, task: i64, params: &[winnow_grammar::Symbol], body: &Block, detached: bool, span: &Span) -> Ty {
+pub(crate) fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, task: i64, params: &[winnow_grammar::Symbol], body: &Block, detached: bool, child: bool, span: &Span) -> Ty {
     state.a_task_takes_no_arguments(world, params, span);
-    let closure = Expr::Closure { params: params.to_owned(), mutable: vec![], body: body.clone(), id: fresh_id() };
-    let who = if detached { "a detached task" } else { "a background task" };
-    state.a_task_takes_these(world, &closure, task, who, span);
+    if !child {
+        let closure = Expr::Closure { params: params.to_owned(), mutable: vec![], body: body.clone(), id: fresh_id() };
+        let who = if detached { "a detached task" } else { "a background task" };
+        state.a_task_takes_these(world, &closure, task, who, span);
+    }
     state.scope.push(vec![]);
     state.task_bindings.push(vec![]);
     let outer_inside = state.inside_a_door;
@@ -810,16 +812,26 @@ pub(crate) fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &
     state.inside_a_door = outer_inside;
     let bound: Vec<(String, Ty, i64)> = nikaia_std::index::or(state.task_bindings.pop(), || vec![].into());
     state.a_task_holds_these_across_a_pause(world, host, body, &bound, span);
+    if child { return Ty::Named { name: CHILD_HANDLE.to_string(), args: vec![value], view: false }; }
     Ty::Named { name: String::from("TaskHandle"), args: vec![value], view: false }
+}
+
+pub const CHILD_HANDLE: &str = "task::ChildHandle";
+
+pub fn a_child_handle(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => name == CHILD_HANDLE,
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, spawned: &Expr, detached: bool, span: &Span) -> Ty {
-    state.crosses_into_a_task(world, spawned, span);
+pub fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, spawned: &Expr, detached: bool, child: bool, span: &Span) -> Ty {
+    if !child { state.crosses_into_a_task(world, spawned, span); }
     let task = id_of(spawned) as i64;
     match spawned {
-        Expr::Closure { params, body, .. } => { return check_core_ops_task(state, world, host, task, params, body, detached, span); },
+        Expr::Closure { params, body, .. } => { return check_core_ops_task(state, world, host, task, params, body, detached, child, span); },
         _ => { },
     }
     check_core_expr(state, world, host, spawned, span);

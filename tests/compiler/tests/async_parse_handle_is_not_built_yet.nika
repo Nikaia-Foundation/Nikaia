@@ -1,7 +1,0 @@
-// `async(handle) fn { … }` (ADR-async-5 D11) is refused until the checker
-// handles it (#986).
-
-fn main() {
-	let h = async(handle) fn { 1 }
-	println(f"{h.join()}")
-}

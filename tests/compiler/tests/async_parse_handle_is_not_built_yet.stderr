@@ -1,7 +1,0 @@
-error: `async(handle) fn { … }` isn't built yet (#986).
-  --> tests/async_parse_handle_is_not_built_yet.nika:5:16
-   |
- 5 | 	let h = async(handle) fn { 1 }
-   |                ^^^^^^
-   |
-   = help: `async(detached) fn { … }` is: it starts a free task and hands back its handle.

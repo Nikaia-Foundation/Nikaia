@@ -1,0 +1,24 @@
+// `async(handle) fn { … } catch { f }` (Part I 8.1.2, ADR-async-5 D11, D22,
+// #986): the fallback stands in for the value of a child task that fails, so
+// `join()` gives it; a task that does not fail gives its own value.
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn fails(n: i64) -> i64 throws {
+	if n > 1 {
+		throw Bad {}
+	}
+	return n
+}
+
+fn main() throws {
+	let h = async(handle) fn { fails(2) } catch { 7 }
+	let k = async(handle) fn { fails(1) } catch { 8 }
+	let other = fails(0)
+	println(f"{h.join()} {k.join()} {other}")
+}

@@ -75,10 +75,13 @@ pub struct FactClaim {
 /// **Where a task of `async e` is waited for** (ADR-async-5 D6), for the
 /// lowering onto tasks (#986): before a call or an operation (its node), before
 /// a statement of the binding's block (its span's start), or at its group's end.
+/// `Handle` is an `async(handle)`'s task (D11): waited for where its handle is
+/// joined, and at its group's end where it is left live.
 pub enum CheckAsyncWaitAt {
     Before(i64),
     BeforeStatement(i64),
     GroupEnd,
+    Handle,
 }
 
 /// One task's wait point and its group (D9): an `async { }`'s node, or for the

@@ -1652,6 +1652,9 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         state.stored_frames.push(CheckStoredCode::empty())
     }
     let mut found = check_core_expr(state, world, host, value, span)
+    if a_child_handle(found) {
+        state.a_child_handle_leaving_its_group(span, "it is assigned to a place, which may outlive its group")
+    }
     if code_keys.len() > 0 {
         check_core_places_stored_keys(state, world, host, value, code_keys)
     }
@@ -2459,6 +2462,7 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
         match stmt.node {
             Stmt::Let { names, value, .. } => {
                 match value {
+                    Expr::Spawn { child, .. } if child => pending.push(check_child_binding(state, world, block, at, names, value, group)),
                     Expr::Async(inner, _) => {
                         pending.push(check_async_binding(state, world, block, at, names, value, group, beside, last, stmt.span))
                         check_async_in(state, inner, group, stmt.span)
@@ -2468,6 +2472,7 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
                     // as the bare form's does.
                     Expr::TryCatch { expr: guarded, .. } => {
                         match guarded {
+                            Expr::Spawn { child, .. } if child => pending.push(check_child_binding(state, world, block, at, names, guarded, group)),
                             Expr::Async(inner, _) => {
                                 pending.push(check_async_binding(state, world, block, at, names, guarded, group, beside, last, stmt.span))
                                 check_async_in(state, inner, group, stmt.span)
@@ -2497,6 +2502,16 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
             },
             Stmt::Expr(value) => {
                 match value {
+                    // A child task as a statement runs to its end, waited for
+                    // at its group's end (8.1.2, D11).
+                    Expr::Spawn { child, .. } if child => {
+                        state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
+                        pending.push(count)
+                    },
+                    Expr::TryCatch { expr: guarded, .. } if check_a_child_task(guarded) => {
+                        state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
+                        pending.push(count)
+                    },
                     Expr::Async(inner, _) => {
                         state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
                         if last && beside == 0 {
@@ -2565,6 +2580,46 @@ fn check_async_binding(mut state: CheckState, world: ref CheckWorld, block: ref 
     return named
 }
 
+/// One child task a binding holds (`let h = async(handle) fn { … }`, 8.1.2,
+/// D11): its handle is used where a later statement names the binding; one
+/// nothing names runs to its end, waited for at its group's end. It runs
+/// beside everything up to the group's end; gives back the block's length.
+fn check_child_binding(mut state: CheckState, world: ref CheckWorld, block: ref Block, at: i64, names: ref Vec[winnow_grammar::Symbol], task: ref Expr, group: i64) -> i64 sync {
+    let count = block.stmts.len() as i64
+    let mut wanted: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in names {
+        wanted.insert(world.words.resolve(name).clone())
+    }
+    let mut named = false
+    let mut index = 0
+    for stmt in block.stmts {
+        if index > at && !named {
+            let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+            names_in_statement(stmt.node, world.words, seen)
+            for name in wanted {
+                if seen.contains(name) {
+                    named = true
+                }
+            }
+        }
+        index += 1
+    }
+    let mut wait = CheckAsyncWaitAt::GroupEnd
+    if named {
+        wait = CheckAsyncWaitAt::Handle
+    }
+    state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: wait, group: group })
+    return count
+}
+
+/// Whether an expression is a child task, `async(handle) fn { … }`.
+fn check_a_child_task(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Spawn { child, .. } => child,
+        else => false,
+    }
+}
+
 /// Whether a statement starts a task as a whole, `let x = async e` or `async
 /// e`: a pending binding it names is waited for in that task, so the main line
 /// waits where another statement names it (D6).
@@ -2622,6 +2677,10 @@ fn check_async_in(mut state: CheckState, expr: ref Expr, group: i64, span: ref S
                 parts.push(item)
             }
             check_async_operands(state, parts, id_of(expr) as i64, group, span)
+        },
+        // A child task anywhere else gives its handle where it stands.
+        Expr::Spawn { child, .. } if child => {
+            state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Handle, group: group })
         },
         Expr::Async(inner, _) => {
             state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(id_of(expr) as i64), group: group })

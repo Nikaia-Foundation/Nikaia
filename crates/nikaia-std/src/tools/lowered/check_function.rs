@@ -617,6 +617,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
         Some(written) => {
             check_reflected_field_kept(state, world, written, at, false);
             expected = Some(host.type_of(written).erase(&parameters));
+            if a_child_handle(nikaia_std::index::or(expected.as_ref(), || &Ty::Unknown)) { state.a_child_handle_leaving_its_group(at, "it is this function's result, and its group ends with the function at the latest"); }
         },
         None => { },
     }

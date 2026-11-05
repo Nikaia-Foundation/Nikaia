@@ -64,6 +64,7 @@ pub(crate) fn check_walks_task(state: &CheckState, world: &CheckWorld<'_, '_, '_
     let wait = match state.facts.async_waits.get(&(id as i64)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let until: i64 = match wait.at {
         CheckAsyncWaitAt::GroupEnd => 4611686018427387904i64,
+        CheckAsyncWaitAt::Handle => 4611686018427387904i64,
         CheckAsyncWaitAt::BeforeStatement(start) => start,
         CheckAsyncWaitAt::Before(operation) => nikaia_std::index::or(world.here.spans.get(&u32::try_from(operation).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"))).map(|__nikaia_it| __nikaia_it.end), || at.end.into()) as i64,
     };

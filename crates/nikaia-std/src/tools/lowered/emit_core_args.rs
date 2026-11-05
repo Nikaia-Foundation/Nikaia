@@ -802,7 +802,15 @@ impl EmitState {
             CheckAsyncWaitAt::Before(_) => String::from("join"),
             CheckAsyncWaitAt::BeforeStatement(_) => String::from("handle"),
             CheckAsyncWaitAt::GroupEnd => String::from("spawn"),
+            CheckAsyncWaitAt::Handle => String::from("handle"),
         }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn emit_child_kind(&self, id: i64, flow: EmitFlow) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
+        let kind = self.emit_async_kind(id);
+        if kind == "" { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async(handle)` here yet: put it in `async { … }` or in the function's own body."), at: emit_async_at(flow.statement) }, &"emit_child_kind")); }
+        Ok(kind)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

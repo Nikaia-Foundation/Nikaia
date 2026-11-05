@@ -212,6 +212,7 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
     }
     state.flow.lending_let = !wants_fn;
     let found = check_core_expr(state, world, host, arg, span);
+    if a_child_handle(&found) { state.a_child_handle_leaving_its_group(span, "it is handed to a call, which may keep it past its group"); }
     state.flow.lending_let = false;
     let named = check_core_args_named(&state, world, arg);
     let mut found_fn = false;

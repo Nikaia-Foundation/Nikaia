@@ -418,6 +418,19 @@ impl EmitState {
             Expr::Coalesce { value, fallback, .. } => self.emit_core_coalesce(world, walk, out, host, node, value, fallback, depth, flow, scope),
             // `async(detached) fn { … } catch { f }`: the fallback (D22).
             Expr::TryCatch { expr, handler, id } => match expr {
+                // `async(handle) fn { … } catch { f }`: the fallback runs in
+                // the child task, as the detached one's does (D22).
+                Expr::Spawn { body, child, .. } if child => {
+                    match body {
+                        Expr::Closure { body: block, .. } => {
+                            let guarded = Expr::Block(block.clone(), numbered_id(id_of(expr)))
+                            let caught = Expr::TryCatch { expr: guarded, handler: handler.clone(), id: numbered_id(id.get()) }
+                            let kind = self.emit_child_kind(id_of(expr) as i64, flow)
+                            self.emit_async_task(world, walk, out, host, caught, id_of(expr) as i64, kind, depth, flow, scope)
+                        },
+                        else => throw EmitRefused { message: "`async(handle)` takes a lambda. Write `async(handle) fn { … }`.", at: flow.statement },
+                    }
+                },
                 Expr::Spawn { body, written_async, .. } if written_async => self.emit_core_spawn_fallback(world, walk, out, host, expr, body, handler, id.get(), depth, flow, scope),
                 else => self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope),
             },
@@ -426,6 +439,13 @@ impl EmitState {
             Expr::Break(_) => self.emit_core_jump(out, true, flow),
             Expr::Continue(_) => self.emit_core_jump(out, false, flow),
             Expr::Throw(inner, _) => self.emit_core_throw(world, walk, out, host, inner, depth, flow, scope),
+            // `async(handle) fn { … }` (8.1.2, D11): a child task of its
+            // group; its `task::ChildHandle`, or one nothing names runs to its
+            // end and is waited for at the group's end.
+            Expr::Spawn { body, child, id, .. } if child => {
+                let kind = self.emit_child_kind(id.get() as i64, flow)
+                self.emit_async_task(world, walk, out, host, body, id.get() as i64, kind, depth, flow, scope)
+            },
             Expr::Spawn { body, .. } => self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope),
             // Part I 8.1.2 (ADR-async-5 D6, D9, #988): a task of its group,
             // waited for where the checker recorded; and the group.

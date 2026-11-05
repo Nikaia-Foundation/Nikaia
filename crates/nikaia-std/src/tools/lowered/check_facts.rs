@@ -55,6 +55,7 @@ pub enum CheckAsyncWaitAt {
     Before(i64),
     BeforeStatement(i64),
     GroupEnd,
+    Handle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

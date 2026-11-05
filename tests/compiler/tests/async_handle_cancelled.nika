@@ -1,0 +1,16 @@
+// `cancel()` on a child handle (Part I 8.1.2, ADR-async-5 D11, #986): a task
+// that pauses stops at its pause, and its group does not wait for its rest.
+use std::time
+
+fn slow(n: i64) -> i64 {
+	time::sleep(1.millis())
+	println(f"slow {n} ended")
+	return n
+}
+
+fn main() throws {
+	let h = async(handle) fn { slow(1) }
+	let k = async(handle) fn { slow(2) }
+	k.cancel()
+	println(f"joined {h.join()}")
+}

@@ -257,6 +257,7 @@ pub(crate) fn check_crossings_spawned(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
         Stmt::Let { names, value, .. } => {
             if names.len() != 1 { return None; }
             match value {
+                Expr::Spawn { child, .. } if { let child = *child; child } => { return None; },
                 Expr::Spawn { .. } => { },
                 _ => { if !handles.contains(&at) { return None; } },
             }

@@ -1,0 +1,21 @@
+// `async(handle) fn { … }` starts a child task of its group and gives its
+// `task::ChildHandle` (Part I 8.1.2, ADR-async-5 D11, #986): `join()` waits
+// for the task and gives its value; one that pauses is polled there.
+use std::time
+
+fn work(n: i64) -> i64 {
+	return n * 10
+}
+
+fn slow(n: i64) -> i64 {
+	time::sleep(1.millis())
+	return n + 1
+}
+
+fn main() throws {
+	let h = async(handle) fn { work(2) }
+	let p = async(handle) fn { slow(4) }
+	let other = work(3)
+	println(f"{h.join()} {other}")
+	println(f"{p.join()}")
+}

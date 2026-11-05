@@ -1,0 +1,21 @@
+// A child handle may not leave its group (Part I 8.1.2, ADR-async-5 D11,
+// #986): as a function's result, as the value of `async { … }`, assigned to
+// a place outside or handed to a call, it is `NK2122`.
+
+fn starts() -> task::ChildHandle[i64] {
+	return async(handle) fn { 1 }
+}
+
+fn main() throws {
+	let mut kept = null
+	let mut all = []
+	let v = async {
+		let h = async(handle) fn { 2 }
+		h
+	}
+	async {
+		let h = async(handle) fn { 3 }
+		kept = h
+		all.push(async(handle) fn { 4 })
+	}
+}

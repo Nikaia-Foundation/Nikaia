@@ -2332,7 +2332,7 @@ pub mod check_core_method {
 }
 pub mod check_core_ops {
     #[allow(unused_imports)]
-    pub use super::{check_core_ops_binary, check_core_ops_coalesce, check_core_ops_none_named, check_core_ops_closure, check_core_ops_spawn};
+    pub use super::{check_core_ops_binary, check_core_ops_coalesce, check_core_ops_none_named, check_core_ops_closure, CHILD_HANDLE, a_child_handle, check_core_ops_spawn};
 }
 pub mod check_core_pilot {
     #[allow(unused_imports)]

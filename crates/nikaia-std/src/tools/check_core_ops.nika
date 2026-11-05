@@ -1163,14 +1163,17 @@ fn check_core_ops_lambda_tail_wrapped[H: CheckHost](mut state: CheckState, world
 
 /// **A task's lambda, walked** (Part I 8.2, ADR-055 D5, ADR-312, ADR-281 D29):
 /// its body's value is what the handle hands back.
-fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, task: i64, params: ref Vec[winnow_grammar::Symbol], body: ref Block, detached: bool, span: ref Span) -> Ty sync {
+fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, task: i64, params: ref Vec[winnow_grammar::Symbol], body: ref Block, detached: bool, child: bool, span: ref Span) -> Ty sync {
     // A task is handed nothing, so a parameter has nothing to be bound from.
     state.a_task_takes_no_arguments(world, params, span)
     // **What the task takes with it** (`NK2101`), read off the body before it
-    // is walked. No parameter of a task is ever `mut`.
-    let closure = Expr::Closure { params: params.clone(), mutable: [], body: body.clone(), id: fresh_id() }
-    let who = if detached { "a detached task" } else { "a background task" }
-    state.a_task_takes_these(world, closure, task, who, span)
+    // is walked. No parameter of a task is ever `mut`. A child task takes
+    // nothing: it borrows, and its group outlives it (ADR-async-5 D11).
+    if !child {
+        let closure = Expr::Closure { params: params.clone(), mutable: [], body: body.clone(), id: fresh_id() }
+        let who = if detached { "a detached task" } else { "a background task" }
+        state.a_task_takes_these(world, closure, task, who, span)
+    }
     state.scope.push([])
     state.task_bindings.push([])
     // A task runs later and elsewhere: taking a lock in one is not a door's.
@@ -1187,20 +1190,38 @@ fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     state.inside_a_door = outer_inside
     let bound: Vec[(String, Ty, i64)] = state.task_bindings.pop() ?? []
     state.a_task_holds_these_across_a_pause(world, host, body, bound, span)
+    if child {
+        return Ty::Named { name: CHILD_HANDLE.clone(), args: [value], view: false }
+    }
     return Ty::Named { name: "TaskHandle", args: [value], view: false }
 }
 
+/// The type of an `async(handle)`'s value (Part I 8.1.2, ADR-async-5 D11).
+pub comptime CHILD_HANDLE: ref String = "task::ChildHandle"
+
+/// Whether the type is a child task's handle, which cannot leave its group
+/// (`NK2122`).
+pub fn a_child_handle(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, .. } => name == CHILD_HANDLE,
+        else => false,
+    }
+}
+
 /// **`spawn`** hands back a `TaskHandle` of what the task's body comes to;
-/// `detached` where it is written `async(detached)` (ADR-async-5 D13).
-pub fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, spawned: ref Expr, detached: bool, span: ref Span) -> Ty sync {
+/// `detached` where it is written `async(detached)` (ADR-async-5 D13); a
+/// `task::ChildHandle` where it is written `async(handle)` (`child`, D11).
+pub fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, spawned: ref Expr, detached: bool, child: bool, span: ref Span) -> Ty sync {
     // **Before** the body is walked, so that the task's own `let`s are not
-    // yet in scope.
-    state.crosses_into_a_task(world, spawned, span)
+    // yet in scope. A child task crosses into nothing: it may borrow.
+    if !child {
+        state.crosses_into_a_task(world, spawned, span)
+    }
     // The handles a task duplicates are keyed by its lambda's node (ADR-340 D5).
     let task = id_of(spawned) as i64
     match spawned {
         Expr::Closure { params, body, .. } => {
-            return check_core_ops_task(state, world, host, task, params, body, detached, span)
+            return check_core_ops_task(state, world, host, task, params, body, detached, child, span)
         },
         else => {},
     }

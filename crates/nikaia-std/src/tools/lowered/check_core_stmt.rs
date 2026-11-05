@@ -1230,6 +1230,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     state.flow.writing_index = false;
     if !code_keys.is_empty() { state.stored_frames.push(CheckStoredCode::empty()); }
     let mut found = check_core_expr(state, world, host, value, span);
+    if a_child_handle(&found) { state.a_child_handle_leaving_its_group(span, "it is assigned to a place, which may outlive its group"); }
     if !code_keys.is_empty() { check_core_places_stored_keys(state, world, host, Some(value), &code_keys); }
     if op.is_none() {
         state.a_map_read_assigned(world, &into, value, span);
@@ -1798,6 +1799,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
         match &stmt.node {
             Stmt::Let { names, value, .. } => {
                 match value {
+                    Expr::Spawn { child, .. } if { let child = *child; child } => { pending.push(check_child_binding(state, world, block, at, names, value, group)); },
                     Expr::Async(inner, _) => {
                         let inner = nikaia_std::boxed::open(inner);
                         pending.push(check_async_binding(state, world, block, at, names, value, group, beside, last, &stmt.span));
@@ -1806,6 +1808,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
                     Expr::TryCatch { expr: guarded, .. } => {
                         let guarded = nikaia_std::boxed::open(guarded);
                         match guarded {
+                            Expr::Spawn { child, .. } if { let child = *child; child } => { pending.push(check_child_binding(state, world, block, at, names, guarded, group)); },
                             Expr::Async(inner, _) => {
                                 let inner = nikaia_std::boxed::open(inner);
                                 pending.push(check_async_binding(state, world, block, at, names, guarded, group, beside, last, &stmt.span));
@@ -1833,6 +1836,15 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
             },
             Stmt::Expr(value) => {
                 match value {
+                    Expr::Spawn { child, .. } if { let child = *child; child } => {
+                        state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
+                        pending.push(count);
+                    },
+                    Expr::TryCatch { expr: guarded, .. } if { let guarded = nikaia_std::boxed::peek(&guarded); check_a_child_task(guarded) } => {
+                        let guarded = nikaia_std::boxed::open(guarded);
+                        state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
+                        pending.push(count);
+                    },
                     Expr::Async(inner, _) => {
                         let inner = nikaia_std::boxed::open(inner);
                         state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
@@ -1890,6 +1902,40 @@ pub(crate) fn check_async_binding(state: &mut CheckState, world: &CheckWorld<'_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_child_binding(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], task: &Expr, group: i64) -> i64 {
+    let count = block.stmts.len() as i64;
+    let mut wanted: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in names.iter() {
+        let name = *name;
+        wanted.insert(world.words.resolve(name).to_string());
+    }
+    let mut named = false;
+    let mut index: i64 = 0;
+    for stmt in block.stmts.iter() {
+        if index > at && !named {
+            let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+            names_in_statement(&stmt.node, world.words, &mut seen);
+            for name in wanted.iter() { if seen.contains(name) { named = true; } }
+        }
+        index += 1;
+    }
+    let mut wait = CheckAsyncWaitAt::GroupEnd;
+    if named { wait = CheckAsyncWaitAt::Handle; }
+    state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: wait, group });
+    count
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_a_child_task(expr: &Expr) -> bool {
+    match expr {
+        Expr::Spawn { child, .. } => { let child = *child; child },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn starts_a_task(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Let { value, .. } => match value {
@@ -1934,6 +1980,7 @@ pub(crate) fn check_async_in(state: &mut CheckState, expr: &Expr, group: i64, sp
             for item in items.iter() { parts.push(item); }
             check_async_operands(state, &parts, id_of(expr) as i64, group, span);
         },
+        Expr::Spawn { child, .. } if { let child = *child; child } => { state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Handle, group }); },
         Expr::Async(inner, _) => {
             let inner = nikaia_std::boxed::open(inner);
             state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(id_of(expr) as i64), group });

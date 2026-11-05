@@ -571,6 +571,10 @@ pub enum Expr {
         // Written `async(detached) fn { … }`: the checker refuses it inside a
         // loop's body (`NK2120`, ADR-async-5 D30), and `spawn` it does not.
         written_async: bool,
+        // Written `async(handle) fn { … }`: a child task bound to its group,
+        // whose value is a `task::ChildHandle` (Part I 8.1.2, ADR-async-5
+        // D11): it takes nothing, may borrow, and its group waits for it.
+        child: bool,
         id: node_id::NodeId,
     },
 

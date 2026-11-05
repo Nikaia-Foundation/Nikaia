@@ -296,6 +296,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             state.flow.async_group_block = Some(id_of(expr) as i64);
             let ty = check_core_block(state, world, host, block);
             if state.flow.async_started == 0 { state.a_group_with_no_task(span); }
+            if a_child_handle(&ty) { state.a_child_handle_leaving_its_group(span, "it is the value of this `async { … }`, which ends its group"); }
             state.flow.async_depth -= 1;
             state.flow.loops = loops;
             state.flow.barrier = barrier;
@@ -324,10 +325,11 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); check_core_range(state, world, host, start, end, span) },
         Expr::TryCatch { expr: guarded, handler, .. } => { let guarded = nikaia_std::boxed::open(guarded); check_core_flow_try_catch(state, world, host, expr, guarded, handler, span) },
-        Expr::Spawn { body, written_async, .. } => {
-            let body = nikaia_std::boxed::open(body); let written_async = *written_async;
+        Expr::Spawn { body, written_async, child, .. } => {
+            let body = nikaia_std::boxed::open(body); let child = *child; let written_async = *written_async;
             if written_async && state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
-            check_core_ops_spawn(state, world, host, body, written_async, span)
+            if child { state.flow.async_started += 1; }
+            check_core_ops_spawn(state, world, host, body, written_async, child, span)
         },
         Expr::Dsl { target, package, context, content, .. } => { let context = *context; let package = *package; let target = *target; check_core_expr_dsl(state, world, host, expr, target, package, context, content, span) },
         Expr::Asm { .. } => {

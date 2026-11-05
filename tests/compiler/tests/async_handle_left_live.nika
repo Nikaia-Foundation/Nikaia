@@ -1,0 +1,25 @@
+// A child handle left live is waited for at its group's end (Part I 8.1.2,
+// ADR-async-5 D11, #986): one nothing names, one only a branch not taken
+// names, and one that pauses all run to their end before `main` ends.
+use std::time
+
+fn work(n: i64) -> i64 {
+	println(f"work {n}")
+	return n
+}
+
+fn slow(n: i64) -> i64 {
+	time::sleep(1.millis())
+	println(f"slow {n}")
+	return n
+}
+
+fn main() throws {
+	let quiet = work(0) > 5
+	let h = async(handle) fn { work(1) }
+	async(handle) fn { slow(2) }
+	if quiet {
+		h.cancel()
+	}
+	println("main")
+}

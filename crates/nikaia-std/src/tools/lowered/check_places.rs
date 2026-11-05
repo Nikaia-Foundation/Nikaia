@@ -59,6 +59,9 @@ impl CheckState {
     pub fn a_group_with_no_task(&mut self, span: &Span) { self.findings.push(check_refusal("NK2111", span, String::from("This `async { … }` starts no task, so it waits for nothing."), vec![String::from("Its statements run in order, as any block's; only an `async` inside it starts a task its end waits for.")], Some(String::from("Remove the word `async`. For one task of several steps, write `async fn { … }`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_child_handle_leaving_its_group(&mut self, span: &Span, why: &str) { self.findings.push(check_refusal("NK2122", span, format!("A child handle (`async(handle)`) leaves its group here: {}.", why), vec![String::from("A child task is bound to the group it starts in: it may borrow from it, and the group waits for it at its end, so its handle cannot outlive the group.")], Some(String::from("Write `async(detached) fn { … }` for a task whose handle outlives its group.")))); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_return_out_of_an_async_form(&mut self, span: &Span) { self.findings.push(check_refusal("NK1132", span, String::from("`return` leaves the function, but it stands inside an `async` form."), vec![String::from("A task is a boundary no jump leaves, and an `async { … }` waits for its tasks at its end.")], Some(String::from("For a task of several steps that can end early, write `async fn { … }`: `return` in it ends the task with its value.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
