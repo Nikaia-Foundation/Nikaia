@@ -664,7 +664,7 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
             params.c_params.push(format!("{}_{} {}", prefix, plain.name, param));
             let arms = cx_choice_arms_in(&plain);
             params.checks.push_str(&format!("    let {} = match {} {{ {} _ => return -1 }};\n", local, local, arms));
-            params.call_args.push(local.to_string());
+            if cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(local.to_string()); }
         },
         CxIn::Callback { lent, result } => {
             let mut rust_args: Vec<String> = vec![];

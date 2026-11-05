@@ -810,7 +810,14 @@ fn cx_parameter(ctx: ref CxCtx, contracts: ref Ledger, key: ref String, position
             // A number no variant has is `E_ARGUMENT` (ADR-284 D5).
             let arms = cx_choice_arms_in(plain)
             params.checks.push_str(f"    let {local} = match {local} {{ {arms} _ => return -1 }};\n")
-            params.call_args.push(local.clone())
+            // **Lent where the function only reads it** (a `match` over the
+            // parameter takes it apart and keeps nothing), as the ledger says
+            // and the declaration was lowered.
+            if cx_lent(contracts, key, position) {
+                params.call_args.push(f"&{local}")
+            } else {
+                params.call_args.push(local.clone())
+            }
         },
         CxIn::Callback { lent, result } => {
             // **A function pointer and the context C hands it back** (D5);
