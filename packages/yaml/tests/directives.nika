@@ -5,7 +5,7 @@
 // "Spec Example" cases).
 use yaml
 
-fn props(n: ref yaml::Node) -> String {
+fn props(n: yaml::Node) -> String {
 	let a = match n.anchor {
 		null => ""
 		x => f"&{x} "
@@ -17,7 +17,7 @@ fn props(n: ref yaml::Node) -> String {
 	return f"{a}{t}"
 }
 
-fn show(n: ref yaml::Node) -> String {
+fn show(n: yaml::Node) -> String {
 	let p = props(n)
 	return match n.value {
 		yaml::Value::Null => f"{p}null"

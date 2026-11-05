@@ -4,7 +4,7 @@
 // YAML 1.2.2 sets no limit; the nested flow sequences are built for this test.
 use yaml
 
-fn run(text: String, limits: yaml::Limits) {
+fn run(text: String, keep limits: yaml::Limits) {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input; limits: limits) catch {
 		println(f"error {error.line}:{error.column}: {error.message}")

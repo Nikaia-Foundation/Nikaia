@@ -24,30 +24,26 @@ pub = true
 sync = "inferred"
 throws = ["ConvertError"]
 touches = []
-views = ["v: borrowed"]
-signature = "(v: ref Value) -> f64"
+signature = "(v: Value) -> f64"
 
 [fn."as_i64"]
 pub = true
 sync = "inferred"
 throws = ["ConvertError"]
 touches = []
-views = ["v: borrowed"]
-signature = "(v: ref Value) -> i64"
+signature = "(v: Value) -> i64"
 
 [fn."as_u64"]
 pub = true
 sync = "inferred"
 throws = ["ConvertError"]
 touches = []
-views = ["v: borrowed"]
-signature = "(v: ref Value) -> u64"
+signature = "(v: Value) -> u64"
 
 [fn."at_end"]
 sync = "inferred"
 touches = []
-views = ["r: borrowed"]
-signature = "(r: ref Reader) -> bool"
+signature = "(r: Reader) -> bool"
 
 [fn."blanks"]
 sync = "inferred"
@@ -65,8 +61,7 @@ signature = "(mut r: Reader, word: String, path: String)"
 sync = "inferred"
 keeps = ["message", "path"]
 touches = []
-views = ["r: borrowed"]
-signature = "(r: ref Reader, message: String, path: String) -> Error"
+signature = "(r: Reader, message: String, path: String) -> Error"
 
 [fn."hex4"]
 sync = "inferred"
@@ -85,8 +80,7 @@ signature = "(c: scalar) -> bool"
 [fn."kind_of"]
 sync = "inferred"
 touches = []
-views = ["v: borrowed"]
-signature = "(v: ref Value) -> ref String"
+signature = "(v: Value) -> ref String"
 
 [fn."number"]
 sync = "inferred"
@@ -99,8 +93,8 @@ signature = "(mut r: Reader, path: String) -> Value"
 sync = "inferred"
 throws = ["ConvertError"]
 touches = []
-views = ["v: borrowed", "asked: borrowed"]
-signature = "(v: ref Value, asked: String) -> String"
+views = ["asked: borrowed"]
+signature = "(v: Value, asked: String) -> String"
 
 [fn."parse"]
 pub = true
@@ -113,8 +107,7 @@ signature = "(text: String) -> Value"
 [fn."peek"]
 sync = "inferred"
 touches = []
-views = ["r: borrowed"]
-signature = "(r: ref Reader) -> scalar"
+signature = "(r: Reader) -> scalar"
 
 [fn."string"]
 sync = "inferred"

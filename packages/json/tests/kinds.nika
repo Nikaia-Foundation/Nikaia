@@ -1,6 +1,6 @@
 use json
 
-fn show(v: ref json::Value) -> String {
+fn show(v: json::Value) -> String {
     return match v {
         json::Value::Null => "null"
         json::Value::Bool(b) => f"bool({b})"

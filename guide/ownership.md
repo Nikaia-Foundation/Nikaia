@@ -13,8 +13,8 @@ runs with the current compiler, except a line marked `does not compile`, which s
 compiler refuses; the error below such a program is the one the compiler prints. To try one,
 save it as a file and run `nikaia run file.nika`.
 
-The last section, [What changes next](#what-changes-next), shows a new way of writing
-signatures that is decided but not built yet; its blocks are marked `does not compile yet`.
+The last section, [A signature that says what it keeps](#a-signature-that-says-what-it-keeps),
+shows how a signature writes `keep` and `from`, and what of that is still being built.
 
 ---
 
@@ -212,9 +212,9 @@ Alan is 42
 
 A function keeps a parameter when the value outlives the call: the body stores it somewhere
 that lives on (a list or a field it was handed `mut`), returns it, gives it to a task, or
-passes it on to another function that keeps it. You do not write which parameters a function
-keeps; the compiler reads it off the body, and records it (see
-[The contract ledger](#the-contract-ledger)).
+passes it on to another function that keeps it. Such a parameter says `keep`, as `enrol`'s
+`p` does above; the compiler reads off the body what a function keeps, checks the signature
+against it, and records it (see [The contract ledger](#the-contract-ledger)).
 
 A task shows where the line runs. A task started with `async` belongs to a group and ends
 before the group does, so it can borrow what was bound outside the group, and the code after
@@ -415,8 +415,8 @@ an owner of its own ([`NK1102`](#nk1102-a-view-handed-to-a-function-that-keeps-i
 
 ## The contract ledger
 
-You do not write which parameters a function keeps, or what its result points into. The
-compiler reads both off the body and writes them, for every function, into a file beside your
+The compiler reads off the body which parameters a function keeps and what its result points
+into, and writes both, for every function, into a file beside your
 code, `nikaia.contracts`. You commit it like a lock file. For the functions on this page it
 reads:
 
@@ -597,10 +597,10 @@ A check that runs before the program does refuses some programs that would have 
 that pushes to the list it walks is one: written with an index over a length taken before the
 loop, it is fine, and the message says so.
 
-Because the compiler reads what a function keeps off its body, today's signature does not show
-it. A change inside a function can change what its callers may do; the ledger shows such a
-change in review and the compiler names it, but the signature stays the same. Putting it into the signature is decided but not built yet
-([What changes next](#what-changes-next)).
+What a result points into is read off the body unless the signature writes it with `from`, so
+a change inside a function can change what its callers may do; the ledger shows such a change
+in review and the compiler names it
+([A signature that says what it keeps](#a-signature-that-says-what-it-keeps)).
 
 In an `extern "C"` declaration, `ref i32` and `ref mut i32` are the pointers C expects, and
 what the C library does with them is outside these checks: its code is trusted as it is. The
@@ -609,17 +609,13 @@ and its `unsafe` code is trusted.
 
 **Specification:** [Part I, §6.2 Unified types](../docs/specification/10-nikaia-light.md#62-unified-types) · [Part II, Chapter 12 Thread safety](../docs/specification/20-nikaia-advance.md#chapter-12-thread-safety-and-synchronization) · [Part III, §15.1 C interoperability](../docs/specification/30-nikaia-tooling.md#151-c-interoperability)
 
-## What changes next
+## A signature that says what it keeps
 
-This section describes a design that is decided but not built yet: the compiler of today
-refuses every block marked `does not compile yet`. It is
-[ADR-views-3](../docs/specification/adr/adr-views-3.md), and
-[#1213](https://github.com/Nikaia-Foundation/Nikaia/issues/1213) builds it. Until then, the
-spelling of the sections above is the one that works.
-
-The change puts into the signature what the ledger records today, so that a reader of a
-function sees what happens to each argument without reading its body, and a change in a body
-cannot silently change what its callers may do. Here is a small cart as it is written today:
+A parameter whose function keeps the argument (stores it, returns it, gives it to a task, or
+passes it on to a function that keeps it) says `keep`. A plain parameter is lent, as most are,
+and a `mut` parameter changes the caller's value in place. The receiver follows the same rule:
+`self` is lent, `mut self` changes the object in place, and `keep self` takes the object over.
+Here is a small cart:
 
 ```nika
 struct Item { name: String, price: int }
@@ -627,7 +623,7 @@ struct Item { name: String, price: int }
 struct Cart { items: Vec[Item] }
 
 impl Cart {
-    fn total(ref self) -> int {
+    fn total(self) -> int {
         let mut sum = 0
         for item in self.items {
             sum += item.price
@@ -635,11 +631,11 @@ impl Cart {
         return sum
     }
 
-    fn add(ref mut self, item: Item) {
+    fn add(mut self, keep item: Item) {
         self.items.push(item)
     }
 
-    fn into_items(self) -> Vec[Item] {
+    fn into_items(keep self) -> Vec[Item] {
         return self.items
     }
 }
@@ -659,10 +655,19 @@ fn main() {
 2
 ```
 
-And the same cart in the decided spelling:
+`total` only reads the cart, `add` changes it and keeps the item it is handed, and
+`into_items` takes the whole cart over. The calls in `main` write none of this: what an
+argument becomes is read off the callee's declaration, so a reader of a function sees what
+happens to each argument without reading its body.
+
+The compiler still works out from the body what a function keeps, and checks the signature
+against it. Without the `keep` on `add`, the cart is refused:
 
 ```nika
-// does not compile yet (ADR-views-3, #1213)
+struct Item { name: String, price: int }
+
+struct Cart { items: Vec[Item] }
+
 impl Cart {
     fn total(self) -> int {
         let mut sum = 0
@@ -672,70 +677,55 @@ impl Cart {
         return sum
     }
 
-    fn add(mut self, keep item: Item) {
-        self.items.push(item)
+    fn add(mut self, item: Item) {
+        self.items.push(item)           // does not compile: NK2302
     }
 
     fn into_items(keep self) -> Vec[Item] {
         return self.items
     }
 }
+
+fn main() {
+    let mut cart = Cart { items: [] }
+    cart.add(Item { name: "pen", price: 3 })
+    println(cart.total())
+}
 ```
 
-The calls in `main` stay exactly as they are. A caller writes nothing new; what an argument
-becomes is read off the callee's declaration.
+```text
+error[NK2302]: `Cart::add` keeps `item`, but `item` is not marked `keep`.
+   --> main.nika:15:9
+    |
+ 15 |         self.items.push(item)           // does not compile: NK2302
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2).
+    = note: Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).
+    = help: Write `keep item` in the signature of `Cart::add`.
+```
 
-### `keep` on a parameter that keeps its argument
+The `item` pushed into the cart outlives the call, so the signature has to say so, and the
+help writes the word. As the second note says, the compiler asks for `keep` today only in a
+file that already writes it somewhere: code written before the word existed still builds,
+and `nikaia migrate views-3 <path>` writes `keep` into it from the ledger.
 
-A parameter whose function keeps the argument (stores it, returns it, gives it to a task, or
-passes it on to a function that keeps it) says `keep`. A plain parameter is lent, as most are,
-and `mut` stays as it is. The compiler still works out from the body what a function keeps,
-and checks the signature against it: a body that keeps a parameter without `keep` is refused,
-with a help that adds the word, and a `keep` the body does not need is a warning. A trait's
-method says it too, and then it holds for every implementation.
+`ref` has nothing left to say beside `keep`. It is written only in an `extern "C"`
+declaration, where `ref i32` and `ref mut i32` remain the pointers C expects; the migration
+removes it everywhere else.
 
-### `self`, `mut self` and `keep self`
-
-The receiver follows the same rule. `self` is lent, `mut self` changes the object in place,
-and `keep self` takes the object over. Note that plain `self` changes its meaning: today it
-takes the object over (`into_items` above), and after the change it is lent.
-
-| Today | Decided |
+| Before | Now |
 | :--- | :--- |
 | `fn total(ref self)` | `fn total(self)` |
 | `fn add(ref mut self, item: Item)` | `fn add(mut self, keep item: Item)` |
 | `fn into_items(self)` | `fn into_items(keep self)` |
-
-### `ref` leaves the language, outside `extern "C"`
-
-With `keep` in the signature, `ref` has nothing left to say, and it is refused everywhere
-except in an `extern "C"` declaration, where `ref i32` and `ref mut i32` remain the pointers C
-expects. A `ref` elsewhere gets a help that removes it.
-
-| Today | Decided |
-| :--- | :--- |
-| `fn shout(s: ref String)` (a warning already) | `fn shout(s: String)` |
-| `struct Reading { name: ref String, temp: i32 }` | `struct Reading { name: String, temp: i32 }` |
-| `let first: ref Expr = given[0]` | `let first = given[0]` |
+| `fn shout(s: ref String)` | `fn shout(s: String)` |
 | `return ref s` | `return s` |
 
-### Views are inferred
-
-A field, a list element or a local is a view where the code makes it one: where what flows
-into it is a piece of someone else's data, it holds a view, tethered to that data as in
-[A view and the data it points into](#a-view-and-the-data-it-points-into). A field the program
-changes in place, or hands to a `keep` parameter, holds a value of its own, and where a view
-would flow into it, the error names where to write `.clone()`. Much of this is how the
-compiler already reads plain fields today; the ledger then lists the fields that hold views.
-
-### Where a result points: `from`
-
-A result that points into a parameter, like `longest` above, is still worked out from the body
-by default. It may also be written on the result, and must be where there is no body to read
-it from (a trait's method, a function type, a foreign function):
+A result that points into a parameter, like `longest` above, is worked out from the body. It
+may also be written on the result with `from`, and then the body is checked against it:
 
 ```nika
-// does not compile yet (ADR-views-3, #1213)
 fn first_word(s: String) -> String from s {
     let words: Vec[String] = s.split(" ").collect()
     return words[0]
@@ -747,13 +737,23 @@ fn longest(a: String, b: String) -> String from a | b {
     }
     return b
 }
+
+fn main() {
+    println(first_word("hello world"))
+    println(longest("ab", "abc"))
+}
 ```
 
-Where `from` is written, the body is checked against it. The ledger writes the source in the
-same spelling: `-> String from a | b` where it writes `-> ref(a | b) String` today.
+```text
+hello
+abc
+```
 
-Existing code moves over once, mechanically: a migration writes `keep` from the ledger and
-removes `ref`.
+The rest of the design is still being built
+([#1213](https://github.com/Nikaia-Foundation/Nikaia/issues/1213)): a `keep` the body does not
+need is to get a warning, `from` is to be required where there is no body to read it from (a
+trait's method, a function type, a foreign function), and the ledger is to write the source in
+the same spelling, `-> String from a | b`, where it writes `-> ref(a | b) String` today.
 
 **Specification:** [ADR-views-3](../docs/specification/adr/adr-views-3.md) · [Part I, §6.5 References and borrowing](../docs/specification/10-nikaia-light.md#65-references-and-borrowing)
 

@@ -4,7 +4,7 @@
 // `[]` and `plain`.
 use yaml
 
-fn style(s: ref yaml::Style) -> String {
+fn style(s: yaml::Style) -> String {
 	match s {
 		yaml::Style::Plain => "plain"
 		yaml::Style::Single => "single"
@@ -14,7 +14,7 @@ fn style(s: ref yaml::Style) -> String {
 	}
 }
 
-fn walk(n: ref yaml::Node, depth: i64) {
+fn walk(n: yaml::Node, depth: i64) {
 	let mut pad = String()
 	let mut i = 0
 	while i < depth {

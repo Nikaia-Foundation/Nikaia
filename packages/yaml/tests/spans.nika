@@ -2,7 +2,7 @@
 // trailing space, a comment or the line break. `é` is two bytes.
 use yaml
 
-fn walk(n: ref yaml::Node, depth: i64) {
+fn walk(n: yaml::Node, depth: i64) {
 	let mut pad = String()
 	let mut i = 0
 	while i < depth {

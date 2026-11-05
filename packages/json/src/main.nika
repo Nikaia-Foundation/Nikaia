@@ -38,7 +38,7 @@ pub struct Error {
 }
 
 impl Error for Error {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         return f"{self.line}:{self.column}: {self.message} at {self.path}"
     }
 }
@@ -49,7 +49,7 @@ pub struct ConvertError {
 }
 
 impl Error for ConvertError {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         return self.message.clone()
     }
 }
@@ -59,7 +59,7 @@ struct Reader {
     pos: i64,
 }
 
-fn fail(r: ref Reader, message: String, path: String) -> Error {
+fn fail(r: Reader, keep message: String, keep path: String) -> Error {
     let mut line = 1
     let mut column = 1
     let mut i = 0
@@ -75,13 +75,13 @@ fn fail(r: ref Reader, message: String, path: String) -> Error {
     return Error { message: message, line: line, column: column, path: path }
 }
 
-fn at_end(r: ref Reader) -> bool {
+fn at_end(r: Reader) -> bool {
     return r.pos >= r.cs.len() as i64
 }
 
 // The character at the position; NUL at the end (check `at_end` first where
 // the end is an error of its own).
-fn peek(r: ref Reader) -> scalar {
+fn peek(r: Reader) -> scalar {
     if r.pos < r.cs.len() as i64 {
         return r.cs[r.pos]
     }
@@ -372,7 +372,7 @@ pub fn parse(text: String) -> Value throws {
     return v
 }
 
-fn kind_of(v: ref Value) -> String {
+fn kind_of(v: Value) -> String {
     return match v {
         Value::Null => "null"
         Value::Bool(_) => "a bool"
@@ -383,7 +383,7 @@ fn kind_of(v: ref Value) -> String {
     }
 }
 
-fn number_text(v: ref Value, asked: String) -> String throws {
+fn number_text(v: Value, asked: String) -> String throws {
     return match v {
         Value::Number(t) => t.clone()
         else => throw ConvertError { message: f"expected a number to read as {asked}, found {kind_of(v)}" }
@@ -416,7 +416,7 @@ fn zero_fraction(text: String) -> String? {
 
 // The number as an `i64`: `12`, `12.0` and `1e3` are 12 and 1000, `12.5` and a
 // number beyond `i64` are not.
-pub fn as_i64(v: ref Value) -> i64 throws {
+pub fn as_i64(v: Value) -> i64 throws {
     let t = number_text(v, "an i64")
     let direct = text::parse_i64(t.clone())
     if direct != null {
@@ -438,7 +438,7 @@ pub fn as_i64(v: ref Value) -> i64 throws {
 }
 
 // As `as_i64`, for a `u64`.
-pub fn as_u64(v: ref Value) -> u64 throws {
+pub fn as_u64(v: Value) -> u64 throws {
     let t = number_text(v, "a u64")
     let direct = text::parse_u64(t.clone())
     if direct != null {
@@ -460,7 +460,7 @@ pub fn as_u64(v: ref Value) -> u64 throws {
 }
 
 // The number as an `f64`; one beyond the range of an `f64` (`1e999`) is not.
-pub fn as_f64(v: ref Value) -> f64 throws {
+pub fn as_f64(v: Value) -> f64 throws {
     let t = number_text(v, "an f64")
     let x = text::parse_f64(t.clone()) ?? 0.0
     if x - x != 0.0 {

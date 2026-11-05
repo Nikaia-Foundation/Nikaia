@@ -3,7 +3,7 @@
 // convert when asked.
 use yaml
 
-fn show(n: ref yaml::Node) -> String {
+fn show(n: yaml::Node) -> String {
 	return match n.value {
 		yaml::Value::Null => "null"
 		yaml::Value::Bool(b) => f"bool({b})"

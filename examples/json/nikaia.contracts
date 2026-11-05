@@ -21,7 +21,7 @@ signature = "(input: ?) -> Json"
 sync = "inferred"
 touches = []
 views = ["value: borrowed"]
-signature = "(value: ref Json) -> i64"
+signature = "(value: Json) -> i64"
 
 [fn."main"]
 throws = ["?"]
@@ -30,7 +30,6 @@ signature = "()"
 
 [fn."show"]
 sync = "inferred"
-keeps = ["value"]
 locks = true
 touches = ["stdout write"]
 views = ["value: borrowed"]

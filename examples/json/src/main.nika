@@ -182,7 +182,7 @@ fn unescape(raw: String) -> String {
 // The longest decoded string in the document, in characters. It takes the
 // tree by `ref` because `main` still prints it afterwards; `show` takes it by
 // value, being the last to look.
-fn longest(value: ref Json) -> i64 {
+fn longest(value: Json) -> i64 {
     match value {
         Json::Text(raw) => return unescape(raw).chars().count() as i64
 
@@ -211,7 +211,7 @@ fn longest(value: ref Json) -> i64 {
 fn main() throws {
     let path = cli::args().nth(1) ?? "data.json"
 
-    let text = fs::read_to_string(ref path, fs::Root::Anywhere) catch {
+    let text = fs::read_to_string(path, fs::Root::Anywhere) catch {
         eprintln(f"cannot read {path}: {error}")
         return
     }
