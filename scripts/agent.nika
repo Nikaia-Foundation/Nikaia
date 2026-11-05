@@ -276,11 +276,14 @@ fn agent_facts_unknown(body: String, facts: String) -> String {
 }
 
 // The text of the sections the brief names, each down to the next heading of
-// its level or above, under one heading for the prompt; "" without Facts.
+// its level or above, under one heading for the prompt. The section `Core`,
+// when the file has one, comes first for every brief; "" without either.
 fn agent_facts(body: String, facts: String) -> String {
-    let names = agent_fact_names(body)
-    if names.len() == 0 { return "" }
     let lines = facts.split("\n").collect()
+    let mut names: Vec[String] = []
+    for line in lines { if agent_fact_level(line, "Core") == 2 { names.push("Core") } }
+    for name in agent_fact_names(body) { if name != "Core" { names.push(name) } }
+    if names.len() == 0 { return "" }
     let mut out: Vec[String] = ["", "", "# Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)"]
     for name in names {
         let mut level = 0

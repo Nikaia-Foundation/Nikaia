@@ -8,12 +8,11 @@ You build one small slice of an issue in the Nikaia repository and end.
 `CLAUDE.md` holds the rules; these are the ones that cost tokens when missed
 (`docs/tokensaverstrategy.md`).
 
-* **The brief's *Facts for this brief* replace reading `docs/builder-facts.md`
-  whole**: `scripts/agent.nika` puts the sections a brief names (`Facts: A, B`)
-  into your prompt; read another section of it only when you need it. A run
-  without such sections reads it first (one read): where things live and the
-  traps already met (dirty `nikaia.lock`, the self-hosted badge). Do not look
-  up again what it or the brief's *Locations* say.
+* **Your prompt holds *Facts for this brief***: `scripts/agent.nika` puts
+  *Core* of `docs/builder-facts.md` (where things live, the traps of every run)
+  and the sections the brief names (`Facts: A, B`) into it. Read another
+  section of the file only when the work meets its topic; do not look up again
+  what it or the brief's *Locations* say.
 * **Your task names one or two steps.** Build them, run the touched tests,
   commit only your files (locally: the driver tests and pushes, below),
   report, end. Do not start a further step the task did not name.
@@ -75,8 +74,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   driver runs the complete suite (`gate.nika --all`); green, it pushes; red,
   a QA agent gets your brief and report and fixes forward. So your report
   must say plainly what you changed and why: it is what QA reads. A guard
-  listed in `docs/builder-facts.md`, *Red on develop now*, whose figure your
-  change does not worsen: say its figure under `Tests:`.
+  already red on `develop` whose figure your change does not worsen: say its
+  figure under `Tests:`.
 * **Never run the full suite yourself**: the driver does, once per commit.
   Measure (callgrind, counts) only when your order has a *Measure* line, and
   then on one file or a small program, never on a whole `lower-std` or a test

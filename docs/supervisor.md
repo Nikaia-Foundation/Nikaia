@@ -39,7 +39,7 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   the generated files (`crates/nikaia-std/src/tools/lowered/*.rs`, index
   `lowered.rs`; a change to one `.nika` changes one file). CI takes the newest
   stable; when `rustup check` shows this machine's `stable` behind it, run
-  clippy with that version too (`docs/builder-facts.md`, *Traps already met*;
+  clippy with that version too (`docs/builder-facts.md`, *Tests and the gate*;
   c80e63ac kept `develop` red on a lint 1.97 did not have).
 * **A change to the language raises the version by one**: the `**Version:**`
   line of the three specification parts and a `CHANGELOG.md` heading, then
@@ -430,8 +430,10 @@ form done before, a named test, a mechanical edit) and `medium` otherwise;
 
 A line `Facts: <heading>, <heading>` (or `facts:` in the frontmatter) names
 the `## ` / `### ` sections of `docs/builder-facts.md` the builder needs;
-`agent.nika` puts their text into its prompt under *Facts for this brief*, so
-it does not read the file whole. A heading ending in a parenthetical is named
+`agent.nika` puts *Core* and their text into its prompt under *Facts for this
+brief*, so it does not read the file whole. Name the narrowest topics
+(`Tests and the gate, Probes, Grammar`), not the whole *Traps already met*;
+*Core* is never named. A heading ending in a parenthetical is named
 without it (`Moving Rust into Nikaia`); an unknown one stops the run.
 
 **Issues are written in brief form** (owner, 2026-10-25): frontmatter, facts,
@@ -451,7 +453,8 @@ issue instead of copying it and adds only the decision and the probe it lacks.
   and function) that the supervisor found while tracing the probe, and says how
   sure it is.
 * **`Facts: <heading>, ...`**: the sections of `docs/builder-facts.md` the
-  builder needs, by their exact `##` heading; `agent.nika` inlines them. A new
+  builder needs, by their exact `##` or `###` heading; `agent.nika` inlines
+  them after *Core*. A new
   trap goes into builder-facts, not into each brief.
 
 **Before a brief is written, the supervisor checks** (each tag is the run that

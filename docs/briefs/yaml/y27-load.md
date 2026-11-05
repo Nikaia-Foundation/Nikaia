@@ -8,7 +8,9 @@ budget_usd: 12
 
 Score: #928 step 4, the next step of the package after `y21-events.md` (which runs just before this brief, in the same checkout; its commit is on your `develop`). This change touches only `packages/yaml` and needs no version raise and no `CHANGELOG.md` entry (ADR-yaml-1 D1).
 
-Read `docs/builder-facts.md`, ADR-yaml-1 **D4, D6, D8** (`docs/specification/adr/adr-yaml-1.md`), and in `packages/yaml/src/main.nika` the tree types at the top, `Limits`, `Error`, `place_of`, `documents`, `parse`, `as_i64`, `as_f64`.
+Facts: Tests and the gate, Checker and views, Packages
+
+Read ADR-yaml-1 **D4, D6, D8** (`docs/specification/adr/adr-yaml-1.md`), and in `packages/yaml/src/main.nika` the tree types at the top, `Limits`, `Error`, `place_of`, `documents`, `parse`, `as_i64`, `as_f64`.
 
 ## Pre-flight
 
@@ -31,10 +33,10 @@ If a form the package needs is missing or refused in the compiler, the lowering 
 
 Run 1 built both steps on local branch `wip/y27-load` (eef3a2e7: `main.nika` `load` and helpers, `tests/load.nika`, `tests/load.stdout` blessed and checked line by line in a scratch copy) and stopped on #1089: `let a = match m.get(k) { null => throw ..  x => x }` then `match a.node { .. }` in `Loader::expansion` lowers without `&` (rustc E0507, shown as NK1127 on every `limits = default_limits()`). `y29-1089-match-on-a-get-bound-local.md` runs just before this brief and fixes it.
 
-Pre-flight instead of the one above: `git log --oneline -5` shows y29's commit (`Fixes #1089`); rebuild `target/fast/nikaia`. Then `git checkout eef3a2e7 -- packages/yaml/src/main.nika packages/yaml/tests/load.nika packages/yaml/tests/load.stdout` (only these three; `main.nika` of eef3a2e7 is y21's file plus `load`, check with `git diff HEAD -- packages/yaml/src/main.nika` that nothing else differs), `target/fast/nikaia check packages/yaml/src/main.nika` clean, then the package gate once without `--bless`: `load` must pass with the blessed `.stdout` as it is. Do not rewrite `expansion`'s `match a.node` (run 1's scratch spelling `a.node?.clone()` is the way around #1089). If the build still fails there, `Result: blocked` with rustc's error. Commit the three files (and `nikaia.contracts`/`nikaia.derived` if they changed), `Part: #928`. No `--bless` unless check is clean (`docs/builder-facts.md`, *Traps already met*).
+Pre-flight instead of the one above: `git log --oneline -5` shows y29's commit (`Fixes #1089`); rebuild `target/fast/nikaia`. Then `git checkout eef3a2e7 -- packages/yaml/src/main.nika packages/yaml/tests/load.nika packages/yaml/tests/load.stdout` (only these three; `main.nika` of eef3a2e7 is y21's file plus `load`, check with `git diff HEAD -- packages/yaml/src/main.nika` that nothing else differs), `target/fast/nikaia check packages/yaml/src/main.nika` clean, then the package gate once without `--bless`: `load` must pass with the blessed `.stdout` as it is. Do not rewrite `expansion`'s `match a.node` (run 1's scratch spelling `a.node?.clone()` is the way around #1089). If the build still fails there, `Result: blocked` with rustc's error. Commit the three files (and `nikaia.contracts`/`nikaia.derived` if they changed), `Part: #928`. No `--bless` unless check is clean (`docs/builder-facts.md`, *Packages*).
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
-* Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
+* Your prompt holds the facts you need from `docs/builder-facts.md`. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
 * `git add <files>` only; commit after each step. Do not push: the driver runs the suite on your commit and pushes it (CLAUDE.md, *Builders commit, the driver tests and pushes*).
 * Before committing: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `scripts/pre-push-check.sh`, and the gate of `.claude/agents/builder.md` (#852).
 * No version lines, `CHANGELOG.md`, badges; no new NK code. New tests in Nikaia only; never the full suite. No foreground `sleep`, no polling; scripts in files.

@@ -1,58 +1,175 @@
 # Builder facts
 
-Fixed facts a builder otherwise looks up itself (counted over 48 builder runs,
-2026-10-25: median 2, up to 19 `grep -r` calls per run to find where a name is
-defined; four `pre-push` failures on the same badge; seven runs puzzled by
-the same dirty lock file). Read once; the brief adds only what is specific.
+Fixed facts a builder would otherwise look up itself. `scripts/agent.nika`
+puts *Core* into every builder's prompt, and after it the sections the brief
+names (`Facts: Probes, Grammar`; a `##` heading brings its `###` sections
+along). Read another section only when the work meets its topic. A new trap
+goes into the section of its topic, in one line, with the run that paid for it.
 
-## Red on develop now
+## Core
 
-Guards of the gate that are red on `develop` before your change, with their
-figure; whoever finds such a red or fixes it rewrites this list (y7a,
-2026-10-30: a builder spent a build and two runs on a guard that was red
-without it). A change that leaves the figure where it stands, or better, does
-not make your gate red: report `Gate: green` and the figure under `Tests:`.
-
-* `sequences::the_corpus_has_no_more_unanswered_method_calls_than_it_had`: 18
-  against a ceiling of 16, since 75e25ed8 (43312d30); fix-forward
-  `docs/briefs/b-fixforward-corpus-unanswered.md` (main lane).
-
-## Where things live
+### Where things live
 
 | What | Where |
 | :--- | :--- |
-| Checker, moved parts | `crates/nikaia-std/src/tools/check_*.nika` (87 files); Rust adapter in `crates/nikaia/src/check/` |
+| Checker, moved parts | `crates/nikaia-std/src/tools/check_*.nika`; Rust adapter in `crates/nikaia/src/check/` |
 | Emitter | `crates/nikaia/src/emit/mod.rs`, `emit/host.rs`; moved parts `tools/emit_*.nika` |
 | `std` methods by receiver | `std_receivers` in `tools/check_core_method.nika` |
 | Generated Rust of a tools file | `tools/lowered/<file>.rs`, index `tools/lowered.rs` (never edit, `lower-std` writes them) |
 | Program tests (new tests) | `tests/compiler/tests/NAME.nika` + `.stdout` / `.stderr` |
 | Rust tests by NK code | `grep -rln NK1234 crates/nikaia/tests/it/` |
 | Specification | `docs/specification/10-nikaia-light.md`, `20-nikaia-advance.md`, `30-nikaia-tooling.md` (code table) |
-| A name, Rust or Nikaia | `nikaia run scripts/where.nika -- NAME...`: definitions (`fn`, `struct`, `enum`, `type`) with file:line, the files that call it; for an `NKnnnn` the tests and the spec row (a field is not found: grep it); `-- --outline FILE` lists each item of a `.rs` / `.nika` with its line range |
-| An unfixed binary, for before/after probes | copy `target/fast/nikaia` to your scratchpad before your first build (the suite runs on CI since 2026-11-01; `/home/user/nikaia-suite` is no longer updated) |
+| A name, Rust or Nikaia | `nikaia run scripts/where.nika -- NAME...`: definitions with file:line and the files that call them; for an `NKnnnn` the tests and the spec row (a field is not found: grep it); `-- --outline FILE` lists each item of a file with its line range |
+
+### Every run
+
+* **Copy `target/fast/nikaia` to your scratchpad before your first build**: it
+  is the before binary for the fails-before run, and the binary long test runs
+  use, since another agent may rebuild `target/fast/nikaia` mid-run (P5a, j5).
+  Keep the copy in its own directory and name it exactly `nikaia`
+  (`$S/old/nikaia`): script tests check the basename and otherwise fall back
+  to `target/fast/nikaia` (b42). `target/release/nikaia` is older than the
+  views syntax and cannot serve.
+* **The checkout is shared.** A file another agent has modified: stage only
+  your hunks (`git diff FILE > $S/p.diff`, delete theirs from the copy, `git
+  apply --cached`, check with `git diff --cached FILE`; `git add -p` is
+  refused here). A build that shows none of your edits may have run during a
+  driver rebase: check `git status` and your file, then rebuild; never touch
+  others' `UU` files, name them under `Needs:` (BT, b1043).
+* **Long runs go in the background** with `run_in_background` and `timeout:
+  3600000`, and you wait for the wake-up, never a `sleep` or `pgrep` loop. A
+  `lower-std` and build cycle takes 10-15 minutes: find every change it needs
+  with probes on the old binary first; one cycle less is the largest saving a
+  run can make (a9, v6, v7). Put a `&` on one command, never on a chain (P4b).
+* **Probes live in the scratchpad**, outside any project: `nikaia check FILE`
+  inside `tests/compiler/tests/` reads the sibling files (prover lane).
+* **Never commit `nikaia.lock`**; it is git-ignored and changes with each build.
+* **Never run `nikaia fmt` on `crates/nikaia-std/src/tools/*.nika`**: it
+  reindents the whole file (b1012b). Format by hand there.
+* **`pre-push` fails with *out of date: self-hosted.svg*** when a `.nika`
+  changed the self-hosting share: regenerate it from what you commit, `git
+  checkout-index -a --prefix=target/badge/`, run `scripts/badges.py` in that
+  copy, copy its `assets/badges/self-hosted.svg` back and list it under
+  `Files:`.
+* **Builders have no GitHub**: the prompt holds the issues the brief names; a
+  missing one goes under `Deviation`. A pre-flight names a commit by subject
+  (`git log --grep`), never by hash: rebases change hashes (p9).
 
 ## Traps already met
 
-* **A view-checker refusal (NK2302, NK2106, NK1106) in a draft**: narrow it in two probes first, the refused value as `return x` and as `let r = x; return r`, with the struct's field really a view (built from a `trim()` inside a function; built from a literal in `main` the field is owned and the probe passes). That pair found #1071 and #1085 (y21 runs 2-3).
-* **`tests/compiler` programs run `target/fast/nikaia`, so nothing may rebuild it while they run** (j2, 2026-10-31: the `it` binary started beside them relinked it and five tests failed for nothing). Run `nikaia test --project tests/compiler` and the `it` binary one after the other, never together. **One program alone**: `nikaia test --project tests/compiler --filter NAME` runs the tests whose name holds `NAME`; give `--filter` more than once for several (#1238).
-* **`--bless` creates a missing `.stdout`** when the test printed something (#1238), never a `.stderr`; `--bless-stderr` creates the missing `.stderr` too (warnings, a program's own standard error). With `--filter NAME` it blesses only that test.
-* **One `keep` written anywhere in a file turns NK2302 on for the whole file** (`check_keep_marks.nika`; v9, v10, v11 each found it alone). A probe for a views change carries one `keep` function beside the shape it tests.
-* **The release binary is older than the views syntax**: `target/release/nikaia` (2026-11-02) does not parse `from` or the views-3 forms, so it cannot show a test failing before (v8, v9b). The before binary is the copy of `target/fast/nikaia` made before your first build.
-* **A change to inference or to what a bare `self` means moves baselines outside `tests/compiler`**: the specification's `EXPECTED.txt` / `COMPILES.txt` and the examples' ledgers (v11). Run `git status` after the targeted checks and look for them, before the commit. `EXPECTED.txt` is regenerated with `cargo run --profile fast -p nikaia --example specification > tests/specification/EXPECTED.txt`; `COMPILES.txt` is the left-hand side the `specification` `it` test prints. The `it` programs that consumed a bare `self` are found with `grep -rn "(self" crates/nikaia/tests/it`; run those modules, never the whole `it` binary.
-* **One `keep` in a file turns on `NK2302` for the whole file** (migration of #1213): a test that writes `keep` once is checked for every parameter it keeps (v11).
-* **A use after a move is refused only by rustc today** (#1241), with its own message; `nikaia test` counts that as a failed build, not a refusal, so it cannot be a `tests/compiler` program with a `.stderr` yet.
-* **A `lower-std` and build cycle takes 10-15 minutes**: start it with `run_in_background` and `timeout: 3600000` and wait for its wake-up, never a `sleep` or `pgrep` loop (a9, v6). Find every change the cycle needs first (all probes on the old binary), one cycle less is the largest saving a run can make (v7, v9b).
-* **A probe file inside a project is checked with the whole project** (prover lane p5-p11, 2026-10-31: one wasted run each): `nikaia check FILE` in `tests/compiler/tests/` reads its sibling files and prints their errors, and `nikaia test` without `src/main.nika` crashes. Copy probes into the scratchpad, outside any project.
-* **Prover (bounds) work** (prover lane, 2026-10-31): `nikaia check --bounds FILE` checks a file alone; a tools file is measured only with `lower-std --bounds --asserts [--optimization prove-through-loops:on] > R` (45 s) and `nikaia run scripts/proved.nika -- R`, before and after on the same tree. Where the walk stops (2^62 goal cap, no local types, loop guesses, `if` join): `docs/formal-verification.md` §2. A test's `.bounds` / `.loops.bounds` key sites by line: an edited comment keeps its line count, or bless again. A precondition on a parameter's length is carried to the function's start (ADR-269 D20), so a refused-call test row stands in `main` with a value the prover cannot read (`let k = xs[2]`). A precondition change changes what is refused: run `grep -rln 'assert(' crates/nikaia/tests/it/` modules first (seconds), not the full `it` binary. Nikaia has no `i8`; widening is `i64::from` with `use std::i64`.
-* **Script forms** (`nikaia run` scripts, p1): text to integer `text::parse_i64(s)` (`use std::text`); arguments `for a in cli::args() { args.push(a) }`; a text is cut only at a position `find` returned (NK1214), else `strip_suffix(..) ?? ""`.
-* **A pre-flight that names a commit matches it by subject** (`git log --grep`), never by short hash: the driver's rebases change hashes (p9, 2026-10-31).
-* **Kinds and the catch-all in a `match` on a kind** (j2): the kind names are Part II 10.3's (`I64`, `F64`, `Text`, `Bool`, `Maybe(A)`, `List(A)`, `Map(K, V)`, `Struct(S)`), not `Int`; the catch-all arm is `else`, never `_` (Part I, *Patterns*).
+### Tests and the gate
 
-* **Clippy here is not clippy in CI.** `rust-toolchain.toml` says `channel = "stable"`: CI installs the newest stable, this machine's `stable` lags until someone runs `rustup update` (2026-10-31: CI 1.99.1, here 1.97.0; clippy 1.99's new `chunks_exact_to_as_chunks` kept `develop` red from c80e63ac). `rustup check` shows the gap. When it shows one and your change touches Rust, also run `CARGO_TARGET_DIR=/home/user/nikaia-clippy-new cargo +<that version> clippy --all-targets -- -D warnings` (`rustup toolchain install <version> --profile minimal -c clippy` once) and delete that directory at the end; never `rustup update stable` yourself (every `target/` of every agent rebuilds).
-* **A file you must change is already modified by another agent** (BT, 2026-10-31: `lowered.rs`; `git add -p` is interactive and refused here). Stage only your hunks: `git diff FILE > /tmp/p.diff` (use your scratchpad), delete the other agent's hunks from the copy, `git apply --cached /tmp/p.diff`, then `git diff --cached FILE` to check. Never commit their hunks, never restore them.
-* **A build that shows none of your edits may have run while another lane's `drive.nika` rebased the shared checkout** (`git pull --rebase --autostash` after a rejected push, `scripts/drive.nika` `drive_push`; b1043, 2026-10-31: one probe round lost, `UU` files left). When a probe behaves as if your change were not there, first check `git status` and that your edit is in the file, then rebuild; never resolve or stage the `UU` files of others, report them under `Needs:`.
-* **A grammar probe fails in rustc with "multiple different versions of crate `winnow_grammar`" or "Cannot find type `E`"**: `target/fast/nikaia` has an old winnow-grammar rev baked in by `crates/nikaia/build.rs`, never your change (y12, 8 turns lost). Before the first grammar probe: `grep -c "$(grep -o 'rev = "[0-9a-f]*"' Cargo.toml | grep -o '[0-9a-f]\{7,\}' | head -1)" target/fast/nikaia` must print 1 or more; if 0, `touch crates/nikaia/build.rs` and `cargo build --profile fast -p nikaia`.
-* **A grammar probe to copy** (y2b's architect lost five runs writing one from memory: `match` instead of `catch` on an entry, `Bytes("..")`, a thrown `String`). This runs and prints `42`; the generated Rust is under `~/.cache/nikaia/run/main-*/target/nikaia/gen/` (newest first: `ls -dt`). A lowercase rule skips whitespace before each element; `rule WS = "" -> { }` turns that off.
+* **One program alone**: `nikaia test --project tests/compiler --filter NAME`
+  (several `--filter`s allowed, #1238). Without `--filter` it runs everything:
+  write the output to a file and grep it, never `| tail` (b933).
+* **`--bless` creates a missing `.stdout`**, never a `.stderr`; `--bless-stderr`
+  does both. With `--filter` it blesses only that test. A new test is run
+  through `nikaia test`, not only `nikaia run`: `print` writes no newline and
+  the `.stdout` holds the bytes exactly (7c1643d).
+* **`tests/compiler` runs `target/fast/nikaia`**: never run the `it` binary
+  beside it, it relinks the binary (j2). Some tests spawn `target/fast/nikaia`
+  by relative path and fail from a copy (`a_trait_column_*`,
+  `a_library_trait_with_no_impl_runs`, `bounds_expectation_guards_a_proof`;
+  v16): run those with `target/fast/nikaia`. A failure from a vanished binary
+  is not yours: re-run that test singly. An untracked test of another agent
+  may fail: name it under `Tests:`.
+* **`--both-settings` runs past 10 minutes**: background with the long timeout (y9).
+* **`cargo test ... --test it -- a:: b::`**: the `--` is needed. Read an `it`
+  run with `grep -E '^test result:|FAILED|panicked'`, anchored (M3b).
+* **A parser change runs the whole `it` binary**, no filter: many tests hold
+  programs as Rust strings (9936c70).
+* **A change to what the lowering writes**: `grep -rn '<old fragment>'
+  crates/nikaia/tests/it/` and run each test it names (b1029).
+* **A change to inference or to a bare `self`** moves baselines outside
+  `tests/compiler`: the specification's `EXPECTED.txt` (regenerate with `cargo
+  run --profile fast -p nikaia --example specification >
+  tests/specification/EXPECTED.txt`), `COMPILES.txt`, and the examples'
+  ledgers. Look at `git status` before the commit (v11).
+* **A use after a move is refused only by rustc today** (#1241): `nikaia test`
+  counts it as a failed build, so it cannot be a `.stderr` test yet.
+* **Guard tests scan the whole repository** (`range_spelling`,
+  `shipped_ledger`, the std ledger in `contracts`): a script's `a..b` or a new
+  `unsafe fn` fails them.
+* **Clippy here is not clippy in CI**: CI takes the newest stable. When `rustup
+  check` shows a newer one and your change touches Rust, also run
+  `CARGO_TARGET_DIR=/home/user/nikaia-clippy-new cargo +<version> clippy
+  --all-targets -- -D warnings` (install with `rustup toolchain install
+  <version> --profile minimal -c clippy`), then delete that directory; never
+  `rustup update stable`.
+* **CI has no `target/fast`**: a test that runs the toolchain takes the
+  `nikaia` that runs it (`readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe`).
+  A red test that passes locally: check what CI lacks first.
+
+### Probes
+
+* **Does the lowered Rust compile? `nikaia run scratch.nika`** on a scratchpad
+  copy (b1006). `nikaia lower F.nika` writes `F.rs` itself; plain `rustc`
+  cannot link `nikaia_std`; `nikaia run` refuses a file inside `tests/compiler`.
+* **A wrong lowering: look before you read code** (b933): `nikaia check
+  --tethers F.nika` prints what each result views, and the `nikaia.contracts`
+  beside a lowered probe shows the ledger; they name the pass (`buffers.nika`,
+  `tether.nika`, `views.nika`).
+* **A checker defect "accepts X"** is probed in its neighbours first (a17): a
+  user type, a std type, a literal, a typed and an open variable, on the old
+  binary. Open numbers are typed by `number_where_no_number_is`.
+* **To see a refusal of the prover**, put the call in a loop body or behind an
+  input it cannot pin: a pure call with literal arguments is run at build time
+  and proved (y4b).
+
+### Checker and views
+
+* **One `keep` anywhere in a file turns `NK2302` on for the whole file**
+  (v9-v11): a probe for a views change carries one `keep` function.
+* **A view-checker refusal (NK2302, NK2106, NK1106)**: narrow it in two probes,
+  the value as `return x` and as `let r = x; return r`, with the field really
+  a view (built from a `trim()` in a function, not a literal in `main`) (y21).
+* **`Self` in a trait's signature is `Ty::Named { name: "Self" }`**, not a
+  `Ty::Var`; `substitute` (`ty.nika`) does not replace it. A call through a
+  bound is typed in `check_core_call_on.nika` via `bound_that_answers`
+  (`check_decls.nika`); `Eq`, `Ord`, `Clone` are `STANDARD_BOUNDS` (v15).
+* **Kinds in a `match` on a kind** are Part II 10.3's (`I64`, `F64`, `Text`,
+  `Bool`, `Maybe(A)`, `List(A)`, `Map(K, V)`, `Struct(S)`); the catch-all is
+  `else` (j2).
+* **A loop that takes the elements away** is `for x in v.drain()`; `for x in v`
+  over an owned `Vec` only borrows them.
+
+### Lowering and lower-std
+
+* **Check lowered tools code with `cargo check --profile fast -p nikaia-std
+  --features compiler --message-format short`** right after the first
+  `lower-std`; without the feature the check is a false green (k3a2).
+* **After any `*.nika` or `described.contracts` change**, run `lower-std` with
+  a binary built from that tree and commit the diff; it reads and writes the
+  checkout the binary was built in (set `NIKAIA_SYSROOT=/home/user/Nikaia/crates`
+  for a binary built in a private copy). It lists every refusal of a file: fix
+  them all before the next cycle. A new `.nika` needs one `lower-std` run
+  before `cargo build`, and a row in `scripts/self_hosting.py`.
+* **Reproduce a lowering defect in seconds**: `nikaia lower f.nika` or `nikaia
+  run f.nika`. One that shows only in `tools/` needs a throwaway function in a
+  tools file and `lower-std`; restore both after.
+* **A lowered clippy lint** (`.map(fn(x) { x.clone() })` trips `map_clone`) goes
+  into the allow list of the `tools` module in `crates/nikaia-std/src/lib.rs`,
+  never into the lowered file (P5d).
+* **A package is lowered file by file** (cv2): probe a new mutual call between
+  two files as a two-file scratch package. `code_on_a_cycle` is not
+  package-wide yet (#1129).
+* **The lowering cache misses an inferred `sync`** (#1014): declare a function
+  `sync` when a body change could make it `async`. Remove when #1014 closes.
+* **A build-time value fails with `NK1127` and no reason**: the sub-program is
+  `<project>/target/nikaia/build-time/comptime/<hash>/main.rs`. A new
+  `comptime` value shape must survive as a literal (`comptime_literal_of`) (j5).
+* **A `std.contracts` method Rust has under the same name** needs only the
+  contract; the file is built into the binary, so rebuild after editing it.
+
+### Grammar
+
+* **Check the baked winnow-grammar rev before the first probe** (y12): `grep -c
+  "$(grep -o 'rev = "[0-9a-f]*"' Cargo.toml | grep -o '[0-9a-f]\{7,\}' | head -1)"
+  target/fast/nikaia` prints 1 or more; if 0, `touch crates/nikaia/build.rs`
+  and rebuild. Otherwise rustc says "multiple different versions of crate".
+* **A grammar probe to copy** (y2b). It prints `42`; the generated Rust is
+  under `~/.cache/nikaia/run/main-*/target/nikaia/gen/` (`ls -dt`). A lowercase
+  rule skips whitespace before each element; `rule WS = "" -> { }` turns that off.
   ```nika
   grammar G {
       rule WS = "" -> { }
@@ -67,186 +184,127 @@ not make your gate red: report `Gate: green` and the figure under `Tests:`.
       println(f"{r}")
   }
   ```
-* **A test that reads a type of another package** (`use yaml` in `packages/yaml/tests`): the compiler's own test project is a package too (`tests/compiler`, name `compiler_tests`), so its `pub` items in `tests/compiler/src/main.nika` are reached from a test with `use compiler_tests`; that is how a cross-package case gets a test CI runs (#1037).
-* **A package commit** (y21, 2026-10-31) holds the package's `nikaia.contracts` and `nikaia.derived` when they changed, never `nikaia.lock` or a `nikaia.proofs` your change did not cause. Write a new package test's `.nika` before the first `nikaia test --project` run (one run is 3-4 minutes), and fill its `.stdout` with `--bless` in that same run. Only once `nikaia check` on the changed file is clean: a package that fails to build blesses a `.stderr` for every test (y27, 2026-10-31: 18 files to delete). An NK1127 on a default (`limits: Limits = default_limits()`) after your change means rustc refused the lowered file; to see rustc's error, `nikaia run` a scratch copy with the defaults written out.
-* **A loop that takes the elements away** is `for x in v.drain()` (Part I 6.5); a plain `for x in v` over an owned `Vec` only borrows them.
+* **A rustc error from a grammar** is the checker's or the emitter's: run
+  `nikaia check` and `nikaia lower FILE` first (y9). A label's type comes from
+  `CheckState::pattern_type` (`check_grammar.nika`); a rule's tier also from
+  `grammar_pattern_kinds` (`text_tiers.nika`): a new pattern kind needs an arm
+  in both (y10). A guard: `bind_grammar_pattern` (#1032) and the
+  `Pattern::Guard` arm of `emit_pattern.nika` (#1033); probe it alone (y2c).
+* **`peek`, `not`, a cut, a guard and `fail` cannot be bound.** A published
+  field may not hold both a view and owned text (ADR-282 D22). `nikaia fmt` can
+  break a rule line holding `if(cond, "label")` (#1015): check it still parses.
+* **Open grammar defects** (`ready`; never written around): #1001 branches of
+  different types reach rustc; #1002 `hex_digit` undefined; #1004 a temporary
+  `Bytes(..)` as an entry argument. An option after `;` needs a default; a
+  helper called from an action is `sync`. Remove a line when its issue closes.
 
-* **A wrong lowering: look before you read code** (b933, 15 turns reading `views.nika` before one probe found the cause): `nikaia check --tethers F.nika` prints what each result views, and the `nikaia.contracts` file written beside a lowered probe shows the ledger the lowering used. Run both on the probe first; they name the pass (`buffers.nika`, `tether.nika`, `views.nika`).
-* **A change to what the lowering writes greps the Rust tests for the old text** (b1029, 2026-10-31: a typed let around a kept lambda's boxed future broke `selfhosting_defects::a_run_and_a_kept_lambda_in_a_statement_differ`, which asserts `move |x| Box::pin`; `develop` stayed red for the next three briefs). Before pushing, `grep -rn '<a fragment of the old lowering>' crates/nikaia/tests/it/` and run each test it names (`cargo test -p nikaia --test it <module>::<name>`).
-* **Check lowered tools code with `cargo check --profile fast -p nikaia-std --features compiler --message-format short`**, right after the first `lower-std` and before writing a Rust host. Without `--features compiler` the `tools` module is not compiled and the check is a false green (k3a2 run 4).
-* Without `--filter`, `nikaia test` runs everything: write its whole output to a file (`> out.txt 2>&1`) and grep that, never `| tail` (b933 ran `tests/compiler` a second time, 10 minutes, to find one test's line).
-* `tests/compiler/nikaia.lock` is git-ignored, like the other test
-  packages' locks (it changes with every compiler build). Never commit it.
-* `scripts/pre-push.nika` fails with *out of date: self-hosted.svg* when a
-  `.nika` changed the self-hosting share: regenerate it from what you commit,
-  not from the shared tree (other agents' files count there): `git
-  checkout-index -a --prefix=target/badge/`, `python3 scripts/badges.py` in
-  that copy, copy its `assets/badges/self-hosted.svg` back and add it to
-  `Files:` (the only badge you touch).
-* `cargo test ... --test it -- a:: b::`: the `--` before the filters is needed.
-* `export A=1 && S=x cmd &` sends the whole chain to the background, and the
-  output is lost (P4b ran clippy and its tests twice): put the `&` on `cmd` alone.
-* A `nikaia run` script cannot `use` another script and cannot find its own
-  binary; a test program cannot set `RUSTFLAGS` or see git state. Such a
-  change is checked by hand runs; say so under `Deviation`.
-* Valgrind cannot run a binary built for an AVX-512 CPU: name `x86-64-v3`.
-* Builders have no GitHub: the prompt holds the text and comments of the
-  issues the brief names. If an issue it needs is missing, say so under
-  `Deviation` and build from the brief.
-* Syntax gaps of `tools/*.nika`: the list below, *Moving Rust into Nikaia*.
-* Guard tests (`range_spelling`, `shipped_ledger`, the std ledger in
-  `contracts`) scan the whole repository: a script's `a..b` or a new
-  `unsafe fn` fails them. They are in the gate (builder.md) for that reason.
-* **CI has no `target/fast`.** CI builds `target/release` only; a test that runs the toolchain takes the `nikaia` that runs it (`readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe`), never a fixed `target/fast/nikaia` (four script tests kept develop red that way, 2026-10-26). A red test that passes locally: check what CI lacks first.
-* **A parser change runs the whole `it` binary** (`cargo test --profile fast -p nikaia --test it`, no filter): many `it` tests hold one-line programs as Rust strings, and `accepted_compiles` lowers the corpus; 9936c70 ran `-- parse` only and turned `develop` red (2026-10-26).
-* **A change to `scripts/X.nika` runs the tests that name it** (`grep -l X tests/compiler/tests`), also from the main session: a `--dry-run` line added without its `.stdout` kept `develop` red (7970db8, `drive_actions`, 2026-10-26).
-* **A new `tests/compiler` test is run through `nikaia test --project tests/compiler`, never only with `nikaia run`** (7c1643d, 2026-10-29: `print(m)` writes `1` without a newline, the `.stdout` held `1\n`, CI went red on bootstrap_compiler and arm64). `print` writes no newline, `println` one; the `.stdout` holds the bytes exactly.
-* **Does the lowered Rust compile? `nikaia run scratch.nika`**, a copy in the scratchpad (b1006, 2026-10-30: three turns lost). Plain `rustc` cannot link `nikaia_std`; `nikaia lower F.nika` writes `F.rs` itself, so never redirect its stdout into a file; `nikaia run` refuses a file inside `tests/compiler` (not the project's entry), so copy it out first. Wait for a background test run's wake-up, never a `sleep` loop. A method `std.contracts` declares that Rust also has under the same name (`iter`) needs only the contract: the emitter passes the name through; `std.contracts` is built into the binary, so rebuild after editing it.
-* **Test with your own copy of the binary.** In the shared checkout another agent may rebuild `target/fast/nikaia` mid-run: after your build, `cp target/fast/nikaia "$SCRATCH/nikaia"` and run long tests (`nikaia test --project tests/compiler`) with that copy (P5a lost two runs, 2026-10-28). Some tests still spawn `target/fast/nikaia` by path even then (b1034b, 2026-10-31: 5 of 6 failures were a vanished binary): such a failure is not yours, re-run that test singly. Some tests spawn `target/fast/nikaia` by its relative path and fail from any copy, not only when the binary vanished (`a_trait_column_*`, `a_library_trait_with_no_impl_runs`, `bounds_expectation_guards_a_proof`; v16, 2026-11-05): run those with `target/fast/nikaia` itself. An untracked test another agent is writing may fail: name it under `Tests:`, do not touch it.
-* **`.map(fn(x) { x.clone() })` in `tools/*.nika` lowers as written and trips `clippy::map_clone`**: the tools module in `crates/nikaia-std/src/lib.rs` allows it since P5d (0f9a525); another lowered lint goes into the same allow list, never into the lowered file.
-* **A package is lowered file by file, each with its `beside` files** (cv2, 2026-11-01: half a run): a new mutual call between two files of a package can meet an emitter analysis that reads only one file. Probe it first as a two-file scratch package against the same calls joined into one file. The pausing graph is package-wide since 72e7789c; `code_on_a_cycle` (a lambda round a cycle) is not yet (#1129).
+### Packages
 
-* **To probe an unproved claim, put the call in a loop body or behind an input the prover cannot pin** (y4b, 2026-10-30): a value from a pure call with literal arguments is run at build time and proved, so such a probe never shows a refusal. A call is carried back to its caller's entry only from the top of a body, not from inside a loop. `--asserts` lists only the checker's claims.
-* **The lowering cache's key leaves out an inferred `sync`** (#1014, y5): a body change that makes a `tools/*.nika` function `async` leaves its callers' lowered files stale, and a touch or `NIKAIA_LOWER_CACHE_SALT` does not refresh them; declare such functions `sync`. Remove this line when #1014 closes.
-* **Never run `nikaia fmt` on `crates/nikaia-std/src/tools/*.nika`** (b1012b, 2026-10-31): those files keep 4-space indentation and long lines, and `fmt` does what Part III says (one tab per level, breaks at 100 columns), so it rewrites the whole file and the diff buries your change. Format by hand there; `fmt` is for packages, tests and examples.
-* **A rustc error from a grammar** (`Mismatched types`, `Cannot find value`) is the checker's or the emitter's: run `nikaia check` (it passes) and `nikaia lower FILE` (writes the `.rs`, shows each rule's lowered type) before reading code; the backend `winnow-grammar` is a pinned git dependency, not changed here (y9, 2026-10-31). A label's type comes from `CheckState::pattern_type` (`check_grammar.nika`). A rule's result tier (view or owned) is decided a second time by `grammar_pattern_kinds` in `text_tiers.nika`: a new pattern kind needs an arm in both, or the checker refuses with NK1104/NK1106 (y10, 2026-10-31). A guard is a case of its own for both passes: its calls are tiered by `bind_grammar_pattern` (`text_tiers.nika`, #1032) and its text labels lowered by the `Pattern::Guard` arm (`emit_pattern.nika`, #1033); probe a guard alone before bisecting a whole rule (y2c, 2026-10-31).
-* **`nikaia test --both-settings --project tests/compiler` runs past the 10-minute default** of a background call: give it `run_in_background` with `timeout: 3600000`, and put no `&` on a chain (y9 lost two runs).
-* **A build-time value fails with `NK1127` and no reason**: the generated sub-program of a run with a project is `<project>/target/nikaia/build-time/comptime/<hash>/main.rs`, none when lowering refused it. A new `comptime` value shape must also survive as the literal the sub-program carries for earlier `comptime`s (`comptime_literal_of`, re-checked) (j5, 2026-10-31).
-* **The fails-before run needs the old binary**: copy `target/fast/nikaia` to your scratchpad before your first build (*Where things live*) (j5, 2026-10-31).
-* **In a grammar, `peek`, `not`, a cut, a guard and `fail` cannot be bound** (winnow-grammar, `winnow-grammar-model/src/parser.rs`); a binding inside `text(..)` is #1013 (decided: supported). `nikaia fmt` can break a long rule line holding `if(cond, "label")` (#1015): check the formatted file still parses. A published field may not hold both a view and owned text (ADR-282 D22): such a field is private and read through a method.
-* **Open grammar lowering defects** (y1-tree-core, 2026-10-30; each a `ready` issue, a brief names the one it meets and never writes around it): #1001 a group whose branches yield different types reaches rustc; #1002 `hex_digit` is an undefined rule (check a digit with a guard instead, `x:any if(...)`); #1003 an integer `as scalar` (decided: `scalar::from`); #1004 a temporary `Bytes(..)` as an entry argument (bind it with `let`). In a grammar: an option after `;` needs a default; a helper called from an action is `sync`; Remove a line when its issue closes.
-* **A checker defect "accepts X" is probed in its neighbours first** (a17, 2026-11-05): on the old binary, try the same with a user type, a std type, a literal, a typed variable and an open variable before reading code; the probes show which path is wrong. Open numbers are typed by `number_where_no_number_is` (`check_core_leaves.nika`, `check_function.nika`).
-* **`Self` in a trait's signature is `Ty::Named { name: "Self" }`, not a `Ty::Var`** (v15, 2026-11-05): `substitute` in `ty.nika` does not replace it. A call through a bound is typed in `check_core_call_on.nika` (`check_core_call_on_undescribed`, which asks `bound_that_answers` in `check_decls.nika`); `Eq`, `Ord` and `Clone` are the bounds the language answers (`STANDARD_BOUNDS` in `types.nika`, `CheckComparable` in `check_compare.nika`).
+* **A test that reads another package's type**: `tests/compiler` is the package
+  `compiler_tests`; its `pub` items in `src/main.nika` are reached with `use
+  compiler_tests` (#1037).
+* **A package commit** holds `nikaia.contracts` and `nikaia.derived` when they
+  changed, never `nikaia.lock` or a `nikaia.proofs` you did not cause. Write a
+  new test's `.nika` before the first `nikaia test --project` run (3-4
+  minutes) and `--bless` in that run, only once `nikaia check` is clean: a
+  package that fails to build blesses a `.stderr` for every test (y21, y27).
+  An `NK1127` on a default after your change: `nikaia run` a scratch copy with
+  the defaults written out to see rustc's error.
+
+### Scripts
+
+* **Forms** (p1): text to integer `text::parse_i64(s)`; arguments `for a in
+  cli::args() { args.push(a) }`; a text is cut only at a position `find`
+  returned (NK1214), else `strip_suffix(..) ?? ""`.
+* **A change to `scripts/X.nika` runs the tests that name it**: `grep -l X
+  tests/compiler/tests` (7970db8).
+* **A script cannot `use` another script or find its own binary**; a test
+  cannot set `RUSTFLAGS` or see git state: check by hand runs, say so under
+  `Deviation`.
+
+### Prover
+
+* **`nikaia check --bounds FILE`** checks a file alone; a tools file is
+  measured with `lower-std --bounds --asserts [--optimization
+  prove-through-loops:on] > R` and `nikaia run scripts/proved.nika -- R`,
+  before and after on the same tree. Where the walk stops:
+  `docs/formal-verification.md` §2.
+* **A test's `.bounds` keys sites by line**: an edited comment keeps its line
+  count, or bless again. A precondition on a parameter's length is carried to
+  the function's start (ADR-269 D20); a call is carried back only from the top
+  of a body. After a precondition change run the `grep -rln 'assert('
+  crates/nikaia/tests/it/` modules, not the whole `it` binary.
+* Nikaia has no `i8`; widening is `i64::from`. Valgrind needs `x86-64-v3`.
 
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
 
-Rules from the sessions that moved the most; they save tokens, not just time.
+### Slices and patterns
 
+* **A move is translated by hand from the Rust** (owner, 2026-11-01).
+  Iterator chains are the house style (owner, 2026-10-27).
 * **Pick the slice by the call graph, leaves first.** The `Checker` and the
-  emitter's state become Nikaia structs (#558, owner's direction: C directly,
-  no described Rust type in between). Rust's struct holds the Nikaia state as
-  one field and a method moves into an `impl` in Nikaia once everything it
-  calls has moved; the large recursive core (`value_of`, `stmt`, `call`;
-  `expr_as_written`, `a_stmt`) moves in one step. `grep 'Finding {'` and
-  `format!(` find the cheap message-building first. A walk that cannot move yet
-  takes a callback (`fn(ref Expr) -> i64 sync`; see `bounds_basic.nika`). Code
-  keyed on expression addresses waits for the expression id (#558); changing a
-  `mut` parameter in a `match` is ADR-094 D7 / #576.
-* **Copy a pattern, do not invent one.** `libraries.nika` + `libraries.rs`
-  (small), `assets.nika`, `parse_numbers.nika` (callbacks), `interpreter.nika`.
-  The Rust module stays as the adapter that calls `nikaia_std::tools::<m>::f`.
-* **One namespace for all `tools/*.nika`.** Type and function names are global
-  (`Decision` clashed): prefix them with the module. Calls to other tools files
-  are unqualified.
-* **A new `.nika`** needs one `lower-std` run with the old binary before
-  `cargo build` (the module only appears in `lowered.rs` after that run), and a
-  row in the table in `scripts/self_hosting.py`. The share counts code lines,
-  not comments.
-* **After any `*.nika` or `described.contracts` change**, run `lower-std` with a
-  binary built from that tree, or the sysroot test fails on a stale
-  `lowered/*.rs`. `lower-std` reads and writes the checkout the binary was
-  **built in** (`CARGO_MANIFEST_DIR`, unless `NIKAIA_SYSROOT` says otherwise),
-  not the working directory. A lowering change can change the generated files:
-  run `lower-std` after building and commit the diff. It reports every refusal
-  of a file, in file order, as `nikaia check` does: fix them all before the next
-  cycle.
-* **A binary built in a private `git archive` copy** with the shared target dir
-  replaces `target/fast/nikaia`, and that binary looks for `std` in the copy.
-  Once the copy is deleted, `nikaia run`, `test` and `lower-std` fail with
-  "failed to read `.../crates/nikaia-std/Cargo.toml`". Set
-  `NIKAIA_SYSROOT=/home/user/Nikaia/crates` for every call of the shared binary.
-* **Reproduce a lowering defect in seconds**, not with a cargo build:
-  `target/fast/nikaia lower f.nika` or `nikaia run f.nika`. A defect that shows
-  only in `tools/*.nika` needs a throwaway probe function in a tools file and
-  `nikaia lower-std`; look at `tools/lowered/<file>.rs`, then restore both.
-* **Syntax gaps** (each cost a build cycle), classed by the architect (now the supervisor)
-  (2026-10-29, probes on `target/fast/nikaia run`). Not a licence to write
-  around (CLAUDE.md *A missing form stops the work*): **[design]** holds, build
-  that way; **[gap #N]** is a `decision` issue: meeting it stops the slice
-  (`Result: blocked`), no way around; **[defect #N]** is a `ready` issue: fix
-  it or wait; **[works]** is a form that exists today: use it, and do not copy
-  the old way around from the moves that did (#953).
-  * [design: ADR-382 D6, Part I 3.1] no `if let`: `x ?? default`, `match`, or
-    `starts_with` then `strip_prefix(..) ?? ""`;
-  * [design: ADR-094 D4, ADR-231] no `*x`; loop variables over a `ref Vec` are values;
-  * [design: Part I 2.5, ADR-282] `.to_owned()` is `NK1189`: write `.clone()`;
-  * [design: ADR-282 D2; transition #654] text is `String`; never `ref` on a
-    number, `bool` or a data-less enum (`NK1257`). Until #654 step 0 is built,
-    `ref String` is written in exactly these places and nowhere else: a field;
-    a type argument (`Vec[ref String]`, a map's key); an option after `;`; a
-    function's or a rule's result; a parameter the result points into; a
-    parameter used as a key of a map keyed by `ref String`. Everywhere else,
-    above all a parameter that is only read, it is `String`;
-  * [design: ADR-293 D19, Part I 4.5] `opt ?? ""` moves the option:
-    `(opt ?? "").clone()` for a second use; a method on a `String?` is
-    `opt?.len() ?? 0`;
-  * [design: Part I 2.5] f-string braces are `{{` `}}`; a plain string takes braces literally;
-  * [design: ADR-288] a function parameter is `fn(ref X) -> T sync`;
-    [works] a `Span` that arrives by reference is copied with `s.clone()`;
-  * [design: one namespace for `tools/*.nika`, above] `view_of` resolves to
-    `signature::view_of`, not `check_types::view_of_type`: a false `NK1104`
-    (*returns `ref String`, but declared `ref String`*) means the wrong one was called;
-  * [design: ADR-352 D5, #825] `Some(..)`/`None` are no patterns of a `T?`:
-    bind `how ?? ...` first and match the plain enum;
-  * [design: Part I 4.5, ADR-293] a `T?` local needs `?.clone()` (NK1125);
-  * [works] a `ref String?` parameter takes a bare `String` argument (and
-    `ref String?` is `NK1261`, write `String?`);
-  * [gap: ADR-views-2 section 6] `mut` on one name of a tuple
-    (`for (k, mut v) in m`, `let (a, mut b) = …`), and so a map's
-    `values_mut()` / `iter_mut()`, is refused now, possible later (`NK1307`):
-    a move that needs it stops (`Result: blocked`);
-  * [design: Part I 3.3] `a..b` includes `b`; the half-open range is `a..<b`;
-  * [design: Part I 3.4, ADR-352] the catch-all arm of a `match` is `else =>`;
-    `_ =>` and `None =>` are refused;
-  * [works] a `String?` field is matched as it is (`match s.f { null => .., x => .. }`);
-  * collections: [works] a `BTreeMap` has `.iter()` (`m.iter().filter_map(..)`)
-    and `for (k, v) in m`; [works: ADR-293 D20] `a.iter().zip(b.iter())`;
-    [works: ADR-282 D7, #816] in-place change of a map's value is
-    `let mut c = m[k] ?? continue` (or `m.get(k) ?? continue`, the same `get_mut` since 0.0.1277, #952);
-    [gap #950] a `BTreeSet` has no `extend`, a `BTreeMap` no `entry`
-    (`HashMap::entry` works); [gap #949] no `mem::take`, and no part taken out
-    of a `let mut` view (NK1131); [design: Part I 2.6] a text is cut only at a
-    position it handed out (`NK1214`): a prefix of a hex digest is
-    `hex.scalars.take(16).collect()` or `hex.bytes[0..<16].text()`;
-    [design: Part III fs] `fs::read` is async and gives `Bytes` (the Rust
-    caller needs `block_on`; a `Vec[u8]` is filled by a loop, as
-    `sysroot_cache.nika` does); `read_dir` gives sorted names, not paths. Two
-    host parameters `[M: A, H: B]` lower.
-  * [defect #943, closed by 417fc04] a text literal changed in place needed
-    its type (`let mut out: String = "a"`); not probed in `tools/` since: if
-    `lower-std` reads `String?` again, reopen #943 rather than type it.
-* **Host traits** (M3b, 2026-10-29): a host method that `throws` lowers to
-  `Result<T, Box<dyn std::error::Error>>`; to hand an `anyhow` refusal back
-  unchanged, keep it in a `RefCell` of the Rust host and return it after the
-  call. A body-less trait method's text parameter reads as owned: write
-  `ref String`. Rust state the host keeps (checked units, a source map) is a
-  `RefCell` field; the Nikaia side names units by `i64` index.
-* **Reading an `it` run:** filter with `grep -E '^test result:|FAILED|panicked'`,
-  anchored: a bare `test result` also matches test names such as
-  `result_source::` and hides the summary (M3b repeated a 2-minute run).
-* **Lowered types:** `String` is `&str` where a view suffices and `String`
-  where it is owned (the compiler decides, ADR-282 D2), `ref T` is `&T`, `Vec[String]` is
-  `Vec<String>` (a `ref` one a slice), `String?` is `Option<String>`. Most Rust
-  errors after a move are `&` against owned. Check that `Display` equals
-  `Ty::text()` before replacing `{ty}` with it.
-* **Moving a resolver or a map loop:** never compare a contract by address
-  (`std::ptr::eq`): a resolver that returns an owned value breaks it silently.
-  Destructure map loops (`for (name, value) in map`), not `entry.0`/`entry.1`,
-  which the checker cannot type; a named `_` (`for (name, _) in map`) avoids the
-  unused-variable clippy error in the lowering. A layout change breaks tests
-  keyed on an address by allocator luck.
-* **Delete the dead locals** a replaced block leaves behind (`cargo check` lists
-  them as unused), and re-grep function names instead of trusting line numbers
-  from an earlier listing: every commit shifts them.
-* **Edit scripts:** replace blocks bottom-up with exact-string asserts. Never
-  `str.replace('', ...)` (an empty-slice replace corrupted `emit/mod.rs` once).
-* **A move is translated by hand from the Rust** (owner, 2026-11-01; the rules are in this file). Iterator
-  chains (`.iter().map(..).sum()`, `.any(..)`, `.filter(..).map(..).collect()`)
-  are the house style in `tools/*.nika` (owner, 2026-10-27). Open
-  lowering defects are GitHub issues, the language options against the usual
-  hurdles in `docs/history/mitigation-hurdles.md`.
+  emitter's state become Nikaia structs (#558); a method moves into an `impl`
+  in Nikaia once everything it calls has moved; the recursive core (`value_of`,
+  `stmt`, `call`; `expr_as_written`, `a_stmt`) moves in one step. `grep
+  'Finding {'` and `format!(` find the cheap message-building first. A walk
+  that cannot move yet takes a callback (`fn(ref Expr) -> i64 sync`, see
+  `bounds_basic.nika`).
+* **Copy a pattern**: `libraries.nika` + `libraries.rs`, `assets.nika`,
+  `parse_numbers.nika` (callbacks), `interpreter.nika`. The Rust module stays as
+  the adapter that calls `nikaia_std::tools::<m>::f`.
+* **One namespace for all `tools/*.nika`**: prefix type and function names with
+  the module; calls to other tools files are unqualified.
+* **Never compare a contract by address** (`std::ptr::eq`). Destructure map
+  loops (`for (name, value) in map`, `for (name, _) in map`), not
+  `entry.0`/`entry.1`.
+* **Delete the dead locals** a replaced block leaves, and re-grep function names
+  instead of trusting line numbers from an earlier listing.
 
-## Commands
+### Syntax gaps of tools/*.nika
 
-The cycle, clippy beside the tests, the report and `commit.nika`:
-`.claude/agents/builder.md`. Disk at the end: the same file, last step.
+Classes (CLAUDE.md, *A missing form stops the work*): **[design]** holds,
+build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
+#N]**: fix it or wait; **[works]**: use it, do not copy an old way around.
+
+* [design: ADR-382 D6] no `if let`: `x ?? default`, `match`, or `starts_with`
+  then `strip_prefix(..) ?? ""`;
+* [design: ADR-094 D4, ADR-231] no `*x`; loop variables over a `ref Vec` are values;
+* [design: Part I 2.5, ADR-282] `.to_owned()` is `NK1189`: write `.clone()`;
+* [design: ADR-282 D2; transition #654] text is `String`; never `ref` on a
+  number, `bool` or a data-less enum (`NK1257`). Until #654 step 0, `ref
+  String` only in: a field; a type argument; an option after `;`; a function's
+  or rule's result; a parameter the result points into; a parameter used as a
+  key of a map keyed by `ref String`. A parameter only read is `String`;
+* [design: ADR-293 D19] `opt ?? ""` moves the option: `(opt ?? "").clone()`
+  for a second use; a method on a `String?` is `opt?.len() ?? 0`; a `T?` local
+  needs `?.clone()` (NK1125);
+* [design: Part I 2.5] f-string braces are `{{` `}}`;
+* [design: ADR-288] a function parameter is `fn(ref X) -> T sync`; a `Span` by
+  reference is copied with `s.clone()`;
+* [design: one namespace] `view_of` is `signature::view_of`: a false `NK1104`
+  (*returns `ref String`, but declared `ref String`*) means the wrong one;
+* [design: ADR-352 D5] `Some(..)`/`None` are no patterns of a `T?`: bind `how
+  ?? ...` first; a `String?` field is matched as it is (`null => .., x => ..`);
+* [works] a `ref String?` parameter takes a bare `String` (`ref String?` is
+  `NK1261`, write `String?`);
+* [gap: ADR-views-2 §6] `mut` on one name of a tuple (`for (k, mut v) in m`),
+  and so `values_mut()` / `iter_mut()`, is `NK1307`: stops the slice;
+* [design: Part I 3.3, 3.4] `a..b` includes `b`, half-open is `a..<b`; the
+  catch-all arm is `else =>`;
+* collections: [works] `m.iter()`, `for (k, v) in m`, `a.iter().zip(b.iter())`;
+  in-place change of a map value `let mut c = m[k] ?? continue` (#952); [gap
+  #950] no `BTreeSet::extend`, no `BTreeMap::entry`; [gap #949] no
+  `mem::take`; [design: Part I 2.6] a text is cut only where it handed out a
+  position (`NK1214`): `hex.scalars.take(16).collect()`; [design: Part III]
+  `fs::read` is async and gives `Bytes`; `read_dir` gives sorted names.
+
+### Lowered types and host traits
+
+* `String` is `&str` where a view suffices and `String` where owned (ADR-282
+  D2), `ref T` is `&T`, `String?` is `Option<String>`. Most Rust errors after a
+  move are `&` against owned. Check that `Display` equals `Ty::text()` before
+  replacing `{ty}`.
+* A host method that `throws` lowers to `Result<T, Box<dyn std::error::Error>>`;
+  keep an `anyhow` refusal in a `RefCell` of the host to hand it back. A
+  body-less trait method's text parameter is written `ref String`. Host state
+  is a `RefCell` field; the Nikaia side names units by `i64` index (M3b).

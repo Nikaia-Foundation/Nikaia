@@ -6,7 +6,7 @@ budget_usd: 6
 ---
 # Brief: winnow-grammar passes its own clippy gate again (`src/rt.rs` `piece_ranges`, j8's Found)
 
-Facts: Traps already met
+Facts: Tests and the gate, Grammar
 
 Score: unblocks the push of j8's backend commit (winnow-grammar's CI runs `cargo clippy --workspace --all-targets -- -D warnings`, `.github/workflows/ci.yaml` 39 and 104, so the push the main session makes is red without it), and with it j6 run 2 (#1019 step 3d); S=A, O=~0.05M tokens, C=~0.05M tokens; one line in the backend, nothing in Nikaia.
 
@@ -40,7 +40,7 @@ a lint needs a change in behaviour or public API (say which, `Needs: architect d
 Nikaia's `Cargo.toml` pin (j6 run 2 moves it after the push); everything in the Nikaia checkout but the patch and your report.
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
-* Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
+* Your prompt holds the facts you need from `docs/builder-facts.md`. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
 * `git add <files>` only (`scripts/commit.nika -- REPORT` does it); commit locally after each step and **never push**: the driver runs the complete suite and pushes (`.claude/agents/builder.md`, *Cheap checks only*; owner, 2026-10-31).
 * Before committing, cheap checks only: `cargo build --profile fast -p nikaia`, `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `scripts/pre-push-check.sh`, the tests the brief names and the ones your change touches. No `gate.nika`.
 * No version lines, `CHANGELOG.md`, badges; no new NK code. New tests in Nikaia only; never the full suite. No foreground `sleep`, no polling; scripts in files.

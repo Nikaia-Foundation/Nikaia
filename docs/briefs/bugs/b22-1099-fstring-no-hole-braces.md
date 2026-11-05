@@ -10,7 +10,7 @@ Blocks: none (found by s1082, `docs/briefs/s1082-or-default-cloned.md.report.md`
 
 Score: compiler bug, a wrong output with no error, so it ranks above a refusal. One branch of one function, the cause traced and sure: cheap.
 
-Facts: Where things live, Traps already met, Commands
+Facts: Tests and the gate, Probes, Lowering and lower-std
 
 ## Run 2 (architect, 2026-11-01)
 Run 1 stopped `partial` on K3b's then-untracked `comptime_bundle.nika`, which broke the build; K3b is committed (79e5571b) and `develop` builds. Run 1 left its edit **uncommitted in the tree**: `crates/nikaia-std/src/tools/emit_core_leaves.nika` (hole-less branch: `format_of(parts).replace("{{", "{").replace("}}", "}")`) and its twin `lowered/emit_core_leaves.rs`. These two files are yours: take the edit over, check it against step 2 (escaping as the `LitString` arm does it, not a second escaper), rebuild, test, commit. Old report: `b22-1099-fstring-no-hole-braces.md.report.run1.md`. Committing them moves the self-hosting share (83.2 to 83.3 %): the badge trap in *Traps already met* applies.
@@ -43,7 +43,7 @@ An edit is needed outside `emit_core_leaves.nika`, the file that defines `format
 **Not yours, never stage**: every file `git status` shows modified or untracked at your start except the two run-1 files above, and every `docs/briefs/*` file except your report.
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
-* Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
+* Your prompt holds the facts you need from `docs/builder-facts.md`. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
 * `git add <files>` only (`scripts/commit.nika -- REPORT` does it); commit locally after each step and **never push**: the driver runs the complete suite and pushes (`.claude/agents/builder.md`, *Cheap checks only*; owner, 2026-10-31).
 * Before committing, cheap checks only: `cargo build --profile fast -p nikaia`, `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `scripts/pre-push-check.sh`, the tests the brief names and the ones your change touches. No `gate.nika`.
 * No version lines, `CHANGELOG.md`, badges; no new NK code. New tests in Nikaia only; never the full suite. No foreground `sleep`, no polling; scripts in files.

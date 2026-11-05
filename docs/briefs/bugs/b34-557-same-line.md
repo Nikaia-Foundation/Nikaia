@@ -11,7 +11,7 @@ Blocks: the parser grammar port (#557 step 4: `parser/mod.rs`, 2,728 Rust lines,
 
 Score: decided (ADR-339 D2, Part II 10.8 table row `same_line`); steps 1-2 are on develop (2ca9841, 9545797). One built-in, checker and lowering.
 
-Facts: Where things live, Traps already met, Commands
+Facts: Tests and the gate, Probes, Grammar, Lowering and lower-std
 
 ## Decided
 * ADR-339 D2 (copied): "`same_line` matches nothing and fails where the whitespace skipped just before it held a line break. The generated parser records, by position, what its last `WS` skip held, so the answer is a fact about the input and survives backtracking." ADR-339 D3: no *grammar* declares a state or an `extern rule`; the **lowering** may write both into the generated `grammar!`.

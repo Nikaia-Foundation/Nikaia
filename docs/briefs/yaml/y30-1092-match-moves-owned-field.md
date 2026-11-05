@@ -8,7 +8,7 @@ budget_usd: 18
 
 Score: y29's `Found:` (the fix for #1089), filed as #1092. Nothing in `yaml` needs it yet; built in this lane because the lane found it and the view-checker facts are fresh from y29. It changes `crates/`: name in the report what it decided (the supervisor raises the version), `Changelog:` one sentence. The commit says `Fixes #1092`.
 
-Facts: Where things live, Traps already met
+Facts: Tests and the gate, Probes, Checker and views, Lowering and lower-std
 
 **Problem.** A by-value parameter nobody consumes is inferred lent (ADR-277 D17) and lowered `a: &A`. A `match` on one of its non-copy optional fields whose arm hands the payload on by value (`x => x`) moves the field out, so it consumes the parameter, as `a.node ?? throw ..` already does; but the inference does not count it, and rustc refuses the move (E0507, *Cannot move out of `a.node` ... behind a shared reference*). Checked by the architect on `target/fast/nikaia` at 445f6064.
 
@@ -39,7 +39,7 @@ Rows: a the probe (E0507); b `return a.node ?? throw E{..}` prints `3` (runs, mu
 Files you may change: the `tools/*.nika` the cause is in, with their `lowered/*.rs`, the new test, and an existing test's expected output your change rightly changes (name it in `Body:`). If the fix needs a language decision, stop: `Result: blocked`, `Needs: architect decision`. A builder that has found no cause after about 40 turns stops and reports `partial` with what it ruled out.
 
 ## Rules (CLAUDE.md; this block is pasted into every brief, also a fix-forward)
-* Read `docs/builder-facts.md` first. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
+* Your prompt holds the facts you need from `docs/builder-facts.md`. `develop` in the main checkout; `git status` at start: other agents' uncommitted files are not yours, never touch or stage them.
 * `git add <files>` only; commit after each step. Do not push: the driver runs the suite on your commit and pushes it (CLAUDE.md, *Builders commit, the driver tests and pushes*).
 * Before committing: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `scripts/pre-push-check.sh`, and the gate of `.claude/agents/builder.md` (#852).
 * No version lines, `CHANGELOG.md`, badges; no new NK code. New tests in Nikaia only; never the full suite. No foreground `sleep`, no polling; scripts in files.

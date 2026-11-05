@@ -11,7 +11,7 @@ Blocks: none (b26 left #1107's rows 4-5 open for structs that copy; no move wait
 
 Score: language decision by the architect (ADR-387, 2026-11-01), closes #1107. One mechanism exists at calls and is widened to four more places (effort medium).
 
-Facts: Where things live, Traps already met, Commands
+Facts: Tests and the gate, Probes, Checker and views, Lowering and lower-std
 
 ## Problem
 ADR-233 D4 lets a view of a value that copies go where the value is wanted only at a call, by a name (`check_arguments.nika` ~:420: `a_view_that_copies` + `unviewed_type(found) == want` + `check_arguments_a_variable`, recorded in `state.facts.copied_args` so the emitter writes the `*`). ADR-387 D1 widens it to every place that wants the value. Probe (`target/fast/nikaia` at e1a88e49, the architect ran it):
@@ -57,7 +57,7 @@ Today: NK1104 at :8 (`return e`), NK1103 at :19 (`let g: C = e`), NK1106 at :20 
 ## To build
 1. The widening, the emitter's `*` at each new place, and `tests/compiler/tests/a_copy_view_is_copied_where_the_value_is_wanted.nika` (+ `.stdout`) from the probe above, plus one `.stderr` test row that a non-copy struct is still refused (`let g: D = e` with `D { s: String }`, NK1103). Refused by the unfixed binary, passes `--both-settings`. Then `an_unwrapped_map_view_stays_a_view` (b26's test) still passes, and `cargo test -p nikaia --test it -- coalesce view map_read element_read copy`. `lower-std` and its fixpoint. Commit `check: a view of a type that copies is copied where the value is wanted (ADR-387)`, `Fixes: #1107`.
 ## Rules
-* Read `docs/builder-facts.md` first. `develop` in the main checkout; other agents' uncommitted files are not yours: never touch or stage them.
+* Your prompt holds the facts you need from `docs/builder-facts.md`. `develop` in the main checkout; other agents' uncommitted files are not yours: never touch or stage them.
 * Commit locally after each step with `target/fast/nikaia run scripts/commit.nika -- REPORT` (it adds exactly the report's `Files:`); the driver pushes.
 * Before committing, cheap checks only: `cargo build --profile fast -p nikaia`, `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `scripts/pre-push-check.sh`, the tests the brief names and the ones your change touches.
 * Version lines, `CHANGELOG.md`, badges and NK codes are the supervisor's. New tests in Nikaia only.

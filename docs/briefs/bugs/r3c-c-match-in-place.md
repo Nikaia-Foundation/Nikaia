@@ -12,6 +12,8 @@ Source: docs/briefs/bugs/r3c-a-taking-arms.md.report.md (Found lines); the
 wip is on branch wip/r3c-type-rules-chunk2 (6465e74c). Do not merge or move
 that branch.
 
+Facts: Tests and the gate, Probes, Checker and views, Lowering and lower-std, Moving Rust into Nikaia
+
 Fix, each with a test in tests/compiler/ and as its own commit:
 1. #1139: a `match` over a place inside a `mut` parameter whose arm changes
    a part in place lowers as a move (E0507); `tr_rewrite_item`'s

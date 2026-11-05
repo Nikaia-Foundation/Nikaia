@@ -1,6 +1,7 @@
 // A brief's `Facts:` sections of docs/builder-facts.md go into the builder's
-// prompt after the brief (scripts/agent.nika); an unknown heading is refused
-// by name. Run in a directory of its own with a small facts file.
+// prompt after the brief (scripts/agent.nika), after the section `Core` every
+// brief gets; an unknown heading is refused by name. Run in a directory of its
+// own with a small facts file.
 use std::fs
 use std::process
 
@@ -40,7 +41,7 @@ fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
     process::run("mkdir", [f"{tmp}/docs"])
-    fs::write(f"{tmp}/docs/builder-facts.md", fs::Root::Anywhere, "# Builder facts\n\nintro\n\n## Traps\n\n* a trap\n\n### Grammar\n\n* a grammar trap\n\n## Moving Rust (self-hosting, #125)\n\n* a move rule\n")
+    fs::write(f"{tmp}/docs/builder-facts.md", fs::Root::Anywhere, "# Builder facts\n\nintro\n\n## Core\n\n* a core fact\n\n## Traps\n\n* a trap\n\n### Grammar\n\n* a grammar trap\n\n## Moving Rust (self-hosting, #125)\n\n* a move rule\n")
     fs::write(f"{tmp}/line.md", fs::Root::Anywhere, "Brief.\nFacts: Grammar, Moving Rust\n")
     fs::write(f"{tmp}/front.md", fs::Root::Anywhere, "---\nfacts: Traps\n---\nBrief.\n")
     fs::write(f"{tmp}/plain.md", fs::Root::Anywhere, "Brief.\n")

@@ -1,6 +1,10 @@
 
 # Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)
 
+## Core
+
+* a core fact
+
 ### Grammar
 
 * a grammar trap
@@ -13,6 +17,10 @@
 
 # Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)
 
+## Core
+
+* a core fact
+
 ## Traps
 
 * a trap
@@ -22,5 +30,11 @@
 * a grammar trap
 
 --
-plain: []
+plain: [
+# Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)
+
+## Core
+
+* a core fact
+]
 code=2 unknown Facts heading: Lowering
