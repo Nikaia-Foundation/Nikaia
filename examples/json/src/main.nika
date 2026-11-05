@@ -179,9 +179,8 @@ fn unescape(raw: String) -> String {
     return out
 }
 
-// The longest decoded string in the document, in characters. It takes the
-// tree by `ref` because `main` still prints it afterwards; `show` takes it by
-// value, being the last to look.
+// The longest decoded string in the document, in characters. It only reads
+// the tree, so `main` can still print it afterwards.
 fn longest(value: Json) -> i64 {
     match value {
         Json::Text(raw) => return unescape(raw).chars().count() as i64

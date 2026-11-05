@@ -41,7 +41,7 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn method(ref self) -> Method {
+    pub fn method(self) -> Method {
         if self.head.method() == "POST" {
             return Method::Post
         }
@@ -49,36 +49,36 @@ impl Request {
     }
 
     // The method as the client wrote it, for a log.
-    pub fn method_text(ref self) -> String {
+    pub fn method_text(self) -> String {
         return self.head.method()
     }
 
     // The path without the query string. It is not decoded: a `%20` stays
     // `%20`.
-    pub fn path(ref self) -> String {
+    pub fn path(self) -> String {
         return self.head.path()
     }
 
     // The whole request target as the client wrote it, for a log.
-    pub fn target(ref self) -> String {
+    pub fn target(self) -> String {
         return self.head.target()
     }
 
     // What the client sent after the head, empty if it sent nothing. Treat it
     // as untrusted: it came off a socket.
-    pub fn body(ref self) -> String {
+    pub fn body(self) -> String {
         return self.body
     }
 
     // One query parameter, or nothing if the query does not have it. The `?`
     // in the return type is what allows "nothing". Not decoded either.
-    pub fn query(ref self, name: ref String) -> String? {
+    pub fn query(self, name: String) -> String? {
         return self.head.query(name)
     }
 
     // One header, or nothing if the client did not send it. The name is
     // matched case-insensitively, as HTTP requires.
-    pub fn header(ref self, name: ref String) -> String? {
+    pub fn header(self, name: String) -> String? {
         return self.head.header(name)
     }
 }
@@ -111,7 +111,7 @@ pub struct File {
 }
 
 impl File {
-    pub fn(path: String, root: fs::Root) -> File {
+    pub fn(path: String, keep root: fs::Root) -> File {
         let mut status = 200
         let mut size = 0
         let known = fs::metadata(path, root) catch {
@@ -131,7 +131,7 @@ impl File {
 
     // What the name's extension says the file is, and what is not named
     // is bytes (ADR-289 D23).
-    pub fn content_type(ref self) -> String {
+    pub fn content_type(self) -> String {
         let name = self.path.to_lowercase()
         if name.ends_with(".html") || name.ends_with(".htm") {
             return "text/html; charset=utf-8"
@@ -156,18 +156,18 @@ impl File {
 
 impl Response {
     // A `200` with a plain-text body.
-    pub fn text(body: String) -> Response {
+    pub fn text(keep body: String) -> Response {
         return Response { status: 200, content_type: "text/plain", body: Body::Text(body) }
     }
 
     // A `200` with bytes the program holds (ADR-289 D22).
-    pub fn bytes(body: Bytes) -> Response {
+    pub fn bytes(keep body: Bytes) -> Response {
         return Response { status: 200, content_type: "application/octet-stream", body: Body::Bytes(body) }
     }
 
     // A file, answered as `File` decided: `200` with its type, or the status
     // it already knows (ADR-289 D23, D27, D28).
-    pub fn file(file: File) -> Response {
+    pub fn file(keep file: File) -> Response {
         if file.status != 200 {
             let status = file.status
             return Response { status: status, content_type: "text/plain", body: Body::Text(status_line(status)) }
@@ -183,7 +183,7 @@ impl Response {
 }
 
 // How long the body is, as `content-length` says it.
-fn length_of(body: ref Body) -> i64 {
+fn length_of(body: Body) -> i64 {
     match body {
         Body::Text(text) => text.len()
         Body::Bytes(bytes) => bytes.len()
@@ -193,7 +193,7 @@ fn length_of(body: ref Body) -> i64 {
 
 // The status line and the headers, as the text that goes on the wire before
 // the body.
-pub fn render_head(response: ref Response) -> String {
+pub fn render_head(response: Response) -> String {
     let status = status_line(response.status)
     let length = length_of(response.body)
     return f"HTTP/1.1 {status}\r\ncontent-type: {response.content_type}\r\ncontent-length: {length}\r\n\r\n"
@@ -201,7 +201,7 @@ pub fn render_head(response: ref Response) -> String {
 
 // The head and a text body, as the text that goes on the wire. A body of
 // bytes or a file is written after the head by `send`.
-pub fn render(response: ref Response) -> String {
+pub fn render(response: Response) -> String {
     let head = render_head(response)
     match response.body {
         Body::Text(text) => f"{head}{text}"
@@ -212,7 +212,7 @@ pub fn render(response: ref Response) -> String {
 // The answer, written to the connection. What the client sees was settled by
 // the head: a file that fails to read after it closes the connection short,
 // and the failure is logged (ADR-289 D27).
-fn send(mut connection: net::Connection, response: ref Response) throws {
+fn send(mut connection: net::Connection, response: Response) throws {
     connection.write(render_head(response))
     match response.body {
         Body::Text(text) => connection.write(text)
