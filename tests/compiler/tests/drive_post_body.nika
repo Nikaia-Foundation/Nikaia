@@ -1,0 +1,28 @@
+// scripts/drive.nika --post-body BRIEF: the comment that puts a queued brief
+// on its issue (#1252); the post itself is not run here.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/d1-1252-briefs.md", fs::Root::Anywhere, "---\nagent: builder\n---\n\n# d1: the brief\n\nTo build.\n\n")
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--post-body", f"{tmp}/d1-1252-briefs.md"]; dir: repo)
+    print(out.stdout)
+    process::run("rm", ["-rf", tmp])
+}

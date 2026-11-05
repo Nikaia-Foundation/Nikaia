@@ -1,5 +1,5 @@
-// scripts/drive.nika: which cycle line leads to which action, and which paths a
-// run's commit takes. Each case is one `--dry-run` step on a scratch directory.
+// scripts/drive.nika: which cycle line leads to which action; a run commits
+// nothing under docs/briefs/ (#1252). Each case is one `--dry-run` step on a scratch directory.
 use std::fs
 use std::process
 

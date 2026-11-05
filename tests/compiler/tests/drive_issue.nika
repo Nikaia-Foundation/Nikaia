@@ -1,0 +1,28 @@
+// scripts/drive.nika --issue NAME...: the issue a brief is posted on, the
+// first part of four digits of its name after the prefix (#1252).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    let names = ["docs/briefs/views/d1-1252-briefs-off-the-tree.md", "b44-1206-fn-type.md", "x/p1198-words-table.md", "r4-grammar-red.md", "c2-12345-five-then-1100.md"]
+    let mut argv: Vec[String] = ["run", "scripts/drive.nika", "--", "--issue"]
+    for n in names { argv.push(n.clone()) }
+    let out = process::run(nikaia, argv; dir: repo)
+    println(out.stdout.trim())
+}
