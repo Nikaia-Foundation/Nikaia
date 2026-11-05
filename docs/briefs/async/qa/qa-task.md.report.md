@@ -1,15 +1,12 @@
 Result: done
-Cause: 15e380dd (a11, the fallback `catch` after `let x = async e`): CI bootstrap_compiler arm64, specification::the_specifications_programs_are_the_ones_in_expected_txt; block #107 of Part I 8.1.2 now parses and is refused like its sibling #105 instead of being a fragment.
-Fixed: tests/specification/EXPECTED.txt regenerated; one line, #107 "fragment (as written)" to "refused (a body) [NK1117,NK1181,NK2110]", the change a11 meant.
-Tests: `cargo test -p nikaia --test it specification` 6 passed; pre-push run below.
+Cause: 7f77b71d (an integer is never a `time::Duration`): tests/compiler a_sync_function_calls_a_pausing_generic_by_brackets, `time::sleep(1)` now NK1102
+Fixed: the test's sleep takes a span, `time::sleep(1.millis())`; its .stderr is unchanged (same lines and columns)
+Tests: the_compiler_test_package_passes_at_both_settings rerun: the program passes at both settings; the one red left, agent_script ("settings disagree", `tokens.txt` missing in a temp dir), is this checkout's shared tree (scripts/agent.nika run with a fake claude, ok=false), green in CI, not touched by the unpushed commits
 Found: none
-Files: tests/specification/EXPECTED.txt
-Commit: specification: EXPECTED.txt takes block #107, the async fallback now parses (the fix for the drift after ADR-async-5 D22)
+Files: tests/compiler/tests/a_sync_function_calls_a_pausing_generic_by_brackets.nika
+Commit: tests: a sleep in a_sync_function_calls_a_pausing_generic_by_brackets takes a span (the fix for the red of 7f77b71d)
 Changelog: none
-Owner: none
-Disk freed: none
-Rs2nika: none
 Attribution:
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
-Pushed: local 3fd4cc70c1fc632c2239362dfe323c91725edc01
+Pushed: local 6005d10bc0505479ac70858963ec148b873ab1ea
