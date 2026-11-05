@@ -15,3 +15,4 @@
 /home/user/Nikaia/docs/briefs/async/a12-async-handle.md 6756575 91
 /home/user/Nikaia/docs/briefs/async/a14-async-handle.md 6038880 95
 /home/user/Nikaia/docs/briefs/async/a15-join-within-child.md 3006244 46
+/home/user/Nikaia/docs/briefs/async/qa/qa-task.md 369644 16

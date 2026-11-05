@@ -1,14 +1,14 @@
-1. **Most turns:** hunting for a cause that probably isn't in the unpushed commits. The test passed locally and on develop. I spent about a dozen calls reading the grammar-check chain (`check_core_a_block_over_a_grammar`, `run_grammar`, `Workshop::run`) to explain an empty findings list, and never found how it could happen. The CI-log fetch that showed `[]` came late.
+1. **Most turns:** finding where the failure was. The brief pointed at `docs/briefs/qa-input.txt`, but this lane's input was in `docs/briefs/async/`. That input held only the tail of `suite.log`, which showed no panic. I had to pull the CI log with `gh run view --log-failed` to find the failing test. The cause then took one regenerate-and-diff of `EXPECTED.txt`.
 
 2. **Lookups the brief could have handed me:**
-   - The brief points at `docs/briefs/qa-input.txt`, but this lane's input is `docs/briefs/async/qa-input.txt`. I only found it by listing directories.
-   - The input held only the tail of `suite.log`, so I had to run `gh run view --log-failed` to see the actual panic.
-   - The `.claude/agents/qa.md` pointer was fine.
-   - I found the test file, the check path and the shared workshop by grep.
+   - The correct driver directory, `docs/briefs/async/`.
+   - The name of the failing test.
+   - The regenerate command for `EXPECTED.txt`. It is in the test's assertion message, but I only saw it after fetching the CI log.
+   - What NK1181 means. I checked it against sibling block #105 to confirm the change was meant.
 
 3. **Checks:**
-   - Useful: the single failing test (passed), the `dsl_grammar` module on a cold cache (passed), the arm64 history on the two earlier develop runs, and the diff review.
-   - Wasted: the cold-cache run of `dsl grammar` filtered across the whole `it` binary. It filled the disk and gave unrelated failures, and I then had to clean up the scratch cache. I also read `parser/mod.rs` and `check_core_expr` diffs that had nothing to do with the failing test.
-   - I ran no fmt, clippy or pre-push, because nothing changed.
+   - Useful: regenerating the specification report and diffing it against the baseline, the 6 specification tests, and pre-push.
+   - Wasted: the first `docs/briefs/` file listing and the `nikaia` command lookup. The binary was not on PATH. I also grepped `parser/mod.rs` for NK1181, and that returned a large output I did not need.
+   - Skipped: clippy, because no Rust changed.
 
-4. **One change:** have the driver put the failing test's panic output, not just the last 200 lines, in `qa-input.txt`. Add a rule to `qa.md`: if a failing test passes locally and on the last develop CI, and the diff doesn't touch its path, report it as a flake after at most 10 turns. Don't run cold-cache runs on a disk that is almost full.
+4. **One change:** have the driver put the failing test names and their panic text in `qa-input.txt`. It should extract them from the log with `grep -A15 "---- .* stdout ----"` instead of passing the last 200 lines. Also make the brief name the lane's input directory. A short rule in `qa.md` would help too: for a drifted `EXPECTED.txt`, regenerate it, diff it, and check the diff against the unpushed briefs.
