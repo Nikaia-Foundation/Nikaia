@@ -647,18 +647,28 @@ impl EmitState {
             },
             _ => { },
         }
-        let nested = !joined && self.emit_catch_nests_a_failure(world, guarded_expr);
+        let mut fallback = false;
+        match guarded_expr {
+            Expr::Async(_, _) => { fallback = true; },
+            _ => { },
+        }
+        let nested = !joined && !fallback && self.emit_catch_nests_a_failure(world, guarded_expr);
         let at = node_key(guarded_expr);
+        let mut a_block = false;
+        match guarded_expr {
+            Expr::Block(_, _) => { a_block = true; },
+            _ => { },
+        }
         if nested {
             guarded = EmitFlow { breaks_to: at, ..guarded };
-            out.push(&format!("'__nikaia_caught_{}: {{ Ok::<_, Box<dyn std::error::Error>>(", at));
+            if a_block { out.push(&format!("'__nikaia_caught_{}: {{ let __nikaia_value = ", at)); } else { out.push(&format!("'__nikaia_caught_{}: {{ Ok::<_, Box<dyn std::error::Error>>(", at)); }
         } else { guarded = EmitFlow { breaks_to: -1, ..guarded }; }
         walk.boxed_scope = false;
         let bracketed = emit_flow_struct_headed(guarded_expr);
         if bracketed { out.push("("); }
         self.emit_expr(world, walk, out, host, guarded_expr, depth, guarded, scope)?;
         if bracketed { out.push(")"); }
-        if nested { out.push(") }"); }
+        if nested && a_block { out.push("; Ok::<_, Box<dyn std::error::Error>>(__nikaia_value) }"); } else if nested { out.push(") }"); }
         let a_scope = a_scope_call && walk.boxed_scope;
         walk.boxed_scope = false;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
@@ -686,7 +696,7 @@ impl EmitState {
             sum = Some(String::from(""));
             boxed = true;
         }
-        if caught && nested {
+        if caught && (nested || fallback) {
             sum = Some(String::from(""));
             boxed = true;
             named = false;
@@ -843,6 +853,23 @@ impl EmitState {
         match lambda {
             Expr::Closure { body, .. } => { self.emit_flow_task(world, walk, out, host, node_key(lambda), body, depth, flow, scope)?; },
             _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("`spawn` takes a lambda. Write `spawn fn { … }`."), at: Some(flow.statement) }, &"emit_core_spawn")); },
+        }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_spawn_fallback<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: &Expr, lambda: &Expr, handler: &Block, id: u32, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        match lambda {
+            Expr::Closure { body, .. } => {
+                let mut at: u32 = 0u32;
+                if flow.statement > 0 { at = u32::try_from(flow.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")); }
+                let guarded = Expr::Block(body.clone(), numbered_id(id_of(task)));
+                let caught = Expr::TryCatch { expr: Box::new(guarded), handler: handler.clone(), id: numbered_id(id) };
+                let wrapped = Block { stmts: vec![Spanned::new(Stmt::Expr(caught), Span { start: at, end: at })] };
+                self.emit_flow_task(world, walk, out, host, node_key(lambda), &wrapped, depth, flow, scope)?;
+            },
+            _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("`async(detached)` takes a lambda. Write `async(detached) fn { … }`."), at: Some(flow.statement) }, &"emit_core_spawn_fallback")); },
         }
         Ok(())
     }

@@ -416,7 +416,11 @@ impl EmitState {
             Expr::Binary { op, lhs, rhs, span, .. } => self.emit_core_binary(world, walk, out, host, node, op, lhs, rhs, span, depth, flow, scope),
             // The four arms of `??`, in their original order, are one function.
             Expr::Coalesce { value, fallback, .. } => self.emit_core_coalesce(world, walk, out, host, node, value, fallback, depth, flow, scope),
-            Expr::TryCatch { expr, handler, .. } => self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope),
+            // `async(detached) fn { … } catch { f }`: the fallback (D22).
+            Expr::TryCatch { expr, handler, id } => match expr {
+                Expr::Spawn { body, written_async, .. } if written_async => self.emit_core_spawn_fallback(world, walk, out, host, expr, body, handler, id.get(), depth, flow, scope),
+                else => self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope),
+            },
             Expr::Try(inner, _) => self.emit_core_try(world, walk, out, host, inner, depth, flow, scope),
             Expr::Return(value, _) => self.emit_core_return(world, walk, out, host, value, depth, flow, scope),
             Expr::Break(_) => self.emit_core_jump(out, true, flow),

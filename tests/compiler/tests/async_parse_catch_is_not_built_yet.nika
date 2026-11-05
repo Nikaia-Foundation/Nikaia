@@ -1,7 +1,0 @@
-// A `catch` after an `async` form, its fallback (ADR-async-5 D22), is refused
-// until the checker handles it (#986).
-
-fn main() {
-	let h = async(detached) fn { 1 } catch { 0 }
-	println(f"{h.join()}")
-}

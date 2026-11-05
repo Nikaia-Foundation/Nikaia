@@ -1,0 +1,28 @@
+// The fallback of a value form (Part I 8.1.2, ADR-async-5 D22, #986): the
+// task fails, and `catch` stands in for its value where it arrives, the
+// statement that first needs it. The function itself cannot fail.
+
+struct Oops {}
+
+impl Error for Oops {
+	fn message(self) -> String {
+		return "oops"
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Oops {}
+	}
+	return n * 2
+}
+
+fn other() -> i64 {
+	return 1
+}
+
+fn main() {
+	let a = async work(7) catch { 0 }
+	let b = other()
+	println(f"{a + b}")
+}

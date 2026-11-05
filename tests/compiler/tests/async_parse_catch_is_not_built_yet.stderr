@@ -1,7 +1,0 @@
-error: A `catch` after an `async` form isn't built yet (#986).
-  --> tests/async_parse_catch_is_not_built_yet.nika:5:35
-   |
- 5 | 	let h = async(detached) fn { 1 } catch { 0 }
-   |                                   ^^^^^
-   |
-   = help: Put the `catch` inside the task's lambda.

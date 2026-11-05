@@ -980,11 +980,34 @@ impl EmitState {
         // every failing call in it leaves with its error, in the box, which
         // the handler opens by the type each arm names. A `catch` around this
         // one is no longer where they go.
-        let nested = !joined && self.emit_catch_nests_a_failure(world, guarded_expr)
+        // **The fallback of a value form** (Part I 8.1.2, D22): its join hands
+        // the task's value or its failure, in the box.
+        let mut fallback = false
+        match guarded_expr {
+            Expr::Async(_, _) => {
+                fallback = true
+            },
+            else => {},
+        }
+        let nested = !joined && !fallback && self.emit_catch_nests_a_failure(world, guarded_expr)
         let at = node_key(guarded_expr)
+        // A block is bound first: inside `Ok(…)` its braces would be
+        // reported as unneeded, which the author may not even have written
+        // (a detached task's fallback guards the task's body).
+        let mut a_block = false
+        match guarded_expr {
+            Expr::Block(_, _) => {
+                a_block = true
+            },
+            else => {},
+        }
         if nested {
             guarded = guarded with { breaks_to: at }
-            out.push(f"'__nikaia_caught_{at}: {{ Ok::<_, Box<dyn std::error::Error>>(")
+            if a_block {
+                out.push(f"'__nikaia_caught_{at}: {{ let __nikaia_value = ")
+            } else {
+                out.push(f"'__nikaia_caught_{at}: {{ Ok::<_, Box<dyn std::error::Error>>(")
+            }
         } else {
             guarded = guarded with { breaks_to: -1 }
         }
@@ -997,7 +1020,9 @@ impl EmitState {
         if bracketed {
             out.push(")")
         }
-        if nested {
+        if nested && a_block {
+            out.push("; Ok::<_, Box<dyn std::error::Error>>(__nikaia_value) }")
+        } else if nested {
             out.push(") }")
         }
         // Whether the scope's tasks failed in the box, or `Crashed` came alone.
@@ -1050,7 +1075,7 @@ impl EmitState {
             sum = ""
             boxed = true
         }
-        if caught && nested {
+        if caught && (nested || fallback) {
             sum = ""
             boxed = true
             named = false
@@ -1311,6 +1336,30 @@ impl EmitState {
             Expr::Closure { body, .. } => self.emit_flow_task(world, walk, out, host, node_key(lambda), body, depth, flow, scope),
             else => {
                 throw EmitRefused { message: "`spawn` takes a lambda. Write `spawn fn { … }`.", at: flow.statement }
+            }
+        }
+    }
+
+    /// **The fallback of a detached task** (Part I 8.1.2, ADR-async-5 D22):
+    /// `async(detached) fn { body } catch { f }` starts the task as
+    /// `async(detached) fn { { body } catch { f } }`, so `f` stands in for the
+    /// task's value where its failure arrives, the `join`, after the task's
+    /// own `catch` and before the receiver's. The guarded block keeps the
+    /// task's node, which the checker's facts of this `catch` are keyed by.
+    pub fn emit_core_spawn_fallback[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, lambda: ref Expr, handler: ref Block, id: u32, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match lambda {
+            Expr::Closure { body, .. } => {
+                let mut at: u32 = 0
+                if flow.statement > 0 {
+                    at = flow.statement as u32
+                }
+                let guarded = Expr::Block(body.clone(), numbered_id(id_of(task)))
+                let caught = Expr::TryCatch { expr: guarded, handler: handler.clone(), id: numbered_id(id) }
+                let wrapped = Block { stmts: [Spanned(Stmt::Expr(caught), Span { start: at, end: at })] }
+                self.emit_flow_task(world, walk, out, host, node_key(lambda), wrapped, depth, flow, scope)
+            },
+            else => {
+                throw EmitRefused { message: "`async(detached)` takes a lambda. Write `async(detached) fn { … }`.", at: flow.statement }
             }
         }
     }

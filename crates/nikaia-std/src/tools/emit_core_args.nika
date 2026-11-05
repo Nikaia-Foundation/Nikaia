@@ -1215,7 +1215,17 @@ impl EmitState {
         // In a function that pauses, the task's own pauses are polled where it
         // is waited for (D20, #1226).
         let failing = EmitFlow::plain().at(flow.statement) with { in_lambda: !walk.async_pausing, can_throw: true }
-        let inner = EmitScope::plain() with { origin: scope.origin.clone(), function: owner.clone(), channel: channel.clone(), changed: scope.changed.clone(), tasks_channel: channel.clone(), tasks_function: owner.clone() }
+        // **A task with a fallback fails in the box** (D22): its body runs in
+        // a closure of its own, whose result is the task's value.
+        let fallback = walk.async_fallback
+        walk.async_fallback = false
+        let boxed: String = "Box<dyn std::error::Error>"
+        let mut own = channel.clone()
+        if fallback {
+            own = boxed.clone()
+            owner = ""
+        }
+        let inner = EmitScope::plain() with { origin: scope.origin.clone(), function: owner.clone(), channel: own.clone(), changed: scope.changed.clone(), tasks_channel: channel.clone(), tasks_function: owner.clone() }
         let mut body = EmitOut::empty()
         let mut ran = false
         match task {
@@ -1229,6 +1239,15 @@ impl EmitState {
         }
         if !ran {
             self.emit_expr(world, walk, body, host, task, depth, failing, inner)
+        }
+        if fallback {
+            let text = body.buf.clone()
+            body = EmitOut::empty()
+            if walk.async_pausing {
+                body.push(f"(async || -> Result<_, {boxed}> {{ Ok({text}) }})().await")
+            } else {
+                body.push(f"(|| -> Result<_, {boxed}> {{ Ok({text}) }})()")
+            }
         }
         let name = emit_async_group_name(group)
         // **A task that pauses is polled by its group's future** (D20,
@@ -1340,9 +1359,20 @@ impl EmitState {
         let mut tasks: Vec[(Expr, i64)] = []
         let mut named: String = ""
         let mut whole = true
+        let mut fallback = false
         match node {
             Stmt::Let { names, value, .. } => {
                 match value {
+                    Expr::TryCatch { expr: guarded, .. } => match guarded {
+                        Expr::Async(inner, id) => {
+                            if names.len() == 1 {
+                                tasks.push((inner.clone(), id.get() as i64))
+                                named = emit_text(world, names[0])
+                                fallback = true
+                            }
+                        },
+                        else => {},
+                    },
                     Expr::Async(inner, id) => {
                         if names.len() == 1 {
                             tasks.push((inner.clone(), id.get() as i64))
@@ -1394,7 +1424,9 @@ impl EmitState {
             first = false
             out.push(f"let {handle} = ")
             let mut started = EmitOut::empty()
+            walk.async_fallback = fallback
             self.emit_async_task(world, walk, started, host, each.0, each.1, "handle", depth, here, scope)
+            walk.async_fallback = false
             let mut joined = emit_async_joined(handle, channel)
             if started.buf.ends_with(".await") {
                 joined = emit_async_joined_paused(handle, channel)
@@ -1403,6 +1435,9 @@ impl EmitState {
             out.push(";")
             walk.async_joining.insert(each.1, joined.clone())
             joins.push(joined)
+        }
+        if waits < 0 && fallback {
+            throw EmitRefused { message: "The compiler can't translate the fallback of `async e` yet where nothing names its binding or only another task does (#986): name it in a statement of this group.", at: span.start as i64 }
         }
         if waits < 0 {
             // Named in another task alone (D8): that task waits for it.

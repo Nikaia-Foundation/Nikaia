@@ -744,7 +744,15 @@ impl EmitState {
         let mut owner: String = String::from("");
         if channel == scope.channel { owner = scope.function.to_string(); }
         let failing = EmitFlow { in_lambda: !walk.async_pausing, can_throw: true, ..EmitFlow::plain().at(flow.statement) };
-        let inner = EmitScope { origin: scope.origin.to_string(), function: owner.to_string(), channel: channel.to_string(), changed: scope.changed.to_owned(), tasks_channel: channel.to_string(), tasks_function: owner.to_string(), ..EmitScope::plain() };
+        let fallback = walk.async_fallback;
+        walk.async_fallback = false;
+        let boxed: &'static str = "Box<dyn std::error::Error>";
+        let mut own = channel.to_string();
+        if fallback {
+            own = boxed.to_string();
+            owner = String::from("");
+        }
+        let inner = EmitScope { origin: scope.origin.to_string(), function: owner.to_string(), channel: own.to_string(), changed: scope.changed.to_owned(), tasks_channel: channel.to_string(), tasks_function: owner.to_string(), ..EmitScope::plain() };
         let mut body = EmitOut::empty();
         let mut ran = false;
         match task {
@@ -757,6 +765,11 @@ impl EmitState {
             _ => { },
         }
         if !ran { self.emit_expr(world, walk, &mut body, host, task, depth, failing, &inner)?; }
+        if fallback {
+            let text = body.buf.to_string();
+            body = EmitOut::empty();
+            if walk.async_pausing { body.push(&format!("(async || -> Result<_, {}> {{ Ok({}) }})().await", boxed, text)); } else { body.push(&format!("(|| -> Result<_, {}> {{ Ok({}) }})()", boxed, text)); }
+        }
         let name = emit_async_group_name(group);
         if body.buf.contains(".await") {
             if kind == "spawn" {
@@ -839,9 +852,21 @@ impl EmitState {
         let mut tasks: Vec<(Expr, i64)> = vec![];
         let mut named: String = String::from("");
         let mut whole = true;
+        let mut fallback = false;
         match node {
             Stmt::Let { names, value, .. } => {
                 match value {
+                    Expr::TryCatch { expr: guarded, .. } => { let guarded = nikaia_std::boxed::open(guarded); match guarded {
+                        Expr::Async(inner, id) => {
+                            let inner = nikaia_std::boxed::open(inner); let id = *id;
+                            if names.len() == 1 {
+                                tasks.push((inner.clone(), id.get() as i64));
+                                named = emit_text(world, *nikaia_std::index::get(&names, 0));
+                                fallback = true;
+                            }
+                        },
+                        _ => { },
+                    }; },
                     Expr::Async(inner, id) => {
                         let inner = nikaia_std::boxed::open(inner); let id = *id;
                         if names.len() == 1 {
@@ -880,7 +905,9 @@ impl EmitState {
             first = false;
             out.push(&format!("let {} = ", handle));
             let mut started = EmitOut::empty();
+            walk.async_fallback = fallback;
             self.emit_async_task(world, walk, &mut started, host, &each.0, each.1, "handle", depth, here, scope)?;
+            walk.async_fallback = false;
             let mut joined = emit_async_joined(&handle, &channel);
             if started.buf.ends_with(".await") { joined = emit_async_joined_paused(&handle, &channel); }
             out.append(started);
@@ -888,6 +915,7 @@ impl EmitState {
             walk.async_joining.insert(each.1, joined.to_string());
             joins.push(joined);
         }
+        if waits < 0 && fallback { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate the fallback of `async e` yet where nothing names its binding or only another task does (#986): name it in a statement of this group."), at: Some(span.start as i64) }, &"emit_async_binding")); }
         if waits < 0 {
             walk.async_joining = collections::BTreeMap::new();
             if named != "" { walk.async_handles.insert(named, (*nikaia_std::index::get(&joins, 0)).to_string()); }

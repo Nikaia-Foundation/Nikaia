@@ -2463,6 +2463,18 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
                         pending.push(check_async_binding(state, world, block, at, names, value, group, beside, last, stmt.span))
                         check_async_in(state, inner, group, stmt.span)
                     },
+                    // `let x = async e catch { f }`: the fallback (D22) stands
+                    // in where the task's failure arrives, the binding waits
+                    // as the bare form's does.
+                    Expr::TryCatch { expr: guarded, .. } => {
+                        match guarded {
+                            Expr::Async(inner, _) => {
+                                pending.push(check_async_binding(state, world, block, at, names, guarded, group, beside, last, stmt.span))
+                                check_async_in(state, inner, group, stmt.span)
+                            },
+                            else => check_async_in(state, value, group, stmt.span),
+                        }
+                    },
                     Expr::Tuple(parts, _) => {
                         let mut computed = 0
                         for part in parts {
@@ -2560,6 +2572,10 @@ fn starts_a_task(stmt: ref Stmt) -> bool sync {
     return match stmt {
         Stmt::Let { value, .. } => match value {
             Expr::Async(_, _) => true,
+            Expr::TryCatch { expr, .. } => match expr {
+                Expr::Async(_, _) => true,
+                else => false,
+            },
             else => false,
         },
         Stmt::Expr(value) => match value {

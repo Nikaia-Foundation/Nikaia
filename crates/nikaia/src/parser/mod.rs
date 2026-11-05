@@ -3836,8 +3836,11 @@ grammar! {
         // meets `NK2103` there. `async e` (`async fn { … }` its lambda form,
         // and the statement `expr_stmt` reads) is `Expr::Async`, `async { … }`
         // `Expr::AsyncGroup`: the checker computes their wait points and groups
-        // (#986), the lowering refuses them until a5. The handle forms, the
-        // options and a `catch` after the form are refused here, by name - the
+        // (#986). A `catch` written directly after the value form or after
+        // `async(detached) fn { … }` is its fallback (D22): it parses as the
+        // `Expr::TryCatch` around the form, which the checker and the
+        // lowering read as the fallback. The handle forms, the options not
+        // built yet and a `catch` after `async { }` are refused here, by name - the
         // way `immutable_item` refuses (ADR-389 D4): a reader gets the
         // sentence, not a parse error at the word.
         //
@@ -3847,14 +3850,10 @@ grammar! {
         // A list of several options not built yet names the first. The task of
         // `async e` is a unary operand, so `async a() + async b()` is two tasks.
         rule async_expr -> Expr =
-            KW_ASYNC "(" OPT_DETACHED ")" body:trailing_lambda not(KW_CATCH) -> {
+            KW_ASYNC "(" OPT_DETACHED ")" body:trailing_lambda -> {
                 Expr::Spawn { body: Box::new(body), written_async: true, id: NodeId::parsed() }
             }
           | KW_ASYNC "(" async_built_options u:async_unbuilt_option -> { u }
-          | KW_ASYNC "(" OPT_DETACHED ")" trailing_lambda peek(KW_CATCH) fail(
-                "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
-                 the task's lambda."
-            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
           | KW_ASYNC "(" OPT_DETACHED ")" fail(
                 "`async(detached)` takes a lambda. Write `async(detached) fn { … }`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
@@ -3863,23 +3862,15 @@ grammar! {
                  `admission:`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
           | KW_ASYNC peek("{") b:block not(KW_CATCH) -> { Expr::AsyncGroup(b, NodeId::parsed()) }
-          | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") e:unary_expr not(KW_CATCH) -> {
+          | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") e:unary_expr -> {
                 Expr::Async(Box::new(e), NodeId::parsed())
             }
-          | KW_ASYNC peek(KW_FN) not(async_named_fn) l:trailing_lambda not(KW_CATCH) -> {
+          | KW_ASYNC peek(KW_FN) not(async_named_fn) l:trailing_lambda -> {
                 Expr::Async(Box::new(l), NodeId::parsed())
             }
-          | KW_ASYNC peek(KW_FN) not(async_named_fn) trailing_lambda peek(KW_CATCH) fail(
-                "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
-                 the task's lambda."
-            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
           | KW_ASYNC peek("{") block peek(KW_CATCH) fail(
                 "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
                  the group."
-            ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
-          | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") unary_expr peek(KW_CATCH) fail(
-                "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
-                 a lambda, `async fn { … }`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
 
         // `async` before a function's declaration is `NK2115` (D5,

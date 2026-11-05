@@ -1803,6 +1803,17 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
                         pending.push(check_async_binding(state, world, block, at, names, value, group, beside, last, &stmt.span));
                         check_async_in(state, inner, group, &stmt.span);
                     },
+                    Expr::TryCatch { expr: guarded, .. } => {
+                        let guarded = nikaia_std::boxed::open(guarded);
+                        match guarded {
+                            Expr::Async(inner, _) => {
+                                let inner = nikaia_std::boxed::open(inner);
+                                pending.push(check_async_binding(state, world, block, at, names, guarded, group, beside, last, &stmt.span));
+                                check_async_in(state, inner, group, &stmt.span);
+                            },
+                            _ => { check_async_in(state, value, group, &stmt.span); },
+                        }
+                    },
                     Expr::Tuple(parts, _) => {
                         let mut computed: i64 = 0;
                         for part in parts.iter() { if check_async_computes(part) { computed += 1; } }
@@ -1881,7 +1892,11 @@ pub(crate) fn check_async_binding(state: &mut CheckState, world: &CheckWorld<'_,
 // this was written - see `contracts::sync`.
 pub(crate) fn starts_a_task(stmt: &Stmt) -> bool {
     match stmt {
-        Stmt::Let { value, .. } => matches!(value, Expr::Async(_, _)),
+        Stmt::Let { value, .. } => match value {
+            Expr::Async(_, _) => true,
+            Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); matches!(expr, Expr::Async(_, _)) },
+            _ => false,
+        },
         Stmt::Expr(value) => matches!(value, Expr::Async(_, _)),
         _ => false,
     }

@@ -1425,6 +1425,23 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
         return check_core_stmt_unit();
     }
     let value = nikaia_std::index::or(literal, || handled.into());
+    match guarded_expr {
+        Expr::Spawn { written_async, .. } => {
+            let written_async = *written_async;
+            if written_async {
+                match answers {
+                    Ty::Named { ref name, ref args, .. } => {
+                        if name == "TaskHandle" && args.len() == 1 {
+                            if !state.block_leaves(world, handler) && !(*nikaia_std::index::get(&args, 0)).is_unknown() && value.text() != "()" && !value.fits(nikaia_std::index::get(&args, 0)) { state.expect_type(world, &value.owned(), nikaia_std::index::get(&args, 0), span, "catch", &|found, wanted| { format!("This fallback hands back `{}`, but the task's value is `{}`.", found, wanted) }); }
+                            return answers;
+                        }
+                    },
+                    _ => { },
+                }
+            }
+        },
+        _ => { },
+    }
     if !state.block_leaves(world, handler) && check_core_flow_widened_by_null(&value, &answers) {
         state.facts.nullable_catches.insert(node_key(guarded_expr));
         return Ty::Nullable(Box::new(answers.clone()));

@@ -1839,6 +1839,28 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
         return check_core_stmt_unit()
     }
     let value = literal ?? handled
+    // **The fallback of a detached task** (Part I 8.1.2, ADR-async-5 D22):
+    // `async(detached) fn { … } catch { f }` gives the handle, and `f`
+    // stands in for the task's value, so it is of the `T` of
+    // `TaskHandle[T]`.
+    match guarded_expr {
+        Expr::Spawn { written_async, .. } => {
+            if written_async {
+                match answers {
+                    Ty::Named { name, args, .. } => {
+                        if name == "TaskHandle" && args.len() == 1 {
+                            if !state.block_leaves(world, handler) && !args[0].is_unknown() && value.text() != "()" && !value.fits(args[0]) {
+                                state.expect_type(world, value.owned(), args[0], span, "catch", fn(found, wanted) { f"This fallback hands back `{found}`, but the task's value is `{wanted}`." })
+                            }
+                            return answers
+                        }
+                    },
+                    else => {},
+                }
+            }
+        },
+        else => {},
+    }
     // **A `null` from the block widens the guarded `T` to `T?`** (Part I
     // 7.1, #884), as a `null` arm of an `if` does: the guarded value is
     // `Some`. A `T` that is already `T?` stays `T?` and fits below.

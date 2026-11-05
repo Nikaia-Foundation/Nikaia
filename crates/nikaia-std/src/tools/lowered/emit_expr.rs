@@ -273,7 +273,10 @@ impl EmitState {
             Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.emit_expr_unary(world, walk, out, host, node, *op, expr, depth, flow, scope)?; },
             Expr::Binary { op, lhs, rhs, span, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.emit_core_binary(world, walk, out, host, node, *op, lhs, rhs, span, depth, flow, scope)?; },
             Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); self.emit_core_coalesce(world, walk, out, host, node, value, fallback, depth, flow, scope)?; },
-            Expr::TryCatch { expr, handler, .. } => { let expr = nikaia_std::boxed::open(expr); self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope)?; },
+            Expr::TryCatch { expr, handler, id } => { let expr = nikaia_std::boxed::open(expr); let id = *id; match expr {
+                Expr::Spawn { body, written_async, .. } if { let written_async = *written_async; written_async } => { let body = nikaia_std::boxed::open(body); self.emit_core_spawn_fallback(world, walk, out, host, expr, body, handler, id.get(), depth, flow, scope)?; },
+                _ => { self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope)?; },
+            }; },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.emit_core_try(world, walk, out, host, inner, depth, flow, scope)?; },
             Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); self.emit_core_return(world, walk, out, host, (value).as_ref(), depth, flow, scope)?; },
             Expr::Break(_) => { self.emit_core_jump(out, true, flow)?; },
