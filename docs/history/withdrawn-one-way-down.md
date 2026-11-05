@@ -7,7 +7,7 @@ what a program means. The decisions that stand are
 D1 and D2, and [ADR-004](../specification/adr/adr-004.md) D1; the release entry is
 [`../CHANGELOG.md`](../../CHANGELOG.md).
 **The measurements are elsewhere and are unrevised:**
-[`nightly-cost.md`](nightly-cost.md), [`subprocess-cost.md`](../subprocess-cost.md),
+[`nightly-cost.md`](nightly-cost.md), [`subprocess-cost.md`](subprocess-cost.md),
 [`std-sysroot.md`](std-sysroot.md), [`technical_notes.md`](technical_notes.md).
 
 The specification and the ADRs are written as though none of this existed, which
@@ -59,10 +59,10 @@ notes named beside it. None was taken to justify the withdrawal.
 
 | what | number | where |
 | :--- | :--- | :--- |
-| what Bridge-IR could carry | **1 of 15** corpus programs | [`subprocess-cost.md`](../subprocess-cost.md) §5 |
-| the printed-Rust round trip | **0.161 %** of a full compile (2.77 M of 1 719 M Ir) | [`subprocess-cost.md`](../subprocess-cost.md) §4 |
-| starting the `rustc` process | **0.48 %** (8.3 M Ir), two thirds of it the rustup shim | [`subprocess-cost.md`](../subprocess-cost.md) §3–§4 |
-| the two together — what the in-memory exit would buy | **0.64 %** | [`subprocess-cost.md`](../subprocess-cost.md) §4 |
+| what Bridge-IR could carry | **1 of 15** corpus programs | [`subprocess-cost.md`](subprocess-cost.md) §5 |
+| the printed-Rust round trip | **0.161 %** of a full compile (2.77 M of 1 719 M Ir) | [`subprocess-cost.md`](subprocess-cost.md) §4 |
+| starting the `rustc` process | **0.48 %** (8.3 M Ir), two thirds of it the rustup shim | [`subprocess-cost.md`](subprocess-cost.md) §3–§4 |
+| the two together — what the in-memory exit would buy | **0.64 %** | [`subprocess-cost.md`](subprocess-cost.md) §4 |
 | `-Zpolonius=next` over the corpus | **0 verdicts changed** at **+7.11 %** of a build | [`nightly-cost.md`](nightly-cost.md) §3 |
 | the pinned toolchain against a stable one | 1 420 MiB / 24.7 s against 602 MiB / 12.3 s | [`nightly-cost.md`](nightly-cost.md) §4 |
 | what the nightly cost a *user* who only runs programs | **2 MiB** — and a non-relocatable binary | [`nightly-cost.md`](nightly-cost.md) §4 |

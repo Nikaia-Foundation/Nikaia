@@ -97,9 +97,6 @@ is normative and nothing may depend on it to know what a program means.
   83 % of them bounds on single variables or differences, 4.2 µs each, and
   the one pattern - an equality with a coefficient - behind every query it
   cannot answer. The numbers [ADR-270](specification/adr/adr-270.md) D9 rests on.
-* [`subprocess-cost.md`](subprocess-cost.md) — what invoking `rustc` as a child
-  process costs, against the codegen it wraps: 0.64 % of a compile, which is what
-  the text interface of ADR-004 D1 is paid for with.
 * [`mutex-floor.md`](mutex-floor.md) — what an always-`Mutex` floor for
   `Locked` would cost against Part II 12.2's no-pausing rule: why blocking is
   not pausing in this language, the one ledger line the answer turns on, and
@@ -138,6 +135,9 @@ is withdrawn — never for age by itself. The method and the measurement are
 still true and still cited by ADR number from wherever they are used; only the
 question the page was written to answer is no longer open.
 
+* [`subprocess-cost.md`](history/subprocess-cost.md) — what invoking `rustc` as a
+  child process costs: 0.64 % of a compile. The in-memory exit it priced is
+  withdrawn; the number is why the text interface of ADR-004 D1 stays.
 * [`briefs.md`](history/briefs.md) — where the briefs of the finished lanes
   are: in git, at the commit named there.
 * [`mitigation-hurdles.md`](history/mitigation-hurdles.md) — four hurdles of

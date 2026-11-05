@@ -13,7 +13,7 @@ edited when the experiment ends. What happened, and why, is
 as this file's third conclusion wanted), [ADR-005](../specification/adr/adr-005.md)
 D2 (Group B.2, now the frontend's desugaring),
 [ADR-021](../specification/adr/adr-021.md) D9 (the precedent for refusing a backend
-by name), [`subprocess-cost.md`](../subprocess-cost.md) (the same machine, the same
+by name), [`subprocess-cost.md`](subprocess-cost.md) (the same machine, the same
 method, the adjacent question)
 
 At the time of writing, the project pinned one exact nightly `rustc` and justified
@@ -44,7 +44,7 @@ already have.
 
 Intel Xeon @ 2.80 GHz, 4 vCPU, 15 GB RAM, Linux 6.18.44 x86_64 — a **shared virtual
 machine** with no `cpufreq` governor exposed, and the same box
-[`subprocess-cost.md`](../subprocess-cost.md) used. `rustc 1.94.0-nightly (8d670b93d
+[`subprocess-cost.md`](subprocess-cost.md) used. `rustc 1.94.0-nightly (8d670b93d
 2025-12-31)`, which is the `nightly-2026-01-01` `rust-toolchain.toml` named at the time;
 stable is `1.94.1 (e408947bf 2026-03-25)` for
 the builds and `1.98.1 (48a229cea 2026-09-01)` for the installs, because an install measures
@@ -323,7 +323,7 @@ records as open — and it is a second reason this is a record's business and no
 | `json.rs`, **full debug compile** | 1 731 303 418 | 1 854 471 352 | **+7.11 %** |
 
 The full-compile row is the one to quote, and it cross-checks
-[`subprocess-cost.md`](../subprocess-cost.md) §4, which measured the same file's full debug
+[`subprocess-cost.md`](subprocess-cost.md) §4, which measured the same file's full debug
 compile at 1 719 M Ir — 0.7 % apart, a day and a flag apart.
 
 Wall-clock beside it, median of nine after two warm-ups, milliseconds:
@@ -514,5 +514,5 @@ desugar. The full account, including what each withdrawn thing was for, is
 
 One question this file handed on is still open and is unaffected by any of it:
 whether the compiler should invoke the rustup shim or a named compiler
-([`subprocess-cost.md`](../subprocess-cost.md) §5) — *which* `rustc` a Nikaia
+([`subprocess-cost.md`](subprocess-cost.md) §5) — *which* `rustc` a Nikaia
 installation is entitled to assume.

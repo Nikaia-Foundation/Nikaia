@@ -6,11 +6,11 @@ a `rustc_ast::Crate` to `rustc_interface::run_compiler` instead of printing it �
 "can be added when the subprocess cost is worth removing". This file put the
 number on it. That exit, and the whole `rustc_ast` path it belonged to, has since
 been **withdrawn** (§6): the numbers below are unrevised, because they are part of
-why. `../CHANGELOG.md` and [`withdrawn-one-way-down.md`](history/withdrawn-one-way-down.md)
+why. `../../CHANGELOG.md` and [`withdrawn-one-way-down.md`](withdrawn-one-way-down.md)
 carry the account.
-**Related:** [ADR-004](specification/adr/adr-004.md) D1 (the one lowering, which
-emits text, and whose price §4 is), [ADR-003](specification/adr/adr-003.md) D1
-(the text interface), [ADR-300](specification/adr/adr-300.md) (diagnostics read
+**Related:** [ADR-004](../specification/adr/adr-004.md) D1 (the one lowering, which
+emits text, and whose price §4 is), [ADR-003](../specification/adr/adr-003.md) D1
+(the text interface), [ADR-300](../specification/adr/adr-300.md) (diagnostics read
 the generated file)
 
 Nobody had ever put a number on what invoking `rustc` as a child process costs.
@@ -176,7 +176,7 @@ once per file, and a project ten times this size pays the same 8.3 M against ten
 codegen. The share falls.
 
 The one thing that would invert this is named so it can be watched: if
-[ADR-003](specification/adr/adr-003.md) D2's build graph ever splits a program into several Rust
+[ADR-003](../specification/adr/adr-003.md) D2's build graph ever splits a program into several Rust
 crates, each crate becomes an invocation and the fixed cost multiplies by the crate count. **That
 is the condition under which the fixed cost is worth re-measuring** — not a bigger program, a
 differently shaped build.
@@ -234,7 +234,7 @@ let new_id = $self.cx.resolver.next_node_id();
 
 So handing this crate to `run_compiler` trips that assertion on a debug compiler, and on a release
 one silently skips assignment and leaves every node holding the crate root's id. The spans are the
-same story from the other end: [ADR-300](specification/adr/adr-300.md)'s contract is that an error
+same story from the other end: [ADR-300](../specification/adr/adr-300.md)'s contract is that an error
 points back at the `.nika` file, and it is kept today by translating `rustc --error-format=json`
 about the generated file — a file an in-memory compile does not produce and a stream it does not
 emit. Opening the in-memory exit therefore costs a node-id discipline and a `SourceMap` in the
@@ -266,7 +266,7 @@ compiler as `NIKAIA_RUSTC`, and `crates/nikaia/tests/common/mod.rs` already invo
 
 **Left undone on purpose, because it is a decision no record has made.** *Which* `rustc` the
 executor invokes is not a performance question. The shim is what makes
-[ADR-001](specification/adr/adr-001.md) D1's "one file is the single source of truth"
+[ADR-001](../specification/adr/adr-001.md) D1's "one file is the single source of truth"
 true at run time — it reads `rust-toolchain.toml` on every invocation — and the two answers come
 apart for a user whose own project names something else. Choosing between "the toolchain resolved
 where the build runs" and "the toolchain that built this compiler" is an ADR's job, not a
@@ -286,7 +286,7 @@ paragraph above is what took that away: it did not build an AST anything but a p
 Three things would have changed the answer —
 
 1. the orchestrator splitting a program into several Rust crates, so the per-invocation cost
-   multiplies ([ADR-003](specification/adr/adr-003.md) D2's build graph);
+   multiplies ([ADR-003](../specification/adr/adr-003.md) D2's build graph);
 2. Bridge-IR growing wide enough that a real program could reach the bridge backend at all;
 3. the lowering acquiring node ids and spans for some other reason, which would have made the exit
    genuinely free to open, as the record believed it already was.
@@ -294,7 +294,7 @@ Three things would have changed the answer —
 — and **none of the three happened.** The exit, the Bridge-IR protocol and the `rustc_ast` lowering
 are withdrawn; the compiler emits Rust source text and hands `rustc` a file, which is the path §3
 and §4 measured and the 0.64 % is the whole price of
-([ADR-004](specification/adr/adr-004.md) D1). Condition 1 is still the thing to watch, and now it
+([ADR-004](../specification/adr/adr-004.md) D1). Condition 1 is still the thing to watch, and now it
 is about the fixed cost of an extra invocation rather than about an exit from an AST nobody builds.
 
 And one open question is handed on rather than answered: two thirds of the per-invocation cost is
