@@ -228,6 +228,13 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
     let bound: Option<Ty> = state.bound_that_answers(world, type_name, entry);
     if bound.is_some() {
         let answered: Ty = nikaia_std::index::or(bound, || Ty::Unknown);
+        let found: Option<CheckResolved<'_>> = resolve_method(world, &format!("{}::{}", check_core_call_on_type_name(&answered), entry));
+        if found.is_some() {
+            let resolved: CheckResolved<'_> = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+            let mut contract: FnContract = resolved.contract.clone();
+            contract.signature = check_core_call_on_self_signature((contract.signature).as_ref(), type_name);
+            return check_core_call_on_described(state, world, host, &answered, receiver, method, args, entry, &resolved.key, &contract, span);
+        }
         return check_core_call_on(state, world, host, answered, receiver, method, args, entry, span);
     }
     if (entry == "compare" || entry == "eq") && args.len() == 1 {
@@ -260,6 +267,39 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
     check_core_call_on_reached(state, None);
     check_core_call_on_quiet(state, receiver);
     Ty::Unknown
+}
+
+pub(crate) fn check_core_call_on_self_signature(signature: Option<&Signature>, parameter: &str) -> Option<Signature> {
+    let mut written: Signature = match match signature {
+        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut params: Vec<(String, Ty)> = vec![];
+    for (name, ty) in written.params.iter() { params.push((name.to_string(), check_core_call_on_self_as(ty, parameter))); }
+    written.params = params;
+    let result: Option<Ty> = match written.result.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if result.is_some() {
+        let held: Ty = nikaia_std::index::or(result, || Ty::Unknown);
+        written.result = Some(check_core_call_on_self_as(&held, parameter));
+    }
+    Some(written)
+}
+
+pub(crate) fn check_core_call_on_self_as(ty: &Ty, parameter: &str) -> Ty {
+    match ty {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            let mut renamed: String = name.to_string();
+            if name == "Self" { renamed = parameter.to_string(); }
+            Ty::Named { name: renamed, args: args.iter().map(|a| { check_core_call_on_self_as(a, parameter) }).collect::<Vec<_>>(), view }
+        },
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|a| { check_core_call_on_self_as(a, parameter) }).collect::<Vec<_>>()),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(Box::new(check_core_call_on_self_as(inner, parameter))) },
+        _ => ty.clone(),
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

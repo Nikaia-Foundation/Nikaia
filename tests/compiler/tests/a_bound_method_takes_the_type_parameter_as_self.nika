@@ -1,0 +1,25 @@
+// `Self` as a parameter of a bound's method is the type parameter: `x.same(y)`
+// takes a `T` on two `T: Same` (Part I 4.7, #1244).
+
+trait Same {
+    fn same(ref self, other: Self) -> bool
+}
+
+struct N {
+    v: i64,
+}
+
+impl Same for N {
+    fn same(ref self, other: Self) -> bool {
+        return self.v == other.v
+    }
+}
+
+fn both[T: Same](x: T, y: T) -> bool {
+    return x.same(y)
+}
+
+fn main() {
+    println(f"{both(N { v: 3 }, N { v: 3 })}")
+    println(f"{both(N { v: 3 }, N { v: 4 })}")
+}

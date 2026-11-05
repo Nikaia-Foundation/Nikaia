@@ -1,0 +1,25 @@
+// `Self` in a bound's method is the type parameter: `x.twin()` on a `T: Twin`
+// hands back a `T` (Part I 4.7, #1244).
+
+trait Twin {
+    fn twin(ref self) -> Self
+}
+
+struct N {
+    v: i64,
+}
+
+impl Twin for N {
+    fn twin(ref self) -> Self {
+        return N { v: self.v }
+    }
+}
+
+fn id[T: Twin](x: T) -> T {
+    return x.twin()
+}
+
+fn main() {
+    let n = id(N { v: 3 })
+    println(f"{n.v}")
+}
