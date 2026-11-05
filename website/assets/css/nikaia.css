@@ -1864,3 +1864,98 @@ details.study-card {
 @media (max-width: 760px) {
   .study-tiles { grid-template-columns: minmax(0, 1fr); }
 }
+
+/*
+ * Research questions (`research/`). Each question carries two bars, written
+ * as plain HTML in the page (Markdown files are fenced off from Liquid by
+ * `scripts/site-build.sh`, so no include can draw them):
+ *
+ * - `.rq-build`: how far the work is. The track is the known scope
+ *   (`.rq-known`: what we know and what we know we do not know yet), with the
+ *   share built filled in (`.rq-done`), followed by a hatched reserve for what
+ *   we do not yet know we will meet (`.rq-unknown`).
+ * - `.rq-conf`: the evidence, from the middle: to the left it points to the
+ *   opposite answer, to the right to a positive one; the right end is an
+ *   answer shown by measured figures.
+ *
+ * `.rq-metric` is a measured share. Colours are the theme's tokens.
+ */
+.rq-bars { margin: 0.5rem 0 1.25rem; }
+.rq-row {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.35rem 0;
+  font-size: 0.85rem;
+  color: var(--nk-fg-muted);
+}
+.rq-build, .rq-conf, .rq-metric-bar {
+  position: relative;
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--nk-surface);
+  border: 1px solid var(--nk-border);
+}
+.rq-known { position: relative; display: block; height: 100%; background: var(--nk-border); }
+.rq-done { display: block; height: 100%; background: var(--nk-link); }
+.rq-unknown {
+  display: block;
+  height: 100%;
+  background: repeating-linear-gradient(135deg, var(--nk-border) 0 4px, transparent 4px 8px);
+}
+.rq-conf::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--nk-fg-muted);
+}
+.rq-conf-pos, .rq-conf-neg { position: absolute; top: 0; bottom: 0; }
+.rq-conf-pos { left: 50%; background: var(--nk-accent); }
+.rq-conf-neg { right: 50%; background: var(--nk-fg-muted); }
+.rq-metric { margin: 0.5rem 0 1rem; }
+.rq-metric-bar span { display: block; height: 100%; background: var(--nk-accent); }
+.markdown-body .rq-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--nk-fg-muted);
+}
+.rq-key {
+  display: inline-block;
+  width: 1.6em;
+  height: 0.7em;
+  margin-right: 0.3em;
+  border: 1px solid var(--nk-border);
+  border-radius: 3px;
+  vertical-align: baseline;
+}
+.rq-key-done { background: var(--nk-link); }
+.rq-key-known { background: var(--nk-border); }
+.rq-key-unknown { background: repeating-linear-gradient(135deg, var(--nk-border) 0 3px, transparent 3px 6px); }
+.rq-key-conf { background: var(--nk-accent); }
+@media (max-width: 480px) {
+  .rq-row { grid-template-columns: 5rem 1fr; font-size: 0.75rem; }
+}
+
+.rq-over { margin: 1rem 0; }
+.rq-over-row {
+  display: grid;
+  grid-template-columns: 1fr 9rem 9rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--nk-border);
+  font-size: 0.9rem;
+}
+.rq-over-head { font-size: 0.8rem; color: var(--nk-fg-muted); }
+@media (max-width: 600px) {
+  .rq-over-row { grid-template-columns: 1fr 1fr; }
+  .rq-over-row > a { grid-column: 1 / -1; }
+  .rq-over-head > span:first-child { grid-column: 1 / -1; }
+}
