@@ -228,6 +228,10 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(world, &want) { found_here = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
         }
         if key == "Bytes::find" && at == 0 && check_arguments_a_byte_set(&found_here) { continue; }
+        if (lent || want.is_a_view()) && given_here.is_some() {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if check_reference_a_library_text_view(world, value, &found_here) { state.facts.lent_args.insert(id_of(value) as i64); }
+        }
         if at < given.len() as i64 && (lent || want.is_a_view()) && !check_arguments_nullable(&want) && state.lent_arms_view_and_new(world, nikaia_std::index::get(&given, nikaia_std::index::at(at))) { continue; }
         let string = Ty::Named { name: String::from("String"), args: vec![], view: false };
         if !kept && !check_arguments_wrote_ref(given_here) && found_here == text_view && want == string && own { continue; }

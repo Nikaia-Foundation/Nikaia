@@ -13,6 +13,19 @@ pub(crate) fn check_reference_written(expr: &Expr) -> bool {
     }
 }
 
+pub(crate) fn check_reference_a_library_text_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr, found: &Ty) -> bool {
+    let text = match found {
+        Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (name == "str" || type_last_segment(name) == "String") },
+        _ => false,
+    };
+    if !text { return false; }
+    let callee = match given {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match check_core_call_free_callee(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false } },
+        _ => return false,
+    };
+    !world.own.functions.contains_key(&callee) && world.library.functions.contains_key(&callee)
+}
+
 pub(crate) fn check_reference_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
 
 pub(crate) fn check_reference_nullable_view(ty: &Ty) -> bool {
@@ -175,7 +188,10 @@ impl CheckState {
             }
         }
         if !fits { return false; }
-        if already_a_view { return true; }
+        if already_a_view {
+            if check_reference_a_library_text_view(world, given_expr, found) { self.facts.lent_args.insert(id_of(given_expr) as i64); }
+            return true;
+        }
         if wrote_a_reference {
             match found {
                 Ty::Unknown => { return false; },
@@ -188,7 +204,13 @@ impl CheckState {
         let found_nullable = check_reference_nullable(found);
         let want_nullable_view = check_reference_nullable_view(want);
         let a_lent_nullable = found_nullable && want_nullable_view && self.a_name_that_is_lent(world, given_expr);
-        if found.is_a_view() && !a_lent_nullable { return false; }
+        if found.is_a_view() && !a_lent_nullable {
+            if check_reference_a_library_text_view(world, given_expr, found) {
+                self.facts.lent_args.insert(id_of(given_expr) as i64);
+                return true;
+            }
+            return false;
+        }
         if !found_nullable && moves(found) && self.a_name_that_is_lent(world, given_expr) { return true; }
         let found_a_function = matches!(found, Ty::Fn { .. });
         if found_a_function && self.a_lent_parameter(world, given_expr) { return false; }

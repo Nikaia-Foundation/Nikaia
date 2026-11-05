@@ -1,0 +1,23 @@
+// `html::escape` hands back a view of its argument where nothing had to
+// change: the compiler lends that result to a parameter that only reads a
+// text, with no `ref` written at the call (ADR-views-3 D1, D4).
+
+use std::html
+
+fn counted(text: String) -> i64 {
+    return text.len() as i64
+}
+
+fn emphasised(name: String) -> String {
+    let mut built = String()
+    built.push_str("<em>")
+    built.push_str(html::escape(name))
+    built.push_str("</em>")
+    return built
+}
+
+fn main() {
+    println(emphasised("a<b"))
+    println(emphasised("Ada"))
+    println(counted(html::escape("a&b")))
+}

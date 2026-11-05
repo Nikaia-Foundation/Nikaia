@@ -40,7 +40,7 @@ fn table(rows: Vec[Row]) -> String {
 fn emphasised(name: String) -> String {
     let mut built = String()
     built.push_str("<em>")
-    built.push_str(ref html::escape(name))
+    built.push_str(html::escape(name))
     built.push_str("</em>")
     let markup = html::Raw(built)
     return dsl html {

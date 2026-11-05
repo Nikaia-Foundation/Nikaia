@@ -344,6 +344,16 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         if key == "Bytes::find" && at == 0 && check_arguments_a_byte_set(found_here) {
             continue
         }
+        // **A library function's text view is lent where it is read**
+        // (ADR-views-3 D1, D4, #1213): `html::escape` hands back a view the
+        // language below holds as a value of its own (a `Cow`), so the
+        // compiler writes the `&` the source no longer does.
+        if (lent || want.is_a_view()) && given_here != null {
+            let value = given_here ?? continue
+            if check_reference_a_library_text_view(world, value, found_here) {
+                state.facts.lent_args.insert(id_of(value) as i64)
+            }
+        }
         // **Arms that are views and values made there, lent whole** (#894):
         // asked of the choice, whole or once for each of its arms.
         if at < given.len() && (lent || want.is_a_view()) && !check_arguments_nullable(want) && state.lent_arms_view_and_new(world, given[at]) {

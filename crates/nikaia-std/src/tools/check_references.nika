@@ -27,6 +27,25 @@ fn check_reference_written(expr: ref Expr) -> bool {
     }
 }
 
+/// **A library function's text view is a `Cow` below** (ADR-views-3 D1,
+/// #1213): `html::escape` hands back its argument where nothing had to change
+/// and a new text where something did, so its result is lent with a `&`, which
+/// Rust's deref coercion turns into the `&str` the parameter takes.
+fn check_reference_a_library_text_view(world: ref CheckWorld, given: ref Expr, found: ref Ty) -> bool {
+    let text = match found {
+        Ty::Named { name, args, view } => view && args.len() == 0 && (name == "str" || type_last_segment(name) == "String"),
+        else => false,
+    }
+    if !text {
+        return false
+    }
+    let callee = match given {
+        Expr::Call { func, .. } => check_core_call_free_callee(world, func) ?? return false,
+        else => return false,
+    }
+    return !world.own.functions.contains_key(callee) && world.library.functions.contains_key(callee)
+}
+
 fn check_reference_nullable(ty: ref Ty) -> bool {
     return match ty {
         Ty::Nullable(_) => true,
@@ -270,6 +289,9 @@ impl CheckState {
             return false
         }
         if already_a_view {
+            if check_reference_a_library_text_view(world, given_expr, found) {
+                self.facts.lent_args.insert(id_of(given_expr) as i64)
+            }
             return true
         }
         if wrote_a_reference {
@@ -293,6 +315,10 @@ impl CheckState {
         let a_lent_nullable = found_nullable && want_nullable_view && self.a_name_that_is_lent(world, given_expr)
         // A value that is already a view needs nothing.
         if found.is_a_view() && !a_lent_nullable {
+            if check_reference_a_library_text_view(world, given_expr, found) {
+                self.facts.lent_args.insert(id_of(given_expr) as i64)
+                return true
+            }
             return false
         }
         // **Nor a name that is a view below whatever its type says.**
