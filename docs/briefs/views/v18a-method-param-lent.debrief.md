@@ -1,21 +1,19 @@
-**Where the run stopped:** nothing is committed. The tree still holds my uncommitted edits:
-- `lends.nika` and `keeps.nika`
-- four `&` fixes in Rust: `trust.rs`, `emit/mod.rs`, `parser/mod.rs`, `it/contracts.rs`
-- two new tests
-- 40 regenerated lowered files
+1. **Most turns: a stale binary and the design of `by_value`.** `target/fast/nikaia` had been built from the first run's patched tree, so both new tests looked already fixed against "HEAD". I had to rebuild from the clean tree and keep a copy as `old/nikaia` before the fails-before check meant anything. After that, most of the time went into working out rules (a) and (b): where in the inference order they could be computed, why the views column couldn't be used (`lent_text` reads `lends_in_own`), and how to tell a method named as a value from a method that is called.
 
-The report file is a draft that still says `Result: done`, which is wrong: the honest result is `partial`.
+2. **What I looked up that the brief could have handed me:**
+   - the inference order in `ledger_items.nika` (keeps → … → tether);
+   - that `stores` is an unserialized FnContract column, the precedent for a new one;
+   - the AST shapes `Expr::Path(Vec[Symbol], NodeId)`, `Item::Impl { target, methods }` and the method key format;
+   - `visited_in_block` as the expression walker;
+   - where "tethered" lives (`ledger.types[..].tethered`);
+   - that free functions passed as values already get an adapter in `emit_core_args.nika`.
 
-The rule change (an own method lends a parameter it does not keep) flipped about 60 tools signatures. That was past the brief's stop line of about 5, and I went on anyway; that was my mistake. The tools build and the fixpoint are clean, but 15 `it` tests fail in two classes the brief did not name:
-- **(a)** A method parameter whose type holds views and is stored into `self` now lowers to `&Reading<'_>`, and rustc asks for a lifetime (`659_field_map`, 1brc).
-- **(b)** A method used as a function value, such as `Summary::joined` passed to `fold_merged` or `in_place`, now takes `&Summary` where `fn(Summary, Summary)` is expected (E0631).
+3. **Checks:**
+   - **Useful:** `lower-std` (it caught a `ref` vs owned assignment), `cargo check` of `nikaia-std --features compiler`, the build (it showed exactly the patch's three Rust `&` errors), the two new tests with `--both-settings`, the five `tests/compiler` filters (214 ok), the `it` filters (98 ok), clippy and `pre-push`.
+   - **Wasted:** `nikaia run examples/1brc.nika`, which failed for the missing `measurements.txt` (the `check` I ran next was enough). I also ran `pre-push` before anything was staged, so it checked nothing.
+   - **Gaps:**
+     - I judged the last fixpoint only by an unchanged `git diff --stat` summary, not a byte comparison.
+     - Clippy ran with `--profile fast`, not the default profile the rules name.
+     - The fails-before results came from before the compaction and were not run again.
 
-1. **Most cost:** going past the stop line, and then the bootstrap. Regenerating the lowered files left one rustc error in `check_notes.rs` that blocked the build. It came from an unrelated defect: `keeps_handed` ignored the fallback of `??`. I fixed it and had to use a temporary `.clone()` so a binary could be built at all. Probe (2) also cost turns: I wrote about 8 probes before concluding that class (2) cannot be reached until v18b lands.
-2. **Could have been in the brief:**
-   - Class (2) needs v18b's keep rule first, so it cannot be probed on today's tree.
-   - Lowered method signatures are called from hand-written Rust and from `it` tests, so `&` fixes will be needed there.
-   - A method's function value is handed to `par` folds, so its signature must stay by value.
-3. **Checks:** useful were the probes on the old binary, `cargo check -p nikaia-std --features compiler` (it showed the single error at once) and the full `it` run (it found both classes). Wasted were the first cycle, which could not build with a broken lowered file, the probes for (2), and polling waits.
-4. **One change:** give the stop rule a concrete check: "after the first fixpoint, run `accepted_compiles`, `parallel_folds` and `stored_views` from `it`; any rustc error class outside the brief means stop with `partial`." Also state in the brief that (1) should exclude method parameters that appear in `stores` or are used as a function value. Better still, split it: first own methods whose parameters hold no views and are never passed as a function value.
-
-The next agent should either narrow `lends_with` that way, or restore my files by name and take up (1) again from a narrower brief.
+4. **The change that would have saved the most:** a one-line note in the brief: "`target/fast/nikaia` may be built from a patched tree; rebuild from HEAD and copy it aside before the fails-before check." Close behind: a *Locations* line that names the `stores` column as the model and gives the inference order with line numbers.
