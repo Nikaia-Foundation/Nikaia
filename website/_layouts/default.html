@@ -56,27 +56,28 @@
         -->
         <summary>In this section: {% if in_research %}Research{% else %}{{ nav_section.title | escape }}{% endif %}</summary>
         <div class="site-nav-body">
-          <details class="site-nav-section" open>
-          {%- if in_research %}
-            <summary>Research</summary>
-            <ul>
-              {%- assign research_pages = "/research/|Research questions,/research/prover/|The prover,/research/prover/architecture.html|How the prover is built,/research/performance/|Performance with safety" | split: "," -%}
-              {%- for pair in research_pages -%}
-                {%- assign r = pair | split: "|" %}
-                <li><a href="{{ r[0] | relative_url }}"{% if r[0] == page.url %} aria-current="page"{% endif %}>{{ r[1] }}</a></li>
-              {%- endfor %}
-            </ul>
-          {%- else %}
-            <summary>{{ nav_section.title | escape }}</summary>
-            <ul>
-              {% for item in nav_section.pages %}
-                <li>
-                  <a href="{{ item.url | relative_url }}"{% if item.url == page.url %} aria-current="page"{% endif %}>{{ item.title | escape }}</a>
-                </li>
-              {% endfor %}
-            </ul>
+          {%- comment -%}
+            The working papers of the project's own process are notes too, but
+            not for a reader of the site; they stay reachable by their address
+            and are left out of the menu.
+          {%- endcomment -%}
+          {%- assign internal_notes = "/docs/supervisor.html /docs/builder-facts.html /docs/consultant.html /docs/handoff.html /docs/tokensaverstrategy.html /docs/tokenspeed.html /docs/priorities.html /docs/long-jobs.html /docs/ci-cache.html /docs/speed.html /docs/writing-guide.html /docs/selfhosting-plan.html" | split: " " -%}
+          {%- comment -%} The section's name, on wide screens only: on a narrow one the line above already says it. {%- endcomment %}
+          <p class="site-nav-title">{% if in_research %}Research{% else %}{{ nav_section.title | escape }}{% endif %}</p>
+          <ul>
+          {%- if in_research -%}
+            {%- assign research_pages = "/research/|Research questions,/research/prover/|The prover,/research/prover/architecture.html|How the prover is built,/research/performance/|Performance with safety" | split: "," -%}
+            {%- for pair in research_pages -%}
+              {%- assign r = pair | split: "|" %}
+            <li><a href="{{ r[0] | relative_url }}"{% if r[0] == page.url %} aria-current="page"{% endif %}>{{ r[1] }}</a></li>
+            {%- endfor -%}
+          {%- else -%}
+            {%- for item in nav_section.pages -%}
+              {%- if internal_notes contains item.url and item.url != page.url -%}{%- continue -%}{%- endif %}
+            <li><a href="{{ item.url | relative_url }}"{% if item.url == page.url %} aria-current="page"{% endif %}>{{ item.title | escape }}</a></li>
+            {%- endfor -%}
           {%- endif %}
-          </details>
+          </ul>
         </div>
        </details>
       </nav>

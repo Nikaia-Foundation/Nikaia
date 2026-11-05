@@ -1961,3 +1961,9 @@ details.study-card {
 }
 /* The roadmap's bar beside a chapter's level (docs/project_status_and_roadmap.md). */
 .rq-inline { display: flex; width: 6rem; height: 8px; margin-top: 0.35rem; }
+
+/* The name of the section the sidebar shows; on a narrow screen the summary
+   line ("In this section: ...") says it, so the name is shown only where the
+   sidebar stands beside the page. */
+.site-nav-title { display: none; margin: 0 0 4px; font-weight: 600; color: var(--nk-fg); }
+@media (min-width: 900px) { .site-nav-title { display: block; } }
