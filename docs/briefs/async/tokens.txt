@@ -19,3 +19,4 @@
 /home/user/Nikaia/docs/briefs/async/a13-async-within.md 5981191 91
 /home/user/Nikaia/docs/briefs/async/a13-async-within.md 5094186 76
 /home/user/Nikaia/docs/briefs/async/a16-handle-dropped-live.md 4367440 73
+/home/user/Nikaia/docs/briefs/async/a17-duration-integer.md 923008 11
