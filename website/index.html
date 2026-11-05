@@ -222,7 +222,7 @@ optimization = "remove-bounds-checks:on,remove-overflow-checks:on"</code></pre><
 <section class="home-section" id="easy">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Easy to understand</p>
-    <h2 class="home-heading">Short code that reads like a script.</h2>
+    <h2 class="home-heading">Concise by design.</h2>
     <p class="safe-lead home-intro">You write what should happen, and Nikaia works out the technical details other fast languages make you spell out. When something is wrong, it tells you in plain words what to change.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-a">
@@ -292,34 +292,75 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
   </div>
 </section>
 
-<section class="home-section">
+<section class="home-section" id="fits">
   <div class="home-inner">
-    <h2 class="home-heading">Where Nikaia fits</h2>
-    <div class="compare">
-      <div class="compare-card">
-        <h3>Easy languages</h3>
-        <p class="compare-examples">Python, JavaScript</p>
-        <p>Quick to write in. The programs are slower and need more memory, and some
-        mistakes only show up in production, under load, at night.</p>
-      </div>
-      <div class="compare-card">
-        <h3>Fast languages</h3>
-        <p class="compare-examples">C++, Rust</p>
-        <p>Fast programs. In exchange, much of each program tells the compiler how memory,
-        waiting and sharing should work.</p>
-      </div>
-      <div class="compare-card compare-card-nikaia">
-        <h3>Nikaia</h3>
-        <p class="compare-examples">fast and safe</p>
-        <p>A compiler that sees the whole program can work much of that out itself. You write
-        plain code and Nikaia turns it into optimised machine code. Nikaia checks your program,
-        and Rust's compiler checks memory safety again.</p>
-      </div>
+    <p class="home-eyebrow home-eyebrow-center">Where it fits</p>
+    <h2 class="home-heading">What Nikaia is built for.</h2>
+    <div class="next">
+      <a class="next-card" href="{{ "/safe/" | relative_url }}">
+        <p class="fit-tag">Safety and robustness</p>
+        <h3>Where a failure is expensive</h3>
+        <p>Services that have to keep running and data that has to stay correct. The compiler
+        refuses two tasks changing the same value, an error nobody handles and a task that can
+        get stuck, and every task runs within a memory budget.</p></a>
+      <a class="next-card" href="{{ "/fast/" | relative_url }}">
+        <p class="fit-tag">Speed</p>
+        <h3>Where speed counts</h3>
+        <p>Data processing, batch jobs and code that runs long or often. Programs become
+        optimised machine code, release memory without collector pauses and can spread their
+        work over every core.</p></a>
+      <a class="next-card" href="{{ "/fast/#tuned" | relative_url }}">
+        <p class="fit-tag">Both at once</p>
+        <h3>Where both count</h3>
+        <p>Backends and web services under load, where a slow answer and a wrong one both cost
+        something. This is where Nikaia is at home.</p></a>
+      <a class="next-card" href="{{ "/easy/#grammar" | relative_url }}">
+        <p class="fit-tag">For compiler builders</p>
+        <h3>Languages and formats</h3>
+        <p>Describe a language or a data format as a grammar and the compiler builds the parser.
+        Nikaia's own compiler is moving into Nikaia, so these tools are tried on a real
+        compiler.</p></a>
+      <a class="next-card" href="{{ "/easy/#async" | relative_url }}">
+        <p class="fit-tag">For libraries</p>
+        <h3>One version of each function</h3>
+        <p>A function that waits is called like any other, so a library offers one version of
+        each function for every caller. Contracts state what a function expects and promises,
+        and the compiler checks the calls where it can.</p></a>
+      <a class="next-card" href="{{ "/guide/getting-started.html" | relative_url }}">
+        <p class="fit-tag">For small tools</p>
+        <h3>Scripts that grow</h3>
+        <p>A few lines that read like a script build to a fast program, and the same code keeps
+        working as the tool grows. This area is still young.</p></a>
     </div>
   </div>
 </section>
 
-<section class="home-section home-section-alt">
+<section class="home-section home-section-alt" id="contribute">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Get involved</p>
+    <h2 class="home-heading">Build Nikaia with us.</h2>
+    <p class="safe-lead home-intro">Nikaia is built in the open, and there is room to help at every size: a single fix, a whole issue, or a part of the language you look after.</p>
+    <div class="next">
+      <a class="next-card" href="https://github.com/Nikaia-Foundation/Nikaia/pulls">
+        <p class="fit-tag">Pull requests</p>
+        <h3>Send a change</h3>
+        <p>A clearer error message, a missing example, a test or a fix in the compiler. Open a
+        pull request on GitHub and it is reviewed there.</p></a>
+      <a class="next-card" href="https://github.com/Nikaia-Foundation/Nikaia/issues?q=is%3Aissue+is%3Aopen+label%3Aready">
+        <p class="fit-tag">Issues</p>
+        <h3>Fix an open issue</h3>
+        <p>Issues marked <code>ready</code> are decided and say what to build. Pick one, say in
+        the issue that you are on it, and send the fix.</p></a>
+      <a class="next-card" href="{{ "/foundation/" | relative_url }}">
+        <p class="fit-tag">Responsibility</p>
+        <h3>Take on a part of the project</h3>
+        <p>Look after an area of the language, such as concurrency, grammars or the standard
+        library, or take on a role in the governance of the Nikaia Foundation.</p></a>
+    </div>
+  </div>
+</section>
+
+<section class="home-section">
   <div class="home-inner">
     <h2 class="home-heading">Where to go next</h2>
     <div class="next">
