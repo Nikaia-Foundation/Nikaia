@@ -143,16 +143,16 @@ language, with arenas of `u32`, flat loops over lists, and in-place changes
 to one field of the solver while another is read. A probe of the forms a
 CDCL(T) core and an e-graph need found most of them working and a few
 defects in how they are lowered, each filed with its probe. They are
-[#1206](https://github.com/Nikaia-Language/Nikaia/issues/1206) (an argument
+[#1206](https://github.com/Nikaia-Foundation/Nikaia/issues/1206) (an argument
 that reads the list whose element a call changes),
-[#1207](https://github.com/Nikaia-Language/Nikaia/issues/1207) (the value
+[#1207](https://github.com/Nikaia-Foundation/Nikaia/issues/1207) (the value
 `or_insert` hands back),
-[#1208](https://github.com/Nikaia-Language/Nikaia/issues/1208) (a part of
+[#1208](https://github.com/Nikaia-Foundation/Nikaia/issues/1208) (a part of
 `mut self` handed to a `keep` parameter),
-[#1209](https://github.com/Nikaia-Language/Nikaia/issues/1209) (a part of a
+[#1209](https://github.com/Nikaia-Foundation/Nikaia/issues/1209) (a part of a
 list handed to a function and changed there),
-[#907](https://github.com/Nikaia-Language/Nikaia/issues/907) (`contains`
+[#907](https://github.com/Nikaia-Foundation/Nikaia/issues/907) (`contains`
 with a computed argument) and
-[#591](https://github.com/Nikaia-Language/Nikaia/issues/591) (a declared
+[#591](https://github.com/Nikaia-Foundation/Nikaia/issues/591) (a declared
 struct as the key of a map). The work on the solver waits for these rather
 than writing around them.

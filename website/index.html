@@ -43,7 +43,7 @@ description: >-
       <div class="hero-actions">
         <a class="button button-primary" href="{{ "/guide/getting-started.html" | relative_url }}">Get started</a>
         <a class="button button-secondary" href="{{ "/guide/syntax.html" | relative_url }}">Tour the syntax</a>
-        <a class="button button-ghost" href="https://github.com/Nikaia-Language/Nikaia">View on GitHub</a>
+        <a class="button button-ghost" href="https://github.com/Nikaia-Foundation/Nikaia">View on GitHub</a>
       </div>
       <p class="hero-motto">Good wins.</p>
     </div>
@@ -301,8 +301,8 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
         <p class="fit-tag">Safety and robustness</p>
         <h3>Where a failure is expensive</h3>
         <p>Services that have to keep running and data that has to stay correct. The compiler
-        refuses two tasks changing the same value, an error nobody handles and a task that can
-        get stuck, and every task runs within a memory budget.</p></a>
+        looks for an error nobody handles, a task nobody waits for and a call outside what a
+        function expects, and shows where its checks stop.</p></a>
       <a class="next-card" href="{{ "/fast/" | relative_url }}">
         <p class="fit-tag">Speed</p>
         <h3>Where speed counts</h3>
@@ -314,6 +314,24 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
         <h3>Where both count</h3>
         <p>Backends and web services under load, where a slow answer and a wrong one both cost
         something. This is where Nikaia is at home.</p></a>
+      <a class="next-card" href="{{ "/fast/#memory" | relative_url }}">
+        <p class="fit-tag">Efficiency</p>
+        <h3>Where resources are scarce or expensive</h3>
+        <p>Cloud bills, small machines and energy. A program that does the same work with less
+        processor time and memory needs fewer servers, and memory is released at a point the
+        code shows, without a collector holding on to it.</p></a>
+      <a class="next-card" href="#ai">
+        <p class="fit-tag">AI-generated code</p>
+        <h3>Where a model writes the code</h3>
+        <p>Generated code reads well, and its mistakes are often the ones review finds hardest.
+        The compiler checks for them before the program runs, and its messages say what to write
+        instead, so an agent can fix the code and build again.</p></a>
+      <a class="next-card" href="{{ "/safe/#conflicts" | relative_url }}">
+        <p class="fit-tag">Concurrency</p>
+        <h3>Where many tasks run at once</h3>
+        <p>Servers, pipelines and programs that wait on files and the network. The compiler
+        refuses two tasks that would change the same value at once, and a function that waits is
+        called like any other.</p></a>
       <a class="next-card" href="{{ "/easy/#grammar" | relative_url }}">
         <p class="fit-tag">For compiler builders</p>
         <h3>Languages and formats</h3>
@@ -376,7 +394,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
         <h3>Specification</h3><p>The full rules, from variables to the concurrency model.</p></a>
       <a class="next-card" href="{{ "/docs/specification/adr/" | relative_url }}">
         <h3>Decisions</h3><p>Every design decision, with the evidence that settled it.</p></a>
-      <a class="next-card" href="https://github.com/Nikaia-Language/Nikaia">
+      <a class="next-card" href="https://github.com/Nikaia-Foundation/Nikaia">
         <h3>GitHub</h3><p>The source code, the issues and the discussions.</p></a>
     </div>
   </div>

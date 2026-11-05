@@ -21,7 +21,7 @@ under [performance with safety](../performance/).
 
 The compiler's own code written in Nikaia (`tools/*.nika`) is the first test
 bed. The goal that it be free of run-time errors is
-[#796](https://github.com/Nikaia-Language/Nikaia/issues/796), and the work towards it is [#1053](https://github.com/Nikaia-Language/Nikaia/issues/1053). A count taken
+[#796](https://github.com/Nikaia-Foundation/Nikaia/issues/796), and the work towards it is [#1053](https://github.com/Nikaia-Foundation/Nikaia/issues/1053). A count taken
 for #1053 file by file found 965 of 1,821 indexes proved (53 %) and 560 of
 1,381 arithmetic steps (41 %). The issue notes that the count misses sites in
 files the single-file check could not type, so the figure is a lower bound
@@ -150,7 +150,7 @@ The question is where the ceiling of this lies on real code, and how small
 the set of additional means can be that closes the gap. One such means is
 decided. A named property such as `is_sorted(xs)` is proved by name and
 carried to callers ([ADR-381](/docs/specification/adr/adr-381.html), to be built in
-[#797](https://github.com/Nikaia-Language/Nikaia/issues/797)). The measure is the share of indexes and arithmetic steps
+[#797](https://github.com/Nikaia-Foundation/Nikaia/issues/797)). The measure is the share of indexes and arithmetic steps
 proved, on the compiler's own code first and then on the examples and
 packages, together with the number of lines written only to help a proof.
 
@@ -229,7 +229,7 @@ value otherwise. Equality with uninterpreted functions, built as an e-graph,
 and a theory of arrays carry exactly this. The procedure is decided
 ([ADR-270](/docs/specification/adr/adr-270.html) D13) and not yet built. Beyond it lie claims
 about every element, such as a sorted list or a partition, which need a rule
-over all elements ([#798](https://github.com/Nikaia-Language/Nikaia/issues/798), open for decision) and invariants over
+over all elements ([#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798), open for decision) and invariants over
 list contents that the compiler would have to find by itself. Finding such
 invariants without help is the hardest part of the question "nothing written
 for it", and the place where its limits are most likely to show.
@@ -322,7 +322,7 @@ such properties as facts and proves them once, each program that uses it
 starts from proved pieces instead of proving them again. Part of this is
 decided. A named property such as `is_sorted(xs)` is carried from a promise
 to every caller ([ADR-381](/docs/specification/adr/adr-381.html)), and `sort()` is to promise it,
-with `binary_search` requiring it ([#798](https://github.com/Nikaia-Language/Nikaia/issues/798)). That the length stays the
+with `binary_search` requiring it ([#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798)). That the length stays the
 same is plain arithmetic for the prover. That the result is a permutation of
 the input needs a way to speak about what a list holds as a whole, which is
 not yet decided, and proving the sorting functions themselves against all
@@ -343,4 +343,4 @@ programs above it.
 | A function says what it keeps and changes, and a view of a value forbids changing it | [ADR-views-3](/docs/specification/adr/adr-views-3.html) |
 | The solver is written in Nikaia, untrusted, its proofs checked and committed | [ADR-270](/docs/specification/adr/adr-270.html) |
 | A strategy layer switches engines during a search, and effort is counted in work, not time | [ADR-270](/docs/specification/adr/adr-270.html) D14, D25, [ADR-306](/docs/specification/adr/adr-306.html) |
-| A library promises properties its callers use as facts | [ADR-381](/docs/specification/adr/adr-381.html), [#798](https://github.com/Nikaia-Language/Nikaia/issues/798) |
+| A library promises properties its callers use as facts | [ADR-381](/docs/specification/adr/adr-381.html), [#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798) |

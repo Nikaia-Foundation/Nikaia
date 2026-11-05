@@ -30,7 +30,7 @@ description: >-
 
         <div class="study-card markdown-body">
           <h2>2. Method</h2>
-          <p>Every program prints the same output, byte for byte, for the same million rows. Counted with callgrind (<code>valgrind --tool=callgrind --branch-sim=yes</code>), never timed: a count is the work a program does, and it does not move from one day to the next. For a program that uses all cores it is the work of all of them. Release builds on every side with the same settings, 16 codegen units, at the baseline <code>x86-64</code> and at <code>x86-64-v3</code> (AVX2, BMI2). Length in tokens, the same rule for both languages. The full method and every row are in <a href="https://github.com/Nikaia-Language/Nikaia/tree/main/benches/brc">benches/brc</a>.</p>
+          <p>Every program prints the same output, byte for byte, for the same million rows. Counted with callgrind (<code>valgrind --tool=callgrind --branch-sim=yes</code>), never timed: a count is the work a program does, and it does not move from one day to the next. For a program that uses all cores it is the work of all of them. Release builds on every side with the same settings, 16 codegen units, at the baseline <code>x86-64</code> and at <code>x86-64-v3</code> (AVX2, BMI2). Length in tokens, the same rule for both languages. The full method and every row are in <a href="https://github.com/Nikaia-Foundation/Nikaia/tree/main/benches/brc">benches/brc</a>.</p>
         </div>
 
         <div class="study-card markdown-body">
@@ -56,7 +56,7 @@ description: >-
             </tbody>
           </table>
           </div>
-          <p>The human programs use every core; the count is the work of all of them. <code>automataIA</code>'s programs are MIT-licensed and copied into the repository; <code>beowolx/fast_1brc</code> has no licence and is fetched at a fixed commit when the benchmark runs. The authors' own builds use AVX-512, which callgrind cannot run; they wait for another machine. AI variant 1 is an AI assistant's program from one request, AI variant 2 the same assistant's after several rounds, each measured and improved (<a href="https://github.com/Nikaia-Language/Nikaia/blob/main/benches/brc/README.md#why-two-ai-variants">why two</a>). The programs this project wrote are at the end of this page.</p>
+          <p>The human programs use every core; the count is the work of all of them. <code>automataIA</code>'s programs are MIT-licensed and copied into the repository; <code>beowolx/fast_1brc</code> has no licence and is fetched at a fixed commit when the benchmark runs. The authors' own builds use AVX-512, which callgrind cannot run; they wait for another machine. AI variant 1 is an AI assistant's program from one request, AI variant 2 the same assistant's after several rounds, each measured and improved (<a href="https://github.com/Nikaia-Foundation/Nikaia/blob/main/benches/brc/README.md#why-two-ai-variants">why two</a>). The programs this project wrote are at the end of this page.</p>
         </div>
 
         <div class="study-card markdown-body">
@@ -146,11 +146,11 @@ description: >-
               <tr><th>Open item</th><th>Which program it helps</th><th>Expected effect</th><th>Issue</th><th>State</th></tr>
             </thead>
             <tbody>
-              <tr><td>The sums and counts of every slot proved over the whole fold</td><td><code>fast.nika</code></td><td>part of the 7.8 a row to <code>fast-unsafe.nika</code>'s 87.2</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/770">#770</a></td><td>decided; three questions open</td></tr>
+              <tr><td>The sums and counts of every slot proved over the whole fold</td><td><code>fast.nika</code></td><td>part of the 7.8 a row to <code>fast-unsafe.nika</code>'s 87.2</td><td><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/770">#770</a></td><td>decided; three questions open</td></tr>
               <tr><td>The grammar's search for the next <code>;</code> a block at a time, as <code>find_all</code> does</td><td><code>1brc.nika</code></td><td><code>memchr</code> costs 27 a row today</td><td></td><td>open</td></tr>
-              <tr><td>No UTF-8 check of the whole file where the grammar checks what it keeps</td><td><code>1brc.nika</code></td><td>about −10, once its byte loop is as tight as its text loop</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/664">#664</a></td><td>decided, waits</td></tr>
-              <tr><td>Vector lanes kept in one register by the lowering, for the two-row temperature parse</td><td><code>fast.nika</code>, <code>fast-unsafe.nika</code> at <code>x86-64-v3</code></td><td>at most 1.6 a row: the same parse written with intrinsics saved no more</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/775">#775</a></td><td>not worth building for 1BRC (ADR-377 D8)</td></tr>
-              <tr><td>The rest of the vector API, <code>crc32c</code> among it</td><td><code>fast.nika</code>, <code>fast-unsafe.nika</code> at <code>x86-64-v3</code></td><td>not estimated yet</td><td><a href="https://github.com/Nikaia-Language/Nikaia/issues/755">#755</a></td><td>left open on purpose</td></tr>
+              <tr><td>No UTF-8 check of the whole file where the grammar checks what it keeps</td><td><code>1brc.nika</code></td><td>about −10, once its byte loop is as tight as its text loop</td><td><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/664">#664</a></td><td>decided, waits</td></tr>
+              <tr><td>Vector lanes kept in one register by the lowering, for the two-row temperature parse</td><td><code>fast.nika</code>, <code>fast-unsafe.nika</code> at <code>x86-64-v3</code></td><td>at most 1.6 a row: the same parse written with intrinsics saved no more</td><td><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/775">#775</a></td><td>not worth building for 1BRC (ADR-377 D8)</td></tr>
+              <tr><td>The rest of the vector API, <code>crc32c</code> among it</td><td><code>fast.nika</code>, <code>fast-unsafe.nika</code> at <code>x86-64-v3</code></td><td>not estimated yet</td><td><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/755">#755</a></td><td>left open on purpose</td></tr>
               <tr><td>The authors' AVX-512 builds, counted on another machine</td><td>none: rows of their own for the human programs</td><td>–</td><td></td><td>waits for the machine</td></tr>
             </tbody>
           </table>
@@ -190,7 +190,7 @@ description: >-
     </script>
     <div class="safe-reading">
       <h2>Go deeper</h2>
-      <ul><li><a href="https://github.com/Nikaia-Language/Nikaia/tree/main/benches/brc">Method and full tables (benches/brc)</a></li><li><a href="https://github.com/Nikaia-Language/Nikaia/blob/main/examples/1brc.nika">The plain program: examples/1brc.nika</a></li><li><a href="https://github.com/Nikaia-Language/Nikaia/blob/main/benches/brc/fast.nika">The safe hand-tuned program: fast.nika</a></li><li><a href="https://github.com/Nikaia-Language/Nikaia/blob/main/benches/brc/fast-unsafe.nika">The unsafe one: fast-unsafe.nika</a></li></ul>
+      <ul><li><a href="https://github.com/Nikaia-Foundation/Nikaia/tree/main/benches/brc">Method and full tables (benches/brc)</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/blob/main/examples/1brc.nika">The plain program: examples/1brc.nika</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/blob/main/benches/brc/fast.nika">The safe hand-tuned program: fast.nika</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/blob/main/benches/brc/fast-unsafe.nika">The unsafe one: fast-unsafe.nika</a></li></ul>
     </div>
     <p class="safe-others">More under Very fast: <a href="{{ "/fast/one-core-or-all.html" | relative_url }}">One core or all of them</a><a href="{{ "/fast/no-garbage-collector.html" | relative_url }}">Memory released where the code shows it</a><a href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Index and overflow checks removed where proved safe</a></p>
   </div>
