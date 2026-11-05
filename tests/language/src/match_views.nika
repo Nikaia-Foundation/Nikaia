@@ -46,7 +46,7 @@ test "a name matched twice is still there" {
     assert(empty)
 }
 
-fn match_views_label(s: MatchViewsShape) -> String {
+fn match_views_label(keep s: MatchViewsShape) -> String {
     match s {
         MatchViewsShape::Named(n) => return n
         else => return f"none"
@@ -90,7 +90,7 @@ enum MatchViewsConfigError {
 }
 
 impl Error for MatchViewsConfigError {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         match self {
             MatchViewsConfigError::NotFound(p) => f"no config at {p}"
         }

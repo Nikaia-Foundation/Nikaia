@@ -44,15 +44,15 @@ pub struct SyncOfALambdaHolder {
 }
 
 impl SyncOfALambdaHolder {
-    fn row_copy(ref self) -> SyncOfALambdaRow {
+    fn row_copy(self) -> SyncOfALambdaRow {
         return self.row?.clone() ?? SyncOfALambdaRow { id: 0 }
     }
 
-    fn plain(ref self, r: ref SyncOfALambdaRow) -> SyncOfALambdaRow {
+    fn plain(self, r: SyncOfALambdaRow) -> SyncOfALambdaRow {
         return r.clone()
     }
 
-    fn name_copy(ref self) -> String {
+    fn name_copy(self) -> String {
         return self.name?.clone() ?? "none"
     }
 }
@@ -86,7 +86,7 @@ test "a clone of a number or a tuple is sync" {
 // over a `BTreeSet[(String, String)]` bound two names of unknown type, so
 // `a.clone()` resolved to nothing and the function was lowered `async` (found
 // moving `text_tiers` into Nikaia, #125).
-fn sync_of_a_lambda_firsts(links: ref collections::BTreeSet[(String, String)]) -> i64 {
+fn sync_of_a_lambda_firsts(links: collections::BTreeSet[(String, String)]) -> i64 {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     for (a, b) in links {
         out.insert(a.clone())

@@ -2,7 +2,7 @@
 // issue #164): it stands where an `i64` is wanted, under an operator and as a
 // receiver, and a program's own `count` is left alone.
 
-fn counts_words(text: ref String) -> i64 {
+fn counts_words(text: String) -> i64 {
     return text.split_whitespace().count()
 }
 
@@ -33,7 +33,7 @@ struct CountsTally {
 }
 
 impl CountsTally {
-    fn count(ref self) -> String {
+    fn count(self) -> String {
         return f"{self.seen}!"
     }
 }

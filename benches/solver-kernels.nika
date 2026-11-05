@@ -28,7 +28,7 @@ fn next(state: u64) -> u64 sync {
 
 // `a·(rc, rv) + b·(sc, sv)` into `(oc, ov)`, by column; how many coefficients
 // left the 32-bit range and would have been promoted to big integers.
-fn combine(rc: ref Vec[i64], rv: ref Vec[i64], a: i64, sc: ref Vec[i64], sv: ref Vec[i64], b: i64, mut oc: Vec[i64], mut ov: Vec[i64]) -> i64 sync {
+fn combine(rc: Vec[i64], rv: Vec[i64], a: i64, sc: Vec[i64], sv: Vec[i64], b: i64, mut oc: Vec[i64], mut ov: Vec[i64]) -> i64 sync {
     let limit: i64 = 2147483647
     let mut promoted = 0
     let mut i = 0
@@ -180,7 +180,7 @@ fn watch(n: i64) -> i64 {
 
 // --- 3. multiplying big integers --------------------------------------------
 
-fn multiply(x: ref Vec[u32], y: ref Vec[u32], mut out: Vec[u32]) sync {
+fn multiply(x: Vec[u32], y: Vec[u32], mut out: Vec[u32]) sync {
     out.resize(x.len() + y.len(), 0)
     for i in 0..<x.len() {
         let mut carry: u64 = 0

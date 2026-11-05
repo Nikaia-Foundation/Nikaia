@@ -19,7 +19,7 @@ test "the first to finish is the one that is kept" {
 enum RacingTimeout { TooSlow }
 
 impl Error for RacingTimeout {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         match self {
             RacingTimeout::TooSlow => { return "too slow" }
         }

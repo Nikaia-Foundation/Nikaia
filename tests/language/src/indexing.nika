@@ -83,7 +83,7 @@ test "a slice of text is converted where the range is computed" {
     let text = "hello"
     let at = text.find("e") ?? 0
     let last = at + "el".len()
-    let part = ref text[at..last]
+    let part = text[at..last]
     let end = at + "ell".len()
     let computed = f"{text[at..<end]}"
     let written = part == "ell"
@@ -102,7 +102,7 @@ test "a slice of text read as a value runs" {
     let last = at + "el".len()
     let space = text.find(" ") ?? 0
     let bare = f"{text[at..last]}"
-    let part = ref text[at..last]
+    let part = text[at..last]
     let viewed = f"{part}"
     let open = f"{text[0..<space]}"
     assert(bare == "ell")
@@ -116,7 +116,7 @@ test "a slice of text read as a value runs" {
 test "a slice of a sequence read as a value runs" {
     let xs: Vec[i64] = [1, 2, 3, 4]
     let bare = xs[1..2].len()
-    let run = ref xs[1..2]
+    let run = xs[1..2]
     let viewed = run.len()
     assert(bare == 2)
     assert(viewed == 2)

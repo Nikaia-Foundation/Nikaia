@@ -1,15 +1,15 @@
 // #732 item 4: a trait's method that hands back a literal answers the
 // trait's declaration, not a narrower `'static` one.
 trait Named {
-    fn label(ref self) -> ref String
-    fn tag(ref self) -> String
+    fn label(self) -> String
+    fn tag(self) -> String
 }
 struct Point { x: i64 }
 impl Named for Point {
-    fn label(ref self) -> ref String { return "point" }
-    fn tag(ref self) -> String { return "tag" }
+    fn label(self) -> String { return "point" }
+    fn tag(self) -> String { return "tag" }
 }
-fn describe[T: Named](value: ref T) -> ref String {
+fn describe[T: Named](value: T) -> String {
     return value.label()
 }
 fn main() {

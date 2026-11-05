@@ -20,7 +20,7 @@ test "a fallback value is the operator itself" {
     assert(n == 0)
 }
 
-fn coalescing_pick(q: String?) -> String {
+fn coalescing_pick(keep q: String?) -> String {
     let id = q ?? return "bad request"
     return id
 }
@@ -48,7 +48,7 @@ test "panic is the third spelling and the value goes on" {
 // A map whose element type only the language below decides, read past a jump,
 // compares with a number on either side and with an ordering (#531): the name
 // is read as the number, whether it arrived as one or as a view of one.
-fn coalescing_compared(key: ref String) -> bool {
+fn coalescing_compared(key: String) -> bool {
     let mut m = collections::HashMap()
     m["a"] = 7
     let n = m[key] ?? return false

@@ -5,7 +5,7 @@
 struct BoundsPoint { x: i64, y: i64 }
 
 impl Ord for BoundsPoint {
-    fn compare(ref self, other: ref BoundsPoint) -> Ordering {
+    fn compare(self, other: BoundsPoint) -> Ordering {
         if self.x < other.x { return Ordering::Less }
         if self.x > other.x { return Ordering::Greater }
         if self.y < other.y { return Ordering::Less }
@@ -17,21 +17,21 @@ impl Ord for BoundsPoint {
 struct BoundsTagged { id: i64, note: String }
 
 impl Eq for BoundsTagged {
-    fn eq(ref self, other: ref BoundsTagged) -> bool {
+    fn eq(self, other: BoundsTagged) -> bool {
         return self.id == other.id
     }
 }
 
-fn bounds_biggest[T: Ord](a: T, b: T) -> T {
+fn bounds_biggest[T: Ord](keep a: T, keep b: T) -> T {
     if a > b { return a }
     return b
 }
 
-fn bounds_same[T: Eq](a: ref T, b: ref T) -> bool {
+fn bounds_same[T: Eq](a: T, b: T) -> bool {
     return a == b
 }
 
-fn bounds_rank[T: Ord](a: ref T, b: ref T) -> i64 {
+fn bounds_rank[T: Ord](a: T, b: T) -> i64 {
     return match a.compare(b) {
         Ordering::Less => -1,
         Ordering::Equal => 0,

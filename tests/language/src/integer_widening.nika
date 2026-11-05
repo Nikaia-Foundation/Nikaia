@@ -106,7 +106,7 @@ test "every pair of integer types compares as numbers" {
 
 // One type is one type (#439 step 5): a type variable handed two `i64`s runs;
 // the refusal of an `i32` and an `i64` is in the `.rs` file.
-fn integer_widening_pick[T](a: T, _b: T) -> T {
+fn integer_widening_pick[T](keep a: T, _b: T) -> T {
     a
 }
 
@@ -187,7 +187,7 @@ test "a compound assignment computes in the common type" {
 
 // A body's last expression asks the walk too (D32): `xs.len()` handed back as
 // a `u64` is taken.
-fn integer_widening_count(xs: ref Vec[i64]) -> u64 {
+fn integer_widening_count(xs: Vec[i64]) -> u64 {
     xs.len()
 }
 

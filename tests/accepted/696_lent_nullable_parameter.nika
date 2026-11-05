@@ -1,7 +1,7 @@
 // A `String?` parameter handed back as it is, or as a side of `??`, is lent
 // (#696 step 5, #678 shape 1): `pick` lowers as its `ref String?` twin, and
 // the caller still reads what it lent afterwards.
-fn pick(a: String?, b: String?) -> String? {
+fn pick(keep a: String?, b: String?) -> String? {
     return a ?? b
 }
 
@@ -16,7 +16,7 @@ fn not_self(name: String) -> String? {
     return name
 }
 
-fn first(a: String?, b: String) -> String {
+fn first(keep a: String?, b: String) -> String {
     return a ?? b
 }
 

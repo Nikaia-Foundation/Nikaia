@@ -14,12 +14,12 @@ struct Maker {
 }
 
 impl Maker {
-    fn make(ref self, s: String) -> Tag {
+    fn make(self, keep s: String) -> Tag {
         return Tag { label: s }
     }
 }
 
-fn keep(m: Maker, v: String, mut b: Box) {
+fn keep(m: Maker, keep v: String, mut b: Box) {
     b.items.push(m.make(v))
 }
 

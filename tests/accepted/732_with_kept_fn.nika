@@ -2,11 +2,11 @@
 // struct literal keeps it.
 enum Bad { Oops }
 impl Error for Bad {
-    fn message(ref self) -> String { "oops" }
+    fn message(self) -> String { "oops" }
 }
 enum Boom { Bang }
 impl Error for Boom {
-    fn message(ref self) -> String { "boom" }
+    fn message(self) -> String { "boom" }
 }
 struct Job { run: fn() throws, name: String }
 fn fail() throws {

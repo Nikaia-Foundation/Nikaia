@@ -5,7 +5,7 @@ struct Table {
     used: i64,
 }
 
-fn put(mut tab: ref Table) {
+fn put(mut tab: Table) {
     tab.used = tab.used + 1
 }
 

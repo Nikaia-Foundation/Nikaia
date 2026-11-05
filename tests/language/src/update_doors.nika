@@ -58,7 +58,7 @@ test "a kept lambda takes its own handle of a lock" {
 // **And so does one handed to a parameter the callee keeps** (#536): the
 // callee stores it as a field is stored, and the capture used to move the
 // name it was written beside.
-fn update_doors_button_of(on_click: fn() sync) -> UpdateDoorsButton {
+fn update_doors_button_of(keep on_click: fn() sync) -> UpdateDoorsButton {
     return UpdateDoorsButton { on_click: on_click }
 }
 

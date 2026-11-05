@@ -5,11 +5,11 @@
 struct ShapeBoundsPoint { x: i64, y: i64 }
 enum ShapeBoundsOp { Add, Sub }
 
-fn shape_bounds_describe[T: Struct](_value: T) -> ref String {
+fn shape_bounds_describe[T: Struct](_value: T) -> String {
     return "a struct"
 }
 
-fn shape_bounds_name_it[T: Enum](_value: T) -> ref String {
+fn shape_bounds_name_it[T: Enum](_value: T) -> String {
     return "an enum"
 }
 

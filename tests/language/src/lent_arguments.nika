@@ -14,7 +14,7 @@ test "a parameter that is only read is lent at the call" {
     assert(line == "5 hello")
 }
 
-fn lent_arguments_count(dna: ref String) -> i64 { return dna.len() as i64 }
+fn lent_arguments_count(dna: String) -> i64 { return dna.len() as i64 }
 
 // A `String` reaching a `&str` is still the one rewrite Part I 6.5 makes: what
 // has to fit is the argument with the reference the compiler writes.
@@ -24,13 +24,13 @@ test "an owned string reaches a view parameter without a written ampersand" {
     assert(line == "4 acgt")
 }
 
-fn lent_arguments_total(xs: ref Vec[i64]) -> i64 {
+fn lent_arguments_total(xs: Vec[i64]) -> i64 {
     let mut sum = 0
     for x in xs { sum += x }
     return sum
 }
 
-fn lent_arguments_hand(xs: ref Vec[i64]) -> i64 { return lent_arguments_total(xs) }
+fn lent_arguments_hand(xs: Vec[i64]) -> i64 { return lent_arguments_total(xs) }
 
 // An argument that is already a view gets no second one: the declaration and
 // the argument agree without it.
@@ -54,7 +54,7 @@ test "a parameter passed on to a lending callee is lent too" {
 
 struct LentArgumentsEntry { count: i64 }
 
-fn lent_arguments_read(data: ref String) -> Vec[LentArgumentsEntry] throws {
+fn lent_arguments_read(data: String) -> Vec[LentArgumentsEntry] throws {
     let mut out = Vec()
     out.push(LentArgumentsEntry { count: data.len() as i64 })
     return out
@@ -94,7 +94,7 @@ test "a parameter a method changes in place is not lent" {
 
 struct LentArgumentsR { items: Vec[i64], unknown: bool }
 
-fn lent_arguments_has(xs: ref Vec[i64], x: i64) -> bool {
+fn lent_arguments_has(xs: Vec[i64], x: i64) -> bool {
     for one in xs {
         if one == x {
             return true
@@ -103,7 +103,7 @@ fn lent_arguments_has(xs: ref Vec[i64], x: i64) -> bool {
     return false
 }
 
-fn lent_arguments_add(given: ref Vec[i64], mut r: LentArgumentsR) {
+fn lent_arguments_add(given: Vec[i64], mut r: LentArgumentsR) {
     for x in given {
         if x < 0 {
             r.unknown = true

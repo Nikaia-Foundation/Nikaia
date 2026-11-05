@@ -6,14 +6,14 @@
 enum ErrorsLoweringConfigError { NotFound(String) }
 
 impl Error for ErrorsLoweringConfigError {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         match self {
             ErrorsLoweringConfigError::NotFound(p) => { return f"no config at {p}" }
         }
     }
 }
 
-fn errors_lowering_load(path: String) -> String throws {
+fn errors_lowering_load(keep path: String) -> String throws {
     throw ErrorsLoweringConfigError::NotFound(path)
 }
 
@@ -31,7 +31,7 @@ test "an error is declared raised caught and printed" {
     assert(said == "no config at app.conf")
 }
 
-fn errors_lowering_ruft(path: String) -> String throws {
+fn errors_lowering_ruft(keep path: String) -> String throws {
     return errors_lowering_load(path)
 }
 
@@ -53,14 +53,14 @@ test "a written call propagates its failure" {
 enum ErrorsLoweringZuVoll { Voll }
 
 impl Error for ErrorsLoweringZuVoll {
-    fn message(ref self) -> String { return "too full" }
+    fn message(self) -> String { return "too full" }
 }
 
 struct ErrorsLoweringStats { n: i64 }
 
 impl ErrorsLoweringStats {
     fn(n: i64) -> ErrorsLoweringStats { return ErrorsLoweringStats { n: n } }
-    fn add(ref self, v: i64) -> i64 throws {
+    fn add(self, v: i64) -> i64 throws {
         if self.n + v > 100 { throw ErrorsLoweringZuVoll::Voll }
         return self.n + v
     }

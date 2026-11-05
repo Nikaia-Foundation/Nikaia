@@ -47,7 +47,7 @@ test "a plain arm beside an optional one is some" {
     assert(f == -1)
 }
 
-fn mixed_arms_none(m: ref collections::BTreeMap[String, i64], s: ref collections::HashSet[i64]) -> bool {
+fn mixed_arms_none(m: collections::BTreeMap[String, i64], s: collections::HashSet[i64]) -> bool {
     return m.is_empty() && s.is_empty()
 }
 

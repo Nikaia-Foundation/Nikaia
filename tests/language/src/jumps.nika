@@ -57,7 +57,7 @@ test "a break is how an unconditional loop ends" {
 }
 
 // A `break` in a `catch` handler leaves the loop the handler stands in.
-fn jumps_read_them(paths: Vec[ref String]) -> i64 {
+fn jumps_read_them(paths: Vec[String]) -> i64 {
     let mut seen = 0
     for p in paths {
         let text = fs::read_to_string(p, fs::Root::Anywhere) catch {

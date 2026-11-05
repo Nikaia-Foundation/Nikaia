@@ -3,7 +3,7 @@
 // is refused, the walk over variants and the report stay in
 // `crates/nikaia/tests/reflection.rs`.
 
-struct ReflectionUser { name: ref String, age: i64 }
+struct ReflectionUser { name: String, age: i64 }
 struct ReflectionPoint { x: i64, y: i64 }
 
 fn reflection_describe[T: Struct](value: T) -> String {

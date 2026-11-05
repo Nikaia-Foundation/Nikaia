@@ -78,7 +78,7 @@ grammar SelfHostingMini {
     entry rule program -> Vec[SelfHostingLet] = lines:line* NL -> { lines }
 }
 
-fn self_hosting_emit(e: ref SelfHostingExpr) -> String {
+fn self_hosting_emit(e: SelfHostingExpr) -> String {
     return match e {
         SelfHostingExpr::Num(n) => f"{n}",
         SelfHostingExpr::Name(s) => f"{s}",
@@ -87,7 +87,7 @@ fn self_hosting_emit(e: ref SelfHostingExpr) -> String {
     }
 }
 
-fn self_hosting_unknown(e: ref SelfHostingExpr, known: ref collections::HashSet[String]) -> Vec[String] {
+fn self_hosting_unknown(e: SelfHostingExpr, known: collections::HashSet[String]) -> Vec[String] {
     let mut out = Vec()
     match e {
         SelfHostingExpr::Num(_) => {}
@@ -120,7 +120,7 @@ test "the miniature compiler builds and runs" {
     assert(written == "fn main() {\n    let a = (2 + 3);\n    let b = (a * 4);\n    let c = (b + z);\n}")
 }
 
-fn self_hosting_count(long: ref Vec[scalar], short: ref Vec[scalar]) -> i64 {
+fn self_hosting_count(long: Vec[scalar], short: Vec[scalar]) -> i64 {
     let mut n = 0
     for c in long {
         if short[0] == c { n += 1 }

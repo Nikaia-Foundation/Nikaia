@@ -10,7 +10,7 @@ enum RecursiveTypesExpr {
     Neg { inner: RecursiveTypesExpr },
 }
 
-fn recursive_types_eval(e: ref RecursiveTypesExpr) -> i64 {
+fn recursive_types_eval(e: RecursiveTypesExpr) -> i64 {
     return match e {
         RecursiveTypesExpr::Num(n) => n,
         RecursiveTypesExpr::Add(a, b) => recursive_types_eval(a) + recursive_types_eval(b),
@@ -19,7 +19,7 @@ fn recursive_types_eval(e: ref RecursiveTypesExpr) -> i64 {
     }
 }
 
-fn recursive_types_show(e: ref RecursiveTypesExpr) -> String {
+fn recursive_types_show(e: RecursiveTypesExpr) -> String {
     return match e {
         RecursiveTypesExpr::Num(n) => f"{n}",
         RecursiveTypesExpr::Add(a, b) => f"({recursive_types_show(a)} + {recursive_types_show(b)})",
@@ -28,7 +28,7 @@ fn recursive_types_show(e: ref RecursiveTypesExpr) -> String {
     }
 }
 
-fn recursive_types_left(e: RecursiveTypesExpr) -> RecursiveTypesExpr {
+fn recursive_types_left(keep e: RecursiveTypesExpr) -> RecursiveTypesExpr {
     return match e {
         RecursiveTypesExpr::Add(a, _b) => a,
         else => RecursiveTypesExpr::Num(0),
@@ -53,7 +53,7 @@ struct RecursiveTypesNode {
     next: RecursiveTypesNode?,
 }
 
-fn recursive_types_two(n: ref RecursiveTypesNode) -> i64 {
+fn recursive_types_two(n: RecursiveTypesNode) -> i64 {
     return n.value + (n.next?.value ?? 0)
 }
 
@@ -88,14 +88,14 @@ struct RecursiveTypesCall {
 struct RecursiveTypesBlock { stmts: Vec[RecursiveTypesStmt] }
 enum RecursiveTypesStmt { Say(String), Nested(RecursiveTypesBlock) }
 
-fn recursive_types_depth(e: ref RecursiveTypesRingExpr) -> i64 {
+fn recursive_types_depth(e: RecursiveTypesRingExpr) -> i64 {
     return match e {
         RecursiveTypesRingExpr::Lit(_n) => 0,
         RecursiveTypesRingExpr::Apply(call) => 1 + recursive_types_depth(call.arg),
     }
 }
 
-fn recursive_types_count(b: ref RecursiveTypesBlock) -> i64 {
+fn recursive_types_count(b: RecursiveTypesBlock) -> i64 {
     let mut n = 0
     for s in b.stmts {
         n += match s {
@@ -124,7 +124,7 @@ enum RecursiveTypesNestedExpr {
     Neg { inner: RecursiveTypesNestedExpr },
 }
 
-fn recursive_types_simplify(e: ref RecursiveTypesNestedExpr) -> i64 {
+fn recursive_types_simplify(e: RecursiveTypesNestedExpr) -> i64 {
     return match e {
         RecursiveTypesNestedExpr::Add(RecursiveTypesNestedExpr::Num(0), b) => recursive_types_simplify(b),
         RecursiveTypesNestedExpr::Add(a, RecursiveTypesNestedExpr::Num(0)) => recursive_types_simplify(a),
@@ -180,7 +180,7 @@ fn recursive_types_owned(e: RecursiveTypesGuardExpr) -> String {
     }
 }
 
-fn recursive_types_lent(e: ref RecursiveTypesGuardExpr) -> i64 {
+fn recursive_types_lent(e: RecursiveTypesGuardExpr) -> i64 {
     return match e {
         RecursiveTypesGuardExpr::Add(RecursiveTypesGuardExpr::Num(n), _b) if n > 1 => n,
         else => -1,
@@ -215,7 +215,7 @@ enum RecursiveTypesPartExpr {
     Add(RecursiveTypesPartExpr, RecursiveTypesPartExpr),
 }
 
-fn recursive_types_is_zero(e: ref RecursiveTypesPartExpr) -> bool {
+fn recursive_types_is_zero(e: RecursiveTypesPartExpr) -> bool {
     return match e {
         RecursiveTypesPartExpr::Num(n) => n == 0,
         else => false,
@@ -245,7 +245,7 @@ test "a guard reads a boxed part as the part" {
 
 enum RecursiveTypesToken { Word(String), Count(i64), End }
 
-fn recursive_types_weight(t: ref RecursiveTypesToken) -> i64 {
+fn recursive_types_weight(t: RecursiveTypesToken) -> i64 {
     return match t {
         RecursiveTypesToken::Word(w) => w.len() as i64,
         RecursiveTypesToken::Count(n) => n,

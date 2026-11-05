@@ -1,15 +1,15 @@
 // #721: a `catch` handles every error that arrives at it, also one from a
 // call inside the expression it guards: an argument, a receiver, an operand.
 enum Low { Bad(i64) }
-impl Error for Low { fn message(ref self) -> String { return "low" } }
+impl Error for Low { fn message(self) -> String { return "low" } }
 
 enum High { Empty }
-impl Error for High { fn message(ref self) -> String { return "high" } }
+impl Error for High { fn message(self) -> String { return "high" } }
 
 struct Box2 { n: i64 }
 
 impl Box2 {
-    fn word(ref self) -> String throws {
+    fn word(self) -> String throws {
         if self.n < 0 { throw Low::Bad(self.n) }
         return "word"
     }

@@ -51,7 +51,7 @@ test "a view of a declared type compares with a value" {
 // `named: String` compared a `&String` with a `String`, which has no impl
 // there - `rustc` about a file nobody wrote (found moving `describe` into
 // Nikaia, #124). Against a literal and against a view it stays as written.
-fn comparison_has(words: ref Vec[String], wanted: ref String) -> bool {
+fn comparison_has(words: Vec[String], wanted: String) -> bool {
     let named = wanted.trim().clone()
     for one in words {
         if one == named { return true }
@@ -59,7 +59,7 @@ fn comparison_has(words: ref Vec[String], wanted: ref String) -> bool {
     return false
 }
 
-fn comparison_literal(words: ref Vec[String]) -> bool {
+fn comparison_literal(words: Vec[String]) -> bool {
     for one in words {
         if one == "b" || one == words[0] { return true }
     }

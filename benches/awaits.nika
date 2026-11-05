@@ -18,7 +18,7 @@ use std::text
 use std::fs
 
 fn read(path: String) -> i64 throws {
-    let text = fs::read_to_string(ref path, fs::Root::Anywhere)
+    let text = fs::read_to_string(path, fs::Root::Anywhere)
     return text.len()
 }
 

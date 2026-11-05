@@ -10,7 +10,7 @@ fn pausing_lambdas_slow(x: i64) -> i64 {
     return x * 2
 }
 
-fn pausing_lambdas_slow_len(w: ref String) -> i64 {
+fn pausing_lambdas_slow_len(w: String) -> i64 {
     time::sleep(1.millis())
     return w.len()
 }
@@ -83,7 +83,7 @@ fn pausing_lambdas_quick(x: i64) -> i64 {
     return x
 }
 
-fn pausing_lambdas_quick_len(w: ref String) -> i64 {
+fn pausing_lambdas_quick_len(w: String) -> i64 {
     return w.len()
 }
 

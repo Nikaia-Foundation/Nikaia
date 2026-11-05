@@ -11,7 +11,7 @@ impl DslParametersDb {
     // The driver. `...args: Self::dsl` is the typed spread of ADR-296 D5: the
     // parameters of whatever statement this call was given, as one value on
     // the stack.
-    fn prepare(ref self, statement: ref String; ...args: Self::dsl) -> Self::dsl {
+    fn prepare(self, statement: String; ...args: Self::dsl) -> Self::dsl {
         println(f"{self.name}: {statement}")
         return args
     }
@@ -43,7 +43,7 @@ test "a deferred parameter dsl lowers compiles and runs" {
 struct DslParametersPage { name: String }
 
 impl DslParametersPage {
-    fn run(ref self, statement: ref String; ...args: Self::dsl) -> Self::dsl {
+    fn run(self, statement: String; ...args: Self::dsl) -> Self::dsl {
         println(f"{self.name}: {statement}")
         return args
     }

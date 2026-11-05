@@ -3,7 +3,7 @@
 // programs, computed. The shapes themselves are
 // `crates/nikaia/tests/lowering_costs.rs`.
 
-fn lowering_costs_sum(xs: ref Vec[i64], mut out: Vec[i64]) -> i64 {
+fn lowering_costs_sum(xs: Vec[i64], mut out: Vec[i64]) -> i64 {
     let mut total = 0
     for x in xs {
         total += x

@@ -8,7 +8,7 @@ struct Pile {
 }
 
 impl Pile {
-    fn empty_out(ref mut self) -> i64 {
+    fn empty_out(mut self) -> i64 {
         let mut n = 0
         for s in self.items.drain() {
             n += s.len()

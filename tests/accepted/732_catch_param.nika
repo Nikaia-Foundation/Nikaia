@@ -3,7 +3,7 @@
 // handed to such a parameter in an `Ok`.
 enum Bad { Oops }
 impl Error for Bad {
-    fn message(ref self) -> String { "oops" }
+    fn message(self) -> String { "oops" }
 }
 fn fail() throws {
     throw Bad::Oops

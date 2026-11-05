@@ -20,7 +20,7 @@ test "a mut parameter changes the callers value" {
 struct MutBindingsStats { n: i64 }
 
 impl MutBindingsStats {
-    fn add(ref mut self, by: i64) sync { self.n += by }
+    fn add(mut self, by: i64) sync { self.n += by }
 }
 
 // The receiver is untouched: `&mut self` was always how a method said it.

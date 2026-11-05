@@ -42,7 +42,7 @@ enum JumpGuardsSpeedError {
 }
 
 impl Error for JumpGuardsSpeedError {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         match self {
             JumpGuardsSpeedError::TooFast(n) => f"too fast: {n}"
         }

@@ -4,7 +4,7 @@
 
 use std::fs
 
-fn catch_handler_read(path: ref String, mut said: Vec[String]) -> i64 {
+fn catch_handler_read(path: String, mut said: Vec[String]) -> i64 {
     let text = fs::read_to_string(path, fs::Root::Anywhere) catch {
         said.push(f"caught {error}")
         return 0

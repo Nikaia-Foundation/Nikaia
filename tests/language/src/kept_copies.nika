@@ -2,15 +2,15 @@
 // 2.5, #547): returned, assigned to a `String`, put in a field or in a `T?`
 // slot - also when the view comes from a text method `std` describes.
 
-fn tail(line: ref String) -> String {
+fn tail(line: String) -> String {
     return line.trim_start_matches("// ").clone()
 }
 
-fn maybe_tail(line: ref String) -> String? {
+fn maybe_tail(line: String) -> String? {
     return line.trim_end_matches(";").clone()
 }
 
-fn without(line: ref String) -> String {
+fn without(line: String) -> String {
     return (line.strip_prefix("// ") ?? line).clone()
 }
 
@@ -36,7 +36,7 @@ test "a cloned view is assigned and kept in a field" {
 
 // The view may come from a sequence's first element: `next` is described, so
 // what it hands back is known to be a view and its `.clone()` is text.
-fn first_line(code: ref String) -> String? {
+fn first_line(code: String) -> String? {
     let first = code.lines().next() ?? return null
     return first.trim().clone()
 }

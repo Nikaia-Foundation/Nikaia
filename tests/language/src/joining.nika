@@ -38,7 +38,7 @@ enum JoiningLoadError {
 }
 
 impl Error for JoiningLoadError {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         match self {
             JoiningLoadError::Missing(w) => { return f"{w} is missing" }
             JoiningLoadError::Broken(w) => { return f"{w} is broken" }
@@ -46,7 +46,7 @@ impl Error for JoiningLoadError {
     }
 }
 
-fn joining_load(which: String) -> String throws {
+fn joining_load(keep which: String) -> String throws {
     if which == "a" {
         throw JoiningLoadError::Missing(which)
     }

@@ -6,7 +6,7 @@
 // offset basis is above an `i64`, `^` over the bytes of a text, a wrapping
 // multiply, and the hash cut apart with a shift and a mask. The numbers are
 // FNV-1a's for `hello`, which every implementation agrees on.
-fn bits_fnv(key: ref String, seed: u64) -> u64 {
+fn bits_fnv(key: String, seed: u64) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325 ^ seed
     for b in key.bytes() {
         hash ^= b as u64

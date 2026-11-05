@@ -3,9 +3,9 @@
 // in the call alike. The refusal and `--tethers` are
 // `crates/nikaia/tests/views_handed_back.rs`.
 
-fn views_handed_back_d() -> ref String {
+fn views_handed_back_d() -> String {
     let s: String = "x"
-    return ref s
+    return s
 }
 
 // **D23, step 1**: the caller's keep is declared wherever the call stands -
@@ -30,25 +30,25 @@ struct ViewsHandedBackRow {
     name: String,
 }
 
-fn views_handed_back_e(t: String) -> ref String {
-    return ref t
+fn views_handed_back_e(keep t: String) -> String {
+    return t
 }
 
-fn views_handed_back_c(row: ViewsHandedBackRow) -> ref String {
-    return ref row.name
+fn views_handed_back_c(row: ViewsHandedBackRow) -> String {
+    return row.name
 }
 
 // One source on every way out that has one (ADR-283 D25): `a` or a literal. The
 // version that handed back `a` or `b` shared one lifetime and is NK2302 now
 // (`result_source.rs::plain_string_longest_is_refused_since_d25`).
-fn views_handed_back_first(a: String, b: String) -> ref String {
+fn views_handed_back_first(keep a: String, b: String) -> String {
     if a.len() > b.len() {
-        return ref a
+        return a
     }
     return "short"
 }
 
-fn views_handed_back_label(a: String, b: String) -> ref String {
+fn views_handed_back_label(a: String, b: String) -> String {
     if a == b {
         return "same"
     }
@@ -85,7 +85,7 @@ test "following nk1104s help runs" {
 // leaves `g` through its result, so the argument goes into the keep `g` is
 // given and the caller declares it beside the call - it was *cannot return
 // value referencing local variable*.
-fn views_handed_back_g() -> ref String {
+fn views_handed_back_g() -> String {
     return views_handed_back_e("y")
 }
 

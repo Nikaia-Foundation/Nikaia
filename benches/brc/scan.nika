@@ -8,7 +8,7 @@ use std::fs
 
 fn main() throws {
     let path = cli::args().nth(1) ?? "measurements.txt"
-    let data = fs::map(ref path, fs::Root::Anywhere) catch {
+    let data = fs::map(path, fs::Root::Anywhere) catch {
         eprintln(f"cannot open {path}: {error}")
         return
     }

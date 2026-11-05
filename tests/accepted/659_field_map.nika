@@ -13,11 +13,11 @@ struct Seen {
 }
 
 impl Seen {
-    fn record(ref mut self, r: Reading) {
+    fn record(mut self, r: Reading) {
         self.m.insert(r.name, r.t)
     }
 
-    fn merge(ref mut self, other: Seen) {
+    fn merge(mut self, keep other: Seen) {
         for (name, n) in other.m.drain() {
             self.m.insert(name, (self.m[name] ?? 0) + n)
         }

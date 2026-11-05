@@ -69,7 +69,7 @@ test "a name that leaves the root is refused before anything is touched" {
 
 // **A file held open** (Part III 17.1): written, moved about in and read, and
 // closed when the function that owns it ends.
-fn written(root: ref fs::Root) throws {
+fn written(root: fs::Root) throws {
     let mut f = fs::open("data.bin", root; write: true, create: true, truncate: true)
     f.write("hello world")
     f.seek(fs::Seek::Start(6))
@@ -96,13 +96,13 @@ test "a file is written, moved about in and read" {
     assert(text == "hello WORLD")
 }
 
-fn opens(name: ref String, root: ref fs::Root) -> bool throws {
+fn opens(name: String, root: fs::Root) -> bool throws {
     let f = fs::open(name, root) catch { return false }
     let size = f.len() catch { return false }
     return size == 0
 }
 
-fn seeks_to(to: i64, root: ref fs::Root) -> bool throws {
+fn seeks_to(to: i64, root: fs::Root) -> bool throws {
     let mut f = fs::open("made.txt", root; write: true, create: true) catch { return false }
     f.seek(fs::Seek::Start(to)) catch { return false }
     return true
