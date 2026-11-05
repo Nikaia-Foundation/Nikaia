@@ -3,7 +3,7 @@
 use std::time
 
 fn g[T](x: T) -> T {
-	time::sleep(1)
+	time::sleep(1.millis())
 	return x
 }
 
