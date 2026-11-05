@@ -252,7 +252,7 @@ fn a_pattern_nests_and_a_struct_may_leave_the_rest() {
                   fn main() { println(f\"{at(Event::Quit)}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
-        lowered(source).contains("Event::Click(Point { x, .. }) => x"),
+        lowered(source).contains("Event::Click(Point { x, .. }) => { let x = *x; x }"),
         "{}",
         lowered(source)
     );

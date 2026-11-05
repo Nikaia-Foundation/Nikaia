@@ -791,12 +791,12 @@ fn the_http_example_without_ref_on_its_results_lowers_the_same() {
     );
     let mut with = source.clone();
     for accessor in ["method_text", "path", "target", "body"] {
-        let written = format!("fn {accessor}(ref self) -> String");
+        let written = format!("fn {accessor}(self) -> String");
         assert!(with.contains(&written), "{written}");
         with = with.replace(&written, &format!("fn {accessor}(ref self) -> ref String"));
     }
     for accessor in ["query", "header"] {
-        let written = format!("fn {accessor}(ref self, name: ref String) -> String?");
+        let written = format!("fn {accessor}(self, name: String) -> String?");
         assert!(with.contains(&written), "{written}");
         with = with.replace(
             &written,
@@ -877,24 +877,25 @@ fn a_lent_parameter_or_option_handed_on_lowers_as_a_written_view() {
     );
 }
 
-/// **`examples/http` without any `ref String` but on its methods' parameters
-/// lowers to the same Rust** (#654): `listen(at)` hands its parameter to
-/// `std::net` as it is. A method's parameter is not lent yet (ADR-288): a
-/// method with a `String` parameter keeps it.
+/// **`examples/http` writes no `ref` and lowers to the same Rust as with `ref`
+/// on its methods' parameters** (#654, ADR-views-3 D1): a parameter is lent
+/// unless written `keep`, so `ref self, name: ref String` says what
+/// `self, name: String` already says.
 #[test]
 fn the_http_example_without_ref_but_on_method_parameters_lowers_the_same() {
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/http/src/main.nika");
     let source = std::fs::read_to_string(&path).expect("examples/http/src/main.nika");
-    let without = source
-        .replace("(ref self, name: ref String)", "(ref self, name: KEPT)")
-        .replace("ref String", "String")
-        .replace("name: KEPT", "name: ref String");
-    assert!(without.contains("name: ref String"));
-    assert!(findings(&without).is_empty(), "{:#?}", findings(&without));
+    assert!(
+        !source.contains("ref String"),
+        "the example writes no `ref`"
+    );
+    let with = source.replace("(self, name: String)", "(ref self, name: ref String)");
+    assert!(with.contains("name: ref String"));
+    assert!(findings(&source).is_empty(), "{:#?}", findings(&source));
     assert_eq!(
         lowered(&source, Build::default()),
-        lowered(&without, Build::default())
+        lowered(&with, Build::default())
     );
 }
 

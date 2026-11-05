@@ -101,7 +101,7 @@ fn a_member_that_is_written_down_passes() {
 }
 
 /// **A bare name in a pattern binds the whole value, typed** (#497): `x => …`
-/// over an `E` is an `E`, where it was unknown.
+/// over an `E` is an `E` (a `ref E` where the subject is a lent parameter), where it was unknown.
 #[test]
 fn a_bare_name_in_a_pattern_is_the_value_matched() {
     let found = errors(
@@ -109,7 +109,7 @@ fn a_bare_name_in_a_pattern_is_the_value_matched() {
     );
     assert!(
         found.iter().any(|f| f.code == "NK1103"
-            && f.message == "This value is `E`, but the `let` declares `String`."),
+            && f.message == "This value is `ref E`, but the `let` declares `String`."),
         "{found:#?}"
     );
 }
