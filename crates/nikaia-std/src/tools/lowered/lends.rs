@@ -14,6 +14,7 @@ pub(crate) fn lends_with(contract: &FnContract, at: i64, copying: &[&Ledger], ow
         if position == at {
             if nikaia_std::list::contains(&signature.mutable, &name) || name == "self" { return false; }
             if ty.is_a_view() { return true; }
+            if a_run_parameter(ty) { return !nikaia_std::list::contains(&contract.keeps, &name); }
             let viewed_by_the_result = nikaia_std::list::contains(&contract.borrows, &name);
             let own_lends = own && (a_function_value(ty) || !nikaia_std::list::contains(&contract.by_value, &name));
             return (!signature.takes_a_receiver() || own_lends || viewed_by_the_result) && moves(ty) && !a_ledger_copies(ty, copying) && !nikaia_std::list::contains(&contract.keeps, &name);
@@ -21,6 +22,13 @@ pub(crate) fn lends_with(contract: &FnContract, at: i64, copying: &[&Ledger], ow
         position += 1;
     }
     false
+}
+
+pub(crate) fn a_run_parameter(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; !view && base_name(name) == ARRAY && args.len() == 1 },
+        _ => false,
+    }
 }
 
 pub(crate) fn a_function_value(ty: &Ty) -> bool { matches!(ty, Ty::Fn { .. }) }

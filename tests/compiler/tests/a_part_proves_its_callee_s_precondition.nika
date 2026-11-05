@@ -1,0 +1,14 @@
+// A part `v[a..<b]` handed to an `Array[T]` is `b - a` long, so the callee's
+// precondition on its length is proved at the call (ADR-views-3 D11, #1209).
+
+fn second(xs: Array[u32]) -> u32 {
+    assert(xs.len() >= 2)
+    return xs[1]
+}
+
+fn main() {
+    let v: Vec[u32] = [1, 2, 3, 4]
+    for i in 0..<2 {
+        println(f"{second(v[i..<i + 2])} {second(v[1..<3])}")
+    }
+}

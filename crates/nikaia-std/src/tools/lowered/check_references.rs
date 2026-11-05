@@ -116,7 +116,7 @@ impl CheckState {
             return true;
         }
         let viewed = self.a_mut_view_name(world, given_expr);
-        if !(found.fits(want) || self.fits_through_deref(world, found, want) || viewed && unviewed_type(found).fits(want)) { return false; }
+        if !(found.fits(want) || self.fits_through_deref(world, found, want) || viewed && unviewed_type(found).fits(want) || hands_a_run(found, want)) { return false; }
         if !viewed && self.a_name_that_changes(world, given_expr) {
             check_narrow_written_through(&mut *self, given_expr);
             return true;

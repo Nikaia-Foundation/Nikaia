@@ -49,6 +49,13 @@ fn lends_with(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger], o
             if ty.is_a_view() {
                 return true
             }
+            // **An `Array[T]` with no length is a view of a run unless it is
+            // kept** (ADR-views-3 D11, #1209): the caller lends a list, an
+            // array or a part of either; ADR-184 D3's function generic over
+            // the length stays for a `keep` parameter.
+            if a_run_parameter(ty) {
+                return !contract.keeps.contains(name)
+            }
             // **A method's parameter its result is written to view is lent**
             // (ADR-views-3 D2, D14, #1230): `fn pick(self, a: String) -> String
             // from a` hands back a view of the caller's `a`, at the trait's
@@ -69,6 +76,14 @@ fn lends_with(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger], o
         position += 1
     }
     return false
+}
+
+/// Whether a parameter's type is an `Array[T]` with no length.
+fn a_run_parameter(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && base_name(name) == ARRAY && args.len() == 1,
+        else => false,
+    }
 }
 
 /// Whether a type is a function value.

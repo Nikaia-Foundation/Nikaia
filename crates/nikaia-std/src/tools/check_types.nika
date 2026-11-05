@@ -61,6 +61,27 @@ pub fn unviewed_type(ty: ref Ty) -> Ty {
     }
 }
 
+/// **A run handed to a lent or `mut` `Array[T]`** (ADR-views-3 D11, #1209):
+/// the parameter is an array with no length, and the argument a list, an
+/// array or a part of either, whose elements fit.
+pub fn hands_a_run(found: ref Ty, want: ref Ty) -> bool {
+    let wanted = match want {
+        Ty::Named { name, args, view } => !view && name == ARRAY && args.len() == 1,
+        else => false,
+    }
+    if !wanted {
+        return false
+    }
+    let item = match want {
+        Ty::Named { args, .. } => args[0].clone(),
+        else => Ty::Unknown,
+    }
+    return match found {
+        Ty::Named { name, args, .. } => (name == ARRAY || name == "Vec" || name == "List") && args.len() >= 1 && args[0].fits(item),
+        else => false,
+    }
+}
+
 /// A view of a number, a `bool` or a `char`: read, it is the same value.
 pub fn copies_as_a_view(ty: ref Ty) -> bool {
     return match ty {

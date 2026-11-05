@@ -1,0 +1,29 @@
+// A part of a list, the list itself and an array are handed to a lent and a
+// `mut` `Array[T]`: a view of the run, `&[T]` and `&mut [T]` (ADR-views-3
+// D11, #1209).
+
+fn sum(xs: Array[u32]) -> u32 {
+    let mut s: u32 = 0
+    for x in xs { s += x }
+    return s
+}
+
+fn zero(mut xs: Array[u32]) {
+    for i in 0..<xs.len() { xs[i] = 0 }
+}
+
+fn clear(mut v: Vec[u32]) {
+    zero(v[0..<1])
+    zero(v)
+}
+
+fn main() {
+    let mut v: Vec[u32] = [1, 2, 3, 4]
+    print(f"{sum(v[1..<4])} ")
+    zero(v[1..<3])
+    println(f"{sum(v[1..<3])} {sum(v)}")
+    let a: Array[u32, 3] = [5, 6, 7]
+    println(f"{sum(a)} {sum(a[1..<3])}")
+    clear(v)
+    println(f"{sum(v)}")
+}

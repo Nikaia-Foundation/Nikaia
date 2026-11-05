@@ -42,6 +42,22 @@ pub fn unviewed_type(ty: &Ty) -> Ty {
     }
 }
 
+pub fn hands_a_run(found: &Ty, want: &Ty) -> bool {
+    let wanted = match want {
+        Ty::Named { name, args, view } => { let view = *view; !view && name == ARRAY && args.len() == 1 },
+        _ => false,
+    };
+    if !wanted { return false; }
+    let item = match want {
+        Ty::Named { args, .. } => (*nikaia_std::index::get(&args, 0)).clone(),
+        _ => Ty::Unknown,
+    };
+    match found {
+        Ty::Named { name, args, .. } => (name == ARRAY || name == "Vec" || name == "List") && !args.is_empty() && (*nikaia_std::index::get(&args, 0)).fits(&item),
+        _ => false,
+    }
+}
+
 pub fn copies_as_a_view(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar") },

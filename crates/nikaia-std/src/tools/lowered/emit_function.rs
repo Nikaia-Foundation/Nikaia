@@ -350,11 +350,14 @@ impl EmitState {
                 }
                 let sig = EmitSig { key: key.to_string(), lifetimes, has_kept, kept: kept_lt, stores: stores.to_owned(), inner_views, carries_input: carries_input.to_owned(), source_kept, source_name };
                 let mut lengths: Vec<String> = vec![];
+                let mut runs: Vec<bool> = vec![];
                 let mut open: Vec<String> = vec![];
-                let mut at = 0;
+                let mut at: i64 = 0;
                 for each in args.iter() {
                     let any = !each.ty.is_view && !each.ty.is_slice && each.ty.count.is_none() && each.ty.generics.len() == 1 && emit_text(world, each.ty.name) == "Array";
-                    if any {
+                    let lent_run = any && (self.emit_fn_changes(&key, &emit_text(world, each.name)) || self.emit_fn_lends(world, &key, at + recv));
+                    runs.push(lent_run);
+                    if any && !lent_run {
                         lengths.push(format!("__NIKAIA_N{}", at));
                         open.push(format!("const __NIKAIA_N{}: usize", at));
                     } else { lengths.push(String::from("")); }
@@ -380,10 +383,10 @@ impl EmitState {
                     let read_only = changes || self.emit_fn_lends(world, &key, at);
                     let how = self.emit_how(&sig, each.name, &pname, each.ty.is_view, read_only);
                     let mut spelled: String = String::from("");
-                    if *nikaia_std::index::get(&lengths, nikaia_std::index::at(k)) != "" {
+                    if *nikaia_std::index::get(&lengths, nikaia_std::index::at(k)) != "" || *nikaia_std::index::get(&runs, nikaia_std::index::at(k)) {
                         let mut element: String = String::from("u8");
                         if !each.ty.generics.is_empty() { element = self.emit_fn_ty(world, walk, host, nikaia_std::index::get(&each.ty.generics, 0), &how, &key, &pname); }
-                        spelled = format!("[{}; {}]", element, *nikaia_std::index::get(&lengths, nikaia_std::index::at(k)));
+                        spelled = if *nikaia_std::index::get(&runs, nikaia_std::index::at(k)) { format!("[{}]", element) } else { format!("[{}; {}]", element, *nikaia_std::index::get(&lengths, nikaia_std::index::at(k))) };
                     } else {
                         let runs = !self.emit_fn_keeps(&key, &pname);
                         let held = walk.code_parameter_runs;

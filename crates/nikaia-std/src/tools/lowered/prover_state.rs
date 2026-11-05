@@ -558,6 +558,23 @@ pub fn length_given(arena: &mut TermArena, words: &winnow_grammar::InternerConte
             if !scope.ints.contains(&length) { return None; }
             return Some(arena.var(&length));
         },
+        Expr::Index { index, .. } => {
+            let index = nikaia_std::boxed::open(index);
+            match index {
+                Expr::Range { start, end, inclusive, .. } => {
+                    let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
+                    let from = match lin_term(start, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(pinned, scope, name) }, &mut arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let to = match lin_term(end, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(pinned, scope, name) }, &mut arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let span = arena.sub(to, from);
+                    if inclusive {
+                        let one = arena.int(1);
+                        return Some(arena.add(span, one));
+                    }
+                    return Some(span);
+                },
+                _ => return None,
+            }
+        },
         Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
             if args.len() != 1 { return None; }

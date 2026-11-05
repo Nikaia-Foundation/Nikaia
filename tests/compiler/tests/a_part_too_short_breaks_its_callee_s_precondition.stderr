@@ -1,0 +1,9 @@
+error[NK1207]: This call breaks `second`'s precondition `xs.len() >= 2` every time it is reached.
+   --> tests/a_part_too_short_breaks_its_callee_s_precondition.nika:12:5
+    |
+ 12 |     println(f"{second(v[3..<4])}")
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `xs.len()` is 1.
+    = help: Pass `second` arguments for which `xs.len() >= 2` holds, or check them with a guard before the call.
+1 claim shown false

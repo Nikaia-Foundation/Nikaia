@@ -1,0 +1,13 @@
+// A part `v[a..<b]` handed to an `Array[T]` is `b - a` long, so one too short
+// for the callee's precondition is refused at the call (ADR-views-3 D11,
+// #1209).
+
+fn second(xs: Array[u32]) -> u32 {
+    assert(xs.len() >= 2)
+    return xs[1]
+}
+
+fn main() {
+    let v: Vec[u32] = [1, 2, 3, 4]
+    println(f"{second(v[3..<4])}")
+}

@@ -879,6 +879,16 @@ impl<V, const N: usize> Set<usize, V> for [V; N] {
     }
 }
 
+/// A changeable run, `mut xs: Array[T]` lowered to `&mut [T]`, is written in
+/// place too ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md)
+/// D11, #1209).
+impl<V> Set<usize, V> for [V] {
+    #[track_caller]
+    fn set(&mut self, key: usize, value: V) {
+        self[key] = value;
+    }
+}
+
 /// The write of the same: `out[i] = x` on a `mut out: Vec[u32]` parameter is
 /// `set(&mut out, …)` on what is already a `&mut Vec<u32>`.
 impl<K, V, T> Set<K, V> for &mut T

@@ -561,14 +561,19 @@ impl EmitState {
                 }
                 let sig = EmitSig { key: key.clone(), lifetimes: lifetimes, has_kept: has_kept, kept: kept_lt, stores: stores.clone(), inner_views: inner_views, carries_input: carries_input.clone(), source_kept: source_kept, source_name: source_name }
 
-                // **`xs: Array[T]` is an array of any length, and the call says
-                // which** (ADR-184 D3): a `const` parameter per position.
+                // **`keep xs: Array[T]` is an array of any length, and the call
+                // says which** (ADR-184 D3): a `const` parameter per position.
+                // A lent or `mut` one is a view of a run, `&[T]` or `&mut [T]`
+                // (ADR-views-3 D11, #1209).
                 let mut lengths: Vec[String] = []
+                let mut runs: Vec[bool] = []
                 let mut open: Vec[String] = []
                 let mut at = 0
                 for each in args {
                     let any = !each.ty.is_view && !each.ty.is_slice && each.ty.count == null && each.ty.generics.len() == 1 && emit_text(world, each.ty.name) == "Array"
-                    if any {
+                    let lent_run = any && (self.emit_fn_changes(key, emit_text(world, each.name)) || self.emit_fn_lends(world, key, at + recv))
+                    runs.push(lent_run)
+                    if any && !lent_run {
                         lengths.push(f"__NIKAIA_N{at}")
                         open.push(f"const __NIKAIA_N{at}: usize")
                     } else {
@@ -619,14 +624,15 @@ impl EmitState {
                     let read_only = changes || self.emit_fn_lends(world, key, at)
                     let how = self.emit_how(sig, each.name, pname, each.ty.is_view, read_only)
                     let mut spelled: String = ""
-                    if lengths[k] != "" {
+                    if lengths[k] != "" || runs[k] {
                         // **An array of any length is written with the length
-                        // this signature declares for it** (ADR-184 D3).
+                        // this signature declares for it** (ADR-184 D3), a
+                        // lent or changed one as the run it views (D11).
                         let mut element: String = "u8"
                         if each.ty.generics.len() > 0 {
                             element = self.emit_fn_ty(world, walk, host, each.ty.generics[0], how, key, pname)
                         }
-                        spelled = f"[{element}; {lengths[k]}]"
+                        spelled = if runs[k] { f"[{element}]" } else { f"[{element}; {lengths[k]}]" }
                     } else {
                         // **Run is the absence of `keeps`** (ADR-277 D11).
                         let runs = !self.emit_fn_keeps(key, pname)

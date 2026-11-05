@@ -983,6 +983,25 @@ pub fn length_given(mut arena: TermArena, words: ref winnow_grammar::InternerCon
             }
             return arena.var(length)
         },
+        // **A part of a list or an array is as long as its range**
+        // (ADR-views-3 D11, #1209): `v[a..<b]` handed to an `Array[T]` is
+        // `b - a` long, since a range outside the list stops the program at
+        // the call.
+        Expr::Index { index, .. } => {
+            match index {
+                Expr::Range { start, end, inclusive, .. } => {
+                    let from = lin_term(start, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(pinned, scope, name) }, arena.nodes) ?? return null
+                    let to = lin_term(end, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(pinned, scope, name) }, arena.nodes) ?? return null
+                    let span = arena.sub(to, from)
+                    if inclusive {
+                        let one = arena.int(1)
+                        return arena.add(span, one)
+                    }
+                    return span
+                },
+                else => return null,
+            }
+        },
         Expr::Call { func, args, .. } => {
             if args.len() != 1 {
                 return null

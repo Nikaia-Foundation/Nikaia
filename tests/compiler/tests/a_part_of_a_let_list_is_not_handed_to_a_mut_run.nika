@@ -1,0 +1,12 @@
+// A part handed to a `mut` `Array[T]` changes the list, which a `let` without
+// `mut` does not allow (ADR-views-3 D11, #1209).
+
+fn zero(mut xs: Array[u32]) {
+    for i in 0..<xs.len() { xs[i] = 0 }
+}
+
+fn main() {
+    let v: Vec[u32] = [1, 2, 3, 4]
+    zero(v[0..<2])
+    println(f"{v[0]}")
+}

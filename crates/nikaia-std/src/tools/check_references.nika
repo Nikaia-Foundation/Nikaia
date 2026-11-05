@@ -169,7 +169,9 @@ impl CheckState {
         let viewed = self.a_mut_view_name(world, given_expr)
         // **The `&mut` is the compiler's, the type is still the
         // argument's.**
-        if !(found.fits(want) || self.fits_through_deref(world, found, want) || (viewed && unviewed_type(found).fits(want))) {
+        // **A list, an array or a part of either goes to a `mut`
+        // `Array[T]`** (ADR-views-3 D11, #1209): `&mut v[a..b]`.
+        if !(found.fits(want) || self.fits_through_deref(world, found, want) || (viewed && unviewed_type(found).fits(want)) || hands_a_run(found, want)) {
             return false
         }
         // **A reference that is already there is not written twice**; a

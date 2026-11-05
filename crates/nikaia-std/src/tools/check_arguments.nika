@@ -392,6 +392,17 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             let value = given_here ?? continue
             check_overflow_list_into_nullables(state, value, found_here, want)
         }
+        // **A list, or a part of a list or an array, handed to a lent
+        // `Array[T]`** (ADR-views-3 D11, #1209): the parameter is a view of
+        // the run, so a list is lent (`&v`) and a part is one already
+        // (`&v[a..b]`). A `mut` one is `lent_to_a_mut_parameter`'s below.
+        if lent && !found_here.fits(want) && hands_a_run(found_here, want) {
+            if given_here != null && !found_here.is_a_view() {
+                let value = given_here ?? continue
+                state.facts.lent_args.insert(id_of(value) as i64)
+            }
+            continue
+        }
         // **The compiler writes the `&` at the call** (ADR-094 D1), where the
         // callee lends this position and the value is not already a view.
         if state.the_compiler_writes_the_reference(world, contract, at, given_here, found_here, want, own, written, span) {
