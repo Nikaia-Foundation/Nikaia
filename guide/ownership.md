@@ -28,7 +28,7 @@ holds a resource gets its `drop` method called, so a file is closed exactly ther
 struct File { name: String }
 
 impl Drop for File {
-    fn drop(ref mut self) {
+    fn drop(mut self) {
         println(f"closing {self.name}")
     }
 }
@@ -97,7 +97,7 @@ After the call the value belongs to the list, and the caller's name for it is go
 ```nika
 struct Person { name: String, age: int }
 
-fn enrol(mut team: Vec[Person], p: Person) {
+fn enrol(mut team: Vec[Person], keep p: Person) {
     team.push(p)
 }
 
@@ -128,7 +128,7 @@ of its own. On the last use, no copy is needed:
 ```nika
 struct Person { name: String, age: int }
 
-fn enrol(mut team: Vec[Person], p: Person) {
+fn enrol(mut team: Vec[Person], keep p: Person) {
     team.push(p)
 }
 
@@ -470,7 +470,7 @@ Make a copy before the task starts and let the task use the copy, or share the v
 ```nika
 struct Person { name: String, age: int }
 
-fn enrol(mut team: Vec[Person], p: Person) {
+fn enrol(mut team: Vec[Person], keep p: Person) {
     team.push(p)
 }
 
@@ -505,7 +505,7 @@ them. `enrol` then keeps each `Person` itself, and nothing is copied:
 ```nika
 struct Person { name: String, age: int }
 
-fn enrol(mut team: Vec[Person], p: Person) {
+fn enrol(mut team: Vec[Person], keep p: Person) {
     team.push(p)
 }
 

@@ -17,8 +17,7 @@ signature = "(ref mut self, bytes: i64)"
 [fn."Counts::merge"]
 sync = true
 touches = []
-views = ["other: borrowed"]
-signature = "(ref mut self, other: ref Counts)"
+signature = "(ref mut self, other: Counts)"
 
 [fn."Counts::new"]
 pub = true

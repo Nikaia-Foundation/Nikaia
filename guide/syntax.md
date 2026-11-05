@@ -226,7 +226,7 @@ struct Point {
 }
 
 impl Point {
-    fn length_squared(ref self) -> int {
+    fn length_squared(self) -> int {
         return self.x * self.x + self.y * self.y
     }
 }
@@ -314,7 +314,7 @@ enum AgeError {
 }
 
 impl Error for AgeError {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         match self {
             AgeError::Empty => "the input is empty",
             AgeError::NotANumber(text) => f"not a number: {text}",
@@ -402,7 +402,7 @@ to be handled there, as for any call that can fail:
 ```nika
 struct TooLong { words: int }
 impl Error for TooLong {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         return f"{self.words} words is too long"
     }
 }

@@ -41,7 +41,7 @@ enum Refused {
 }
 
 impl Error for Refused {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         match self {
             Refused::NoDatabase => "sqlite3_open handed back no database"
             Refused::NoStatement => "sqlite3_prepare_v2 handed back no statement"

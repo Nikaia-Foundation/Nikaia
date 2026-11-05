@@ -100,7 +100,7 @@ They are deliberately different shapes.
   thousands of views into that buffer, not strings.
 * **`n-body.nika`** is the one with **no grammar in it at all**. Five programs in a row that
   all begin with a DSL would say Nikaia is a parser generator; this one is arithmetic in a
-  loop — `sync` methods, `ref mut self`, indices and floats — and it is the only example here
+  loop — `sync` methods, `mut self`, indices and floats — and it is the only example here
   whose numbers are directly comparable against other languages, because the CLBG publishes
   the same program in some thirty of them with an exact expected output. Ours matches it to
   the digit.

@@ -8,7 +8,7 @@
 // The argument is the number of steps (1000 if left out). These two numbers
 // are the benchmark's published output for 1000 steps.
 //
-// Shows: structs with methods, `ref mut self` for methods that change their
+// Shows: structs with methods, `mut self` for methods that change their
 // value, `sync` functions, and floating-point arithmetic in a loop.
 //
 // A package: `nikaia run` in this directory runs it, and `nikaia test` checks
@@ -42,7 +42,7 @@ impl System {
     //
     // `sync` says the method cannot pause (no file or network I/O, for
     // example); the compiler refuses the program if it could.
-    fn offset_momentum(ref mut self) sync {
+    fn offset_momentum(mut self) sync {
         let mut px = 0.0
         let mut py = 0.0
         let mut pz = 0.0
@@ -66,7 +66,7 @@ impl System {
     //
     // The inner loop starts at `i + 1`: each pair is visited once, and the pull
     // on its two bodies differs only in sign.
-    fn advance(ref mut self, dt: f64) sync {
+    fn advance(mut self, dt: f64) sync {
         let n = self.bodies.len()
 
         for i in 0..<n {
@@ -101,7 +101,7 @@ impl System {
     // Kinetic energy of each body, less the potential energy of each pair. An
     // exact integrator would keep it constant, so printing it before and after
     // shows how well the arithmetic held up.
-    fn energy(ref self) -> f64 sync {
+    fn energy(self) -> f64 sync {
         let n = self.bodies.len()
         let mut e = 0.0
 

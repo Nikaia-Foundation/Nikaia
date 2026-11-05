@@ -95,14 +95,14 @@ impl Stats {
         return Stats { min: first, max: first, sum: first as i64, count: 1 }
     }
 
-    fn add(ref mut self, temp: i32) {
+    fn add(mut self, temp: i32) {
         if temp < self.min { self.min = temp }
         if temp > self.max { self.max = temp }
         self.sum += temp as i64
         self.count += 1
     }
 
-    fn merge(ref mut self, other: ref Stats) {
+    fn merge(mut self, other: Stats) {
         if other.min < self.min { self.min = other.min }
         if other.max > self.max { self.max = other.max }
         self.sum += other.sum
@@ -113,7 +113,7 @@ impl Stats {
     // toward +infinity (`Math.round` in the official Java baseline). Exact
     // integer arithmetic, no float: `div_euclid` divides rounding down, also
     // when the sum is negative.
-    fn mean(ref self) -> i64 {
+    fn mean(self) -> i64 {
         return (2 * self.sum + self.count).div_euclid(2 * self.count)
     }
 }
@@ -129,18 +129,18 @@ impl Summary {
         return Summary { stations: collections::HashMap() }
     }
 
-    fn record(ref mut self, m: Reading) {
+    fn record(mut self, m: Reading) {
         self.stations
             .entry(m.name)
             .and_modify fn (stats) { stats.add(m.temp) }
             .or_insert_with fn { Stats(m.temp) }
     }
 
-    fn merge(ref mut self, other: Summary) {
+    fn merge(mut self, keep other: Summary) {
         for (name, stats) in other.stations.drain() {
             self.stations
                 .entry(name)
-                .and_modify fn (into) { into.merge(ref stats) }
+                .and_modify fn (into) { into.merge(stats) }
                 .or_insert(stats)
         }
     }
@@ -158,7 +158,7 @@ fn main() throws {
     // No `async` or `await` is written: I/O does not block, and the code reads
     // straight through. `catch` runs its block when the call fails, with the
     // failure named `error`.
-    let data = fs::map(ref path, fs::Root::Anywhere) catch {
+    let data = fs::map(path, fs::Root::Anywhere) catch {
         eprintln(f"cannot open {path}: {error}")
         return
     }

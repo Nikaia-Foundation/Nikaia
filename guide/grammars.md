@@ -588,7 +588,7 @@ struct TooBig {
 }
 
 impl Error for TooBig {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         return f"{self.n} does not fit in a byte"
     }
 }

@@ -65,7 +65,7 @@ fn main() throws {
     let path = cli::args().nth(1) ?? "stock.csv"
     let out = cli::args().nth(2) ?? "report.html"
 
-    let data = fs::map(ref path, fs::Root::Anywhere) catch {
+    let data = fs::map(path, fs::Root::Anywhere) catch {
         eprintln(f"cannot open {path}: {error}")
         return
     }
@@ -86,7 +86,7 @@ fn main() throws {
     let markup = page(entries, total)
 
     // If the page cannot be written, say so and stop, rather than report success.
-    fs::write(ref out, fs::Root::Anywhere, ref markup) catch {
+    fs::write(out, fs::Root::Anywhere, markup) catch {
         eprintln(f"cannot write {out}: {error}")
         return
     }

@@ -66,12 +66,12 @@ impl Counts {
         return Counts { hits: 1, bytes: bytes }
     }
 
-    fn add(ref mut self, bytes: i64) sync {
+    fn add(mut self, bytes: i64) sync {
         self.hits += 1
         self.bytes += bytes
     }
 
-    fn merge(ref mut self, other: ref Counts) sync {
+    fn merge(mut self, other: Counts) sync {
         self.hits += other.hits
         self.bytes += other.bytes
     }
@@ -89,7 +89,7 @@ impl Report {
     }
 
     // `sync`: this function cannot pause, and the compiler checks it.
-    fn record(ref mut self, e: Hit) sync {
+    fn record(mut self, e: Hit) sync {
         self.requests += 1
         if e.status >= 400 { self.failures += 1 }
         self.paths
@@ -98,13 +98,13 @@ impl Report {
             .or_insert_with fn { Counts(e.bytes) }
     }
 
-    fn merge(ref mut self, other: Report) sync {
+    fn merge(mut self, keep other: Report) sync {
         self.requests += other.requests
         self.failures += other.failures
         for (path, counts) in other.paths.drain() {
             self.paths
                 .entry(path)
-                .and_modify fn (into) { into.merge(ref counts) }
+                .and_modify fn (into) { into.merge(counts) }
                 .or_insert(counts)
         }
     }
@@ -113,7 +113,7 @@ impl Report {
 fn main() throws {
     let path = cli::args().nth(1) ?? "access.log"
 
-    let data = fs::map(ref path, fs::Root::Anywhere) catch {
+    let data = fs::map(path, fs::Root::Anywhere) catch {
         eprintln(f"cannot open {path}: {error}")
         return
     }

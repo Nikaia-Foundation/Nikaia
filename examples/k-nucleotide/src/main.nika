@@ -73,14 +73,14 @@ impl Tally {
         return Tally { n: first }
     }
 
-    fn bump(ref mut self) sync {
+    fn bump(mut self) sync {
         self.n += 1
     }
 }
 
 // Every fragment of length `k`, and how often each occurs.
 //
-// The keys are views into `dna`: `ref dna[i..<i + k]` is a slice, not a copy,
+// The keys are views into `dna`: `dna.bytes[i..<i + k]` is a slice, not a copy,
 // so a sequence of a million characters builds a table of positions and
 // lengths rather than a million small strings.
 fn count(dna: String, k: i64) -> collections::HashMap[String, Tally] {
@@ -166,9 +166,9 @@ fn main() throws {
 
     let mut dna = String()
     for section in sections {
-        if section.header.starts_with(ref wanted) {
+        if section.header.starts_with(wanted) {
             for line in section.lines {
-                dna.push_str(ref line.to_uppercase())
+                dna.push_str(line.to_uppercase())
             }
         }
     }
