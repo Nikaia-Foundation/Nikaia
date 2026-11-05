@@ -1,17 +1,13 @@
-1. **Most time.** The slowest part was fixing the test in `sysroot.rs`. I guessed at Nikaia syntax and needed about five edit-and-compile rounds. Each round recompiled `nikaia` and took 40 seconds or more, and the first build took 4m39s. The guesses were:
-   - quote escaping in Rust string literals (two sed attempts that did not match);
-   - the type is `String`, not `text`;
-   - returning a parameter bare gives NK1104, because parameters are `ref` by default;
-   - finally, `mut v: Vec[String]` with `v.push(s)`.
+1. **Most time:** The 10-minute `nikaia test --both-settings` run on the old binary. It passed, and it told me nothing, because the failure was in a commit older than my HEAD. The slow part of the diagnosis was finding the failing program's name. `qa-input.txt` only had the last 200 log lines, and those were all passing tests. I found the name with `gh run view --log-failed`.
 
-   Finding the cause took only a few calls.
+2. **Lookups the brief could have handed me:**
+   - The CI run's head SHA, and whether it is an ancestor of the current HEAD. This was the actual cause: the run tested `d0855a7a`, before the fix `e95ea023`.
+   - The failing program name. The driver's grep matches `panicked at` and `^error`, but not `program "X" ... FAILED` or the `--- program` block.
+   - The `gh` command that fetches the full failed log.
+   - The fact that 727 + 1 = the 728 committed programs, so the untracked test files in the shared tree don't count.
 
-2. **Lookups the brief could have handed me.**
-   - The brief's two named input files were not where it said. `qa-input.txt` was in `docs/briefs/views/`, not in `qa/`, and I did not read `.claude/agents/qa.md`.
-   - `qa-input.txt` held CI logs, so I had to grep for the failing test name instead of reading a list of red steps.
-   - Tool-file syntax (`String`, not `text`; how to write an inferred keep) was never stated. A one-line pointer to `docs/builder-facts.md` would have covered it.
-   - `nikaia` was not on PATH. The binary is at `target/release/nikaia`.
+3. **Checks:**
+   - Useful: the `gh` log grep (found the failing program), the ancestor check (found the cause), and the `cargo build` no-op (showed the binary was current).
+   - Wasted: copying the old binary into the scratchpad, and the full both-settings run, which I started before knowing the CI commit. Reading `agent_facts.nika` and the diffs of `agent_facts.stdout` and `agent_script.nika` was partly wasted for the same reason.
 
-3. **Checks.** I ran the failing test, clippy on the `nikaia` crate, fmt and `pre-push`. All were useful. Three of the test runs were wasted on my own syntax guesses. `pre-push` was red on the badge, which is not from my change. I did not read the previous commit's report beyond the reason for the red, and that was enough.
-
-4. **One change.** Add a driver-written "failing tests" line to `qa-input.txt`, with the exact `cargo test` command and the path of the binary. It would also help to put a short, working example of an inferred-keep in a tools-file test string into `builder-facts.md`.
+4. **One change:** Have the driver put the CI run's head SHA and the names of the failing programs in `qa-input.txt`. Also add one line to `qa.md`: first run `git merge-base --is-ancestor <fix> <run sha>` for the failing commits. If the red comes from a commit before a later fix, write the report and stop. Do this before any long rerun.

@@ -1,13 +1,7 @@
 Result: done
-Cause: 783e576d (keeps: a copied scalar is never kept) broke `sysroot::tests::the_per_file_cache_follows_the_interface` (bootstrap_compiler arm64): its last step changed the contract by returning an i64 parameter bare, which is no longer a keep
-Fixed: the test's two files now use a `String` parameter pushed into a `Vec` (`s.clone()` vs `s`), so the last step still changes the inferred contract (a test that stayed valid under the new rule, no expectation loosened)
-Tests: `cargo test -p nikaia --lib the_per_file_cache_follows` ok; clippy -p nikaia --all-targets clean; fmt
-Found: none (pre-push "version" red: assets/badges/self-hosted.svg out of date, not from this change; supervisor owns badges)
-Files: crates/nikaia/src/sysroot.rs
-Commit: sysroot test: change the inferred contract with a String parameter, not a copied scalar
-Changelog: none
-Owner: none
-Attribution:
-Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01GFeMqxRbtUMiGVyDMxsvEq
-Pushed: local 6a09623428d463ac327380be8675343f0bf142f9
+Cause: d0855a7a (the commit CI ran on ci/views) failed tests/agent_script.nika; its dry-run prompt gained the Core facts (23febfe0) and the test read words[7..] of the old layout. Already fixed by e95ea023, which is after the CI head and is not in that run.
+Fixed: nothing new; no commit needed (e95ea023 reads the flags after ` --agent `).
+Tests: `nikaia test --both-settings --project tests/compiler` on HEAD (target/fast/nikaia, build up to date): 729 passed, 0 failed, agent_script and agent_facts ok. arm64 and bootstrap_compiler failed only on this one program (727 passed; 1 failed).
+Found: none
+Files: none
+Commit: none

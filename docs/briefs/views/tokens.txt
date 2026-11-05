@@ -20,3 +20,4 @@
 /home/user/Nikaia/docs/briefs/views/v15-bound-self.md 1540432 39 1479917 48443 11992
 /home/user/Nikaia/docs/briefs/views/v16-clone-trait.md 4604791 68 4478749 98820 27084
 /home/user/Nikaia/docs/briefs/views/v17-migrate-docs-packages.md 4528510 68 4396823 98051 33500
+/home/user/Nikaia/docs/briefs/views/qa/qa-task.md 517082 18 470924 41169 4953
