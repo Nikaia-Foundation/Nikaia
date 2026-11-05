@@ -1,6 +1,6 @@
 ---
 layout: home
-title: The program waits where it needs the value
+title: Waiting does not split your code in two
 description: >-
   Code that waits looks like any other code.
 ---
@@ -13,7 +13,7 @@ description: >-
 <section class="home-section" id="check">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/easy/#async" | relative_url }}">Easy to understand</a></p>
-    <h1 class="home-heading">The program waits where it needs the value</h1>
+    <h1 class="home-heading">Waiting does not split your code in two</h1>
     <div class="limit-class">
         <h3>Running two things at once</h3>
         <p>Lines run in the order they are written. To run work beside the code after it, a program writes <code>async</code> before an expression. <code>async e</code> starts <code>e</code> at once, and the program waits for its value where the value is first needed. In the program below both counts run while the first <code>println</code> does its work, and <code>a + b</code> waits for both. It compiles with today&rsquo;s compiler and prints <code>both counts have started</code>, then <code>caught: 5 words is too long</code> and <code>0 words</code>.</p>

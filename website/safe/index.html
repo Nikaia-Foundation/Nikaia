@@ -23,7 +23,10 @@ description: >-
 <section class="home-section home-code-section" id="conflicts">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <span class="safe-chip safe-chip-part">Partly checked</span>
+      <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+<p><span class="why why-todo">Still being built</span> For <code>async</code> tasks the check is being built (#988), and two writes to the same file are not yet told apart from writes to two files.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
+</details>
       <h2>Conflicting actions</h2>
       <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches when the program is built, and refuses two tasks that change the same value or both write to standard output, naming what they share. The way out is in the message: a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
       <p>Where the compiler cannot tell what a call touches, as in a Rust crate or a C library that starts its own threads, it does not refuse, so this is not a proof that every race is found. The compiler builds <code>async</code> tasks today, but this check between them is still being built (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/988">#988</a>): the example shows what the specification refuses. Older programs written with <code>overlap</code> get the check today.</p>
@@ -41,7 +44,10 @@ description: >-
 <section class="home-section home-section-alt home-code-section" id="stuck">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <span class="safe-chip safe-chip-part">Partly checked</span>
+      <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+<p><span class="why why-todo">Still being built</span> A lock taken inside another lock by hand is not refused yet, so for several locks using <code>update_all</code> is up to you.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> Whether a program can get stuck cannot be decided for every program. Where the analysis cannot tell, it does not claim the problem is solved.</p>
+</details>
       <h2>Tasks that get stuck</h2>
       <p>Sometimes tasks wait for each other forever. A task that pauses while it holds a lock is rejected, since everyone who needs that value would wait too. For several locks at once, <code>update_all</code> takes them in one fixed order, so two transfers cannot hold one each and wait for the other.</p>
       <p>Nikaia does not yet reject a lock taken inside another lock when you write it by hand, so using <code>update_all</code> for several locks is up to you. And not every possible deadlock can be ruled out in every situation; where the analysis cannot decide, it does not claim the problem is solved.</p>
