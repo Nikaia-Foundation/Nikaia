@@ -2018,3 +2018,58 @@ details.study-card {
 }
 :root[data-theme="dark"] .safe-chip-part,
 :root[data-theme="dark"] .safe-chip-run { border-color: #c9a227; color: #e3c15a; }
+
+/* Architecture drawings (.nkd): inline SVG on a dark panel in both themes,
+ * bright strokes, and data flows whose dashes and dots move. Each group
+ * sets its colour in --k; a reader who asks for reduced motion gets still
+ * lines and no dots. */
+.nkd {
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid #1f2a3d;
+  border-radius: 14px;
+  background-color: #070b14;
+  background-image: radial-gradient(rgba(148, 163, 184, 0.16) 1px, transparent 1px);
+  background-size: 18px 18px;
+  box-shadow: 0 24px 48px rgba(7, 11, 20, 0.25);
+  overflow-x: auto;
+}
+.nkd svg { display: block; width: 100%; min-width: 560px; height: auto; }
+.nkd figcaption { margin-top: 12px; color: #8b96a5; font-size: 13px; line-height: 1.5; }
+.nkd text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  fill: #cbd5e1;
+}
+.nkd .t { font-size: 14px; font-weight: 700; fill: var(--k, #e2e8f0); }
+.nkd .m { font-size: 12px; fill: #94a3b8; }
+.nkd .l { font-size: 11.5px; fill: #7c8a9e; }
+.nkd .cy { --k: #22d3ee; }
+.nkd .vi { --k: #a78bfa; }
+.nkd .gr { --k: #34d399; }
+.nkd .am { --k: #fbbf24; }
+.nkd .pk { --k: #f472b6; }
+.nkd .sl { --k: #94a3b8; }
+.nkd .box {
+  fill: rgba(15, 23, 42, 0.85);
+  fill: color-mix(in srgb, var(--k) 8%, #0b1120);
+  stroke: var(--k);
+  stroke-width: 1.5;
+}
+.nkd .dash .box { stroke-dasharray: 6 5; }
+.nkd .glow .box { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--k) 45%, transparent)); }
+.nkd .flow {
+  fill: none;
+  stroke: var(--k);
+  stroke-width: 2;
+  stroke-dasharray: 5 7;
+  animation: nkd-flow 0.9s linear infinite;
+  filter: drop-shadow(0 0 3px var(--k));
+}
+.nkd .head { fill: var(--k); }
+.nkd .dot { fill: var(--k); filter: drop-shadow(0 0 6px var(--k)); }
+@keyframes nkd-flow { to { stroke-dashoffset: -12; } }
+@media (prefers-reduced-motion: reduce) {
+  .nkd .flow { animation: none; stroke-dasharray: none; }
+  .nkd .dot { display: none; }
+}
