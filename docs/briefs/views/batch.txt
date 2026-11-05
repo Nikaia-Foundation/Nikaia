@@ -1,4 +1,3 @@
-v18a-method-param-lent.md
 d1-1252-briefs-off-the-tree.md
 v18b-matched-lent-param.md
 v20-migrate-rest.md
