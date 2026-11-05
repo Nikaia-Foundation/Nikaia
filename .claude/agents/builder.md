@@ -18,7 +18,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   report, end. Do not start a further step the task did not name.
 * **The report file has exactly the brief's fields** (`Result:`, `Pushed:`,
   `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, ...), one line
-  each, no prose: `scripts/release.nika` parses them. A test added for a fix
+  each, no prose: `scripts/release.nika` parses them. `Gate:` is the bare
+  word `green` or `red` (`Gate: cheap checks green` cuts the batch, v23
+  2026-11-05). A test added for a fix
   is run once against the unfixed compiler (stash the fix) and the report
   says it failed there. **New tests are Nikaia programs in `tests/compiler/`,
   never a new Rust `#[test]`** (CLAUDE.md).
