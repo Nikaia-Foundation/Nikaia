@@ -1032,7 +1032,7 @@ let result = {
 }
 ```
 
-**A statement begins a line.** Two statements on one line are a parse error: `println!("hi")` is not `println` and then `!"hi"`, and `let a = 1 2` is not `let a = 1` and then `2`. The first statement of a block may stand on the line of its `{` (`{ return 0 }`), and a jump's trailing condition (`return 0 if done`) is part of its statement.
+**A statement begins a line.** Two statements on one line are a parse error: `println!("hi")` is not `println` and then `!"hi"`, and `let a = 1 2` is not `let a = 1` and then `2`. The first statement of a block may stand on the line of its `{` (`{ return 0 }`), and a jump's trailing condition (`return 0 if done`) is part of its statement. A `-` that begins a line begins an expression and never subtracts from the line above it, as a `[` or a `(` there does ([ADR-390](adr/adr-390.md)); a subtraction broken over lines keeps its `-` at the end of the line.
 
 A block's last line is the **block's** value; `return` is the **function's**.
 A `return` written at the end of a block that is itself a value (a `match` arm,
