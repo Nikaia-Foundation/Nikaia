@@ -74,6 +74,11 @@ cannot be used yet. How the parts fit together is drawn under
 <div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Loops as Horn clauses, about 40 % built, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 53%"></span></span><span class="rq-unknown" style="width: 25%"></span></div><span class="rq-pct">40 %</span></div>
 <p class="rq-note">Invariants by closed forms and intervals, each checked, for whole numbers so far. More strategies and outside proposals are decided. (<a href="/docs/specification/adr/adr-361.html">ADR-361</a>)</p>
 </div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Proposers, a language model among them</span><span class="rq-stage rq-stage-next">next</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Proposers, a language model among them, about 0 % built, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 25%"></span></div><span class="rq-pct">0 %</span></div>
+<p class="rq-note">Any outside program, a language model or a tool that learns from test runs, may propose a loop invariant through <code>nikaia prove --propose</code>. The compiler checks every proposal before it is used, and a normal build never calls one. (<a href="/docs/specification/adr/adr-361.html">ADR-361</a> D6)</p>
+</div>
 <p class="rq-layer">The engine</p>
 <div class="rq-comp">
 <div class="rq-comp-head"><span class="rq-comp-name">Solver foundations</span><span class="rq-stage rq-stage-next">next</span></div>
@@ -258,7 +263,19 @@ its time.
 A loop invariant may be proposed by any program, a language model among
 them, and a proposal is used only after the compiler has checked it
 ([ADR-361](/docs/specification/adr/adr-361.html) D6). Much of Nikaia's own code is written with
-the help of such models. The question is how much a proposer adds to what
+the help of such models.
+
+The interface is decided and not yet built. A proposer is a program named in
+the manifest, and only `nikaia prove --propose` starts it, never `build`,
+`run` or `test`. It reads one line of JSON per loop the build left open, with
+the problem in SMT-LIB, the loop's source and the names it reads, and answers
+with candidate invariants. What passes the check is written to
+`nikaia.proofs`, so the next build uses it without asking anyone, and a wrong
+proposal costs time and nothing else. Which model, provider or prompt is used
+lives in the proposer and not in the compiler, and the program's code leaves
+the machine only through that command and that entry.
+
+The question is how much a proposer adds to what
 the compiler finds alone, measured by what is proved with it and without it,
 and whether this keeps the cost of a proof off the person who writes the
 program.

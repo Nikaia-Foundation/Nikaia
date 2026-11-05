@@ -111,6 +111,31 @@ arena of `u32` words with watch lists that hold a blocking literal (D16).
 The same parts, each with a bar for how far it is built, are under
 [what is being built](./#what-is-being-built).
 
+## Help from outside
+
+A solver inside the compiler is not the only place a proof can come from. An
+outside program, a language model among them, may propose a loop invariant,
+and the compiler uses it only after checking it like one of its own
+([ADR-361](/docs/specification/adr/adr-361.html) D6).
+
+```text
+  nikaia prove --propose
+      |  one JSON line per open loop (problem in SMT-LIB, source, names)
+      v
+  proposer          any program named in the manifest
+      |  candidate invariants
+      v
+  checker           replays each candidate, keeps what holds
+      |
+      v
+  nikaia.proofs     read by the next build, which calls no proposer
+```
+
+The proposer is a child process, as language servers are, so what a provider,
+a model, a key or a prompt is stays out of the compiler. This is decided and
+not yet built, and what it adds is asked under
+[open questions about the prover](./#what-can-outside-help-add).
+
 ## What the language has to offer the solver
 
 The solver is written in Nikaia, so building it is also a test of the
