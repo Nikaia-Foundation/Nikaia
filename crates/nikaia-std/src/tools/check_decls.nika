@@ -66,7 +66,7 @@ impl CheckState {
         if !self.type_parameters.contains_key(parameter) {
             return
         }
-        self.findings.push(check_refusal("NK1126", span, f"`{parameter}` can be any type the caller picks, so you can't use a {kind} `{name}` on it.", ["A type parameter with no bound can only be moved and passed on, because the body has to work for every type the caller might pick."], f"Use the concrete type the value has instead of `{parameter}`. Bounds that limit which types `{parameter}` can be aren't available yet."))
+        self.findings.push(check_refusal("NK1126", span, f"`{parameter}` can be any type the caller picks, so you can't use a {kind} `{name}` on it.", ["A type parameter with no bound can only be moved and passed on, because the body has to work for every type the caller might pick."], check_decls_bound_help(parameter, kind, name)))
     }
 
     /// **Whether what a counted container holds takes space** (#383): text,
@@ -496,4 +496,17 @@ fn check_decls_bits_as(name: String, method: String) -> String? {
         return null
     }
     return f"bits_as_{into}"
+}
+
+/// **What `NK1126` asks for** (Part I 4.7, #1245): the bound that gives the
+/// method - `Clone` for `.clone()`, a trait declaring it otherwise - or, for a
+/// field, which no bound gives, the concrete type.
+fn check_decls_bound_help(parameter: ref String, kind: ref String, name: ref String) -> String {
+    if kind != "method" {
+        return f"Use the concrete type the value has instead of `{parameter}`: a bound gives methods, never fields."
+    }
+    if name == "clone" {
+        return f"Write the bound `[{parameter}: Clone]`, which gives `.clone()` on a `{parameter}`, or use the concrete type the value has."
+    }
+    return f"Bound `{parameter}` by a trait that declares `{name}` (`[{parameter}: Named]` with `trait Named {{ fn {name}(…) }}`), or use the concrete type the value has instead of `{parameter}`."
 }

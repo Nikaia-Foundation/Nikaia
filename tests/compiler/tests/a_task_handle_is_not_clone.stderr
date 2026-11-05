@@ -1,0 +1,17 @@
+error[NK1164]: `id` needs a `Clone` here, but `TaskHandle[?]` isn't one.
+   --> tests/a_task_handle_is_not_clone.nika:12:2
+    |
+ 12 | 	let h = id(spawn fn { 3 })
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `id` declares `[T: Clone]`, so the type passed has to copy, and `TaskHandle[?]` can't: a task's handle and a lock are never copied.
+    = help: Pass a type that copies, or hand the value itself to a function without the bound.
+error[NK1164]: `id` needs a `Clone` here, but `Held` isn't one.
+   --> tests/a_task_handle_is_not_clone.nika:13:2
+    |
+ 13 | 	let held = id(Held { h: spawn fn { 4 } })
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `id` declares `[T: Clone]`, so the type passed has to copy, and `Held` can't: a task's handle and a lock are never copied.
+    = help: Pass a type that copies, or hand the value itself to a function without the bound.
+2 type errors

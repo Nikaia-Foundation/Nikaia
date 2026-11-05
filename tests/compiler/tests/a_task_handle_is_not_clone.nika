@@ -1,0 +1,15 @@
+// A task's handle does not copy, so it is no `Clone` (Part I 4.7, #1245):
+// passing one, or a struct holding one, for `[T: Clone]` is `NK1164`.
+struct Held {
+	h: TaskHandle[i64],
+}
+
+fn id[T: Clone](x: T) -> T {
+	return x.clone()
+}
+
+fn main() throws {
+	let h = id(spawn fn { 3 })
+	let held = id(Held { h: spawn fn { 4 } })
+	println(f"{h.join()} {held.h.join()}")
+}

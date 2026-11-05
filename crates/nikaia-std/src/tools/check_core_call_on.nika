@@ -265,6 +265,23 @@ fn check_core_call_on_comparable(state: ref CheckState, world: ref CheckWorld, o
     return check_core_call_on_compares(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, on, wants_order)
 }
 
+/// Whether `on` is a type parameter in scope bound by the language's `Clone`.
+fn check_core_call_on_cloned_parameter(state: ref CheckState, world: ref CheckWorld, on: ref Ty) -> bool sync {
+    if world.own.traits.contains_key("Clone") {
+        return false
+    }
+    match on {
+        Ty::Named { name, args, .. } => {
+            if args.len() == 0 && state.type_parameters.contains_key(name) {
+                let bounds: Vec[String] = state.type_parameters[name]?.clone() ?? []
+                return bounds.contains("Clone")
+            }
+        }
+        else => {}
+    }
+    return false
+}
+
 /// The language's own order or equality, asked of what the state collected
 /// (a free function: `CheckComparable` holds references, NK1106).
 fn check_core_call_on_compares(beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]], world: ref CheckWorld, on: ref Ty, wants_order: bool) -> bool {
@@ -305,6 +322,11 @@ fn check_core_call_on_undescribed[H: CheckHost](mut state: CheckState, world: re
             return check_core_call_on_described(state, world, host, answered, receiver, method, args, entry, resolved.key, contract, span)
         }
         return check_core_call_on(state, world, host, answered, receiver, method, args, entry, span)
+    }
+    // **`[T: Clone]` gives `.clone()` on a `T`** (Part I 4.7, #1245): the
+    // language's trait, so no ledger describes it; the copy is a `T`.
+    if entry == "clone" && args.len() == 0 && check_core_call_on_cloned_parameter(state, world, on) {
+        return on.clone()
     }
     if (entry == "compare" || entry == "eq") && args.len() == 1 {
         let wants_order = entry == "compare"

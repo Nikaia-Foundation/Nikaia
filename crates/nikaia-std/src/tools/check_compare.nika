@@ -15,6 +15,9 @@ comptime COMPARE_PLAIN: Array[ref String, 11] = ["i32", "i64", "u8", "u32", "u64
 comptime COMPARE_CONTAINERS: Array[ref String, 14] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared"]
 
 /// The maps and sets not kept in order, which have no order.
+// What `.clone()` does not reach: a task's handle and a lock (#1245).
+comptime COMPARE_UNCOPIED: Array[ref String, 4] = ["TaskHandle", "task::ChildHandle", "Locked", "SharedMut"]
+
 comptime COMPARE_UNORDERED: Array[ref String, 7] = ["Set", "collections::HashMap", "collections::HashSet", "HashMap", "HashSet", "TrustedMap", "TrustedSet"]
 
 /// Which of the three questions is asked.
@@ -60,6 +63,88 @@ impl CheckComparable {
     pub fn orders(ref self, ty: ref Ty) -> bool {
         let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
         return self.asking(ty, CompareStrength::Orders, seen)
+    }
+
+    /// **Whether its values copy (`Clone`)** (Part I 4.7, #1245): what
+    /// `.clone()` on the type does today. A task's handle and a lock do not;
+    /// a container, a tuple, an option and a declared type copy where their
+    /// parts do; a type parameter where it is bound by `Clone`.
+    pub fn clones(ref self, ty: ref Ty, bounds: ref collections::BTreeMap[String, Vec[String]]) -> bool {
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        return self.copying(ty, bounds, seen)
+    }
+
+    fn copying(ref self, ty: ref Ty, bounds: ref collections::BTreeMap[String, Vec[String]], mut seen: collections::BTreeSet[String]) -> bool {
+        return match ty {
+            Ty::Tuple(parts) => self.all_copy(parts, bounds, seen),
+            Ty::Nullable(inner) => self.copying(inner, bounds, seen),
+            Ty::Named { name, args, .. } => self.copying_named(name, args, bounds, seen),
+            else => true,
+        }
+    }
+
+    fn all_copy(ref self, parts: ref Vec[Ty], bounds: ref collections::BTreeMap[String, Vec[String]], mut seen: collections::BTreeSet[String]) -> bool {
+        for part in parts {
+            if !self.copying(part, bounds, seen) {
+                return false
+            }
+        }
+        return true
+    }
+
+    fn copying_named(ref self, name: ref String, args: ref Vec[Ty], bounds: ref collections::BTreeMap[String, Vec[String]], mut seen: collections::BTreeSet[String]) -> bool {
+        if args.len() == 0 && bounds.contains_key(name) {
+            let own = bounds.get(name) ?? return false
+            return own.contains("Clone")
+        }
+        if COMPARE_UNCOPIED.contains(name) {
+            return false
+        }
+        let mut key = name.clone()
+        if args.len() > 0 {
+            let mut written: Vec[String] = []
+            for arg in args {
+                written.push(arg.text())
+            }
+            key = f"{name}[{written.join(", ")}]"
+        }
+        if seen.contains(key) {
+            return true
+        }
+        seen.insert(key)
+        if !self.all_copy(args, bounds, seen) {
+            return false
+        }
+        if self.structs.contains_key(name) {
+            let fields = self.structs.get(name) ?? return true
+            let mut bound: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+            let params = self.parameters.get(name)
+            if params != null {
+                let names = params ?? return true
+                let mut at = 0
+                for param in names {
+                    if at < args.len() {
+                        bound.insert(param.clone(), args[at].clone())
+                    }
+                    at = at + 1
+                }
+            }
+            for field in fields {
+                let given = substitute(field.ty, bound)
+                if !self.copying(given, bounds, seen) {
+                    return false
+                }
+            }
+            return true
+        }
+        if self.enums.contains_key(name) {
+            return self.all_copy(self.payloads_of(name), bounds, seen)
+        }
+        if self.beside.contains_key(name) {
+            let parts = self.beside.get(name) ?? return true
+            return self.all_copy(parts, bounds, seen)
+        }
+        return true
     }
 
     /// Whether the program or a library wrote `impl <trait_name> for <name>`
@@ -430,7 +515,15 @@ pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref coll
     for (parameter, traits) in wanted {
         let held = bound.get(parameter) ?? continue
         for wanted_trait in traits {
-            if (wanted_trait != "Eq" && wanted_trait != "Ord") || asking.own.traits.contains_key(wanted_trait) {
+            if (wanted_trait != "Eq" && wanted_trait != "Ord" && wanted_trait != "Clone") || asking.own.traits.contains_key(wanted_trait) {
+                continue
+            }
+            if wanted_trait == "Clone" {
+                if asking.clones(held, parameters) {
+                    continue
+                }
+                let shown = held.text()
+                refused.push(check_refusal("NK1164", span, f"`{key}` needs a `Clone` here, but `{shown}` isn't one.", [f"`{key}` declares `[{parameter}: Clone]`, so the type passed has to copy, and `{shown}` can't: a task's handle and a lock are never copied."], "Pass a type that copies, or hand the value itself to a function without the bound."))
                 continue
             }
             let ordered = wanted_trait == "Ord"

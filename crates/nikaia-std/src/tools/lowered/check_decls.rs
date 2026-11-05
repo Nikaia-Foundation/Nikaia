@@ -16,7 +16,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn nothing_says_what_a_parameter_can_do(&mut self, parameter: &str, kind: &str, name: &str, span: &Span) {
         if !self.type_parameters.contains_key(parameter) { return; }
-        self.findings.push(check_refusal("NK1126", span, format!("`{}` can be any type the caller picks, so you can't use a {} `{}` on it.", parameter, kind, name), vec![String::from("A type parameter with no bound can only be moved and passed on, because the body has to work for every type the caller might pick.")], Some(format!("Use the concrete type the value has instead of `{}`. Bounds that limit which types `{}` can be aren't available yet.", parameter, parameter))));
+        self.findings.push(check_refusal("NK1126", span, format!("`{}` can be any type the caller picks, so you can't use a {} `{}` on it.", parameter, kind, name), vec![String::from("A type parameter with no bound can only be moved and passed on, because the body has to work for every type the caller might pick.")], Some(check_decls_bound_help(parameter, kind, name))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -260,5 +260,11 @@ pub(crate) fn check_decls_bits_as(name: &str, method: &str) -> Option<String> {
     };
     if partner == "" || into != partner { return None; }
     Some(format!("bits_as_{}", into))
+}
+
+pub(crate) fn check_decls_bound_help(parameter: &str, kind: &str, name: &str) -> String {
+    if kind != "method" { return format!("Use the concrete type the value has instead of `{}`: a bound gives methods, never fields.", parameter); }
+    if name == "clone" { return format!("Write the bound `[{}: Clone]`, which gives `.clone()` on a `{}`, or use the concrete type the value has.", parameter, parameter); }
+    format!("Bound `{}` by a trait that declares `{}` (`[{}: Named]` with `trait Named {{ fn {}(…) }}`), or use the concrete type the value has instead of `{}`.", parameter, name, parameter, name, parameter)
 }
 

@@ -206,6 +206,25 @@ pub(crate) fn check_core_call_on_comparable(state: &CheckState, world: &CheckWor
     check_core_call_on_compares(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, on, wants_order)
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_cloned_parameter(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty) -> bool {
+    if world.own.traits.contains_key("Clone") { return false; }
+    match on {
+        Ty::Named { name, args, .. } => {
+            if args.is_empty() && state.type_parameters.contains_key(name) {
+                let bounds: Vec<String> = nikaia_std::index::or(match *nikaia_std::index::get(&state.type_parameters, name) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || vec![].into());
+                return nikaia_std::list::contains(&bounds, &"Clone");
+            }
+        },
+        _ => { },
+    }
+    false
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_on_compares(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, wants_order: bool) -> bool {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
@@ -237,6 +256,7 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
         }
         return check_core_call_on(state, world, host, answered, receiver, method, args, entry, span);
     }
+    if entry == "clone" && args.is_empty() && check_core_call_on_cloned_parameter(&state, world, on) { return on.clone(); }
     if (entry == "compare" || entry == "eq") && args.len() == 1 {
         let wants_order = entry == "compare";
         if check_core_call_on_comparable(&state, world, on, wants_order) {

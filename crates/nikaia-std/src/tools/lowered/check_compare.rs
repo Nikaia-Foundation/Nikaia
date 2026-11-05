@@ -5,6 +5,8 @@ pub(crate) const COMPARE_PLAIN: [&str; 11] = ["i32", "i64", "u8", "u32", "u64", 
 
 pub(crate) const COMPARE_CONTAINERS: [&str; 14] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared"];
 
+pub(crate) const COMPARE_UNCOPIED: [&str; 4] = ["TaskHandle", "task::ChildHandle", "Locked", "SharedMut"];
+
 pub(crate) const COMPARE_UNORDERED: [&str; 7] = ["Set", "collections::HashMap", "collections::HashSet", "HashMap", "HashSet", "TrustedMap", "TrustedSet"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +39,62 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
     pub fn orders(&self, ty: &'a Ty) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         self.asking(ty, CompareStrength::Orders, &mut seen)
+    }
+    pub fn clones(&self, ty: &'a Ty, bounds: &'a collections::BTreeMap<String, Vec<String>>) -> bool {
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        self.copying(ty, bounds, &mut seen)
+    }
+    pub(crate) fn copying(&self, ty: &Ty, bounds: &'a collections::BTreeMap<String, Vec<String>>, seen: &mut collections::BTreeSet<String>) -> bool {
+        match ty {
+            Ty::Tuple(parts) => self.all_copy(parts, bounds, seen),
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.copying(inner, bounds, seen) },
+            Ty::Named { name, args, .. } => self.copying_named(name, args, bounds, seen),
+            _ => true,
+        }
+    }
+    pub(crate) fn all_copy(&self, parts: &'a Vec<Ty>, bounds: &'a collections::BTreeMap<String, Vec<String>>, seen: &mut collections::BTreeSet<String>) -> bool {
+        for part in parts.iter() { if !self.copying(part, bounds, seen) { return false; } }
+        true
+    }
+    pub(crate) fn copying_named(&self, name: &'a str, args: &'a Vec<Ty>, bounds: &'a collections::BTreeMap<String, Vec<String>>, seen: &mut collections::BTreeSet<String>) -> bool {
+        if args.is_empty() && bounds.contains_key(name) {
+            let own = match bounds.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            return nikaia_std::list::contains(&own, &"Clone");
+        }
+        if nikaia_std::list::contains(&COMPARE_UNCOPIED, &name) { return false; }
+        let mut key = name.to_string();
+        if !args.is_empty() {
+            let mut written: Vec<String> = vec![];
+            for arg in args.iter() { written.push(arg.text()); }
+            key = format!("{}[{}]", name, written.join(", "));
+        }
+        if seen.contains(&key) { return true; }
+        seen.insert(key);
+        if !self.all_copy(args, bounds, seen) { return false; }
+        if self.structs.contains_key(name) {
+            let fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return true };
+            let mut bound: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+            let params = self.parameters.get(name);
+            if params.is_some() {
+                let names = match params { Some(__nikaia_value) => __nikaia_value, None => return true };
+                let mut at: i64 = 0;
+                for param in names.iter() {
+                    if at < args.len() as i64 { bound.insert(param.to_string(), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
+                    at = at + 1;
+                }
+            }
+            for field in fields.iter() {
+                let given = substitute(&field.ty, &bound);
+                if !self.copying(&given, bounds, seen) { return false; }
+            }
+            return true;
+        }
+        if self.enums.contains_key(name) { return self.all_copy(&self.payloads_of(name), bounds, seen); }
+        if self.beside.contains_key(name) {
+            let parts = match self.beside.get(name) { Some(__nikaia_value) => __nikaia_value, None => return true };
+            return self.all_copy(&parts, bounds, seen);
+        }
+        true
     }
     pub fn implements(&self, trait_name: &'a str, name: &str) -> bool {
         if self.own.traits.contains_key(trait_name) { return false; }
@@ -261,7 +319,13 @@ pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
     for (parameter, traits) in wanted.iter() {
         let held = match bound.get(parameter) { Some(__nikaia_value) => __nikaia_value, None => continue };
         for wanted_trait in traits.iter() {
-            if wanted_trait != "Eq" && wanted_trait != "Ord" || asking.own.traits.contains_key(wanted_trait) { continue; }
+            if wanted_trait != "Eq" && wanted_trait != "Ord" && wanted_trait != "Clone" || asking.own.traits.contains_key(wanted_trait) { continue; }
+            if wanted_trait == "Clone" {
+                if asking.clones(&held, parameters) { continue; }
+                let shown = held.text();
+                refused.push(check_refusal("NK1164", span, format!("`{}` needs a `Clone` here, but `{}` isn't one.", key, shown), vec![format!("`{}` declares `[{}: Clone]`, so the type passed has to copy, and `{}` can't: a task's handle and a lock are never copied.", key, parameter, shown)], Some(String::from("Pass a type that copies, or hand the value itself to a function without the bound."))));
+                continue;
+            }
             let ordered = wanted_trait == "Ord";
             let mut met = false;
             let own_bounds = compare_parameter_bounds(&held, parameters);

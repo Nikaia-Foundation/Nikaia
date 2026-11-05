@@ -1,0 +1,17 @@
+// `Clone` is a trait of the language (Part I 4.7, #1245): `[T: Clone]` gives
+// the body `.clone()` on a `T`, and the language answers the bound for a
+// number and for a struct whose parts copy.
+struct P {
+	s: String,
+}
+
+fn id[T: Clone](x: T) -> T {
+	return x.clone()
+}
+
+fn main() {
+	let a = id(3)
+	let p = id(P { s: "x" })
+	println(f"{a}")
+	println(p.s)
+}
