@@ -21,3 +21,5 @@
 /home/user/Nikaia/docs/briefs/views/v16-clone-trait.md 4604791 68 4478749 98820 27084
 /home/user/Nikaia/docs/briefs/views/v17-migrate-docs-packages.md 4528510 68 4396823 98051 33500
 /home/user/Nikaia/docs/briefs/views/qa/qa-task.md 517082 18 470924 41169 4953
+/home/user/Nikaia/docs/briefs/views/v18-matched-lent-param.md 5565010 80 5420374 114084 30392
+/home/user/Nikaia/docs/briefs/views/v19-migrate-tool-tests-self.md 3587744 53 3463505 88679 35454
