@@ -889,10 +889,13 @@ impl Picks for Holder {
     }
 }
 
-/// `b` is moved into the method and ends with it, and nothing keeps it.
+/// **A method's parameter it does not keep is lent, as a free function's is**
+/// (ADR-views-3 D1): `b` is the caller's text, not moved into the method, so a
+/// view of it outlives the call. Before the method lent it, `b` ended with the
+/// call and the walk refused the view; the free function never did.
 #[test]
-fn a_view_of_a_parameter_taken_by_value_in_a_method() {
-    let source = r#"struct S { name: String }
+fn a_view_of_a_parameter_a_method_does_not_keep_is_the_callers() {
+    let method = r#"struct S { name: String }
 impl S {
     fn get(ref self, b: String) -> ref String {
         if b.len() > 9 {
@@ -902,16 +905,24 @@ impl S {
     }
 }
 "#;
-    let found = all_findings(source);
-    assert!(!found.is_empty(), "accepted, and it should not be");
-    assert!(
-        found.iter().any(|f| f.message.contains("takes by value")),
-        "{found:#?}"
-    );
-    for finding in &found {
-        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
-        assert!(!says_a_lifetime(&shown), "{shown}");
+    let function = r#"struct S { name: String }
+fn get(s: ref S, b: String) -> ref String {
+    if b.len() > 9 {
+        return s.name
     }
+    return ref b
+}
+"#;
+    assert!(
+        all_findings(function).is_empty(),
+        "{:#?}",
+        all_findings(function)
+    );
+    assert!(
+        all_findings(method).is_empty(),
+        "{:#?}",
+        all_findings(method)
+    );
 }
 
 // --- accepted shapes the review found failing in rustc ------------------------------

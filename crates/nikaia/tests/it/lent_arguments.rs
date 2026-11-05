@@ -120,14 +120,12 @@ fn a_copy_type_is_not_lent() {
     assert!(!rust.contains("&i64"), "{rust}");
 }
 
-/// **A method's argument is not lent**, which is `touches`' reason for asking a
-/// weaker question said once more: which entry `acc.record(m)` goes to is the
-/// type checker's answer and the emitter has none
-/// ([ADR-288](../../../docs/specification/adr/adr-288.md)). The declaration is
-/// written off the column and the call would not be, so a call the checker does
-/// not walk — a grammar action's fold lambda — would hand a value into a `&T`.
+/// **An own method's argument it does not keep is lent**, at the declaration
+/// and at the call alike (ADR-views-3 D1): the declaration is this program's, the
+/// type checker knows which entry `s.measure(t)` goes to, and `lends_in_own`
+/// answers for it as for a free function's parameter.
 #[test]
-fn a_method_argument_is_not_lent() {
+fn an_own_methods_argument_it_does_not_keep_is_lent() {
     let rust = lowered(
         "struct Sink { n: i64 }\n\
          impl Sink {\n\
@@ -140,8 +138,11 @@ fn a_method_argument_is_not_lent() {
          \x20   println(f\"{s.n}\")\n\
          }\n",
     );
-    assert!(rust.contains("text: String"), "{rust}");
-    assert!(!rust.contains("text: &String"), "{rust}");
+    assert!(
+        rust.contains("text: &str") || rust.contains("text: &String"),
+        "{rust}"
+    );
+    assert!(rust.contains("s.measure(&t)"), "{rust}");
 }
 
 /// **And a `&` written at a method call is left alone**, for the same reason:
