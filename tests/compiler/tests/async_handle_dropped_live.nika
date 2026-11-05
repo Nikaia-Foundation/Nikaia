@@ -1,0 +1,24 @@
+// A live child handle dropped unjoined is waited for at its group's end
+// (Part I 8.2, ADR-async-5 D11, #987): the `join(within:)` times out, the
+// handler does not take the task up, and the group of `main` still waits for
+// the rest, whose value is nobody's. A handle cancelled in a branch taken
+// still stops at its pause.
+use std::time
+
+fn slow(s: String, n: i64) -> i64 {
+	time::sleep(50.millis())
+	println(f"end {s}")
+	return n
+}
+
+fn main() {
+	let s = "slow"
+	let h = async(handle) fn { slow(s, 7) }
+	let v = h.join(within: 5.millis()) catch { 0 }
+	println(f"{v}")
+	let c = async(handle) fn { slow("cancelled", 8) }
+	if v == 0 {
+		c.cancel()
+	}
+	println("main")
+}

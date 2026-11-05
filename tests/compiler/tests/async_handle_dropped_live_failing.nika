@@ -1,0 +1,38 @@
+// The failure of a live child handle dropped unjoined arrives at its group's
+// end as an unread one (Part I 8.1.2 and 8.2, ADR-async-5 D11, #987): the
+// `join(within:)` times out, `run` goes on to its `return`, and the group
+// raises the rest's failure there, so the value is never handed back.
+use std::time
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Oops(n) => f"task {n} failed",
+		}
+	}
+}
+
+fn late(n: i64) -> i64 throws {
+	time::sleep(20.millis())
+	println("the rest runs on")
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n
+}
+
+fn run() -> i64 throws {
+	let h = async(handle) fn { late(9) }
+	let v = h.join(within: 1.millis()) catch { 0 }
+	println(f"timed out: {v}")
+	return v + 1
+}
+
+fn main() {
+	let n = run() catch {
+		println(f"caught at the group's end: {error}")
+		100
+	}
+	println(f"{n}")
+}

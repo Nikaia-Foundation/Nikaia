@@ -1294,7 +1294,15 @@ impl EmitState {
                 out.push(f"{name}.spawn_paused_here(async || -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await")
                 return
             }
-            let held = f"{name}.start_paused(async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+            let mut held = f"{name}.start_paused(async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+            // **A handle named later keeps its rest in a cell of its block**
+            // (Part I 8.2, #987): dropped live, the task is waited for at
+            // the block's end instead of cancelled at its pause.
+            if kind == "handle" && walk.async_keeps {
+                let cell = f"__rest_{id}"
+                held = f"{name}.start_kept(&{cell}, async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+                walk.async_kept.push(cell)
+            }
             if kind == "join" {
                 out.push(emit_async_joined_paused(held, channel))
             } else {

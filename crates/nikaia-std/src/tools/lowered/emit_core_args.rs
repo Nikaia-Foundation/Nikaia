@@ -800,7 +800,12 @@ impl EmitState {
                 out.push(&format!("{}.spawn_paused_here(async || -> Result<(), {}> {{ let _ = {}; Ok(()) }}).await", name, channel, body.buf));
                 return Ok(());
             }
-            let held = format!("{}.start_paused(async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }}).await", name, channel, body.buf);
+            let mut held = format!("{}.start_paused(async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }}).await", name, channel, body.buf);
+            if kind == "handle" && walk.async_keeps {
+                let cell = format!("__rest_{}", id);
+                held = format!("{}.start_kept(&{}, async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }}).await", name, cell, channel, body.buf);
+                walk.async_kept.push(cell);
+            }
             if kind == "join" { out.push(&emit_async_joined_paused(&held, &channel)); } else { out.push(&held); }
             return Ok(());
         }

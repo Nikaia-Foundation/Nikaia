@@ -101,6 +101,12 @@ impl EmitOut {
     }
 
     /// The same, just before the last `}`.
+    /// Insert `text` at byte `at`, moving the map entries behind it.
+    pub fn insert_at(ref mut self, at: i64, text: ref String) {
+        self.buf.insert_str(at, text)
+        self.shift_entries(at, text.len())
+    }
+
     pub fn insert_before_last_brace(ref mut self, text: ref String) {
         let at = self.buf.rfind("}") ?? return
         self.buf.insert_str(at, text)

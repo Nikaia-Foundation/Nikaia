@@ -29,7 +29,7 @@
 
 mod group;
 
-pub use group::{ChildHandle, Deferred, Ended, Receiver};
+pub use group::{ChildHandle, Deferred, Ended, Polled, Receiver, Rest};
 use group::{Group, ended, ran};
 
 /// **What a `spawn` hands back** (Part I 8.2,
@@ -1499,6 +1499,22 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
         F: std::future::Future<Output = Result<T, E>> + 'g,
     {
         ChildHandle::held(self, body).await
+    }
+
+    /// **`async e` whose task pauses, bound to a handle named later**
+    /// (Part I 8.2, #987): as [`Scope::start_paused`], but the rest lives in
+    /// `rest`, which the emitted code finishes at the end of its block, so a
+    /// handle dropped live is waited for there.
+    pub async fn start_kept<'g, 'b: 'g, T: 'b, F>(
+        &'b self,
+        rest: &'g Rest<'b>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        ChildHandle::kept(self, rest, body).await
     }
 
     /// **`async e` as a statement whose task pauses** (D9, D20, #1226): it

@@ -149,6 +149,8 @@ impl EmitState {
             out.push(f"{inner_pad}{line}\n")
         }
         let last = if count == 0 { 0 } else { count - 1 }
+        let keeps = walk.async_keeps
+        let rests = walk.async_rests.len()
         let mut i = 0
         for stmt in body.stmts {
             out.push(inner_pad)
@@ -172,6 +174,13 @@ impl EmitState {
             self.write_keep_prelude(walk, out, key, stmt.span.start as i64, depth + 1)
             // The bindings of `async e` this statement waits for (ADR-async-5 D6).
             self.emit_async_joins(walk, out, stmt.span.start as i64, inner_pad)
+            // **The cells of rests this body declared** (Part I 8.2, #987) are
+            // finished after its tail value, before it is handed back.
+            let ending = i == last && walk.async_rests.len() > rests && here.is_value()
+            walk.async_keeps = i < last
+            if ending {
+                out.push("let __nikaia_rested = { ")
+            }
             let st = out.mark()
             if wrap {
                 if binds {
@@ -189,8 +198,17 @@ impl EmitState {
                 }
             }
             out.record(stmt.span, st)
+            if ending {
+                out.push(" };")
+            }
             out.push("\n")
             i += 1
+        }
+        walk.async_keeps = keeps
+        let finished = emit_stmt_finish_rests(walk, rests, inner_pad)
+        out.push(finished)
+        if finished != "" && tail.is_value() {
+            out.push(f"{inner_pad}__nikaia_rested\n")
         }
         if main_ends {
             out.push(f"{inner_pad}nikaia_std::rt::exit::main_ends();\n")

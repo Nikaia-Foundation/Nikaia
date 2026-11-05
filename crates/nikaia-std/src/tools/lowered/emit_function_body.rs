@@ -89,6 +89,8 @@ impl EmitState {
         out.push("{\n");
         for line in first.iter() { out.push(&format!("{}{}\n", inner_pad, line)); }
         let last = if count == 0 { 0 } else { count - 1 };
+        let keeps = walk.async_keeps;
+        let rests = walk.async_rests.len() as i64;
         let mut i: i64 = 0;
         for stmt in body.stmts.iter() {
             out.push(&inner_pad);
@@ -97,14 +99,22 @@ impl EmitState {
             let binds = wrap && self.a_tail_that_enters_a_grammar(world, &stmt.node);
             self.write_keep_prelude(walk, out, key, stmt.span.start as i64, depth + 1);
             self.emit_async_joins(walk, out, stmt.span.start as i64, &inner_pad);
+            let ending = i == last && (walk.async_rests.len() as i64) > rests && here.is_value();
+            walk.async_keeps = i < last;
+            if ending { out.push("let __nikaia_rested = { "); }
             let st = out.mark();
             if wrap { if binds { out.push("let __nikaia_value = "); } else { out.push("Ok("); } }
             self.emit_stmt(world, walk, out, host, &stmt.node, &stmt.span, depth + 1, here, flow, &scope)?;
             if wrap { if binds { out.push(&format!(";\n{}Ok(__nikaia_value)", inner_pad)); } else { out.push(")"); } }
             out.record(&stmt.span, st);
+            if ending { out.push(" };"); }
             out.push("\n");
             i += 1;
         }
+        walk.async_keeps = keeps;
+        let finished = emit_stmt_finish_rests(walk, rests, &inner_pad);
+        out.push(&finished);
+        if finished != "" && tail.is_value() { out.push(&format!("{}__nikaia_rested\n", inner_pad)); }
         if main_ends { out.push(&format!("{}nikaia_std::rt::exit::main_ends();\n", inner_pad)); }
         if !returns_value && !leaves { out.push(&format!("{}Ok(())\n", inner_pad)); }
         out.push(&pad);

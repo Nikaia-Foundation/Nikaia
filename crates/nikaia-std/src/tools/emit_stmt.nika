@@ -174,7 +174,10 @@ impl EmitState {
             let bound = walk.async_bound.clone()
             let mut rendered = EmitOut::empty()
             let st = rendered.mark()
+            let keeps = walk.async_keeps
+            walk.async_keeps = false
             self.emit_stmt(world, walk, rendered, host, block.stmts[0].node, block.stmts[0].span, depth, tail, flow, scope)
+            walk.async_keeps = keeps
             rendered.record(block.stmts[0].span, st)
             if !rendered.buf.contains("\n") {
                 out.push("{ ")
@@ -196,6 +199,8 @@ impl EmitState {
             out.push("\n")
         }
         let last = block.stmts.len() - 1
+        let keeps = walk.async_keeps
+        let rests = walk.async_rests.len()
         // **Statements run in the order they are written** (ADR-292 D1), and no
         // analysis stands between the source and the schedule. A program that
         // wants overlap writes `overlap { ... }` and has the claim checked
@@ -245,11 +250,28 @@ impl EmitState {
             }
             out.push(inner_pad)
             self.emit_async_joins(walk, out, block.stmts[i].span.start as i64, inner_pad)
+            let here = tail.at(i, last)
+            let ending = i == last && walk.async_rests.len() > rests
+            walk.async_keeps = i < last
+            if ending && here.is_value() {
+                out.push("let __nikaia_rested = { ")
+            }
             let st = out.mark()
-            self.emit_stmt(world, walk, out, host, block.stmts[i].node, block.stmts[i].span, depth + 1, tail.at(i, last), flow, scope)
+            self.emit_stmt(world, walk, out, host, block.stmts[i].node, block.stmts[i].span, depth + 1, here, flow, scope)
             out.record(block.stmts[i].span, st)
+            if ending && here.is_value() {
+                out.push(" };")
+            }
             out.push("\n")
             pos += 1
+        }
+        walk.async_keeps = keeps
+        let finished = emit_stmt_finish_rests(walk, rests, inner_pad)
+        if finished != "" {
+            out.push(finished)
+            if tail.is_value() {
+                out.push(f"{inner_pad}__nikaia_rested\n")
+            }
         }
         out.push(pad)
         out.push("}")
@@ -259,10 +281,13 @@ impl EmitState {
     /// since its `join` throws `task::Crashed` alone (ADR-328 D8).
     pub fn emit_stmt[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let mark = out.buf.len()
+        let kept = walk.async_kept.len()
         if self.emit_async_binding(world, walk, out, host, node, span, depth, tail, flow, scope) {
+            emit_stmt_declare_rests(walk, out, mark, kept)
             return
         }
         self.emit_stmt_written(world, walk, out, host, node, span, depth, tail, flow, scope)
+        emit_stmt_declare_rests(walk, out, mark, kept)
         match node {
             Stmt::Let { names, value, .. } => {
                 match value {
@@ -1176,4 +1201,30 @@ impl EmitState {
             out.push(";")
         }
     }
+}
+
+/// **The cells a statement's bound pausing tasks asked for** (Part I 8.2,
+/// #987), declared before it: `let __rest_N = nikaia_std::task::Rest::new();`.
+fn emit_stmt_declare_rests(mut walk: EmitWalk, mut out: EmitOut, mark: i64, kept: i64) {
+    let mut declared = ""
+    while walk.async_kept.len() > kept {
+        let cell = walk.async_kept.pop() ?? break
+        declared = f"let {cell} = nikaia_std::task::Rest::new(); {declared}"
+        walk.async_rests.push(cell)
+    }
+    if declared != "" {
+        out.insert_at(mark, declared)
+    }
+}
+
+/// **The end of a block that declared cells of rests** (Part I 8.2, #987):
+/// each still running is waited for here, in the order they started; the
+/// cells leave the walk.
+fn emit_stmt_finish_rests(mut walk: EmitWalk, rests: i64, pad: ref String) -> String {
+    let mut finished = ""
+    while walk.async_rests.len() > rests {
+        let cell = walk.async_rests.pop() ?? break
+        finished = f"{pad}{cell}.finish().await;\n{finished}"
+    }
+    return finished
 }

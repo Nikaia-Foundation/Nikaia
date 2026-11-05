@@ -56,6 +56,10 @@ impl EmitOut {
         self.buf.insert_str(nikaia_std::count::of(at), text);
         self.shift_entries(at, text.len() as i64);
     }
+    pub fn insert_at(&mut self, at: i64, text: &str) {
+        self.buf.insert_str(nikaia_std::count::of(at), text);
+        self.shift_entries(at, text.len() as i64);
+    }
     pub fn insert_before_last_brace(&mut self, text: &str) {
         let at = match nikaia_std::search::rfind(&self.buf, &"}") { Some(__nikaia_value) => __nikaia_value, None => return };
         self.buf.insert_str(nikaia_std::count::of(at), text);

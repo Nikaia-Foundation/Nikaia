@@ -290,6 +290,16 @@ pub struct EmitWalk {
     /// The bindings of `async e` only other tasks name (D8): the name and its
     /// handle's name, joined in the task that names it.
     pub async_handles: collections::BTreeMap[String, String],
+    /// **A bound pausing task may keep its rest in a cell here** (Part I
+    /// 8.2, #987): set by a block's loop for a statement that is not its
+    /// tail, so the block can finish the cell at its end.
+    pub async_keeps: bool,
+    /// The cells of rests the statement being written asked for, declared
+    /// before it once it is written.
+    pub async_kept: Vec[String],
+    /// The cells declared in the blocks open where the walk is, finished at
+    /// the end of the block that declared them.
+    pub async_rests: Vec[String],
     /// The join each `async e` of a binding is written as, by its node, while
     /// its `let` is kept for the statement that waits (D6); empty elsewhere.
     pub async_joining: collections::BTreeMap[i64, String],
@@ -314,6 +324,6 @@ pub struct EmitWalk {
 impl EmitWalk {
     /// Nothing written yet.
     pub fn fresh() -> EmitWalk {
-        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_members: [], grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", dyn_code: false, nonnegative: collections::BTreeMap(), specialising: null, slotted: false, at_field: null, field_names: collections::BTreeMap(), field_types: collections::BTreeMap(), field_owners: collections::BTreeMap(), field_copy: null, type_names: collections::BTreeMap(), code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1, path_types: "", async_groups: [], async_pending: [], async_handles: collections::BTreeMap(), async_joining: collections::BTreeMap(), async_pausing: false, async_fallback: false, async_within: "", async_bound: "", async_deadlines: [] }
+        return EmitWalk { plain_tasks: collections::BTreeSet(), boxed_scope: false, dropped_catch: -1, reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), grammar_rules: collections::BTreeSet(), grammar_values: collections::BTreeMap(), grammar_members: [], grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", dyn_code: false, nonnegative: collections::BTreeMap(), specialising: null, slotted: false, at_field: null, field_names: collections::BTreeMap(), field_types: collections::BTreeMap(), field_owners: collections::BTreeMap(), field_copy: null, type_names: collections::BTreeMap(), code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, method_callee: null, hoisted_args: null, hoisted_lets: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1, path_types: "", async_groups: [], async_pending: [], async_handles: collections::BTreeMap(), async_keeps: false, async_kept: [], async_rests: [], async_joining: collections::BTreeMap(), async_pausing: false, async_fallback: false, async_within: "", async_bound: "", async_deadlines: [] }
     }
 }

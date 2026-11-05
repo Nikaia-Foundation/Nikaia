@@ -327,6 +327,67 @@ pub struct ChildHandle<'g, T, E> {
     /// #1226), after its first pause: polled where the checker waits, its
     /// `join`. Dropped unjoined, the task is cancelled at that pause.
     held: std::cell::RefCell<Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'g>>>>,
+    /// **The cell that holds the rest of a bound pausing task** (Part I 8.2,
+    /// #987): where the handle is named after its `let`, the rest lives in a
+    /// [`Rest`] the emitted code declares before it and finishes at the end of
+    /// that block, so a handle dropped live is waited for there.
+    kept: Option<&'g dyn Polled>,
+}
+
+/// What a [`ChildHandle`] does with the [`Rest`] cell of its task.
+pub trait Polled {
+    /// Poll the rest in place, where the checker waits; an ended one is
+    /// dropped.
+    fn poll_rest(&self, cx: &mut std::task::Context<'_>);
+    /// Drop the rest: the task stops at its pause.
+    fn cancel_rest(&self);
+}
+
+/// **The rest of a bound pausing task of `async e`** (Part I 8.2,
+/// ADR-async-5 D11, #987): declared by the emitted code just before the
+/// handle's `let`, so it may borrow what the task borrows. `join` polls it
+/// through the handle; [`Rest::finish`], at the end of the block, waits for a
+/// rest whose handle was dropped live (its failure then reaches the group as
+/// an unread one); leaving the block early drops it, at its pause.
+pub struct Rest<'b> {
+    held: std::cell::RefCell<Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'b>>>>,
+}
+
+impl Rest<'_> {
+    pub fn new() -> Self {
+        Rest {
+            held: std::cell::RefCell::new(None),
+        }
+    }
+
+    /// **The block's end**: the rest still running, if any, is waited for.
+    pub async fn finish(&self) {
+        let rest = self.held.take();
+        if let Some(rest) = rest {
+            rest.await;
+        }
+    }
+}
+
+impl Default for Rest<'_> {
+    fn default() -> Self {
+        Rest::new()
+    }
+}
+
+impl Polled for Rest<'_> {
+    fn poll_rest(&self, cx: &mut std::task::Context<'_>) {
+        let mut held = self.held.borrow_mut();
+        if let Some(task) = held.as_mut()
+            && task.as_mut().poll(cx).is_ready()
+        {
+            *held = None;
+        }
+    }
+
+    fn cancel_rest(&self) {
+        drop(self.held.take());
+    }
 }
 
 impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
@@ -339,7 +400,38 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             is_deferred: false,
             claimed: std::cell::Cell::new(false),
             held: std::cell::RefCell::new(None),
+            kept: None,
         }
+    }
+
+    /// **A handle to a bound pausing task of `async e`** (Part I 8.2, #987):
+    /// as [`ChildHandle::held`], but the rest lives in `rest`, which the
+    /// block that declared it finishes at its end.
+    pub(super) async fn kept<'b, F>(
+        group: &'b dyn Receiver<E>,
+        rest: &'g Rest<'b>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> Self
+    where
+        'b: 'g,
+        T: 'b,
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        let mut handle = ChildHandle::new(group, empty_slot());
+        handle.kept = Some(rest);
+        let Some(at) = group.place() else {
+            locked(&handle.slot).ended = Some(Ended::Cancelled);
+            return handle;
+        };
+        handle.at = Some(at);
+        *rest.held.borrow_mut() = Some(Box::pin(held_task(group, handle.slot.clone(), at, body)));
+        std::future::poll_fn(|cx| {
+            rest.poll_rest(cx);
+            std::task::Poll::Ready(())
+        })
+        .await;
+        handle
     }
 
     /// **A handle to a pausing task of `async e`** (ADR-async-5 D6, D20,
@@ -451,6 +543,9 @@ impl<T, E> ChildHandle<'_, T, E> {
     fn cancel_here(&self) {
         self.claimed.set(true);
         drop(self.held.take());
+        if let Some(rest) = self.kept {
+            rest.cancel_rest();
+        }
         let mut held = locked(&self.slot);
         held.cancel = true;
         held.unclaimed = true;
@@ -478,6 +573,9 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
                 && task.as_mut().poll(cx).is_ready()
             {
                 rest = None;
+            }
+            if let Some(kept) = self.kept {
+                kept.poll_rest(cx);
             }
             let mut held = locked(&slot);
             match held.ended.take() {
@@ -523,6 +621,9 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
                 && task.as_mut().poll(cx).is_ready()
             {
                 rest = None;
+            }
+            if let Some(kept) = self.kept {
+                kept.poll_rest(cx);
             }
             let mut held = locked(&slot);
             if let Some(end) = held.ended.take() {

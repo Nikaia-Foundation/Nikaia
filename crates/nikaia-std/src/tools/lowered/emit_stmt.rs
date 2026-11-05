@@ -114,7 +114,10 @@ impl EmitState {
             let bound = walk.async_bound.to_string();
             let mut rendered = EmitOut::empty();
             let st = rendered.mark();
+            let keeps = walk.async_keeps;
+            walk.async_keeps = false;
             self.emit_stmt(world, walk, &mut rendered, host, &nikaia_std::index::get(&block.stmts, 0).node, &nikaia_std::index::get(&block.stmts, 0).span, depth, tail, flow, scope)?;
+            walk.async_keeps = keeps;
             rendered.record(&nikaia_std::index::get(&block.stmts, 0).span, st);
             if !rendered.buf.contains("\n") {
                 out.push("{ ");
@@ -134,6 +137,8 @@ impl EmitState {
             out.push("\n");
         }
         let last = block.stmts.len() as i64 - 1;
+        let keeps = walk.async_keeps;
+        let rests = walk.async_rests.len() as i64;
         let order = host.order_of(block);
         let mut pos: i64 = 0;
         while ((pos) as usize) < order.len() {
@@ -168,11 +173,22 @@ impl EmitState {
             }
             out.push(&inner_pad);
             self.emit_async_joins(walk, out, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64, &inner_pad);
+            let here = tail.at(i, last);
+            let ending = i == last && (walk.async_rests.len() as i64) > rests;
+            walk.async_keeps = i < last;
+            if ending && here.is_value() { out.push("let __nikaia_rested = { "); }
             let st = out.mark();
-            self.emit_stmt(world, walk, out, host, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, depth + 1, tail.at(i, last), flow, scope)?;
+            self.emit_stmt(world, walk, out, host, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, depth + 1, here, flow, scope)?;
             out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
+            if ending && here.is_value() { out.push(" };"); }
             out.push("\n");
             pos += 1;
+        }
+        walk.async_keeps = keeps;
+        let finished = emit_stmt_finish_rests(walk, rests, &inner_pad);
+        if finished != "" {
+            out.push(&finished);
+            if tail.is_value() { out.push(&format!("{}__nikaia_rested\n", inner_pad)); }
         }
         out.push(&pad);
         out.push("}");
@@ -183,8 +199,13 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_stmt<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mark = out.buf.len() as i64;
-        if self.emit_async_binding(world, walk, out, host, node, span, depth, tail, flow, scope)? { return Ok(()); }
+        let kept = walk.async_kept.len() as i64;
+        if self.emit_async_binding(world, walk, out, host, node, span, depth, tail, flow, scope)? {
+            emit_stmt_declare_rests(walk, out, mark, kept);
+            return Ok(());
+        }
         self.emit_stmt_written(world, walk, out, host, node, span, depth, tail, flow, scope)?;
+        emit_stmt_declare_rests(walk, out, mark, kept);
         match node {
             Stmt::Let { names, value, .. } => {
                 match value {
@@ -853,5 +874,24 @@ impl EmitState {
         if !tail.is_value() && !block_shaped { out.push(";"); }
         Ok(())
     }
+}
+
+pub(crate) fn emit_stmt_declare_rests(walk: &mut EmitWalk, out: &mut EmitOut, mark: i64, kept: i64) {
+    let mut declared = String::from("");
+    while (walk.async_kept.len() as i64) > kept {
+        let cell = match walk.async_kept.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        declared = format!("let {} = nikaia_std::task::Rest::new(); {}", cell, declared);
+        walk.async_rests.push(cell);
+    }
+    if declared != "" { out.insert_at(mark, &declared); }
+}
+
+pub(crate) fn emit_stmt_finish_rests(walk: &mut EmitWalk, rests: i64, pad: &str) -> String {
+    let mut finished = String::from("");
+    while (walk.async_rests.len() as i64) > rests {
+        let cell = match walk.async_rests.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        finished = format!("{}{}.finish().await;\n{}", pad, cell, finished);
+    }
+    finished
 }
 
