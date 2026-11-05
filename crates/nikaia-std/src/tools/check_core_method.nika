@@ -394,9 +394,22 @@ fn check_core_method_changes(mut state: CheckState, world: ref CheckWorld, recei
     }
     state.a_changed_binding_says_mut(root, f"changed here, by `{name}`", span.clone())
     state.a_shared_name_changed_in_parallel(root, span)
-    // **An element a call changes is a place** (0.0.250, #526).
-    if an_element_beneath(receiver) {
+    // **An element a call changes is a place** (0.0.250, #526), and so is
+    // a part of a list (ADR-views-3 D11, #1209): `v[2..<4].sort()` sorts
+    // `v[2..4]` itself.
+    if an_element_beneath(receiver) || check_core_method_a_part(receiver) {
         state.facts.changed_elements.insert(id_of(receiver) as i64)
+    }
+}
+
+/// Whether `expr` is a part `v[a..<b]` of a list or an array.
+fn check_core_method_a_part(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Index { index, .. } => match index {
+            Expr::Range { .. } => true,
+            else => false,
+        },
+        else => false,
     }
 }
 

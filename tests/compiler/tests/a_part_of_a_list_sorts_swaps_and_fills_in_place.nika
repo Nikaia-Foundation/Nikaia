@@ -1,0 +1,16 @@
+// A part `v[a..<b]` of a `mut` list changes in place: the list sees it
+// (ADR-views-3 D11, #1209).
+fn main() {
+    let mut p: Vec[u32] = [5, 4, 3, 2, 1, 0]
+    p[2..<5].sort()
+    p[0..<2].fill(0)
+    p[1..<3].reverse()
+    let from = 3
+    p[from..<p.len()].swap(0, 2)
+    let mut a: Array[u32, 4] = [4, 3, 2, 1]
+    a[1..<4].sort()
+    let k = 1
+    a[0..k].swap(0, 1)
+    p[k..<from].reverse()
+    println(f"{p[0]} {p[1]} {p[2]} {p[3]} {p[4]} {p[5]} / {a[0]} {a[1]} {a[2]} {a[3]}")
+}

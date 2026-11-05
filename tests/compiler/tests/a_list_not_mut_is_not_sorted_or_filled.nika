@@ -1,0 +1,9 @@
+// A list changes in place only where it is a `mut` place, a part of it too
+// (ADR-views-3 D11, #1209).
+fn main() {
+    let v: Vec[u32] = [2, 1]
+    v.sort()
+    let w: Vec[u32] = [2, 1]
+    w[0..<1].fill(0)
+    println(f"{v[0]} {w[0]}")
+}

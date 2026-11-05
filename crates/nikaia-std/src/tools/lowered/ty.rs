@@ -1085,7 +1085,11 @@ pub(crate) fn bind_named(pattern_name: &str, pattern_args: &[Ty], actual: &Ty, o
 }
 
 pub(crate) fn bind_arguments(pattern_name: &str, pattern_args: &[Ty], name: &str, args: &[Ty], out: &mut collections::BTreeMap<String, Ty>) {
-    if name != pattern_name || (args.len() as i64) != pattern_args.len() as i64 { return; }
+    if name != pattern_name { return; }
+    if (args.len() as i64) != pattern_args.len() as i64 {
+        if name == "Array" && !args.is_empty() && !pattern_args.is_empty() { bind(nikaia_std::index::get(&pattern_args, 0), nikaia_std::index::get(&args, 0), out); }
+        return;
+    }
     for at in 0..args.len() as i64 { bind(nikaia_std::index::get(&pattern_args, (at) as usize), nikaia_std::index::get(&args, (at) as usize), out); }
 }
 

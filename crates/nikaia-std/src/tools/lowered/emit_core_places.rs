@@ -308,6 +308,30 @@ impl EmitState {
             return Ok(());
         }
         self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
+        match index {
+            Expr::Range { start, end, inclusive, .. } => {
+                let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
+                if !inclusive && emit_read_ends_in_len(world, end, base) {
+                    if only_literals(start) {
+                        out.push("[");
+                        self.emit_expr(world, walk, out, host, start, depth, flow.inferred(), scope)?;
+                        out.push("..]");
+                    } else {
+                        out.push("[nikaia_std::index::part_from(");
+                        self.emit_expr(world, walk, out, host, start, depth, flow, scope)?;
+                        out.push("..)]");
+                    }
+                    return Ok(());
+                }
+                if !only_literals(index) {
+                    if inclusive { out.push("[nikaia_std::index::part_through("); } else { out.push("[nikaia_std::index::part("); }
+                    self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?;
+                    out.push(")]");
+                    return Ok(());
+                }
+            },
+            _ => { },
+        }
         if only_literals(index) {
             out.push("[");
             self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?;

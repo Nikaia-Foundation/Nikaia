@@ -1,0 +1,15 @@
+// `sort` needs an ordered element, on a list and on a run (ADR-341 D4, #1209).
+struct Point {
+    x: i64,
+}
+
+fn tidy(mut xs: Array[Point]) {
+    xs.sort()
+}
+
+fn main() {
+    let mut v: Vec[Point] = [Point { x: 2 }, Point { x: 1 }]
+    v.sort()
+    tidy(v)
+    println(f"{v[0].x}")
+}

@@ -11,7 +11,7 @@ pub struct ProjectTestsOutcome {
     pub bounds: Vec<(String, Bytes, Bytes)>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutputTest {
     pub name: String,
     pub dir: fs::Path,
@@ -23,7 +23,7 @@ pub struct OutputTest {
     pub args: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProgramTest {
     pub name: String,
     pub dir: fs::Path,
@@ -513,7 +513,7 @@ pub async fn project_tests_bless(output: &OutputTest, outcomes: &[(String, Proje
     Ok(ProjectTestsBlessed::Written)
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectTestsFailed {
     pub label: String,
     pub outcomes: Vec<(String, ProjectTestsOutcome)>,

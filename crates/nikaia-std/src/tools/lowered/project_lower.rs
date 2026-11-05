@@ -9,7 +9,7 @@ pub struct ProjectLowerArtifacts {
     pub warnings: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectLowerOut {
     pub rust: String,
     pub ledger: String,

@@ -345,8 +345,13 @@ pub(crate) fn check_crossings_bounds(beside: &collections::BTreeMap<String, Vec<
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
-    if !state.declared_bounds.contains_key(key) { return; }
-    let wanted = match state.declared_bounds.get(key) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut wanted: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    if state.declared_bounds.contains_key(key) {
+        wanted = match match state.declared_bounds.get(key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return };
+    } else { wanted = match bounds_in_a_signature(world, key) { Some(__nikaia_value) => __nikaia_value, None => return }; }
     let refused = check_crossings_bounds(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, &state.type_parameters, key, &wanted, bound, span);
     for finding in refused.iter() { state.findings.push(finding.clone()); }
 }

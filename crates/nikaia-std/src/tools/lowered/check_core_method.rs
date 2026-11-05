@@ -283,7 +283,16 @@ pub(crate) fn check_core_method_changes(state: &mut CheckState, world: &CheckWor
     if count == 0 || !all { return; }
     state.a_changed_binding_says_mut(&root, &format!("changed here, by `{}`", name), span.clone());
     state.a_shared_name_changed_in_parallel(&root, span);
-    if an_element_beneath(receiver) { state.facts.changed_elements.insert(id_of(receiver) as i64); }
+    if an_element_beneath(receiver) || check_core_method_a_part(receiver) { state.facts.changed_elements.insert(id_of(receiver) as i64); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_a_part(expr: &Expr) -> bool {
+    match expr {
+        Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); matches!(index, Expr::Range { .. }) },
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

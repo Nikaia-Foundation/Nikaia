@@ -76,7 +76,7 @@ pub fn cli_commands_test<H: CliTestHost>(host: &H, root: &std::path::Path, user_
     Ok(host.run_tests(&test_builds, &programs, &settings, bless, stderr)?)
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CliDescribed {
     pub adopted: Option<fs::Path>,
     pub path: fs::Path,

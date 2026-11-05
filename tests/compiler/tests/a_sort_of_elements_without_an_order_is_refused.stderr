@@ -1,0 +1,17 @@
+error[NK1164]: `Array::sort` needs an `Ord` here, but `Point` isn't one.
+  --> tests/a_sort_of_elements_without_an_order_is_refused.nika:7:5
+   |
+ 7 |     xs.sort()
+   |     ^^^^^^^^^
+   |
+   = note: `Array::sort` declares `[T: Ord]`, so the type passed has to have an order, and `Point` hasn't.
+   = help: Write `impl Ord for Point { … }`, or pass a type that already has one.
+error[NK1164]: `Vec::sort` needs an `Ord` here, but `Point` isn't one.
+   --> tests/a_sort_of_elements_without_an_order_is_refused.nika:12:5
+    |
+ 12 |     v.sort()
+    |     ^^^^^^^^
+    |
+    = note: `Vec::sort` declares `[T: Ord]`, so the type passed has to have an order, and `Point` hasn't.
+    = help: Write `impl Ord for Point { … }`, or pass a type that already has one.
+2 type errors

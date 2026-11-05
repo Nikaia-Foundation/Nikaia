@@ -615,7 +615,7 @@ impl std::fmt::Display for ModulesRefusal {
 }
 impl std::error::Error for ModulesRefusal {}
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModulesUnit {
     pub path: fs::Path,
     pub source: String,

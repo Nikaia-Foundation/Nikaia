@@ -151,6 +151,32 @@ pub fn at<I: At>(index: I) -> I::Out {
     index.at()
 }
 
+/// **A part as a place** (ADR-views-3 D11, #1209): `v[a..<b].sort()`. The
+/// output type is written out, so a method on the part resolves while the
+/// bounds' integer type is still open (`let a = 3` in Rust is `{integer}`
+/// until the end of the function); [`at`]'s `I::Out` is not known then.
+#[inline(always)]
+#[track_caller]
+pub fn part<I: At<Out = std::ops::Range<usize>>>(index: I) -> std::ops::Range<usize> {
+    index.at()
+}
+
+/// [`part`] from a position to the end: `v[a..<v.len()]`.
+#[inline(always)]
+#[track_caller]
+pub fn part_from<I: At<Out = std::ops::RangeFrom<usize>>>(index: I) -> std::ops::RangeFrom<usize> {
+    index.at()
+}
+
+/// [`part`] with its end included: `v[a..=b]`.
+#[inline(always)]
+#[track_caller]
+pub fn part_through<I: At<Out = std::ops::RangeInclusive<usize>>>(
+    index: I,
+) -> std::ops::RangeInclusive<usize> {
+    index.at()
+}
+
 /// **A read through the brackets answers what the container can promise**
 /// ([ADR-293](../../../docs/specification/adr/adr-293.md) D4).
 ///

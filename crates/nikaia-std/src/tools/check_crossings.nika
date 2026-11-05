@@ -491,12 +491,15 @@ fn check_crossings_bounds(beside: ref collections::BTreeMap[String, Vec[Ty]], st
 
 /// **`NK1164` for `[T: Eq]` and `[T: Ord]`: the argument's type is neither**
 /// ([ADR-341](../../../docs/specification/adr/adr-341.md) D4). The bound is
-/// the language's, so no `impl` in a ledger answers it.
+/// the language's, so no `impl` in a ledger answers it. **A ledger's
+/// signature declares them too** (#1209): `Vec::sort` is `[T: Ord]`.
 pub fn check_crossings_a_standard_bound_not_met(mut state: CheckState, world: ref CheckWorld, key: ref String, bound: ref collections::BTreeMap[String, Ty], span: ref Span) sync {
-    if !state.declared_bounds.contains_key(key) {
-        return
+    let mut wanted: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    if state.declared_bounds.contains_key(key) {
+        wanted = state.declared_bounds.get(key)?.clone() ?? return
+    } else {
+        wanted = bounds_in_a_signature(world, key) ?? return
     }
-    let wanted = state.declared_bounds.get(key) ?? return
     let refused = check_crossings_bounds(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, state.type_parameters, key, wanted, bound, span)
     for finding in refused {
         state.findings.push(finding.clone())

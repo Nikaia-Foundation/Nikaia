@@ -1875,7 +1875,16 @@ fn bind_named(pattern_name: ref String, pattern_args: ref Array[Ty], actual: ref
 
 // Argument by argument, where the two are one name with as many arguments.
 fn bind_arguments(pattern_name: ref String, pattern_args: ref Array[Ty], name: ref String, args: ref Array[Ty], mut out: collections::BTreeMap[String, Ty]) {
-    if name != pattern_name || args.len() != pattern_args.len() {
+    if name != pattern_name {
+        return
+    }
+    // **A run `Array[T]` and an array `Array[T, N]` share their element**
+    // (ADR-views-3 D11, #1209): `mut xs: Array[T]` answers a ledger's
+    // `self: ref Array[T, ?]`, so `T` binds from the first argument alone.
+    if args.len() != pattern_args.len() {
+        if name == "Array" && args.len() >= 1 && pattern_args.len() >= 1 {
+            bind(pattern_args[0], args[0], out)
+        }
         return
     }
     for at in 0..<args.len() {

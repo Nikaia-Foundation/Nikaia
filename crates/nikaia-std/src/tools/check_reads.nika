@@ -11,13 +11,13 @@ use std::collections
 /// Whether a ledger entry takes a count in `usize` as its first argument
 /// (ADR-293 D20): the entry and not the method's name.
 fn check_counts_first(key: ref String) -> bool {
-    return key == "Seq::take" || key == "Seq::skip" || key == "Seq::step_by" || key == "Seq::nth" || key == "Vec::get" || key == "Vec::chunks" || key == "Vec::windows" || key == "Vec::insert" || key == "Vec::remove" || key == "Vec::swap_remove" || key == "Vec::truncate" || key == "Vec::resize" || key == "Vec::swap" || key == "str::splitn" || key == "String::insert_str"
+    return key == "Seq::take" || key == "Seq::skip" || key == "Seq::step_by" || key == "Seq::nth" || key == "Vec::get" || key == "Vec::chunks" || key == "Vec::windows" || key == "Vec::insert" || key == "Vec::remove" || key == "Vec::swap_remove" || key == "Vec::truncate" || key == "Vec::resize" || key == "Vec::swap" || key == "Array::swap" || key == "str::splitn" || key == "String::insert_str"
 }
 
 /// Whether a ledger entry takes a second count in `usize` as well: `swap`'s
 /// two positions.
 fn check_counts_second(key: ref String) -> bool {
-    return key == "Vec::swap"
+    return key == "Vec::swap" || key == "Array::swap"
 }
 
 /// The integer and floating-point types a cast goes between.

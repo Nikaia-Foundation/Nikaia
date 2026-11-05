@@ -483,6 +483,38 @@ impl EmitState {
             return
         }
         self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+        // **`v[a..<v.len()]` as a place is `v[a..]`** (#527 for a read; #1209):
+        // the length read inside the brackets would borrow `v` a second time
+        // while the part is lent `mut`.
+        match index {
+            Expr::Range { start, end, inclusive, .. } => {
+                if !inclusive && emit_read_ends_in_len(world, end, base) {
+                    if only_literals(start) {
+                        out.push("[")
+                        self.emit_expr(world, walk, out, host, start, depth, flow.inferred(), scope)
+                        out.push("..]")
+                    } else {
+                        out.push("[nikaia_std::index::part_from(")
+                        self.emit_expr(world, walk, out, host, start, depth, flow, scope)
+                        out.push("..)]")
+                    }
+                    return
+                }
+                // A part's bounds in a name: the part's type is written out,
+                // so a method on it resolves (`index::part`, #1209).
+                if !only_literals(index) {
+                    if inclusive {
+                        out.push("[nikaia_std::index::part_through(")
+                    } else {
+                        out.push("[nikaia_std::index::part(")
+                    }
+                    self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+                    out.push(")]")
+                    return
+                }
+            },
+            else => {},
+        }
         if only_literals(index) {
             out.push("[")
             self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)

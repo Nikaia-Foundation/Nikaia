@@ -2963,6 +2963,50 @@ sync = true
 touches = []
 signature = "[T](self: ref Array[T, ?]) -> Seq[ref(self) T] sync ends sized"
 
+# **A changeable run changes in place** (ADR-views-3 D11, #1209): an array
+# of a `mut` place, a `mut xs: Array[T]` and a part `v[a..<b]` of a `mut`
+# list are sorted, swapped, turned round and filled as a list is. They are
+# Rust's `[T]` methods.
+#
+# Put the elements in their natural order, in place. It is **stable**, and
+# the elements need an order (`NK1164` otherwise, ADR-341 D4).
+[fn."Array::sort"]
+pub = true
+sync = true
+touches = []
+signature = "[T: Ord](mut self: ref Array[T, ?])"
+
+# Put the elements in the order of what the function returns, in place. It
+# is **stable**, as a list's is.
+[fn."Array::sort_by_key"]
+pub = true
+sync = "sync(f)"
+signature = "[T, K](mut self: ref Array[T, ?], f: fn(ref T) -> K)"
+
+# Exchange the elements at two positions, in place. A position past the end
+# aborts, as an index does.
+[fn."Array::swap"]
+pub = true
+sync = true
+touches = []
+signature = "[T](mut self: ref Array[T, ?], i: i64, j: i64)"
+
+# Put the elements in the opposite order, in place.
+[fn."Array::reverse"]
+pub = true
+sync = true
+touches = []
+signature = "[T](mut self: ref Array[T, ?])"
+
+# Every element set to one value, in place. The run **keeps** the value:
+# each place gets a copy of it.
+[fn."Array::fill"]
+pub = true
+sync = true
+touches = []
+keeps = ["value"]
+signature = "[T: Clone](mut self: ref Array[T, ?], value: T)"
+
 # A list with nothing in it. It is written `Vec()`.
 [fn."Vec::new"]
 pub = true
@@ -3550,11 +3594,13 @@ signature = "[T](mut self: ref Vec[T], items: ?)"
 #
 # It is **stable**: elements the order does not separate keep the order they
 # had, which is what lets two passes express a compound order.
+#
+# The elements need an order (`NK1164` otherwise, ADR-341 D4).
 [fn."Vec::sort"]
 pub = true
 sync = true
 touches = []
-signature = "(mut self: ref Vec[?])"
+signature = "[T: Ord](mut self: ref Vec[T])"
 
 # Keep the elements the function says yes to and drop the rest, in place.
 #
@@ -3581,6 +3627,16 @@ pub = true
 sync = true
 touches = []
 signature = "(mut self: ref Vec[?])"
+
+# **Every element set to one value, in place** (ADR-views-3 D11, #1209).
+#
+# The list **keeps** the value: each place gets a copy of it.
+[fn."Vec::fill"]
+pub = true
+sync = true
+touches = []
+keeps = ["value"]
+signature = "[T: Clone](mut self: ref Vec[T], value: T)"
 
 # Drop each element that equals the one before it, in place.
 #
@@ -4422,6 +4478,8 @@ variants = ["Dir(fs::Path)", "Anywhere"]
 pub = true
 crosses = true
 compares = true
+equates = true
+orders = true
 
 # What a program does with a name, it does on the name (ADR-319 D3): the
 # bytes are compared and kept as they are.

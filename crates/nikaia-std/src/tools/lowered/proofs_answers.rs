@@ -24,7 +24,7 @@ pub enum ProofsEntry {
     Unknown(String),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProofsBook {
     pub entries: collections::BTreeMap<String, ProofsEntry>,
     pub asked: collections::BTreeSet<String>,
@@ -50,7 +50,7 @@ pub struct ProofsKnown {
     pub asked: ProofsAsked,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProofsWhere {
     pub file: Option<fs::Path>,
     pub source: String,
@@ -69,7 +69,7 @@ pub fn proofs_where(path: &std::path::Path, source: &str) -> ProofsWhere {
     ProofsWhere { file: Some(nikaia_std::fs::path::clone(&(path))), source: source.to_string(), breaks }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProofsThread {
     pub book: Option<ProofsBook>,
     pub known: collections::BTreeMap<String, ProofsKnown>,

@@ -1,0 +1,51 @@
+// The five in-place methods on a list of a `mut` place, on an array and on a
+// `mut xs: Array[T]` (ADR-views-3 D11, #1209).
+fn tidy(mut xs: Array[u32]) {
+    xs.swap(0, xs.len() - 1)
+    xs.sort()
+    xs.reverse()
+}
+
+fn reset(mut xs: Array[u32], to: u32) {
+    xs.fill(to)
+}
+
+fn by_last_digit(mut xs: Array[i64]) {
+    xs.sort_by_key(fn(x) { x % 10 })
+}
+
+fn show(xs: Array[u32]) -> String {
+    let mut out = ""
+    for x in xs {
+        out = f"{out}{x} "
+    }
+    return out
+}
+
+fn main() {
+    let mut v: Vec[u32] = [3, 1, 4, 1, 5]
+    v.swap(0, 1)
+    print(show(v))
+    v.sort()
+    print(show(v))
+    v.reverse()
+    print(show(v))
+    tidy(v)
+    print(show(v))
+    v.fill(7)
+    print(show(v))
+    reset(v, 2)
+    println(show(v))
+    let mut w: Vec[i64] = [21, 13, 32]
+    w.sort_by_key(fn(x) { x % 10 })
+    by_last_digit(w)
+    println(f"{w[0]} {w[1]} {w[2]}")
+    let mut a: Array[u32, 3] = [9, 8, 7]
+    a.sort()
+    tidy(a)
+    println(f"{a[0]} {a[1]} {a[2]}")
+    let mut names: Vec[String] = ["b", "a"]
+    names.sort()
+    names.fill("z")
+    println(f"{names[0]}{names[1]}")
+}
