@@ -3,7 +3,7 @@
   <h1>N I K A I A</h1>
   <p><strong>Good wins.</strong></p>
   <p>
-    Write it like a script. Catch what can be proven at compile time.
+    Concise by design. Catch what can be proven at compile time.
     Fast as lightning.
   </p>
 
@@ -25,7 +25,7 @@
   <img src="assets/badges/self-hosted.svg" alt="Self-hosted share of the compiler" />
   <img src="assets/badges/license.svg" alt="License" />
   <a href="https://nikaia-lang.org/"><img src="assets/badges/docs.svg" alt="Documentation site" /></a>
-  <a href="https://github.com/Nikaia-Language/Nikaia"><img src="assets/badges/github.svg" alt="GitHub repository" /></a>
+  <a href="https://github.com/Nikaia-Foundation/Nikaia"><img src="assets/badges/github.svg" alt="GitHub repository" /></a>
 </div>
 
 ---
