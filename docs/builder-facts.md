@@ -144,6 +144,13 @@ goes into the section of its topic, in one line, with the run that paid for it.
   for a binary built in a private copy). It lists every refusal of a file: fix
   them all before the next cycle. A new `.nika` needs one `lower-std` run
   before `cargo build`, and a row in `scripts/self_hosting.py`.
+* **A keep or lowering rule change bootstraps in two stages** (v18b): keep the
+  binary from before the change (`cp target/fast/nikaia $S/old-nikaia`). After
+  editing the rule: build, then `lower-std` with the new binary and `cargo check`
+  (above). If the lowered files do not compile, restore them by name, fix the
+  rule or the tools `.nika`, and never run `lower-std` again from a binary that
+  was built from lowered files that do not compile: start over from the old
+  binary.
 * **Reproduce a lowering defect in seconds**: `nikaia lower f.nika` or `nikaia
   run f.nika`. One that shows only in `tools/` needs a throwaway function in a
   tools file and `lower-std`; restore both after.
