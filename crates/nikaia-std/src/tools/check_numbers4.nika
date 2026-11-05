@@ -641,7 +641,7 @@ impl CheckState {
     /// that use, with the position's own code and sentence, the value named *a
     /// number*.
     pub fn an_open_number_where_none_fits(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) -> bool sync {
-        if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_integer_is(want) {
+        if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_integer_is(world, want) {
             return false
         }
         let code = number_position_code(what) ?? return false
@@ -655,7 +655,11 @@ impl CheckState {
         if a_float_type(want) {
             note = "A number nothing typed takes one of the integer types its uses ask for, and a float is none of them (Part I 2.4)."
         }
-        self.findings.push(check_refusal(code, span, text, [note], f"Make it a `{wanted}`, or give the number to a place that holds one."))
+        let mut help: String = f"Make it a `{wanted}`, or give the number to a place that holds one."
+        if wanted == "time::Duration" {
+            help = way_out_of_a_mismatch(Ty::Named { name: "i64", args: [], view: false }, want)
+        }
+        self.findings.push(check_refusal(code, span, text, [note], help))
         return true
     }
 

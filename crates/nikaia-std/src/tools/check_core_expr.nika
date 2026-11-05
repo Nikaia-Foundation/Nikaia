@@ -742,8 +742,14 @@ fn check_core_expr_dsl[H: CheckHost](mut state: CheckState, world: ref CheckWorl
 /// from the form's start; it is read before the task starts.
 fn check_core_async_within[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, within: ref Expr?, span: ref Span) sync {
     let d = within ?? return
-    let found = check_core_expr(state, world, host, d, span)
+    let walked = check_core_expr(state, world, host, d, span)
     let want = Ty::Named { name: "time::Duration", args: [], view: false }
+    // **A number is no span** (#1246): `within: 20` is the `i64` it would
+    // be, and the mismatch says so.
+    let mut found = walked.clone()
+    if walked.is_unknown() && state.number_shaped(world, d) {
+        found = Ty::Named { name: "i64", args: [], view: false }
+    }
     state.expect_type(world, found, want, span, "argument", fn(found_text, wanted_text) { f"This deadline is `{found_text}`, but `within:` takes a `{wanted_text}`." })
     check_core_async_deadline_fails(state, span)
 }

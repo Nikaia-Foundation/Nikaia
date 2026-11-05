@@ -44,11 +44,13 @@ impl CheckState {
     }
 
     /// **A type no number can be**: text, a `bool`, a `char`, a tuple, a
-    /// container, or a struct or an enum declared here. A name this checker
-    /// does not know - a type parameter, a library's type - is not claimed.
-    pub fn no_number_is(ref self, ty: ref Ty) -> bool sync {
+    /// container, or a struct or an enum declared here. **A type a ledger
+    /// declares is one too** (#1246): `time::Duration` is made with
+    /// `20.millis()`, never written as `20` (Part II, `select`). A name this
+    /// checker does not know - a type parameter - is not claimed.
+    pub fn no_number_is(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
         return match ty {
-            Ty::Named { name, args, .. } => name == "String" || name == "str" || name == "bool" || name == "char" || (args.len() > 0 && !a_number_name(name)) || self.structs.contains_key(name) || self.enums.contains_key(name),
+            Ty::Named { name, args, .. } => name == "String" || name == "str" || name == "bool" || name == "char" || (args.len() > 0 && !a_number_name(name)) || self.structs.contains_key(name) || self.enums.contains_key(name) || world.library.types.contains_key(name),
             Ty::Tuple(_) => true,
             else => false,
         }
@@ -57,8 +59,8 @@ impl CheckState {
     /// **A type no integer is** (Part I 2.2, 2.4): one no number is, and a
     /// float, whose literal is written with a decimal point. A number takes
     /// its type among the integer types.
-    pub fn no_integer_is(ref self, ty: ref Ty) -> bool sync {
-        return self.no_number_is(ty) || a_float_type(ty)
+    pub fn no_integer_is(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+        return self.no_number_is(world, ty) || a_float_type(ty)
     }
 
     /// **Owned text is lent to a pattern** (D28, #579). `starts_with`,

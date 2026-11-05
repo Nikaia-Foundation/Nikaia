@@ -1312,7 +1312,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
             return check_core_stmt_unit();
         }
         let mut assigned: Ty = found.clone();
-        if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(&into) { assigned = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
+        if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(world, &into) { assigned = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
         state.expect_type(world, &assigned, &into, span, "assign", &|was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
         state.findings_moved(span, &at, pushed, &waiting);
     }

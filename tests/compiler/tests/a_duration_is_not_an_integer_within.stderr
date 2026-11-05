@@ -1,0 +1,8 @@
+error[NK1102]: This deadline is `i64`, but `within:` takes a `time::Duration`.
+   --> tests/a_duration_is_not_an_integer_within.nika:15:2
+    |
+ 15 | 	let a = async(within: 20) quick() catch { 0 }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make the number a span: `20.seconds()` or `20.millis()`.
+1 type error

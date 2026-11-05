@@ -253,6 +253,11 @@ pub fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
     if found_text == "String" && want_text == "ref String" {
         return "Write `ref` in front of it to pass a view of it."
     }
+    // **A span is made from a number, never written as one** (Part II,
+    // `select`; #1246).
+    if want_text == "time::Duration" && a_number_name(found_text) {
+        return "Make the number a span: `20.seconds()` or `20.millis()`."
+    }
     if a_number_name(found_text) && a_number_name(want_text) {
         return f"Convert it with `as {want_text}`. A number goes into another type on its own only where every value it can hold fits."
     }

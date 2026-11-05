@@ -1,0 +1,18 @@
+// An integer is never a `time::Duration` (Part II, `select`; #1246):
+// `async(within: 20) e` is refused by the checker, not by rustc.
+
+use std::time
+
+fn quick() -> i64 {
+	return 7
+}
+
+fn other() -> i64 {
+	return 1
+}
+
+fn main() {
+	let a = async(within: 20) quick() catch { 0 }
+	let b = other()
+	println(f"{a + b}")
+}

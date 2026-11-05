@@ -1,0 +1,12 @@
+// An integer is never a `time::Duration` (Part II, `select`; #1246): a span is
+// made with `20.millis()`, so `f(20)` is refused by the checker, not by rustc.
+
+use std::time
+
+fn f(d: time::Duration) {
+	println("ok")
+}
+
+fn main() {
+	f(20)
+}

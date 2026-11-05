@@ -1,0 +1,23 @@
+// A span made from a number with `.millis()` is a `time::Duration` (Part II,
+// `select`; #1246): as a parameter and as `within:`, it is accepted.
+
+use std::time
+
+fn f(_d: time::Duration) {
+	println("ok")
+}
+
+fn quick() -> i64 {
+	return 7
+}
+
+fn other() -> i64 {
+	return 1
+}
+
+fn main() {
+	f(20.millis())
+	let a = async(within: 2000.millis()) quick() catch { 0 }
+	let b = other()
+	println(f"{a + b}")
+}

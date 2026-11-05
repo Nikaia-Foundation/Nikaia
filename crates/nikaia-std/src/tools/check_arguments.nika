@@ -219,7 +219,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             continue
         }
         // A number literal as an arm is an `i64` written there (#600).
-        let no_number = at < wanted.len() && state.no_integer_is(wanted[at].1)
+        let no_number = at < wanted.len() && state.no_integer_is(world, wanted[at].1)
         let mut k = 0
         while k < arms.len() {
             let arm = arms[k].clone()
@@ -335,7 +335,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             }
             // **An integer literal handed where no integer goes** (#471,
             // #703) is the `i64` it would be, and the mismatch says so.
-            if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(want) {
+            if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(world, want) {
                 found_here = Ty::Named { name: "i64", args: [], view: false }
             }
         }

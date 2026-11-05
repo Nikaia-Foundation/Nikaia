@@ -161,7 +161,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             expanded.push(CheckArgument { at, arm: false, given: here, found: found_here });
             continue;
         }
-        let no_number = at < wanted.len() as i64 && state.no_integer_is(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1);
+        let no_number = at < wanted.len() as i64 && state.no_integer_is(world, &nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1);
         let mut k: i64 = 0;
         while ((k) as usize) < arms.len() {
             let arm = (*nikaia_std::index::get(&arms, (k) as usize)).clone();
@@ -225,7 +225,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let array = state.array_literal(world, &found_here, &want, value, span);
             if array.is_some() { found_here = nikaia_std::index::or(array, || found_here.clone().into()); } else { found_here = nikaia_std::index::or(state.text_literal(world, &literal_wants, value, kept), || nikaia_std::index::or(state.tuple_literal(world, &found_here, &literal_wants, value), || found_here.clone().into()).into()); }
             if lent && a_text_literal_expr(value) { state.facts.owned_texts.remove(&(id_of(value) as i64)); }
-            if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(&want) { found_here = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
+            if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(world, &want) { found_here = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
         }
         if key == "Bytes::find" && at == 0 && check_arguments_a_byte_set(&found_here) { continue; }
         if at < given.len() as i64 && (lent || want.is_a_view()) && !check_arguments_nullable(&want) && state.lent_arms_view_and_new(world, nikaia_std::index::get(&given, nikaia_std::index::at(at))) { continue; }

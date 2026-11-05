@@ -26,16 +26,16 @@ impl CheckState {
     pub fn copied(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { copies_plainly(ty) || a_ledger_copies(ty, &vec![world.library]) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn no_number_is(&self, ty: &Ty) -> bool {
+    pub fn no_number_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
-            Ty::Named { name, args, .. } => name == "String" || name == "str" || name == "bool" || name == "char" || !args.is_empty() && !a_number_name(name) || self.structs.contains_key(name) || self.enums.contains_key(name),
+            Ty::Named { name, args, .. } => name == "String" || name == "str" || name == "bool" || name == "char" || !args.is_empty() && !a_number_name(name) || self.structs.contains_key(name) || self.enums.contains_key(name) || world.library.types.contains_key(name),
             Ty::Tuple(_) => true,
             _ => false,
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn no_integer_is(&self, ty: &Ty) -> bool { self.no_number_is(ty) || a_float_type(ty) }
+    pub fn no_integer_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { self.no_number_is(world, ty) || a_float_type(ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_pattern_of_owned_text(&mut self, key: &str, given: &[Expr], found: &[Ty], span: &Span) {

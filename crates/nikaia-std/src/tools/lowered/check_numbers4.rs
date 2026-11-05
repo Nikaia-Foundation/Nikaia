@@ -491,7 +491,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn an_open_number_where_none_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) -> bool {
-        if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_integer_is(want) { return false; }
+        if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_integer_is(world, want) { return false; }
         let code = match number_position_code(what) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let hole: String = String::from("\u{0}");
         let wanted = want.text();
@@ -499,7 +499,9 @@ impl CheckState {
         let text = said.replace(&format!("`{}`", hole), &"a number");
         let mut note: String = String::from("A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.");
         if a_float_type(want) { note = String::from("A number nothing typed takes one of the integer types its uses ask for, and a float is none of them (Part I 2.4)."); }
-        self.findings.push(check_refusal(&code, span, text, vec![note], Some(format!("Make it a `{}`, or give the number to a place that holds one.", wanted))));
+        let mut help: String = format!("Make it a `{}`, or give the number to a place that holds one.", wanted);
+        if wanted == "time::Duration" { help = way_out_of_a_mismatch(&Ty::Named { name: String::from("i64"), args: vec![], view: false }, want); }
+        self.findings.push(check_refusal(&code, span, text, vec![note], Some(help)));
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

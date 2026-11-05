@@ -1800,7 +1800,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
             return check_core_stmt_unit()
         }
         let mut assigned: Ty = found.clone()
-        if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(into) {
+        if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(world, into) {
             assigned = Ty::Named { name: "i64", args: [], view: false }
         }
         state.expect_type(world, assigned, into, span, "assign", fn(was, wanted) { f"You're assigning `{was}` to something that holds `{wanted}`." })

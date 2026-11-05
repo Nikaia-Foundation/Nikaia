@@ -577,8 +577,10 @@ pub(crate) fn check_core_expr_dsl<H: CheckHost>(state: &mut CheckState, world: &
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_async_within<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, within: Option<&Expr>, span: &Span) {
     let d = match within { Some(__nikaia_value) => __nikaia_value, None => return };
-    let found = check_core_expr(state, world, host, d, span);
+    let walked = check_core_expr(state, world, host, d, span);
     let want = Ty::Named { name: String::from("time::Duration"), args: vec![], view: false };
+    let mut found = walked.clone();
+    if walked.is_unknown() && state.number_shaped(world, d) { found = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
     state.expect_type(world, &found, &want, span, "argument", &|found_text, wanted_text| { format!("This deadline is `{}`, but `within:` takes a `{}`.", found_text, wanted_text) });
     check_core_async_deadline_fails(state, span);
 }
