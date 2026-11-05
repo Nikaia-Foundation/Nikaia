@@ -161,6 +161,9 @@ goes into the section of its topic, in one line, with the run that paid for it.
   for a binary built in a private copy). It lists every refusal of a file: fix
   them all before the next cycle. A new `.nika` needs one `lower-std` run
   before `cargo build`, and a row in `scripts/self_hosting.py`.
+* **`keeps.nika` (`lends_with` in `lends.nika`) drives both the view migration and
+  what the tool files lend** (v24): a change to the keep rule rewrites how 20 or
+  more tool files lower. Probe first that they still compile under the new rule.
 * **A keep or lowering rule change bootstraps in two stages** (v18b): keep the
   binary from before the change (`cp target/fast/nikaia $S/old-nikaia`). After
   editing the rule: build, then `lower-std` with the new binary and `cargo check`
