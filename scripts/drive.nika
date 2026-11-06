@@ -139,91 +139,92 @@ use std::process
 use std::text
 
 fn drive_exe() -> String throws {
-    for exe in ["target/fast/nikaia", "target/release/nikaia"] {
-        if fs::exists(exe, fs::Root::Anywhere) { return exe.to_string() }
-    }
-    return ""
+	for exe in ["target/fast/nikaia", "target/release/nikaia"] {
+		if fs::exists(exe, fs::Root::Anywhere) { return exe.to_string() }
+	}
+	return ""
 }
 
 // Ends the run with exit 2; a suite still running is waited for and handled
 // first (drive_settle), with one line naming the escalation it delays.
 fn drive_escalate(why: String) throws {
-    let lane = drive_lock_lane()
-    if lane != "" && drive_testing() != "" {
-        println(f"SUITE before escalating: {why}")
-        let exe = drive_exe()
-        drive_settle(exe.clone(), lane)
-    }
-    drive_unlock()
-    println(f"ESCALATE drive: {why}")
-    process::exit(2)
+	let lane = drive_lock_lane()
+	if lane != "" && drive_testing() != "" {
+		println(f"SUITE before escalating: {why}")
+		let exe = drive_exe()
+		drive_settle(exe.clone(), lane)
+	}
+	drive_unlock()
+	println(f"ESCALATE drive: {why}")
+	process::exit(2)
 }
 
 // The suite lock of this checkout (drive_suite).
 fn drive_lock_dir() -> String {
-    return "target/suite.lock"
+	return "target/suite.lock"
 }
 
 // This driver's pid: the parent of the shell it starts.
 fn drive_pid() -> String throws {
-    return process::run("sh", ["-c", "echo $PPID"]).stdout.trim().clone()
+	return process::run("sh", ["-c", "echo $PPID"]).stdout.trim().clone()
 }
 
 // Releases the suite lock if this driver holds it; every exit path calls it.
 fn drive_unlock() throws {
-    let owner = drive_read(drive_lock_dir() + "/owner")
-    if owner == "" { return }
-    if owner.split(" ").collect()[0].trim() == drive_pid() { process::run("rm", ["-rf", drive_lock_dir()]) }
+	let owner = drive_read(drive_lock_dir() + "/owner")
+	if owner == "" { return }
+	if owner.split(" ").collect()[0].trim()
+		== drive_pid() { process::run("rm", ["-rf", drive_lock_dir()]) }
 }
 
 // Takes the suite lock: waits in 60 s steps while another live driver holds
 // it, takes over a dead one's. An owner file not yet written counts as live
 // for two steps.
 fn drive_lock(dir: String) throws {
-    let me = drive_pid()
-    let mut blank: i64 = 0
-    let mut said = false
-    while true {
-        process::run("mkdir", ["-p", "target"])
-        if process::run("mkdir", [drive_lock_dir()]).ok {
-            fs::write(drive_lock_dir() + "/owner", fs::Root::Anywhere, f"{me} {dir}\n")
-            return
-        }
-        let owner = drive_read(drive_lock_dir() + "/owner").trim()
-        let pid = owner.split(" ").collect()[0]
-        if pid == "" { blank += 1 }
-        let live = if pid == "" { blank <= 2 } else { process::run("kill", ["-0", pid.clone()]).ok }
-        if !live {
-            process::run("rm", ["-rf", drive_lock_dir()])
-            continue
-        }
-        if !said {
-            println(f"SUITE waiting for target/suite.lock: {owner}")
-            said = true
-        }
-        process::run("sleep", ["60"])
-    }
+	let me = drive_pid()
+	let mut blank: i64 = 0
+	let mut said = false
+	while true {
+		process::run("mkdir", ["-p", "target"])
+		if process::run("mkdir", [drive_lock_dir()]).ok {
+			fs::write(drive_lock_dir() + "/owner", fs::Root::Anywhere, f"{me} {dir}\n")
+			return
+		}
+		let owner = drive_read(drive_lock_dir() + "/owner").trim()
+		let pid = owner.split(" ").collect()[0]
+		if pid == "" { blank += 1 }
+		let live = if pid == "" { blank <= 2 } else { process::run("kill", ["-0", pid.clone()]).ok }
+		if !live {
+			process::run("rm", ["-rf", drive_lock_dir()])
+			continue
+		}
+		if !said {
+			println(f"SUITE waiting for target/suite.lock: {owner}")
+			said = true
+		}
+		process::run("sleep", ["60"])
+	}
 }
 
 // The brief's name: the last path component without `.md`.
 fn drive_stem(path: String) -> String throws {
-    let parts = path.split("/").collect()
-    let last = parts[parts.len() - 1]
-    return last.replace(".md", "")
+	let parts = path.split("/").collect()
+	let last = parts[parts.len() - 1]
+	return last.replace(".md", "")
 }
 
 // The first word of the value after `key:` in a report, "" if absent.
 fn drive_field(body: String, key: String) -> String {
-    let prefix = key + ":"
-    for line in body.split("\n") {
-        let t = line.trim()
-        if t.starts_with(prefix) { return (t.strip_prefix(prefix) ?? "").trim().clone() }
-    }
-    return ""
+	let prefix = key + ":"
+	for line in body.split("\n") {
+		let t = line.trim()
+		if t.starts_with(prefix) { return (t.strip_prefix(prefix) ?? "").trim().clone() }
+	}
+	return ""
 }
 
 fn drive_word(value: String) -> String {
-    return value.split(" ").collect()[0].replace(".", "")
+	return value.split(" ").collect()[0].replace(".", "")
 }
 
 // Which action a cycle's output leads to, as one line:
@@ -234,23 +235,23 @@ fn drive_word(value: String) -> String {
 // `ignore_red` (--ignore-ci-red): a RED line leads nowhere; NEXT and BATCH DONE
 // go on as if CI were green, and BUMP still waits for a green CI line.
 fn drive_action(lines: Vec[String], ignore_red: bool) -> String {
-    let mut ci: String = ""
-    let mut red: String = ""
-    let mut batch: String = ""
-    let mut bump: String = ""
-    for i in 0..<lines.len() {
-        let l = lines[i].trim()
-        if l.starts_with("OWNER ") { return f"ESCALATE {l}" }
-        if l.starts_with("CI ") { ci = l }
-        if l.starts_with("RED ") { red = l }
-        if l.starts_with("NEXT ") || l.starts_with("CUT") || l.starts_with("BATCH") { batch = l }
-        if l.starts_with("BUMP pending") { bump = l }
-    }
-    if red != "" && !ignore_red && !batch.starts_with("NEXT ") { return f"STOP {red}" }
-    if bump != "" && ci.ends_with("green") && !batch.starts_with("NEXT ") { return "BUMP" }
-    if batch.starts_with("NEXT ") { return f"NEXT {batch.split(" ").collect()[1]}" }
-    if batch.starts_with("CUT") || batch.starts_with("BATCH DONE") { return f"STOP {batch}" }
-    return f"ESCALATE no action for: {batch}"
+	let mut ci: String = ""
+	let mut red: String = ""
+	let mut batch: String = ""
+	let mut bump: String = ""
+	for i in 0..<lines.len() {
+		let l = lines[i].trim()
+		if l.starts_with("OWNER ") { return f"ESCALATE {l}" }
+		if l.starts_with("CI ") { ci = l }
+		if l.starts_with("RED ") { red = l }
+		if l.starts_with("NEXT ") || l.starts_with("CUT") || l.starts_with("BATCH") { batch = l }
+		if l.starts_with("BUMP pending") { bump = l }
+	}
+	if red != "" && !ignore_red && !batch.starts_with("NEXT ") { return f"STOP {red}" }
+	if bump != "" && ci.ends_with("green") && !batch.starts_with("NEXT ") { return "BUMP" }
+	if batch.starts_with("NEXT ") { return f"NEXT {batch.split(" ").collect()[1]}" }
+	if batch.starts_with("CUT") || batch.starts_with("BATCH DONE") { return f"STOP {batch}" }
+	return f"ESCALATE no action for: {batch}"
 }
 
 // The report with `Pushed:` rewritten when `Result: done`, `Pushed:` is
@@ -259,32 +260,32 @@ fn drive_action(lines: Vec[String], ignore_red: bool) -> String {
 // commits of both `HEAD` and `origin/develop` (drive_report_pushed), so a commit
 // already on `origin/develop` is found too.
 fn drive_rewrite(report: String, log: String) -> String {
-    if drive_word(drive_field(report, "Result")) != "done" { return report }
-    let pushed = drive_word(drive_field(report, "Pushed"))
-    if pushed != "rejected" && pushed != "none" { return report }
-    let subject = drive_field(report, "Commit")
-    if subject == "" { return report }
-    let mut sha: String = ""
-    for l in log.split("\n") {
-        let parts = l.split("\t").collect()
-        if sha == "" && parts.len() == 2 && parts[1].trim() == subject { sha = parts[0].trim() }
-    }
-    if sha == "" { return report }
-    let mut out: Vec[String] = []
-    let mut done = false
-    for l in report.split("\n") {
-        if !done && l.trim().starts_with("Pushed:") {
-            out.push(f"Pushed: {sha} (pushed by drive.nika)")
-            done = true
-        } else {
-            out.push(l)
-        }
-    }
-    return out.join("\n")
+	if drive_word(drive_field(report, "Result")) != "done" { return report }
+	let pushed = drive_word(drive_field(report, "Pushed"))
+	if pushed != "rejected" && pushed != "none" { return report }
+	let subject = drive_field(report, "Commit")
+	if subject == "" { return report }
+	let mut sha: String = ""
+	for l in log.split("\n") {
+		let parts = l.split("\t").collect()
+		if sha == "" && parts.len() == 2 && parts[1].trim() == subject { sha = parts[0].trim() }
+	}
+	if sha == "" { return report }
+	let mut out: Vec[String] = []
+	let mut done = false
+	for l in report.split("\n") {
+		if !done && l.trim().starts_with("Pushed:") {
+			out.push(f"Pushed: {sha} (pushed by drive.nika)")
+			done = true
+		} else {
+			out.push(l)
+		}
+	}
+	return out.join("\n")
 }
 
 fn drive_say(dry: bool, line: String) {
-    if dry { println(f"would run: {line}") }
+	if dry { println(f"would run: {line}") }
 }
 
 // Pushes the tested commit; rejected, merges `origin/develop` once and pushes
@@ -293,23 +294,23 @@ fn drive_say(dry: bool, line: String) {
 // untracked). Prints `PUSHED <sha8>`. True when HEAD was pushed (after the
 // merge), false when exactly `sha`.
 fn drive_push(sha: String) -> bool throws {
-    let first = process::run("git", ["push", "origin", f"{sha}:develop"])
-    let mut pushed = sha
-    let mut head = false
-    if !first.ok {
-        // The shared checkout holds other agents' unfinished files and build locks:
-        // they are stashed around the merge, not a reason to stop (2026-10-28).
-        let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
-        if !fetched.ok { drive_escalate("push rejected, and git fetch origin develop failed") }
-        let merged = process::run("git", ["merge", "-q", "--no-edit", "--autostash", "FETCH_HEAD"])
-        if !merged.ok { drive_merge_abort() }
-        let second = process::run("git", ["push", "origin", "HEAD:develop"])
-        if !second.ok { drive_escalate("push rejected after one merge") }
-        pushed = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
-        head = true
-    }
-    println(f"PUSHED {drive_short(pushed)}")
-    return head
+	let first = process::run("git", ["push", "origin", f"{sha}:develop"])
+	let mut pushed = sha
+	let mut head = false
+	if !first.ok {
+		// The shared checkout holds other agents' unfinished files and build locks:
+		// they are stashed around the merge, not a reason to stop (2026-10-28).
+		let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
+		if !fetched.ok { drive_escalate("push rejected, and git fetch origin develop failed") }
+		let merged = process::run("git", ["merge", "-q", "--no-edit", "--autostash", "FETCH_HEAD"])
+		if !merged.ok { drive_merge_abort() }
+		let second = process::run("git", ["push", "origin", "HEAD:develop"])
+		if !second.ok { drive_escalate("push rejected after one merge") }
+		pushed = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		head = true
+	}
+	println(f"PUSHED {drive_short(pushed)}")
+	return head
 }
 
 // A failed merge must not leave the shared checkout mid-merge: the conflicted
@@ -317,98 +318,104 @@ fn drive_push(sha: String) -> bool throws {
 // back, and the check that no merge is left open and no path is unmerged
 // precedes the escalation. Always escalates.
 fn drive_merge_abort() throws {
-    let unmerged = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().split("\n").collect().join(" ")
-    let paths = if unmerged == "" { "no unmerged path" } else { unmerged }
-    let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
-    let mut why: String = ""
-    let mut aborted = true
-    if fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere) {
-        let abort = process::run("git", ["merge", "--abort"])
-        aborted = abort.ok
-        why = (abort.stderr + abort.stdout).trim().split("\n").collect()[0].clone()
-    }
-    let open = fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere)
-    let left = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().clone()
-    if !aborted || open || left != "" {
-        drive_escalate(f"merge left open: push rejected, merge conflicted in {paths}, and git merge --abort did not finish ({why}); the shared checkout needs a hand now")
-    }
-    drive_escalate(f"push rejected, merge conflicted in {paths}, merge aborted")
+	let unmerged = process::run(
+		"git",
+		["diff", "--name-only", "--diff-filter=U"],
+	).stdout.trim().split("\n").collect().join(" ")
+	let paths = if unmerged == "" { "no unmerged path" } else { unmerged }
+	let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
+	let mut why: String = ""
+	let mut aborted = true
+	if fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere) {
+		let abort = process::run("git", ["merge", "--abort"])
+		aborted = abort.ok
+		why = (abort.stderr + abort.stdout).trim().split("\n").collect()[0].clone()
+	}
+	let open = fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere)
+	let left = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().clone()
+	if !aborted || open || left != "" {
+		drive_escalate(f"merge left open: push rejected, merge conflicted in {paths}, and git merge --abort did not finish ({why}); the shared checkout needs a hand now")
+	}
+	drive_escalate(f"push rejected, merge conflicted in {paths}, merge aborted")
 }
 
 fn drive_short(sha: String) -> String throws {
-    if sha.len() <= 8 { return sha }
-    return sha.bytes[0..<8].text().clone()
+	if sha.len() <= 8 { return sha }
+	return sha.bytes[0..<8].text().clone()
 }
 
 fn drive_append(path: String, line: String) throws {
-    let old = drive_read(path)
-    let mut text = old
-    if text != "" && !text.ends_with("\n") { text = text + "\n" }
-    fs::write(path, fs::Root::Anywhere, text + line + "\n")
+	let old = drive_read(path)
+	let mut text = old
+	if text != "" && !text.ends_with("\n") { text = text + "\n" }
+	fs::write(path, fs::Root::Anywhere, text + line + "\n")
 }
 
 // The last `n` lines of a text.
 fn drive_tail(body: String, n: i64) -> String throws {
-    let lines = body.trim_end().split("\n").collect()
-    let mut from: i64 = 0
-    if lines.len() > n { from = lines.len() - n }
-    let mut out: Vec[String] = []
-    for i in from..<lines.len() { out.push(lines[i]) }
-    return out.join("\n")
+	let lines = body.trim_end().split("\n").collect()
+	let mut from: i64 = 0
+	if lines.len() > n { from = lines.len() - n }
+	let mut out: Vec[String] = []
+	for i in from..<lines.len() { out.push(lines[i]) }
+	return out.join("\n")
 }
 
 // What the QA agent reads: the CI run's step lines and suite.log (the failed
 // jobs' log tails), the unpushed commits, and the briefs and reports of the
 // batch, found from DIR/unpushed.txt among the working files (they are never committed).
 fn drive_qa_input(dir: String, out: String, steps: String) throws {
-    let mut lines: Vec[String] = []
-    lines.push(f"The suite (the CI run on {drive_ci_branch(dir)}, the whole workflow) is red: {steps}")
-    lines.push("")
-    lines.push("Step lines:")
-    for l in out.split("\n") {
-        for step in ["CI run ", "no CI run ", "the CI run ", "Gate: "] {
-            if l.starts_with(step) { lines.push(l) }
-        }
-    }
-    lines.push("")
-    lines.push(f"{dir}/suite.log (the last 200 lines of each failed job):")
-    lines.push(out.trim())
-    lines.push("")
-    lines.push("Unpushed commits (origin/develop..HEAD; briefs and reports are never among them):")
-    lines.push(process::run("git", ["log", "--format=%h %s", "origin/develop..HEAD"]).stdout.trim().clone())
-    lines.push("")
-    lines.push(f"Briefs and reports of this batch ({dir}/unpushed.txt, untracked working files):")
-    for b in drive_read(f"{dir}/unpushed.txt").split("\n") {
-        let brief = b.trim()
-        if brief == "" { continue }
-        lines.push(brief.clone())
-        let stem = (brief.strip_suffix(".md") ?? "")
-        for r in [f"{brief}.report.md", f"{stem}.report.md"] {
-            if r != ".report.md" && fs::exists(r, fs::Root::Anywhere) { lines.push(r) }
-        }
-    }
-    fs::write(f"{dir}/qa-input.txt", fs::Root::Anywhere, lines.join("\n") + "\n")
+	let mut lines: Vec[String] = []
+	lines.push(f"The suite (the CI run on {drive_ci_branch(dir)}, the whole workflow) is red: {steps}")
+	lines.push("")
+	lines.push("Step lines:")
+	for l in out.split("\n") {
+		for step in ["CI run ", "no CI run ", "the CI run ", "Gate: "] {
+			if l.starts_with(step) { lines.push(l) }
+		}
+	}
+	lines.push("")
+	lines.push(f"{dir}/suite.log (the last 200 lines of each failed job):")
+	lines.push(out.trim())
+	lines.push("")
+	lines.push("Unpushed commits (origin/develop..HEAD; briefs and reports are never among them):")
+	lines.push(process::run(
+		"git",
+		["log", "--format=%h %s", "origin/develop..HEAD"],
+	).stdout.trim().clone())
+	lines.push("")
+	lines.push(f"Briefs and reports of this batch ({dir}/unpushed.txt, untracked working files):")
+	for b in drive_read(f"{dir}/unpushed.txt").split("\n") {
+		let brief = b.trim()
+		if brief == "" { continue }
+		lines.push(brief.clone())
+		let stem = (brief.strip_suffix(".md") ?? "")
+		for r in [f"{brief}.report.md", f"{stem}.report.md"] {
+			if r != ".report.md" && fs::exists(r, fs::Root::Anywhere) { lines.push(r) }
+		}
+	}
+	fs::write(f"{dir}/qa-input.txt", fs::Root::Anywhere, lines.join("\n") + "\n")
 }
 
 // The red steps of a gate run, "" when green.
 fn drive_red_steps(out: String) -> String throws {
-    for l in out.split("\n") {
-        if l.starts_with("Gate: green") { return "" }
-        if l.starts_with("Gate: red") { return (l.strip_prefix("Gate: red") ?? "").trim() }
-    }
-    return "gate-error"
+	for l in out.split("\n") {
+		if l.starts_with("Gate: green") { return "" }
+		if l.starts_with("Gate: red") { return (l.strip_prefix("Gate: red") ?? "").trim() }
+	}
+	return "gate-error"
 }
 
 // The repository CI runs on (the `gh api` paths of drive_ci_wait).
 fn drive_repo() -> String {
-    return "Nikaia-Foundation/Nikaia"
+	return "Nikaia-Foundation/Nikaia"
 }
 
 // The branch lane DIR's suite runs on: `ci/` and the last part of DIR
 // (docs/briefs -> ci/briefs), so the two lanes never cancel each other's run.
 fn drive_ci_branch(dir: String) -> String {
-    let parts = dir.trim_end_matches("/").split("/").collect()
-    return "ci/" + parts[parts.len() - 1]
+	let parts = dir.trim_end_matches("/").split("/").collect()
+	return "ci/" + parts[parts.len() - 1]
 }
 
 // Starts one suite run on CI (owner, 2026-11-01): the tested sha is pushed with
@@ -420,25 +427,30 @@ fn drive_ci_branch(dir: String) -> String {
 // of unpushed.txt it covers>` (drive_settle reads both). Nothing builds or tests
 // in this checkout.
 fn drive_launch(dir: String) throws {
-    let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
-    let branch = drive_ci_branch(dir)
-    let log = process::run("realpath", [dir.clone()]).stdout.trim() + "/suite.log"
-    let exit = process::run("realpath", [drive_lock_dir()]).stdout.trim() + f"/exit-{sha}"
-    process::run("rm", ["-f", exit.clone(), log.clone()])
-    let mut covered: i64 = 0
-    for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
-        if l.trim() != "" { covered += 1 }
-    }
-    let pushed = process::run("git", ["push", "--force", "--quiet", "origin", f"{sha}:refs/heads/{branch}"])
-    if !pushed.ok { drive_escalate(f"git push origin {drive_short(sha)}:{branch} failed: {pushed.stderr.trim()}") }
-    let bin = drive_exe()
-    let exe = process::run("realpath", [bin.clone()]).stdout.trim().clone()
-    let script = process::run("realpath", ["scripts/drive.nika"]).stdout.trim().clone()
-    let wait = f"'{exe}' run '{script}' -- --ci-wait {sha} '{log}' '{exit}'"
-    let started = process::run("sh", ["-c", f"( {wait} ) < /dev/null > /dev/null 2>&1 &"])
-    if !started.ok { drive_escalate(f"the CI waiter did not start: {started.stderr.trim()}") }
-    fs::write(drive_lock_dir() + "/testing", fs::Root::Anywhere, f"{sha} {covered}\n")
-    println(f"SUITE {drive_short(sha)} started on CI ({branch})")
+	let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+	let branch = drive_ci_branch(dir)
+	let log = process::run("realpath", [dir.clone()]).stdout.trim() + "/suite.log"
+	let exit = process::run("realpath", [drive_lock_dir()]).stdout.trim() + f"/exit-{sha}"
+	process::run("rm", ["-f", exit.clone(), log.clone()])
+	let mut covered: i64 = 0
+	for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
+		if l.trim() != "" { covered += 1 }
+	}
+	let pushed = process::run(
+		"git",
+		["push", "--force", "--quiet", "origin", f"{sha}:refs/heads/{branch}"],
+	)
+	if !pushed.ok {
+		drive_escalate(f"git push origin {drive_short(sha)}:{branch} failed: {pushed.stderr.trim()}")
+	}
+	let bin = drive_exe()
+	let exe = process::run("realpath", [bin.clone()]).stdout.trim().clone()
+	let script = process::run("realpath", ["scripts/drive.nika"]).stdout.trim().clone()
+	let wait = f"'{exe}' run '{script}' -- --ci-wait {sha} '{log}' '{exit}'"
+	let started = process::run("sh", ["-c", f"( {wait} ) < /dev/null > /dev/null 2>&1 &"])
+	if !started.ok { drive_escalate(f"the CI waiter did not start: {started.stderr.trim()}") }
+	fs::write(drive_lock_dir() + "/testing", fs::Root::Anywhere, f"{sha} {covered}\n")
+	println(f"SUITE {drive_short(sha)} started on CI ({branch})")
 }
 
 // `--ci-wait SHA LOG EXIT`: follows the CI run of the push of SHA to a `ci/`
@@ -448,74 +460,102 @@ fn drive_launch(dir: String) throws {
 // ci-no-run`, none finished after 3 hours `Gate: red ci-timeout`. Then the exit
 // status (0 green, 1 red) to EXIT, through EXIT.tmp.
 fn drive_ci_wait(sha: String, log: String, exit: String) throws {
-    let (body, green) = drive_ci_poll(sha)
-    fs::write(log, fs::Root::Anywhere, body)
-    let code = if green { "0" } else { "1" }
-    fs::write(exit.clone() + ".tmp", fs::Root::Anywhere, code + "\n")
-    process::run("mv", [exit.clone() + ".tmp", exit])
+	let (body, green) = drive_ci_poll(sha)
+	fs::write(log, fs::Root::Anywhere, body)
+	let code = if green { "0" } else { "1" }
+	fs::write(exit.clone() + ".tmp", fs::Root::Anywhere, code + "\n")
+	process::run("mv", [exit.clone() + ".tmp", exit])
 }
 
 // One CI verdict for SHA: the log text and whether it is green.
 fn drive_ci_poll(sha: String) -> (String, bool) throws {
-    let repo = drive_repo()
-    let query = ".workflow_runs[] | select(.name == \"Nikaia\" and (.head_branch | startswith(\"ci/\"))) | \"\\(.id) \\(.status) \\(.conclusion)\""
-    let mut polls: i64 = 0
-    while true {
-        let runs = process::run("gh", ["api", f"repos/{repo}/actions/runs?head_sha={sha}&event=push&per_page=20", "--jq", query.clone()])
-        let first = runs.stdout.trim().split("\n").collect()[0].trim()
-        let words = first.split(" ").collect()
-        if runs.ok && words.len() >= 3 && words[1] == "completed" {
-            let id = words[0]
-            let url = f"https://github.com/{repo}/actions/runs/{id}"
-            if words[2] == "success" {
-                return (f"CI run {url}: success\nGate: green\n", true)
-            } else {
-                let jobs = process::run("gh", ["api", f"repos/{repo}/actions/runs/{id}/jobs?per_page=100", "--jq", ".jobs[] | select(.conclusion == \"failure\" or .conclusion == \"cancelled\" or .conclusion == \"timed_out\") | \"\\(.id) \\(.name)\""])
-                let mut names: Vec[String] = []
-                let mut tails: String = ""
-                for j in jobs.stdout.trim().split("\n") {
-                    let line = j.trim()
-                    if line == "" { continue }
-                    let jid = line.split(" ").collect()[0]
-                    let name = (line.strip_prefix(jid) ?? "").trim()
-                    names.push(name.replace(" ", "_"))
-                    let text = process::run("gh", ["api", f"repos/{repo}/actions/jobs/{jid}/logs"]).stdout
-                    tails = tails + f"\nLast 200 lines of the job {name} ({url}/job/{jid}):\n" + drive_tail(text, 200) + "\n"
-                }
-                if names.len() == 0 { names.push(words[2]) }
-                return (f"CI run {url}: {words[2]}\n{tails}\nGate: red " + names.join(" ") + "\n", false)
-            }
-        }
-        if polls >= 30 && first == "" {
-            return (f"no CI run for {sha} after 15 minutes\nGate: red ci-no-run\n", false)
-        }
-        if polls >= 360 {
-            return (f"the CI run for {sha} did not finish in 3 hours: {first}\nGate: red ci-timeout\n", false)
-        }
-        polls += 1
-        process::run("sleep", ["30"])
-    }
+	let repo = drive_repo()
+	let query = ".workflow_runs[] | select(.name == \"Nikaia\" and (.head_branch | startswith(\"ci/\"))) | \"\\(.id) \\(.status) \\(.conclusion)\""
+	let mut polls: i64 = 0
+	while true {
+		let runs = process::run(
+			"gh",
+			[
+				"api",
+				f"repos/{repo}/actions/runs?head_sha={sha}&event=push&per_page=20",
+				"--jq",
+				query.clone(),
+			],
+		)
+		let first = runs.stdout.trim().split("\n").collect()[0].trim()
+		let words = first.split(" ").collect()
+		if runs.ok && words.len() >= 3 && words[1] == "completed" {
+			let id = words[0]
+			let url = f"https://github.com/{repo}/actions/runs/{id}"
+			if words[2] == "success" {
+				return (f"CI run {url}: success\nGate: green\n", true)
+			} else {
+				let jobs = process::run(
+					"gh",
+					[
+						"api",
+						f"repos/{repo}/actions/runs/{id}/jobs?per_page=100",
+						"--jq",
+						".jobs[] | select(.conclusion == \"failure\" or .conclusion == \"cancelled\" or .conclusion == \"timed_out\") | \"\\(.id) \\(.name)\"",
+					],
+				)
+				let mut names: Vec[String] = []
+				let mut tails: String = ""
+				for j in jobs.stdout.trim().split("\n") {
+					let line = j.trim()
+					if line == "" { continue }
+					let jid = line.split(" ").collect()[0]
+					let name = (line.strip_prefix(jid) ?? "").trim()
+					names.push(name.replace(" ", "_"))
+					let text = process::run(
+						"gh",
+						["api", f"repos/{repo}/actions/jobs/{jid}/logs"],
+					).stdout
+					tails = tails
+						+ f"\nLast 200 lines of the job {name} ({url}/job/{jid}):\n"
+						+ drive_tail(text, 200)
+						+ "\n"
+				}
+				if names.len() == 0 { names.push(words[2]) }
+				return (
+					f"CI run {url}: {words[2]}\n{tails}\nGate: red " + names.join(" ") + "\n",
+					false,
+				)
+			}
+		}
+		if polls >= 30 && first == "" {
+			return (f"no CI run for {sha} after 15 minutes\nGate: red ci-no-run\n", false)
+		}
+		if polls >= 360 {
+			return (
+				f"the CI run for {sha} did not finish in 3 hours: {first}\nGate: red ci-timeout\n",
+				false,
+			)
+		}
+		polls += 1
+		process::run("sleep", ["30"])
+	}
 }
 
 // The suite this driver started and has not handled yet: `<sha> <covered>`
 // from target/suite.lock/testing while it holds the lock, else "".
 fn drive_testing() -> String throws {
-    let owner = drive_read(drive_lock_dir() + "/owner")
-    if owner == "" || owner.split(" ").collect()[0].trim() != drive_pid() { return "" }
-    return drive_read(drive_lock_dir() + "/testing").trim().clone()
+	let owner = drive_read(drive_lock_dir() + "/owner")
+	if owner == "" || owner.split(" ").collect()[0].trim() != drive_pid() { return "" }
+	return drive_read(drive_lock_dir() + "/testing").trim().clone()
 }
 
 // The lane directory of the lock this driver holds, "" when it holds none.
 fn drive_lock_lane() -> String throws {
-    let owner = drive_read(drive_lock_dir() + "/owner").trim()
-    let words = owner.split(" ").collect()
-    if words.len() < 2 || words[0].trim() != drive_pid() { return "" }
-    return words[1].trim().clone()
+	let owner = drive_read(drive_lock_dir() + "/owner").trim()
+	let words = owner.split(" ").collect()
+	if words.len() < 2 || words[0].trim() != drive_pid() { return "" }
+	return words[1].trim().clone()
 }
 
 // The QA task's one text; each lane's QA runs on a copy of it (drive_qa_copy).
 fn drive_qa_template() -> String {
-    return "docs/briefs/qa-task.md"
+	return "docs/briefs/qa-task.md"
 }
 
 // The brief lane DIR's QA runs on: DIR/qa/qa-task.md, so each lane's QA
@@ -523,16 +563,20 @@ fn drive_qa_template() -> String {
 // commits of them never conflict (2026-10-31: `rebase conflicted in
 // docs/briefs/qa-task.md.report.md`).
 fn drive_qa_brief(dir: String) -> String {
-    return f"{dir}/qa/qa-task.md"
+	return f"{dir}/qa/qa-task.md"
 }
 
 // Copies the template to drive_qa_brief(dir), creating DIR/qa/; the one
 // change is the report path the template names, made the copy's own.
 fn drive_qa_copy(dir: String) throws {
-    let qa = drive_qa_brief(dir)
-    process::run("mkdir", ["-p", f"{dir}/qa"])
-    let text = drive_read(drive_qa_template())
-    fs::write(qa, fs::Root::Anywhere, text.replace(f"{drive_qa_template()}.report.md", f"{qa}.report.md"))
+	let qa = drive_qa_brief(dir)
+	process::run("mkdir", ["-p", f"{dir}/qa"])
+	let text = drive_read(drive_qa_template())
+	fs::write(
+		qa,
+		fs::Root::Anywhere,
+		text.replace(f"{drive_qa_template()}.report.md", f"{qa}.report.md"),
+	)
 }
 
 // Waits for the background suite, if one runs, and handles its result: green
@@ -541,52 +585,52 @@ fn drive_qa_copy(dir: String) throws {
 // most 2 QA rounds. Releases the lock on every path. One `SUITE <sha8> waiting`
 // line, polls every 10 s.
 fn drive_settle(exe: String, dir: String) throws {
-    let qa = drive_qa_brief(dir)
-    let mut rounds: i64 = 0
-    while true {
-        let testing = drive_testing()
-        if testing == "" { return }
-        let parts = testing.split(" ").collect()
-        let sha = parts[0].clone()
-        let mut covered: i64 = 0
-        if parts.len() > 1 { covered = text::parse_i64(parts[1]) ?? 0 }
-        let exit = f"{drive_lock_dir()}/exit-{sha}"
-        if !fs::exists(exit, fs::Root::Anywhere) {
-            println(f"SUITE {drive_short(sha)} waiting")
-            while !fs::exists(exit, fs::Root::Anywhere) { process::run("sleep", ["10"]) }
-        }
-        process::run("rm", ["-f", exit, drive_lock_dir() + "/testing"])
-        let out = drive_read(f"{dir}/suite.log")
-        let steps = drive_red_steps(out)
-        if steps == "" {
-            println(f"SUITE {drive_short(sha)} green")
-            let all = drive_push(sha)
-            let mut left: Vec[String] = []
-            let mut seen: i64 = 0
-            for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
-                if l.trim() == "" { continue }
-                seen += 1
-                if seen > covered && !all { left.push(l.trim().clone()) }
-            }
-            let mut body: String = ""
-            if left.len() > 0 { body = left.join("\n") + "\n" }
-            fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, body)
-            drive_unlock()
-            return
-        }
-        println(f"SUITE {drive_short(sha)} red {steps}")
-        if rounds >= 2 { drive_escalate(f"suite red after 2 QA rounds: {steps}") }
-        drive_qa_input(dir, out, steps)
-        drive_qa_copy(dir)
-        process::run("rm", ["-f", f"{qa}.report.md"])
-        drive_agent(exe, false, dir, qa, "qa")
-        rounds += 1
-        drive_report_pushed(false, qa)
-        drive_tidy(false, dir.clone())
-        drive_append(f"{dir}/unpushed.txt", qa)
-        if drive_nothing_new(dir) { return }
-        drive_launch(dir)
-    }
+	let qa = drive_qa_brief(dir)
+	let mut rounds: i64 = 0
+	while true {
+		let testing = drive_testing()
+		if testing == "" { return }
+		let parts = testing.split(" ").collect()
+		let sha = parts[0].clone()
+		let mut covered: i64 = 0
+		if parts.len() > 1 { covered = text::parse_i64(parts[1]) ?? 0 }
+		let exit = f"{drive_lock_dir()}/exit-{sha}"
+		if !fs::exists(exit, fs::Root::Anywhere) {
+			println(f"SUITE {drive_short(sha)} waiting")
+			while !fs::exists(exit, fs::Root::Anywhere) { process::run("sleep", ["10"]) }
+		}
+		process::run("rm", ["-f", exit, drive_lock_dir() + "/testing"])
+		let out = drive_read(f"{dir}/suite.log")
+		let steps = drive_red_steps(out)
+		if steps == "" {
+			println(f"SUITE {drive_short(sha)} green")
+			let all = drive_push(sha)
+			let mut left: Vec[String] = []
+			let mut seen: i64 = 0
+			for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
+				if l.trim() == "" { continue }
+				seen += 1
+				if seen > covered && !all { left.push(l.trim().clone()) }
+			}
+			let mut body: String = ""
+			if left.len() > 0 { body = left.join("\n") + "\n" }
+			fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, body)
+			drive_unlock()
+			return
+		}
+		println(f"SUITE {drive_short(sha)} red {steps}")
+		if rounds >= 2 { drive_escalate(f"suite red after 2 QA rounds: {steps}") }
+		drive_qa_input(dir, out, steps)
+		drive_qa_copy(dir)
+		process::run("rm", ["-f", f"{qa}.report.md"])
+		drive_agent(exe, false, dir, qa, "qa")
+		rounds += 1
+		drive_report_pushed(false, qa)
+		drive_tidy(false, dir.clone())
+		drive_append(f"{dir}/unpushed.txt", qa)
+		if drive_nothing_new(dir) { return }
+		drive_launch(dir)
+	}
 }
 
 // The path rule of scripts/ci-changes.sh (its `docs` output), kept alike with
@@ -595,81 +639,113 @@ fn drive_settle(exe: String, dir: String) throws {
 // benches/, tools/, scripts/, tests/ or docs/specification/. A change of
 // .github/workflows/ or of ci-changes.sh itself runs everything.
 fn drive_docs_path(path: String) -> bool {
-    if path.starts_with("guide/") || path.starts_with("website/") { return true }
-    if !path.ends_with(".md") || path == "CHANGELOG.md" { return false }
-    for tree in ["crates/", "packages/", "examples/", "benches/", "tools/", "scripts/", "tests/", "docs/specification/"] {
-        if path.starts_with(tree) { return false }
-    }
-    return true
+	if path.starts_with("guide/") || path.starts_with("website/") { return true }
+	if !path.ends_with(".md") || path == "CHANGELOG.md" { return false }
+	for tree in ["crates/", "packages/", "examples/", "benches/", "tools/", "scripts/", "tests/", "docs/specification/"] {
+		if path.starts_with(tree) { return false }
+	}
+	return true
 }
 
 // True when every path is documentation (drive_docs_path) and there is one.
 fn drive_docs_only(paths: Vec[String]) -> bool {
-    let mut any = false
-    for p in paths {
-        if p == "" { continue }
-        if p.starts_with(".github/workflows/") || p == "scripts/ci-changes.sh" { return false }
-        if !drive_docs_path(p) { return false }
-        any = true
-    }
-    return any
+	let mut any = false
+	for p in paths {
+		if p == "" { continue }
+		if p.starts_with(".github/workflows/") || p == "scripts/ci-changes.sh" { return false }
+		if !drive_docs_path(p) { return false }
+		any = true
+	}
+	return any
 }
 
 // The paths the unpushed commits touch, each commit's own.
 fn drive_unpushed_paths() -> Vec[String] throws {
-    let log = process::run("git", ["log", "--format=", "--name-only", "origin/develop..HEAD"]).stdout
-    let mut out: Vec[String] = []
-    for line in log.split("\n") {
-        let p = line.trim().clone()
-        if p != "" { out.push(p) }
-    }
-    return out
+	let log = process::run(
+		"git",
+		["log", "--format=", "--name-only", "origin/develop..HEAD"],
+	).stdout
+	let mut out: Vec[String] = []
+	for line in log.split("\n") {
+		let p = line.trim().clone()
+		if p != "" { out.push(p) }
+	}
+	return out
 }
 
 // After the lock and before each suite: another lane may have pushed these
 // commits meanwhile. Nothing left to push: unpushed.txt emptied, the lock
 // released, true.
 fn drive_nothing_new(dir: String) -> bool throws {
-    process::run("git", ["fetch", "--quiet", "origin", "develop"])
-    let count = process::run("git", ["rev-list", "--count", "origin/develop..HEAD"]).stdout.trim().clone()
-    if count != "0" { return false }
-    fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
-    drive_unlock()
-    println("SUITE nothing new after the lock")
-    return true
+	process::run("git", ["fetch", "--quiet", "origin", "develop"])
+	let count = process::run(
+		"git",
+		["rev-list", "--count", "origin/develop..HEAD"],
+	).stdout.trim().clone()
+	if count != "0" { return false }
+	fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
+	drive_unlock()
+	println("SUITE nothing new after the lock")
+	return true
 }
 
 // At the end of a batch: waits for a suite still running (drive_settle), then
 // starts the complete suite on HEAD in the background and returns at once
 // (header comment).
 fn drive_suite(exe: String, dry: bool, dir: String) throws {
-    let qa = drive_qa_brief(dir)
-    drive_say(dry, "a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)")
-    drive_say(dry, "git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)")
-    drive_say(dry, "git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty " + f"{dir}/unpushed.txt")
-    drive_say(dry, "mkdir target/suite.lock (wait while its owner's pid lives)")
-    drive_say(dry, "after the lock and before each suite: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: SUITE nothing new after the lock, " + f"empty {dir}/unpushed.txt, rm -rf target/suite.lock)")
-    drive_say(dry, f"git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: {exe} run scripts/drive.nika -- --ci-wait <sha> {dir}/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)")
-    drive_say(dry, f"before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock")
-    drive_say(dry, f"red: write {dir}/qa-input.txt, mkdir -p {dir}/qa, copy {drive_qa_template()} to {qa} (its report path made {qa}.report.md), rm -f {qa}.report.md, {exe} run scripts/agent.nika -- {qa} --dir {dir}, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)")
-    if dry { return }
-    drive_settle(exe, dir)
-    process::run("git", ["fetch", "--quiet", "origin", "develop"])
-    let count = process::run("git", ["rev-list", "--count", "origin/develop..HEAD"]).stdout.trim().clone()
-    if count == "0" {
-        fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
-        return
-    }
-    if drive_docs_only(drive_unpushed_paths()) {
-        let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
-        println(f"SUITE {drive_short(head)} docs-only, pushed without the suite")
-        drive_push(head)
-        fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
-        return
-    }
-    drive_lock(dir)
-    if drive_nothing_new(dir) { return }
-    drive_launch(dir)
+	let qa = drive_qa_brief(dir)
+	drive_say(
+		dry,
+		"a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)",
+	)
+	drive_say(
+		dry,
+		"git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)",
+	)
+	drive_say(
+		dry,
+		"git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty "
+			+ f"{dir}/unpushed.txt",
+	)
+	drive_say(dry, "mkdir target/suite.lock (wait while its owner's pid lives)")
+	drive_say(
+		dry,
+		"after the lock and before each suite: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: SUITE nothing new after the lock, "
+			+ f"empty {dir}/unpushed.txt, rm -rf target/suite.lock)",
+	)
+	drive_say(
+		dry,
+		f"git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: {exe} run scripts/drive.nika -- --ci-wait <sha> {dir}/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)",
+	)
+	drive_say(
+		dry,
+		f"before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock",
+	)
+	drive_say(
+		dry,
+		f"red: write {dir}/qa-input.txt, mkdir -p {dir}/qa, copy {drive_qa_template()} to {qa} (its report path made {qa}.report.md), rm -f {qa}.report.md, {exe} run scripts/agent.nika -- {qa} --dir {dir}, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)",
+	)
+	if dry { return }
+	drive_settle(exe, dir)
+	process::run("git", ["fetch", "--quiet", "origin", "develop"])
+	let count = process::run(
+		"git",
+		["rev-list", "--count", "origin/develop..HEAD"],
+	).stdout.trim().clone()
+	if count == "0" {
+		fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
+		return
+	}
+	if drive_docs_only(drive_unpushed_paths()) {
+		let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		println(f"SUITE {drive_short(head)} docs-only, pushed without the suite")
+		drive_push(head)
+		fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
+		return
+	}
+	drive_lock(dir)
+	if drive_nothing_new(dir) { return }
+	drive_launch(dir)
 }
 
 // After a run: a builder's `Pushed: rejected` (or `none`) is rewritten when
@@ -677,37 +753,43 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 // brief, its report and run files stay untracked working files beside the
 // tree (#1252; owner, 2026-11-05: each such commit started a CI run for nothing).
 fn drive_report_pushed(dry: bool, brief: String) throws {
-    let report_path = f"{brief}.report.md"
-    if !fs::exists(report_path, fs::Root::Anywhere) { return }
-    let old = drive_read(report_path)
-    if dry {
-        drive_say(dry, f"rewrite Pushed: in {report_path} when its Commit: is in the log (nothing committed)")
-        return
-    }
-    process::run("git", ["fetch", "--quiet", "origin", "develop"])
-    let log = process::run("git", ["log", "-40", "--format=%h%x09%s", "HEAD", "origin/develop"]).stdout
-    let fresh = drive_rewrite(old.clone(), log)
-    if fresh != old { fs::write(report_path, fs::Root::Anywhere, fresh) }
+	let report_path = f"{brief}.report.md"
+	if !fs::exists(report_path, fs::Root::Anywhere) { return }
+	let old = drive_read(report_path)
+	if dry {
+		drive_say(
+			dry,
+			f"rewrite Pushed: in {report_path} when its Commit: is in the log (nothing committed)",
+		)
+		return
+	}
+	process::run("git", ["fetch", "--quiet", "origin", "develop"])
+	let log = process::run(
+		"git",
+		["log", "-40", "--format=%h%x09%s", "HEAD", "origin/develop"],
+	).stdout
+	let fresh = drive_rewrite(old.clone(), log)
+	if fresh != old { fs::write(report_path, fs::Root::Anywhere, fresh) }
 }
 
 // The issue a brief belongs to: the first part of four digits of its name
 // after the prefix (`d1-1252-briefs` -> 1252, `b44-1206-x` -> 1206), "" when
 // it has none.
 fn drive_issue(brief: String) -> String throws {
-    let parts = drive_stem(brief).split("-").collect()
-    for i in 1..<parts.len() {
-        let part = parts[i].clone()
-        let mut digits = part.len() == 4
-        for c in part.scalars { if !c.is_ascii_digit() { digits = false } }
-        if digits { return part }
-    }
-    return ""
+	let parts = drive_stem(brief).split("-").collect()
+	for i in 1..<parts.len() {
+		let part = parts[i].clone()
+		let mut digits = part.len() == 4
+		for c in part.scalars { if !c.is_ascii_digit() { digits = false } }
+		if digits { return part }
+	}
+	return ""
 }
 
 // The comment that puts a queued brief on its issue: `Brief queued: <name>`,
 // a blank line, the brief, then the generated-by footer.
 fn drive_post_body(name: String, text: String) -> String {
-    return f"Brief queued: {name}\n\n" + text.trim_end() + drive_footer()
+	return f"Brief queued: {name}\n\n" + text.trim_end() + drive_footer()
 }
 
 // Before a brief runs: its text goes as a comment on its issue (drive_issue),
@@ -715,60 +797,63 @@ fn drive_post_body(name: String, text: String) -> String {
 // session gets the brief back from the issue. No issue, or a failed post, is
 // logged (`no issue for <brief>`, `post failed for <brief>`) and the batch goes on.
 fn drive_post_brief(dry: bool, brief: String) throws {
-    let marker = f"{brief}.posted"
-    let name = drive_stem(brief)
-    if fs::exists(marker, fs::Root::Anywhere) { return }
-    let issue = drive_issue(brief)
-    if issue == "" {
-        println(f"no issue for {name}")
-        return
-    }
-    drive_say(dry, f"gh api {drive_comments_api(issue)} -F body=@<Brief queued: {name}, the brief, the footer>; write {marker}")
-    if dry { return }
-    if !drive_comment(issue, drive_post_body(name, drive_read(brief))) {
-        println(f"post failed for {name}")
-        return
-    }
-    fs::write(marker, fs::Root::Anywhere, f"{issue}\n")
+	let marker = f"{brief}.posted"
+	let name = drive_stem(brief)
+	if fs::exists(marker, fs::Root::Anywhere) { return }
+	let issue = drive_issue(brief)
+	if issue == "" {
+		println(f"no issue for {name}")
+		return
+	}
+	drive_say(
+		dry,
+		f"gh api {drive_comments_api(issue)} -F body=@<Brief queued: {name}, the brief, the footer>; write {marker}",
+	)
+	if dry { return }
+	if !drive_comment(issue, drive_post_body(name, drive_read(brief))) {
+		println(f"post failed for {name}")
+		return
+	}
+	fs::write(marker, fs::Root::Anywhere, f"{issue}\n")
 }
 
 // The `gh api` path of issue N's comments.
 fn drive_comments_api(issue: String) -> String {
-    return f"repos/{drive_repo()}/issues/{issue}/comments"
+	return f"repos/{drive_repo()}/issues/{issue}/comments"
 }
 
 // Posts `body` as a comment on issue N (`gh api ... -F body=@FILE`, the file
 // a temporary one); true when it went through.
 fn drive_comment(issue: String, body: String) -> bool throws {
-    let file = process::run("mktemp", []).stdout.trim().clone()
-    fs::write(file, fs::Root::Anywhere, body)
-    let posted = process::run("gh", ["api", drive_comments_api(issue), "-F", f"body=@{file}"])
-    process::run("rm", ["-f", file])
-    return posted.ok
+	let file = process::run("mktemp", []).stdout.trim().clone()
+	fs::write(file, fs::Root::Anywhere, body)
+	let posted = process::run("gh", ["api", drive_comments_api(issue), "-F", f"body=@{file}"])
+	process::run("rm", ["-f", file])
+	return posted.ok
 }
 
 // The generated-by footer of every comment the driver posts.
 fn drive_footer() -> String {
-    return "\n\n---\n_Generated by [Claude Code](https://claude.ai/code)_\n"
+	return "\n\n---\n_Generated by [Claude Code](https://claude.ai/code)_\n"
 }
 
 // Dollars with cents of a sum of micro-dollars, rounded: `1.76`.
 fn drive_dollars(micro: i64) -> String {
-    let cents = (micro + 5000) / 10000
-    let rest = cents % 100
-    let pad = if rest < 10 { "0" } else { "" }
-    return f"{cents / 100}.{pad}{rest}"
+	let cents = (micro + 5000) / 10000
+	let rest = cents % 100
+	let pad = if rest < 10 { "0" } else { "" }
+	return f"{cents / 100}.{pad}{rest}"
 }
 
 // The micro-dollars of the cost.txt lines (`DATE USD`) from line `from` on.
 fn drive_cost_since(text: String, from: i64) -> i64 throws {
-    let lines = text.trim_end().split("\n").collect()
-    let mut micro = 0
-    for i in 0..<lines.len() {
-        let words = lines[i].trim().split(" ").collect()
-        if i >= from && words.len() == 2 { micro += drive_micro(words[1]) }
-    }
-    return micro
+	let lines = text.trim_end().split("\n").collect()
+	let mut micro = 0
+	for i in 0..<lines.len() {
+		let words = lines[i].trim().split(" ").collect()
+		if i >= from && words.len() == 2 { micro += drive_micro(words[1]) }
+	}
+	return micro
 }
 
 // The comment of one run (#1252): `Run: <name>, <result line>`, its tokens
@@ -776,18 +861,28 @@ fn drive_cost_since(text: String, from: i64) -> i64 throws {
 // being TOKENS less the other three), the cost (micro-dollars), the time (ms)
 // and the turns, the report under `### Report`, the debrief under `###
 // Debrief` when there is one, then the footer.
-fn drive_run_body(name: String, result: String, row: String, micro: i64, ms: i64, turns: String, report: String, debrief: String) -> String throws {
-    let words = row.trim().split(" ").collect()
-    let mut n: Vec[i64] = []
-    for k in 1..<words.len() { n.push(text::parse_i64(words[k]) ?? 0) }
-    while n.len() < 5 { n.push(0) }
-    let input = n[0] - n[2] - n[3] - n[4]
-    let mut out = f"Run: {name}, {result}\n\n"
-    out = out + f"Tokens: input {input}, cache read {n[2]}, cache write {n[3]}, output {n[4]}\n"
-    out = out + f"Cost: {drive_dollars(micro)} USD, time {ms / 60000} min {(ms / 1000) % 60} s, turns {turns}\n\n"
-    out = out + "### Report\n\n" + (if report.trim() == "" { "(none)" } else { report.trim_end() })
-    if debrief.trim() != "" { out = out + "\n\n### Debrief\n\n" + debrief.trim_end() }
-    return out + drive_footer()
+fn drive_run_body(
+	name: String,
+	result: String,
+	row: String,
+	micro: i64,
+	ms: i64,
+	turns: String,
+	report: String,
+	debrief: String,
+) -> String throws {
+	let words = row.trim().split(" ").collect()
+	let mut n: Vec[i64] = []
+	for k in 1..<words.len() { n.push(text::parse_i64(words[k]) ?? 0) }
+	while n.len() < 5 { n.push(0) }
+	let input = n[0] - n[2] - n[3] - n[4]
+	let mut out = f"Run: {name}, {result}\n\n"
+	out = out + f"Tokens: input {input}, cache read {n[2]}, cache write {n[3]}, output {n[4]}\n"
+	out = out
+		+ f"Cost: {drive_dollars(micro)} USD, time {ms / 60000} min {(ms / 1000) % 60} s, turns {turns}\n\n"
+	out = out + "### Report\n\n" + (if report.trim() == "" { "(none)" } else { report.trim_end() })
+	if debrief.trim() != "" { out = out + "\n\n### Debrief\n\n" + debrief.trim_end() }
+	return out + drive_footer()
 }
 
 // The comment of BRIEF's run, from the files the run left in DIR: the report's
@@ -795,133 +890,149 @@ fn drive_run_body(name: String, result: String, row: String, micro: i64, ms: i64
 // DIR/tokens.txt, DIR/cost.txt from line `cost_from` on (the run and its
 // debrief), BRIEF.run.json's `duration_ms` (and `num_turns` without a tokens
 // row), the debrief.
-fn drive_run_comment(dir: String, brief: String, cost_from: i64, fallback: String) -> String throws {
-    let abs = process::run("realpath", [brief]).stdout.trim().clone()
-    let report_path = drive_report_of(abs)
-    let report = if report_path == "" { "" } else { drive_read(report_path) }
-    let field = drive_field(report, "Result")
-    let result = if field == "" { fallback.clone() } else { f"Result: {field}" }
-    let mut row: String = ""
-    for line in drive_read(f"{dir}/tokens.txt").split("\n") {
-        if line.trim().split(" ").collect()[0] == abs { row = line.clone() }
-    }
-    let json = drive_read(f"{abs}.run.json")
-    let ms = text::parse_i64(drive_json_field(json, "duration_ms")) ?? 0
-    let mut turns = drive_json_field(json, "num_turns")
-    let cells = row.trim().split(" ").collect()
-    if cells.len() > 2 { turns = cells[2].clone() }
-    if turns == "" { turns = "0" }
-    let stem = (abs.strip_suffix(".md") ?? "")
-    let mut debrief = drive_read(f"{abs}.debrief.md")
-    if stem != "" { debrief = drive_read(f"{stem}.debrief.md") }
-    let micro = drive_cost_since(drive_read(f"{dir}/cost.txt"), cost_from)
-    return drive_run_body(drive_stem(abs), result, row, micro, ms, turns, report, debrief)
+fn drive_run_comment(
+	dir: String,
+	brief: String,
+	cost_from: i64,
+	fallback: String,
+) -> String throws {
+	let abs = process::run("realpath", [brief]).stdout.trim().clone()
+	let report_path = drive_report_of(abs)
+	let report = if report_path == "" { "" } else { drive_read(report_path) }
+	let field = drive_field(report, "Result")
+	let result = if field == "" { fallback.clone() } else { f"Result: {field}" }
+	let mut row: String = ""
+	for line in drive_read(f"{dir}/tokens.txt").split("\n") {
+		if line.trim().split(" ").collect()[0] == abs { row = line.clone() }
+	}
+	let json = drive_read(f"{abs}.run.json")
+	let ms = text::parse_i64(drive_json_field(json, "duration_ms")) ?? 0
+	let mut turns = drive_json_field(json, "num_turns")
+	let cells = row.trim().split(" ").collect()
+	if cells.len() > 2 { turns = cells[2].clone() }
+	if turns == "" { turns = "0" }
+	let stem = (abs.strip_suffix(".md") ?? "")
+	let mut debrief = drive_read(f"{abs}.debrief.md")
+	if stem != "" { debrief = drive_read(f"{stem}.debrief.md") }
+	let micro = drive_cost_since(drive_read(f"{dir}/cost.txt"), cost_from)
+	return drive_run_body(drive_stem(abs), result, row, micro, ms, turns, report, debrief)
 }
 
 // The raw value after `"key":` in claude's JSON (first occurrence), "" if absent.
 fn drive_json_field(body: String, key: String) -> String {
-    let parts = body.split("\"" + key + "\":").collect()
-    if parts.len() < 2 { return "" }
-    let first = parts[1].split(",").collect()[0]
-    return first.split("}").collect()[0].trim().replace("\"", "")
+	let parts = body.split("\"" + key + "\":").collect()
+	if parts.len() < 2 { return "" }
+	let first = parts[1].split(",").collect()[0]
+	return first.split("}").collect()[0].trim().replace("\"", "")
 }
 
 // The issue a run or a block is posted on: the brief's own (drive_issue), else
 // the lane issue of DIR's area in docs/briefs/focus.txt; "" when neither.
 fn drive_run_issue(brief: String, dir: String) -> String throws {
-    let own = drive_issue(brief)
-    if own != "" { return own }
-    return drive_focus_issue(drive_read("docs/briefs/focus.txt"), "", dir)
+	let own = drive_issue(brief)
+	if own != "" { return own }
+	return drive_focus_issue(drive_read("docs/briefs/focus.txt"), "", dir)
 }
 
 // After a run: its comment on its issue (drive_run_comment). No issue, or a
 // failed post, is logged (`no issue for <brief>`, `post failed for <brief>`)
 // and stops nothing; the files stay for the driver and the supervisor.
 fn drive_post_run(dir: String, brief: String, cost_from: i64, fallback: String) throws {
-    let name = drive_stem(brief)
-    let issue = drive_run_issue(brief, dir)
-    if issue == "" {
-        println(f"no issue for {name}")
-        return
-    }
-    if !drive_comment(issue, drive_run_comment(dir, brief, cost_from, fallback)) { println(f"post failed for {name}") }
+	let name = drive_stem(brief)
+	let issue = drive_run_issue(brief, dir)
+	if issue == "" {
+		println(f"no issue for {name}")
+		return
+	}
+	if !drive_comment(issue, drive_run_comment(dir, brief, cost_from, fallback)) {
+		println(f"post failed for {name}")
+	}
 }
 
 // What a run leaves behind that no commit takes: untracked step reports
 // (`*.step<N>.report.md`) beside the briefs.
 fn drive_tidy(dry: bool, dir: String) throws {
-    let left = process::run("git", ["ls-files", "--others", "--exclude-standard", "--", dir])
-    let mut stray: Vec[String] = []
-    for l in left.stdout.trim().split("\n") {
-        if l.contains(".step") && l.ends_with(".report.md") { stray.push(l) }
-    }
-    if stray.len() > 0 { drive_say(dry, "rm -f " + stray.join(" ")) }
-    if dry { return }
-    for i in 0..<stray.len() { process::run("rm", ["-f", stray[i].clone()]) }
+	let left = process::run("git", ["ls-files", "--others", "--exclude-standard", "--", dir])
+	let mut stray: Vec[String] = []
+	for l in left.stdout.trim().split("\n") {
+		if l.contains(".step") && l.ends_with(".report.md") { stray.push(l) }
+	}
+	if stray.len() > 0 { drive_say(dry, "rm -f " + stray.join(" ")) }
+	if dry { return }
+	for i in 0..<stray.len() { process::run("rm", ["-f", stray[i].clone()]) }
 }
 
 // Runs one agent; prints `<role> done ...`; escalates on anything else.
 fn drive_agent(exe: String, dry: bool, dir: String, brief: String, role: String) throws {
-    drive_say(dry, f"{exe} run scripts/agent.nika -- {brief} --dir {dir}")
-    drive_say(dry, f"gh api {drive_comments_api("<issue of " + drive_stem(brief) + ">")} -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>")
-    if dry { return }
-    let cost_from = drive_line_count(drive_read(f"{dir}/cost.txt"))
-    let out = process::run(exe, ["run", "scripts/agent.nika", "--", brief.clone(), "--dir", dir.clone()])
-    let mut done: String = ""
-    let mut first: String = ""
-    for l in out.stdout.trim().split("\n") {
-        if first == "" { first = l }
-        if l.starts_with("done ") { done = l }
-    }
-    if done == "" || !out.ok {
-        if first == "" { first = f"agent.nika exited with code {out.code}" }
-        drive_post_run(dir, brief.clone(), cost_from, first)
-        drive_escalate(first)
-    }
-    drive_post_run(dir, brief.clone(), cost_from, "no report")
-    println(f"{role} {done}")
+	drive_say(dry, f"{exe} run scripts/agent.nika -- {brief} --dir {dir}")
+	drive_say(
+		dry,
+		f"gh api {drive_comments_api("<issue of " + drive_stem(brief) + ">")} -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>",
+	)
+	if dry { return }
+	let cost_from = drive_line_count(drive_read(f"{dir}/cost.txt"))
+	let out = process::run(
+		exe,
+		["run", "scripts/agent.nika", "--", brief.clone(), "--dir", dir.clone()],
+	)
+	let mut done: String = ""
+	let mut first: String = ""
+	for l in out.stdout.trim().split("\n") {
+		if first == "" { first = l }
+		if l.starts_with("done ") { done = l }
+	}
+	if done == "" || !out.ok {
+		if first == "" { first = f"agent.nika exited with code {out.code}" }
+		drive_post_run(dir, brief.clone(), cost_from, first)
+		drive_escalate(first)
+	}
+	drive_post_run(dir, brief.clone(), cost_from, "no report")
+	println(f"{role} {done}")
 }
 
 fn drive_read(path: String) -> String throws {
-    if !fs::exists(path, fs::Root::Anywhere) { return "" }
-    return fs::read_to_string(path, fs::Root::Anywhere)
+	if !fs::exists(path, fs::Root::Anywhere) { return "" }
+	return fs::read_to_string(path, fs::Root::Anywhere)
 }
 
 fn drive_cycle(exe: String, dir: String, lines_file: String) -> String throws {
-    if lines_file != "" { return drive_read(lines_file) }
-    let c = process::run(exe, ["run", "scripts/cycle.nika", "--", dir])
-    if !c.ok { drive_escalate("cycle.nika failed") }
-    return c.stdout
+	if lines_file != "" { return drive_read(lines_file) }
+	let c = process::run(exe, ["run", "scripts/cycle.nika", "--", dir])
+	if !c.ok { drive_escalate("cycle.nika failed") }
+	return c.stdout
 }
 
 // One builder run of DIR's brief: the brief posted on its issue (once), the
 // agent, its report's `Pushed:` checked, the tidy, the brief appended to
 // DIR/unpushed.txt. Nothing under docs/briefs/ is committed.
 fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
-    drive_say(dry, "a batch's suite still running (target/suite.lock/testing): wait for it and handle it (drive_settle) first")
-    drive_post_brief(dry, brief)
-    drive_agent(exe, dry, dir, brief, "builder")
-    drive_report_pushed(dry, brief)
-    drive_tidy(dry, dir.clone())
-    drive_say(dry, f"append {brief} to {dir}/unpushed.txt (no suite until the batch ends)")
-    if dry { return }
-    drive_append(f"{dir}/unpushed.txt", brief)
+	drive_say(
+		dry,
+		"a batch's suite still running (target/suite.lock/testing): wait for it and handle it (drive_settle) first",
+	)
+	drive_post_brief(dry, brief)
+	drive_agent(exe, dry, dir, brief, "builder")
+	drive_report_pushed(dry, brief)
+	drive_tidy(dry, dir.clone())
+	drive_say(dry, f"append {brief} to {dir}/unpushed.txt (no suite until the batch ends)")
+	if dry { return }
+	drive_append(f"{dir}/unpushed.txt", brief)
 }
 
 // The batch ends at a stop line: its suite runs and is waited for (pushed when
 // green), then the driver stops for the supervisor, who writes the next briefs
 // (a fix-forward for RED). A dry run prints `DRY-RUN STOP <stop>`.
 fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
-    drive_suite(exe, dry, dir)
-    drive_say(dry, "wait for the suite (drive_settle), then stop for the supervisor (exit 2)")
-    if dry {
-        println(f"DRY-RUN STOP {stop}")
-        return
-    }
-    drive_settle(exe, dir)
-    drive_unlock()
-    println(f"ESCALATE {stop}: the supervisor writes the next briefs")
-    process::exit(2)
+	drive_suite(exe, dry, dir)
+	drive_say(dry, "wait for the suite (drive_settle), then stop for the supervisor (exit 2)")
+	if dry {
+		println(f"DRY-RUN STOP {stop}")
+		return
+	}
+	drive_settle(exe, dir)
+	drive_unlock()
+	println(f"ESCALATE {stop}: the supervisor writes the next briefs")
+	process::exit(2)
 }
 
 // The words of the first line of a focus file that starts with `key`, empty
@@ -930,216 +1041,235 @@ fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
 //     area bugs docs/briefs/bugs
 //     current bugs 0
 fn drive_focus_words(text: String, key: String) -> Vec[String] {
-    for line in text.split("\n") {
-        let words = line.trim().split(" ").collect()
-        if words.len() > 1 && words[0] == key { return words }
-    }
-    let none: Vec[String] = []
-    return none
+	for line in text.split("\n") {
+		let words = line.trim().split(" ").collect()
+		if words.len() > 1 && words[0] == key { return words }
+	}
+	let none: Vec[String] = []
+	return none
 }
 
 // The block length (builder briefs an area runs before the focus moves on), 3
 // when the file names none.
 fn drive_focus_block(text: String) -> i64 {
-    let words = drive_focus_words(text, "block")
-    if words.len() < 2 { return 3 }
-    return text::parse_i64(words[1]) ?? 3
+	let words = drive_focus_words(text, "block")
+	if words.len() < 2 { return 3 }
+	return text::parse_i64(words[1]) ?? 3
 }
 
 // The areas in order, each `NAME DIR`. An area line may name the lane's
 // issue as a fourth word (`area views docs/briefs/views 1213`).
 fn drive_focus_areas(text: String) -> Vec[String] {
-    let mut out: Vec[String] = []
-    for line in text.split("\n") {
-        let words = line.trim().split(" ").collect()
-        if (words.len() == 3 || words.len() == 4) && words[0] == "area" { out.push(words[1] + " " + words[2]) }
-    }
-    return out
+	let mut out: Vec[String] = []
+	for line in text.split("\n") {
+		let words = line.trim().split(" ").collect()
+		if (words.len() == 3 || words.len() == 4)
+			&& words[0] == "area" { out.push(words[1] + " " + words[2]) }
+	}
+	return out
 }
 
 // True when `dir` (relative, or absolute under the checkout) is the area
 // directory `area`; "" is no directory.
 fn drive_same_dir(dir: String, area: String) -> bool {
-    let a = area.trim_end_matches("/")
-    if dir == "" || a == "" { return false }
-    return dir == a || dir.ends_with("/" + a)
+	let a = area.trim_end_matches("/")
+	if dir == "" || a == "" { return false }
+	return dir == a || dir.ends_with("/" + a)
 }
 
 // The lane issue of the area named `name`, or of the area whose DIR is `dir`
 // (the fourth word of its line), "" when its line names none.
 fn drive_focus_issue(text: String, name: String, dir: String) -> String {
-    let want = dir.trim_end_matches("/")
-    for line in text.split("\n") {
-        let words = line.trim().split(" ").collect()
-        if words.len() == 4 && words[0] == "area" && (words[1] == name || drive_same_dir(want, words[2])) { return words[3] }
-    }
-    return ""
+	let want = dir.trim_end_matches("/")
+	for line in text.split("\n") {
+		let words = line.trim().split(" ").collect()
+		if words.len() == 4
+			&& words[0] == "area"
+			&& (words[1] == name || drive_same_dir(want, words[2])) { return words[3] }
+	}
+	return ""
 }
 
 // The current area's name: the `current` line's, else the first area's.
 fn drive_focus_current(text: String) -> String {
-    let words = drive_focus_words(text, "current")
-    if words.len() > 1 { return words[1].clone() }
-    let areas = drive_focus_areas(text)
-    if areas.len() == 0 { return "" }
-    return areas[0].split(" ").collect()[0].clone()
+	let words = drive_focus_words(text, "current")
+	if words.len() > 1 { return words[1].clone() }
+	let areas = drive_focus_areas(text)
+	if areas.len() == 0 { return "" }
+	return areas[0].split(" ").collect()[0].clone()
 }
 
 // The builder runs the current area has had in its block.
 fn drive_focus_count(text: String) -> i64 {
-    let words = drive_focus_words(text, "current")
-    if words.len() < 3 { return 0 }
-    return text::parse_i64(words[2]) ?? 0
+	let words = drive_focus_words(text, "current")
+	if words.len() < 3 { return 0 }
+	return text::parse_i64(words[2]) ?? 0
 }
 
 // The directory of area NAME, "" when the file has no such area.
 fn drive_focus_dir(text: String, name: String) -> String {
-    for area in drive_focus_areas(text) {
-        let words = area.split(" ").collect()
-        if words[0] == name { return words[1].clone() }
-    }
-    return ""
+	for area in drive_focus_areas(text) {
+		let words = area.split(" ").collect()
+		if words[0] == name { return words[1].clone() }
+	}
+	return ""
 }
 
 // `text` with its `current` line set to `NAME COUNT` (appended when absent).
 fn drive_focus_set(text: String, name: String, count: i64) -> String {
-    let mut out: Vec[String] = []
-    let mut set = false
-    for line in text.trim_end().split("\n") {
-        if line.trim().starts_with("current ") || line.trim() == "current" {
-            out.push(f"current {name} {count}")
-            set = true
-        } else {
-            out.push(line)
-        }
-    }
-    if !set { out.push(f"current {name} {count}") }
-    return out.join("\n") + "\n"
+	let mut out: Vec[String] = []
+	let mut set = false
+	for line in text.trim_end().split("\n") {
+		if line.trim().starts_with("current ") || line.trim() == "current" {
+			out.push(f"current {name} {count}")
+			set = true
+		} else {
+			out.push(line)
+		}
+	}
+	if !set { out.push(f"current {name} {count}") }
+	return out.join("\n") + "\n"
 }
 
 // The area after the current one, wrapping, whose name is not in `skipped`
 // (` a b `, the areas found empty in this rotation); the current one itself
 // comes last. "" when every area is skipped.
 fn drive_focus_next(text: String, skipped: String) -> String {
-    let areas = drive_focus_areas(text)
-    let current = drive_focus_current(text)
-    let n = areas.len()
-    let mut at: i64 = 0
-    for i in 0..<n {
-        if areas[i].split(" ").collect()[0] == current { at = i }
-    }
-    for k in 0..<n {
-        let name = areas[(at + 1 + k) % n].split(" ").collect()[0].clone()
-        if !skipped.contains(f" {name} ") { return name }
-    }
-    return ""
+	let areas = drive_focus_areas(text)
+	let current = drive_focus_current(text)
+	let n = areas.len()
+	let mut at: i64 = 0
+	for i in 0..<n {
+		if areas[i].split(" ").collect()[0] == current { at = i }
+	}
+	for k in 0..<n {
+		let name = areas[(at + 1 + k) % n].split(" ").collect()[0].clone()
+		if !skipped.contains(f" {name} ") { return name }
+	}
+	return ""
 }
 
 // Micro-dollars of "12.34": whole * 1_000_000 + the first six decimals.
 fn drive_micro(cost: String) -> i64 throws {
-    let parts = cost.trim().split(".").collect()
-    let whole = text::parse_i64(parts[0]) ?? 0
-    if parts.len() < 2 { return whole * 1000000 }
-    let padded = parts[1] + "000000"
-    let frac = text::parse_i64(padded.bytes[0..<6].text()) ?? 0
-    return whole * 1000000 + frac
+	let parts = cost.trim().split(".").collect()
+	let whole = text::parse_i64(parts[0]) ?? 0
+	if parts.len() < 2 { return whole * 1000000 }
+	let padded = parts[1] + "000000"
+	let frac = text::parse_i64(padded.bytes[0..<6].text()) ?? 0
+	return whole * 1000000 + frac
 }
 
 // The focus line of one block: `<stamp> <area> briefs <n> done <d>
 // partial <p> blocked <b> noop <o> tokens <t> cost <c> queue <q>`. `tokens`: the rows (`BRIEF TOKENS CALLS`) of the block's
 // briefs from tokens.txt; `costs`: the cost.txt lines (`DATE USD`) the block
 // added.
-fn drive_focus_line(stamp: String, area: String, reports: Vec[String], tokens: Vec[String], costs: Vec[String], queue: i64) -> String throws {
-    let mut done = 0
-    let mut partial = 0
-    let mut blocked = 0
-    let mut noop = 0
-    for report in reports {
-        let result = drive_word(drive_field(report, "Result"))
-        if result == "done" { done += 1 }
-        if result == "partial" { partial += 1 }
-        if result == "blocked" { blocked += 1 }
-        if result == "noop" { noop += 1 }
-    }
-    let mut sum = 0
-    for row in tokens {
-        let words = row.trim().split(" ").collect()
-        if words.len() > 1 { sum += text::parse_i64(words[1]) ?? 0 }
-    }
-    let mut micro = 0
-    for row in costs {
-        let words = row.trim().split(" ").collect()
-        if words.len() == 2 { micro += drive_micro(words[1]) }
-    }
-    return f"{stamp} {area} briefs {reports.len()} done {done} partial {partial} blocked {blocked} noop {noop} tokens {sum} cost {drive_dollars(micro)} queue {queue}"
+fn drive_focus_line(
+	stamp: String,
+	area: String,
+	reports: Vec[String],
+	tokens: Vec[String],
+	costs: Vec[String],
+	queue: i64,
+) -> String throws {
+	let mut done = 0
+	let mut partial = 0
+	let mut blocked = 0
+	let mut noop = 0
+	for report in reports {
+		let result = drive_word(drive_field(report, "Result"))
+		if result == "done" { done += 1 }
+		if result == "partial" { partial += 1 }
+		if result == "blocked" { blocked += 1 }
+		if result == "noop" { noop += 1 }
+	}
+	let mut sum = 0
+	for row in tokens {
+		let words = row.trim().split(" ").collect()
+		if words.len() > 1 { sum += text::parse_i64(words[1]) ?? 0 }
+	}
+	let mut micro = 0
+	for row in costs {
+		let words = row.trim().split(" ").collect()
+		if words.len() == 2 { micro += drive_micro(words[1]) }
+	}
+	return f"{stamp} {area} briefs {reports.len()} done {done} partial {partial} blocked {blocked} noop {noop} tokens {sum} cost {drive_dollars(micro)} queue {queue}"
 }
 
 // The report of a brief that exists (`BRIEF.report.md`, else the stem's), or "".
 fn drive_report_of(brief: String) -> String throws {
-    let report = f"{brief}.report.md"
-    if fs::exists(report, fs::Root::Anywhere) { return report }
-    let stem = (brief.strip_suffix(".md") ?? "")
-    if stem != "" && fs::exists(f"{stem}.report.md", fs::Root::Anywhere) { return f"{stem}.report.md" }
-    return ""
+	let report = f"{brief}.report.md"
+	if fs::exists(report, fs::Root::Anywhere) { return report }
+	let stem = (brief.strip_suffix(".md") ?? "")
+	if stem != ""
+		&& fs::exists(f"{stem}.report.md", fs::Root::Anywhere) { return f"{stem}.report.md" }
+	return ""
 }
 
 // The briefs of DIR/batch.txt that exist and have no report yet, as paths
 // under DIR.
 fn drive_unrun(dir: String) -> Vec[String] throws {
-    let mut out: Vec[String] = []
-    for raw in drive_read(f"{dir}/batch.txt").split("\n") {
-        let name = raw.trim()
-        if name == "" { continue }
-        let brief = f"{dir}/{name}"
-        if fs::exists(brief, fs::Root::Anywhere) && drive_report_of(brief) == "" { out.push(brief) }
-    }
-    return out
+	let mut out: Vec[String] = []
+	for raw in drive_read(f"{dir}/batch.txt").split("\n") {
+		let name = raw.trim()
+		if name == "" { continue }
+		let brief = f"{dir}/{name}"
+		if fs::exists(brief, fs::Root::Anywhere) && drive_report_of(brief) == "" { out.push(brief) }
+	}
+	return out
 }
 
 // The first unrun brief of DIR/batch.txt with a `Blocks:` line (a defect that
 // holds up a move), as its absolute path; "" when none.
 fn drive_focus_blocking(dir: String) -> String throws {
-    for brief in drive_unrun(dir) {
-        for line in drive_read(brief).split("\n") {
-            if line.trim().starts_with("Blocks:") { return process::run("realpath", [brief]).stdout.trim().clone() }
-        }
-    }
-    return ""
+	for brief in drive_unrun(dir) {
+		for line in drive_read(brief).split("\n") {
+			if line.trim().starts_with("Blocks:") {
+				return process::run("realpath", [brief]).stdout.trim().clone()
+			}
+		}
+	}
+	return ""
 }
 
 // The lines of a text, a trailing newline not counted.
 fn drive_line_count(body: String) -> i64 {
-    if body.trim() == "" { return 0 }
-    return body.trim_end().split("\n").collect().len()
+	if body.trim() == "" { return 0 }
+	return body.trim_end().split("\n").collect().len()
 }
 
 // The focus line of a block of AREA (DIR) that ran `briefs`: their
 // reports, their rows of tokens.txt beside each brief, the lines of
 // DIR/cost.txt from line `cost_from` on, the unrun briefs left in DIR.
-fn drive_focus_record(stamp: String, area: String, dir: String, briefs: Vec[String], cost_from: i64) -> String throws {
-    let mut reports: Vec[String] = []
-    let mut tokens: Vec[String] = []
-    for brief in briefs {
-        let report = drive_report_of(brief)
-        if report != "" { reports.push(drive_read(report)) }
-        let cut = brief.rfind("/") ?? 0
-        let home = if cut > 0 { brief[0..<cut] } else { "." }
-        for row in drive_read(f"{home}/tokens.txt").split("\n") {
-            if row.trim().split(" ").collect()[0] == brief { tokens.push(row.clone()) }
-        }
-    }
-    let mut costs: Vec[String] = []
-    let lines = drive_read(f"{dir}/cost.txt").trim_end().split("\n").collect()
-    for i in 0..<lines.len() {
-        if i >= cost_from && lines[i].trim() != "" { costs.push(lines[i]) }
-    }
-    return drive_focus_line(stamp, area, reports, tokens, costs, drive_unrun(dir).len())
+fn drive_focus_record(
+	stamp: String,
+	area: String,
+	dir: String,
+	briefs: Vec[String],
+	cost_from: i64,
+) -> String throws {
+	let mut reports: Vec[String] = []
+	let mut tokens: Vec[String] = []
+	for brief in briefs {
+		let report = drive_report_of(brief)
+		if report != "" { reports.push(drive_read(report)) }
+		let cut = brief.rfind("/") ?? 0
+		let home = if cut > 0 { brief[0..<cut] } else { "." }
+		for row in drive_read(f"{home}/tokens.txt").split("\n") {
+			if row.trim().split(" ").collect()[0] == brief { tokens.push(row.clone()) }
+		}
+	}
+	let mut costs: Vec[String] = []
+	let lines = drive_read(f"{dir}/cost.txt").trim_end().split("\n").collect()
+	for i in 0..<lines.len() {
+		if i >= cost_from && lines[i].trim() != "" { costs.push(lines[i]) }
+	}
+	return drive_focus_line(stamp, area, reports, tokens, costs, drive_unrun(dir).len())
 }
 
 // The comment of a block's focus line (drive_focus_record): the line, then
 // the footer.
 fn drive_focus_body(line: String) -> String {
-    return line + drive_footer()
+	return line + drive_footer()
 }
 
 // A block's line goes to the driver's output (`FOCUS <line>`) and as a comment
@@ -1147,45 +1277,62 @@ fn drive_focus_body(line: String) -> String {
 // none, only to the output (`no lane issue for <area>`). A failed post is
 // logged (`post failed for <area>`) and stops nothing.
 fn drive_post_focus(file: String, area: String, line: String) throws {
-    println(f"FOCUS {line}")
-    let issue = drive_focus_issue(file, area, "")
-    if issue == "" {
-        println(f"no lane issue for {area}")
-        return
-    }
-    if !drive_comment(issue, drive_focus_body(line)) { println(f"post failed for {area}") }
+	println(f"FOCUS {line}")
+	let issue = drive_focus_issue(file, area, "")
+	if issue == "" {
+		println(f"no lane issue for {area}")
+		return
+	}
+	if !drive_comment(issue, drive_focus_body(line)) { println(f"post failed for {area}") }
 }
 
 // The end of a block: the suite (started, then waited for: pushed on green,
 // QA on red), the block's line on the lane issue, the bump of each area's DIR with one pending
 // while CI is green, the focus moved to the next area (focus.txt is a
 // working file, not committed: #1252). `file`: the focus file as read at the block's start.
-fn drive_focus_end(exe: String, dry: bool, file: String, area: String, dir: String, briefs: Vec[String], cost_from: i64) throws {
-    let path = "docs/briefs/focus.txt"
-    drive_suite(exe, dry, dir)
-    drive_say(dry, "wait for the suite (drive_settle)")
-    drive_say(dry, f"gh api {drive_comments_api("<lane issue of " + area + ">")} -F body=@<the block's line, the footer>")
-    if !dry {
-        drive_settle(exe, dir)
-        let stamp = process::run("date", ["+%F %H:%M"]).stdout.trim().clone()
-        let line = drive_focus_record(stamp, area, dir, briefs, cost_from)
-        drive_post_focus(file, area, line)
-    }
-    for each in drive_focus_areas(file) {
-        let other = each.split(" ").collect()[1]
-        drive_say(dry, f"{exe} run scripts/cycle.nika -- {other}: BUMP pending and CI green: {exe} run scripts/cycle.nika -- {other} --apply")
-        if dry { continue }
-        let cyc = drive_cycle(exe, other.clone(), "")
-        let green = cyc.contains(" green\n") || cyc.trim().ends_with(" green")
-        if green && cyc.contains("BUMP pending") {
-            let rel = process::run(exe, ["run", "scripts/cycle.nika", "--", other.clone(), "--apply"])
-            if rel.stdout.contains("PUSH REJECTED") { drive_escalate("bump push rejected") }
-        }
-    }
-    let next = drive_focus_next(file, " ")
-    drive_say(dry, f"set {path} to current {next} 0 (not committed)")
-    if dry { return }
-    fs::write(path, fs::Root::Anywhere, drive_focus_set(drive_read(path), next, 0))
+fn drive_focus_end(
+	exe: String,
+	dry: bool,
+	file: String,
+	area: String,
+	dir: String,
+	briefs: Vec[String],
+	cost_from: i64,
+) throws {
+	let path = "docs/briefs/focus.txt"
+	drive_suite(exe, dry, dir)
+	drive_say(dry, "wait for the suite (drive_settle)")
+	drive_say(
+		dry,
+		f"gh api {drive_comments_api("<lane issue of " + area + ">")} -F body=@<the block's line, the footer>",
+	)
+	if !dry {
+		drive_settle(exe, dir)
+		let stamp = process::run("date", ["+%F %H:%M"]).stdout.trim().clone()
+		let line = drive_focus_record(stamp, area, dir, briefs, cost_from)
+		drive_post_focus(file, area, line)
+	}
+	for each in drive_focus_areas(file) {
+		let other = each.split(" ").collect()[1]
+		drive_say(
+			dry,
+			f"{exe} run scripts/cycle.nika -- {other}: BUMP pending and CI green: {exe} run scripts/cycle.nika -- {other} --apply",
+		)
+		if dry { continue }
+		let cyc = drive_cycle(exe, other.clone(), "")
+		let green = cyc.contains(" green\n") || cyc.trim().ends_with(" green")
+		if green && cyc.contains("BUMP pending") {
+			let rel = process::run(
+				exe,
+				["run", "scripts/cycle.nika", "--", other.clone(), "--apply"],
+			)
+			if rel.stdout.contains("PUSH REJECTED") { drive_escalate("bump push rejected") }
+		}
+	}
+	let next = drive_focus_next(file, " ")
+	drive_say(dry, f"set {path} to current {next} 0 (not committed)")
+	if dry { return }
+	fs::write(path, fs::Root::Anywhere, drive_focus_set(drive_read(path), next, 0))
 }
 
 // `--focus` (owner, 2026-11-01): one driver, one area at a time. Drives the
@@ -1197,300 +1344,304 @@ fn drive_focus_end(exe: String, dry: bool, file: String, area: String, dir: Stri
 // (`FOCUS <area> empty, skipped`), and every area empty escalates. RED and CUT
 // stop for the supervisor as in the single-DIR loop.
 fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: String) throws {
-    let path = "docs/briefs/focus.txt"
-    let bugs = "docs/briefs/bugs"
-    let own = drive_read("scripts/drive.nika")
-    let mut runs: i64 = 0
-    let mut skipped: String = " "
-    let mut briefs: Vec[String] = []
-    let mut cost_from: i64 = -1
-    while true {
-        let file = drive_read(path)
-        let area = drive_focus_current(file)
-        let dir = drive_focus_dir(file, area)
-        if dir == "" { drive_escalate(f"focus: {path} names no area {area}") }
-        if !dry && drive_read("scripts/drive.nika") != own {
-            drive_settle(exe, dir)
-            println("RESTART drive: scripts/drive.nika changed")
-            process::exit(3)
-        }
-        let block = drive_focus_block(file)
-        let count = drive_focus_count(file)
-        if cost_from < 0 { cost_from = drive_line_count(drive_read(f"{dir}/cost.txt")) }
-        if dry { println(f"FOCUS {area} {dir} {count} of {block}") }
-        // A bug brief that holds up a move goes first, before each block.
-        if count == 0 && briefs.len() == 0 {
-            let urgent = drive_focus_blocking(bugs)
-            if urgent != "" {
-                if runs >= max { drive_escalate(f"--max {max} agent runs reached") }
-                if !dry && drive_testing() != "" { drive_settle(exe, dir) }
-                let bugs_from = drive_line_count(drive_read(f"{bugs}/cost.txt"))
-                drive_builder(exe, dry, bugs, urgent)
-                runs += 1
-                if dry {
-                    println(f"DRY-RUN NEXT {drive_stem(urgent)} (Blocks:)")
-                    return
-                }
-                if area == "bugs" {
-                    briefs.push(urgent)
-                    fs::write(path, fs::Root::Anywhere, drive_focus_set(file, area, 1))
-                } else {
-                    let stamp = process::run("date", ["+%F %H:%M"]).stdout.trim().clone()
-                    let line = drive_focus_record(stamp, "bugs", bugs, [urgent], bugs_from)
-                    drive_post_focus(file, "bugs", line)
-                }
-                continue
-            }
-        }
-        let cyc = drive_cycle(exe, dir.clone(), lines_file)
-        let mut lines: Vec[String] = []
-        // A bump waits for the end of a block (drive_focus_end).
-        for l in cyc.trim().split("\n") {
-            if l.trim() != "" && !l.trim().starts_with("BUMP") { lines.push(l.trim().clone()) }
-        }
-        if lines.len() == 0 { drive_escalate("cycle.nika printed nothing") }
-        let action = drive_action(lines, ignore_red)
-        if action.starts_with("ESCALATE ") {
-            drive_settle(exe, dir)
-            drive_unlock()
-            println(action)
-            process::exit(2)
-        }
-        if !dry && action.starts_with("NEXT ") && drive_testing() != "" {
-            drive_settle(exe, dir)
-            continue
-        }
-        if runs >= max { drive_escalate(f"--max {max} agent runs reached") }
-        if action.starts_with("NEXT ") {
-            let brief = (action.strip_prefix("NEXT ") ?? "").clone()
-            drive_builder(exe, dry, dir, brief)
-            runs += 1
-            if dry {
-                println(f"DRY-RUN NEXT {drive_stem(brief)}")
-                return
-            }
-            briefs.push(brief)
-            fs::write(path, fs::Root::Anywhere, drive_focus_set(file, area, count + 1))
-            if count + 1 < block { continue }
-            drive_focus_end(exe, dry, file, area, dir, briefs, cost_from)
-            briefs = []
-            cost_from = -1
-            skipped = " "
-            continue
-        }
-        let stop = (action.strip_prefix("STOP ") ?? "")
-        if !stop.starts_with("BATCH DONE") {
-            drive_stop(exe, dry, dir, stop)
-            return
-        }
-        // BATCH DONE: a block that ran briefs ends here.
-        if briefs.len() > 0 {
-            if dry { println("DRY-RUN BLOCK END") }
-            drive_focus_end(exe, dry, file, area, dir, briefs, cost_from)
-            if dry { return }
-            briefs = []
-            cost_from = -1
-            skipped = " "
-            continue
-        }
-        // Entered with nothing to run: skipped; the supervisor fills the queue.
-        println(f"FOCUS {area} empty, skipped")
-        skipped = skipped + area + " "
-        let next = drive_focus_next(file, skipped)
-        if next == "" {
-            drive_settle(exe, dir)
-            drive_unlock()
-            println("ESCALATE focus: every area empty")
-            process::exit(2)
-        }
-        fs::write(path, fs::Root::Anywhere, drive_focus_set(file, next, 0))
-        cost_from = -1
-    }
+	let path = "docs/briefs/focus.txt"
+	let bugs = "docs/briefs/bugs"
+	let own = drive_read("scripts/drive.nika")
+	let mut runs: i64 = 0
+	let mut skipped: String = " "
+	let mut briefs: Vec[String] = []
+	let mut cost_from: i64 = -1
+	while true {
+		let file = drive_read(path)
+		let area = drive_focus_current(file)
+		let dir = drive_focus_dir(file, area)
+		if dir == "" { drive_escalate(f"focus: {path} names no area {area}") }
+		if !dry && drive_read("scripts/drive.nika") != own {
+			drive_settle(exe, dir)
+			println("RESTART drive: scripts/drive.nika changed")
+			process::exit(3)
+		}
+		let block = drive_focus_block(file)
+		let count = drive_focus_count(file)
+		if cost_from < 0 { cost_from = drive_line_count(drive_read(f"{dir}/cost.txt")) }
+		if dry { println(f"FOCUS {area} {dir} {count} of {block}") }
+		// A bug brief that holds up a move goes first, before each block.
+		if count == 0 && briefs.len() == 0 {
+			let urgent = drive_focus_blocking(bugs)
+			if urgent != "" {
+				if runs >= max { drive_escalate(f"--max {max} agent runs reached") }
+				if !dry && drive_testing() != "" { drive_settle(exe, dir) }
+				let bugs_from = drive_line_count(drive_read(f"{bugs}/cost.txt"))
+				drive_builder(exe, dry, bugs, urgent)
+				runs += 1
+				if dry {
+					println(f"DRY-RUN NEXT {drive_stem(urgent)} (Blocks:)")
+					return
+				}
+				if area == "bugs" {
+					briefs.push(urgent)
+					fs::write(path, fs::Root::Anywhere, drive_focus_set(file, area, 1))
+				} else {
+					let stamp = process::run("date", ["+%F %H:%M"]).stdout.trim().clone()
+					let line = drive_focus_record(stamp, "bugs", bugs, [urgent], bugs_from)
+					drive_post_focus(file, "bugs", line)
+				}
+				continue
+			}
+		}
+		let cyc = drive_cycle(exe, dir.clone(), lines_file)
+		let mut lines: Vec[String] = []
+		// A bump waits for the end of a block (drive_focus_end).
+		for l in cyc.trim().split("\n") {
+			if l.trim() != "" && !l.trim().starts_with("BUMP") { lines.push(l.trim().clone()) }
+		}
+		if lines.len() == 0 { drive_escalate("cycle.nika printed nothing") }
+		let action = drive_action(lines, ignore_red)
+		if action.starts_with("ESCALATE ") {
+			drive_settle(exe, dir)
+			drive_unlock()
+			println(action)
+			process::exit(2)
+		}
+		if !dry && action.starts_with("NEXT ") && drive_testing() != "" {
+			drive_settle(exe, dir)
+			continue
+		}
+		if runs >= max { drive_escalate(f"--max {max} agent runs reached") }
+		if action.starts_with("NEXT ") {
+			let brief = (action.strip_prefix("NEXT ") ?? "").clone()
+			drive_builder(exe, dry, dir, brief)
+			runs += 1
+			if dry {
+				println(f"DRY-RUN NEXT {drive_stem(brief)}")
+				return
+			}
+			briefs.push(brief)
+			fs::write(path, fs::Root::Anywhere, drive_focus_set(file, area, count + 1))
+			if count + 1 < block { continue }
+			drive_focus_end(exe, dry, file, area, dir, briefs, cost_from)
+			briefs = []
+			cost_from = -1
+			skipped = " "
+			continue
+		}
+		let stop = (action.strip_prefix("STOP ") ?? "")
+		if !stop.starts_with("BATCH DONE") {
+			drive_stop(exe, dry, dir, stop)
+			return
+		}
+		// BATCH DONE: a block that ran briefs ends here.
+		if briefs.len() > 0 {
+			if dry { println("DRY-RUN BLOCK END") }
+			drive_focus_end(exe, dry, file, area, dir, briefs, cost_from)
+			if dry { return }
+			briefs = []
+			cost_from = -1
+			skipped = " "
+			continue
+		}
+		// Entered with nothing to run: skipped; the supervisor fills the queue.
+		println(f"FOCUS {area} empty, skipped")
+		skipped = skipped + area + " "
+		let next = drive_focus_next(file, skipped)
+		if next == "" {
+			drive_settle(exe, dir)
+			drive_unlock()
+			println("ESCALATE focus: every area empty")
+			process::exit(2)
+		}
+		fs::write(path, fs::Root::Anywhere, drive_focus_set(file, next, 0))
+		cost_from = -1
+	}
 }
 
 fn main() throws {
-    let mut dir: String = ""
-    let mut max: i64 = 8
-    let mut dry = false
-    let mut no_bump = false
-    let mut ignore_red = false
-    let mut lines_file: String = ""
-    let mut focus = false
-    let mut args: Vec[String] = []
-    for a in cli::args() { args.push(a) }
-    let mut i = 1
-    while i < args.len() {
-        if args[i] == "--dry-run" {
-            dry = true
-        } else if args[i] == "--ignore-ci-red" {
-            ignore_red = true
-        } else if args[i] == "--focus" {
-            focus = true
-        } else if args[i] == "--no-bump" {
-            no_bump = true
-        } else if args[i] == "--max" && i + 1 < args.len() {
-            max = text::parse_i64(args[i + 1]) ?? 8
-            i += 1
-        } else if args[i] == "--lines" && i + 1 < args.len() {
-            lines_file = args[i + 1].clone()
-            dry = true
-            i += 1
-        } else {
-            dir = args[i].clone()
-        }
-        i += 1
-    }
-    if args.len() >= 3 && args[1] == "--focus-next" {
-        let text = drive_read(args[2])
-        let mut skipped: String = " "
-        for k in 3..<args.len() { skipped = skipped + args[k] + " " }
-        let next = drive_focus_next(text, skipped)
-        if next == "" { println("ESCALATE focus: every area empty") } else { print(drive_focus_set(text, next, 0)) }
-        return
-    }
-    if args.len() >= 4 && args[1] == "--focus-log" {
-        let mut briefs: Vec[String] = []
-        for k in 4..<args.len() { briefs.push(args[k].clone()) }
-        print(drive_focus_body(drive_focus_record("2026-11-01 12:00", args[3], args[2], briefs, 0)))
-        return
-    }
-    if args.len() >= 3 && args[1] == "--focus-issue" {
-        let text = drive_read(args[2])
-        for k in 3..<args.len() {
-            let issue = drive_focus_issue(text, args[k], args[k])
-            let name = args[k]
-            if issue == "" { println(f"{name} none") } else { println(f"{name} {issue}") }
-        }
-        return
-    }
-    if args.len() == 4 && args[1] == "--run-body" {
-        print(drive_run_comment(args[2], args[3].clone(), 0, "no report"))
-        return
-    }
-    if args.len() >= 2 && args[1] == "--issue" {
-        for k in 2..<args.len() {
-            let issue = drive_issue(args[k])
-            let name = args[k]
-            if issue == "" { println(f"{name} none") } else { println(f"{name} {issue}") }
-        }
-        return
-    }
-    if args.len() == 3 && args[1] == "--post-body" {
-        print(drive_post_body(drive_stem(args[2]), drive_read(args[2])))
-        return
-    }
-    if args.len() == 3 && args[1] == "--blocks" {
-        let urgent = drive_focus_blocking(args[2])
-        if urgent == "" { println("none") } else { println(drive_stem(urgent)) }
-        return
-    }
-    if focus {
-        let exe = drive_exe()
-        if exe == "" {
-            println("BUILD cargo build --profile fast -p nikaia")
-            process::exit(1)
-        }
-        drive_focus(exe, dry, max, ignore_red, lines_file)
-        return
-    }
-    if dir == "" {
-        println("usage: nikaia run scripts/drive.nika -- DIR [--max N] [--no-bump] [--ignore-ci-red] [--dry-run] [--lines FILE]")
-        println("       nikaia run scripts/drive.nika -- --focus [--max N] [--dry-run]")
-        process::exit(2)
-    }
-    if args.len() == 4 && args[1] == "--rewrite" {
-        println(drive_rewrite(drive_read(args[2]), drive_read(args[3])))
-        return
-    }
-    if args.len() == 5 && args[1] == "--ci-wait" {
-        drive_ci_wait(args[2], args[3], args[4].clone())
-        return
-    }
-    if args.len() == 3 && args[1] == "--docs-only" {
-        let mut paths: Vec[String] = []
-        for line in drive_read(args[2]).split("\n") {
-            let p = line.trim().clone()
-            if p == "" { continue }
-            if drive_docs_path(p) { println(f"docs {p}") } else { println(f"code {p}") }
-            paths.push(p)
-        }
-        if drive_docs_only(paths) { println("docs-only") } else { println("suite") }
-        return
-    }
-    if args.len() == 3 && args[1] == "--changed" {
-        if drive_read(args[2]) != drive_read("scripts/drive.nika") {
-            println("RESTART drive: scripts/drive.nika changed")
-        } else {
-            println("same")
-        }
-        return
-    }
-    let exe = drive_exe()
-    if exe == "" {
-        println("BUILD cargo build --profile fast -p nikaia")
-        process::exit(1)
-    }
-    let mut runs: i64 = 0
-    let mut bumps: i64 = 0
-    let own = drive_read("scripts/drive.nika")
-    while runs <= max {
-        if !dry && drive_read("scripts/drive.nika") != own {
-            drive_settle(exe.clone(), dir)
-            println("RESTART drive: scripts/drive.nika changed")
-            process::exit(3)
-        }
-        let cyc = drive_cycle(exe.clone(), dir.clone(), lines_file)
-        let mut lines: Vec[String] = []
-        for l in cyc.trim().split("\n") {
-            if l.trim() != "" && !(no_bump && l.trim().starts_with("BUMP")) { lines.push(l.trim().clone()) }
-        }
-        if lines.len() == 0 { drive_escalate("cycle.nika printed nothing") }
-        let action = drive_action(lines, ignore_red)
-        if action.starts_with("ESCALATE ") {
-            drive_settle(exe.clone(), dir)
-            drive_unlock()
-            println(action)
-            process::exit(2)
-        }
-        // A builder of the next batch and a bump wait for the batch's suite, and the cycle is read again (QA may
-        // have committed, a push moved CI).
-        if !dry && (action.starts_with("NEXT ") || action == "BUMP") && drive_testing() != "" {
-            drive_settle(exe.clone(), dir)
-            continue
-        }
-        // A bump pushes HEAD: commits not yet through the suite (a restart
-        // between a batch and its suite leaves them) are tested first.
-        if !dry && action == "BUMP" && drive_read(f"{dir}/unpushed.txt").trim() != "" {
-            drive_suite(exe.clone(), dry, dir)
-            drive_settle(exe.clone(), dir)
-            continue
-        }
-        if action == "BUMP" {
-            bumps += 1
-            if bumps > 3 { drive_escalate("BUMP pending persists after --apply") }
-            drive_say(dry, f"{exe} run scripts/cycle.nika -- {dir} --apply")
-            if dry {
-                println("DRY-RUN BUMP")
-                return
-            }
-            let rel = process::run(exe, ["run", "scripts/cycle.nika", "--", dir.clone(), "--apply"])
-            if rel.stdout.contains("PUSH REJECTED") { drive_escalate("bump push rejected") }
-            continue
-        }
-        if runs >= max { drive_escalate(f"--max {max} agent runs reached") }
-        if action.starts_with("NEXT ") {
-            let brief = (action.strip_prefix("NEXT ") ?? "")
-            drive_builder(exe.clone(), dry, dir, brief)
-            runs += 1
-            if dry {
-                println(f"DRY-RUN NEXT {drive_stem(action)}")
-                return
-            }
-            continue
-        }
-        // CUT, BATCH DONE or RED: stop for the supervisor.
-        drive_stop(exe.clone(), dry, dir, (action.strip_prefix("STOP ") ?? ""))
-        return
-    }
-    drive_settle(exe.clone(), dir)
+	let mut dir: String = ""
+	let mut max: i64 = 8
+	let mut dry = false
+	let mut no_bump = false
+	let mut ignore_red = false
+	let mut lines_file: String = ""
+	let mut focus = false
+	let mut args: Vec[String] = []
+	for a in cli::args() { args.push(a) }
+	let mut i = 1
+	while i < args.len() {
+		if args[i] == "--dry-run" {
+			dry = true
+		} else if args[i] == "--ignore-ci-red" {
+			ignore_red = true
+		} else if args[i] == "--focus" {
+			focus = true
+		} else if args[i] == "--no-bump" {
+			no_bump = true
+		} else if args[i] == "--max" && i + 1 < args.len() {
+			max = text::parse_i64(args[i + 1]) ?? 8
+			i += 1
+		} else if args[i] == "--lines" && i + 1 < args.len() {
+			lines_file = args[i + 1].clone()
+			dry = true
+			i += 1
+		} else {
+			dir = args[i].clone()
+		}
+		i += 1
+	}
+	if args.len() >= 3 && args[1] == "--focus-next" {
+		let text = drive_read(args[2])
+		let mut skipped: String = " "
+		for k in 3..<args.len() { skipped = skipped + args[k] + " " }
+		let next = drive_focus_next(text, skipped)
+		if next
+			== "" { println("ESCALATE focus: every area empty") } else {
+				print(drive_focus_set(text, next, 0))
+			}
+		return
+	}
+	if args.len() >= 4 && args[1] == "--focus-log" {
+		let mut briefs: Vec[String] = []
+		for k in 4..<args.len() { briefs.push(args[k].clone()) }
+		print(drive_focus_body(drive_focus_record("2026-11-01 12:00", args[3], args[2], briefs, 0)))
+		return
+	}
+	if args.len() >= 3 && args[1] == "--focus-issue" {
+		let text = drive_read(args[2])
+		for k in 3..<args.len() {
+			let issue = drive_focus_issue(text, args[k], args[k])
+			let name = args[k]
+			if issue == "" { println(f"{name} none") } else { println(f"{name} {issue}") }
+		}
+		return
+	}
+	if args.len() == 4 && args[1] == "--run-body" {
+		print(drive_run_comment(args[2], args[3].clone(), 0, "no report"))
+		return
+	}
+	if args.len() >= 2 && args[1] == "--issue" {
+		for k in 2..<args.len() {
+			let issue = drive_issue(args[k])
+			let name = args[k]
+			if issue == "" { println(f"{name} none") } else { println(f"{name} {issue}") }
+		}
+		return
+	}
+	if args.len() == 3 && args[1] == "--post-body" {
+		print(drive_post_body(drive_stem(args[2]), drive_read(args[2])))
+		return
+	}
+	if args.len() == 3 && args[1] == "--blocks" {
+		let urgent = drive_focus_blocking(args[2])
+		if urgent == "" { println("none") } else { println(drive_stem(urgent)) }
+		return
+	}
+	if focus {
+		let exe = drive_exe()
+		if exe == "" {
+			println("BUILD cargo build --profile fast -p nikaia")
+			process::exit(1)
+		}
+		drive_focus(exe, dry, max, ignore_red, lines_file)
+		return
+	}
+	if dir == "" {
+		println("usage: nikaia run scripts/drive.nika -- DIR [--max N] [--no-bump] [--ignore-ci-red] [--dry-run] [--lines FILE]")
+		println("       nikaia run scripts/drive.nika -- --focus [--max N] [--dry-run]")
+		process::exit(2)
+	}
+	if args.len() == 4 && args[1] == "--rewrite" {
+		println(drive_rewrite(drive_read(args[2]), drive_read(args[3])))
+		return
+	}
+	if args.len() == 5 && args[1] == "--ci-wait" {
+		drive_ci_wait(args[2], args[3], args[4].clone())
+		return
+	}
+	if args.len() == 3 && args[1] == "--docs-only" {
+		let mut paths: Vec[String] = []
+		for line in drive_read(args[2]).split("\n") {
+			let p = line.trim().clone()
+			if p == "" { continue }
+			if drive_docs_path(p) { println(f"docs {p}") } else { println(f"code {p}") }
+			paths.push(p)
+		}
+		if drive_docs_only(paths) { println("docs-only") } else { println("suite") }
+		return
+	}
+	if args.len() == 3 && args[1] == "--changed" {
+		if drive_read(args[2]) != drive_read("scripts/drive.nika") {
+			println("RESTART drive: scripts/drive.nika changed")
+		} else {
+			println("same")
+		}
+		return
+	}
+	let exe = drive_exe()
+	if exe == "" {
+		println("BUILD cargo build --profile fast -p nikaia")
+		process::exit(1)
+	}
+	let mut runs: i64 = 0
+	let mut bumps: i64 = 0
+	let own = drive_read("scripts/drive.nika")
+	while runs <= max {
+		if !dry && drive_read("scripts/drive.nika") != own {
+			drive_settle(exe.clone(), dir)
+			println("RESTART drive: scripts/drive.nika changed")
+			process::exit(3)
+		}
+		let cyc = drive_cycle(exe.clone(), dir.clone(), lines_file)
+		let mut lines: Vec[String] = []
+		for l in cyc.trim().split("\n") {
+			if l.trim() != ""
+				&& !(no_bump && l.trim().starts_with("BUMP")) { lines.push(l.trim().clone()) }
+		}
+		if lines.len() == 0 { drive_escalate("cycle.nika printed nothing") }
+		let action = drive_action(lines, ignore_red)
+		if action.starts_with("ESCALATE ") {
+			drive_settle(exe.clone(), dir)
+			drive_unlock()
+			println(action)
+			process::exit(2)
+		}
+		// A builder of the next batch and a bump wait for the batch's suite, and the cycle is read again (QA may
+		// have committed, a push moved CI).
+		if !dry && (action.starts_with("NEXT ") || action == "BUMP") && drive_testing() != "" {
+			drive_settle(exe.clone(), dir)
+			continue
+		}
+		// A bump pushes HEAD: commits not yet through the suite (a restart
+		// between a batch and its suite leaves them) are tested first.
+		if !dry && action == "BUMP" && drive_read(f"{dir}/unpushed.txt").trim() != "" {
+			drive_suite(exe.clone(), dry, dir)
+			drive_settle(exe.clone(), dir)
+			continue
+		}
+		if action == "BUMP" {
+			bumps += 1
+			if bumps > 3 { drive_escalate("BUMP pending persists after --apply") }
+			drive_say(dry, f"{exe} run scripts/cycle.nika -- {dir} --apply")
+			if dry {
+				println("DRY-RUN BUMP")
+				return
+			}
+			let rel = process::run(exe, ["run", "scripts/cycle.nika", "--", dir.clone(), "--apply"])
+			if rel.stdout.contains("PUSH REJECTED") { drive_escalate("bump push rejected") }
+			continue
+		}
+		if runs >= max { drive_escalate(f"--max {max} agent runs reached") }
+		if action.starts_with("NEXT ") {
+			let brief = (action.strip_prefix("NEXT ") ?? "")
+			drive_builder(exe.clone(), dry, dir, brief)
+			runs += 1
+			if dry {
+				println(f"DRY-RUN NEXT {drive_stem(action)}")
+				return
+			}
+			continue
+		}
+		// CUT, BATCH DONE or RED: stop for the supervisor.
+		drive_stop(exe.clone(), dry, dir, (action.strip_prefix("STOP ") ?? ""))
+		return
+	}
+	drive_settle(exe.clone(), dir)
 }
