@@ -1,0 +1,33 @@
+// A result of a type other than text written `from` its subject is a view of
+// it (ADR-views-3 D7, D8, #1257): a list, a piece of one and a struct, as
+// `ref` of the same type is.
+struct Inner {
+	n: i64,
+}
+
+struct Bag {
+	tags: Vec[i64],
+	inner: Inner,
+}
+
+impl Bag {
+	fn tags(self) -> Vec[i64] from self {
+		return self.tags
+	}
+
+	fn inner(self) -> Inner from self {
+		return self.inner
+	}
+}
+
+fn head(xs: Vec[i64]) -> Array[i64] from xs {
+	return xs[0..<2]
+}
+
+fn main() {
+	let b = Bag { tags: [1, 2, 3], inner: Inner { n: 4 } }
+	let t = b.tags()
+	println(t.len())
+	println(b.inner().n)
+	println(head(b.tags).len())
+}

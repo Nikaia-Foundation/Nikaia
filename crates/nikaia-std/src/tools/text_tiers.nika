@@ -6881,9 +6881,10 @@ fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64])
 /// (`fn hand<'a, T>(x: &'a T) -> &'a T`) and the caller holds a temporary
 /// argument as it holds one for text. Only where every way out is such a
 /// place, rooted in a parameter neither `keep` nor `mut` nor `ref` already;
-/// text, a word copied at a read and a result written with `from` are not
-/// asked. `self` is not asked either: its word says how it is taken. An
-/// `impl` of a trait keeps the trait's signature. A whole parameter handed
+/// text and a word copied at a read are not asked. `self` is not asked
+/// either: its word says how it is taken. A result written `from` is a view
+/// of any type (D8, #1257): the checker holds the body to it, as for text.
+/// An `impl` of a trait keeps the trait's signature. A whole parameter handed
 /// back is asked only in a file that writes `keep` (#1213): until the
 /// migration reaches a file, returning a parameter by value keeps it there,
 /// as `NK2302` is raised only in such a file (`check_keep_marks.nika`).
@@ -6912,7 +6913,13 @@ fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: re
 fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool) {
     match item {
         Item::Fn { args, ret_type, body, is_extern, ret_from, .. } => {
-            if is_extern || ret_from.len() > 0 || !hb_result_may_be_a_view(ret_type, words, plain) {
+            if is_extern || !hb_result_may_be_a_view(ret_type, words, plain) {
+                return
+            }
+            // A result written `from` is a view of what it names, of any type
+            // (D8): the checker holds the body to it, as for text.
+            if ret_from.len() > 0 {
+                hb_set_maybe(ret_type)
                 return
             }
             let roots = hb_roots(body, args, words, opted) ?? return

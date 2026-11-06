@@ -5139,7 +5139,11 @@ pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, pl
     match item {
         Item::Fn { args, ret_type, body, is_extern, ret_from, .. } => {
             let is_extern = *is_extern;
-            if is_extern || !ret_from.is_empty() || !hb_result_may_be_a_view((ret_type).as_ref(), words, plain) { return; }
+            if is_extern || !hb_result_may_be_a_view((ret_type).as_ref(), words, plain) { return; }
+            if !ret_from.is_empty() {
+                hb_set_maybe(&mut *ret_type);
+                return;
+            }
             let roots = match hb_roots(body, &args, words, opted) { Some(__nikaia_value) => __nikaia_value, None => return };
             for arg in args.iter_mut() { if roots.contains(words.resolve((*arg).name)) { hb_set(&mut (*arg).ty); } }
             hb_set_maybe(&mut *ret_type);
