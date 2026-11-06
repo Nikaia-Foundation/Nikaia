@@ -52,31 +52,31 @@ pub fn iter_in_pieces<T: Sync>(
 
 /// **The options a grammar's `par_fold` names after its `;`**
 /// ([ADR-372](../../../docs/specification/adr/adr-372.md) D6, Part II 10.7),
-/// checked where they are made: a `workers:` or `piece:` below 1 is a panic
+/// checked where they are made: a `limit:` or `piece:` below 1 is a panic
 /// at both settings of `user_parallelism`, and at `no` that is all they do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FoldOptions {
     /// D5: whether the pieces' results are merged in input order.
     pub order: Order,
     /// At most this many accumulators are folded at once.
-    pub workers: usize,
+    pub limit: usize,
     /// The bytes a piece is cut near.
     pub piece: usize,
 }
 
 impl FoldOptions {
-    /// The options as written: `workers` is `task::cores()` and `piece` the
+    /// The options as written: `limit` is `task::cores()` and `piece` the
     /// runtime's where they are left out.
     #[track_caller]
-    pub fn new(order: Order, workers: Option<i64>, piece: Option<i64>) -> FoldOptions {
-        let workers = match workers {
-            Some(n) => at_least_one("workers", n),
+    pub fn new(order: Order, limit: Option<i64>, piece: Option<i64>) -> FoldOptions {
+        let limit = match limit {
+            Some(n) => at_least_one("limit", n),
             None => usize::try_from(crate::task::cores()).unwrap_or(1),
         };
         let piece = piece.map_or(PIECE_BYTES, |n| at_least_one("piece", n));
         FoldOptions {
             order,
-            workers,
+            limit,
             piece,
         }
     }
@@ -137,7 +137,7 @@ pub fn in_place<A, T, F: FnOnce(&mut A, T)>(acc: &mut A, x: T, f: F) {
 /// `user_parallelism = no` (ADR-372 D7): one accumulator, every element in
 /// order, `merge` never called. The options are checked and do nothing else.
 pub trait SeqFold: Iterator + Sized {
-    /// `fold(init, step, merge; order:, workers:)`, sequentially.
+    /// `fold(init, step, merge; order:, limit:)`, sequentially.
     #[track_caller]
     fn fold_merged<A, M: Fn() -> A, S: FnMut(A, Self::Item) -> A, G: Fn(A, A) -> A>(
         self,
@@ -145,9 +145,9 @@ pub trait SeqFold: Iterator + Sized {
         step: S,
         merge: G,
         order: Order,
-        workers: i64,
+        limit: i64,
     ) -> A {
-        at_least_one("workers", workers);
+        at_least_one("limit", limit);
         let _ = (merge, order);
         self.fold(init(), step)
     }
@@ -273,7 +273,7 @@ impl<I: ParallelIterator> Par<I> {
     }
 
     /// **Every element folded into accumulators that are merged into one**
-    /// (`fold(init, step, merge; order:, workers:)`,
+    /// (`fold(init, step, merge; order:, limit:)`,
     /// [ADR-372](../../../docs/specification/adr/adr-372.md) D2, D4, D5).
     /// `init` makes each accumulator; over no elements the result is one it
     /// made. Pieces are claimed while the work runs: rayon splits a run when a
@@ -284,14 +284,7 @@ impl<I: ParallelIterator> Par<I> {
     /// * `Any`: one accumulator per worker thread, kept across every piece it
     ///   claims, merged in the order the slots are read.
     #[track_caller]
-    pub fn fold_merged<A, M, S, G>(
-        self,
-        init: M,
-        step: S,
-        merge: G,
-        order: Order,
-        workers: i64,
-    ) -> A
+    pub fn fold_merged<A, M, S, G>(self, init: M, step: S, merge: G, order: Order, limit: i64) -> A
     where
         I: Send,
         A: Send,
@@ -299,9 +292,9 @@ impl<I: ParallelIterator> Par<I> {
         S: Fn(A, I::Item) -> A + Sync + Send,
         G: Fn(A, A) -> A + Sync + Send,
     {
-        let workers = at_least_one("workers", workers);
+        let limit = at_least_one("limit", limit);
         let walk = self.0;
-        on_workers(workers, move || match order {
+        on_workers(limit, move || match order {
             Order::Kept => walk
                 .fold(&init, &step)
                 .reduce_with(&merge)

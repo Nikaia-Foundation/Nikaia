@@ -3416,9 +3416,10 @@ signature = "[T](self: ref Vec[T]; piece: i64 = 0) -> Par[ref(self) T] sync ends
 # **A fold with nothing shared** ([ADR-372](../../docs/specification/adr/adr-372.md)
 # D2, D5, D6): `init` is called once per accumulator, never copied; the three
 # functions are a `par_iter` walk's lambdas, asked `NK2209` and `NK2107`.
-# `workers:` and `order:` change no answer of a fold that keeps its order's
-# promise; `workers:` below 1 panics. At `user_parallelism = no` it is one
-# sequential fold and `merge` is never called (D7).
+# `limit:` and `order:` change no answer of a fold that keeps its order's
+# promise; `limit:` below 1 panics (`limit:` replaced `workers:`, ADR-async-5
+# D27). At `user_parallelism = no` it is one sequential fold and `merge` is
+# never called (D7).
 # Every element folded into accumulators made by `init`, merged into one.
 #
 # `step` takes an accumulator and an element and returns the accumulator;
@@ -3430,7 +3431,7 @@ signature = "[T](self: ref Vec[T]; piece: i64 = 0) -> Par[ref(self) T] sync ends
 pub = true
 sync = true
 touches = []
-signature = "[T, A](self: Par[T], init: fn() -> A, step: fn(A, T) -> A, merge: fn(A, A) -> A; order: par::Order = par::Order::Kept, workers: i64 = task::cores()) -> A"
+signature = "[T, A](self: Par[T], init: fn() -> A, step: fn(A, T) -> A, merge: fn(A, A) -> A; order: par::Order = par::Order::Kept, limit: i64 = task::cores()) -> A"
 
 # The elements, one at a time, **lent**: the list stays where it is.
 #

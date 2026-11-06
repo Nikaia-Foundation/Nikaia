@@ -1,0 +1,16 @@
+// An option a method does not have is NK1109, as it is at a function (Part I
+// 5.1); before, a method call dropped it without a word.
+struct P {
+    n: i64
+}
+
+impl P {
+    fn get(self; extra: i64 = 0) -> i64 {
+        return self.n + extra
+    }
+}
+
+fn main() {
+    let p = P { n: 1 }
+    println(f"{p.get(extra: 1)} {p.get(extar: 2)}")
+}

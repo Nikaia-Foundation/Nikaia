@@ -1,0 +1,30 @@
+// `limit:` caps how many accumulators of a `Par::fold` and a grammar's
+// `par_fold` fold at once; it replaced `workers:` (ADR-async-5 D27, Part II
+// 10.7) and changes no result.
+use std::par
+
+grammar Sum {
+    @frame(boundary: "\n")
+    rule ROW -> i64 = n:dec[i64](digit+) frame_end -> { n }
+    entry rule total -> i64 = par_fold(ROW, zero, fn(acc, m) { acc + m }, add; order: par::Order::Any, limit: 2, piece: 4)
+}
+
+fn zero() -> i64 {
+    return 0
+}
+
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
+}
+
+fn main() throws {
+    let mut xs: Vec[i64] = []
+    for i in 0..<10_000 {
+        xs.push(i)
+    }
+    let plain = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b })
+    let two = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; limit: 2)
+    let one = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; order: par::Order::Any, limit: 1)
+    println(f"{plain} {two} {one} {plain == two && two == one}")
+    println(f"{Sum::total("1\n2\n3\n4\n5\n")}")
+}

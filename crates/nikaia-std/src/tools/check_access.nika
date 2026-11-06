@@ -88,6 +88,11 @@ impl CheckState {
         for option in signature.config {
             names.push(option.name.clone())
         }
+        self.no_such_option_among(key, name, names, span)
+    }
+
+    /// `NK1109` for an option not among `names`, the options `key` has.
+    pub fn no_such_option_among(ref mut self, key: ref String, name: ref String, names: ref Vec[String], span: ref Span) sync {
         let near = nearest_name(name, names)
         let note: String = match names.len() {
             0 => f"`{key}` takes no options: its declaration has no `;`.",
@@ -98,6 +103,9 @@ impl CheckState {
             help = f"Did you mean `{near ?? ""}`?"
         } else if names.len() == 0 {
             help = "Pass it as a plain argument, without a name."
+        }
+        if name == "workers" && names.contains("limit") {
+            help = "`workers:` is now `limit:` (ADR-async-5 D27)."
         }
         self.findings.push(check_refusal("NK1109", span, f"`{key}` has no option called `{name}`.", [note], help))
     }

@@ -190,7 +190,7 @@ fn the_1brc_example_means_the_same_under_every_order_and_setting() {
         ),
         (
             "any-yes",
-            with("order: par::Order::Any, piece: 64, workers: 3"),
+            with("order: par::Order::Any, piece: 64, limit: 3"),
             Build::parallel(),
         ),
         (

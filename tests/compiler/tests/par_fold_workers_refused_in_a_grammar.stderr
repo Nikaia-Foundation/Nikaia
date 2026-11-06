@@ -1,0 +1,9 @@
+error[NK1109]: `par_fold` has no option called `workers`.
+  --> tests/par_fold_workers_refused_in_a_grammar.nika:8:89
+   |
+ 8 |     entry rule total -> i64 = par_fold(ROW, zero, fn(acc, m) { acc + m }, add; workers: 2)
+   |                                                                                         ^
+   |
+   = note: Its options are `order:`, `limit:` and `piece:`, as `Par::fold`'s are.
+   = help: `workers:` is now `limit:` (ADR-async-5 D27).
+1 type error

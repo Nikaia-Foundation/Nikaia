@@ -1,6 +1,6 @@
 //! **A fold over a walk on every core, and the cores it runs on**
 //! ([ADR-372](../../../docs/specification/adr/adr-372.md) D1, D2, D5-D7, Part
-//! II 12.6): `task::cores()`, `Par::fold(init, step, merge; order:, workers:)`
+//! II 12.6): `task::cores()`, `Par::fold(init, step, merge; order:, limit:)`
 //! and `par_iter(piece:)`, each meaning the same at both settings of
 //! `user_parallelism`.
 
@@ -10,7 +10,7 @@ use std::process::{Command, Output};
 
 /// Every fold the issue asks for (#717): a sum at both orders, with fewer and
 /// more workers, with the smallest and the largest piece; a fold into a list
-/// under `Kept`; over no elements; a type as `init`; and last, `workers: 0`.
+/// under `Kept`; over no elements; a type as `init`; and last, `limit: 0`.
 const FOLDS: &str = r#"use std::par
 use std::task
 
@@ -48,8 +48,8 @@ fn main() {
     }
     let kept = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b })
     let any = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, plus; order: par::Order::Any)
-    let two = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; workers: 2, order: par::Order::Kept)
-    let many = xs.par_iter().map(fn(x) { x * 2 }).fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; workers: 64, order: par::Order::Any)
+    let two = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; limit: 2, order: par::Order::Kept)
+    let many = xs.par_iter().map(fn(x) { x * 2 }).fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; limit: 64, order: par::Order::Any)
     let small = xs.par_iter(piece: 1).fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b })
     let large = xs.par_iter(piece: 1_000_000).fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b })
     println(f"{sequential} {kept} {any} {two} {many} {small} {large}")
@@ -82,7 +82,7 @@ fn main() {
     println(f"{t.n}")
     let named = xs.par_iter().fold(Tally, fn(acc, x) { tally_add(acc, x) }, tally_merge)
     println(f"{named.n}")
-    let none = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; workers: 0)
+    let none = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; limit: 0)
     println(f"not reached {none}")
 }
 "#;
@@ -158,10 +158,10 @@ fn the_folds(out: &Output) -> Vec<String> {
         ],
         "{lines:?}"
     );
-    // **`workers: 0` panics, naming the option** (D6), after everything else.
+    // **`limit: 0` panics, naming the option** (D6), after everything else.
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!out.status.success(), "{lines:?}");
-    assert!(stderr.contains("`workers:` is 0"), "{stderr}");
+    assert!(stderr.contains("`limit:` is 0"), "{stderr}");
     lines
 }
 
@@ -418,7 +418,7 @@ fn main() {
     println(f"{step_only.n} {step_only.total}")
     let merge_only = xs.par_iter().fold(Summary, fn(acc, r) { acc.plus(r) }, Summary::merge)
     println(f"{merge_only.n} {merge_only.total}")
-    let declared = xs.par_iter().fold(Summary, add_into, merge_ref; workers: 2)
+    let declared = xs.par_iter().fold(Summary, add_into, merge_ref; limit: 2)
     println(f"{declared.n} {declared.total}")
     let fields = xs.par_iter().fold(Summary, fn(acc, r) {
         acc.n += 1
@@ -582,7 +582,7 @@ fn a_grammars_par_fold_takes_the_options_of_a_fold() {
              }}\n"
         )
     };
-    let fine = findings(&grammar("order: par::Order::Any, workers: 2, piece: 64"));
+    let fine = findings(&grammar("order: par::Order::Any, limit: 2, piece: 64"));
     assert!(fine.is_empty(), "{fine:?}");
     let unknown = findings(&grammar("pieces: 64"));
     assert!(

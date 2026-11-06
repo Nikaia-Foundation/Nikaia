@@ -920,11 +920,39 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
         state.stored_frames.push(CheckStoredCode::empty())
     }
     let found = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span)
+    check_core_method_option_names(state, world, receiver, name, config, span)
     if code_keys.len() > 0 {
         let last = args.len() as i64 - 1
         check_core_places_stored_keys(state, world, host, args[last], code_keys)
     }
     return found
+}
+
+/// **An option a method does not have is `NK1109`** (Part I 5.1), as it is
+/// at a function: the options the call has are the ones `method_options`
+/// recorded from the contract it resolved to. A method with none recorded, a
+/// DSL's driver, and a witness (`join(within:)`, `set(after:)`) are not asked.
+fn check_core_method_option_names(mut state: CheckState, world: ref CheckWorld, receiver: ref Expr, name: ref String, config: ref Vec[ConfigArg], span: ref Span) sync {
+    if config.len() == 0 || state.dsl_drivers.contains(name) {
+        return
+    }
+    let node = id_of(receiver) as i64
+    let recorded = state.facts.method_options.get((node, name.clone())) ?? return
+    let mut names: Vec[String] = []
+    for (option, _) in recorded {
+        names.push(option.clone())
+    }
+    let key = (state.facts.method_callees.get(node) ?? return).clone()
+    let witness = check_core_method_witness(world, name, config)
+    let on_timeout = check_core_method_on_timeout(world, name, config, witness)
+    let mut at = 0
+    while at < config.len() as i64 {
+        let written = world.words.resolve(config[at].name).clone()
+        if at != witness && at != on_timeout && !names.contains(written) {
+            state.no_such_option_among(key, written, names, span)
+        }
+        at += 1
+    }
 }
 
 // A `let mut` name of code handed to a method: its place cannot be named.

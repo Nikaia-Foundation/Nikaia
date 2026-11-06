@@ -39,13 +39,19 @@ impl CheckState {
     pub fn no_such_option(&mut self, key: &str, name: &str, signature: &Signature, span: &Span) {
         let mut names: Vec<String> = vec![];
         for option in signature.config.iter() { names.push(option.name.to_string()); }
-        let near = nearest_name(name, &names);
+        self.no_such_option_among(key, name, &names, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn no_such_option_among(&mut self, key: &str, name: &str, names: &[String], span: &Span) {
+        let near = nearest_name(name, names);
         let note: String = match names.len() as i64 {
             0 => format!("`{}` takes no options: its declaration has no `;`.", key),
-            _ => format!("Its options are {}.", names_listed(&names)),
+            _ => format!("Its options are {}.", names_listed(names)),
         };
         let mut help: String = String::from("Use one of the options it has.");
         if near.is_some() { help = format!("Did you mean `{}`?", nikaia_std::index::or(near.as_deref(), || "")); } else if names.is_empty() { help = String::from("Pass it as a plain argument, without a name."); }
+        if name == "workers" && nikaia_std::list::contains(&names, &"limit") { help = String::from("`workers:` is now `limit:` (ADR-async-5 D27)."); }
         self.findings.push(check_refusal("NK1109", span, format!("`{}` has no option called `{}`.", key, name), vec![note], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

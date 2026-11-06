@@ -821,8 +821,10 @@ pub fn check_core_fold_option(state: &mut CheckState, world: &CheckWorld<'_, '_,
     let written = world.words.resolve(name).to_string();
     let at = check_span_at(world, value, span);
     let mut wanted: &'static str = "i64";
-    if written == "order" { wanted = "par::Order"; } else if written != "workers" && written != "piece" {
-        state.findings.push(check_refusal("NK1109", &at, format!("`par_fold` has no option called `{}`.", written), vec![String::from("Its options are `order:`, `workers:` and `piece:`, as `Par::fold`'s are.")], Some(String::from("Use one of the options it has."))));
+    if written == "order" { wanted = "par::Order"; } else if written != "limit" && written != "piece" {
+        let mut help: String = String::from("Use one of the options it has.");
+        if written == "workers" { help = String::from("`workers:` is now `limit:` (ADR-async-5 D27)."); }
+        state.findings.push(check_refusal("NK1109", &at, format!("`par_fold` has no option called `{}`.", written), vec![String::from("Its options are `order:`, `limit:` and `piece:`, as `Par::fold`'s are.")], Some(help)));
         return;
     }
     if found.is_unknown() { return; }
@@ -831,6 +833,6 @@ pub fn check_core_fold_option(state: &mut CheckState, world: &CheckWorld<'_, '_,
     let written_ty = found.text();
     let mut have = nikaia_std::index::or(written_ty.strip_prefix("ref "), || "").to_string();
     if have == "" { have = written_ty; }
-    state.findings.push(check_refusal("NK1102", &at, format!("`par_fold`'s option `{}:` expects `{}`, but it is handed `{}`.", written, wanted, have), vec![String::from("`order:` says how the pieces' results are merged; `workers:` and `piece:` tune how many fold at once and how large a piece is.")], Some(format!("Hand `{}:` a `{}`.", written, wanted).to_string())));
+    state.findings.push(check_refusal("NK1102", &at, format!("`par_fold`'s option `{}:` expects `{}`, but it is handed `{}`.", written, wanted, have), vec![String::from("`order:` says how the pieces' results are merged; `limit:` and `piece:` tune how many fold at once and how large a piece is.")], Some(format!("Hand `{}:` a `{}`.", written, wanted).to_string())));
 }
 

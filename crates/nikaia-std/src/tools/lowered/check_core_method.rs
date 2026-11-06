@@ -663,11 +663,31 @@ pub fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     for arg in args.iter() { check_core_method_code_lent(state, world, arg); }
     if !code_keys.is_empty() { state.stored_frames.push(CheckStoredCode::empty()); }
     let found = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span);
+    check_core_method_option_names(state, world, receiver, &name, config, span);
     if !code_keys.is_empty() {
         let last = args.len() as i64 - 1;
         check_core_places_stored_keys(state, world, host, Some(nikaia_std::index::get(&args, nikaia_std::index::at(last))), &code_keys);
     }
     found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_option_names(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, name: &str, config: &[ConfigArg], span: &Span) {
+    if config.is_empty() || state.dsl_drivers.contains(name) { return; }
+    let node = id_of(receiver) as i64;
+    let recorded = match state.facts.method_options.get(&(node, name.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut names: Vec<String> = vec![];
+    for (option, _) in recorded.iter() { names.push(option.to_string()); }
+    let key = match state.facts.method_callees.get(&node) { Some(__nikaia_value) => __nikaia_value, None => return }.to_string();
+    let witness = check_core_method_witness(world, name, config);
+    let on_timeout = check_core_method_on_timeout(world, name, config, witness);
+    let mut at: i64 = 0;
+    while at < config.len() as i64 {
+        let written = world.words.resolve(nikaia_std::index::get(&config, (at) as usize).name).to_string();
+        if at != witness && at != on_timeout && !nikaia_std::list::contains(&names, &written) { state.no_such_option_among(&key, &written, &names, span); }
+        at += 1;
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

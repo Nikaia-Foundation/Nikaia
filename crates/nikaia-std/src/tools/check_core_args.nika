@@ -1066,16 +1066,21 @@ fn check_core_args_tuple_texts(mut state: CheckState, parts: ref Vec[Expr], foun
 }
 
 /// **An option a grammar's `par_fold` names after its `;`** (ADR-372 D6, Part
-/// II 10.7): `order:` takes a `par::Order`, `workers:` and `piece:` an `i64`.
-/// Any other name is `NK1109`; a value of another type `NK1102`.
+/// II 10.7): `order:` takes a `par::Order`, `limit:` and `piece:` an `i64`.
+/// Any other name is `NK1109`, `workers:` with a help naming `limit:`, which
+/// replaced it (ADR-async-5 D27); a value of another type `NK1102`.
 pub fn check_core_fold_option(mut state: CheckState, world: ref CheckWorld, name: winnow_grammar::Symbol, value: ref Expr, found: ref Ty, span: ref Span) sync {
     let written = world.words.resolve(name).clone()
     let at = check_span_at(world, value, span)
     let mut wanted: String = "i64"
     if written == "order" {
         wanted = "par::Order"
-    } else if written != "workers" && written != "piece" {
-        state.findings.push(check_refusal("NK1109", at, f"`par_fold` has no option called `{written}`.", ["Its options are `order:`, `workers:` and `piece:`, as `Par::fold`'s are."], "Use one of the options it has."))
+    } else if written != "limit" && written != "piece" {
+        let mut help: String = "Use one of the options it has."
+        if written == "workers" {
+            help = "`workers:` is now `limit:` (ADR-async-5 D27)."
+        }
+        state.findings.push(check_refusal("NK1109", at, f"`par_fold` has no option called `{written}`.", ["Its options are `order:`, `limit:` and `piece:`, as `Par::fold`'s are."], help))
         return
     }
     if found.is_unknown() {
@@ -1090,5 +1095,5 @@ pub fn check_core_fold_option(mut state: CheckState, world: ref CheckWorld, name
     if have == "" {
         have = written_ty
     }
-    state.findings.push(check_refusal("NK1102", at, f"`par_fold`'s option `{written}:` expects `{wanted}`, but it is handed `{have}`.", ["`order:` says how the pieces' results are merged; `workers:` and `piece:` tune how many fold at once and how large a piece is."], f"Hand `{written}:` a `{wanted}`.".clone()))
+    state.findings.push(check_refusal("NK1102", at, f"`par_fold`'s option `{written}:` expects `{wanted}`, but it is handed `{have}`.", ["`order:` says how the pieces' results are merged; `limit:` and `piece:` tune how many fold at once and how large a piece is."], f"Hand `{written}:` a `{wanted}`.".clone()))
 }

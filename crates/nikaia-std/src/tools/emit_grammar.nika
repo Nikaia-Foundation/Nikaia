@@ -305,7 +305,7 @@ impl EmitState {
         } else {
             out.push("nikaia_std::par::Order::Kept")
         }
-        for option in ["workers", "piece"] {
+        for option in ["limit", "piece"] {
             let at = emit_named_option(world, spec, option)
             if at >= 0 {
                 out.push(", Some(")

@@ -180,7 +180,7 @@ where
 /// **At `user_parallelism = yes` the pieces are claimed while the work runs**
 /// ([ADR-372](../../../docs/specification/adr/adr-372.md) D4-D6): cut near
 /// `options.piece` bytes, merged in the order `options.order` says, on a pool
-/// of `options.workers`. **At `no`** (`parallel` is `false`) it is one parse
+/// of `options.limit`. **At `no`** (`parallel` is `false`) it is one parse
 /// of the whole, and the options, already checked, do nothing (D7).
 pub fn parse_pieces<'a, S, O: Send>(
     source: &'a S,
@@ -217,7 +217,7 @@ fn in_pieces<O: Send>(
         piece: options.piece,
         order,
     };
-    crate::par::on_workers(options.workers, move || run(how))
+    crate::par::on_workers(options.limit, move || run(how))
 }
 
 /// [`parse`] over a `Bytes` (ADR-366 D1): `rule` is the entry of the grammar's

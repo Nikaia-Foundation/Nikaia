@@ -1,0 +1,21 @@
+// A grammar's `par_fold` takes `limit:` where it took `workers:`
+// (ADR-async-5 D27).
+use std::par
+
+grammar Sum {
+    @frame(boundary: "\n")
+    rule ROW -> i64 = n:dec[i64](digit+) frame_end -> { n }
+    entry rule total -> i64 = par_fold(ROW, zero, fn(acc, m) { acc + m }, add; workers: 2)
+}
+
+fn zero() -> i64 {
+    return 0
+}
+
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
+}
+
+fn main() throws {
+    println(f"{Sum::total("1\n2\n")}")
+}

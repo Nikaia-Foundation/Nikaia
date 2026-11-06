@@ -1,0 +1,9 @@
+error[NK1109]: `P::get` has no option called `extar`.
+   --> tests/a_method_option_it_does_not_have_is_refused.nika:15:5
+    |
+ 15 |     println(f"{p.get(extra: 1)} {p.get(extar: 2)}")
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Its options are `extra`.
+    = help: Did you mean `extra`?
+1 type error

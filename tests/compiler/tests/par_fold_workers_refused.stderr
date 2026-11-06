@@ -1,0 +1,9 @@
+error[NK1109]: `Par::fold` has no option called `workers`.
+  --> tests/par_fold_workers_refused.nika:5:5
+   |
+ 5 |     let s = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; workers: 2)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Its options are `order` and `limit`.
+   = help: `workers:` is now `limit:` (ADR-async-5 D27).
+1 type error

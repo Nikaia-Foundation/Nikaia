@@ -192,7 +192,7 @@ impl EmitState {
         out.push(&format!("\n#[allow(non_snake_case, dead_code)]\npub fn {}() -> nikaia_std::par::FoldOptions {{\n    nikaia_std::par::FoldOptions::new(", function));
         let order = emit_named_option(world, &spec, "order");
         if order >= 0 { self.emit_expr(world, walk, out, host, &nikaia_std::index::get(&spec.config, nikaia_std::index::at(order)).value, 0, EmitFlow::plain(), &EmitScope::plain())?; } else { out.push("nikaia_std::par::Order::Kept"); }
-        for option in ["workers", "piece"] {
+        for option in ["limit", "piece"] {
             let at = emit_named_option(world, &spec, option);
             if at >= 0 {
                 out.push(", Some(");

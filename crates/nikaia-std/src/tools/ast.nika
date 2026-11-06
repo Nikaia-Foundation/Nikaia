@@ -1541,7 +1541,7 @@ pub struct FoldSpec {
     pub init: Expr,
     pub step: Expr,
     pub merge: Expr?,
-    /// What a `par_fold` names after its `;`: `order:`, `workers:`, `piece:`
+    /// What a `par_fold` names after its `;`: `order:`, `limit:`, `piece:`
     /// (ADR-372 D6, Part II 10.7).
     pub config: Vec[ConfigArg],
 }
