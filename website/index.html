@@ -70,8 +70,13 @@ description: >-
     Each of these is a reasonable decision on the day it is made. Together they are how safety
     becomes the part that gives way, again and again, in the places where a failure costs the
     most.</p>
-    <p class="safe-lead home-intro">That pressure is growing. More code is written in less time,
-    much of it by models and agents, and review does not grow with it.</p>
+    <p class="safe-lead home-intro">That pressure is growing. Far more flaws are found every
+    month, and attacks often begin before a fix is out, so fixing later is no longer enough: a
+    mistake has to be found before the program ships. And the flaws are rarely new ideas. A path
+    that leaves its directory, a write past the end of a buffer, memory damaged while it is
+    cleaned up, state one request leaves for the next: they are mistakes in how input, memory and
+    state are handled, the work Nikaia's compiler takes over and checks.
+    <a href="{{ "/good/why-now.html" | relative_url }}">Why now: the figures →</a></p>
     <p class="safe-lead home-intro">Nikaia is built so that safety does not have to be traded
     for speed or for time. The compiler does the checking, so a check costs the person writing
     the code little time, and a check the compiler has proved can be left out of the machine

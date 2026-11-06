@@ -1,0 +1,96 @@
+---
+layout: home
+title: Why now
+description: >-
+  More flaws are found every month, and attacks begin sooner after a flaw is known. The figures, the cases and where Nikaia stands.
+---
+<!--
+  Level 3, dated: the figures behind the home page's "Why a new language".
+  Unlike the other pages this one has a date and is meant to be updated.
+  Every figure names its source; the CVE volume comes from an aggregator and
+  says so. Taken from a data set compiled on 2026-11-06 (only entries of high
+  confidence, with a primary source or established trade press), except
+  PHP2Shell, which is quoted from NCSC-NL's tracker. The home page carries no
+  figures, so it does not age with this page.
+-->
+
+<section class="home-section" id="top">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#why" | relative_url }}">Why a new language</a></p>
+    <h1 class="home-heading">Why now</h1>
+    <p class="safe-lead home-intro">For anyone who has to keep software safe, it is getting harder. Far more flaws are reported every month, and attacks begin sooner after a flaw becomes known, often before a fix is out. This page gives the figures, a few of the cases behind them, and what kind of mistake each case was.</p>
+    <p class="safe-lead home-intro">As of 6 November 2026. The figures change every month, and this page is updated with them.</p>
+  </div>
+</section>
+
+<section class="home-section home-section-alt" id="more">
+  <div class="home-inner">
+    <h2 class="home-heading">More flaws to fix</h2>
+    <p class="safe-lead home-intro">From January to October 2026, 95,094 vulnerabilities were published, against 42,337 in the same months of 2025. October 2026 alone brought about 17,650, nearly four times October 2025. Microsoft's October update fixed 1,413 vulnerabilities in one day, the largest it has published.</p>
+    <p class="safe-lead home-intro">The number of flaws confirmed as exploited grew too, more slowly. The U.S. Cybersecurity and Infrastructure Security Agency (CISA) lists them in its catalogue of known exploited vulnerabilities:</p>
+    <div class="markdown-body" style="overflow-x:auto">
+      <table style="display:table;width:100%">
+        <thead><tr><th>Year</th><th>Vulnerabilities published</th><th>Added to CISA's catalogue of exploited ones</th></tr></thead>
+        <tbody>
+          <tr><td>2023</td><td>28,824</td><td>187</td></tr>
+          <tr><td>2024</td><td>39,762</td><td>186</td></tr>
+          <tr><td>2025</td><td>47,539</td><td>245</td></tr>
+          <tr><td>2026, January to October</td><td>95,094</td><td>282</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="safe-lead home-intro">A published vulnerability is usually a flaw that was there before and has now been found, so these counts measure finding and reporting more than how software is written. For the people who run it, the difference does not help: each one has to be checked, and the few that are attacked have to be found among many more. In 2025 one in 198 published vulnerabilities was confirmed as exploited; in 2026 one in 337.</p>
+  </div>
+</section>
+
+<section class="home-section" id="faster">
+  <div class="home-inner">
+    <h2 class="home-heading">Less time to fix them</h2>
+    <p class="safe-lead home-intro">Here the evidence is clearest. Mandiant's M-Trends 2026 puts the mean time to exploitation at seven days <em>before</em> a fix is available; in 2018 it was 63 days after. VulnCheck measured the median time from publication to CISA's catalogue at 120 days in 2025 and 80 days in the first half of 2026. Google's Threat Intelligence Group counted 141 exploited vulnerabilities from January to August 2026, more than in the whole of 2025 (127), and attributes the growth to flaws attacked quickly after they were disclosed.</p>
+    <p class="safe-lead home-intro">One case from this week: a flaw in OpenSSH on some Linux systems was fixed on 5 November 2026, and the first successful attacks began nine hours after it was disclosed. When attacks start within hours or before a fix exists, fixing later is no longer enough. A mistake has to be found before the program ships.</p>
+  </div>
+</section>
+
+<section class="home-section home-section-alt" id="cases">
+  <div class="home-inner">
+    <h2 class="home-heading">What kind of mistake they were</h2>
+    <p class="safe-lead home-intro">Most of the flaws attacked in 2026 are not new ideas. They are mistakes in how input, memory and state are handled, the kinds the layers under <a href="{{ "/safe/" | relative_url }}">Very safe</a> are about. The right-hand column says how Nikaia meets each kind and where that stops.</p>
+    <div class="markdown-body" style="overflow-x:auto">
+      <table style="display:table;width:100%">
+        <thead><tr><th>Case</th><th>What went wrong</th><th>In Nikaia</th></tr></thead>
+        <tbody>
+          <tr><td>FortiMail mail gateway, exploited before a fix, October 2026 (CVE-2026-104286)</td><td>A path from a request left the directory it was meant for, with null bytes in the name.</td><td>A path from outside is opened under a directory the call names, and a name that leaves it is refused at the call (<a href="{{ "/safe/outside-data.html" | relative_url }}">data from outside</a>).</td></tr>
+          <tr><td>PHP interpreter, “PHP2Shell”, fixed 21 October 2026 (CVE-2026-109618, -109619)</td><td>Memory corrupted while a request was cleaned up, and state left by one request reused by the next on the same worker.</td><td>Memory is released where the code shows a value ends, without a free written by hand (<a href="{{ "/fast/no-garbage-collector.html" | relative_url }}">memory</a>).</td></tr>
+          <tr><td>Citrix NetScaler, exploited, October 2026 (CVE-2026-88779)</td><td>A memory overflow.</td><td>An index outside a list stops the program at that line, before anything is written where it does not belong (<a href="{{ "/safe/#running" | relative_url }}">while the program runs</a>).</td></tr>
+          <tr><td>Windows ALPC, exploited before a fix, September 2026 (CVE-2026-85880)</td><td>A heap overflow.</td><td>The same check, and no memory managed by hand.</td></tr>
+          <tr><td>Ivanti Connect Secure, three times in October 2026</td><td>A chain of flaws gave attackers root without logging in; the fix of 13 October left two of them open.</td><td>The pressure this page is about: three rounds of patching in one month.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="safe-lead home-intro">These are kinds of mistake, not a claim that a program written in Nikaia would have had none of these flaws. Code in a C library that a Nikaia program calls is outside what its compiler checks, and a flaw in the logic of a program, such as a login check that lets the wrong person in, is caught only where it breaks a rule the code states.</p>
+  </div>
+</section>
+
+<section class="home-section" id="sources">
+  <div class="home-inner">
+    <h2 class="home-heading">How the figures were counted</h2>
+    <p class="safe-lead home-intro">The counts of published vulnerabilities come from an aggregator, cve.tools, which joins several databases; other sources give slightly different numbers for the same month, so one source is used throughout. CISA's catalogue is a lower bound: it lists what CISA has confirmed and what has a fix, and the OpenSSH flaw above is not in it. Its yearly totals were checked against CISA's own figures. Since June 2026 CISA sets shorter deadlines by rule, so a shorter deadline is not a sign of a greater threat. A list of cases reflects what drew attention and is not a count.</p>
+    <div class="safe-reading">
+      <h2>Sources</h2>
+      <ul>
+        <li><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA: Known Exploited Vulnerabilities Catalog</a></li>
+        <li><a href="https://cloud.google.com/blog/topics/threat-intelligence/vulnerability-discovery-and-exploitation-trends-in-the-ai-era">Google Threat Intelligence Group: vulnerability discovery and exploitation trends, 30 September 2026</a></li>
+        <li><a href="https://www.vulncheck.com/blog/state-of-exploitation-1h-2026">VulnCheck: State of Exploitation 1H 2026</a></li>
+        <li><a href="https://labs.cloudsecurityalliance.org/research/ai-exploitation-time-collapse-enterprise-risk-v1-0-csa-style/">Mandiant M-Trends 2026, as reported by the Cloud Security Alliance</a></li>
+        <li><a href="https://cve.tools/trends">cve.tools: CVE publication trends (aggregator)</a></li>
+        <li><a href="https://www.crowdstrike.com/en-us/blog/patch-tuesday-analysis-october-2026/">CrowdStrike: October 2026 Patch Tuesday</a></li>
+        <li><a href="https://www.helpnetsecurity.com/2026/11/06/openssh-sshole-cve-2026-123158-exploitation/">Help Net Security: OpenSSH CVE-2026-123158 exploited</a></li>
+        <li><a href="https://thehackernews.com/2026/10/critical-fortimail-zero-day-flaw.html">The Hacker News: FortiMail zero-day</a></li>
+        <li><a href="https://github.com/NCSC-NL/php2shell">NCSC-NL: php2shell vulnerabilities</a></li>
+        <li><a href="https://www.volexity.com/blog/2026/10/13/a-series-of-unauthenticated-events-chained-exploitation-of-ivanti-connect-secure-zero-days/">Volexity: chained exploitation of Ivanti Connect Secure</a> and <a href="https://www.rapid7.com/blog/post/etr-additional-ivanti-connect-secure-zero-days-exploited-in-the-wild-cve-2026-111357-cve-2026-118527/">Rapid7: additional Ivanti zero-days</a></li>
+        <li><a href="https://www.securityweek.com/microsoft-patches-record-974-vulnerabilities-including-two-exploited-zero-days/">SecurityWeek: Microsoft's September 2026 patches</a></li>
+      </ul>
+    </div>
+    <p class="safe-others">More under Made for good: <a href="{{ "/good/built-in-the-open.html" | relative_url }}">Built in the open</a><a href="{{ "/good/pre-alpha.html" | relative_url }}">Pre-alpha: what to expect</a><a href="{{ "/manifesto.html" | relative_url }}">Why Nikaia exists</a></p>
+  </div>
+</section>
