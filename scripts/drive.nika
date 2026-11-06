@@ -75,7 +75,12 @@
 // skips its build and test jobs for them too), HEAD is pushed as on green
 // without a suite, `SUITE <sha8> docs-only, pushed without the suite`, and
 // unpushed.txt is emptied. `--docs-only FILE` prints `docs`/`code` for each
-// path in FILE and `docs-only` or `suite` (for tests). Else the driver
+// path in FILE and `docs-only` or `suite` (for tests).
+// Before a suite is pushed to its `ci/` branch, the tests named after the
+// changed scripts run here (owner, 2026-11-06; drive_named_filters,
+// `LOCAL tests ...`): red writes `Gate: red local-tests` and their output to
+// the suite log and goes to QA without a CI round; `--named-filters FILE`
+// prints the filters for the paths in FILE (for tests). Else the driver
 // takes the checkout's suite lock, `mkdir target/suite.lock` with
 // `<pid> <DIR>` in target/suite.lock/owner: two drivers (the main lane and the
 // bug lane) share this checkout, so one waits in 60 s steps while the owner's
@@ -517,6 +522,14 @@ fn drive_launch(dir: String) throws {
 	for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
 		if l.trim() != "" { covered += 1 }
 	}
+	let failed = drive_local_tests(drive_unpushed_paths())
+	if failed != "" {
+		fs::write(log.clone(), fs::Root::Anywhere, "Gate: red local-tests\n" + drive_tail(failed, 200) + "\n")
+		fs::write(exit.clone(), fs::Root::Anywhere, "1\n")
+		fs::write(drive_lock_dir() + "/testing", fs::Root::Anywhere, f"{sha} {covered}\n")
+		println(f"SUITE {drive_short(sha)} red locally (tests named after the changed scripts), not sent to CI")
+		return
+	}
 	// The branch is the driver's, but someone else may have pushed to it (the
 	// owner did, 2026-11-06): its tip is overwritten only when it is already in
 	// HEAD's history; anything else stops the driver instead of being lost.
@@ -801,6 +814,57 @@ fn drive_unpushed_paths() -> Vec[String] throws {
 		if p != "" { out.push(p) }
 	}
 	return out
+}
+
+// The `--filter`s of the tests named after the changed scripts (owner,
+// 2026-11-06): for each `scripts/X.nika` or `tools/X.nika`, X with `-` as `_`
+// and its first `_` word when that has five letters or more
+// (`facts-collect` gives `facts_collect` and `facts`), each kept only when a
+// test in tests/compiler/tests holds it in its name, each once.
+fn drive_named_filters(paths: Vec[String]) -> Vec[String] throws {
+	let mut keys: Vec[String] = []
+	for p in paths {
+		let parts: Vec[String] = p.split("/").collect()
+		if parts.len() != 2 || !parts[1].ends_with(".nika") { continue }
+		if parts[0] != "scripts" && parts[0] != "tools" { continue }
+		let key = parts[1].replace(".nika", "").replace("-", "_")
+		if !keys.contains(key.clone()) { keys.push(key.clone()) }
+		let first = key.split("_").collect()[0].clone()
+		if first != key && first.len() >= 5 && !keys.contains(first.clone()) { keys.push(first) }
+	}
+	let mut tests: Vec[String] = []
+	for entry in fs::read_dir("tests/compiler/tests", fs::Root::Anywhere) {
+		let n = entry.to_text()
+		if n.ends_with(".nika") { tests.push(n) }
+	}
+	let mut out: Vec[String] = []
+	for k in keys {
+		for t in tests.clone() {
+			if t.contains(k.clone()) {
+				out.push(k.clone())
+				break
+			}
+		}
+	}
+	return out
+}
+
+// Before a suite goes to CI: the tests named after the changed scripts, run
+// here (a minute instead of a CI round). Red: their output, else "".
+fn drive_local_tests(paths: Vec[String]) -> String throws {
+	let filters = drive_named_filters(paths)
+	if filters.len() == 0 { return "" }
+	let bin = drive_exe()
+	let exe = process::run("realpath", [bin.clone()]).stdout.trim().clone()
+	let mut args: String = ""
+	for f in filters.clone() { args = args + f" --filter '{f}'" }
+	println(f"LOCAL tests {filters.join(" ")}")
+	let out = process::run(
+		"sh",
+		["-c", f"cd tests/compiler && NIKAIA_CACHE_LIMIT=2G '{exe}' test{args} 2>&1"],
+	)
+	if out.ok { return "" }
+	return out.stdout + out.stderr
 }
 
 // After the lock and before each suite: another lane may have pushed these
@@ -1808,6 +1872,14 @@ fn main() throws {
 			paths.push(p)
 		}
 		if drive_docs_only(paths) { println("docs-only") } else { println("suite") }
+		return
+	}
+	if args.len() == 3 && args[1] == "--named-filters" {
+		let mut paths: Vec[String] = []
+		for line in drive_read(args[2]).split("\n") {
+			if line.trim() != "" { paths.push(line.trim().clone()) }
+		}
+		println(drive_named_filters(paths).join(" "))
 		return
 	}
 	if args.len() == 3 && args[1] == "--changed" {
