@@ -39,7 +39,7 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   the generated files (`crates/nikaia-std/src/tools/lowered/*.rs`, index
   `lowered.rs`; a change to one `.nika` changes one file). CI takes the newest
   stable; when `rustup check` shows this machine's `stable` behind it, run
-  clippy with that version too (`docs/builder-facts.md`, *Tests and the gate*;
+  clippy with that version too (`docs/builder-facts-lookup.md`, *Tests and the gate*;
   c80e63ac kept `develop` red on a lint 1.97 did not have).
 * **A change to the language raises the version by one**: the `**Version:**`
   line of the three specification parts and a `CHANGELOG.md` heading, then
@@ -299,7 +299,7 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   after each run, not after a batch). `agent.nika` writes `BRIEF.debrief.md`
   after each run; the supervisor watches the driver's log for `builder done`,
   reads the debrief at once and, before the next brief is written, turns each
-  point into one of three things: a line in `docs/builder-facts.md` (a trap, a
+  point into one of three things: a line in `docs/builder-facts-lookup.md` (a trap, a
   location, a recipe), a fix to the brief template or a wrong fact in a
   waiting brief, or a `ready` issue when the toolchain lacks what the builder
   needed. A point two builders reported is never left for a third.
@@ -453,9 +453,10 @@ form done before, a named test, a mechanical edit) and `medium` otherwise;
 `high` is accepted but not written into briefs; any other value stops the run.
 
 A line `Facts: <heading>, <heading>` (or `facts:` in the frontmatter) names
-the `## ` / `### ` sections of `docs/builder-facts.md` the builder needs;
+the `## ` / `### ` sections of `docs/builder-facts-lookup.md` the builder needs;
 `agent.nika` puts *Core* and their text into its prompt under *Facts for this
-brief*, so it does not read the file whole. Name the narrowest topics
+brief* (*Core* comes from `docs/builder-facts.md`), so it does not read the
+file whole; the rest it looks up with `scripts/syntax.nika`. Name the narrowest topics
 (`Tests and the gate, Probes, Grammar`), not the whole *Traps already met*;
 *Core* is never named. A heading ending in a parenthetical is named
 without it (`Moving Rust into Nikaia`); an unknown one stops the run.
@@ -476,10 +477,11 @@ issue instead of copying it and adds only the decision and the probe it lacks.
   `grep -r`. A bug brief names the **suspected location** of the fault (file
   and function) that the supervisor found while tracing the probe, and says how
   sure it is.
-* **`Facts: <heading>, ...`**: the sections of `docs/builder-facts.md` the
+* **`Facts: <heading>, ...`**: the sections of `docs/builder-facts-lookup.md` the
   builder needs, by their exact `##` or `###` heading; `agent.nika` inlines
   them after *Core*. A new
-  trap goes into builder-facts, not into each brief.
+  trap goes into its topic's section there, not into each brief; only a trap
+  of every run goes into *Core* (`docs/builder-facts.md`).
 
 **Before a brief is written, the supervisor checks** (each tag is the run that
 paid for the rule):

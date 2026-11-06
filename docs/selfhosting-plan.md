@@ -4,7 +4,7 @@ Decided by read-only architecture reviews on 2026-10-11. No owner decision is
 open. A builder reads only its own section.
 
 A move is translated by hand from the Rust (owner, 2026-11-01; the rules are
-in `docs/builder-facts.md`). Check the functions tools/*.nika may already have
+in `docs/builder-facts-lookup.md`). Check the functions tools/*.nika may already have
 before moving a duplicate.
 
 ## Done
@@ -615,7 +615,7 @@ after the other. Line ranges are at 62a07a1: re-grep the names before cutting.
   `format_of`, `template_holes_bound`, `dsl_name`, `escaped`, `nonnegative_*`, `ty`,
   `common_integer`, `written`, `char_literal`): they go when their last Rust caller goes.
 
-**First slice to brief: C7-r1** (needs nothing). Known risk per slice (`docs/builder-facts.md`):
+**First slice to brief: C7-r1** (needs nothing). Known risk per slice (`docs/builder-facts-lookup.md`):
 
 * C7-r1: the map loop over `((start, _), claim)` is a nested tuple pattern in a `for`; and
   `n if n <= 0 => continue` inside a `match` that makes a value: bind the count first.

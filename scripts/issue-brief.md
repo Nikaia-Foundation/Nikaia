@@ -12,7 +12,8 @@ Your work order is issue #{N}, inlined below with its comments. There is no
 brief written around it: plan your own steps from its *To build* list, build
 them in order, commit after each finished step, and end when its *Done when*
 holds (or at the limits of `builder.md`, reporting what is left). The
-facts sections in your prompt come from `docs/builder-facts.md`.
+facts in your prompt are *Core* of `docs/builder-facts.md`; more on a topic:
+`nikaia run scripts/syntax.nika -- KEYWORD`, a probe: `nikaia run scripts/probe.nika -- SNIPPET`.
 
 Measure the issue against `docs/issues.md` while you work: what it lacked,
 what was wrong in it. That answer goes into the report's `Issue:` field.
@@ -21,9 +22,9 @@ comment (`gh api repos/Nikaia-Foundation/Nikaia/issues/{N}/comments -F body=@fil
 ending with the Claude Code footer), rule I13.
 
 ## Rules (CLAUDE.md; shared checkout)
-* Read `docs/builder-facts.md` first. `develop` in the main checkout; other agents' uncommitted files are not yours: never touch or stage them.
+* Read the facts in your prompt first. `develop` in the main checkout; other agents' uncommitted files are not yours: never touch or stage them.
 * Commit locally after each step with `target/fast/nikaia run scripts/commit.nika -- REPORT` (it adds exactly the report's `Files:`); the driver pushes.
-* Before committing, cheap checks only: `cargo build --profile fast -p nikaia`, `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `scripts/pre-push-check.sh`, the tests the issue names and the ones your change touches.
+* Before committing, cheap checks only: `cargo build --profile fast -p nikaia`, `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `nikaia run scripts/pre-push.nika`, the tests the issue names and the ones your change touches.
 * Version lines, `CHANGELOG.md`, badges and NK codes are the supervisor's. New tests in Nikaia only.
 * A defect you meet on the way to the issue's goal (a compiler or lowering bug in the path) you fix, with a test, as its own commit; `Found:` is only for what lies off that path or cannot be fixed this run.
 * A form Nikaia, `std` or the toolchain lacks stops the work, unless an ADR or Part I-III refuses it (name it): `Result: blocked`, `Found:` the gap with a probe, `Needs: supervisor decision`.

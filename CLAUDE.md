@@ -82,8 +82,10 @@ The rules every session and agent needs. What only the main session does
   versions, watches CI, runs decision rounds, writes the briefs and keeps the lanes and the
   issues): `docs/supervisor.md`.
 * **Builders**: `.claude/agents/builder.md` (the cycle and the gate) and
-  `docs/builder-facts.md` (where things live, traps, and the self-hosting
-  rules: slices, syntax gaps of `tools/*.nika`, lowering).
+  `docs/builder-facts.md` (*Core*: where things live, the traps of every run),
+  `docs/builder-facts-lookup.md` (the other traps and the self-hosting rules:
+  slices, syntax gaps of `tools/*.nika`, lowering; looked up by topic with
+  `nikaia run scripts/syntax.nika -- KEYWORD`).
 * **Whoever files or rewrites an issue**: `docs/issues.md` (what an issue holds,
   I1-I13; a builder gets the issue as its work order and judges it by them).
 * **Whoever measures performance or quotes a figure**: `docs/measuring.md`
@@ -131,4 +133,4 @@ The rules every session and agent needs. What only the main session does
   the compiler to `NIKAIA_CACHE_LIMIT`). Never run the full suite locally by hand
   (about 45 minutes; a driver runs it per batch): CI runs it on every push to `develop`.
 * The working rules for a move (slices, patterns, syntax gaps, lowered types,
-  `lower-std`) are in `docs/builder-facts.md`.
+  `lower-std`) are in `docs/builder-facts-lookup.md`.

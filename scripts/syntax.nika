@@ -1,0 +1,214 @@
+// How a form is written, in one call.
+//
+//     nikaia run scripts/syntax.nika -- slice
+//     nikaia run scripts/syntax.nika -- "match guard"
+//
+// Prints, for the keyword (any case; words may be joined by spaces):
+// 1. the first section of the specification (`docs/specification/10-*`,
+//    `20-*`, `30-*`) whose heading holds it, at most 40 lines, and the other
+//    headings that hold it; without one, the first section whose text holds it;
+// 2. the shortest test in `tests/compiler/tests/` whose name holds it (spaces
+//    as `_`), else whose text holds it, at most 30 lines;
+// 3. the lines of `docs/builder-facts.md` and `docs/builder-facts-lookup.md`
+//    that hold it, at most 20.
+// A builder reads this instead of the whole specification or facts file.
+
+use std::cli
+use std::fs
+use std::process
+
+fn syntax_specs() -> Vec[String] {
+	return ["docs/specification/10-nikaia-light.md", "docs/specification/20-nikaia-advance.md", "docs/specification/30-nikaia-tooling.md"]
+}
+
+fn syntax_usage() throws {
+	println("usage: nikaia run scripts/syntax.nika -- KEYWORD...")
+	process::exit(2)
+}
+
+fn syntax_heading_level(line: String) -> i64 {
+	if line.starts_with("#### ") { return 4 }
+	if line.starts_with("### ") { return 3 }
+	if line.starts_with("## ") { return 2 }
+	if line.starts_with("# ") { return 1 }
+	return 0
+}
+
+// The section starting at line `start` of `lines`, down to the next heading of
+// its level or above, at most `limit` lines.
+fn syntax_section(lines: Vec[String], start: i64, limit: i64) -> Vec[String] {
+	let level = syntax_heading_level(lines[start].clone())
+	let mut out: Vec[String] = [lines[start].clone()]
+	let mut i = start + 1
+	while i < lines.len() {
+		let l = lines[i].clone()
+		let h = syntax_heading_level(l.clone())
+		if h > 0 && h <= level { break }
+		if out.len() == limit {
+			out.push(f"... (section goes on; read the file from the line above)")
+			break
+		}
+		out.push(l)
+		i = i + 1
+	}
+	return out
+}
+
+fn syntax_spec(key: String) throws {
+	let mut first_file: String = ""
+	let mut first_line = -1
+	let mut others: Vec[String] = []
+	// Headings first.
+	for path in syntax_specs() {
+		let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+		let lines: Vec[String] = text.split("\n").collect()
+		let mut i = 0
+		while i < lines.len() {
+			let l = lines[i].clone()
+			if syntax_heading_level(l.clone()) > 0 && l.to_lowercase().contains(key.clone()) {
+				if first_line < 0 {
+					first_file = path.clone()
+					first_line = i
+				} else {
+					others.push(f"{path}:{i + 1}: {l.trim()}")
+				}
+			}
+			i = i + 1
+		}
+	}
+	// Else the section around the first line of text that holds it.
+	if first_line < 0 {
+		for path in syntax_specs() {
+			if first_line >= 0 { break }
+			let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+			let lines: Vec[String] = text.split("\n").collect()
+			let mut heading = -1
+			let mut i = 0
+			while i < lines.len() {
+				if syntax_heading_level(lines[i].clone()) > 0 { heading = i }
+				if heading >= 0 && lines[i].to_lowercase().contains(key.clone()) {
+					first_file = path.clone()
+					first_line = heading
+					break
+				}
+				i = i + 1
+			}
+		}
+	}
+	if first_line < 0 {
+		println("== specification: nothing")
+		return
+	}
+	println(f"== specification: {first_file}:{first_line + 1}")
+	let first_lines: Vec[String] = fs::read_to_string(
+		first_file.clone(),
+		fs::Root::Anywhere,
+	).split("\n").collect()
+	for l in syntax_section(first_lines, first_line, 40) { println(l) }
+	if others.len() > 0 {
+		println("-- other headings:")
+		let mut n = 0
+		for o in others {
+			if n == 10 {
+				println(f"... {others.len() - 10} more")
+				break
+			}
+			println(o)
+			n = n + 1
+		}
+	}
+}
+
+fn syntax_test(key: String) throws {
+	let by_name = key.replace(" ", "_")
+	let mut best: String = ""
+	let mut best_len = 0
+	let mut by_text: String = ""
+	let mut by_text_len = 0
+	for entry in fs::read_dir("tests/compiler/tests", fs::Root::Anywhere) {
+		let name = entry.to_text()
+		if !name.ends_with(".nika") { continue }
+		let path = f"tests/compiler/tests/{name}"
+		if name.to_lowercase().contains(by_name.clone()) {
+			let n = fs::read_to_string(path.clone(), fs::Root::Anywhere).len()
+			if best == "" || n < best_len {
+				best = path.clone()
+				best_len = n
+			}
+		} else if best == "" {
+			let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+			if text.to_lowercase().contains(key.clone())
+				&& (by_text == "" || text.len() < by_text_len) {
+					by_text = path.clone()
+					by_text_len = text.len()
+				}
+		}
+	}
+	if best == "" { best = by_text }
+	if best == "" {
+		println("== example test: nothing")
+		return
+	}
+	println(f"== example test: {best}")
+	let lines: Vec[String] = fs::read_to_string(
+		best.clone(),
+		fs::Root::Anywhere,
+	).trim().split("\n").collect()
+	let mut n = 0
+	for l in lines {
+		if n == 30 {
+			println(f"... {lines.len() - 30} more lines")
+			break
+		}
+		println(l)
+		n = n + 1
+	}
+	let out = best.replace(".nika", ".stdout")
+	if fs::exists(out.clone(), fs::Root::Anywhere) {
+		let expected: Vec[String] = fs::read_to_string(
+			out.clone(),
+			fs::Root::Anywhere,
+		).trim().split("\n").collect()
+		println(f"-- expected output in {out}, {expected.len()} lines")
+	}
+}
+
+fn syntax_facts(key: String) throws {
+	println("== facts")
+	let mut n = 0
+	let mut more = 0
+	for path in ["docs/builder-facts.md", "docs/builder-facts-lookup.md"] {
+		let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+		let lines: Vec[String] = text.split("\n").collect()
+		let mut i = 0
+		while i < lines.len() {
+			if lines[i].to_lowercase().contains(key.clone()) {
+				if n < 20 {
+					println(f"{path}:{i + 1}: {lines[i].trim()}")
+					n = n + 1
+				} else {
+					more = more + 1
+				}
+			}
+			i = i + 1
+		}
+	}
+	if n == 0 { println("nothing") }
+	if more > 0 { println(f"... {more} more lines") }
+}
+
+fn main() throws {
+	let mut parts: Vec[String] = []
+	let mut i = 0
+	for a in cli::args() {
+		if i > 0 { parts.push(a) }
+		i = i + 1
+	}
+	if parts.len() == 0 { syntax_usage() }
+	let key = parts.join(" ").to_lowercase()
+	syntax_spec(key.clone())
+	println("")
+	syntax_test(key.clone())
+	println("")
+	syntax_facts(key)
+}

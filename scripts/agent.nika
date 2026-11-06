@@ -269,7 +269,7 @@ fn agent_fact_level(line: String, name: String) -> i64 {
     return 0
 }
 
-// The first heading of the brief that docs/builder-facts.md (`facts`) lacks, or "".
+// The first heading of the brief that the facts (`facts`: builder-facts.md and its lookup) lack, or "".
 fn agent_facts_unknown(body: String, facts: String) -> String {
     let lines = facts.split("\n").collect()
     for name in agent_fact_names(body) {
@@ -289,7 +289,7 @@ fn agent_facts(body: String, facts: String) -> String {
     for line in lines { if agent_fact_level(line, "Core") == 2 { names.push("Core") } }
     for name in agent_fact_names(body) { if name != "Core" { names.push(name) } }
     if names.len() == 0 { return "" }
-    let mut out: Vec[String] = ["", "", "# Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)"]
+    let mut out: Vec[String] = ["", "", "# Facts for this brief (Core and the named sections of docs/builder-facts-lookup.md; more on a topic: `nikaia run scripts/syntax.nika -- KEYWORD`)"]
     for name in names {
         let mut level = 0
         for line in lines {
@@ -410,8 +410,8 @@ fn main() throws {
     }
     let mut wanted = agent_read("/proc/sys/kernel/random/uuid").trim().clone()
     let mut claude_args = agent_args(abs.clone(), text.clone(), wanted.clone())
-    // The sections of docs/builder-facts.md the brief names go into its prompt.
-    let facts = agent_read("docs/builder-facts.md")
+    // Core and the sections of docs/builder-facts-lookup.md the brief names go into its prompt.
+    let facts = agent_read("docs/builder-facts.md") + "\n" + agent_read("docs/builder-facts-lookup.md")
     let unknown = agent_facts_unknown(text.clone(), facts.clone())
     if unknown != "" {
         if dry {

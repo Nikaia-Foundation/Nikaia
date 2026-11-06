@@ -9,9 +9,11 @@ You build one small slice of an issue in the Nikaia repository and end.
 (`docs/tokensaverstrategy.md`).
 
 * **Your prompt holds *Facts for this brief***: `scripts/agent.nika` puts
-  *Core* of `docs/builder-facts.md` (where things live, the traps of every run)
-  and the sections the brief names (`Facts: A, B`) into it. Read another
-  section of the file only when the work meets its topic; do not look up again
+  `docs/builder-facts.md` (*Core*: where things live, the traps of every run)
+  and the sections of `docs/builder-facts-lookup.md` the brief names (`Facts:
+  A, B`) into it. On another topic run `nikaia run scripts/syntax.nika --
+  KEYWORD` (spec section, example test, facts lines) instead of reading the
+  files whole; probe a snippet with `nikaia run scripts/probe.nika -- SNIPPET`; do not look up again
   what it or the brief's *Locations* say.
 * **Your work order is an issue** (inlined in your prompt; a brief `issue-N.md`
   only frames it), or an older brief that names its steps. Plan your own steps
@@ -32,7 +34,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   commit) writes such a brief, at most 80 lines, and reports its path.
 * **A move is translated by hand, directly from the Rust** (owner, 2026-11-01):
   read the Rust function, write its Nikaia by the rules
-  of `docs/builder-facts.md` (slices, patterns, syntax gaps, lowering). Iterator
+  of `docs/builder-facts-lookup.md` (slices, patterns, syntax gaps, lowering). Iterator
   chains stay chains: one that does not compile is a gap, and stops the slice
   as below, it is not rewritten as a loop.
 * **A run that starts from a draft or a `wip/*` branch checks it whole first**
