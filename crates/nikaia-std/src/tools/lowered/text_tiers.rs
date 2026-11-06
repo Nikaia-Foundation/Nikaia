@@ -5217,7 +5217,59 @@ pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerCon
     let plain = hb_plain_enums(&program.items, words);
     let opted = keep_marks_opted_in_items(&program.items);
     for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, opted); }
+    sf_slice_fields(program, words);
 }
+
+pub(crate) fn sf_slice_fields(program: &mut Program, words: &winnow_grammar::InternerContext) {
+    let mut filled: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
+    for item in program.items.iter() { sf_item(&item.node, words, &mut filled); }
+    for item in program.items.iter_mut() {
+        match &mut (*item).node {
+            Item::Struct { name, fields, is_extern, .. } => {
+                let is_extern = *is_extern; let name = *name;
+                if !is_extern {
+                    let of = words.resolve(name).to_string();
+                    for field in fields.iter_mut() {
+                        let key = format!("{}.{}", of, words.resolve((*field).name));
+                        if sf_a_run(&(*field).ty, words) && nikaia_std::index::or(filled.get(&key), || false) { (*field).ty.is_view = true; }
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+}
+
+pub(crate) fn sf_item(item: &Item, words: &winnow_grammar::InternerContext, filled: &mut collections::BTreeMap<String, bool>) {
+    match item {
+        Item::Fn { body, .. } => { sf_body(body, words, filled); },
+        Item::Impl { methods, .. } => { for method in methods.iter() { sf_item(&method.node, words, filled); } },
+        _ => { },
+    }
+}
+
+pub(crate) fn sf_body(body: &Block, words: &winnow_grammar::InternerContext, filled: &mut collections::BTreeMap<String, bool>) {
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::StructLit { name, fields, .. } => {
+                let name = *name;
+                let of = words.resolve(name).to_string();
+                for init in fields.iter() {
+                    let place = match &init.value {
+                        None => true,
+                        Some(value) => hb_place_root(value, words).is_some(),
+                    };
+                    let key = format!("{}.{}", of, words.resolve(init.name));
+                    let before = nikaia_std::index::or(filled.get(&key), || true);
+                    filled.insert(key, before && place);
+                }
+            },
+            _ => { },
+        }
+    }
+}
+
+pub(crate) fn sf_a_run(ty: &Type, words: &winnow_grammar::InternerContext) -> bool { !ty.is_view && !ty.is_slice && !ty.is_mut && !ty.is_nullable && ty.count.is_none() && (*ty.code).is_none() && ty.generics.len() == 1 && words.resolve(ty.name) == "Array" }
 
 pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool) {
     match item {

@@ -7030,6 +7030,77 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
     for mut item in program.items {
         hb_item(item.node, words, plain, opted)
     }
+    sf_slice_fields(program, words)
+}
+
+/// **A field `Array[T]` with no length that the file fills only with a place
+/// is a view** (ADR-views-3 D5, D11; #1267): owning needs a length, so where
+/// every struct literal of the file puts a piece of a buffer there - `a[1..]`
+/// of a lent parameter, a field or an element of one, a run handed in whole -
+/// the field is written as `ref Array[T]`, the struct holds a view and the
+/// checker ties it to what it points into, as a `String` field the walk above
+/// makes a view. A field no literal fills, or one filled with anything else,
+/// stays as written, and `NK1182` says it needs a length.
+fn sf_slice_fields(mut program: Program, words: ref winnow_grammar::InternerContext) {
+    let mut filled: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    for item in program.items {
+        sf_item(item.node, words, filled)
+    }
+    for mut item in program.items {
+        match item.node {
+            Item::Struct { name, fields, is_extern, .. } => {
+                if !is_extern {
+                    let of = words.resolve(name).clone()
+                    for mut field in fields {
+                        let key = f"{of}.{words.resolve(field.name)}"
+                        if sf_a_run(field.ty, words) && (filled.get(key) ?? false) {
+                            field.ty.is_view = true
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+/// What the struct literals in the bodies of `item` put into each field:
+/// `true` while every value was a place.
+fn sf_item(item: ref Item, words: ref winnow_grammar::InternerContext, mut filled: collections::BTreeMap[String, bool]) {
+    match item {
+        Item::Fn { body, .. } => sf_body(body, words, filled),
+        Item::Impl { methods, .. } => {
+            for method in methods {
+                sf_item(method.node, words, filled)
+            }
+        },
+        else => {},
+    }
+}
+
+fn sf_body(body: ref Block, words: ref winnow_grammar::InternerContext, mut filled: collections::BTreeMap[String, bool]) {
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::StructLit { name, fields, .. } => {
+                let of = words.resolve(name).clone()
+                for init in fields {
+                    let place = match init.value {
+                        null => true,
+                        value => hb_place_root(value, words) != null,
+                    }
+                    let key = f"{of}.{words.resolve(init.name)}"
+                    let before = filled.get(key) ?? true
+                    filled.insert(key, before && place)
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+/// `Array[T]` with no length, written as a value.
+fn sf_a_run(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
+    return !ty.is_view && !ty.is_slice && !ty.is_mut && !ty.is_nullable && ty.count == null && ty.code == null && ty.generics.len() == 1 && words.resolve(ty.name) == "Array"
 }
 
 fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool) {

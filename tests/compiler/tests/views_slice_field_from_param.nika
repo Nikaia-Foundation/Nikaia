@@ -1,0 +1,10 @@
+// ADR-views-3 D5, D11 (#1267): an `Array[T]` field the file fills only with a piece of a buffer is a view.
+struct Window { xs: Array[i64] }
+
+fn window(a: Array[i64]) -> Window { return Window { xs: a[1..] } }
+
+fn main() {
+	let v = [1, 2, 3]
+	let w = window(v)
+	print(w.xs.len())
+}
