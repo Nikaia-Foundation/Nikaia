@@ -4,7 +4,7 @@
 //     nikaia run scripts/probe.nika -- --check 'fn f(xs: Array[i64]) -> i64 { return xs[0] }'
 //     nikaia run scripts/probe.nika -- --file F.nika
 //
-// The snippet's `\n` become new lines; without an `fn main` it is wrapped in
+// The snippet's `\n` outside string literals become new lines; without an `fn main` it is wrapped in
 // one. It is written to `target/probe/main.nika` and run (`--check`: only
 // checked) with `target/fast/nikaia`, the compiler already built: no
 // `lower-std`, no cargo. Prints the output and the diagnostics, at most 60
@@ -16,55 +16,84 @@ use std::fs
 use std::process
 
 fn probe_usage() throws {
-    println("usage: nikaia run scripts/probe.nika -- [--check] (SNIPPET | --file F.nika)")
-    process::exit(2)
+	println("usage: nikaia run scripts/probe.nika -- [--check] (SNIPPET | --file F.nika)")
+	process::exit(2)
+}
+
+// The text's `\n` become new lines, except inside a string literal, where
+// they stay the escape they are (`"a\nb"` keeps its two characters).
+fn probe_newlines(text: String) -> String {
+	let chars: Vec[scalar] = text.chars().collect()
+	let mut out: String = ""
+	let mut in_string = false
+	let mut i = 0
+	while i < chars.len() {
+		let c = chars[i]
+		if c == '\\' && i + 1 < chars.len() {
+			let next = chars[i + 1]
+			if !in_string && next == 'n' {
+				out = f"{out}\n"
+			} else {
+				out = f"{out}{c}{next}"
+			}
+			i = i + 2
+			continue
+		}
+		if c == '"' { in_string = !in_string }
+		out = f"{out}{c}"
+		i = i + 1
+	}
+	return out
 }
 
 fn probe_source(file: String, parts: Vec[String]) -> String throws {
-    if file != "" { return fs::read_to_string(file, fs::Root::Anywhere) }
-    if parts.len() == 0 { probe_usage() }
-    let src = parts.join(" ").replace("\\n", "\n")
-    if src.contains("fn main") { return src }
-    return f"fn main() throws {{\n{src}\n}}\n"
+	if file != "" { return fs::read_to_string(file, fs::Root::Anywhere) }
+	if parts.len() == 0 { probe_usage() }
+	let src = probe_newlines(parts.join(" "))
+	if src.contains("fn main") { return src }
+	return f"fn main() throws {{\n{src}\n}}\n"
 }
 
 fn main() throws {
-    let mut args: Vec[String] = []
-    for a in cli::args() { args.push(a) }
-    let mut check = false
-    let mut file: String = ""
-    let mut parts: Vec[String] = []
-    let mut i = 1
-    while i < args.len() {
-        let a = args[i].clone()
-        if a == "--check" {
-            check = true
-        } else if a == "--file" {
-            if i + 1 >= args.len() { probe_usage() }
-            file = args[i + 1].clone()
-            i = i + 1
-        } else {
-            parts.push(a)
-        }
-        i = i + 1
-    }
-    let src = probe_source(file, parts)
-    process::run("mkdir", ["-p", "target/probe"])
-    fs::write("target/probe/main.nika", fs::Root::Anywhere, src)
-    let mut verb: String = "run"
-    if check { verb = "check" }
-    let out = process::run("sh", ["-c", f"NIKAIA_CACHE_LIMIT=2G target/fast/nikaia {verb} target/probe/main.nika"])
-    let all = out.stdout + out.stderr
-    let lines: Vec[String] = all.trim().split("\n").collect()
-    let mut n = 0
-    for l in lines {
-        if n == 60 {
-            println(f"... {lines.len() - 60} more lines")
-            break
-        }
-        println(l)
-        n = n + 1
-    }
-    println(f"exit {out.code}")
-    if out.code != 0 { process::exit(out.code) }
+	let mut args: Vec[String] = []
+	for a in cli::args() { args.push(a) }
+	let mut check = false
+	let mut file: String = ""
+	let mut parts: Vec[String] = []
+	let mut i = 1
+	while i < args.len() {
+		let a = args[i].clone()
+		if a == "--check" {
+			check = true
+		} else if a == "--file" {
+			if i + 1 >= args.len() { probe_usage() }
+			file = args[i + 1].clone()
+			i = i + 1
+		} else {
+			parts.push(a)
+		}
+		i = i + 1
+	}
+	let src = probe_source(file, parts)
+	process::run("mkdir", ["-p", "target/probe"])
+	fs::write("target/probe/main.nika", fs::Root::Anywhere, src)
+	let mut verb: String = "run"
+	if check { verb = "check" }
+	let out = process::run(
+		"sh",
+		["-c", f"NIKAIA_CACHE_LIMIT=2G target/fast/nikaia {verb} target/probe/main.nika"],
+	)
+	let all = out.stdout + out.stderr
+	let lines: Vec[String] = all.trim().split("\n").collect()
+	let mut n = 0
+	for l in lines {
+		if n == 60 {
+			println(f"... {lines.len() - 60} more lines")
+			break
+		}
+		println(l)
+		n = n + 1
+	}
+	println(f"exit {out.code}")
+	if out.code != 0 { process::exit(out.code) }
 }

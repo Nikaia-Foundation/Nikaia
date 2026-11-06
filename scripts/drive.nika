@@ -185,10 +185,10 @@ fn drive_unlock() throws {
 		== drive_pid() { process::run("rm", ["-rf", drive_lock_dir()]) }
 }
 fn drive_silence_stop_hook() throws {
-    let home = env::var("HOME") ?? ""
-    if home == "" { return }
-    let hook = f"{home}/.claude/stop-hook-git-check.sh"
-    if drive_read(hook) != "" { fs::write(hook, fs::Root::Anywhere, "") }
+	let home = env::var("HOME") ?? ""
+	if home == "" { return }
+	let hook = f"{home}/.claude/stop-hook-git-check.sh"
+	if drive_read(hook) != "" { fs::write(hook, fs::Root::Anywhere, "") }
 }
 // Takes the suite lock: waits in 60 s steps while another live driver holds
 // it, takes over a dead one's. An owner file not yet written counts as live
@@ -399,9 +399,15 @@ fn drive_failures(body: String, n: i64) -> String throws {
 	for raw in body.split("\n") {
 		if out.len() >= n { break }
 		let l = raw.trim_end()
-		if l.contains(" FAILED") || l.contains("panicked at") || l.contains("error[") || l.contains("error: ") || l.contains("fails its own tests") || l.contains(" type error") || l.contains(" ---- ") {
-			out.push(l)
-		}
+		if l.contains(" FAILED")
+			|| l.contains("panicked at")
+			|| l.contains("error[")
+			|| l.contains("error: ")
+			|| l.contains("fails its own tests")
+			|| l.contains(" type error")
+			|| l.contains(" ---- ") {
+				out.push(l)
+			}
 	}
 	return out.join("\n")
 }
@@ -471,7 +477,32 @@ fn drive_ci_branch(dir: String) -> String {
 // target/suite.lock/exit-<sha>; target/suite.lock/testing notes `<sha> <lines
 // of unpushed.txt it covers>` (drive_settle reads both). Nothing builds or tests
 // in this checkout.
+// The badges follow the tree they describe (the self-hosted share moves with
+// every move into Nikaia); a builder does not touch them, so the driver
+// regenerates them before each suite and commits only `assets/badges/`.
+fn drive_badges() throws {
+	let made = process::run("python3", ["scripts/badges.py"])
+	if !made.ok { drive_escalate(f"scripts/badges.py failed: {made.stderr.trim()}") }
+	let changed = process::run("git", ["status", "--porcelain", "assets/badges/"])
+	if changed.stdout.trim() == "" { return }
+	process::run("git", ["add", "assets/badges/"])
+	let done = process::run(
+		"git",
+		[
+			"commit",
+			"-q",
+			"-m",
+			"badges: regenerate for the tree under test",
+			"--",
+			"assets/badges/",
+		],
+	)
+	if !done.ok { drive_escalate(f"committing the badges failed: {done.stderr.trim()}") }
+	println("BADGES regenerated and committed")
+}
+
 fn drive_launch(dir: String) throws {
+	drive_badges()
 	let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	let branch = drive_ci_branch(dir)
 	let log = process::run("realpath", [dir.clone()]).stdout.trim() + "/suite.log"
@@ -1561,7 +1592,7 @@ fn main() throws {
 	let mut args: Vec[String] = []
 	for a in cli::args() { args.push(a) }
 	let mut i = 1
-    if !dry { drive_silence_stop_hook() } 
+	if !dry { drive_silence_stop_hook() }
 	while i < args.len() {
 		if args[i] == "--dry-run" {
 			dry = true
