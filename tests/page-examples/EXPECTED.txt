@@ -81,10 +81,10 @@ website/easy/async-without-colouring.html #1 lowered (as written)  struct TooLon
 website/easy/formats-as-grammar.html #1 fragment (as written)  grammar Calc {
 website/easy/index.html #1 refused (a body) [NK1117,NK1117,NK1117,NK1117]  let a = async count_words(first)    // starts at once
 website/easy/index.html #2 fragment (as written) [sketch]  grammar Calc {
-website/index.html #1 refused (a body) [NK1117,NK1117,NK1117,NK1117]  async {
-website/index.html #2 refused (a body) [NK1117,NK1117]  a.update fn(mut acc) {
-website/index.html #3 refused (as written) [NK1117,NK2605]  fn load() -> String {
-website/index.html #4 refused (items, then a body) [NK1207]  fn percent(n: int) -> int {
+website/index.html #1 refused (as written) [NK1117,NK2605]  fn load() -> String {
+website/index.html #2 refused (a body) [NK1117,NK2605,NK1202]  let out = process::run("git", ["rev-parse", "HEAD"])
+website/index.html #3 refused (items, then a body) [NK1207]  fn percent(n: int) -> int {
+website/index.html #4 refused (a body) [NK2110,NK1117]  let price = async(within: 100.millis()) lookup()
 website/index.html #5 refused (a body) [NK1117,NK1117,NK1117,NK1117]  let a = async count_words(first)    // starts at once
 website/index.html #6 fragment (as written) [sketch]  grammar Calc {
 website/safe/broken-promises.html #1 refused (as written) [NK1207]  fn percent(n: int) -> int {
@@ -97,10 +97,18 @@ website/safe/broken-promises.html #7 lowered (as written)  use std::process
 website/safe/broken-promises.html #8 refused (as written) [NK1300]  fn average(total: int, count: int) -> int {
 website/safe/broken-promises.html #9 lowered (as written)  /// Divides 100 by a, a few times.
 website/safe/conflicting-actions.html #1 refused (a body) [NK2107,NK2107]  let mut balance = 100
-website/safe/index.html #1 refused (a body) [NK1117,NK1117,NK1117,NK1117]  async {
-website/safe/index.html #2 refused (a body) [NK1117,NK1117]  a.update fn(mut acc) {
-website/safe/index.html #3 refused (as written) [NK1117,NK2605]  fn load() -> String {
+website/safe/deadlines.html #1 refused (as written) [NK2605]  use std::time
+website/safe/deadlines.html #2 lowered (as written)  use std::time
+website/safe/index.html #1 refused (as written) [NK1117,NK2605]  fn load() -> String {
+website/safe/index.html #2 refused (a body) [NK1117,NK2605,NK1202]  let out = process::run("git", ["rev-parse", "HEAD"])
+website/safe/index.html #3 refused (a body) [NK1117,NK1117,NK2605]  fs::read_to_string(name, fs::Root::Dir("store"))
 website/safe/index.html #4 refused (items, then a body) [NK1207]  fn percent(n: int) -> int {
+website/safe/index.html #5 refused (a body) [NK1117,NK1117,NK1117,NK1117]  async {
+website/safe/index.html #6 refused (a body) [NK2110,NK1117]  let price = async(within: 100.millis()) lookup()
+website/safe/index.html #7 refused (a body) [NK1117,NK1117]  a.update fn(mut acc) {
+website/safe/outside-data.html #1 refused (as written) [NK1202]  use std::process
+website/safe/outside-data.html #2 lowered (as written)  use std::process
+website/safe/outside-data.html #3 lowered (as written)  use std::fs
 website/safe/stuck-tasks.html #1 refused (as written) [NK2202]  use std::time
 website/safe/stuck-tasks.html #2 refused (a body) [NK1117,NK1117]  update_all(a, b) fn(mut from, mut to) {
 website/safe/unhandled-errors.html #1 refused (as written) [NK2605]  use std::fs

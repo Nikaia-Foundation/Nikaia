@@ -12,10 +12,15 @@ description: >-
   benches/brc/README.md (performance) and the figures of
   docs/project_status_and_roadmap.md, shortened for a first screen; the numbers
   are dated there and here, and change together; where the two disagree, those
-  pages are the ones to fix first and this page follows them. What "Very safe"
-  shows in detail (contracts, loops, the report, data from outside, the command
-  line) is on its five pages under safe/. The "People and AI" section is the
-  README's "When people and AI write code together", shortened.
+  pages are the ones to fix first and this page follows them. "Why a new
+  language" answers why the project exists at all: safety, speed and time to
+  market pull apart, and safety is what gives way; the longer form is the
+  manifesto. "Very safe" shows safety as a whole, in five layers (while the
+  program runs, data from outside, parts that keep their promises, changes by
+  people and models, under load and failure); each layer is a section of
+  safe/index.html, and its topics have their own pages under safe/. The
+  "People and AI" section is the README's "When people and AI write code
+  together", shortened.
 -->
 
 <section class="hero">
@@ -53,6 +58,29 @@ description: >-
   </div>
 </section>
 
+<section class="home-section home-section-alt" id="why">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Why a new language</p>
+    <h2 class="home-heading">One language that holds together what usually pulls apart.</h2>
+    <p class="safe-lead home-intro">Every software project weighs three things against each other:
+    that the program is correct, that it is fast, and that it is ready in time. The way software
+    has been built makes these pull in different directions. A check costs speed, so it is left
+    out where speed counts. Showing that code is right costs time, so it waits until after the
+    release. Code that is quick to write is often code whose mistakes show up only in production.
+    Each of these is a reasonable decision on the day it is made. Together they are how safety
+    becomes the part that gives way, again and again, in the places where a failure costs the
+    most.</p>
+    <p class="safe-lead home-intro">That pressure is growing. More code is written in less time,
+    much of it by models and agents, and review does not grow with it.</p>
+    <p class="safe-lead home-intro">Nikaia is built so that safety does not have to be traded
+    for speed or for time. The compiler does the checking, so a check costs the person writing
+    the code little time, and a check the compiler has proved can be left out of the machine
+    code. The code stays short, so writing it quickly and writing it safely are the same work.
+    And where the compiler cannot check something, it says so.
+    <a href="#safe">Safety as a whole, in five layers ↓</a></p>
+  </div>
+</section>
+
 <section class="home-section" id="ai">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">People and AI</p>
@@ -77,12 +105,11 @@ description: >-
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>
         <h3>Very safe</h3>
-        <p>Catch mistakes before they become failures. Nikaia checks how tasks interact: two
-        tasks that would change the same value at once, a task nobody waits for, an error a task
-        throws that nobody handles. A memory budget for every task is specified and not built yet.
-        It checks how errors are handled and whether parts of your program keep their promises,
-        at compile time wherever it can, and shows you where its checks stop.
-        <a href="#safe">How it works — and where the limits are ↓</a></p>
+        <p>Safety as a whole, not one check. Nikaia looks at what happens when something goes
+        wrong while the program runs, at data from outside, at whether parts keep their promises,
+        at changes made by people and by models, and at a program under load and failure. It
+        checks at compile time wherever it can, and shows you where its checks stop.
+        <a href="#safe">The five layers, and where the limits are ↓</a></p>
       </div>
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
@@ -114,67 +141,54 @@ description: >-
 <section class="home-section" id="safe">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Very safe</p>
-    <h2 class="home-heading">Catch mistakes before they become failures.</h2>
-    <p class="safe-lead home-intro">Many bugs follow patterns. Nikaia checks for those patterns before they reach your users, and says where it cannot.</p>
+    <h2 class="home-heading">Safety as a whole, in five layers.</h2>
+    <p class="safe-lead home-intro">A program fails in more than one way. Nikaia looks at five of them, checks at compile time wherever it can, and says for each where its checks stop.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
-        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-todo">Still being built</span> For <code>async</code> tasks the check is being built (#988), and two writes to the same file are not yet told apart from writes to two files.</p>
-<p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
-</details>
-        <h3><a href="{{ "/safe/#conflicts" | relative_url }}">Two tasks changing the same value</a></h3>
-        <p>Two tasks change the same value at once. One update overwrites the other.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">async {
-    async fn { balance = balance + 50 }
-    async fn { balance = balance - 30 }   // refused: both change `balance`
-}</code></pre></div>
-        <a class="safe-more" href="{{ "/safe/#conflicts" | relative_url }}">Read more →</a>
-      </div>
-      <div class="safe-tile safe-tile-b">
-        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-todo">Still being built</span> A lock taken inside another lock by hand is not refused yet, so for several locks using <code>update_all</code> is up to you.</p>
-<p><span class="why why-limit">Beyond what a compiler sees</span> Whether a program can get stuck cannot be decided for every program. Where the analysis cannot tell, it does not claim the problem is solved.</p>
-</details>
-        <h3><a href="{{ "/safe/#stuck" | relative_url }}">Tasks that get stuck</a></h3>
-        <p>Tasks wait for each other forever, or one holds up everyone.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">a.update fn(mut acc) {
-    acc.balance -= 30
-    time::sleep(5.millis())
-}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `time::sleep` can pause, but you're holding a lock here.</b></code></pre></div>
-        
-        <a class="safe-more" href="{{ "/safe/#stuck" | relative_url }}">Read more →</a>
-      </div>
-      <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
-        <h3><a href="{{ "/safe/#memory" | relative_url }}">A memory budget for every task</a></h3>
-        <p>A task that uses up its memory ends alone, and the rest of the program runs on. Every task gets a memory budget of its own.</p>
-        <p class="safe-note">Decided and specified, not built yet: today a task can still take memory from the whole program.</p>
-
-        
-        <a class="safe-more" href="{{ "/safe/#memory" | relative_url }}">Read more →</a>
-      </div>
-      <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-build">Caught at compile time</span>
-        <h3><a href="{{ "/safe/#errors" | relative_url }}">Errors that go unhandled</a></h3>
-        <p>Something fails and nothing deals with it.</p>
+        <span class="safe-chip safe-chip-part">Partly checked</span>
+        <h3><a href="{{ "/safe/#running" | relative_url }}">While the program runs</a></h3>
+        <p>An error nobody handles is refused when the program is built. A failing task is specified to end alone, and that is being built.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
     return fs::read_to_string("config.txt", fs::Root::Anywhere)
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This function can fail, because `fs::read_to_string` can fail.</b></code></pre></div>
-        
-        <a class="safe-more" href="{{ "/safe/#errors" | relative_url }}">Read more →</a>
+        <a class="safe-more" href="{{ "/safe/#running" | relative_url }}">Read more →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-part">Partly checked</span>
+        <h3><a href="{{ "/safe/#outside" | relative_url }}">Data from outside</a></h3>
+        <p>A claim about data from outside waits for a guard where the data arrives, and a path from outside stays in the directory the call names.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let out = process::run("git", ["rev-parse", "HEAD"])
+let n: int = out.stdout.len()
+assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `n == 41` is a claim about data from outside the program.</b></code></pre></div>
+        <a class="safe-more" href="{{ "/safe/#outside" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
-        <h3><a href="{{ "/safe/#promises" | relative_url }}">Calls that break a function's contract</a></h3>
-        <p>A part of the program is called outside what it was told to expect.</p>
+        <h3><a href="{{ "/safe/#logic" | relative_url }}">Parts that keep their promises</a></h3>
+        <p>An <code>assert</code> is a contract, and a call that breaks it is refused. Two tasks that change the same value are refused too; for <code>async</code> that check is being built.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
     assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
     return n
 }
 
 percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b></code></pre></div>
-        
-        <a class="safe-more" href="{{ "/safe/#promises" | relative_url }}">Read more →</a>
+        <a class="safe-more" href="{{ "/safe/#logic" | relative_url }}">Read more →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Checked on every build</span>
+        <h3><a href="{{ "/safe/#changes" | relative_url }}">Changes, by people and by models</a></h3>
+        <p>Every change is checked against the rules the code states, whoever wrote it. A change that breaks one is refused, with what to write instead. A change to a rule itself shows in the diff and in the reports.</p>
+<div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
+  …/src/main.nika:10  assert(n == 41)  proved</code></pre></div>
+        <a class="safe-more" href="{{ "/safe/#changes" | relative_url }}">Read more →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-part">Partly checked</span>
+        <h3><a href="{{ "/safe/#load" | relative_url }}">Under load and failure</a></h3>
+        <p>A wait with a deadline has to handle its timeout. A lock held across a pause is refused. A memory budget for every task is specified and not built yet.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let price = async(within: 100.millis()) lookup()
+    catch { "cached price" }</code></pre></div>
+        <a class="safe-more" href="{{ "/safe/#load" | relative_url }}">Read more →</a>
       </div>
     </div>
   </div>

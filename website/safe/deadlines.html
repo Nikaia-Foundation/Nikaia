@@ -1,0 +1,78 @@
+---
+layout: home
+title: A deadline for every wait
+description: >-
+  A slow service or a stuck connection holds up only the work that waits for it, for as long as the program allows.
+---
+<!--
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#load" | relative_url }}">Very safe</a></p>
+    <h1 class="home-heading">A deadline for every wait</h1>
+    <div class="limit-class">
+        <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd>A program that waits for another service waits as long as that service takes. When the service is slow or gone, the answer the program owes its own callers is late too, and under load the waiting requests pile up.</dd>
+          <dt>An example</dt>
+          <dd>A page shows a price from a pricing service. The service stops answering, and every page that shows a price hangs with it.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>A task can be started with a deadline, <code>async(within: d)</code>, and a handle can be waited for with one, <code>join(within: d)</code>. When the time runs out, the task is cancelled at its next pause and ends with <code>task::TimedOut</code>. That is a failure like any other, so the compiler asks for it to be handled where the value is first needed, and a fallback written with <code>catch</code> stands in for it there. A handle that is still live where a <code>join(within:)</code> timed out is refused (<code>NK2109</code>), so a task is not left behind by accident.</dd>
+          <dt>The limit</dt>
+          <dd>The deadline is a protection while the program runs: the compiler checks that a timeout is handled, not that the time chosen is right. A task is cancelled where it pauses; a long calculation that never pauses runs to its next pause first. A limit on how many tasks of one form run at once, <code>async(limit: n)</code>, is specified and not built yet (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/986">#986</a>).</dd>
+        </dl>
+
+        <details class="limit-details home-code markdown-body" open>
+          <summary>Show the program and what Nikaia says</summary>
+<pre><code class="language-nika">use std::time
+
+fn lookup() -&gt; String {
+    time::sleep(2.seconds())
+    return "fresh price"
+}
+
+fn main() {
+    let price = async(within: 100.millis()) lookup()
+    println("rendering the page")
+    println(price)
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
+<span class="d-error">error[NK2605]</span><b>: This function can fail, because the deadline of `within:` can run out.</b>
+<span class="d-gutter">  --&gt;</span> main.nika:9:5
+<span class="d-gutter">   |</span>
+<span class="d-gutter"> 9 |</span>     let price = async(within: 100.millis()) lookup()
+<span class="d-gutter">   |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="d-gutter">   |</span>
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).
+<span class="d-gutter">   =</span> <span class="d-help">help:</span> Add `throws` to `main`, or write a fallback: `async(within: d) … catch { … }`.</code></pre>
+<p>With a fallback, the page is rendered with the price the program already has:</p>
+<pre><code class="language-nika">use std::time
+
+fn lookup() -&gt; String {
+    time::sleep(2.seconds())
+    return "fresh price"
+}
+
+fn main() {
+    let price = async(within: 100.millis()) lookup() catch { "cached price" }
+    println("rendering the page")
+    println(price)
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia run main.nika</b>
+rendering the page
+cached price</code></pre>
+        </details>
+      </div>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/docs/specification/10-nikaia-light.html" | relative_url }}">Specification, Part I 8.1.2: running work beside the code after it</a></li><li><a href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5: tasks and async (D15-D17)</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/986">Issue #986: limit and the rest of the async forms</a></li></ul>
+    </div>
+    <p class="safe-others">More under Very safe: <a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/outside-data.html" | relative_url }}">Data from outside</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Calls that break a function's contract</a><a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a></p>
+  </div>
+</section>
