@@ -1,0 +1,43 @@
+// #1266, ADR-views-3 D4, D5, D8, D11: a call whose result is a view of its
+// parameter is handed to a plain parameter as the slice it stands for, for
+// an `Array[i64]`, a `String` and a `Bytes` result alike.
+fn rest(xs: Array[i64]) -> Array[i64] {
+	return xs[1..]
+}
+
+fn total(xs: Array[i64]) -> i64 {
+	let mut t = 0
+	for x in xs {
+		t = t + x
+	}
+	return t
+}
+
+fn after(s: String) -> String {
+	let i = s.find("l") ?? return s
+	return s[i..]
+}
+
+fn width(s: String) -> i64 {
+	return s.len()
+}
+
+fn tail(b: Bytes) -> Bytes {
+	return b[1..]
+}
+
+fn size(b: Bytes) -> i64 {
+	return b.len()
+}
+
+fn main() {
+	let v = [1, 2, 3]
+	println(f"{total(v[1..])}")
+	println(f"{total(rest(v))}")
+	let s = "hello"
+	println(f"{width(after(s))}")
+	println(f"{width(after(after(s)))}")
+	let text: String = "abc"
+	println(f"{size(text.bytes[1..])}")
+	println(f"{size(tail(text.bytes))}")
+}
