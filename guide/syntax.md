@@ -472,19 +472,23 @@ or a C library allocates for itself is not counted.
 
 ```nika
 fn main() {
-    let counter = SharedMut(0)
+    let evens = SharedMut(0)
+    let odds = SharedMut(0)
     async {
-        async counter.update fn(mut v) { v += 1 }
-        async counter.update fn(mut v) { v += 2 }
+        async evens.update fn(mut v) { v += 2 }
+        async odds.update fn(mut v) { v += 1 }
     }                                         // both tasks have ended here
-    println(f"counter is {counter.get()}")    // counter is 3
+    println(f"{evens.get()} and {odds.get()}")    // 2 and 1
 }
 ```
 
-A value that several tasks change is put into a `SharedMut`, and it is changed only
-through its methods (`get`, `set`, `update`, `access`). The lock is part of the value, so
-you cannot forget to take it. The compiler also refuses code that would wait for I/O while
-holding it.
+A value that a task changes while the rest of the program goes on is put into a
+`SharedMut`, and it is changed only through its methods (`get`, `set`, `update`,
+`access`). The lock is part of the value, so you cannot forget to take it. The compiler
+also refuses code that would wait for I/O while holding it. Two tasks of one group that
+both write the same `SharedMut` are refused (`NK2104`), and so is a `get` written beside
+a task's `update`: give each task its own value, or read it after the group has ended, as
+above.
 
 Whether this runs on one core or on all of them is not written here at all. It is one line
 in `nikaia.toml` ([Getting started](getting-started.md#the-two-build-settings)), and
