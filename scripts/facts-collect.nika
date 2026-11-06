@@ -3,6 +3,7 @@
 //     nikaia run scripts/facts-collect.nika            # what is not reviewed yet
 //     nikaia run scripts/facts-collect.nika -- --all   # every debrief
 //     nikaia run scripts/facts-collect.nika -- --mark  # print, then mark as reviewed
+//     nikaia run scripts/facts-collect.nika -- --apply # enter them, then mark
 //
 // Reads every `docs/briefs/**/*.debrief.md` not listed in
 // `docs/briefs/facts-reviewed.txt` and prints, per debrief, its `Fact:` lines
@@ -11,6 +12,16 @@
 // supervisor takes what holds into `docs/builder-facts-lookup.md` (Core only
 // for a trap of every run) and runs `--mark`, which appends the debriefs shown
 // to the reviewed list.
+//
+// `--apply` (owner, 2026-11-06; the driver runs it at the end of each block)
+// enters each `Fact: <section> | <line>` as `* <line> (<debrief stem>)` at the
+// end of its section: `Core` is *Every run* of `docs/builder-facts.md`, any
+// other name the first `###` heading of `docs/builder-facts-lookup.md` (or
+// `docs/builder-facts.md`) that holds it, in any case. A line already in
+// either file is skipped. Prints `FACT <section> | <line>` per line entered
+// and `UNPLACED <debrief>: <Fact line>` for a section no heading holds; such a
+// debrief is not marked, so it shows again for the supervisor. Then marks the
+// others. `(older)` lines are prose, never entered.
 
 use std::cli
 use std::fs
@@ -44,9 +55,74 @@ fn facts_lines(path: String) -> Vec[String] throws {
 	return out
 }
 
+fn facts_files() -> Vec[String] {
+	return ["docs/builder-facts.md", "docs/builder-facts-lookup.md"]
+}
+
+// The file and line index after which a fact of SECTION goes, or ("", -1).
+fn facts_place(section: String) -> (String, i64) throws {
+	let mut key = section.trim().to_lowercase()
+	if key == "core" { key = "every run" }
+	for path in facts_files() {
+		let lines: Vec[String] = fs::read_to_string(path.clone(), fs::Root::Anywhere).split("\n").collect()
+		let mut i = 0
+		while i < lines.len() {
+			if lines[i].starts_with("### ") && lines[i].to_lowercase().contains(key.clone()) {
+				let mut end = i
+				let mut j = i + 1
+				while j < lines.len() && !lines[j].starts_with("#") {
+					if lines[j].trim() != "" { end = j }
+					j = j + 1
+				}
+				return (path.clone(), end)
+			}
+			i = i + 1
+		}
+	}
+	return ("", -1)
+}
+
+fn facts_known(line: String) -> bool throws {
+	for path in facts_files() {
+		if fs::read_to_string(path.clone(), fs::Root::Anywhere).contains(line.clone()) { return true }
+	}
+	return false
+}
+
+// Enters one `Fact: <section> | <line>`; false when no section holds it.
+fn facts_enter(fact: String, stem: String) -> bool throws {
+	let body = (fact.strip_prefix("Fact:") ?? "").trim()
+	let parts: Vec[String] = body.split("|").collect()
+	if parts.len() < 2 { return false }
+	let section = parts[0].trim().clone()
+	let line = (body.strip_prefix(f"{parts[0]}|") ?? "").trim().clone()
+	if line == "" { return false }
+	if facts_known(line.clone()) { return true }
+	let (path, at) = facts_place(section.clone())
+	if at < 0 { return false }
+	let lines: Vec[String] = fs::read_to_string(path.clone(), fs::Root::Anywhere).split("\n").collect()
+	let mut out: Vec[String] = []
+	let mut i = 0
+	while i < lines.len() {
+		out.push(lines[i].clone())
+		if i == at { out.push(f"* {line} ({stem})") }
+		i = i + 1
+	}
+	fs::write(path, fs::Root::Anywhere, out.join("\n"))
+	println(f"FACT {section} | {line}")
+	return true
+}
+
+// The debrief's name: the last path component without `.debrief.md`.
+fn facts_stem(path: String) -> String {
+	let parts: Vec[String] = path.split("/").collect()
+	return parts[parts.len() - 1].replace(".debrief.md", "")
+}
+
 fn main() throws {
 	let mut all = false
 	let mut mark = false
+	let mut apply = false
 	let mut i = 0
 	for a in cli::args() {
 		if i > 0 {
@@ -54,8 +130,11 @@ fn main() throws {
 				all = true
 			} else if a == "--mark" {
 				mark = true
+			} else if a == "--apply" {
+				apply = true
+				mark = true
 			} else {
-				println("usage: nikaia run scripts/facts-collect.nika -- [--all] [--mark]")
+				println("usage: nikaia run scripts/facts-collect.nika -- [--all] [--mark | --apply]")
 				process::exit(2)
 			}
 		}
@@ -69,8 +148,21 @@ fn main() throws {
 		let p = path.trim()
 		if p == "" { continue }
 		if !all && reviewed.contains(p) { continue }
-		shown.push(p)
 		let lines = facts_lines(p)
+		if apply {
+			let mut placed = true
+			for l in lines {
+				if !l.starts_with("Fact:") { continue }
+				proposals = proposals + 1
+				if !facts_enter(l.clone(), facts_stem(p.clone())) {
+					println(f"UNPLACED {p}: {l}")
+					placed = false
+				}
+			}
+			if placed { shown.push(p) }
+			continue
+		}
+		shown.push(p)
 		if lines.len() == 0 { continue }
 		println(f"== {p}")
 		for l in lines {

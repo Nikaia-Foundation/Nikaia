@@ -13,11 +13,15 @@
 // the next area, focus.txt written (not committed). CUT and RED stop for the supervisor as
 // in single-DIR mode (a report's `Found:` does not cut: it goes to DIR/found.txt,
 // `drive_found`); an area entered with an empty queue is skipped (`FOCUS
-// <area> empty, skipped`); every area empty escalates. Before a block, the first unrun
+// <area> empty, skipped`); every area empty escalates. Before each cycle the open
+// issues labelled `ready` and the area's name are appended to DIR/batch.txt
+// as `#N` (`QUEUED #N <area>`, drive_queue). At a block's end the debriefs'
+// `Fact:` lines go into the facts files (`facts-collect.nika -- --apply`,
+// committed as docs, `FACTS <n> entered`). Before a block, the first unrun
 // docs/briefs/bugs brief with a `Blocks:` line runs first. Test flags:
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
-// `--found DIR BRIEF` (drive_found).
+// `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add).
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time:
 //
@@ -91,7 +95,8 @@
 // DIR/suite.log target/suite.lock/exit-<sha>` waits for that run: `gh api
 // repos/.../actions/runs?head_sha=<sha>` every 30 s, the workflow Nikaia on a
 // ci/ branch; success writes `Gate: green`, any other conclusion `Gate: red
-// <failed jobs>` (spaces as `_`) and each failed job's last 200 log lines; no
+// <failed jobs>` (spaces as `_`) and each failed job's last 200 log lines, at
+// the first failed job already (the run then cancelled: owner, 2026-11-06); no
 // run after 15 minutes is `Gate: red ci-no-run`, none finished after 3 hours
 // `Gate: red ci-timeout`. Its output goes to DIR/suite.log of the shared
 // checkout (overwritten), its exit status to target/suite.lock/exit-<sha>, and
@@ -547,7 +552,8 @@ fn drive_launch(dir: String) throws {
 // branch, polling `gh api` every 30 s. Green writes `Gate: green` to LOG; red
 // (failure, timed out, or cancelled three times: a cancel is started again)
 // writes `Gate: red <job names>` and the last
-// 200 lines of each failed job's log; no run after 15 minutes is `Gate: red
+// 200 lines of each failed job's log; the first failed or timed-out job of a
+// running run cancels it and is red at once (owner, 2026-11-06); no run after 15 minutes is `Gate: red
 // ci-no-run`, none finished after 3 hours `Gate: red ci-timeout`. Then the exit
 // status (0 green, 1 red) to EXIT, through EXIT.tmp.
 fn drive_ci_wait(sha: String, log: String, exit: String) throws {
@@ -556,6 +562,37 @@ fn drive_ci_wait(sha: String, log: String, exit: String) throws {
 	let code = if green { "0" } else { "1" }
 	fs::write(exit.clone() + ".tmp", fs::Root::Anywhere, code + "\n")
 	process::run("mv", [exit.clone() + ".tmp", exit])
+}
+
+// The red log text of CI run ID: per job matching the jq condition FILTER
+// what failed and its last 200 lines, then `Gate: red <job names>`.
+fn drive_ci_red(repo: String, id: String, url: String, conclusion: String, filter: String) -> String throws {
+	let jobs = process::run(
+		"gh",
+		[
+			"api",
+			f"repos/{repo}/actions/runs/{id}/jobs?per_page=100",
+			"--jq",
+			f".jobs[] | select({filter}) | \"\\(.id) \\(.name)\"",
+		],
+	)
+	let mut names: Vec[String] = []
+	let mut tails: Vec[String] = []
+	for j in jobs.stdout.trim().split("\n") {
+		let line = j.trim()
+		if line == "" { continue }
+		let jid = line.split(" ").collect()[0]
+		let name = (line.strip_prefix(jid) ?? "").trim()
+		names.push(name.replace(" ", "_"))
+		let text = process::run("gh", ["api", f"repos/{repo}/actions/jobs/{jid}/logs"]).stdout
+		let failures = drive_failures(text.clone(), 80)
+		let tail = drive_tail(text, 200)
+		tails.push(f"\nWhat failed in the job {name}, from anywhere in its log:\n{failures}\n\nLast 200 lines of the job {name} ({url}/job/{jid}):\n{tail}\n")
+	}
+	if names.len() == 0 { names.push(conclusion.replace(" ", "_")) }
+	let body = tails.join("")
+	let gate = names.join(" ")
+	return f"CI run {url}: {conclusion}\n{body}\nGate: red {gate}\n"
 }
 
 // One CI verdict for SHA: the log text and whether it is green.
@@ -592,40 +629,28 @@ fn drive_ci_poll(sha: String) -> (String, bool) throws {
 			if words[2] == "success" {
 				return (f"CI run {url}: success\nGate: green\n", true)
 			} else {
-				let jobs = process::run(
-					"gh",
-					[
-						"api",
-						f"repos/{repo}/actions/runs/{id}/jobs?per_page=100",
-						"--jq",
-						".jobs[] | select(.conclusion == \"failure\" or .conclusion == \"cancelled\" or .conclusion == \"timed_out\") | \"\\(.id) \\(.name)\"",
-					],
-				)
-				let mut names: Vec[String] = []
-				let mut tails: String = ""
-				for j in jobs.stdout.trim().split("\n") {
-					let line = j.trim()
-					if line == "" { continue }
-					let jid = line.split(" ").collect()[0]
-					let name = (line.strip_prefix(jid) ?? "").trim()
-					names.push(name.replace(" ", "_"))
-					let text = process::run(
-						"gh",
-						["api", f"repos/{repo}/actions/jobs/{jid}/logs"],
-					).stdout
-					tails = tails
-						+ f"\nWhat failed in the job {name}, from anywhere in its log:\n"
-						+ drive_failures(text.clone(), 80)
-						+ "\n"
-						+ f"\nLast 200 lines of the job {name} ({url}/job/{jid}):\n"
-						+ drive_tail(text, 200)
-						+ "\n"
-				}
-				if names.len() == 0 { names.push(words[2]) }
-				return (
-					f"CI run {url}: {words[2]}\n{tails}\nGate: red " + names.join(" ") + "\n",
-					false,
-				)
+				let all = ".conclusion == \"failure\" or .conclusion == \"cancelled\" or .conclusion == \"timed_out\""
+				return (drive_ci_red(repo, id, url, words[2], all), false)
+			}
+		}
+		if runs.ok && words.len() >= 3 {
+			// A failed job decides the run (owner, 2026-11-06): the run is
+			// cancelled and red at once, not waited for to its end.
+			let id = words[0]
+			let failed = ".conclusion == \"failure\" or .conclusion == \"timed_out\""
+			let count = process::run(
+				"gh",
+				[
+					"api",
+					f"repos/{repo}/actions/runs/{id}/jobs?per_page=100",
+					"--jq",
+					f"[.jobs[] | select({failed})] | length",
+				],
+			)
+			if count.ok && count.stdout.trim() != "" && count.stdout.trim() != "0" {
+				process::run("gh", ["api", "-X", "POST", f"repos/{repo}/actions/runs/{id}/cancel"])
+				let url = f"https://github.com/{repo}/actions/runs/{id}"
+				return (drive_ci_red(repo, id, url, "failure (cancelled at the first failed job)", failed), false)
 			}
 		}
 		if polls >= 30 && first == "" {
@@ -1410,6 +1435,24 @@ fn drive_post_focus(file: String, area: String, line: String) throws {
 	if !drive_comment(issue, drive_focus_body(line)) { println(f"post failed for {area}") }
 }
 
+// The debriefs' facts into the facts files (owner, 2026-11-06): runs
+// `facts-collect.nika -- --apply` and commits what it entered, docs only.
+fn drive_facts(exe: String) throws {
+	let out = process::run(exe, ["run", "scripts/facts-collect.nika", "--", "--apply"])
+	let mut n: i64 = 0
+	for l in out.stdout.split("\n") {
+		if l.starts_with("FACT ") { n += 1 }
+		if l.starts_with("UNPLACED ") { println(l) }
+	}
+	if n == 0 { return }
+	let commit = process::run(
+		"git",
+		["commit", "-q", "-m", "docs: builder facts from the debriefs", "--", "docs/builder-facts.md", "docs/builder-facts-lookup.md"],
+	)
+	if !commit.ok { println(f"facts commit failed: {commit.stderr.trim()}") }
+	println(f"FACTS {n} entered")
+}
+
 // The end of a block: the suite (started, then waited for: pushed on green,
 // QA on red), the block's line on the lane issue, the bump of each area's DIR with one pending
 // while CI is green, the focus moved to the next area (focus.txt is a
@@ -1452,10 +1495,67 @@ fn drive_focus_end(
 			if rel.stdout.contains("PUSH REJECTED") { drive_escalate("bump push rejected") }
 		}
 	}
+	drive_say(dry, f"{exe} run scripts/facts-collect.nika -- --apply, committed as docs")
+	if !dry { drive_facts(exe) }
 	let next = drive_focus_next(file, " ")
 	drive_say(dry, f"set {path} to current {next} 0 (not committed)")
 	if dry { return }
 	fs::write(path, fs::Root::Anywhere, drive_focus_set(drive_read(path), next, 0))
+}
+
+// BATCH with each of NUMBERS not yet in it (as the first word of a line)
+// appended as a `#N` line, in order.
+fn drive_queue_add(batch: String, numbers: Vec[String]) -> String {
+	let mut have: Vec[String] = []
+	let mut out: Vec[String] = []
+	for l in batch.split("\n") {
+		let w = l.trim().clone()
+		if w == "" { continue }
+		out.push(l.clone())
+		let first: Vec[String] = w.split(" ").collect()
+		have.push(first[0].clone())
+	}
+	for n in numbers {
+		let tag = f"#{n.trim()}"
+		if n.trim() == "" || have.contains(tag.clone()) { continue }
+		have.push(tag.clone())
+		out.push(tag)
+	}
+	if out.len() == 0 { return "" }
+	let text = out.join("\n")
+	return f"{text}\n"
+}
+
+// Queues the lane's ready issues (owner, 2026-11-06): the open issues
+// labelled `ready` and AREA go into DIR/batch.txt as `#N` lines, oldest
+// first (drive_queue_add); prints `QUEUED #N AREA` for each new one.
+fn drive_queue(dir: String, area: String) throws {
+	let repo = drive_repo()
+	let got = process::run(
+		"gh",
+		[
+			"api",
+			f"repos/{repo}/issues?state=open&labels=ready,{area}&per_page=100&sort=created&direction=asc",
+			"--jq",
+			".[] | select(.pull_request == null) | .number",
+		],
+	)
+	if !got.ok { return }
+	let mut numbers: Vec[String] = []
+	for n in got.stdout.trim().split("\n") {
+		if n.trim() != "" { numbers.push(n.trim().clone()) }
+	}
+	if numbers.len() == 0 { return }
+	let path = f"{dir}/batch.txt"
+	let old = drive_read(path.clone())
+	let new = drive_queue_add(old.clone(), numbers)
+	if new == old || new == "" { return }
+	fs::write(path, fs::Root::Anywhere, new.clone())
+	let before = drive_queue_add(old, [])
+	let had: Vec[String] = before.split("\n").collect()
+	for l in new.split("\n") {
+		if l.trim() != "" && !had.contains(l.clone()) { println(f"QUEUED {l.trim()} {area}") }
+	}
 }
 
 // `--focus` (owner, 2026-11-01): one driver, one area at a time. Drives the
@@ -1513,6 +1613,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 				continue
 			}
 		}
+		if !dry && lines_file == "" { drive_queue(dir.clone(), area.clone()) }
 		let cyc = drive_cycle(exe, dir.clone(), lines_file)
 		let mut lines: Vec[String] = []
 		// A bump waits for the end of a block (drive_focus_end).
@@ -1659,6 +1760,16 @@ fn main() throws {
 	if args.len() == 4 && args[1] == "--found" {
 		let found = drive_found(args[2], args[3].clone())
 		if found == "" { println("none") } else { println(found) }
+		return
+	}
+	if args.len() >= 3 && args[1] == "--queue-add" {
+		let mut numbers: Vec[String] = []
+		let mut i = 3
+		while i < args.len() {
+			numbers.push(args[i].clone())
+			i += 1
+		}
+		print(drive_queue_add(drive_read(args[2]), numbers))
 		return
 	}
 	if args.len() == 3 && args[1] == "--blocks" {
