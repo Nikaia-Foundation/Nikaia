@@ -392,16 +392,181 @@ fn migrate_in_params(tokens: ref Vec[MigrateToken]) -> Vec[bool] sync {
 
 /// **Each declared parameter, in order**: the index of its name's token, a
 /// word before `:` right after `(`, `,`, `keep` or `mut` in a parameter list.
+/// The names a function type or a lambda writes, `fn(a: String)`, are none:
+/// the migration names a function type's parameters (D14), and the list must
+/// read alike before and after it.
 fn migrate_parameters(tokens: ref Vec[MigrateToken]) -> Vec[i64] sync {
     let in_params = migrate_in_params(tokens)
+    let mut unnamed: Vec[bool] = []
     let mut out: Vec[i64] = []
-    for k in 1..<tokens.len() {
-        let before = tokens[k - 1].text.clone()
-        if in_params[k] && tokens[k].kind == MigrateKind::Word && migrate_text_at(tokens, k + 1) == ":" && (before == "(" || before == "," || before == "keep" || before == "mut") {
-            out.push(k)
+    for k in 0..<tokens.len() {
+        match tokens[k].kind {
+            MigrateKind::Open => {
+                unnamed.push(k > 0 && tokens[k].text == "(" && tokens[k - 1].text == "fn")
+            },
+            MigrateKind::Close => {
+                if unnamed.len() > 0 {
+                    unnamed.pop()
+                }
+            },
+            else => {},
+        }
+        if k > 0 && !(unnamed.len() > 0 && unnamed[unnamed.len() - 1]) {
+            let before = tokens[k - 1].text.clone()
+            if in_params[k] && tokens[k].kind == MigrateKind::Word && migrate_text_at(tokens, k + 1) == ":" && (before == "(" || before == "," || before == "keep" || before == "mut") {
+                out.push(k)
+            }
         }
     }
     return out
+}
+
+/// The last token of the type that starts at `at`: a bracketed one whole, or
+/// a name with its path, its `[…]` and its `?`.
+fn migrate_type_end(tokens: ref Vec[MigrateToken], at: i64) -> i64 sync {
+    let mut k = at
+    if k >= tokens.len() {
+        return tokens.len() - 1
+    }
+    if tokens[k].kind == MigrateKind::Open {
+        k = migrate_closing(tokens, k)
+    } else {
+        while migrate_text_at(tokens, k + 1) == "::" {
+            k += 2
+        }
+        if migrate_text_at(tokens, k + 1) == "[" {
+            k = migrate_closing(tokens, k + 1)
+        }
+    }
+    if migrate_text_at(tokens, k + 1) == "?" {
+        k += 1
+    }
+    return k
+}
+
+/// Whether the tokens at `k` are a function type with a `ref` result, `fn(…)
+/// -> ref T`, read where a type stands: after `:`, `->` or `[`, or after a
+/// `,` among a type's `[…]`.
+fn migrate_a_ref_code(tokens: ref Vec[MigrateToken], k: i64, in_brackets: bool) -> bool sync {
+    if tokens[k].text != "fn" || migrate_text_at(tokens, k + 1) != "(" || tokens[k + 1].gap != "" || k == 0 {
+        return false
+    }
+    let before = tokens[k - 1].text.clone()
+    if before != ":" && before != "->" && before != "[" && !(before == "," && in_brackets) {
+        return false
+    }
+    let close = migrate_closing(tokens, k + 1)
+    return migrate_text_at(tokens, close + 1) == "->" && migrate_text_at(tokens, close + 2) == "ref" && migrate_text_at(tokens, close + 3) != "mut" && migrate_text_at(tokens, close + 3) != "("
+}
+
+/// **A function type with a `ref` result, written as D14 says** (ADR-views-3
+/// D14, #1254): each parameter named by its position, `a`, `b`, `c`, … (a
+/// name written already stays), and the result reads `from` the ones written
+/// `ref`. `fn(ref String) -> ref String` becomes `fn(a: String) -> String from
+/// a`. Its `ref`s go as everywhere else; the names and the `from` are added
+/// to `prefix` and `suffix`.
+fn migrate_name_a_code(tokens: ref Vec[MigrateToken], k: i64, mut prefix: Vec[String], mut suffix: Vec[String]) sync {
+    let open = k + 1
+    let close = migrate_closing(tokens, open)
+    let mut sources: Vec[String] = []
+    let mut start = open + 1
+    let mut depth = 0
+    let mut position = 0
+    let mut j = open + 1
+    while j <= close {
+        let ends = j == close || (depth == 0 && tokens[j].text == ",")
+        if ends && j > start {
+            let mut name: String = ""
+            let mut type_at = start
+            if tokens[start].kind == MigrateKind::Word && migrate_text_at(tokens, start + 1) == ":" {
+                name = tokens[start].text.clone()
+                type_at = start + 2
+            } else {
+                name = migrate_letter(position)
+                prefix[start] = f"{name}: "
+            }
+            if migrate_text_at(tokens, type_at) == "ref" && migrate_text_at(tokens, type_at + 1) != "mut" {
+                sources.push(name)
+            }
+            position += 1
+        }
+        if ends {
+            start = j + 1
+        }
+        match tokens[j].kind {
+            MigrateKind::Open => { depth += 1 },
+            MigrateKind::Close => { depth -= 1 },
+            else => {},
+        }
+        j += 1
+    }
+    if sources.len() == 0 {
+        return
+    }
+    let last = migrate_type_end(tokens, close + 3)
+    suffix[last] = f"{suffix[last]} from {sources.join(" | ")}"
+}
+
+/// The name of a function type's parameter at `position`: `a`, `b`, … `z`,
+/// then `a26`, … .
+fn migrate_letter(position: i64) -> String sync {
+    let letters = "abcdefghijklmnopqrstuvwxyz"
+    let chars: Vec[scalar] = letters.chars().collect()
+    if position < 26 {
+        let mut one: String = ""
+        one.push(chars[position])
+        return one
+    }
+    return f"a{position}"
+}
+
+/// **A declaration whose `ref` result may come out of a function value it
+/// takes** (ADR-views-3 D8, D14, #1254): `fn apply(f: fn(ref String) -> ref
+/// String, s: ref String) -> ref String` hands back what `f` makes of `s`,
+/// which no body tells the inference, so the result is written `from` the
+/// parameters the old one could point into, those written `ref` (and a `ref
+/// self`): `-> String from s`. `k` is the `fn` of the declaration.
+fn migrate_from_of_a_declaration(tokens: ref Vec[MigrateToken], k: i64, mut suffix: Vec[String]) sync {
+    if migrate_text_at(tokens, k + 1) == "(" || k + 1 >= tokens.len() || tokens[k + 1].kind != MigrateKind::Word {
+        return
+    }
+    let mut open = k + 2
+    if migrate_text_at(tokens, open) == "[" {
+        open = migrate_closing(tokens, open) + 1
+    }
+    if migrate_text_at(tokens, open) != "(" {
+        return
+    }
+    let close = migrate_closing(tokens, open)
+    if migrate_text_at(tokens, close + 1) != "->" || migrate_text_at(tokens, close + 2) != "ref" || migrate_text_at(tokens, close + 3) == "mut" || migrate_text_at(tokens, close + 3) == "(" {
+        return
+    }
+    let mut takes_one = false
+    let mut sources: Vec[String] = []
+    let mut depth = 0
+    for j in open + 1..<close {
+        if migrate_a_ref_code(tokens, j, false) {
+            takes_one = true
+        }
+        match tokens[j].kind {
+            MigrateKind::Open => { depth += 1 },
+            MigrateKind::Close => { depth -= 1 },
+            else => {},
+        }
+        let before = tokens[j - 1].text.clone()
+        let first = j == open + 1 || (depth == 0 && before == ",")
+        if first && tokens[j].text == "ref" && migrate_text_at(tokens, j + 1) == "self" {
+            sources.push("self")
+        }
+        if first && tokens[j].kind == MigrateKind::Word && migrate_text_at(tokens, j + 1) == ":" && migrate_text_at(tokens, j + 2) == "ref" && migrate_text_at(tokens, j + 3) != "mut" {
+            sources.push(tokens[j].text.clone())
+        }
+    }
+    if !takes_one || sources.len() == 0 {
+        return
+    }
+    let last = migrate_type_end(tokens, close + 3)
+    suffix[last] = f"{suffix[last]} from {sources.join(" | ")}"
 }
 
 fn migrate_ordinal_of(items: ref Vec[i64], wanted: i64) -> i64 sync {
@@ -456,13 +621,16 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool],
     let mut gapless: Vec[bool] = []
     let mut prefix: Vec[String] = []
     let mut guarded: Vec[bool] = []
+    let mut suffix: Vec[String] = []
     for _t in tokens {
         dropped.push(false)
         gapless.push(false)
         prefix.push("")
         guarded.push(false)
+        suffix.push("")
     }
     let in_params = migrate_in_params(tokens)
+    let mut brackets: Vec[bool] = []
     let mut until = -1
     let mut k = 0
     while k < n {
@@ -474,6 +642,17 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool],
         if kind == MigrateKind::Word && t == "extern" && k > until {
             until = migrate_extern_end(tokens, k)
             guarded[k] = true
+        }
+        if !guarded[k] && migrate_a_ref_code(tokens, k, brackets.len() > 0 && brackets[brackets.len() - 1]) {
+            migrate_name_a_code(tokens, k, prefix, suffix)
+        }
+        if !guarded[k] && kind == MigrateKind::Word && t == "fn" {
+            migrate_from_of_a_declaration(tokens, k, suffix)
+        }
+        if kind == MigrateKind::Open {
+            brackets.push(t == "[")
+        } else if kind == MigrateKind::Close && brackets.len() > 0 {
+            brackets.pop()
         }
         if kind == MigrateKind::Word && t == "ref" && !guarded[k] {
             let next = migrate_text_at(tokens, k + 1)
@@ -534,6 +713,7 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool],
         if !dropped[j] {
             out.push_str(tokens[j].text)
         }
+        out.push_str(suffix[j])
         j += 1
     }
     return out

@@ -1,0 +1,33 @@
+migrated TMP/a.nika
+fn total(xs: Array[i64]) -> i64 {
+    let mut s = 0
+    for x in xs {
+        s = s + x
+    }
+    return s
+}
+
+fn size(b: Bytes) -> i64 {
+    return b.len()
+}
+
+comptime GREETING: String = "hi"
+
+fn same(s: String) -> String {
+    return s
+}
+
+fn apply(f: fn(a: String) -> String from a, s: String) -> String from s {
+    return f(s)
+}
+
+fn main() {
+    let a: Array[i64, 3] = [1, 2, 3]
+    println(total(a))
+    let text: String = "abc"
+    println(size(text.bytes))
+    let g: String = "hi"
+    println(GREETING)
+    println(apply(same, g))
+}
+check: Checked TMP/a.nika

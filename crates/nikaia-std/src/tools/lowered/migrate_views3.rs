@@ -276,12 +276,123 @@ pub(crate) fn migrate_in_params(tokens: &[MigrateToken]) -> Vec<bool> {
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_parameters(tokens: &[MigrateToken]) -> Vec<i64> {
     let in_params = migrate_in_params(tokens);
+    let mut unnamed: Vec<bool> = vec![];
     let mut out: Vec<i64> = vec![];
-    for k in 1..tokens.len() as i64 {
-        let before = nikaia_std::index::get(&tokens, nikaia_std::index::at(k - 1)).text.to_string();
-        if *nikaia_std::index::get(&in_params, nikaia_std::index::at(k)) && nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Word && migrate_text_at(tokens, k + 1) == ":" && (before == "(" || before == "," || before == "keep" || before == "mut") { out.push(k); }
+    for k in 0..tokens.len() as i64 {
+        match nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind {
+            MigrateKind::Open => { unnamed.push(k > 0 && nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text == "(" && nikaia_std::index::get(&tokens, nikaia_std::index::at(k - 1)).text == "fn"); },
+            MigrateKind::Close => { if !unnamed.is_empty() { unnamed.pop(); } },
+            _ => { },
+        }
+        if k > 0 && !(!unnamed.is_empty() && *nikaia_std::index::get(&unnamed, nikaia_std::index::at(unnamed.len() as i64 - 1))) {
+            let before = nikaia_std::index::get(&tokens, nikaia_std::index::at(k - 1)).text.to_string();
+            if *nikaia_std::index::get(&in_params, nikaia_std::index::at(k)) && nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Word && migrate_text_at(tokens, k + 1) == ":" && (before == "(" || before == "," || before == "keep" || before == "mut") { out.push(k); }
+        }
     }
     out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn migrate_type_end(tokens: &[MigrateToken], at: i64) -> i64 {
+    let mut k = at;
+    if k >= tokens.len() as i64 { return tokens.len() as i64 - 1; }
+    if nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Open { k = migrate_closing(tokens, k); } else {
+        while migrate_text_at(tokens, k + 1) == "::" { k += 2; }
+        if migrate_text_at(tokens, k + 1) == "[" { k = migrate_closing(tokens, k + 1); }
+    }
+    if migrate_text_at(tokens, k + 1) == "?" { k += 1; }
+    k
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn migrate_a_ref_code(tokens: &[MigrateToken], k: i64, in_brackets: bool) -> bool {
+    if nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text != "fn" || migrate_text_at(tokens, k + 1) != "(" || nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 1)).gap != "" || k == 0 { return false; }
+    let before = nikaia_std::index::get(&tokens, nikaia_std::index::at(k - 1)).text.to_string();
+    if before != ":" && before != "->" && before != "[" && !(before == "," && in_brackets) { return false; }
+    let close = migrate_closing(tokens, k + 1);
+    migrate_text_at(tokens, close + 1) == "->" && migrate_text_at(tokens, close + 2) == "ref" && migrate_text_at(tokens, close + 3) != "mut" && migrate_text_at(tokens, close + 3) != "("
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn migrate_name_a_code(tokens: &[MigrateToken], k: i64, prefix: &mut Vec<String>, suffix: &mut Vec<String>) {
+    let open = k + 1;
+    let close = migrate_closing(tokens, open);
+    let mut sources: Vec<String> = vec![];
+    let mut start = open + 1;
+    let mut depth = 0;
+    let mut position: i64 = 0;
+    let mut j = open + 1;
+    while j <= close {
+        let ends = j == close || depth == 0 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == ",";
+        if ends && j > start {
+            let mut name: String = String::from("");
+            let mut type_at = start;
+            if nikaia_std::index::get(&tokens, nikaia_std::index::at(start)).kind == MigrateKind::Word && migrate_text_at(tokens, start + 1) == ":" {
+                name = nikaia_std::index::get(&tokens, nikaia_std::index::at(start)).text.to_string();
+                type_at = start + 2;
+            } else {
+                name = migrate_letter(position);
+                { let __nikaia_stored = format!("{}: ", name); nikaia_std::index::set(&mut *prefix, nikaia_std::index::at(start), __nikaia_stored); }
+            }
+            if migrate_text_at(tokens, type_at) == "ref" && migrate_text_at(tokens, type_at + 1) != "mut" { sources.push(name); }
+            position += 1;
+        }
+        if ends { start = j + 1; }
+        match nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind {
+            MigrateKind::Open => { depth += 1; },
+            MigrateKind::Close => { depth -= 1; },
+            _ => { },
+        }
+        j += 1;
+    }
+    if sources.is_empty() { return; }
+    let last = migrate_type_end(tokens, close + 3);
+    { let __nikaia_stored = format!("{} from {}", *nikaia_std::index::get(&suffix, nikaia_std::index::at(last)), sources.join(" | ")); nikaia_std::index::set(&mut *suffix, nikaia_std::index::at(last), __nikaia_stored); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn migrate_letter(position: i64) -> String {
+    let letters = "abcdefghijklmnopqrstuvwxyz";
+    let chars: Vec<scalar> = nikaia_std::list::chars(letters.chars());
+    if position < 26 {
+        let mut one: String = String::from("");
+        one.push(*nikaia_std::index::get(&chars, nikaia_std::index::at(position)));
+        return one;
+    }
+    format!("a{}", position)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn migrate_from_of_a_declaration(tokens: &[MigrateToken], k: i64, suffix: &mut Vec<String>) {
+    if migrate_text_at(tokens, k + 1) == "(" || k + 1 >= tokens.len() as i64 || nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 1)).kind != MigrateKind::Word { return; }
+    let mut open = k + 2;
+    if migrate_text_at(tokens, open) == "[" { open = migrate_closing(tokens, open) + 1; }
+    if migrate_text_at(tokens, open) != "(" { return; }
+    let close = migrate_closing(tokens, open);
+    if migrate_text_at(tokens, close + 1) != "->" || migrate_text_at(tokens, close + 2) != "ref" || migrate_text_at(tokens, close + 3) == "mut" || migrate_text_at(tokens, close + 3) == "(" { return; }
+    let mut takes_one = false;
+    let mut sources: Vec<String> = vec![];
+    let mut depth = 0;
+    for j in open + 1..close {
+        if migrate_a_ref_code(tokens, j, false) { takes_one = true; }
+        match nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind {
+            MigrateKind::Open => { depth += 1; },
+            MigrateKind::Close => { depth -= 1; },
+            _ => { },
+        }
+        let before = nikaia_std::index::get(&tokens, nikaia_std::index::at(j - 1)).text.to_string();
+        let first = j == open + 1 || depth == 0 && before == ",";
+        if first && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == "ref" && migrate_text_at(tokens, j + 1) == "self" { sources.push(String::from("self")); }
+        if first && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Word && migrate_text_at(tokens, j + 1) == ":" && migrate_text_at(tokens, j + 2) == "ref" && migrate_text_at(tokens, j + 3) != "mut" { sources.push(nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text.to_string()); }
+    }
+    if !takes_one || sources.is_empty() { return; }
+    let last = migrate_type_end(tokens, close + 3);
+    { let __nikaia_stored = format!("{} from {}", *nikaia_std::index::get(&suffix, nikaia_std::index::at(last)), sources.join(" | ")); nikaia_std::index::set(&mut *suffix, nikaia_std::index::at(last), __nikaia_stored); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -322,15 +433,18 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
     let parameters = migrate_parameters(&tokens);
     let mut dropped: Vec<bool> = vec![];
     let mut gapless: Vec<bool> = vec![];
-    let mut prefix: Vec<&'static str> = vec![];
+    let mut prefix: Vec<String> = vec![];
     let mut guarded: Vec<bool> = vec![];
+    let mut suffix: Vec<String> = vec![];
     for _t in tokens.iter() {
         dropped.push(false);
         gapless.push(false);
-        prefix.push("");
+        prefix.push(String::from(""));
         guarded.push(false);
+        suffix.push(String::from(""));
     }
     let in_params = migrate_in_params(&tokens);
+    let mut brackets: Vec<bool> = vec![];
     let mut until: i64 = -1;
     let mut k: i64 = 0;
     while k < n {
@@ -341,6 +455,9 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
             until = migrate_extern_end(&tokens, k);
             { let __nikaia_stored = true; nikaia_std::index::set(&mut guarded, nikaia_std::index::at(k), __nikaia_stored); }
         }
+        if !*nikaia_std::index::get(&guarded, nikaia_std::index::at(k)) && migrate_a_ref_code(&tokens, k, !brackets.is_empty() && *nikaia_std::index::get(&brackets, nikaia_std::index::at(brackets.len() as i64 - 1))) { migrate_name_a_code(&tokens, k, &mut prefix, &mut suffix); }
+        if !*nikaia_std::index::get(&guarded, nikaia_std::index::at(k)) && kind == MigrateKind::Word && t == "fn" { migrate_from_of_a_declaration(&tokens, k, &mut suffix); }
+        if kind == MigrateKind::Open { brackets.push(t == "["); } else if kind == MigrateKind::Close && !brackets.is_empty() { brackets.pop(); }
         if kind == MigrateKind::Word && t == "ref" && !*nikaia_std::index::get(&guarded, nikaia_std::index::at(k)) {
             let next = migrate_text_at(&tokens, k + 1);
             let after = migrate_text_at(&tokens, k + 2);
@@ -353,7 +470,7 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut dropped, nikaia_std::index::at(k + 1), __nikaia_stored); }
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut gapless, nikaia_std::index::at(k + 1), __nikaia_stored); }
                 { let __nikaia_stored = migrate_blank(&nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 2)).gap); nikaia_std::index::set(&mut gapless, nikaia_std::index::at(k + 2), __nikaia_stored); }
-                { let __nikaia_stored = "mut "; nikaia_std::index::set(&mut prefix, nikaia_std::index::at(k - 2), __nikaia_stored); }
+                { let __nikaia_stored = String::from("mut "); nikaia_std::index::set(&mut prefix, nikaia_std::index::at(k - 2), __nikaia_stored); }
             } else if next == "mut" { } else if k + 1 < n && nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 1)).kind != MigrateKind::Punct {
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut dropped, nikaia_std::index::at(k), __nikaia_stored); }
                 { let __nikaia_stored = migrate_blank(&nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 1)).gap); nikaia_std::index::set(&mut gapless, nikaia_std::index::at(k + 1), __nikaia_stored); }
@@ -368,18 +485,19 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
         if j < n && (nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == "pub" || nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == "fn") {
             let mut r: i64 = 0;
             while ((r) as usize) < receivers.len() && nikaia_std::index::get(&receivers, (r) as usize).0 < j { r += 1; }
-            if ((r) as usize) < receivers.len() && ((r) as usize) < by_value.len() && *nikaia_std::index::get(&by_value, (r) as usize) && nikaia_std::index::get(&receivers, (r) as usize).1 && *nikaia_std::index::get(&prefix, nikaia_std::index::at(nikaia_std::index::get(&receivers, (r) as usize).0)) == "" { { let __nikaia_stored = "keep "; nikaia_std::index::set(&mut prefix, nikaia_std::index::at(nikaia_std::index::get(&receivers, (r) as usize).0), __nikaia_stored); } }
+            if ((r) as usize) < receivers.len() && ((r) as usize) < by_value.len() && *nikaia_std::index::get(&by_value, (r) as usize) && nikaia_std::index::get(&receivers, (r) as usize).1 && *nikaia_std::index::get(&prefix, nikaia_std::index::at(nikaia_std::index::get(&receivers, (r) as usize).0)) == "" { { let __nikaia_stored = String::from("keep "); nikaia_std::index::set(&mut prefix, nikaia_std::index::at(nikaia_std::index::get(&receivers, (r) as usize).0), __nikaia_stored); } }
         } else if j < n && *nikaia_std::index::get(&prefix, nikaia_std::index::at(j)) == "" && !*nikaia_std::index::get(&guarded, nikaia_std::index::at(j)) && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "keep" && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "mut" {
             let at_parameter = migrate_ordinal_of(&parameters, j);
-            if at_parameter < 0 || at_parameter >= lent.len() as i64 || !*nikaia_std::index::get(&lent, nikaia_std::index::at(at_parameter)) { { let __nikaia_stored = "keep "; nikaia_std::index::set(&mut prefix, nikaia_std::index::at(j), __nikaia_stored); } }
+            if at_parameter < 0 || at_parameter >= lent.len() as i64 || !*nikaia_std::index::get(&lent, nikaia_std::index::at(at_parameter)) { { let __nikaia_stored = String::from("keep "); nikaia_std::index::set(&mut prefix, nikaia_std::index::at(j), __nikaia_stored); } }
         }
     }
     let mut out: String = String::from("");
     let mut j: i64 = 0;
     while j < n {
         if !*nikaia_std::index::get(&gapless, nikaia_std::index::at(j)) { out.push_str(&nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).gap); }
-        out.push_str(*nikaia_std::index::get(&prefix, nikaia_std::index::at(j)));
+        out.push_str(nikaia_std::index::get(&prefix, nikaia_std::index::at(j)));
         if !*nikaia_std::index::get(&dropped, nikaia_std::index::at(j)) { out.push_str(&nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text); }
+        out.push_str(nikaia_std::index::get(&suffix, nikaia_std::index::at(j)));
         j += 1;
     }
     out
