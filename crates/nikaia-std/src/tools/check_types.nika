@@ -82,6 +82,21 @@ pub fn hands_a_run(found: ref Ty, want: ref Ty) -> bool {
     }
 }
 
+/// **A view of a run handed to a lent `Array[T]`** (ADR-views-3 D8, D11,
+/// #1254): a call's `Array[T]` result that is a view of its parameter is
+/// typed as the `ref Array[T]` it lowers to, and is a view already, as a
+/// part `v[a..b]` is. Only a lent parameter takes it: a `mut` one needs a
+/// run it may change.
+pub fn hands_a_run_view(found: ref Ty, want: ref Ty) -> bool {
+    return match found {
+        Ty::Pointed { item, slice, mutable } => slice && !mutable && match want {
+            Ty::Named { name, args, view } => !view && name == ARRAY && args.len() == 1 && item.fits(args[0]),
+            else => false,
+        },
+        else => false,
+    }
+}
+
 /// A view of a number, a `bool` or a `char`: read, it is the same value.
 pub fn copies_as_a_view(ty: ref Ty) -> bool {
     return match ty {

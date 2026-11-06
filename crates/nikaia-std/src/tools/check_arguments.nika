@@ -410,8 +410,9 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // **A list, or a part of a list or an array, handed to a lent
         // `Array[T]`** (ADR-views-3 D11, #1209): the parameter is a view of
         // the run, so a list is lent (`&v`) and a part is one already
-        // (`&v[a..b]`). A `mut` one is `lent_to_a_mut_parameter`'s below.
-        if lent && !found_here.fits(want) && hands_a_run(found_here, want) {
+        // (`&v[a..b]`), as a call's result that is a view of a run is
+        // (#1254). A `mut` one is `lent_to_a_mut_parameter`'s below.
+        if lent && !found_here.fits(want) && (hands_a_run(found_here, want) || hands_a_run_view(found_here, want)) {
             if given_here != null && !found_here.is_a_view() {
                 let value = given_here ?? continue
                 state.facts.lent_args.insert(id_of(value) as i64)

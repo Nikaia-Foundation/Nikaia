@@ -58,6 +58,16 @@ pub fn hands_a_run(found: &Ty, want: &Ty) -> bool {
     }
 }
 
+pub fn hands_a_run_view(found: &Ty, want: &Ty) -> bool {
+    match found {
+        Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; slice && !mutable && match want {
+            Ty::Named { name, args, view } => { let view = *view; !view && name == ARRAY && args.len() == 1 && item.fits(nikaia_std::index::get(&args, 0)) },
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
 pub fn copies_as_a_view(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar") },

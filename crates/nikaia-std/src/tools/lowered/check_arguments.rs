@@ -254,7 +254,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             check_overflow_list_into_nullables(state, value, &found_here, &want);
         }
-        if lent && !found_here.fits(&want) && hands_a_run(&found_here, &want) {
+        if lent && !found_here.fits(&want) && (hands_a_run(&found_here, &want) || hands_a_run_view(&found_here, &want)) {
             if given_here.is_some() && !found_here.is_a_view() {
                 let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
                 state.facts.lent_args.insert(id_of(value) as i64);
