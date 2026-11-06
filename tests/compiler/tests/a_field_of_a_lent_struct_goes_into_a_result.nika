@@ -1,0 +1,27 @@
+// ADR-views-3 D5: a text field of a lent struct parameter, stored in a
+// result, is a view of that parameter; the caller's struct stays usable.
+
+struct Node {
+	anchor: String?,
+	name: String,
+	start: u32,
+}
+
+struct Event {
+	start: u32,
+	anchor: String?,
+	name: String,
+}
+
+fn opening(n: Node) -> Event {
+	return Event { start: n.start, anchor: n.anchor, name: n.name }
+}
+
+fn main() {
+	let n = Node { anchor: "a1", name: "root", start: 3 }
+	let e = opening(n)
+	println(e.anchor ?? "none")
+	println(e.name)
+	println(e.start)
+	println(n.name)
+}
