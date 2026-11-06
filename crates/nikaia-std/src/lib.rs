@@ -239,6 +239,10 @@ pub mod runtime {
 /// tiers decide is of views lowers its body to `w` (`view_changes.nika`'s
 /// `vc_part_of`, #942).
 ///
+/// **And `unnecessary_cast`**: `for (at, arg) in args.iter().enumerate()`
+/// then `sources.push(at as i64)` lowers the `as i64` over an `i64` already
+/// (`text_tiers.nika`, views-3 D15).
+///
 /// **And `unused_parens`**: `let code = read.code ?? return ..` over a `let`
 /// of a `Type` lowers to `match (*read.code) { .. }` (`declared.nika`'s
 /// `written_ty`, ADR-views-3 D14).
@@ -298,6 +302,7 @@ pub mod runtime {
     clippy::unneeded_wildcard_pattern,
     clippy::let_unit_value,
     clippy::identity_op,
+    clippy::unnecessary_cast,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):
