@@ -1234,6 +1234,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
         }
     }
     state.stamped_condition = outer_condition;
+    check_core_flow_changed_through_a_mut_element(state, world, value, arms);
     let over = check_core_flow_caught(&state, world, &on, value);
     state.a_match_over_several_error_types(world, &over, value, arms, span);
     let over_error = subject == "error";
@@ -1249,6 +1250,37 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     if over_error { state.a_type_that_cannot_arrive(world, &over, value, arms, span); }
     if any && agree { return seen; }
     check_core_flow_meet(state, world, expr, &answered, span)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_changed_through_a_mut_element(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, arms: &[MatchArm]) {
+    let at = id_of(value) as i64;
+    if !state.facts.lent_scrutinees.contains(&at) || state.facts.text_scrutinees.contains(&at) { return; }
+    let name = check_core_flow_field_root(world, value);
+    if name == "" { return; }
+    let local: CheckLocal = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if local.view_of == "" { return; }
+    let mut bodies: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    for arm in arms.iter() { bodies.insert(id_of(&arm.body) as i64); }
+    let mut changed: Vec<(i64, String)> = vec![];
+    for one in state.facts.changed_bindings.iter() { if bodies.contains(&one.0) { changed.push(one.clone()); } }
+    if changed.is_empty() { return; }
+    for one in changed.iter() { state.facts.changed_bindings.remove(one); }
+    state.facts.changed_scrutinees.insert(at);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_field_root(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> String {
+    match value {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
+            Expr::Variable(name, _) => { let name = *name; format!("{}", world.words.resolve(name)) },
+            Expr::Field { .. } => check_core_flow_field_root(world, base),
+            _ => String::from(""),
+        } },
+        _ => String::from(""),
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

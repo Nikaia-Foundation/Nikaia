@@ -1179,7 +1179,7 @@ impl EmitState {
         // (`check::Checked::lent_scrutinees`).
         let text = self.facts.text_scrutinees.contains(node_key(value))
         if self.facts.lent_scrutinees.contains(node_key(value)) && !text {
-            out.push("&")
+            out.push(if self.facts.changed_scrutinees.contains(node_key(value)) { "&mut " } else { "&" })
         }
         let subject_flow = flow with { subject_copies: emit_match_is_match(value) }
         emit_match_subject(self, world, walk, out, host, value, arms, depth, subject_flow, scope, self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(node_key(value)))

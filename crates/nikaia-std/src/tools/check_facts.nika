@@ -270,6 +270,10 @@ pub struct CheckFacts {
     /// node: each is written under the binding's own name.
     pub shadowing_reads: collections::BTreeSet[i64],
     pub lent_scrutinees: collections::BTreeSet[i64],
+    /// **Of those, a field of a `for mut` element whose arms change a part**,
+    /// by the subject (#1267): it is written `&mut subject`, so the parts the
+    /// arms bind are `&mut` of the element's own and change it in place.
+    pub changed_scrutinees: collections::BTreeSet[i64],
     /// **A `match` over an owned `String` with a text literal among its
     /// patterns**, by the subject (#704): the language below matches a
     /// literal against a `&str`, so the subject is written as one.
@@ -612,6 +616,7 @@ impl CheckFacts {
             folded_comptimes: collections::BTreeSet(),
             shadowing_reads: collections::BTreeSet(),
             lent_scrutinees: collections::BTreeSet(),
+            changed_scrutinees: collections::BTreeSet(),
             text_scrutinees: collections::BTreeSet(),
             text_parts: collections::BTreeMap(),
             arm_subjects: collections::BTreeMap(),

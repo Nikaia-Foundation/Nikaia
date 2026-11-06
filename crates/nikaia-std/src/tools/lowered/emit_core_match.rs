@@ -784,7 +784,7 @@ impl EmitState {
         }
         out.push("match ");
         let text = self.facts.text_scrutinees.contains(&node_key(value));
-        if self.facts.lent_scrutinees.contains(&node_key(value)) && !text { out.push("&"); }
+        if self.facts.lent_scrutinees.contains(&node_key(value)) && !text { out.push(if self.facts.changed_scrutinees.contains(&node_key(value)) { "&mut " } else { "&" }); }
         let subject_flow = EmitFlow { subject_copies: emit_match_is_match(value), ..flow };
         emit_match_subject(self, world, walk, out, host, value, arms, depth, subject_flow, scope, &self.emit_match_lent_subject(world, value), text, self.facts.copied_walks.contains(&node_key(value)))?;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));

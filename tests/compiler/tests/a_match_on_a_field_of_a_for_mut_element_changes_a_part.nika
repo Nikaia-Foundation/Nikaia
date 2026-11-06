@@ -1,0 +1,19 @@
+// A `match` over a field of a `for mut` element whose arm changes a part
+// changes it in place in the list (ADR-views-2 D2, #1267): the subject is
+// matched through `&mut`, not lent as `&`.
+enum Shape { Many { xs: Vec[i64] }, One }
+struct W { node: Shape }
+
+fn main() {
+	let mut all = [W { node: Shape::Many { xs: [1] } }, W { node: Shape::One }]
+	for mut w in all {
+		match w.node {
+			Shape::Many { xs } => xs.push(2),
+			else => {},
+		}
+	}
+	match all[0].node {
+		Shape::Many { xs } => println(xs.len()),
+		else => {},
+	}
+}
