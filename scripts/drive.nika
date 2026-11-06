@@ -366,6 +366,21 @@ fn drive_tail(body: String, n: i64) -> String throws {
 	return out.join("\n")
 }
 
+// The lines of a job log that say what failed, wherever they stand: a long
+// test step writes its failures in the middle, and the tail does not hold
+// them. At most `n` lines.
+fn drive_failures(body: String, n: i64) -> String throws {
+	let mut out: Vec[String] = []
+	for raw in body.split("\n") {
+		if out.len() >= n { break }
+		let l = raw.trim_end()
+		if l.contains(" FAILED") || l.contains("panicked at") || l.contains("error[") || l.contains("error: ") || l.contains("fails its own tests") || l.contains(" type error") || l.contains(" ---- ") {
+			out.push(l)
+		}
+	}
+	return out.join("\n")
+}
+
 // What the QA agent reads: the CI run's step lines and suite.log (the failed
 // jobs' log tails), the unpushed commits, and the briefs and reports of the
 // batch, found from DIR/unpushed.txt among the working files (they are never committed).
@@ -380,7 +395,7 @@ fn drive_qa_input(dir: String, out: String, steps: String) throws {
 		}
 	}
 	lines.push("")
-	lines.push(f"{dir}/suite.log (the last 200 lines of each failed job):")
+	lines.push(f"{dir}/suite.log (what failed in each failed job, then its last 200 lines):")
 	lines.push(out.trim())
 	lines.push("")
 	lines.push("Unpushed commits (origin/develop..HEAD; briefs and reports are never among them):")
@@ -517,6 +532,9 @@ fn drive_ci_poll(sha: String) -> (String, bool) throws {
 						["api", f"repos/{repo}/actions/jobs/{jid}/logs"],
 					).stdout
 					tails = tails
+						+ f"\nWhat failed in the job {name}, from anywhere in its log:\n"
+						+ drive_failures(text.clone(), 80)
+						+ "\n"
 						+ f"\nLast 200 lines of the job {name} ({url}/job/{jid}):\n"
 						+ drive_tail(text, 200)
 						+ "\n"
