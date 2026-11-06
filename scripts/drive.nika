@@ -456,9 +456,23 @@ fn drive_launch(dir: String) throws {
 	for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
 		if l.trim() != "" { covered += 1 }
 	}
+	// The branch is the driver's, but someone else may have pushed to it (the
+	// owner did, 2026-11-06): its tip is overwritten only when it is already in
+	// HEAD's history; anything else stops the driver instead of being lost.
+	let mut lease = f"--force-with-lease=refs/heads/{branch}:"
+	let remote = process::run("git", ["ls-remote", "origin", f"refs/heads/{branch}"])
+	let tip = remote.stdout.trim().split("\t").collect()[0].trim().clone()
+	if tip != "" {
+		process::run("git", ["fetch", "-q", "origin", f"refs/heads/{branch}"])
+		let ours = process::run("git", ["merge-base", "--is-ancestor", tip.clone(), sha.clone()])
+		if !ours.ok {
+			drive_escalate(f"{branch} holds {drive_short(tip)}, which is not in HEAD's history (someone else's commit?); not overwritten")
+		}
+		lease = lease + tip
+	}
 	let pushed = process::run(
 		"git",
-		["push", "--force", "--quiet", "origin", f"{sha}:refs/heads/{branch}"],
+		["push", lease, "--quiet", "origin", f"{sha}:refs/heads/{branch}"],
 	)
 	if !pushed.ok {
 		drive_escalate(f"git push origin {drive_short(sha)}:{branch} failed: {pushed.stderr.trim()}")
