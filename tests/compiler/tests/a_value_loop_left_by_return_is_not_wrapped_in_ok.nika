@@ -1,0 +1,28 @@
+// A `throws` function with a value whose body ends in a `while true` that
+// only a `return` leaves: the loop is emitted as `loop`, which is `!`, so it is
+// not wrapped in `Ok(..)`, where `rustc` warned *unreachable call*. One with a
+// `break` is not a tail and is followed by its own `return`.
+use std::process
+
+fn count(n: i64) -> i64 throws {
+    let mut i: i64 = 0
+    while true {
+        process::run("true", [])
+        if i >= n { return i }
+        i += 1
+    }
+}
+
+fn left(n: i64) -> i64 throws {
+    let mut i: i64 = 0
+    while true {
+        i += 1
+        if i > n { break }
+    }
+    return i
+}
+
+fn main() throws {
+    println(count(3))
+    println(left(2))
+}

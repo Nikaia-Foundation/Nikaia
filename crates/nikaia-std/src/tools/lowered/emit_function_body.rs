@@ -20,6 +20,13 @@ pub(crate) fn emit_ends_in_a_jump(world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt
     }
 }
 
+pub(crate) fn emit_is_a_forever_loop(world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::While { cond, body } => emit_is_literal_true(cond) && !breaks(body, world.words),
+        _ => false,
+    }
+}
+
 pub(crate) fn emit_is_literal_true(cond: &Expr) -> bool {
     match cond {
         Expr::LitBool(truth, _) => { let truth = *truth; truth },
@@ -95,7 +102,7 @@ impl EmitState {
         for stmt in body.stmts.iter() {
             out.push(&inner_pad);
             let here = tail.at(i, last);
-            let wrap = emit_is_a_return_tail(&here) && !emit_is_a_throw(&stmt.node);
+            let wrap = emit_is_a_return_tail(&here) && !emit_is_a_throw(&stmt.node) && !emit_is_a_forever_loop(world, &stmt.node);
             let binds = wrap && self.a_tail_that_enters_a_grammar(world, &stmt.node);
             self.write_keep_prelude(walk, out, key, stmt.span.start as i64, depth + 1);
             self.emit_async_joins(walk, out, stmt.span.start as i64, &inner_pad);

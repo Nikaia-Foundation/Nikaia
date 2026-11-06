@@ -31,6 +31,16 @@ fn emit_ends_in_a_jump(world: ref EmitWorld, stmt: ref Stmt) -> bool {
     }
 }
 
+/// Whether the statement is a `while true` no `break` leaves: emitted as
+/// `loop` (ADR-276 D1), it is `!`, so a value-returning `throws` body ending in
+/// it is not wrapped in `Ok(..)`, where `rustc` said *unreachable call*.
+fn emit_is_a_forever_loop(world: ref EmitWorld, stmt: ref Stmt) -> bool {
+    return match stmt {
+        Stmt::While { cond, body } => emit_is_literal_true(cond) && !breaks(body, world.words),
+        else => false,
+    }
+}
+
 /// Whether `cond` is the literal `true`, the one condition the lowering
 /// writes as `loop` (ADR-276 D1): never a name that happens to be true.
 fn emit_is_literal_true(cond: ref Expr) -> bool {
@@ -161,8 +171,9 @@ impl EmitState {
             // **A tail that is a `throw` is not wrapped** (ADR-292 D20): it
             // writes its own `Err(..)` and leaves. A tail `return` stays
             // wrapped: it is rewritten to its bare value here, and the `Ok(`
-            // makes that value the function's outcome.
-            let wrap = emit_is_a_return_tail(here) && !emit_is_a_throw(stmt.node)
+            // makes that value the function's outcome. Nor is a `while true`
+            // no `break` leaves: its `loop` is `!` and leaves by `return` only.
+            let wrap = emit_is_a_return_tail(here) && !emit_is_a_throw(stmt.node) && !emit_is_a_forever_loop(world, stmt.node)
             // **A tail that enters a grammar binds its value first** (ADR-185
             // D2): the lowering's temporaries borrowing the local would live
             // past it inside `Ok(..)`; a `let` makes them drop at the `;`.
