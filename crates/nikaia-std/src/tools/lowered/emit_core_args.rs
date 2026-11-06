@@ -20,7 +20,7 @@ pub(crate) fn emit_arg_opening_of(ty: &Ty) -> String {
 pub(crate) fn emit_arg_opening_inside(inner: &Ty) -> String {
     if !inner.is_a_view() { return String::from(""); }
     match inner {
-        Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "str" || emit_base(name) == "Bytes" { String::from(".as_deref()") } else { String::from(".as_ref()") },
+        Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "str" || emit_base(name) == "Bytes" || name == "fs::Path" { String::from(".as_deref()") } else { String::from(".as_ref()") },
         _ => String::from(".as_ref()"),
     }
 }
@@ -56,7 +56,7 @@ pub(crate) fn emit_arg_plain_option(ty: &Ty) -> bool {
 pub(crate) fn emit_arg_opening_plain(ty: &Ty) -> String {
     match ty {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
-            Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "Bytes" { String::from(".as_deref()") } else { String::from(".as_ref()") },
+            Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "Bytes" || name == "fs::Path" { String::from(".as_deref()") } else { String::from(".as_ref()") },
             _ => String::from(".as_ref()"),
         } },
         _ => String::from(""),
@@ -312,7 +312,7 @@ impl EmitState {
         }
         if has_how {
             let a_map_read = self.emit_arg_a_map_read(arg) || self.facts.flat_reads.contains(&node) || self.facts.map_gets.contains(&node);
-            if a_map_read { if how == ".as_deref()" { how = String::from(".map(String::as_str)"); } else { how = String::from(""); } }
+            if a_map_read { if how == ".as_deref()" { how = String::from(".map(std::ops::Deref::deref)"); } else { how = String::from(""); } }
         }
         if before == "Some(" {
             has_how = false;

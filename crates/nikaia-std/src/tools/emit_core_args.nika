@@ -41,8 +41,9 @@ fn emit_arg_opening_inside(inner: ref Ty) -> String {
     }
     return match inner {
         // `ref Bytes?` is an `Option<&[u8]>`, as `ref String?` is an
-        // `Option<&str>` (#913).
-        Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "str" || emit_base(name) == "Bytes" { ".as_deref()" } else { ".as_ref()" },
+        // `Option<&str>` (#913), and `ref fs::Path?` an `Option<&Path>`
+        // (ADR-319 D2): the full name, so a user's `Path` is not caught.
+        Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "str" || emit_base(name) == "Bytes" || name == "fs::Path" { ".as_deref()" } else { ".as_ref()" },
         else => ".as_ref()",
     }
 }
@@ -89,7 +90,7 @@ fn emit_arg_plain_option(ty: ref Ty) -> bool {
 fn emit_arg_opening_plain(ty: ref Ty) -> String {
     return match ty {
         Ty::Nullable(inner) => match inner {
-            Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "Bytes" { ".as_deref()" } else { ".as_ref()" },
+            Ty::Named { name, .. } => if emit_base(name) == "String" || emit_base(name) == "Bytes" || name == "fs::Path" { ".as_deref()" } else { ".as_ref()" },
             else => ".as_ref()",
         },
         else => "",
@@ -480,12 +481,13 @@ impl EmitState {
             has_how = how != ""
         }
         // **A map's read is that option already**: `index::get` answers an
-        // `Option<&T>`, so nothing is opened, and text is read as `str`.
+        // `Option<&T>`, so nothing is opened, and text is read as `str` (a
+        // file's name as `Path`, bytes as `[u8]`: each is its `Deref`).
         if has_how {
             let a_map_read = self.emit_arg_a_map_read(arg) || self.facts.flat_reads.contains(node) || self.facts.map_gets.contains(node)
             if a_map_read {
                 if how == ".as_deref()" {
-                    how = ".map(String::as_str)"
+                    how = ".map(std::ops::Deref::deref)"
                 } else {
                     how = ""
                 }

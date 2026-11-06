@@ -1,0 +1,43 @@
+// A lent `fs::Path?` is an `Option<&Path>` (ADR-319 D2, #1256): an owned
+// `fs::Path?` local, a call's result and a lent option are handed to it with
+// `.as_deref()`, to a plain `fs::Path?` the callee only reads as to a written
+// `ref fs::Path?`; and a `??` on it binds the `Path` itself.
+use std::fs
+
+fn shown(p: fs::Path?) -> String {
+    match p {
+        null => return "null",
+        rest => return f"[{rest.display()}]",
+    }
+}
+
+fn written(p: ref fs::Path?) -> String {
+    match p {
+        null => return "none",
+        rest => return f"<{rest.display()}>",
+    }
+}
+
+fn handed(p: fs::Path?) -> String {
+    return shown(p)
+}
+
+fn first(p: ref fs::Path?) -> String {
+    let q = p ?? return "nothing"
+    return f"{q.display()}"
+}
+
+fn main() {
+    let abc: fs::Path = "a/b/c"
+    let local: fs::Path? = abc.strip_prefix("a")
+    println(shown(local))
+    println(shown(abc.strip_prefix("a/b")))
+    println(shown(abc.strip_prefix("x")))
+    println(written(local))
+    println(written(abc.strip_prefix("a/b")))
+    println(handed(local))
+    println(first(local))
+    let none: fs::Path? = null
+    println(shown(none))
+    println(first(none))
+}
