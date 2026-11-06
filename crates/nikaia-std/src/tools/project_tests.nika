@@ -21,6 +21,9 @@ use std::collections
 pub struct ProjectTestsOutcome {
     /// Whether the process ended successfully.
     pub ended_well: bool,
+    /// Whether the program stopped: its own `panic` or a broken run-time
+    /// check, exit code 101 (#1260), not a signal or a refusal.
+    pub stopped: bool,
     pub passed: bool,
     pub stdout: Bytes,
     pub stderr: String,
@@ -45,6 +48,9 @@ pub struct OutputTest {
     pub stdout: Bytes?,
     /// `NAME.stderr`, where there is one (ADR-269 D22).
     pub stderr: Bytes?,
+    /// `NAME.stops`, where there is one: the program is expected to stop,
+    /// writing this to standard error (#1260).
+    pub stops: Bytes?,
     /// `NAME.out/`: each file by the name it has under the working directory.
     pub files: Vec[(String, Bytes)],
     /// `NAME.in/`, copied into the working directory before the run.
@@ -62,6 +68,9 @@ pub struct ProgramTest {
     /// What it writes to standard error, or, where it is refused, the
     /// compiler's whole message (it starts `error`).
     pub stderr: Bytes?,
+    /// `NAME.stops`, where there is one: the program is expected to stop,
+    /// writing this to standard error (#1260).
+    pub stops: Bytes?,
     /// `NAME.bounds`: its `--bounds` report at `prove-through-loops:off`
     /// (#1069), where there is one.
     pub bounds: Bytes?,
@@ -136,6 +145,7 @@ pub fn output_tests(root: ref fs::Path) -> Vec[OutputTest] throws {
     let dir = root.join("tests")
     let mut names = project_tests_stems(dir, ".stdout", false)
     names.extend(project_tests_stems(dir, ".out", true))
+    names.extend(project_tests_stems(dir, ".stops", false))
     let mut tests: Vec[OutputTest] = []
     for name in names {
         // A `NAME.nika` beside them makes the files that program's (D22).
@@ -163,7 +173,8 @@ pub fn output_tests(root: ref fs::Path) -> Vec[OutputTest] throws {
             args = bytes.text().lines().map(fn(line) { line.clone() }).collect()
         }
         let stderr = project_tests_optional(dir.join(f"{name}.stderr"))
-        tests.push(OutputTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, files: files, inputs: inputs, stdin: stdin, args: args })
+        let stops = project_tests_optional(dir.join(f"{name}.stops"))
+        tests.push(OutputTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, stops: stops, files: files, inputs: inputs, stdin: stdin, args: args })
     }
     return tests
 }
@@ -190,7 +201,8 @@ pub fn program_tests(root: ref fs::Path) -> Vec[ProgramTest] throws {
         let stderr = project_tests_optional(dir.join(f"{name}.stderr"))
         let bounds = project_tests_optional(dir.join(f"{name}.bounds"))
         let loops_bounds = project_tests_optional(dir.join(f"{name}.loops.bounds"))
-        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, bounds: bounds, loops_bounds: loops_bounds })
+        let stops = project_tests_optional(dir.join(f"{name}.stops"))
+        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, stops: stops, bounds: bounds, loops_bounds: loops_bounds })
     }
     return tests
 }
@@ -261,7 +273,7 @@ pub fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref Proje
         want => bounds.push((f"{program.name}.loops.bounds", want.clone(), project_tests_bounds_report(on, written))),
     }
     let right = bounds.iter().all(fn(entry) { entry.1 == entry.2 })
-    return ProjectTestsOutcome { ended_well: outcome.ended_well, passed: outcome.passed && right, stdout: outcome.stdout.clone(), stderr: outcome.stderr.clone(), files: outcome.files.clone(), bounds: bounds }
+    return ProjectTestsOutcome { ended_well: outcome.ended_well, stopped: outcome.stopped, passed: outcome.passed && right, stdout: outcome.stdout.clone(), stderr: outcome.stderr.clone(), files: outcome.files.clone(), bounds: bounds }
 }
 
 /// What a test program's `--bounds` reports got wrong, as differences
@@ -372,22 +384,43 @@ fn project_tests_written(path: ref fs::Path) -> Bytes? {
 
 /// **How an output test went at one setting**
 /// ([ADR-247](../../../docs/specification/adr/adr-247.md) D2): the program
-/// ran in `own` and ended as `ended_well` says, printing `stdout` and `stderr`.
-/// It passed where it ended successfully, printed what its `.stdout` and
-/// `.stderr` hold, where it has them, and left each file its `.out/` names
-/// byte for byte.
-pub fn project_tests_output_outcome(output: ref OutputTest, own: ref fs::Path, ended_well: bool, stdout: Bytes, stderr: String) -> ProjectTestsOutcome {
+/// ran in `own` and ended with exit `code`, printing `stdout` and `stderr`.
+/// It passed where it printed what its `.stdout` holds, where it has one,
+/// left each file its `.out/` names byte for byte, and ended as it should:
+/// with a `.stops`, stopped, having written that to standard error (#1260);
+/// without, successfully, having written its `.stderr`, where it has one.
+pub fn project_tests_output_outcome(output: ref OutputTest, own: ref fs::Path, code: i64, stdout: Bytes, stderr: String) -> ProjectTestsOutcome {
+    let ended_well = code == 0
+    let stopped = project_tests_stopped(code)
     let files: Vec[(String, Bytes?)] = output.files.iter().map(fn(file) { (file.0.clone(), project_tests_written(own.join(file.0))) }).collect()
     let printed_right = match output.stdout {
         null => true,
         want => want == stdout,
     }
-    let said_right = match output.stderr {
-        null => true,
-        want => want == stderr.bytes,
+    let ended_right = match output.stops {
+        null => ended_well && match output.stderr {
+            null => true,
+            want => want == stderr.bytes,
+        },
+        want => stopped && want == stderr.bytes,
     }
     let wrote_right = (0..<output.files.len()).all(fn(at) { project_tests_wrote(files, output.files, at) })
-    return ProjectTestsOutcome { ended_well: ended_well, passed: ended_well && printed_right && said_right && wrote_right, stdout: stdout, stderr: stderr, files: files, bounds: [] }
+    return ProjectTestsOutcome { ended_well: ended_well, stopped: stopped, passed: ended_right && printed_right && wrote_right, stdout: stdout, stderr: stderr, files: files, bounds: [] }
+}
+
+/// **Whether a process that ended with exit `code` stopped** (#1260): the
+/// program's own `panic` or a broken run-time check ends it with 101. A
+/// signal leaves no code (the host hands -1), and any other code is another
+/// bad end, never a stop.
+pub fn project_tests_stopped(code: i64) -> bool {
+    return code == 101
+}
+
+/// **How a `test` block went**: it passed where its process, which ended
+/// with exit `code`, ended successfully.
+pub fn project_tests_block_outcome(code: i64, stdout: Bytes, stderr: String) -> ProjectTestsOutcome {
+    let ended_well = code == 0
+    return ProjectTestsOutcome { ended_well: ended_well, stopped: project_tests_stopped(code), passed: ended_well, stdout: stdout, stderr: stderr, files: [], bounds: [] }
 }
 
 /// **A test program the compiler did not build**: `stderr` is what it said,
@@ -400,26 +433,34 @@ pub fn project_tests_refused_outcome(program: ref ProgramTest, stderr: String) -
         true => f"the program does not compile (rustc failed, not a refusal):\n{stderr}",
         false => stderr.clone(),
     }
-    let passed = !broken && match program.stderr {
+    let passed = !broken && program.stops == null && match program.stderr {
         null => false,
         want => want == shown.bytes,
     }
-    return ProjectTestsOutcome { ended_well: false, passed: passed, stdout: Bytes([]), stderr: shown, files: [], bounds: [] }
+    return ProjectTestsOutcome { ended_well: false, stopped: false, passed: passed, stdout: Bytes([]), stderr: shown, files: [], bounds: [] }
 }
 
-/// **A test program that built and ran**: it passed where it ended
-/// successfully and printed what its `.stdout` and `.stderr` hold, where it has
-/// them. A `.stderr` holding a refusal expects one, so a run never matches it.
-pub fn project_tests_ran_outcome(program: ref ProgramTest, ended_well: bool, stdout: Bytes, said: String) -> ProjectTestsOutcome {
+/// **A test program that built and ran**, ending with exit `code`: it passed
+/// where it printed what its `.stdout` holds, where it has one, and ended as
+/// it should. With a `.stops` it stopped, having written that to standard
+/// error (#1260); without, it ended successfully, having written its
+/// `.stderr`, where it has one. A `.stderr` holding a refusal expects one, so
+/// a run never matches it.
+pub fn project_tests_ran_outcome(program: ref ProgramTest, code: i64, stdout: Bytes, said: String) -> ProjectTestsOutcome {
+    let ended_well = code == 0
+    let stopped = project_tests_stopped(code)
     let printed_right = match program.stdout {
         null => true,
         want => want == stdout,
     }
-    let said_right = match program.stderr {
-        null => true,
-        want => !is_refusal(want.text() catch { "" }) && want == said.bytes,
+    let ended_right = match program.stops {
+        null => ended_well && match program.stderr {
+            null => true,
+            want => !is_refusal(want.text() catch { "" }) && want == said.bytes,
+        },
+        want => stopped && want == said.bytes,
     }
-    return ProjectTestsOutcome { ended_well: ended_well, passed: ended_well && printed_right && said_right, stdout: stdout, stderr: said, files: [], bounds: [] }
+    return ProjectTestsOutcome { ended_well: ended_well, stopped: stopped, passed: ended_right && printed_right, stdout: stdout, stderr: said, files: [], bounds: [] }
 }
 
 /// A step of a test program's run that failed, in the words the compiler
@@ -439,7 +480,9 @@ impl Error for ProjectTestsRefusal {
 /// How one process of a test program's run ended, and its two streams as
 /// they came.
 pub struct ProjectTestsRan {
-    pub ended_well: bool,
+    /// Its exit code: 0 where it ended successfully, -1 where it has none (a
+    /// signal ended it).
+    pub code: i64,
     pub stdout: Bytes,
     pub stderr: Bytes,
 }
@@ -539,7 +582,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
         on = project_tests_relocated(host.bounds("prove-through-loops:on", entry, own), entry, written)
     }
     let built = host.compiler("build", setting, project, own)
-    if !built.ended_well {
+    if built.code != 0 {
         let refused = project_tests_refused_outcome(program, project_tests_relocated(built.stderr, entry, written))
         return project_tests_bounds_outcome(program, refused, off, on)
     }
@@ -556,7 +599,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
         }
     }
     let (out, said) = ran
-    let outcome = project_tests_ran_outcome(program, out.ended_well, out.stdout, project_tests_relocated(said, entry, written))
+    let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(said, entry, written))
     return project_tests_bounds_outcome(program, outcome, off, on)
 }
 
@@ -587,7 +630,9 @@ pub fn project_tests_blessed_line(label: String, blessed: ref ProjectTestsBlesse
 /// test has none and printed something (#1238), `NAME.stderr` made likewise
 /// where `stderr` (`--bless-stderr`) says so, and the `--bounds`
 /// reports into the `NAME.bounds` and `NAME.loops.bounds` there are (#1069). A program that
-/// built and ended unsuccessfully, or whose settings disagree, is not blessed.
+/// built and ended unsuccessfully, or whose settings disagree, is not blessed;
+/// one that stopped is, into its `NAME.stops`, where it has one, never a new
+/// one: a stop nobody declared stays a failure (#1260).
 pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(String, ProjectTestsOutcome)], stderr: bool) -> ProjectTestsBlessed throws {
     if outcomes.is_empty() {
         return ProjectTestsBlessed::Unchanged
@@ -596,25 +641,31 @@ pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(
         return ProjectTestsBlessed::Refused("the settings disagree")
     }
     let first = outcomes[0].1
-    let refused = !first.ended_well && is_refusal(first.stderr)
-    if !first.ended_well && !refused && first.stderr.starts_with("the program does not compile") {
+    let refused = !first.ended_well && !first.stopped && is_refusal(first.stderr)
+    let stops = first.stopped && program.stops != null
+    if !first.ended_well && !refused && !stops && first.stderr.starts_with("the program does not compile") {
         return ProjectTestsBlessed::Refused("the program does not compile")
     }
-    if !first.ended_well && !refused {
+    if !first.ended_well && !refused && !stops {
         return ProjectTestsBlessed::Refused("the program did not end successfully")
+    }
+    if !stops && program.stops != null {
+        return ProjectTestsBlessed::Refused("the program did not stop, as its .stops expects")
     }
     // A test with no `.stdout` passes whatever it prints: what it printed
     // becomes its expectation (#1238). A new `.stderr` for warnings or what
     // the program wrote there is made only at `--bless-stderr`.
     let new_stdout = !refused && program.stdout == null && !first.stdout.is_empty()
-    let new_stderr = stderr && !refused && program.stderr == null && !first.stderr.is_empty()
+    let new_stderr = stderr && !refused && !stops && program.stderr == null && !first.stderr.is_empty()
     if first.passed && !new_stdout && !new_stderr {
         return ProjectTestsBlessed::Unchanged
     }
     if !refused && (program.stdout != null || new_stdout) {
         fs::write(program.dir.join(f"{program.name}.stdout"), fs::Root::Anywhere, first.stdout.clone())
     }
-    if refused || program.stderr != null || new_stderr {
+    if stops {
+        fs::write(program.dir.join(f"{program.name}.stops"), fs::Root::Anywhere, first.stderr.bytes)
+    } else if refused || program.stderr != null || new_stderr {
         fs::write(program.dir.join(f"{program.name}.stderr"), fs::Root::Anywhere, first.stderr.bytes)
     }
     for (name, _, got) in first.bounds {
@@ -623,11 +674,29 @@ pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(
     return ProjectTestsBlessed::Written
 }
 
+/// What a test wrote to standard error, `written`, against what it should
+/// have, `want` (its `.stderr`, or its `.stops`, #1260), as differences.
+pub fn project_tests_explain_said(want: ref Bytes, written: ref Bytes) {
+    if want != written {
+        println("standard error (- expected, + written):")
+        print(project_tests_difference(want, written))
+    }
+}
+
 /// **What an output test got wrong, as differences**
 /// ([ADR-247](../../../docs/specification/adr/adr-247.md) D4).
 pub fn project_tests_explain_output(output: ref OutputTest, outcome: ref ProjectTestsOutcome) {
-    if !outcome.ended_well {
-        println("the program did not end successfully")
+    match output.stops {
+        null => {
+            if !outcome.ended_well {
+                println("the program did not end successfully")
+            }
+        },
+        else => {
+            if !outcome.stopped {
+                println("the program did not stop, as its .stops expects")
+            }
+        },
     }
     match output.stdout {
         null => {},
@@ -638,14 +707,15 @@ pub fn project_tests_explain_output(output: ref OutputTest, outcome: ref Project
             }
         },
     }
-    match output.stderr {
-        null => {},
-        want => {
-            if want != outcome.stderr.bytes {
-                println("standard error (- expected, + written):")
-                print(project_tests_difference(want, outcome.stderr.bytes))
+    // A `.stops` is what standard error must hold, in place of a `.stderr`.
+    match output.stops {
+        null => {
+            match output.stderr {
+                null => {},
+                want => project_tests_explain_said(want, outcome.stderr.bytes),
             }
         },
+        want => project_tests_explain_said(want, outcome.stderr.bytes),
     }
     for (wanted, written) in output.files.iter().zip(outcome.files.iter()) {
         let relative = wanted.0
@@ -665,7 +735,9 @@ pub fn project_tests_explain_output(output: ref OutputTest, outcome: ref Project
 /// **`--bless`** ([ADR-247](../../../docs/specification/adr/adr-247.md) D3):
 /// what the program printed becomes `NAME.stdout`, where the test has one,
 /// and each file it wrote becomes the `NAME.out/` entry of that name. Only a
-/// run that ended successfully, and at two settings only one whose runs
+/// run that ended successfully, or one that stopped where the test has a
+/// `NAME.stops` (rewritten, never made: a stop nobody declared stays a
+/// failure, #1260), and at two settings only one whose runs
 /// agree: a difference between the settings is a fault, never an expectation.
 pub fn project_tests_bless(output: ref OutputTest, outcomes: ref Vec[(String, ProjectTestsOutcome)]) -> ProjectTestsBlessed throws {
     if outcomes.is_empty() {
@@ -675,8 +747,12 @@ pub fn project_tests_bless(output: ref OutputTest, outcomes: ref Vec[(String, Pr
         return ProjectTestsBlessed::Refused("the settings disagree")
     }
     let first = outcomes[0].1
-    if !first.ended_well {
+    let stops = first.stopped && output.stops != null
+    if !first.ended_well && !stops {
         return ProjectTestsBlessed::Refused("the program did not end successfully")
+    }
+    if !stops && output.stops != null {
+        return ProjectTestsBlessed::Refused("the program did not stop, as its .stops expects")
     }
     if first.files.iter().any(fn(file) { file.1 == null }) {
         return ProjectTestsBlessed::Refused("a file its .out/ names was not written")
@@ -687,7 +763,9 @@ pub fn project_tests_bless(output: ref OutputTest, outcomes: ref Vec[(String, Pr
     if output.stdout != null {
         fs::write(output.dir.join(f"{output.name}.stdout"), fs::Root::Anywhere, first.stdout.clone())
     }
-    if output.stderr != null {
+    if stops {
+        fs::write(output.dir.join(f"{output.name}.stops"), fs::Root::Anywhere, first.stderr.bytes)
+    } else if output.stderr != null {
         fs::write(output.dir.join(f"{output.name}.stderr"), fs::Root::Anywhere, first.stderr.bytes)
     }
     for (relative, got) in first.files {

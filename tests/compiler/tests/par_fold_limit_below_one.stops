@@ -1,0 +1,1 @@
+tests/par_fold_limit_below_one.nika:5: the program stopped: `limit:` is 0, and it has to be at least 1

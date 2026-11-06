@@ -2466,6 +2466,13 @@ impl TestsHost<'_> {
     }
 }
 
+/// A test process's exit code, as `project_tests.nika` reads it: -1 where it
+/// has none (a signal ended it). The Nikaia side tells a stop (101) from
+/// another bad end (#1260).
+fn exit_code(status: &std::process::ExitStatus) -> i64 {
+    status.code().map_or(-1, i64::from)
+}
+
 impl project_tests::ProjectTestsHost for TestsHost<'_> {
     fn block_outcome(&self, binary: &Path, k: i64) -> HostResult<Outcome> {
         // In the package's directory, as Go's tests run in theirs, so a test
@@ -2474,15 +2481,11 @@ impl project_tests::ProjectTestsHost for TestsHost<'_> {
         self.held((|| {
             let own = Sandbox::new()?;
             let out = outcome_of(binary, &[k.to_string()], &[], self.suite.root, &own.0)?;
-            let ended_well = out.status.success();
-            Ok(Outcome {
-                ended_well,
-                passed: ended_well,
-                stdout: out.stdout.into(),
-                stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-                files: Vec::new(),
-                bounds: Vec::new(),
-            })
+            Ok(project_tests::project_tests_block_outcome(
+                exit_code(&out.status),
+                out.stdout.into(),
+                String::from_utf8_lossy(&out.stderr).into_owned(),
+            ))
         })())
     }
 
@@ -2496,7 +2499,7 @@ impl project_tests::ProjectTestsHost for TestsHost<'_> {
             Ok(block_on(project_tests::project_tests_output_outcome(
                 output,
                 &own.0,
-                out.status.success(),
+                exit_code(&out.status),
                 out.stdout.into(),
                 String::from_utf8_lossy(&out.stderr).into_owned(),
             )))
@@ -2654,7 +2657,7 @@ impl ProgramHost {
             .output()
             .with_context(|| format!("running {}", program.display()))?;
         Ok(project_tests::ProjectTestsRan {
-            ended_well: out.status.success(),
+            code: exit_code(&out.status),
             stdout: out.stdout.into(),
             stderr: out.stderr.into(),
         })
