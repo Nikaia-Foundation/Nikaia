@@ -418,7 +418,8 @@ impl EmitState {
             let mut names: Vec<String> = vec![];
             for n in 0..kept_arity { names.push(format!("__nikaia_a{}", n)); }
             let joined = names.join(", ");
-            out.push(&format!("&async |{}| (*", joined));
+            if !out.buf.ends_with('&') { out.push("&"); }
+            out.push(&format!("async |{}| (*", joined));
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!(")({}).await", joined));
             return Ok(());

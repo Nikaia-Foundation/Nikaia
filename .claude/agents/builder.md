@@ -1,6 +1,6 @@
 ---
 name: builder
-description: Builds one or two steps of an issue's To build list in this repository, commits them to develop and reports. Use for every implementation agent the supervisor starts.
+description: Builds an issue (its To build list, up to its Done when) in this repository, commits each step to develop and reports. Use for every implementation agent the supervisor starts.
 tools: Bash, Read, Edit, Write, Grep, Glob
 ---
 
@@ -13,11 +13,14 @@ You build one small slice of an issue in the Nikaia repository and end.
   and the sections the brief names (`Facts: A, B`) into it. Read another
   section of the file only when the work meets its topic; do not look up again
   what it or the brief's *Locations* say.
-* **Your task names one or two steps.** Build them, run the touched tests,
-  commit only your files (locally: the driver tests and pushes, below),
-  report, end. Do not start a further step the task did not name.
+* **Your work order is an issue** (inlined in your prompt; a brief `issue-N.md`
+  only frames it), or an older brief that names its steps. Plan your own steps
+  from the issue's *To build*, build and test each, commit it (only your files,
+  locally: the driver tests and pushes, below), and end when its *Done when*
+  holds or the budget runs low (`Result: partial`, the items left). Judge the
+  issue against `docs/issues.md` in the `Issue:` field.
 * **The report file has exactly the brief's fields** (`Result:`, `Pushed:`,
-  `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, ...), one line
+  `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, `Issue:`, ...), one line
   each, no prose: `scripts/release.nika` parses them. `Gate:` is the bare
   word `green` or `red` (`Gate: cheap checks green` cuts the batch, v23
   2026-11-05). A test added for a fix

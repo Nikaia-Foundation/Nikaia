@@ -412,6 +412,13 @@ unrun brief is skipped. `docs/briefs/focus-log.md` holds one line per block.
 
 ## Briefs and reports
 
+**Issue briefs** (2026-11-06): a batch line `#N [suffix]` names issue N; `scripts/batch.nika`
+writes `issue-N[-suffix].md` from `scripts/issue-brief.md` and the issue is the
+work order (`docs/issues.md`). The builder plans its own steps and reports
+`Issue:`, its judgement of the issue; the debrief asks what the issue lacked.
+The supervisor counts the `broke` / `rules-gap` / `wrong` answers per rule and
+fixes the issue or the rule. Briefs written by hand remain for work with no issue.
+
 A brief is one file `DIR/<topic>.md` beside the tree: `docs/briefs/` is not
 tracked (#1252; a commit of a brief would start a CI run that tests nothing).
 The driver posts each brief on its issue (the first four-digit part of its

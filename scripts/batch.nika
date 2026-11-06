@@ -4,7 +4,9 @@
 //     nikaia run scripts/batch.nika -- DIR
 //     nikaia run scripts/batch.nika -- DIR --tokens BRIEF TOKENS CALLS
 //
-// `DIR/batch.txt` names the briefs in order, one per line. For each brief in
+// `DIR/batch.txt` names the briefs in order, one per line; a line `#N [suffix]`
+// names issue N, whose brief `issue-N[-suffix].md` is written from
+// `scripts/issue-brief.md` when missing (`docs/issues.md`). For each brief in
 // order: no report (`BRIEF.report.md` or `BRIEF` without `.md` + `.report.md`)
 // prints `NEXT <abs path of brief> <agent> <model> <turns> <budget> <effort>` (the
 // brief's frontmatter through `agent.nika --info`, defaults for a brief
@@ -70,13 +72,34 @@ fn batch_cut(text: String) -> String {
     return ""
 }
 
+// A batch line `#N [suffix]` names issue N: its brief is `issue-N[-suffix].md`
+// in DIR, written from `scripts/issue-brief.md` when it is not there yet.
+fn batch_issue_brief(dir: String, line: String) -> String throws {
+    let words = line.strip_prefix("#") ?? ""
+    let parts = words.split(" ").collect()
+    let n = parts[0].trim().clone()
+    let mut name = f"issue-{n}"
+    if parts.len() > 1 && parts[1].trim() != "" { name = name + "-" + parts[1].trim().clone() }
+    name = name + ".md"
+    let file = f"{dir}/{name}"
+    if !fs::exists(file.clone(), fs::Root::Anywhere) {
+        let template = fs::read_to_string("scripts/issue-brief.md", fs::Root::Anywhere)
+        fs::write(file.clone(), fs::Root::Anywhere, template.replace("{N}", n.clone()))
+        let abs = process::run("realpath", [file.clone()]).stdout.trim().clone()
+        let text = fs::read_to_string(file.clone(), fs::Root::Anywhere)
+        fs::write(file, fs::Root::Anywhere, text.replace("{REPORT}", f"{abs}.report.md"))
+    }
+    return name
+}
+
 fn batch_run(dir: String) -> String throws {
     if !fs::exists(f"{dir}/batch.txt", fs::Root::Anywhere) { return "BATCH none (no DIR/batch.txt)" }
     let order = fs::read_to_string(f"{dir}/batch.txt", fs::Root::Anywhere)
     let mut changelogs = 0
     for raw in order.split("\n") {
-        let brief = raw.trim().clone()
+        let mut brief = raw.trim().clone()
         if brief == "" { continue }
+        if brief.starts_with("#") { brief = batch_issue_brief(dir.clone(), brief.clone()) }
         let path = batch_report_path(dir.clone(), brief.clone())
         if path == "" {
             if !fs::exists(f"{dir}/{brief}", fs::Root::Anywhere) { return f"CUT {brief}: brief missing" }

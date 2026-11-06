@@ -35,7 +35,7 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
         return Ty::Nullable(Box::new(written_ty(names, aliases, &inner)));
     }
     if (*ty.code).is_some() {
-        let read = code_as_read(ty);
+        let read = code_as_read(names, ty);
         let code = match (*read.code) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let params = written_all(names, aliases, &read.generics);
         let result = match (*code.result) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Fn { params, result: Box::new(None), is_sync: code.is_sync, can_throw: code.can_throw } };
@@ -59,24 +59,41 @@ pub(crate) fn lent_item(names: &winnow_grammar::InternerContext, aliases: &colle
     Ty::Named { name: unaliased_in(aliases, names.resolve(ty.name)), args: vec![], view: false }
 }
 
-pub fn code_as_read(ty: &Type) -> Type {
+pub fn code_as_read(names: &winnow_grammar::InternerContext, ty: &Type) -> Type {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
-    if code.result_from.is_empty() { return ty.clone(); }
-    let mut result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() }.clone();
-    result.is_view = true;
+    if !code_lends_unmarked(names, ty) { return ty.clone(); }
     let mut generics: Vec<Type> = vec![];
     for at in 0..ty.generics.len() as i64 {
         let mut part = (*nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at))).clone();
-        if code_reads(code, at) { part.is_view = true; }
+        if code_lends_at(names, ty, at) { part.is_view = true; }
         generics.push(part);
     }
     let mut read = ty.clone();
     read.generics = generics;
     let mut written = code.clone();
-    (*written.result) = Some(result);
+    if !code.result_from.is_empty() {
+        let mut result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() }.clone();
+        result.is_view = true;
+        (*written.result) = Some(result);
+    }
     written.result_from = vec![];
     (*read.code) = Some(written);
     read
+}
+
+pub fn code_lends_at(names: &winnow_grammar::InternerContext, ty: &Type, at: i64) -> bool {
+    let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if at >= ty.generics.len() as i64 { return false; }
+    if code_reads(code, at) { return true; }
+    let part = nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at));
+    !part.is_view && !part.is_mut && !part.is_nullable && !part.is_tuple && !part.is_slice && (*part.code).is_none() && part.generics.is_empty() && names.resolve(part.name) == "String"
+}
+
+pub fn code_lends_unmarked(names: &winnow_grammar::InternerContext, ty: &Type) -> bool {
+    let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if !code.result_from.is_empty() { return true; }
+    for at in 0..ty.generics.len() as i64 { if !nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at)).is_view && code_lends_at(names, ty, at) { return true; } }
+    false
 }
 
 pub fn code_writes_from(ty: &Type) -> bool {

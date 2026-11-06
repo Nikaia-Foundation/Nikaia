@@ -397,7 +397,7 @@ pub(crate) fn check_arguments_mut_differs(found: &Ty, want: &Ty) -> i64 {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn lends_where_a_function_type_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>, found: &Ty, want: &Ty) -> bool {
+    pub fn lends_where_a_function_type_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>, found: &Ty, want: &Ty) -> bool {
         let value = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
         let name = match value {
             Expr::Variable(ident, _) => { let ident = *ident; world.words.resolve(ident).to_string() },

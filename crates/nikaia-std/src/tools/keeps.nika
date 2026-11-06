@@ -2232,13 +2232,15 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                     options.insert(view.text(a.name))
                 }
             }
-            // **What each parameter of function type lends** (ADR-views-3 D14).
+            // **What each parameter of function type lends** (ADR-views-3 D2, D14).
             let mut code_lends: collections::BTreeMap[String, Vec[bool]] = collections::BTreeMap()
             for a in args {
-                let code = a.ty.code ?? continue
+                if a.ty.code == null {
+                    continue
+                }
                 let mut each: Vec[bool] = []
                 for at in 0..<a.ty.generics.len() {
-                    each.push(a.ty.generics[at].is_view || code_reads(code, at))
+                    each.push(a.ty.generics[at].is_view || code_lends_at(view.words, a.ty, at))
                 }
                 code_lends.insert(view.text(a.name), each)
             }

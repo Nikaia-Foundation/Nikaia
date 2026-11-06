@@ -73,6 +73,10 @@ is normative and nothing may depend on it to know what a program means.
   [`decision`](https://github.com/Nikaia-Foundation/Nikaia/issues?q=is%3Aopen+label%3Adecision):
   each says what is blocked by it, the options, and a recommendation, and is
   closed when an ADR answers it.
+* [`issues.md`](issues.md) — **the rules for an issue** (I1-I13): what a bug and
+  a piece of work must hold, since a builder gets the issue itself as its work
+  order, and how a run reports what its issue lacked (a broken rule, a gap in
+  the rules, or a wrong fact).
 * [`handoff.md`](handoff.md) — how to work on the **parser backend**: testing a
   change against Nikaia, what the upstream patch does, and what was tried and
   must not be redone. A guide; the open work that was in it is in

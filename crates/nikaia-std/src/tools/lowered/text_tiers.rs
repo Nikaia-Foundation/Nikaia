@@ -3551,8 +3551,27 @@ pub(crate) fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_, '
         return owned_kinds();
     }
     if args.is_empty() && is_a_container_name(&callee) { return no_kinds(); }
-    if names_a_type(&last_segment(&callee)) || !ask.library.functions.contains_key(&callee) { kept_args(args, &given, ask, walk); } else { std_container_args(args, ask, walk); }
+    if names_a_type(&last_segment(&callee)) || !ask.library.functions.contains_key(&callee) {
+        let lent_at = from_named_positions(func, ask, &walk);
+        let mut at: i64 = 0;
+        for arg in args.iter() {
+            if at < given.len() as i64 && nikaia_std::index::get(&given, nikaia_std::index::at(at)).still && !lent_at.contains(nikaia_std::index::AsKey::as_key(&at)) { kept_unseen(arg, ask, walk); }
+            at += 1;
+        }
+    } else { std_container_args(args, ask, walk); }
     std_result(&callee, ask)
+}
+
+pub(crate) fn from_named_positions(func: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> Vec<i64> {
+    let mut out: Vec<i64> = vec![];
+    let name = match func {
+        Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_string() },
+        _ => return out,
+    };
+    let local = match tier_local(&name, walk) { Some(__nikaia_value) => __nikaia_value, None => return out };
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return out };
+    for at in 0..declared.ty.generics.len() as i64 { if code_lends_at(ask.names, &declared.ty, at) { out.push(at); } }
+    out
 }
 
 pub(crate) fn std_container_args(args: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
