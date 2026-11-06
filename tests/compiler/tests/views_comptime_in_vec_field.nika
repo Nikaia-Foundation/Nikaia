@@ -1,0 +1,25 @@
+// A `comptime` String is a view of build-fixed text (ADR-views-3 D15), so it
+// goes into a `Vec[String]` field, local and element as a literal does (D5,
+// #1254).
+
+comptime GREETING: String = "hi"
+
+struct Names {
+    all: Vec[String],
+}
+
+fn names() -> Names {
+    return Names { all: [GREETING] }
+}
+
+fn main() {
+    let first = names()
+    println(f"{first.all.len()} {first.all[0]}")
+    let mixed: Vec[String] = [GREETING, "there"]
+    println(mixed.join(" "))
+    let g: String = GREETING
+    println(g)
+    comptime LOCAL: String = "local"
+    let inner = Names { all: [LOCAL, GREETING] }
+    println(inner.all.join(","))
+}

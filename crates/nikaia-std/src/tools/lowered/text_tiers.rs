@@ -216,10 +216,11 @@ pub(crate) struct TextDeclared {
     pub(crate) types: collections::BTreeSet<String>,
     pub(crate) methods: collections::BTreeMap<String, Vec<String>>,
     pub(crate) rules: collections::BTreeSet<String>,
+    pub(crate) comptime_texts: collections::BTreeSet<String>,
 }
 
 pub(crate) fn declared_of(program: &Program, names: &winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), variant_fields: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), types: collections::BTreeSet::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new() };
+    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), variant_fields: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), types: collections::BTreeSet::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new(), comptime_texts: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Struct { name, fields, is_public, .. } => {
@@ -258,10 +259,19 @@ pub(crate) fn declared_of(program: &Program, names: &winnow_grammar::InternerCon
                 for method in methods.iter() { declare_function(&method.node, Some(owner.to_string()), names, &mut declared, trait_name.is_some()); }
             },
             Item::Grammar(def) => { declare_rules(def, names, &mut declared); },
+            Item::Comptime { name, ty, .. } => {
+                let name = *name;
+                if comptime_text((ty).as_ref(), names) { declared.comptime_texts.insert(names.resolve(name).to_string()); }
+            },
             _ => { },
         }
     }
     declared
+}
+
+pub(crate) fn comptime_text(ty: Option<&Type>, names: &winnow_grammar::InternerContext) -> bool {
+    let declared = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+    declared.is_view && a_text_parameter(names, declared)
 }
 
 pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerContext, declared: &mut TextDeclared) {
@@ -1710,6 +1720,11 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
         Stmt::Let { names, value, ty, .. } => {
             tier_let(names, value, (ty).as_ref(), at, ask, walk);
             tie_bound(names, value, ask, walk);
+        },
+        Stmt::Comptime { name, ty, .. } => {
+            let name = *name;
+            let kinds = if comptime_text((ty).as_ref(), ask.names) { still_kinds() } else { owned_kinds() };
+            bind_tier_local(ask.names.resolve(name).to_string(), plain_local(kinds), walk);
         },
         Stmt::Assign { target, op, value } => {
             tie_stored(target, value, ask, walk);
@@ -3466,8 +3481,13 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
 
 pub(crate) fn a_range(index: &Expr) -> bool { matches!(index, Expr::Range { .. }) }
 
+pub(crate) fn name_kinds(name: &str, walk: &TierWalk) -> Kinds {
+    if walk.declared.comptime_texts.contains(name) { return still_kinds(); }
+    owned_kinds()
+}
+
 pub(crate) fn kinds_of_local(name: &str, walk: &TierWalk) -> Kinds {
-    let local = match tier_local(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
+    let local = match tier_local(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return name_kinds(name, walk) };
     local.kinds.clone()
 }
 

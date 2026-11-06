@@ -350,10 +350,13 @@ struct TextDeclared {
     methods: collections::BTreeMap[String, Vec[String]],
     /// The keys of the grammars' rules, `G::rule`.
     rules: collections::BTreeSet[String],
+    /// The program's `comptime` constants of type `String`: views of text
+    /// fixed at build time (ADR-views-3 D15, #1254).
+    comptime_texts: collections::BTreeSet[String],
 }
 
 fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), variant_fields: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), types: collections::BTreeSet(), methods: collections::BTreeMap(), rules: collections::BTreeSet() }
+    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), variant_fields: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), types: collections::BTreeSet(), methods: collections::BTreeMap(), rules: collections::BTreeSet(), comptime_texts: collections::BTreeSet() }
     for item in program.items {
         match item.node {
             Item::Struct { name, fields, is_public, .. } => {
@@ -401,10 +404,24 @@ fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext)
                 }
             }
             Item::Grammar(def) => declare_rules(def, names, declared),
+            // **A `comptime` text is a view of build-fixed text** (ADR-views-3
+            // D15, #1254): read where a `String` position stands, it is still
+            // text, as a literal is.
+            Item::Comptime { name, ty, .. } => {
+                if comptime_text(ty, names) {
+                    declared.comptime_texts.insert(names.resolve(name).clone())
+                }
+            }
             else => {}
         }
     }
     return declared
+}
+
+/// A `comptime` declared `String` (a view by ADR-views-3 D15).
+fn comptime_text(ty: ref Type?, names: ref winnow_grammar::InternerContext) -> bool {
+    let declared = ty ?? return false
+    return declared.is_view && a_text_parameter(names, declared)
 }
 
 /// **A grammar's rule is a function of its grammar** for this walk: `G::rule`,
@@ -2473,6 +2490,12 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
         Stmt::Let { names, value, ty, .. } => {
             tier_let(names, value, ty, at, ask, walk)
             tie_bound(names, value, ask, walk)
+        }
+        // A local `comptime` text is still text, as one at the top is
+        // (ADR-views-3 D15, #1254); any other shadows a top one.
+        Stmt::Comptime { name, ty, .. } => {
+            let kinds = if comptime_text(ty, ask.names) { still_kinds() } else { owned_kinds() }
+            bind_tier_local(ask.names.resolve(name).clone(), plain_local(kinds), walk)
         }
         Stmt::Assign { target, op, value } => {
             tie_stored(target, value, ask, walk)
@@ -4762,8 +4785,17 @@ fn a_range(index: ref Expr) -> bool {
     }
 }
 
+/// A name that is no local: a `comptime` text is still text (ADR-views-3
+/// D15, #1254), anything else owned.
+fn name_kinds(name: ref String, walk: ref TierWalk) -> Kinds {
+    if walk.declared.comptime_texts.contains(name) {
+        return still_kinds()
+    }
+    return owned_kinds()
+}
+
 fn kinds_of_local(name: ref String, walk: ref TierWalk) -> Kinds {
-    let local = tier_local(name, walk) ?? return owned_kinds()
+    let local = tier_local(name, walk) ?? return name_kinds(name, walk)
     return local.kinds.clone()
 }
 
