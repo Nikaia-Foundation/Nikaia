@@ -1,0 +1,11 @@
+fn first(s: String) -> String {
+    return s.trim()
+}
+
+fn apply(f: fn(s: String) -> String from s, s: String) -> i64 {
+    return f(s).len()
+}
+
+fn main() {
+    println(apply(first, " ab "))
+}

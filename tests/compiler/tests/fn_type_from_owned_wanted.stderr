@@ -1,0 +1,9 @@
+error[NK1102]: `apply` expects `f` to be `fn(String) -> String`, but you're passing `fn(String) -> ref String sync`.
+   --> tests/fn_type_from_owned_wanted.nika:14:20
+    |
+ 14 |     print(f"{apply(first, s)}\n")
+    |                    ^^^^^
+    |
+    = note: It's declared as `apply(f: fn(String) -> String, s: String) -> i64`.
+    = help: Make it a `fn(String) -> String`, or change the declaration to `fn(String) -> ref String sync`.
+1 type error

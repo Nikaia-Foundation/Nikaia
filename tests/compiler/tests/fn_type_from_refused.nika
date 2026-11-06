@@ -1,0 +1,15 @@
+// ADR-views-3 D14: a function whose result owns its value does not fit a
+// function type whose result writes `from`.
+
+fn shout(s: String) -> String {
+    return s.to_uppercase()
+}
+
+fn apply(f: fn(s: String) -> String from s, s: String) -> i64 {
+    return f(s).len()
+}
+
+fn main() {
+    let s = " ab "
+    print(f"{apply(shout, s)}\n")
+}

@@ -230,6 +230,11 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(world, &want) { found_here = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
         }
         if key == "Bytes::find" && at == 0 && check_arguments_a_byte_set(&found_here) { continue; }
+        if state.lends_where_a_function_type_reads(world, given_here, &found_here, &want) {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if lent { state.facts.lent_args.insert(id_of(value) as i64); }
+            continue;
+        }
         if (lent || want.is_a_view()) && given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             if check_reference_a_library_text_view(world, value, &found_here) { state.facts.lent_args.insert(id_of(value) as i64); }
@@ -387,5 +392,40 @@ pub(crate) fn check_arguments_mut_differs(found: &Ty, want: &Ty) -> i64 {
         at += 1;
     }
     0
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn lends_where_a_function_type_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>, found: &Ty, want: &Ty) -> bool {
+        let value = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let name = match value {
+            Expr::Variable(ident, _) => { let ident = *ident; world.words.resolve(ident).to_string() },
+            _ => return false,
+        };
+        if self.binding(&name).is_some() { return false; }
+        let contract = match world.own.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let (params, result, is_sync, can_throw) = match found {
+            Ty::Fn { params, result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; (params.to_owned(), match result {
+                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                None => None,
+            }, is_sync, can_throw) },
+            _ => return false,
+        };
+        let wanted = match want {
+            Ty::Fn { params, .. } => params.to_owned(),
+            _ => return false,
+        };
+        if (params.len() as i64) != wanted.len() as i64 { return false; }
+        let mut eased: Vec<Ty> = vec![];
+        let mut any = false;
+        for at in 0..params.len() as i64 {
+            if (*nikaia_std::index::get(&wanted, nikaia_std::index::at(at))).is_a_view() && !(*nikaia_std::index::get(&params, nikaia_std::index::at(at))).is_a_view() && view_of_type(nikaia_std::index::get(&params, nikaia_std::index::at(at))).fits(nikaia_std::index::get(&wanted, nikaia_std::index::at(at))) && lends_in_own(contract, at, &vec![world.library]) {
+                eased.push((*nikaia_std::index::get(&wanted, nikaia_std::index::at(at))).clone());
+                any = true;
+            } else { eased.push((*nikaia_std::index::get(&params, nikaia_std::index::at(at))).clone()); }
+        }
+        any && Ty::Fn { params: eased, result: Box::new(result), is_sync, can_throw }.fits(want)
+    }
 }
 

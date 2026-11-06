@@ -172,11 +172,11 @@ pub(crate) fn project_settings_checked(target: String, user_parallelism: String,
     Ok(ProjectWords { target, user_parallelism, reentrancy_check, optimization, refuted_claims, unproved_claims, artifact, symbol_prefix, tests, bind: None, cpu })
 }
 
-pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, package: Option<String>, target: Option<String>, user_parallelism: Option<String>, default_target: String) -> Result<ProjectWords, Box<dyn std::error::Error>> {
+pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, package: Option<String>, target: Option<String>, user_parallelism: Option<String>, default_target: &str) -> Result<ProjectWords, Box<dyn std::error::Error>> {
     let target = nikaia_std::index::or(match target.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, || manifest("target", &default_target).into());
+    }, || manifest("target", default_target).into());
     let user_parallelism = nikaia_std::index::or(match user_parallelism.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,

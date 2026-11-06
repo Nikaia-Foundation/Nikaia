@@ -35,10 +35,11 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
         return Ty::Nullable(Box::new(written_ty(names, aliases, &inner)));
     }
     if (*ty.code).is_some() {
-        let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        let params = written_all(names, aliases, &ty.generics);
-        let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ty::Fn { params, result: Box::new(None), is_sync: code.is_sync, can_throw: code.can_throw } };
-        return Ty::Fn { params, result: Box::new(Some(written_ty(names, aliases, result))), is_sync: code.is_sync, can_throw: code.can_throw };
+        let read = code_as_read(ty);
+        let code = match (*read.code) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        let params = written_all(names, aliases, &read.generics);
+        let result = match (*code.result) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Fn { params, result: Box::new(None), is_sync: code.is_sync, can_throw: code.can_throw } };
+        return Ty::Fn { params, result: Box::new(Some(written_ty(names, aliases, &result))), is_sync: code.is_sync, can_throw: code.can_throw };
     }
     if ty.is_nullable {
         let mut inner = ty.clone();
@@ -56,6 +57,37 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
 pub(crate) fn lent_item(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, ty: &Type) -> Ty {
     if !ty.generics.is_empty() { return written_ty(names, aliases, nikaia_std::index::get(&ty.generics, 0)); }
     Ty::Named { name: unaliased_in(aliases, names.resolve(ty.name)), args: vec![], view: false }
+}
+
+pub fn code_as_read(ty: &Type) -> Type {
+    let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
+    if code.result_from.is_empty() { return ty.clone(); }
+    let mut result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() }.clone();
+    result.is_view = true;
+    let mut generics: Vec<Type> = vec![];
+    for at in 0..ty.generics.len() as i64 {
+        let mut part = (*nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at))).clone();
+        if code_reads(code, at) { part.is_view = true; }
+        generics.push(part);
+    }
+    let mut read = ty.clone();
+    read.generics = generics;
+    let mut written = code.clone();
+    (*written.result) = Some(result);
+    written.result_from = vec![];
+    (*read.code) = Some(written);
+    read
+}
+
+pub fn code_writes_from(ty: &Type) -> bool {
+    let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !code.result_from.is_empty()
+}
+
+pub fn code_reads(code: &Code, at: i64) -> bool {
+    if at >= code.param_names.len() as i64 { return false; }
+    let name = match *nikaia_std::index::get(&code.param_names, nikaia_std::index::at(at)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    code.result_from.contains(&name)
 }
 
 pub(crate) fn written_all(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, types: &[Type]) -> Vec<Ty> {

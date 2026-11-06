@@ -238,8 +238,13 @@ pub mod runtime {
 /// **And `map_identity`**: `.map(fn(w) { w.to_string() })` into a list the
 /// tiers decide is of views lowers its body to `w` (`view_changes.nika`'s
 /// `vc_part_of`, #942).
+///
+/// **And `unused_parens`**: `let code = read.code ?? return ..` over a `let`
+/// of a `Type` lowers to `match (*read.code) { .. }` (`declared.nika`'s
+/// `written_ty`, ADR-views-3 D14).
 #[allow(
     clippy::map_identity,
+    unused_parens,
     clippy::unnecessary_operation,
     unused_assignments,
     clippy::unnecessary_unwrap,

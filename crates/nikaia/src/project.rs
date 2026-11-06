@@ -171,7 +171,7 @@ impl Settings {
                 manifest.package_name().map(str::to_string),
                 target.map(str::to_string),
                 user_parallelism.map(str::to_string),
-                crate::emit::default_target().name().to_string(),
+                crate::emit::default_target().name(),
             )
             .map_err(|e| anyhow!("{e}"))?,
         )
@@ -1505,10 +1505,7 @@ fn written(refusal: ProjectWriteRefusal) -> anyhow::Error {
 /// difference is a change in a contract and never in the formatting.
 pub fn write_ledger(path: &Path, ledger: &str, locked: bool) -> Result<()> {
     block_on(project_write::project_write_ledger(
-        path,
-        ledger.to_string(),
-        locked,
-        &whole,
+        path, ledger, locked, &whole,
     ))
     .map_err(
         |error| match nikaia_std::error::holds::<ProjectWriteRefusal>(&*error) {

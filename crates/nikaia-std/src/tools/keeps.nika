@@ -48,6 +48,10 @@ pub struct KeepsBody {
     /// D4): the clone is a count on the caller's owner, so the parameter takes
     /// the `Bytes` with its owner rather than a run of bytes to copy.
     pub cloned_keeps: collections::BTreeSet[String],
+    /// **The parameters of function type, by which of their own parameters
+    /// the code lends** (ADR-views-3 D14): one written `ref`, or named by the
+    /// type's `from`. An argument handed there is lent to the call, not kept.
+    pub code_lends: collections::BTreeMap[String, Vec[bool]],
 }
 
 // The walk's state: what it found, and the names a `let` bound to what may be
@@ -670,9 +674,19 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         Expr::Spawn { body, .. } => keep_what_a_task_names(body, interner, holes_of, context, walk),
         Expr::Call { func, args, config, .. } => {
             let callee = resolved_callee(func, interner, own, library)
+            // **A parameter of function type lends what its type lends**
+            // (ADR-views-3 D14): `f(s)` over `f: fn(s: String) -> String from s`
+            // keeps nothing.
+            let lends: Vec[bool] = match func {
+                Expr::Variable(ident, _) => context.code_lends[interner.resolve(ident)]?.clone() ?? [],
+                else => [],
+            }
             // **An argument the callee's result points into leaves with the
             // result** (#697): `reached_of` and `keeps_viewed_of` follow it there.
             for at in 0..<args.len() {
+                if at < lends.len() && lends[at] {
+                    continue
+                }
                 if !a_position_the_result_points_into(callee, at, own, library) {
                     keep_argument(args[at], callee, at, interner, holes_of, context, own, library, walk)
                 }
@@ -2028,10 +2042,20 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                     cloned_keeps.insert(view.text(a.name))
                 }
             }
+            // **What each parameter of function type lends** (ADR-views-3 D14).
+            let mut code_lends: collections::BTreeMap[String, Vec[bool]] = collections::BTreeMap()
+            for a in args {
+                let code = a.ty.code ?? continue
+                let mut each: Vec[bool] = []
+                for at in 0..<a.ty.generics.len() {
+                    each.push(a.ty.generics[at].is_view || code_reads(code, at))
+                }
+                code_lends.insert(view.text(a.name), each)
+            }
             // **The walk** (`uses_in`): every statement's expressions
             // classified where they stand, then the blocks it holds, and **the
             // value a body ends in leaves the call**, as a `return` does.
-            let context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps }
+            let context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps, code_lends: code_lends }
             let uses = uses_in(body, view.words, holes_of, context, ledger, library)
             // **A receiver the author wrote `ref` is not kept** (issue #173),
             // **nor an argument written `mut`** (0.0.258): each is a reference

@@ -22,16 +22,16 @@ impl std::fmt::Display for ProjectWriteRefusal {
 }
 impl std::error::Error for ProjectWriteRefusal {}
 
-pub async fn project_write_ledger(path: &std::path::Path, ledger: String, locked: bool, whole: &impl Fn(&std::path::Path, &str) -> Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn project_write_ledger(path: &std::path::Path, ledger: &str, locked: bool, whole: &impl Fn(&std::path::Path, &str) -> Option<String>) -> Result<(), Box<dyn std::error::Error>> {
     if !locked {
-        let failed = match whole(path, &ledger) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let failed = match whole(path, ledger) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         return Err(nikaia_std::error::raise(ProjectWriteRefusal::Failed(failed), &"project_write_ledger"));
     }
     let committed = match fs::read_to_string(path, &fs::Root::Anywhere).await {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::raise(ProjectWriteRefusal::Failed(format!("{}: {}", project_check_locked_ledger_missing(&nikaia_std::fs::path::display(&(path))), error)), &"project_write_ledger")) },
     };
-    if committed != ledger { return Err(nikaia_std::error::raise(ProjectWriteRefusal::Refused(project_check_locked_ledger_changed(&nikaia_std::fs::path::display(&(path)), &changed_lines(&ledger, &committed).join("\n"))), &"project_write_ledger")); }
+    if committed != ledger { return Err(nikaia_std::error::raise(ProjectWriteRefusal::Refused(project_check_locked_ledger_changed(&nikaia_std::fs::path::display(&(path)), &changed_lines(ledger, &committed).join("\n"))), &"project_write_ledger")); }
     Ok(())
 }
 

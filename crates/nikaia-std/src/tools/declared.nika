@@ -66,9 +66,12 @@ pub fn written_ty(names: ref winnow_grammar::InternerContext, aliases: ref colle
         inner.is_nullable = false
         return Ty::Nullable(written_ty(names, aliases, inner))
     }
+    // **One that writes `from` is read as the views it names**
+    // (ADR-views-3 D14, `code_as_read`).
     if ty.code != null {
-        let code = ty.code ?? return Ty::Unknown
-        let params = written_all(names, aliases, ty.generics)
+        let read = code_as_read(ty)
+        let code = read.code ?? return Ty::Unknown
+        let params = written_all(names, aliases, read.generics)
         let result = code.result ?? return Ty::Fn { params: params, result: null, is_sync: code.is_sync, can_throw: code.can_throw }
         return Ty::Fn { params: params, result: written_ty(names, aliases, result), is_sync: code.is_sync, can_throw: code.can_throw }
     }
@@ -106,6 +109,53 @@ fn lent_item(names: ref winnow_grammar::InternerContext, aliases: ref collection
         return written_ty(names, aliases, ty.generics[0])
     }
     return Ty::Named { name: unaliased_in(aliases, names.resolve(ty.name)), args: [], view: false }
+}
+
+/// **A function type that writes `from`, read as the views it names**
+/// (ADR-views-3 D14): its result is a view, and so is each parameter the
+/// `from` names, which the code lends. `fn(s: String) -> String from s` is
+/// the type `fn(ref String) -> ref String` was; a parameter the `from` does not
+/// name is as written, and the read type writes no `from` of its own. Any
+/// other type is as written.
+pub fn code_as_read(ty: ref Type) -> Type {
+    let code = ty.code ?? return ty.clone()
+    if code.result_from.is_empty() {
+        return ty.clone()
+    }
+    let mut result = (code.result ?? return ty.clone()).clone()
+    result.is_view = true
+    let mut generics: Vec[Type] = []
+    for at in 0..<ty.generics.len() {
+        let mut part = ty.generics[at].clone()
+        if code_reads(code, at) {
+            part.is_view = true
+        }
+        generics.push(part)
+    }
+    let mut read = ty.clone()
+    read.generics = generics
+    let mut written = code.clone()
+    written.result = result
+    written.result_from = []
+    read.code = written
+    return read
+}
+
+/// Whether a type is a function type whose result writes `from`
+/// (ADR-views-3 D14).
+pub fn code_writes_from(ty: ref Type) -> bool {
+    let code = ty.code ?? return false
+    return !code.result_from.is_empty()
+}
+
+/// Whether a function type's `from` names its parameter at `at` (ADR-views-3
+/// D14): the code lends it, and its result may point into it.
+pub fn code_reads(code: ref Code, at: i64) -> bool {
+    if at >= code.param_names.len() {
+        return false
+    }
+    let name = code.param_names[at] ?? return false
+    return code.result_from.contains(name)
 }
 
 fn written_all(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], types: ref Vec[Type]) -> Vec[Ty] {

@@ -13,6 +13,7 @@ pub struct KeepsBody<'a, 'a1> {
     pub own_methods: &'a MethodIndex,
     pub library_methods: &'a1 MethodIndex,
     pub cloned_keeps: collections::BTreeSet<String>,
+    pub code_lends: collections::BTreeMap<String, Vec<bool>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -449,7 +450,17 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = resolved_callee(func, interner, own, library);
-            for at in 0..args.len() as i64 { if !a_position_the_result_points_into((callee).as_deref(), at, own, library) { keep_argument(nikaia_std::index::get(&args, nikaia_std::index::at(at)), (callee).as_deref(), at, interner, holes_of, context, own, library, walk); } }
+            let lends: Vec<bool> = match func {
+                Expr::Variable(ident, _) => { let ident = *ident; nikaia_std::index::or(match *nikaia_std::index::get(&context.code_lends, interner.resolve(ident)) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || vec![].into()) },
+                _ => vec![],
+            };
+            for at in 0..args.len() as i64 {
+                if at < lends.len() as i64 && *nikaia_std::index::get(&lends, nikaia_std::index::at(at)) { continue; }
+                if !a_position_the_result_points_into((callee).as_deref(), at, own, library) { keep_argument(nikaia_std::index::get(&args, nikaia_std::index::at(at)), (callee).as_deref(), at, interner, holes_of, context, own, library, walk); }
+            }
             for setting in config.iter() { keep_option(setting, (callee).as_deref(), interner, context, own, library, walk); }
         },
         Expr::MethodCall { receiver, method, args, config, .. } => {
@@ -917,11 +928,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple68584| {
-                            let (at, arg) = __nikaia_tuple68584; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple69358| {
+                            let (at, arg) = __nikaia_tuple69358; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple68760| {
-                            let (at, arg) = __nikaia_tuple68760;
+                        }).map(|__nikaia_tuple69534| {
+                            let (at, arg) = __nikaia_tuple69534;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);
@@ -1336,7 +1347,14 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
             if is_method { types.insert(String::from("self"), target_name.to_string()); }
             let mut cloned_keeps: collections::BTreeSet<String> = collections::BTreeSet::new();
             for a in args.iter() { if a.ty.is_view && !a.ty.is_nullable && !a.ty.is_slice && a.ty.generics.is_empty() && view.text(a.ty.name) == "Bytes" { cloned_keeps.insert(view.text(a.name)); } }
-            let context = KeepsBody { parameters: parameters.to_owned(), lent, fields, returns_a_view, hands_back_its_last: ret_type.is_some() && !returns_a_view, unresolved, types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps };
+            let mut code_lends: collections::BTreeMap<String, Vec<bool>> = collections::BTreeMap::new();
+            for a in args.iter() {
+                let code = match (*a.ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let mut each: Vec<bool> = vec![];
+                for at in 0..a.ty.generics.len() as i64 { each.push(nikaia_std::index::get(&a.ty.generics, nikaia_std::index::at(at)).is_view || code_reads(code, at)); }
+                code_lends.insert(view.text(a.name), each);
+            }
+            let context = KeepsBody { parameters: parameters.to_owned(), lent, fields, returns_a_view, hands_back_its_last: ret_type.is_some() && !returns_a_view, unresolved, types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps, code_lends };
             let uses = uses_in(body, view.words, holes_of, &context, ledger, library);
             let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
             for name in uses.kept.iter() { if !unkept.contains(name) { kept.insert(name.to_string()); } }

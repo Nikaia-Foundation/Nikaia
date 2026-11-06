@@ -1,0 +1,15 @@
+// ADR-views-3 D14: a function whose result is a view does not fit a
+// function type whose result owns its value.
+
+fn first(s: String) -> String {
+    return s.trim()
+}
+
+fn apply(f: fn(String) -> String, s: String) -> i64 {
+    return f(s).len()
+}
+
+fn main() {
+    let s = " ab "
+    print(f"{apply(first, s)}\n")
+}

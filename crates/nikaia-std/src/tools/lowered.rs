@@ -2595,7 +2595,7 @@ pub mod crossing {
 }
 pub mod declared {
     #[allow(unused_imports)]
-    pub use super::{DeclaredFn, written_ty, declared_function, default_text, declared_trait_method, declared_enum, declared_fields, tethered_fields};
+    pub use super::{DeclaredFn, written_ty, code_as_read, code_writes_from, code_reads, declared_function, default_text, declared_trait_method, declared_enum, declared_fields, tethered_fields};
 }
 pub mod describe {
     #[allow(unused_imports)]

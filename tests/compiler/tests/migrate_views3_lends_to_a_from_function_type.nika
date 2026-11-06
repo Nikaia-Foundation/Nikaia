@@ -1,0 +1,20 @@
+// ADR-views-3 D14: `nikaia migrate views-3` writes no `keep` on an argument
+// handed to a function value whose type's `from` reads it: the call lends it.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/a.nika", fs::Root::Anywhere, "fn first(s: String) -> String {\n    return s.trim()\n}\n\nfn apply(f: fn(s: String) -> String from s, s: String) -> i64 {\n    return f(s).len()\n}\n\nfn main() {\n    println(apply(first, \" ab \"))\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/a.nika"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(f"{tmp}/a.nika", fs::Root::Anywhere))
+    process::run("rm", ["-rf", tmp])
+}

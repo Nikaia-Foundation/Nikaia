@@ -345,12 +345,16 @@ impl CheckState {
             self.facts.map_keys.insert((id_of(given) as i64, false), FactKeyForm::Viewed)
             return
         }
-        if ty.is_a_view() || a_string {
+        // **A name that copied a value the ledger copies** out of a place
+        // (`Symbol`) holds the value, not a view, below: it is lent with `&`.
+        let copied = (self.a_lent_let(world, given) || self.a_lent_name(world, given)) && a_ledger_copies(unviewed_type(ty), [world.library])
+        if (ty.is_a_view() && !copied) || a_string {
             return
         }
         // **A name that is a view below whatever its type says** - a `let`
-        // bound to a map read beside a jump - is a reference already (#125).
-        if moves(ty) && (self.a_lent_name(world, given) || self.a_lent_let(world, given)) {
+        // bound to a map read beside a jump - is a reference already (#125);
+        // not one that copied its value.
+        if moves(ty) && !copied && (self.a_lent_name(world, given) || self.a_lent_let(world, given)) {
             return
         }
         // **A number is lent as it is**, typed or not (0.0.246): a literal, or a

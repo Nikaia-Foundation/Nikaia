@@ -350,6 +350,15 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         if key == "Bytes::find" && at == 0 && check_arguments_a_byte_set(found_here) {
             continue
         }
+        // **A declared function that lends a parameter fits a function type
+        // whose `from` reads it** (ADR-views-3 D14).
+        if state.lends_where_a_function_type_reads(world, given_here, found_here, want) {
+            let value = given_here ?? continue
+            if lent {
+                state.facts.lent_args.insert(id_of(value) as i64)
+            }
+            continue
+        }
         // **A library function's text view is lent where it is read**
         // (ADR-views-3 D1, D4, #1213): `html::escape` hands back a view the
         // language below holds as a value of its own (a `Cow`), so the
@@ -584,4 +593,47 @@ fn check_arguments_mut_differs(found: ref Ty, want: ref Ty) -> i64 sync {
         at += 1
     }
     return 0
+}
+
+impl CheckState {
+    /// **A declared function that lends a parameter, handed where a function
+    /// type's `from` reads it** (ADR-views-3 D14): `first(s: String) ->
+    /// String` that hands back a view of `s` fits `fn(s: String) -> String
+    /// from s`, whose `s` is lent and whose result is a view; the language
+    /// below takes both as `&str`. A parameter the function keeps does not
+    /// fit there, nor does a result of its own (D14: a `from` result is a
+    /// view, and an owned one is no view of what the caller lent).
+    fn lends_where_a_function_type_reads(ref self, world: ref CheckWorld, given: ref Expr?, found: ref Ty, want: ref Ty) -> bool sync {
+        let value = given ?? return false
+        let name = match value {
+            Expr::Variable(ident, _) => world.words.resolve(ident).clone(),
+            else => return false,
+        }
+        if self.binding(name) != null {
+            return false
+        }
+        let contract = world.own.functions.get(name) ?? return false
+        let (params, result, is_sync, can_throw) = match found {
+            Ty::Fn { params, result, is_sync, can_throw } => (params.clone(), result?.clone(), is_sync, can_throw),
+            else => return false,
+        }
+        let wanted = match want {
+            Ty::Fn { params, .. } => params.clone(),
+            else => return false,
+        }
+        if params.len() != wanted.len() {
+            return false
+        }
+        let mut eased: Vec[Ty] = []
+        let mut any = false
+        for at in 0..<params.len() {
+            if wanted[at].is_a_view() && !params[at].is_a_view() && view_of_type(params[at]).fits(wanted[at]) && lends_in_own(contract, at, [world.library]) {
+                eased.push(wanted[at].clone())
+                any = true
+            } else {
+                eased.push(params[at].clone())
+            }
+        }
+        return any && Ty::Fn { params: eased, result: result, is_sync: is_sync, can_throw: can_throw }.fits(want)
+    }
 }

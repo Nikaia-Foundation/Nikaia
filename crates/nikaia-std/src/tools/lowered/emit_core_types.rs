@@ -67,6 +67,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_ty_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, name: &str, lifetimes: &EmitLifetimes, count: &Count) -> String {
         let mut out: String = String::from("");
+        if code_writes_from(ty) { return self.emit_core_ty_named(world, walk, crossings, overlaps, &code_as_read(ty), name, &lifetimes, &count); }
         if (*ty.code).is_none() && (ty.is_tuple || !ty.generics.is_empty()) && walk.in_parameter {
             walk.in_parameter = false;
             let written = self.emit_core_ty_named(world, walk, crossings, overlaps, ty, name, &lifetimes, &count);

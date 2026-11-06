@@ -81,7 +81,7 @@ pub(crate) fn comptime_turn_of(value: &Expr) -> Option<ComptimeTurn> {
 pub(crate) fn comptime_turn_function(turn: &ComptimeTurn, returns: &Type, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Item {
     let mut element = returns.clone();
     element.is_view = false;
-    let mut list = comptime_plain(String::from("Vec"), intern);
+    let mut list = comptime_plain("Vec", intern);
     list.generics = vec![element];
     let kept = intern("__nikaia_turned");
     let local = intern(&turn.local);
@@ -419,19 +419,19 @@ pub(crate) fn comptime_written_type(ty: &Ty, intern: &dyn Fn(&str) -> winnow_gra
     match ty {
         Ty::Named { name, args, view } => {
             let view = *view;
-            let mut out = comptime_plain(name.to_string(), &intern);
+            let mut out = comptime_plain(&name.to_string(), &intern);
             out.is_view = view;
             out.generics = match comptime_written_types(args, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(out)
         },
         Ty::Count(n) => {
             let n = *n;
-            let mut out = comptime_plain(format!("{}", n), &intern);
+            let mut out = comptime_plain(&format!("{}", n), &intern);
             out.count = Some(n);
             Some(out)
         },
         Ty::Tuple(parts) => {
-            let mut out = comptime_plain(String::from(""), &intern);
+            let mut out = comptime_plain("", &intern);
             out.is_tuple = true;
             out.generics = match comptime_written_types(parts, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(out)
@@ -452,7 +452,7 @@ pub(crate) fn comptime_written_types(tys: &[Ty], intern: &dyn Fn(&str) -> winnow
     Some(out)
 }
 
-pub(crate) fn comptime_plain(name: String, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Type { Type { name: intern(&name), generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false } }
+pub(crate) fn comptime_plain(name: &str, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Type { Type { name: intern(name), generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false } }
 
 pub trait ComptimeLowerHost {
     fn unit_count(&self) -> i64;

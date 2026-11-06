@@ -1,0 +1,17 @@
+// ADR-views-3 D14: a function whose result is a view of its parameter fits
+// a function type whose result reads that parameter with `from`.
+
+fn first(s: String) -> String {
+    return s.trim()
+}
+
+fn apply(f: fn(s: String) -> String from s, s: String) -> i64 {
+    let t = f(s)
+    print(f"[{t}]\n")
+    return t.len()
+}
+
+fn main() {
+    let s = " ab "
+    print(f"{apply(first, s)}\n")
+}

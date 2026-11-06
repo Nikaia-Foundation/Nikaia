@@ -117,6 +117,13 @@ impl EmitState {
     fn emit_core_ty_named(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type, name: ref String, lifetimes: EmitLifetimes, count: Count) -> String {
         let mut out: String = ""
 
+        // **A function type that writes `from` is written as the views it
+        // names** (ADR-views-3 D14, `code_as_read`): `fn(s: String) -> String
+        // from s` is `Fn(&str) -> &str`.
+        if code_writes_from(ty) {
+            return self.emit_core_ty_named(world, walk, crossings, overlaps, code_as_read(ty), name, lifetimes, count)
+        }
+
         // A function inside a container is a value the container holds
         // (Part I 5.3), so it is kept, even in a parameter the body only runs.
         if ty.code == null && (ty.is_tuple || ty.generics.len() > 0) && walk.in_parameter {
