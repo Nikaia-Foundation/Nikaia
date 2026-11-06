@@ -85,9 +85,11 @@ goes into the section of its topic, in one line, with the run that paid for it.
   run --profile fast -p nikaia --example specification >
   tests/specification/EXPECTED.txt`), `COMPILES.txt`, and the examples'
   ledgers. Look at `git status` before the commit (v11).
-* **A program that stops at run time cannot be a test**: `nikaia test` does not
-  bless an abort. Test the compile-time refusal instead (a precondition broken,
-  NK1207), or check the abort by hand and name it under `Tests:` (v21).
+* **A program that stops at run time is a test with a `NAME.stops`** (#1260,
+  ADR-269 D22): the file holds what the stop writes on standard error, and the
+  test passes only when the run stops (exit 101) writing exactly that
+  (`NAME.stdout` compared too). `--bless` rewrites a `.stops` but never makes
+  one: create it empty, then `--bless --filter NAME` fills it.
 * **A use after a move is refused only by rustc today** (#1241): `nikaia test`
   counts it as a failed build, so it cannot be a `.stderr` test yet.
 * **Guard tests scan the whole repository** (`range_spelling`,
