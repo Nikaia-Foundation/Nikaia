@@ -8,6 +8,19 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1350] — 2026-11-06
+
+**Views-3: function types with from, lent text parameters of function types, comptime text as a view; migrate views-3 keeps less; two lowering fixes**
+- Function types with `from` (ADR-views-3 D14, #1257): a function fits only if its result is a view exactly where the type's is; an owned result does not fit a `from` type, and a view result does not fit an owned one.
+- A function type's plain text parameter is lent (ADR-views-3 D2), with or without `from`: `let f: fn(s: String) -> i64 = ...; f(g)` leaves `g` the caller's, and a named function fits a struct field of such a type.
+- An argument a function type's `from` names is lent, so an owned `String` with its type written can be handed through `f: fn(s: String) -> String from s` (was NK1103), and `return f(s)` hands back a view of `s` (was NK1104).
+- A result of any type written `from` its subject is a view of it: `fn tags(self) -> Vec[i64] from self { return self.tags }` is accepted, where it was NK1131 (ADR-views-3 D7, D8).
+- A `comptime` String goes into a `Vec[String]` field or local, is returned from `-> String` as a view of build-fixed text, and is still text in a `String` position: `Names { all: [GREETING] }` runs (was NK1106, ADR-views-3 D15).
+- A lent plain parameter `T` takes a `Shared[T]` argument through its `deref`, as `ref T` did (was NK1102); a kept one still refuses it.
+- `nikaia migrate views-3` keeps less: a parameter of a copy type gets no `keep` (and NK2302 asks none for it), a parameter only read through `?.` or `??` is lent, `let x = p ?? e` lends `p`, a parameter written `ref` is never given `keep`, and an old `fn(ref String) -> ref String` becomes `fn(a: String) -> String from a`.
+- A `let` of an owned type keeps an option parameter it moves in (the fix for #892's NK2105 over lent options).
+- Fixed: asking a list of text whether it `contains` a call's text compares as text, and `let n = x ?? continue` over a list of number options binds the number; the generated Rust no longer fails with a type mismatch.
+
 ## [0.0.1349] — 2026-11-06
 
 **Driver: a run's numbers, report and debrief, and a block's focus line, go on the issue (#1252); A library function's text view is lent where it is read; A list, an array or a part of either is handed to a lent or mut Array[T] parameter; views: swap, sort, sort_by_key, reverse, fill on a changeable run, a list and a part of one (ADR-views-3 D11); A field of mut self and an element of a mut list handed to a keeper are taken (#1208); Lowering: `??` over a lent option with a value made here goes through a slot; Lowering: a lent `T?` is an `Option<&T>`, a lent `String?` an `Option<&str>` (#1256); Lowering: a lent `fs::Path?` is handed as `Option<&Path>`; ADR-views-3 D15: a comptime declared String is a view of build-fixed text; ADR-views-3 D7/D8/D11: a field or piece of a plain self handed back is an inferred view**
