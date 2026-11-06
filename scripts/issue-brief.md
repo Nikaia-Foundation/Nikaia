@@ -25,6 +25,7 @@ ending with the Claude Code footer), rule I13.
 * Commit locally after each step with `target/fast/nikaia run scripts/commit.nika -- REPORT` (it adds exactly the report's `Files:`); the driver pushes.
 * Before committing, cheap checks only: `cargo build --profile fast -p nikaia`, `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `scripts/pre-push-check.sh`, the tests the issue names and the ones your change touches.
 * Version lines, `CHANGELOG.md`, badges and NK codes are the supervisor's. New tests in Nikaia only.
+* A defect you meet on the way to the issue's goal (a compiler or lowering bug in the path) you fix, with a test, as its own commit; `Found:` is only for what lies off that path or cannot be fixed this run.
 * A form Nikaia, `std` or the toolchain lacks stops the work, unless an ADR or Part I-III refuses it (name it): `Result: blocked`, `Found:` the gap with a probe, `Needs: supervisor decision`.
 * Disk: `NIKAIA_CACHE_LIMIT=2G`; at the end delete your own clone's `target/` and `target/release/nikaia-scratch`.
 * No cause after about 40 turns: stop, `Result: partial` with what you ruled out, the probe, and the suspected file and function.

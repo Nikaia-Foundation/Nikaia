@@ -415,6 +415,16 @@ unrun brief is skipped. `docs/briefs/focus-log.md` holds one line per block.
 
 ## Briefs and reports
 
+**A brief sets the goal, not the way** (owner, 2026-11-06): the default brief
+is one batch line `#N`, "fix issue #N"; the issue says what is wrong and when it
+is done, the builder finds the way. A brief written by hand is a few lines: the
+goal, the issue, a probe or decision the issue lacks. It gives no step lists,
+no narrow scope, no *Not yours* list beyond other agents' open files, and never
+"report it as Found": a defect the builder meets on the way to the goal it
+fixes (CLAUDE.md, *Fix, do not work around*). What the supervisor wants to say
+about the way belongs in the issue, where the debrief can judge it. The rules
+below on *Locations* and *To build* apply to issues, not to briefs.
+
 **Issue briefs** (2026-11-06): a batch line `#N [suffix]` names issue N; `scripts/batch.nika`
 writes `issue-N[-suffix].md` from `scripts/issue-brief.md` and the issue is the
 work order (`docs/issues.md`). The builder plans its own steps and reports
