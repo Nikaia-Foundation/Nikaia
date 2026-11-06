@@ -8,6 +8,27 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1351] — 2026-11-06
+
+**Builders' changes (#1125, #1155, #1267)**
+- Text made for a call (`f(text.clone())`, `f(g())`) whose result views that parameter is bound to a local first, so `let w = words_of(text.clone(), k)` compiles (was rustc E0716)
+- A view of a local that is no text or bytes - a list's element or slice, bare or in a `ref` field of the returned struct - is refused at the `return` with NK2304 instead of failing in rustc.
+- A function that returns a call's view result is a view of what it hands that call: `return rest(xs)`, `return tail(tail(b))` (ADR-views-3 D8, D11, D15)
+- Views-3: an `Array[T]` field that the file only fills with pieces of buffers (`a[1..]`, a `ref` parameter) is a view; was NK1182/NK1106 (#1267)
+- A `match` over a field of a `for mut` element whose arm changes a part it binds changes the element in place (was a rustc borrow error)
+- migrate views-3: a parameter only read through `?.` of a copied field, or through `??` whose result is read in place, gets no keep and is lent
+- Views-3 migration: a let x = p ?? e that is only read lends p, and a parameter written ref is never given keep (#1254)
+- Fix: in a loop over a list of number (or other copy) options, `let n = x ?? continue` binds the number; the generated Rust no longer fails with a `&i64`/`i64` mismatch
+- Views-3: return `f(s)` through `f: fn(s: String) -> String from s` as a view of `s`; `nikaia migrate views-3` turns `fn(ref String) -> ref String` into `fn(a: String) -> String from a`
+- Views-3: a function `-> String from s` can return `f(s)` through a parameter `f: fn(s: String) -> String from s`; the result is a view of `s`
+- Views-3 migration: `nikaia migrate views-3` turns a function type `fn(ref String) -> ref String` into `fn(a: String) -> String from a`, and the function taking it returns `from` its old `ref` parameters
+- Views-3: a lent plain parameter `T` takes a `Shared[T]` argument through its `deref`, as `ref T` did; a kept one still refuses it (NK1102)
+- Views-3: an owned `String` with its type written can be handed through `f: fn(s: String) -> String from s`; the argument the `from` names is lent
+- views-3: a function type's plain text parameter is lent (ADR-views-3 D2), so `let f: fn(s: String) -> i64 = ...; f(g)` leaves `g` the caller's, with or without `from`.
+- Views-3: an `Array[T]` parameter handed back whole is a view in any file, and a piece of a lent `Bytes` handed back (with or without `from`) is a view of it (ADR-views-3 D8, D11, D15)
+- A `comptime` String goes into a `Vec[String]` field or local, and is returned from `-> String`, as a view of build-fixed text (ADR-views-3 D15).
+- A call's `Array[T]` result that is a view goes to a lent `Array[T]` parameter as it is: `total(rest(v))` (ADR-views-3 D8, D11)
+
 ## [0.0.1350] — 2026-11-06
 
 **Views-3: function types with from, lent text parameters of function types, comptime text as a view; migrate views-3 keeps less; two lowering fixes**
