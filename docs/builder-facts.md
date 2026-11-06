@@ -59,4 +59,8 @@ together with the specification section and an example test.
   (`git log --grep`), never by hash: rebases change hashes (p9).
 * A script test that compares a driver's `--dry-run` text fails when `scripts/*.nika` wording changes; bless it from the project dir (`nikaia test --filter NAME --bless` in `tests/compiler`) and review the diff, since `nikaia run FILE` refuses a non-entry file. (qa-task)
 * Two `qa-input.txt` files exist (`docs/briefs/` and `docs/briefs/views/`); read the one in the lane directory your task names. (qa-task)
+* Before putting back a "workaround" an issue names, check `git log -S` on that line: a later commit may have removed it on purpose. (issue-1125)
+* The tether's keep plan (`tools/buffers.nika`, `is_a_buffer` in `tether.nika`) treats only text and bytes as buffers, so a view of a list or struct local handed back is NK2304 (ADR-283 D9), never NK2303, which is not a refusal. (issue-1155)
+* `scripts/where.nika -- NKnnnn` can run past the 120 s tool timeout; grep the `NKnnnn` in `crates/` and the spec row instead. (issue-1155)
+* Running a copied test file with `nikaia run` inside `tests/compiler/tests/` is refused as not the entry point; run the fails-before check on the scratchpad copy. (issue-1266)
 

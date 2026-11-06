@@ -148,6 +148,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
   `comptime` value shape must survive as a literal (`comptime_literal_of`) (j5).
 * **A `std.contracts` method Rust has under the same name** needs only the
   contract; the file is built into the binary, so rebuild after editing it.
+* An `Item::Fn` name is `Symbol?`, so `ask.names.resolve(name)` is refused (NK1102); use the plan's `key` instead. (issue-1155)
 
 ### Grammar
 
@@ -252,6 +253,9 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 Classes (CLAUDE.md, *A missing form stops the work*): **[design]** holds,
 build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
+* `tools/*.nika` has no `loop`; write `while true`. (issue-1266)
+* `for x in E ?? return null {` does not parse; bind `E` with `let` first. (issue-1266)
+* `for (i, mut x) in v.iter_mut().enumerate()` is refused (`mut` in a tuple pattern); use one read-only enumerate loop and a separate `for mut x in v` loop. (issue-1266)
 #N]**: fix it or wait; **[works]**: use it, do not copy an old way around.
 
 * [design: ADR-382 D6] no `if let`: `x ?? default`, `match`, or `starts_with`
