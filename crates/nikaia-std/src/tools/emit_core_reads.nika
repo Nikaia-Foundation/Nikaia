@@ -281,8 +281,55 @@ impl EmitState {
                     return
                 }
                 self.emit_core_hold_chain_base(world, walk, out, host, value, node_key(value), false, depth, flow, scope)
+                self.emit_core_hold_viewed_arguments(world, walk, out, host, value, depth, flow, scope)
             },
             else => {}
+        }
+    }
+
+    /// **A result that views a parameter outlives the statement only if the
+    /// argument does** (#1125). `let w = words_of(text.clone(), k)`, where
+    /// `words_of`'s result points into its first parameter, lends the call a
+    /// `String` that dies at the `;` - `rustc`'s E0716. So an argument made for
+    /// the call (a call, or a method whose result is text of its own) in a
+    /// position the result points into is bound first, and the call lends the
+    /// binding.
+    fn emit_core_hold_viewed_arguments[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let args = match value {
+            Expr::Call { args, .. } => args,
+            Expr::Try(inner, _) => match inner {
+                Expr::Call { args, .. } => args,
+                else => return,
+            },
+            else => return,
+        }
+        let callee = call_callee_name(world.words, world.aliases, value) ?? return
+        let contract = self.own_contracts.functions.get(callee) ?? return
+        let borrows = contract.borrows?.clone() ?? return
+        let signature = contract.signature?.clone() ?? return
+        if signature.takes_a_receiver() {
+            return
+        }
+        for i in 0..<args.len() {
+            if i >= signature.params.len() || !borrows.contains(signature.params[i].0) {
+                continue
+            }
+            let arg = args[i]
+            let made = match arg {
+                Expr::Call { .. } => true,
+                Expr::MethodCall { method, .. } => owns_its_text(emit_text(world, method)),
+                else => false,
+            }
+            if !made {
+                continue
+            }
+            let key = node_key(arg)
+            walk.held.remove(key)
+            let name = f"__nikaia_held_{walk.held.len()}"
+            out.push(f"let {name} = ")
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
+            out.push(f";\n{"    ".repeat(depth)}")
+            walk.held.insert(key, name)
         }
     }
 

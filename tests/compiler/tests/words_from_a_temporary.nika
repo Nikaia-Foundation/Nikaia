@@ -1,0 +1,32 @@
+// #1125: a result that views a parameter, handed text made for the call (a
+// clone, a call's result), is bound to a local first, so the text lives as
+// long as the result does.
+fn words_of(text: String, key: String) -> Vec[String] {
+	for line in text.split("\n") {
+		let w = line.trim().split(" ").collect()
+		if w.len() > 1 && w[0] == key {
+			return w
+		}
+	}
+	let n: Vec[String] = []
+	return n
+}
+
+fn focus() -> String {
+	return "block 3\ncurrent selfhosting 2"
+}
+
+fn current(text: String) -> String {
+	let w = words_of(text.clone(), "current")
+	if w.len() > 1 {
+		return w[1].clone()
+	}
+	return text
+}
+
+fn main() {
+	println(current("block 3\ncurrent converter 0"))
+	let w = words_of(focus(), "current")
+	println(w.len())
+	println(w[2])
+}

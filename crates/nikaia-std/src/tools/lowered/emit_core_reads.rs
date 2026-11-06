@@ -208,8 +208,48 @@ impl EmitState {
                 };
                 if owns { return Ok(()); }
                 self.emit_core_hold_chain_base(world, walk, out, host, value, node_key(value), false, depth, flow, scope)?;
+                self.emit_core_hold_viewed_arguments(world, walk, out, host, value, depth, flow, scope)?;
             },
             _ => { },
+        }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_hold_viewed_arguments<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let args = match value {
+            Expr::Call { args, .. } => args,
+            Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); match inner {
+                Expr::Call { args, .. } => args,
+                _ => return Ok(()),
+            } },
+            _ => return Ok(()),
+        };
+        let callee = match call_callee_name(world.words, world.aliases, value) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let contract = match self.own_contracts.functions.get(&callee) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let borrows = contract.borrows.to_owned();
+        let signature = match match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        if signature.takes_a_receiver() { return Ok(()); }
+        for i in 0..args.len() as i64 {
+            if ((i) as usize) >= signature.params.len() || !nikaia_std::list::contains(&borrows, &nikaia_std::index::get(&signature.params, (i) as usize).0) { continue; }
+            let arg = nikaia_std::index::get(&args, (i) as usize);
+            let made = match arg {
+                Expr::Call { .. } => true,
+                Expr::MethodCall { method, .. } => { let method = *method; owns_its_text(&emit_text(world, method)) },
+                _ => false,
+            };
+            if !made { continue; }
+            let key = node_key(&arg);
+            walk.held.remove(&key);
+            let name = format!("__nikaia_held_{}", walk.held.len() as i64);
+            out.push(&format!("let {} = ", name));
+            self.emit_expr(world, walk, out, host, &arg, depth, flow, scope)?;
+            out.push(&format!(";\n{}", "    ".repeat(nikaia_std::count::of(depth))));
+            walk.held.insert(key, name);
         }
         Ok(())
     }
