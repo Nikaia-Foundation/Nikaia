@@ -278,7 +278,12 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         }
         close_scope(walk)
     }
-    return decide(key, body, walk, ask)
+    let mut plan = decide(key, body, walk, ask)
+    match item {
+        Item::Fn { ret_type, .. } => plan.refusals.extend(untethered_returns(plan.key, ret_type, body, ask)),
+        else => {}
+    }
+    return plan
 }
 
 fn carries_maybe(ty: ref Type?, ask: ref BufferAsk) -> bool {
@@ -2150,4 +2155,229 @@ fn element_refusal(keeper: ref String, why: ref String, help: ref String, plan: 
         }
     }
     return refusal("NK2304", span, f"`{keeper}` keeps views of data read inside a loop and removes entries as it goes, but {why}.", ["Each view keeps its own data alive here, so that data read for entries that were removed can be freed during the loop."], help.clone())
+}
+
+// ---------------------------------------------------------------------------
+// A view of a local that is no text, handed back (#1155)
+// ---------------------------------------------------------------------------
+
+// **What the tether cannot lower yet: a view of a local that is no text or
+// bytes, handed back**, bare or in a field of the struct the function returns
+// (ADR-283 D9). A local lives on in the caller's keep where the views of it
+// are text or bytes (`a_viewed_buffer`); a view of an element of a list the
+// body made, or of a part of a struct it built, would outlive its local. It is
+// refused on the Nikaia line rather than left to `rustc`. Typed by what is
+// written: the result's type, the fields of the struct it names, and the
+// locals bound to a literal or a copy - nothing else counts as owned, so a
+// view the walk cannot place is never refused.
+fn untethered_returns(function: ref String, ret_type: ref Type?, body: ref Block, ask: ref BufferAsk) -> Vec[Finding] {
+    let written = ret_type ?? return []
+    let fields = untethered_fields(written, ask)
+    let bare = untethered_view(written, ask)
+    if !bare && fields.len() == 0 {
+        return []
+    }
+    let asked = UntetheredAsk { function: function.clone(), bare: bare, struct_name: ask.names.resolve(written.name).clone(), fields: fields }
+    let mut walk = UntetheredWalk { owned: collections::BTreeSet(), views: collections::BTreeMap(), carrying: collections::BTreeMap(), findings: [] }
+    untethered_block(body, asked, ask, walk)
+    if body.stmts.len() > 0 {
+        let last = body.stmts[body.stmts.len() - 1]
+        match last.node {
+            Stmt::Expr(value) => untethered_returned(value, last.span, asked, ask, walk),
+            else => {}
+        }
+    }
+    return walk.findings
+}
+
+struct UntetheredAsk {
+    function: String,
+    /// The result is a view that is no text: `ref L`, `ref Array[i64]`.
+    bare: bool,
+    /// The struct the result names, and its fields that are such views.
+    struct_name: String,
+    fields: collections::BTreeSet[String],
+}
+
+struct UntetheredWalk {
+    /// The locals bound to a value of their own: a literal or a copy.
+    owned: collections::BTreeSet[String],
+    /// The locals bound to a view of a place, with the variable it starts from.
+    views: collections::BTreeMap[String, String],
+    /// The locals bound to the result's struct with a view of an owned local.
+    carrying: collections::BTreeMap[String, String],
+    findings: Vec[Finding],
+}
+
+// A view written `ref T` whose `T` is no text or bytes.
+fn untethered_view(ty: ref Type, ask: ref BufferAsk) -> bool {
+    if !ty.is_view || ty.is_tuple || ty.code != null {
+        return false
+    }
+    let base = last_segment(ask.names.resolve(ty.name))
+    if base == "String" || base == "Bytes" || base == "Mapped" || base == "str" {
+        return false
+    }
+    if ty.generics.len() == 1 && ask.names.resolve(ty.generics[0].name) == "u8" {
+        return false
+    }
+    return true
+}
+
+// The fields of the struct `ty` names, in this unit, that are such views.
+fn untethered_fields(ty: ref Type, ask: ref BufferAsk) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    if ty.is_view || ty.is_tuple {
+        return out
+    }
+    let wanted = ask.names.resolve(ty.name).clone()
+    for item in ask.items {
+        match item.node {
+            Item::Struct { name, fields, .. } => {
+                if ask.names.resolve(name) == wanted {
+                    for field in fields {
+                        if untethered_view(field.ty, ask) {
+                            out.insert(ask.names.resolve(field.name).clone())
+                        }
+                    }
+                }
+            }
+            else => {}
+        }
+    }
+    return out
+}
+
+fn untethered_block(block: ref Block, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, value, .. } => {
+                untethered_expr(value, stmt.span, asked, ask, walk)
+                if names.len() == 1 {
+                    untethered_let(ask.names.resolve(names[0]).clone(), value, asked, ask, walk)
+                }
+            }
+            Stmt::Return(value) => {
+                let returned = value ?? continue
+                untethered_expr(returned, stmt.span, asked, ask, walk)
+                untethered_returned(returned, stmt.span, asked, ask, walk)
+            }
+            Stmt::For { body, .. } => untethered_block(body, asked, ask, walk),
+            Stmt::While { body, .. } => untethered_block(body, asked, ask, walk),
+            Stmt::Expr(value) => untethered_expr(value, stmt.span, asked, ask, walk),
+            else => {}
+        }
+    }
+}
+
+// The blocks and the `return`s inside an expression.
+fn untethered_expr(expr: ref Expr, at: ref Span, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            untethered_block(then_branch, asked, ask, walk)
+            if else_branch != null {
+                untethered_block(else_branch ?? return, asked, ask, walk)
+            }
+        }
+        Expr::Block(block, _) => untethered_block(block, asked, ask, walk),
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                untethered_expr(arm.body, at, asked, ask, walk)
+            }
+        }
+        Expr::Return(value, _) => {
+            let returned = value ?? return
+            untethered_returned(returned, at, asked, ask, walk)
+        }
+        else => {}
+    }
+}
+
+fn untethered_let(name: String, value: ref Expr, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
+    walk.owned.remove(name)
+    walk.views.remove(name)
+    walk.carrying.remove(name)
+    let owned = match value {
+        Expr::ListLit { .. } => true,
+        Expr::ListRepeat { .. } => true,
+        Expr::StructLit { .. } => true,
+        Expr::MethodCall { method, .. } => ask.names.resolve(method) == "clone",
+        else => false,
+    }
+    if owned {
+        let carried = untethered_struct(value, asked, ask, walk)
+        if carried != null {
+            walk.carrying.insert(name.clone(), carried ?? "")
+        }
+        walk.owned.insert(name)
+        return
+    }
+    let root = untethered_root(value, ask, walk) ?? return
+    walk.views.insert(name, root)
+}
+
+// The variable a place starts from, through the views bound to one.
+fn untethered_root(expr: ref Expr, ask: ref BufferAsk, walk: ref UntetheredWalk) -> String? {
+    return match expr {
+        Expr::Variable(name, _) => {
+            let named = ask.names.resolve(name).clone()
+            walk.views[named]?.clone() ?? named
+        },
+        Expr::Index { base, .. } => untethered_root(base, ask, walk),
+        Expr::Field { base, .. } => untethered_root(base, ask, walk),
+        Expr::Unary { op, expr, .. } => match op {
+            UnaryOp::Ref => untethered_root(expr, ask, walk),
+            else => null,
+        },
+        else => null,
+    }
+}
+
+// The owned local a view of which a literal of the result's struct holds.
+fn untethered_struct(value: ref Expr, asked: ref UntetheredAsk, ask: ref BufferAsk, walk: ref UntetheredWalk) -> String? {
+    let (name, fields) = match value {
+        Expr::StructLit { name, fields, .. } => (name, fields),
+        else => return null,
+    }
+    if asked.fields.len() == 0 || ask.names.resolve(name) != asked.struct_name {
+        return null
+    }
+    for field in fields {
+        let named = ask.names.resolve(field.name).clone()
+        if !asked.fields.contains(named) {
+            continue
+        }
+        let mut root: String? = walk.views[named]?.clone() ?? named.clone()
+        if field.value != null {
+            root = untethered_root(field.value ?? continue, ask, walk)
+        }
+        let found = root ?? continue
+        if walk.owned.contains(found) {
+            return found
+        }
+    }
+    return null
+}
+
+fn untethered_returned(value: ref Expr, at: ref Span, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
+    let mut found: String? = null
+    if asked.bare {
+        let root = untethered_root(value, ask, walk) ?? ""
+        if root != "" && walk.owned.contains(root) {
+            found = root
+        }
+    }
+    if found == null {
+        found = untethered_struct(value, asked, ask, walk)
+    }
+    if found == null {
+        match value {
+            Expr::Variable(name, _) => {
+                found = walk.carrying[ask.names.resolve(name)]?.clone()
+            }
+            else => {}
+        }
+    }
+    let root = found ?? return
+    walk.findings.push(refusal("NK2304", at.clone(), f"`{asked.function}` hands back a view of `{root}`, a local that is gone once it returns.", ["Only text or bytes a function made live on in the caller after it returns; a view of a list's element or of a part of a struct does not yet."], f"Hand back a copy with `.clone()` and declare it without `ref`, or take `{root}` as a parameter so that the caller owns it."))
 }

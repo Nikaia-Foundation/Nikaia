@@ -219,7 +219,12 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
         }
         close_scope(&mut walk);
     }
-    Some(decide(key, body, &walk, ask))
+    let mut plan = decide(key, body, &walk, ask);
+    match item {
+        Item::Fn { ret_type, .. } => { plan.refusals.extend(untethered_returns(&plan.key, (ret_type).as_ref(), body, ask)); },
+        _ => { },
+    }
+    Some(plan)
 }
 
 pub(crate) fn carries_maybe(ty: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
@@ -1612,5 +1617,184 @@ pub(crate) fn element_refusal(keeper: &str, why: &str, help: &str, plan: &Buffer
         }
     }
     refusal("NK2304", span, format!("`{}` keeps views of data read inside a loop and removes entries as it goes, but {}.", keeper, why), vec![String::from("Each view keeps its own data alive here, so that data read for entries that were removed can be freed during the loop.")], help.to_string())
+}
+
+pub(crate) fn untethered_returns(function: &str, ret_type: Option<&Type>, body: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> Vec<Finding> {
+    let written = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    let fields = untethered_fields(written, ask);
+    let bare = untethered_view(written, ask);
+    if !bare && fields.is_empty() { return vec![]; }
+    let asked = UntetheredAsk { function: function.to_string(), bare, struct_name: ask.names.resolve(written.name).to_string(), fields };
+    let mut walk = UntetheredWalk { owned: collections::BTreeSet::new(), views: collections::BTreeMap::new(), carrying: collections::BTreeMap::new(), findings: vec![] };
+    untethered_block(body, &asked, ask, &mut walk);
+    if !body.stmts.is_empty() {
+        let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+        match &last.node {
+            Stmt::Expr(value) => { untethered_returned(value, &last.span, &asked, ask, &mut walk); },
+            _ => { },
+        }
+    }
+    walk.findings
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UntetheredAsk {
+    pub(crate) function: String,
+    pub(crate) bare: bool,
+    pub(crate) struct_name: String,
+    pub(crate) fields: collections::BTreeSet<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UntetheredWalk {
+    pub(crate) owned: collections::BTreeSet<String>,
+    pub(crate) views: collections::BTreeMap<String, String>,
+    pub(crate) carrying: collections::BTreeMap<String, String>,
+    pub(crate) findings: Vec<Finding>,
+}
+
+pub(crate) fn untethered_view(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+    if !ty.is_view || ty.is_tuple || (*ty.code).is_some() { return false; }
+    let base = last_segment(ask.names.resolve(ty.name));
+    if base == "String" || base == "Bytes" || base == "Mapped" || base == "str" { return false; }
+    if ty.generics.len() == 1 && ask.names.resolve(nikaia_std::index::get(&ty.generics, 0).name) == "u8" { return false; }
+    true
+}
+
+pub(crate) fn untethered_fields(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    if ty.is_view || ty.is_tuple { return out; }
+    let wanted = ask.names.resolve(ty.name).to_string();
+    for item in ask.items.iter() {
+        match &item.node {
+            Item::Struct { name, fields, .. } => {
+                let name = *name;
+                if ask.names.resolve(name) == wanted { for field in fields.iter() { if untethered_view(&field.ty, ask) { out.insert(ask.names.resolve(field.name).to_string()); } } }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn untethered_block(block: &Block, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, value, .. } => {
+                untethered_expr(value, &stmt.span, asked, ask, walk);
+                if names.len() == 1 { untethered_let(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string(), value, asked, ask, walk); }
+            },
+            Stmt::Return(value) => {
+                let returned = match value { Some(__nikaia_value) => __nikaia_value, None => continue };
+                untethered_expr(returned, &stmt.span, asked, ask, walk);
+                untethered_returned(returned, &stmt.span, asked, ask, walk);
+            },
+            Stmt::For { body, .. } => { untethered_block(body, asked, ask, walk); },
+            Stmt::While { body, .. } => { untethered_block(body, asked, ask, walk); },
+            Stmt::Expr(value) => { untethered_expr(value, &stmt.span, asked, ask, walk); },
+            _ => { },
+        }
+    }
+}
+
+pub(crate) fn untethered_expr(expr: &Expr, at: &Span, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            untethered_block(then_branch, asked, ask, walk);
+            if else_branch.is_some() { untethered_block(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, asked, ask, walk); }
+        },
+        Expr::Block(block, _) => { untethered_block(block, asked, ask, walk); },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { untethered_expr(&arm.body, at, asked, ask, walk); } },
+        Expr::Return(value, _) => {
+            let value = nikaia_std::boxed::open(value);
+            let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            untethered_returned(returned, at, asked, ask, walk);
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn untethered_let(name: String, value: &Expr, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) {
+    walk.owned.remove(&name);
+    walk.views.remove(&name);
+    walk.carrying.remove(&name);
+    let owned = match value {
+        Expr::ListLit { .. } => true,
+        Expr::ListRepeat { .. } => true,
+        Expr::StructLit { .. } => true,
+        Expr::MethodCall { method, .. } => { let method = *method; ask.names.resolve(method) == "clone" },
+        _ => false,
+    };
+    if owned {
+        let carried = untethered_struct(value, asked, ask, &walk);
+        if carried.is_some() { walk.carrying.insert(name.to_string(), nikaia_std::index::or(carried, || "".into())); }
+        walk.owned.insert(name);
+        return;
+    }
+    let root = match untethered_root(value, ask, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    walk.views.insert(name, root);
+}
+
+pub(crate) fn untethered_root(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &UntetheredWalk) -> Option<String> {
+    match expr {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let named = ask.names.resolve(name).to_string();
+            Some(nikaia_std::index::or(match *nikaia_std::index::get(&walk.views, &named) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || named.into()))
+        },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); untethered_root(base, ask, walk) },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); untethered_root(base, ask, walk) },
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); match op {
+            UnaryOp::Ref => untethered_root(expr, ask, walk),
+            _ => None,
+        } },
+        _ => None,
+    }
+}
+
+pub(crate) fn untethered_struct(value: &Expr, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &UntetheredWalk) -> Option<String> {
+    let (name, fields) = match value {
+        Expr::StructLit { name, fields, .. } => { let name = *name; (name, fields) },
+        _ => return None,
+    };
+    if asked.fields.is_empty() || ask.names.resolve(name) != asked.struct_name { return None; }
+    for field in fields.iter() {
+        let named = ask.names.resolve(field.name).to_string();
+        if !asked.fields.contains(&named) { continue; }
+        let mut root: Option<String> = Some(nikaia_std::index::or(match *nikaia_std::index::get(&walk.views, &named) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || named.to_string().into()));
+        if field.value.is_some() { root = untethered_root(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue }, ask, walk); }
+        let found = match root { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if walk.owned.contains(&found) { return Some(found); }
+    }
+    None
+}
+
+pub(crate) fn untethered_returned(value: &Expr, at: &Span, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) {
+    let mut found: Option<String> = None;
+    if asked.bare {
+        let root = nikaia_std::index::or(untethered_root(value, ask, &walk), || "".into());
+        if root != "" && walk.owned.contains(&root) { found = Some(root); }
+    }
+    if found.is_none() { found = untethered_struct(value, asked, ask, &walk); }
+    if found.is_none() {
+        match value {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                found = match *nikaia_std::index::get(&walk.carrying, ask.names.resolve(name)) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+            },
+            _ => { },
+        }
+    }
+    let root = match found { Some(__nikaia_value) => __nikaia_value, None => return };
+    walk.findings.push(refusal("NK2304", at.clone(), format!("`{}` hands back a view of `{}`, a local that is gone once it returns.", asked.function, root), vec![String::from("Only text or bytes a function made live on in the caller after it returns; a view of a list's element or of a part of a struct does not yet.")], format!("Hand back a copy with `.clone()` and declare it without `ref`, or take `{}` as a parameter so that the caller owns it.", root)));
 }
 
