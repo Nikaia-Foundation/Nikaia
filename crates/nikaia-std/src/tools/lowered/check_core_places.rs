@@ -471,6 +471,7 @@ pub(crate) fn check_core_places_a_declared_field<H: CheckHost>(state: &mut Check
         let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
         if state.facts.lent_fields.contains(&(id_of(v) as i64)) && check_core_places_a_local_lent(&state, world, v) && check_core_places_viewed_as(&found, &want) { found = want.clone(); }
     }
+    if state.lends_where_a_function_type_reads(world, value, &found, &want) { found = want.clone(); }
     let keeper = format!("`{}` keeps its `{}` after this line", name, field);
     let how: Option<FactWrap> = check_widened_slot(state, world, host, &found, &want, value, span);
     if how.is_some() {

@@ -632,6 +632,11 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
             found = want.clone()
         }
     }
+    // **A declared function that lends a parameter fits a field whose function
+    // type lends it** (ADR-views-3 D2, D14, #1254), as a `let` and an argument do.
+    if state.lends_where_a_function_type_reads(world, value, found, want) {
+        found = want.clone()
+    }
     let keeper = f"`{name}` keeps its `{field}` after this line"
     let how: FactWrap? = check_widened_slot(state, world, host, found, want, value, span)
     if how != null {
