@@ -57,4 +57,6 @@ together with the specification section and an example test.
 * **Builders have no GitHub**: the prompt holds the issues the brief names; a
   missing one goes under `Deviation`. A pre-flight names a commit by subject
   (`git log --grep`), never by hash: rebases change hashes (p9).
+* A script test that compares a driver's `--dry-run` text fails when `scripts/*.nika` wording changes; bless it from the project dir (`nikaia test --filter NAME --bless` in `tests/compiler`) and review the diff, since `nikaia run FILE` refuses a non-entry file. (qa-task)
+* Two `qa-input.txt` files exist (`docs/briefs/` and `docs/briefs/views/`); read the one in the lane directory your task names. (qa-task)
 
