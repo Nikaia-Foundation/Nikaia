@@ -348,7 +348,9 @@ fn agent_issues(body: String, repo: String) -> String throws {
         if issue.code != 0 { continue }
         out.push("")
         out.push(issue.stdout.trim().clone())
-        let comments = process::run("gh", ["api", f"repos/{repo}/issues/{n}/comments?per_page=100", "--jq", ".[] | \"### Comment by \\(.user.login), \\(.created_at[0:10])\\n\\n\\(.body)\\n\""])
+        // The driver's own posts (the queued brief, each run's result) stay out: the brief is
+        // the prompt already, and with them a long issue passes the 128 KB limit of one argument.
+        let comments = process::run("gh", ["api", f"repos/{repo}/issues/{n}/comments?per_page=100", "--jq", ".[] | select((.body | startswith(\"Brief queued:\") or startswith(\"Run:\")) | not) | \"### Comment by \\(.user.login), \\(.created_at[0:10])\\n\\n\\(.body)\\n\""])
         if comments.code == 0 && comments.stdout.trim() != "" {
             out.push("")
             out.push(comments.stdout.trim().clone())
