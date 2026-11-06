@@ -9,8 +9,9 @@
 // view needs a `from` (`NK1336`), unless it is a view of the subject (D7).
 //
 // The ledger records a written `from` as written (D10):
-// `result_from_as_written` replaces what the inference found with it, so a
-// caller reads the declaration, not the body.
+// `result_from_as_written` replaces what the inference found with it, or adds
+// it where the inference found nothing, so a caller reads the declaration,
+// not the body.
 //
 // Free functions over the file's items; the Rust adapter
 // (`check::check_result_from`) adds what they return.
@@ -72,9 +73,16 @@ pub fn result_from_as_written(names: ref winnow_grammar::InternerContext, items:
         return
     }
     for mut source in sources {
-        let named = written[source.key] ?? continue
-        source.borrows = named.clone()
+        let named = written.remove(source.key) ?? continue
+        source.borrows = named
         source.returns = ""
+    }
+    // **A `from` the body gives the inference no way to see** (ADR-views-3
+    // D8, D14, #1254): `return f(s)` through a `fn(s: String) -> String from
+    // s` reaches nothing the views pass follows, and the written sources are
+    // the ledger's all the same.
+    for (key, named) in written {
+        sources.push(ResultSource { key: key.clone(), borrows: named.clone(), returns: "" })
     }
 }
 

@@ -1408,6 +1408,13 @@ pub(crate) fn handed_parameter(value: Option<&Expr>, ask: &TierAsk<'_, '_, '_, '
                 _ => return None,
             }
         },
+        Expr::Call { .. } => {
+            let argument = match lent_through_code(given, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            match argument {
+                Expr::Variable(name, _) => ask.names.resolve(name).to_string(),
+                _ => return None,
+            }
+        },
         _ => return None,
     };
     let local = match tier_local(&name, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -1945,6 +1952,14 @@ pub(crate) fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     let result = match function.result { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut handed = handed_kinds(value, kinds, ask, walk);
+    let through = lent_through_code(value, ask, &walk);
+    if through.is_some() {
+        let argument = match through { Some(__nikaia_value) => __nikaia_value, None => return };
+        match argument {
+            Expr::Variable(name, _) => { handed = kinds_of_local(ask.names.resolve(name), &walk); },
+            _ => { },
+        }
+    }
     if plain_string(ask.names, &result) && !function.of_a_trait {
         let mut sides: Vec<String> = vec![];
         if lendable_sides(value, ask, walk, &mut sides) && !sides.is_empty() {
@@ -1977,9 +1992,50 @@ pub(crate) fn lendable_sides(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, wa
         _ => { },
     }
     if a_null(value) { return true; }
+    let through = lent_through_code(value, ask, &walk);
+    if through.is_some() {
+        let argument = match through { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let word = match lendable_parameter(&argument, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        out.push(word);
+        return true;
+    }
     let word = match lendable_parameter(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     out.push(word);
     true
+}
+
+pub(crate) fn lent_through_code(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> Option<Expr> {
+    let (func, args) = match value {
+        Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); (func, args) },
+        _ => return None,
+    };
+    let name = match func {
+        Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_string() },
+        _ => return None,
+    };
+    let local = match tier_local(&name, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let (key, at) = match declared.owner {
+        TextOwner::Param(ref key, at) => (key.to_string(), at),
+        _ => return None,
+    };
+    let function = match match *nikaia_std::index::get(&walk.declared.fns, &key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if at >= function.params.len() as i64 { return None; }
+    let code = match (*nikaia_std::index::get(&function.params, nikaia_std::index::at(at)).code).clone() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if code.result_from.len() != 1 { return None; }
+    let named = *nikaia_std::index::get(&code.result_from, 0);
+    let mut position: i64 = 0;
+    for written in code.param_names.iter() {
+        let written = *written;
+        let here: i64 = position;
+        position += 1;
+        let symbol = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if symbol == named && here < args.len() as i64 { return Some((*nikaia_std::index::get(&args, nikaia_std::index::at(here))).clone()); }
+    }
+    None
 }
 
 pub(crate) fn count_use(name: &str, walk: &mut TierWalk) {

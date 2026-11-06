@@ -195,6 +195,36 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_from_call_of_a_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+        let expected = match match self.expected.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if expected.is_a_view() { return false; }
+        let key = match match self.current.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let contract = match world.own.functions.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let mut sources: Vec<String> = contract.borrows.to_owned();
+        for named in written_from_of(world, &key) { sources.push(named); }
+        match value {
+            Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); match func {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    let found = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    match found.ty {
+                        Ty::Fn { ref params, ref result, .. } => { let result = nikaia_std::boxed::open(result); a_from_call_reads_only(world, params, (result).as_ref(), args, &sources) },
+                        _ => false,
+                    }
+                },
+                _ => false,
+            } },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_place_of_a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         let a_place = matches!(value, Expr::Field { .. } | Expr::Index { .. });
         if !a_place { return false; }
@@ -234,5 +264,60 @@ pub fn element_of(ty: &Ty) -> Ty {
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { item.clone() } else { ty.clone() } },
         _ => ty.clone(),
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn written_from_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<String> {
+    for item in world.here.items.iter() {
+        match &item.node {
+            Item::Fn { name, ret_from, .. } => {
+                let name = *name;
+                if written_from_names(world, name, None, key) { return ret_from.iter().map(|source| { world.words.resolve(*source).to_string() }).collect::<Vec<_>>(); }
+            },
+            Item::Impl { target, methods, .. } => {
+                let owner = world.words.resolve(target.name).to_string();
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, ret_from, .. } => {
+                            let name = *name;
+                            if written_from_names(world, name, Some(owner.to_string()), key) { return ret_from.iter().map(|source| { world.words.resolve(*source).to_string() }).collect::<Vec<_>>(); }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    vec![]
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn written_from_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, owner: Option<String>, key: &str) -> bool {
+    let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let own = world.words.resolve(symbol).to_string();
+    let held = match owner { Some(__nikaia_value) => __nikaia_value, None => return own == key };
+    format!("{}::{}", held, own) == key
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn a_from_call_reads_only(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[Ty], result: Option<&Ty>, args: &[Expr], borrows: &[String]) -> bool {
+    let held = match result { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if !held.is_a_view() || (params.len() as i64) != args.len() as i64 { return false; }
+    let mut reads = false;
+    for at in 0..params.len() as i64 {
+        if (*nikaia_std::index::get(&params, (at) as usize)).is_a_view() {
+            let named = match nikaia_std::index::get(&args, (at) as usize) {
+                Expr::Variable(name, _) => { let name = *name; nikaia_std::list::contains(&borrows, &world.words.resolve(name)) },
+                _ => false,
+            };
+            if !named { return false; }
+            reads = true;
+        }
+    }
+    reads
 }
 

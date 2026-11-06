@@ -34,10 +34,11 @@ pub fn result_from_as_written(names: &winnow_grammar::InternerContext, items: &[
     }
     if written.is_empty() { return; }
     for source in sources.iter_mut() {
-        let named = match *nikaia_std::index::get(&written, &(*source).key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        (*source).borrows = named.to_owned();
+        let named = match written.remove(&(*source).key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        (*source).borrows = named;
         (*source).returns = String::from("");
     }
+    for (key, named) in written.iter() { sources.push(ResultSource { key: key.to_string(), borrows: named.to_owned(), returns: String::from("") }); }
 }
 
 pub(crate) fn result_from_written_of(names: &winnow_grammar::InternerContext, item: &Item, owner: Option<String>, written: &mut collections::BTreeMap<String, Vec<String>>) {

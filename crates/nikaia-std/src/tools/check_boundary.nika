@@ -284,6 +284,42 @@ impl CheckState {
         return held.kind == CheckKind::Parameter && a_view && (a_list || a_map)
     }
 
+    /// **A call through a function value whose type writes `from`**
+    /// (ADR-views-3 D14, #1254): `return f(s)` with `f: fn(s: String) ->
+    /// String from s` hands back a view of the argument given for `s`, exactly
+    /// as a direct call of a function `-> String from s` does. Where every
+    /// argument the type reads is a parameter this function's result points
+    /// into (its `from`, written or inferred), the call is returned as the
+    /// direct call's result would be.
+    pub fn a_from_call_of_a_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        let expected = self.expected?.clone() ?? return false
+        if expected.is_a_view() {
+            return false
+        }
+        let key = self.current?.clone() ?? return false
+        let contract = world.own.functions.get(key) ?? return false
+        // A result written `-> String from s` is no view in the contract the
+        // body is checked against, so its `borrows` is empty: the declaration
+        // names the sources (D8).
+        let mut sources: Vec[String] = contract.borrows.clone()
+        for named in written_from_of(world, key) {
+            sources.push(named)
+        }
+        return match value {
+            Expr::Call { func, args, .. } => match func {
+                Expr::Variable(name, _) => {
+                    let found = self.binding(world.words.resolve(name)) ?? return false
+                    match found.ty {
+                        Ty::Fn { params, result, .. } => a_from_call_reads_only(world, params, result, args, sources),
+                        else => false,
+                    }
+                },
+                else => false,
+            },
+            else => false,
+        }
+    }
+
     /// **A place inside a borrowed `self` or a `ref` parameter**: a field or
     /// an element, whose buffer is the caller's (#96, #738).
     pub fn a_place_of_a_lent_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
@@ -340,4 +376,68 @@ pub fn element_of(ty: ref Ty) -> Ty sync {
         Ty::Pointed { item, slice, mutable } => if slice && !mutable { item.clone() } else { ty.clone() },
         else => ty.clone(),
     }
+}
+
+/// **The parameters a function of this file writes its result `from`**
+/// (ADR-views-3 D8), found by the ledger's key: `name`, or `Owner::name` for
+/// a method. None where it writes no `from`.
+fn written_from_of(world: ref CheckWorld, key: ref String) -> Vec[String] sync {
+    for item in world.here.items {
+        match item.node {
+            Item::Fn { name, ret_from, .. } => {
+                if written_from_names(world, name, null, key) {
+                    return ret_from.iter().map(fn(source) { world.words.resolve(source).clone() }).collect()
+                }
+            },
+            Item::Impl { target, methods, .. } => {
+                let owner = world.words.resolve(target.name).clone()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, ret_from, .. } => {
+                            if written_from_names(world, name, owner.clone(), key) {
+                                return ret_from.iter().map(fn(source) { world.words.resolve(source).clone() }).collect()
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return []
+}
+
+/// Whether a function named `name`, of `owner` where it is a method, has the
+/// ledger's key `key`.
+fn written_from_names(world: ref CheckWorld, name: winnow_grammar::Symbol?, owner: String?, key: ref String) -> bool sync {
+    let symbol = name ?? return false
+    let own = world.words.resolve(symbol).clone()
+    let held = owner ?? return own == key
+    return f"{held}::{own}" == key
+}
+
+/// Whether a call through a function value of the type `params -> result`
+/// hands back a view of only what `borrows` names (ADR-views-3 D14): the
+/// result is a view, and each argument at a parameter the type lends (one its
+/// `from` reads) is one of those names. At least one argument is read.
+fn a_from_call_reads_only(world: ref CheckWorld, params: ref Vec[Ty], result: ref Ty?, args: ref Vec[Expr], borrows: ref Vec[String]) -> bool sync {
+    let held = result ?? return false
+    if !held.is_a_view() || params.len() != args.len() {
+        return false
+    }
+    let mut reads = false
+    for at in 0..<params.len() {
+        if params[at].is_a_view() {
+            let named = match args[at] {
+                Expr::Variable(name, _) => borrows.contains(world.words.resolve(name)),
+                else => false,
+            }
+            if !named {
+                return false
+            }
+            reads = true
+        }
+    }
+    return reads
 }

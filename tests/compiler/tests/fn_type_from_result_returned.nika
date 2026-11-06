@@ -1,0 +1,16 @@
+// ADR-views-3 D14: a call through a value of type `fn(s: T) -> U from s` is a
+// view of the argument given for `s`, as a direct call of a function `-> U
+// from s` is; a function `-> U from p` returns it when that argument is `p`.
+fn same(s: String) -> String from s {
+    return s
+}
+
+fn apply(f: fn(s: String) -> String from s, s: String) -> String from s {
+    return f(s)
+}
+
+fn main() {
+    let g: String = "hi"
+    println(apply(same, g))
+    println(apply(same, g))
+}

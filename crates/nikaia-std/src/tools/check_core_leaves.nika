@@ -711,6 +711,13 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
         let given = value ?? return
         if state.a_get_off_a_lent_parameter(world, given) {
             found = view_of_type(found)
+        } else if state.a_from_call_of_a_parameter(world, given) {
+            // A view of what the result points into, returned as the direct
+            // call of a function `-> T from p` is: as `T` (ADR-views-3 D14).
+            let owned = viewed_from_type(found)
+            if owned.len() == 1 {
+                found = owned[0].clone()
+            }
         }
     }
     // **A `return` of a choice whose arms read through a borrowed parameter**

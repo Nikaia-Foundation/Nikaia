@@ -580,7 +580,10 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     if lending { found = view_of_type(&found); } else if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-        if state.a_get_off_a_lent_parameter(world, given) { found = view_of_type(&found); }
+        if state.a_get_off_a_lent_parameter(world, given) { found = view_of_type(&found); } else if state.a_from_call_of_a_parameter(world, given) {
+            let owned = viewed_from_type(&found);
+            if owned.len() == 1 { found = (*nikaia_std::index::get(&owned, 0)).clone(); }
+        }
     }
     if !lending && value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
