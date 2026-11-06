@@ -8,6 +8,20 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1349] — 2026-11-06
+
+**Driver: a run's numbers, report and debrief, and a block's focus line, go on the issue (#1252); A library function's text view is lent where it is read; A list, an array or a part of either is handed to a lent or mut Array[T] parameter; views: swap, sort, sort_by_key, reverse, fill on a changeable run, a list and a part of one (ADR-views-3 D11); A field of mut self and an element of a mut list handed to a keeper are taken (#1208); Lowering: `??` over a lent option with a value made here goes through a slot; Lowering: a lent `T?` is an `Option<&T>`, a lent `String?` an `Option<&str>` (#1256); Lowering: a lent `fs::Path?` is handed as `Option<&Path>`; ADR-views-3 D15: a comptime declared String is a view of build-fixed text; ADR-views-3 D7/D8/D11: a field or piece of a plain self handed back is an inferred view**
+- Driver: each run's result, tokens, cost, time, turns, report and debrief go as one comment on its issue (a lane task's on the lane issue named in focus.txt), and a block's focus line goes on the lane issue instead of docs/briefs/focus-log.md.
+- Views: a plain parameter a `match` takes apart stays lent - only an arm that hands a bound part on keeps it; `html::escape`'s result is lent with no `ref` at the call.
+- A part of a list is handed to a lent or `mut` `Array[T]`: `sum(v[1..<4])`, `zero(v[1..<3])` and `sum(v)` for a `Vec` work; a lent or changed `Array[T]` parameter is `&[T]` / `&mut [T]`, a kept one stays generic over its length; a part's length is `b - a` to the prover (ADR-views-3 D11, #1209)
+- A changeable run, a list and a part of one sort, swap, reverse and fill in place: v[2..<4].sort(), v.fill(0), mut xs: Array[T] with xs.sort_by_key(f); sort needs an ordered element (NK1164).
+- A field of `mut self`, or an element `w[i]` / `self.w[i]` of a `mut` place, handed to something that keeps it is taken out (`std::mem::take` / `mem::replace`) and must be given back by assignment (NK2108); NK1131/NK2106 name `mut self` instead of saying `self` is only borrowed (#1208)
+- `??` over a lent option takes a fallback made on the spot (a call, a constructor, a list): it runs only when the option is `null` and is not copied (#1256).
+- Lowering: a parameter of type `T?` that the function only reads is lent as `Option<&T>` (`Option<&str>` for `String?`), so a literal, a local option or a lent option can be handed to it without a copy (#1256).
+- Lowering: a `fs::Path?` that a function only reads takes an owned path option or a call's result as `Option<&Path>`. Before, it got an `Option<&PathBuf>`, which did not compile (#1256).
+- Checker: a `comptime` declared `String` is a view of the text the build fixed (ADR-views-3 D15); it is accepted and means `ref String`, where it was NK1167
+- Checker: a method that hands back a field or a piece of its `self` returns a view of it for any type, with no `from` written (ADR-views-3 D7, D8, D11): `fn tags(self) -> Vec[i64] { return self.tags }` and `fn first(self) -> Array[i64] { return self.tags[0..<1] }` are accepted, where they were NK1131 / NK1182; `migrate views-3` still writes `keep self` where the old by-value `self` moved the field
+
 ## [0.0.1348] — 2026-11-06
 
 **Tests: the read of async_outer_write_shared_mut_runs follows the group, as Part II 12.2 orders a get after an update (#985); Checker: a door on a lock bound to a name is a touch of that lock, so two tasks that write one lock are NK2104; limit: replaces workers: on Par::fold and par_fold, and a method's unknown option is NK1109; Checker: a task is ordered against the main-line statements in its window, NK2104 where both reach a resource one writes (#1259); ADR-269 D22: an expected stop is declared by NAME.stops (#1260)**
