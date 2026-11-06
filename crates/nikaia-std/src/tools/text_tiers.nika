@@ -4870,10 +4870,10 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
     // another file of the package: no position this walk sees says what
     // (ADR-282 D29).
     if names_a_type(last_segment(callee)) || !ask.library.functions.contains_key(callee) {
-        // **An argument a function value's `from` names is lent** (ADR-views-3
-        // D14, #1254): `f(g)` through `f: fn(s: String) -> String from s`
-        // hands back a view of `g`, so `g` goes in as a view, not kept, as it
-        // does into a function's parameter that `-> String from s` names.
+        // **An argument a function value lends is not kept** (ADR-views-3
+        // D2, D14, #1254): `f(g)` through `f: fn(s: String) -> String from s`
+        // or `f: fn(s: String) -> i64` lends `g`, so `g` goes in as a view,
+        // as it does into a function's plain parameter.
         let lent_at = from_named_positions(func, ask, walk)
         let mut at = 0
         for arg in args {
@@ -4888,8 +4888,10 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
     return std_result(callee, ask)
 }
 
-/// **The positions a function value's type names in its result's `from`**
-/// (ADR-views-3 D14): for `f: fn(s: String, n: i64) -> String from s`, `[0]`.
+/// **The positions a function value's type lends** (ADR-views-3 D2, D14,
+/// `code_lends_at`): those its result's `from` names, as `s` in `f: fn(s:
+/// String, n: i64) -> String from s`, and every plain text parameter, as `s`
+/// in `f: fn(s: String) -> i64`.
 /// The function value is a parameter or a `let` that writes its type; empty
 /// for anything else.
 fn from_named_positions(func: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> Vec[i64] {
@@ -4900,14 +4902,9 @@ fn from_named_positions(func: ref Expr, ask: ref TierAsk, walk: ref TierWalk) ->
     }
     let local = tier_local(name, walk) ?? return out
     let declared = local.declared ?? return out
-    let code = declared.ty.code ?? return out
-    let mut position = 0
-    for written in code.param_names {
-        let here = position
-        position += 1
-        let symbol = written ?? continue
-        if code.result_from.contains(symbol) {
-            out.push(here)
+    for at in 0..<declared.ty.generics.len() {
+        if code_lends_at(ask.names, declared.ty, at) {
+            out.push(at)
         }
     }
     return out

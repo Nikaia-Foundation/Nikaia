@@ -1,0 +1,32 @@
+// ADR-views-3 D2: a plain text parameter of a function type is lent, with or
+// without a `from`, so the caller's text stays its own and is usable after
+// the call (#1254).
+fn count(s: String) -> i64 {
+    return s.len()
+}
+
+fn apply(f: fn(s: String) -> i64, s: String) -> i64 {
+    return f(s)
+}
+
+fn twice(f: fn(s: String) -> i64) -> i64 {
+    let g: String = "hey ".trim().to_string()
+    let n = f(g)
+    println(g)
+    return n + f(g)
+}
+
+fn main() {
+    let g = "hi ".trim().to_string()
+    let f: fn(s: String) -> i64 sync = fn(s) { s.len() }
+    println(f(g))
+    let h: String = "hello ".trim().to_string()
+    println(f(h))
+    println(h)
+    let k: fn(s: String) -> i64 sync = count
+    println(k(h))
+    println(apply(fn(s) { s.len() }, h))
+    println(apply(count, g))
+    println(g)
+    println(twice(fn(s) { s.len() }))
+}

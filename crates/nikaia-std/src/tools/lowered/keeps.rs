@@ -1467,9 +1467,9 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
             }
             let mut code_lends: collections::BTreeMap<String, Vec<bool>> = collections::BTreeMap::new();
             for a in args.iter() {
-                let code = match (*a.ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if (*a.ty.code).is_none() { continue; }
                 let mut each: Vec<bool> = vec![];
-                for at in 0..a.ty.generics.len() as i64 { each.push(nikaia_std::index::get(&a.ty.generics, nikaia_std::index::at(at)).is_view || code_reads(code, at)); }
+                for at in 0..a.ty.generics.len() as i64 { each.push(nikaia_std::index::get(&a.ty.generics, nikaia_std::index::at(at)).is_view || code_lends_at(view.words, &a.ty, at)); }
                 code_lends.insert(view.text(a.name), each);
             }
             let context = KeepsBody { parameters: parameters.to_owned(), lent, fields, returns_a_view, hands_back_its_last: ret_type.is_some() && !returns_a_view, unresolved, types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps, code_lends, options };

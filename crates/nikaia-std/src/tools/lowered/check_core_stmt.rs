@@ -730,6 +730,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             state.findings.push(check_refusal("NK1257", span, format!("A `{}` read out of a place is a copy, so it can't be bound as a `ref {}`.", shown, shown), vec![String::from("A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep.")], Some(format!("an `{}` is copied at a read; write `let {} = {}`.", shown, name, written))));
             found_kept = want.clone();
         }
+        if state.lends_where_a_function_type_reads(world, Some(value), &found_kept, &want) { found_kept = want.clone(); }
         state.expect_kept_asked(world, &found_kept, &want, Some(value), "the `let` declares a `String`, which is text of its own", span, "let", &|was, wanted| { format!("This value is `{}`, but the `let` declares `{}`.", was, wanted) });
         check_core_stmt_a_number_read_through_a_lent_binding(state, world, &want, value, span);
         bound = want;

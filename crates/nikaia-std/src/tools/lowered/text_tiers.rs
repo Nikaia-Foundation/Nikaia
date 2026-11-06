@@ -3570,15 +3570,7 @@ pub(crate) fn from_named_positions(func: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_
     };
     let local = match tier_local(&name, walk) { Some(__nikaia_value) => __nikaia_value, None => return out };
     let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return out };
-    let code = match (*declared.ty.code) { Some(__nikaia_value) => __nikaia_value, None => return out };
-    let mut position: i64 = 0;
-    for written in code.param_names.iter() {
-        let written = *written;
-        let here: i64 = position;
-        position += 1;
-        let symbol = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if code.result_from.contains(&symbol) { out.push(here); }
-    }
+    for at in 0..declared.ty.generics.len() as i64 { if code_lends_at(ask.names, &declared.ty, at) { out.push(at); } }
     out
 }
 

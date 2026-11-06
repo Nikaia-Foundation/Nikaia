@@ -69,7 +69,7 @@ pub fn written_ty(names: ref winnow_grammar::InternerContext, aliases: ref colle
     // **One that writes `from` is read as the views it names**
     // (ADR-views-3 D14, `code_as_read`).
     if ty.code != null {
-        let read = code_as_read(ty)
+        let read = code_as_read(names, ty)
         let code = read.code ?? return Ty::Unknown
         let params = written_all(names, aliases, read.generics)
         let result = code.result ?? return Ty::Fn { params: params, result: null, is_sync: code.is_sync, can_throw: code.can_throw }
@@ -115,19 +115,20 @@ fn lent_item(names: ref winnow_grammar::InternerContext, aliases: ref collection
 /// (ADR-views-3 D14): its result is a view, and so is each parameter the
 /// `from` names, which the code lends. `fn(s: String) -> String from s` is
 /// the type `fn(ref String) -> ref String` was; a parameter the `from` does not
-/// name is as written, and the read type writes no `from` of its own. Any
-/// other type is as written.
-pub fn code_as_read(ty: ref Type) -> Type {
+/// name is as written, and the read type writes no `from` of its own. **A
+/// plain text parameter is lent all the same** (ADR-views-3 D2, #1254):
+/// `fn(s: String) -> i64` is the type `fn(ref String) -> i64` was, so a
+/// closure that fits it reads a view and the caller's text stays its own.
+/// Any other type is as written.
+pub fn code_as_read(names: ref winnow_grammar::InternerContext, ty: ref Type) -> Type {
     let code = ty.code ?? return ty.clone()
-    if code.result_from.is_empty() {
+    if !code_lends_unmarked(names, ty) {
         return ty.clone()
     }
-    let mut result = (code.result ?? return ty.clone()).clone()
-    result.is_view = true
     let mut generics: Vec[Type] = []
     for at in 0..<ty.generics.len() {
         let mut part = ty.generics[at].clone()
-        if code_reads(code, at) {
+        if code_lends_at(names, ty, at) {
             part.is_view = true
         }
         generics.push(part)
@@ -135,10 +136,45 @@ pub fn code_as_read(ty: ref Type) -> Type {
     let mut read = ty.clone()
     read.generics = generics
     let mut written = code.clone()
-    written.result = result
+    if !code.result_from.is_empty() {
+        let mut result = (code.result ?? return ty.clone()).clone()
+        result.is_view = true
+        written.result = result
+    }
     written.result_from = []
     read.code = written
     return read
+}
+
+/// **Whether a function type lends its parameter at `at` as a view**
+/// (ADR-views-3 D2, D14): one its `from` names, or plain text, which a
+/// function type cannot keep (only a written `keep` keeps, and a function
+/// type writes none).
+pub fn code_lends_at(names: ref winnow_grammar::InternerContext, ty: ref Type, at: i64) -> bool {
+    let code = ty.code ?? return false
+    if at >= ty.generics.len() {
+        return false
+    }
+    if code_reads(code, at) {
+        return true
+    }
+    let part = ty.generics[at]
+    return !part.is_view && !part.is_mut && !part.is_nullable && !part.is_tuple && !part.is_slice && part.code == null && part.generics.is_empty() && names.resolve(part.name) == "String"
+}
+
+/// Whether `code_as_read` changes a function type: it writes `from`, or
+/// one of its parameters is plain text it lends.
+pub fn code_lends_unmarked(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
+    let code = ty.code ?? return false
+    if !code.result_from.is_empty() {
+        return true
+    }
+    for at in 0..<ty.generics.len() {
+        if !ty.generics[at].is_view && code_lends_at(names, ty, at) {
+            return true
+        }
+    }
+    return false
 }
 
 /// Whether a type is a function type whose result writes `from`

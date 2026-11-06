@@ -603,7 +603,7 @@ impl CheckState {
     /// below takes both as `&str`. A parameter the function keeps does not
     /// fit there, nor does a result of its own (D14: a `from` result is a
     /// view, and an owned one is no view of what the caller lent).
-    fn lends_where_a_function_type_reads(ref self, world: ref CheckWorld, given: ref Expr?, found: ref Ty, want: ref Ty) -> bool sync {
+    pub fn lends_where_a_function_type_reads(ref self, world: ref CheckWorld, given: ref Expr?, found: ref Ty, want: ref Ty) -> bool sync {
         let value = given ?? return false
         let name = match value {
             Expr::Variable(ident, _) => world.words.resolve(ident).clone(),

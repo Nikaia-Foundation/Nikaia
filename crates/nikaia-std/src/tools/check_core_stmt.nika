@@ -968,6 +968,12 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             state.findings.push(check_refusal("NK1257", span, f"A `{shown}` read out of a place is a copy, so it can't be bound as a `ref {shown}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep."], f"an `{shown}` is copied at a read; write `let {name} = {written}`."))
             found_kept = want.clone()
         }
+        // **A declared function that lends a parameter fits a function type
+        // that lends it** (ADR-views-3 D2, D14, #1254): `let k: fn(s: String)
+        // -> i64 = count` with `count(s: String)`, as an argument does.
+        if state.lends_where_a_function_type_reads(world, value, found_kept, want) {
+            found_kept = want.clone()
+        }
         state.expect_kept_asked(world, found_kept, want, value, "the `let` declares a `String`, which is text of its own", span, "let", fn(was, wanted) { f"This value is `{was}`, but the `let` declares `{wanted}`." })
         check_core_stmt_a_number_read_through_a_lent_binding(state, world, want, value, span)
         bound = want

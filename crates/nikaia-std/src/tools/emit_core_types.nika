@@ -119,9 +119,10 @@ impl EmitState {
 
         // **A function type that writes `from` is written as the views it
         // names** (ADR-views-3 D14, `code_as_read`): `fn(s: String) -> String
-        // from s` is `Fn(&str) -> &str`.
-        if code_writes_from(ty) {
-            return self.emit_core_ty_named(world, walk, crossings, overlaps, code_as_read(ty), name, lifetimes, count)
+        // from s` is `Fn(&str) -> &str`, and a plain text parameter is lent
+        // without one (D2, #1254): `fn(s: String) -> i64` is `Fn(&str) -> i64`.
+        if code_lends_unmarked(world.words, ty) {
+            return self.emit_core_ty_named(world, walk, crossings, overlaps, code_as_read(world.words, ty), name, lifetimes, count)
         }
 
         // A function inside a container is a value the container holds

@@ -713,7 +713,13 @@ impl EmitState {
                 names.push(f"__nikaia_a{n}")
             }
             let joined = names.join(", ")
-            out.push(f"&async |{joined}| (*")
+            // **One `&` only** (ADR-views-3 D2, #1254): behind two, Rust no
+            // longer reads the closure's signature off the `AsyncFn` bound,
+            // and a lent parameter's lifetime is then not general enough.
+            if !out.buf.ends_with("&") {
+                out.push("&")
+            }
+            out.push(f"async |{joined}| (*")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f")({joined}).await")
             return
