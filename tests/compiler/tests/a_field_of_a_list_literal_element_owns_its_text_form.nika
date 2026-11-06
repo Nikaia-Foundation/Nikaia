@@ -1,0 +1,34 @@
+// The text form of a number field of an element of a list literal bound
+// without a type is new text, as one of a declared list is (#1210): the
+// struct literals name the element's struct, so `sites[1].line` is a known
+// place and its `to_string()` lends no temporary.
+struct Site {
+    line: i64,
+}
+fn pad_left(text: String, width: i64) -> String {
+    if text.len() >= width {
+        return text
+    }
+    let mut out = ""
+    let mut i = text.len()
+    while i < width {
+        out = out + " "
+        i = i + 1
+    }
+    out = out + text
+    return out
+}
+fn main() {
+    let sites = [Site { line: 7 }, Site { line: 12345 }]
+    for site in sites {
+        let cell = pad_left(site.line.to_string(), 4)
+        println(f"[{cell}]")
+    }
+    for site in sites.iter() {
+        println(f"[{pad_left(site.line.to_string(), 4)}]")
+    }
+    let last = pad_left(sites[1].line.to_string(), 4)
+    println(f"[{last}]")
+    let more = sites
+    println(f"[{pad_left(more[0].line.to_string(), 4)}]")
+}

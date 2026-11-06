@@ -548,6 +548,9 @@ struct TierLocal {
     /// parameter's, or a view of one (#1144): no keep holds it past the
     /// loop, so its text form is text of its own.
     unkept: bool,
+    /// The struct each element of the list literal it is bound to is, where
+    /// the `let` names no type (#1210): its elements' fields are known places.
+    items_of: String?,
 }
 
 /// What one walk found, every position by its word.
@@ -795,7 +798,7 @@ fn tier_arm_read(node: i64, mut walk: TierWalk) -> bool {
 }
 
 fn plain_local(kinds: Kinds) -> TierLocal {
-    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false }
+    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null }
 }
 
 fn tier_at(word: ref String, mut walk: TierWalk) -> Tier {
@@ -2611,6 +2614,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
     let from = text_source_word(value, ask, walk)
     let mut through: Vec[String] = []
     read_through(value, ask, walk, through)
+    let mut items_of: String? = null
     if written {
         let declared_ty = ty?.clone() ?? return
         of = ask.names.resolve(declared_ty.name).clone()
@@ -2619,6 +2623,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         if a_literal_text(value) {
             literal = at
         }
+        items_of = literal_items_struct(value, ask, walk)
         // **A name bound to a list without a type is that list** (ADR-282
         // D16): what is put into it goes where the list came from.
         let source = source_of(value, ask, walk)
@@ -2644,7 +2649,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         }
     }
     if names.len() == 1 {
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk) }
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of: items_of }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
@@ -3297,7 +3302,7 @@ fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Strin
 /// holds the same `P` (#1000): what is read out of its element is read out of
 /// `P`'s positions.
 fn element_struct(list: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String? {
-    let found = source_of(list, ask, walk) ?? return null
+    let found = source_of(list, ask, walk) ?? return literal_items_struct(list, ask, walk)
     let ty = through_ref(found.ty)
     if !a_container(ask.names, ty) {
         return null
@@ -3329,11 +3334,47 @@ fn walked_struct(iter: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String
         }
         else => {}
     }
-    let found = source_of(iter, ask, walk) ?? return null
+    let found = source_of(iter, ask, walk) ?? return literal_items_struct(iter, ask, walk)
     if a_map(ask.names, through_ref(found.ty)) {
         return null
     }
     return element_struct(iter, ask, walk)
+}
+
+/// **The struct every element of a list literal is** (#1210): `[Site { .. },
+/// Site { .. }]`, its repeat, and a name a `let` without a type bound to
+/// one. Where the elements are of more than one struct, or any is no literal
+/// of one, none.
+fn literal_items_struct(list: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> String? {
+    match list {
+        Expr::ListLit { items, .. } => {
+            if items.len() == 0 {
+                return null
+            }
+            let first = literal_struct_name(items[0], ask) ?? return null
+            for item in items {
+                let name = literal_struct_name(item, ask) ?? return null
+                if name != first {
+                    return null
+                }
+            }
+            return first
+        }
+        Expr::ListRepeat { value, .. } => return literal_struct_name(value, ask),
+        Expr::Variable(name, _) => {
+            let local = tier_local(ask.names.resolve(name), walk) ?? return null
+            return local.items_of?.clone()
+        }
+        else => return null,
+    }
+}
+
+/// The struct a struct literal names.
+fn literal_struct_name(expr: ref Expr, ask: ref TierAsk) -> String? {
+    return match expr {
+        Expr::StructLit { name, .. } => ask.names.resolve(name).clone(),
+        else => null,
+    }
 }
 
 /// A borrowed container's type as the container it borrows: `ref Vec[P]` as
@@ -5781,7 +5822,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         let owner = TextOwner::Param(key.clone(), at)
         let kinds = kinds_of(owner, arg.ty, [], ask, walk)
         let of: String = ask.names.resolve(arg.ty.name).clone()
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: arg.ty.clone() }, from: null, empty: -1, through: [], lent: false, made: false, unkept: false }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: arg.ty.clone() }, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
@@ -5794,7 +5835,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     walk.lent_self = false
     if receiver != null && target != null {
         walk.lent_self = receiver?.is_ref ?? false
-        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false }
+        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null }
         bind_tier_local("self", local, walk)
     }
     walk.handed_back = -1
