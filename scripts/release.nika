@@ -13,6 +13,11 @@
 //     RED <sha8> <jobs>                 (the tip of develop is red: no bump)
 //     BUMP 0.0.X <titles> | NO BUMP: <why> | PUSH REJECTED
 //
+// The heading of the entry is the one released report's commit subject (with
+// the issues it fixes), or `Builders' changes (#a, #b)` for several; equal
+// `Changelog:` lines (after trimming whitespace and a trailing `.`) give one
+// bullet. Test flags: `--heading TITLE... [--fixes #N...]`, `--entries LINE...`.
+//
 // `--dry-run` prints what it would do and changes nothing. `--loop M` runs
 // again every M minutes, prints only lines that changed, and ends on RED or
 // when the file `REPORTS_DIR/STOP` exists.
@@ -65,21 +70,57 @@ fn release_git(args: Vec[String]) -> String throws {
     return out.stdout.trim().clone()
 }
 
-// The subject of the pushed commit, with the issues its message fixes. A
-// driver's builder reports `Pushed: local <sha>` (the driver pushes later).
-fn release_title(pushed: String) -> String throws {
-    let sha = (pushed.strip_prefix("local ") ?? pushed).trim().clone()
-    let subject = release_git(["log", "-1", "--format=%s", sha.clone()])
-    let body = release_git(["log", "-1", "--format=%B", sha])
+fn release_sha(pushed: String) -> String {
+    return (pushed.strip_prefix("local ") ?? pushed).trim().clone()
+}
+
+// The issues the pushed commit's message fixes (`Fixes #N`), each once.
+fn release_fixes(pushed: String) -> Vec[String] throws {
+    let body = release_git(["log", "-1", "--format=%B", release_sha(pushed)])
     let mut fixes: Vec[String] = []
     for line in body.split("\n") {
         for word in line.split(" ") {
             let w = word.trim().trim_end_matches(",").trim_end_matches(";").trim_end_matches(".")
-            if w.starts_with("#") && !subject.contains(w) && body.contains(f"Fixes {w}") { fixes.push(w.clone()) }
+            if w.starts_with("#") && body.contains(f"Fixes {w}") && !fixes.contains(w.clone()) { fixes.push(w.clone()) }
         }
+    }
+    return fixes
+}
+
+// The subject of the pushed commit, with the issues its message fixes. A
+// driver's builder reports `Pushed: local <sha>` (the driver pushes later).
+fn release_title(pushed: String) -> String throws {
+    let subject = release_git(["log", "-1", "--format=%s", release_sha(pushed.clone())])
+    let mut fixes: Vec[String] = []
+    for w in release_fixes(pushed) {
+        if !subject.contains(w.clone()) { fixes.push(w) }
     }
     if fixes.len() == 0 { return subject }
     return subject + " (" + fixes.join(", ") + ")"
+}
+
+// The bold heading of the entry (supervisor, 2026-11-06): one released report
+// gives its title; several give `Builders' changes (#a, #b)` with the issues
+// they fix, or `Builders' changes` when none is fixed; subjects are not chained.
+fn release_heading(titles: Vec[String], fixes: Vec[String]) -> String {
+    if titles.len() == 1 { return titles[0].clone() }
+    if fixes.len() == 0 { return "Builders' changes" }
+    return "Builders' changes (" + fixes.join(", ") + ")"
+}
+
+// The changelog lines, each once: two lines equal after trimming whitespace
+// and a trailing `.` give one bullet (the first one's spelling).
+fn release_entries(lines: Vec[String]) -> Vec[String] {
+    let mut keys: Vec[String] = []
+    let mut out: Vec[String] = []
+    for line in lines {
+        let t = line.trim()
+        let key = (t.strip_suffix(".") ?? t).trim().clone()
+        if keys.contains(key.clone()) { continue }
+        keys.push(key)
+        out.push(line.clone())
+    }
+    return out
 }
 
 // `CI <sha8> <state>`, with the failed jobs' names when the tip failed.
@@ -145,7 +186,7 @@ fn release_version() -> String throws {
 }
 
 // Raises the version, commits the files bump.py changed and pushes; the line to print.
-fn release_bump(titles: Vec[String], entries: Vec[String]) -> String throws {
+fn release_bump(title: String, entries: Vec[String]) -> String throws {
     release_git(["fetch", "origin", "develop"])
     let before = release_changed()
     for f in before {
@@ -153,7 +194,6 @@ fn release_bump(titles: Vec[String], entries: Vec[String]) -> String throws {
             return f"NO BUMP: {f} is not clean"
         }
     }
-    let title = titles.join("; ")
     let mut args: Vec[String] = ["scripts/bump.py", "new", "--title", title.clone()]
     for e in entries {
         args.push("--entry")
@@ -189,6 +229,7 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
     lines.push(ci)
     let mut titles: Vec[String] = []
     let mut entries: Vec[String] = []
+    let mut fixes: Vec[String] = []
     let mut names: Vec[String] = []
     let mut skipped = 0
     for r in release_reports(dir.clone()) {
@@ -204,6 +245,9 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
         }
         if r.changelog == "none" || r.changelog == "" { continue }
         titles.push(release_title(r.pushed.clone()))
+        for w in release_fixes(r.pushed.clone()) {
+            if !fixes.contains(w.clone()) { fixes.push(w) }
+        }
         entries.push(r.changelog.clone())
         names.push(r.name.clone())
     }
@@ -216,12 +260,14 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
         lines.push("NO BUMP: no changelog line")
         return lines
     }
+    let heading = release_heading(titles.clone(), fixes)
+    let bullets = release_entries(entries)
     if dry {
-        lines.push(release_cap(f"BUMP (dry run) {release_summary(titles)}"))
+        lines.push(release_cap(f"BUMP (dry run) {heading}: {bullets.len()} entries"))
         return lines
     }
     let summary = release_summary(titles.clone())
-    let done = release_bump(titles, entries)
+    let done = release_bump(heading, bullets)
     if done.starts_with("BUMP") {
         let list = f"{dir}/released.txt"
         let mut old: String = ""
@@ -236,12 +282,38 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
     return lines
 }
 
+// The test flags: `--heading TITLE... [--fixes #N...]` prints the heading,
+// `--entries LINE...` the bullets, one per line.
+fn release_test(args: Vec[String]) {
+    let mut words: Vec[String] = []
+    let mut fixes: Vec[String] = []
+    let mut into_fixes = false
+    for k in 2..<args.len() {
+        if args[k] == "--fixes" {
+            into_fixes = true
+        } else if into_fixes {
+            fixes.push(args[k].clone())
+        } else {
+            words.push(args[k].clone())
+        }
+    }
+    if args[1] == "--heading" {
+        println(release_heading(words, fixes))
+        return
+    }
+    for e in release_entries(words) { println(f"- {e}") }
+}
+
 fn main() throws {
     let mut dry = false
     let mut every: i64 = 0
     let mut dir: String = ""
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
+    if args.len() >= 2 && (args[1] == "--heading" || args[1] == "--entries") {
+        release_test(args)
+        return
+    }
     let mut i = 1
     while i < args.len() {
         if args[i] == "--dry-run" {

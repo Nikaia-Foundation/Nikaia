@@ -11,11 +11,13 @@
 // block's line (`drive_focus_line`) as a comment on the lane issue (#1252;
 // without one only in the output), a pending bump of each area's DIR while CI is green,
 // the next area, focus.txt written (not committed). CUT and RED stop for the supervisor as
-// in single-DIR mode; an area entered with an empty queue is skipped (`FOCUS
+// in single-DIR mode (a report's `Found:` does not cut: it goes to DIR/found.txt,
+// `drive_found`); an area entered with an empty queue is skipped (`FOCUS
 // <area> empty, skipped`); every area empty escalates. Before a block, the first unrun
 // docs/briefs/bugs brief with a `Blocks:` line runs first. Test flags:
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
-// block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`.
+// block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
+// `--found DIR BRIEF` (drive_found).
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time:
 //
@@ -26,7 +28,10 @@
 //                                 (drive_post_run: result, tokens, cost,
 //                                 time, turns, report, debrief; a brief
 //                                 without an issue on its area's lane
-//                                 issue); no suite until the batch ends
+//                                 issue); no suite until the batch ends;
+//                                 a report's `Found:` appended to
+//                                 DIR/found.txt and printed as `FOUND
+//                                 <brief>: Found: ...`, the batch goes on
 //     BUMP pending, CI green      cycle.nika -- DIR --apply
 //     CUT, RED, BATCH DONE        the batch's suite runs and is waited for,
 //                                 then the driver stops for the supervisor
@@ -905,7 +910,26 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
     drive_tidy(dry, dir.clone())
     drive_say(dry, f"append {brief} to {dir}/unpushed.txt (no suite until the batch ends)")
     if dry { return }
-    drive_append(f"{dir}/unpushed.txt", brief)
+    drive_append(f"{dir}/unpushed.txt", brief.clone())
+    let found = drive_found(dir, brief)
+    if found != "" { println(found) }
+}
+
+// A report's `Found:` (a defect outside the builder's step) does not stop the
+// batch (supervisor, 2026-11-06): `<brief>: Found: <text>` is appended to
+// DIR/found.txt (created when missing) for the supervisor to file, and the
+// line to print, `FOUND <brief>: Found: <text>` (at most 160 characters), is
+// returned; "" when the report has none (`none` or no line).
+fn drive_found(dir: String, brief: String) -> String throws {
+    let report = drive_report_of(brief.clone())
+    if report == "" { return "" }
+    let found = drive_field(drive_read(report), "Found")
+    if found == "" || found == "none" { return "" }
+    let line = f"{drive_stem(brief)}: Found: {found}"
+    drive_append(f"{dir}/found.txt", line.clone())
+    let out = f"FOUND {line}"
+    if out.len() <= 160 { return out }
+    return out.bytes[0..157].text() + "..."
 }
 
 // The batch ends at a stop line: its suite runs and is waited for (pushed when
@@ -1195,7 +1219,8 @@ fn drive_focus_end(exe: String, dry: bool, file: String, area: String, dir: Stri
 // an unrun bug brief with a `Blocks:` line runs first (it counts for the bugs
 // area). An area entered with nothing to run is skipped for this rotation
 // (`FOCUS <area> empty, skipped`), and every area empty escalates. RED and CUT
-// stop for the supervisor as in the single-DIR loop.
+// stop for the supervisor as in the single-DIR loop; a report's `Found:` is no
+// CUT (batch.nika), it is collected in DIR/found.txt (drive_builder).
 fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: String) throws {
     let path = "docs/briefs/focus.txt"
     let bugs = "docs/briefs/bugs"
@@ -1377,6 +1402,11 @@ fn main() throws {
     }
     if args.len() == 3 && args[1] == "--post-body" {
         print(drive_post_body(drive_stem(args[2]), drive_read(args[2])))
+        return
+    }
+    if args.len() == 4 && args[1] == "--found" {
+        let found = drive_found(args[2], args[3].clone())
+        if found == "" { println("none") } else { println(found) }
         return
     }
     if args.len() == 3 && args[1] == "--blocks" {

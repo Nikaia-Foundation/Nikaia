@@ -13,8 +13,10 @@
 // `Owner:` is neither empty nor starts with `none` prints
 // `OWNER <brief>: <text>`; a report whose `Result:` first word (`done.` too)
 // is not `done` or `noop`, `Pushed:` is `rejected` or `none` (not for `noop`),
-// `Gate:` is present and does not start with `green`, or `Found:`/`Deviation:`
-// is not `none` prints `CUT <brief>: <line>`; all done prints `BATCH DONE` and the count of
+// `Gate:` is present and does not start with `green`, or `Deviation:` is not
+// `none` prints `CUT <brief>: <line>`; a `Found:` that is not `none` does not
+// cut (supervisor, 2026-11-06): the driver collects it in `DIR/found.txt`
+// (drive.nika, `drive_found`); all done prints `BATCH DONE` and the count of
 // `Changelog:` lines that are not `none`. `--tokens` appends
 // `BRIEF TOKENS CALLS [READ WRITE OUT]` to `DIR/tokens.txt` (the columns of
 // `tokenspeed.nika --usage`; older rows have only the first three).
@@ -58,14 +60,12 @@ fn batch_report_path(dir: String, brief: String) -> String throws {
 fn batch_cut(text: String) -> String {
     let result = batch_field(text.clone(), "Result:")
     let pushed = batch_field(text.clone(), "Pushed:")
-    let found = batch_field(text.clone(), "Found:")
     let deviation = batch_field(text.clone(), "Deviation:")
     let gate = batch_field(text, "Gate:")
     let word = result.split(" ").collect()[0].trim_end_matches(".").clone()
     if word != "done" && word != "noop" { return f"Result: {result}" }
     if word == "done" && (pushed == "rejected" || pushed == "none" || pushed == "") { return f"Pushed: {pushed}" }
     if gate != "" && !gate.starts_with("green") { return f"Gate: {gate}" }
-    if found != "none" { return f"Found: {found}" }
     if deviation != "none" { return f"Deviation: {deviation}" }
     return ""
 }

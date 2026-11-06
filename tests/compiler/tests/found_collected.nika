@@ -1,0 +1,45 @@
+// batch.nika and drive.nika (supervisor, 2026-11-06): a report's `Found:` no
+// longer cuts the batch; the driver appends `<brief>: Found: ...` to
+// DIR/found.txt (created when missing) and prints a `FOUND` line. A
+// `Deviation:` still cuts.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/batch.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/batch.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    fs::write(f"{tmp}/batch.txt", fs::Root::Anywhere, "a.md\n")
+    fs::write(f"{tmp}/a.md", fs::Root::Anywhere, "body\n")
+    let head = "Result: done\nPushed: local abc\nGate: green\n"
+    fs::write(f"{tmp}/a.md.report.md", fs::Root::Anywhere, head + "Found: NK1131 refuses a lent field (probe p.nika)\nDeviation: none\nChangelog: none\n")
+    let batch = process::run(nikaia.clone(), ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo.clone())
+    print(f"batch: {batch.stdout}")
+    for k in 0..<2 {
+        let found = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--found", tmp.clone(), f"{tmp}/a.md"]; dir: repo.clone())
+        print(f"drive {k}: {found.stdout}")
+    }
+    print("found.txt:\n" + fs::read_to_string(f"{tmp}/found.txt", fs::Root::Anywhere))
+    fs::write(f"{tmp}/a.md.report.md", fs::Root::Anywhere, head + "Found: none\nDeviation: step 2 not built\nChangelog: none\n")
+    let cut = process::run(nikaia.clone(), ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo.clone())
+    print(f"deviation: {cut.stdout}")
+    let none = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--found", tmp.clone(), f"{tmp}/a.md"]; dir: repo.clone())
+    print(f"no found: {none.stdout}")
+    process::run("rm", ["-rf", tmp])
+}

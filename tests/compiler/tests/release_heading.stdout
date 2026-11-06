@@ -1,0 +1,6 @@
+Lowering: a lent T? is an Option (#1256)
+Builders' changes (#1257, #1260)
+Builders' changes
+- Two tasks of one group write a SharedMut.
+- A lent text view.
+- Two tasks of one group write a SharedMut!

@@ -1,0 +1,36 @@
+// release.nika (supervisor, 2026-11-06): the heading of a version raise is
+// the one report's title, or `Builders' changes (#a, #b)` for several, never
+// a chain of subjects; two equal `Changelog:` lines give one bullet.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/release.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/release.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn release(nikaia: String, repo: String, args: Vec[String]) -> String throws {
+    let mut all: Vec[String] = ["run", "scripts/release.nika", "--"]
+    for a in args { all.push(a.clone()) }
+    return process::run(nikaia, all; dir: repo).stdout
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    print(release(nikaia.clone(), repo.clone(), ["--heading", "Lowering: a lent T? is an Option (#1256)", "--fixes", "#1256"]))
+    print(release(nikaia.clone(), repo.clone(), ["--heading", "Driver: a run's numbers", "Views: swap and sort", "--fixes", "#1257", "#1260"]))
+    print(release(nikaia.clone(), repo.clone(), ["--heading", "Driver: a run's numbers", "Views: swap and sort"]))
+    print(release(nikaia.clone(), repo.clone(), ["--entries", "Two tasks of one group write a SharedMut.", " Two tasks of one group write a SharedMut ", "A lent text view.", "Two tasks of one group write a SharedMut!"]))
+}
