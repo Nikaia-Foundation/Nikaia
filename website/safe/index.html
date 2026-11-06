@@ -62,7 +62,7 @@ description: >-
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
         <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-todo">Still being built</span> A file read while the program runs still counts as trusted, although the specification counts it as outside data.</p>
+<p><span class="why why-todo">Still being built</span> Standard input and a file read while the program runs still count as trusted, although the specification counts them as outside data (#649).</p>
 <p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one.</p>
 </details>
         <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A guard where the data arrives</a></h3>
