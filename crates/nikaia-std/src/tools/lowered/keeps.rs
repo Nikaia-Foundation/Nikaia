@@ -42,9 +42,15 @@ pub(crate) fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerCo
     match stmt {
         Stmt::Assign { value, .. } => { hand_over(value, interner, &holes_of, context, own, library, walk); },
         Stmt::Return(value) => { if !context.returns_a_view { hand_over_maybe((value).as_ref(), interner, &holes_of, context, own, library, walk); } },
-        Stmt::Let { names, value, mutable, .. } => {
+        Stmt::Let { names, value, mutable, ty, .. } => {
             let mutable = *mutable;
             let reached = reached_of(value, interner, context, own, library, &walk, true);
+            let mut owned_declared = false;
+            if ty.is_some() {
+                let declared = match ty { Some(__nikaia_value) => __nikaia_value, None => return };
+                owned_declared = !declared.is_view;
+            }
+            if owned_declared { for name in reached_of(value, interner, context, own, library, &walk, false) { if context.options.contains(&name) { walk.uses.kept.insert(name.to_string()); } } }
             let viewed = keeps_viewed_of(value, interner, context, own, library, &walk);
             if mutable { for name in reached_of(value, interner, context, own, library, &walk, false) { if !context.lent.contains(&name) { walk.uses.kept.insert(name.to_string()); } } }
             if !reached.is_empty() {
@@ -1019,11 +1025,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple75654| {
-                            let (at, arg) = __nikaia_tuple75654; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple76357| {
+                            let (at, arg) = __nikaia_tuple76357; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple75830| {
-                            let (at, arg) = __nikaia_tuple75830;
+                        }).map(|__nikaia_tuple76533| {
+                            let (at, arg) = __nikaia_tuple76533;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);

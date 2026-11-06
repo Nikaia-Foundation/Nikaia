@@ -102,8 +102,23 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
         }
         // **A `let` does not keep**: it binds a second name inside this body,
         // and what happens to that name decides.
-        Stmt::Let { names, value, mutable, .. } => {
+        Stmt::Let { names, value, mutable, ty, .. } => {
             let reached = reached_of(value, interner, context, own, library, walk, true)
+            // **An option written into a `let` of an owned type is moved
+            // into it** (#892, #1256): `let s: P = if p != null { p } ..`
+            // takes `p`, so `p` is kept and not lent as an `Option<&P>`.
+            let mut owned_declared = false
+            if ty != null {
+                let declared = ty ?? return
+                owned_declared = !declared.is_view
+            }
+            if owned_declared {
+                for name in reached_of(value, interner, context, own, library, walk, false) {
+                    if context.options.contains(name) {
+                        walk.uses.kept.insert(name.clone())
+                    }
+                }
+            }
             let viewed = keeps_viewed_of(value, interner, context, own, library, walk)
             // **A `let mut` changes what it binds**, so a parameter bound to
             // one is owned: a view cannot be changed (D40). A lent one stays
