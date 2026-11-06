@@ -1,0 +1,90 @@
+// The facts lines the builders propose, gathered for review.
+//
+//     nikaia run scripts/facts-collect.nika            # what is not reviewed yet
+//     nikaia run scripts/facts-collect.nika -- --all   # every debrief
+//     nikaia run scripts/facts-collect.nika -- --mark  # print, then mark as reviewed
+//
+// Reads every `docs/briefs/**/*.debrief.md` not listed in
+// `docs/briefs/facts-reviewed.txt` and prints, per debrief, its `Fact:` lines
+// (the debrief's question (6), `Fact: <section> | <line>`) and, from debriefs
+// written before that question, the lines that name a facts file. The
+// supervisor takes what holds into `docs/builder-facts-lookup.md` (Core only
+// for a trap of every run) and runs `--mark`, which appends the debriefs shown
+// to the reviewed list.
+
+use std::cli
+use std::fs
+use std::process
+
+fn facts_reviewed_file() -> String {
+	return "docs/briefs/facts-reviewed.txt"
+}
+
+fn facts_reviewed() -> Vec[String] throws {
+	let mut out: Vec[String] = []
+	if !fs::exists(facts_reviewed_file(), fs::Root::Anywhere) { return out }
+	for l in fs::read_to_string(facts_reviewed_file(), fs::Root::Anywhere).split("\n") {
+		if l.trim() != "" { out.push(l.trim().clone()) }
+	}
+	return out
+}
+
+// The proposed lines of one debrief.
+fn facts_lines(path: String) -> Vec[String] throws {
+	let mut out: Vec[String] = []
+	for l in fs::read_to_string(path, fs::Root::Anywhere).split("\n") {
+		let t = l.trim()
+		let bare = t.trim_start_matches("-").trim_start_matches("*").trim()
+		if bare.starts_with("Fact:") {
+			if bare != "Fact: none" { out.push(bare.clone()) }
+		} else if t.contains("builder-facts") {
+			out.push(f"(older) {t}")
+		}
+	}
+	return out
+}
+
+fn main() throws {
+	let mut all = false
+	let mut mark = false
+	let mut i = 0
+	for a in cli::args() {
+		if i > 0 {
+			if a == "--all" {
+				all = true
+			} else if a == "--mark" {
+				mark = true
+			} else {
+				println("usage: nikaia run scripts/facts-collect.nika -- [--all] [--mark]")
+				process::exit(2)
+			}
+		}
+		i = i + 1
+	}
+	let reviewed = facts_reviewed()
+	let found = process::run("sh", ["-c", "find docs/briefs -name '*.debrief.md' | sort"])
+	let mut shown: Vec[String] = []
+	let mut proposals = 0
+	for path in found.stdout.trim().split("\n") {
+		let p = path.trim()
+		if p == "" { continue }
+		if !all && reviewed.contains(p) { continue }
+		shown.push(p)
+		let lines = facts_lines(p)
+		if lines.len() == 0 { continue }
+		println(f"== {p}")
+		for l in lines {
+			println(l)
+			proposals = proposals + 1
+		}
+	}
+	println(f"-- {proposals} proposed lines from {shown.len()} debriefs")
+	if mark && shown.len() > 0 {
+		let mut list = facts_reviewed()
+		for s in shown {
+			if !list.contains(s) { list.push(s.clone()) }
+		}
+		fs::write(facts_reviewed_file(), fs::Root::Anywhere, list.join("\n") + "\n")
+		println(f"marked as reviewed in {facts_reviewed_file()}")
+	}
+}
