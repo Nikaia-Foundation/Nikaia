@@ -84,6 +84,8 @@ The rules every session and agent needs. What only the main session does
 * **Builders**: `.claude/agents/builder.md` (the cycle and the gate) and
   `docs/builder-facts.md` (where things live, traps, and the self-hosting
   rules: slices, syntax gaps of `tools/*.nika`, lowering).
+* **Whoever files or rewrites an issue**: `docs/issues.md` (what an issue holds,
+  I1-I13; a builder gets the issue as its work order and judges it by them).
 * **Whoever measures performance or quotes a figure**: `docs/measuring.md`
   (count with callgrind, never time; against tuned Rust; tokens, not lines).
 * **Whoever writes for the website, `README.md`, `guide/` or the
