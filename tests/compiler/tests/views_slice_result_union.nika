@@ -1,0 +1,21 @@
+// A slice result chosen between two lent `Array[T]` parameters is a view of
+// both (ADR-views-3 D8, D11), with no `keep` anywhere in the file.
+fn longer(a: Array[i64], b: Array[i64]) -> Array[i64] {
+    if a.len() > b.len() {
+        return a
+    }
+    return b
+}
+
+fn same(a: Array[i64]) -> Array[i64] {
+    return a
+}
+
+fn main() {
+    let x: Array[i64, 3] = [1, 2, 3]
+    let y: Array[i64, 2] = [4, 5]
+    let l = longer(x, y)
+    println(f"{l.len()} {l[0]}")
+    println(f"{longer(y, x)[2]}")
+    println(f"{same(y).len()}")
+}

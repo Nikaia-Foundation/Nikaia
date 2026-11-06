@@ -5236,6 +5236,10 @@ pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, pl
             let is_extern = *is_extern;
             if is_extern || !hb_result_may_be_a_view((ret_type).as_ref(), words, plain) { return; }
             if !ret_from.is_empty() {
+                for arg in args.iter_mut() {
+                    let named = ret_from.iter().any(|source| { words.resolve(*source) == words.resolve((*arg).name) });
+                    if named && !(*arg).keep && !(*arg).mutable && !(*arg).ty.is_view && !(*arg).ty.is_mut && (*(*arg).ty.code).is_none() && hb_type_may_be_a_view(&(*arg).ty, words, plain) { hb_set(&mut (*arg).ty); }
+                }
                 hb_set_maybe(&mut *ret_type);
                 return;
             }
@@ -5280,7 +5284,7 @@ pub(crate) fn hb_type_may_be_a_view(t: &Type, words: &winnow_grammar::InternerCo
     if t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || (*t.code).is_some() || t.count.is_some() || t.either || t.lasting { return false; }
     let name = words.resolve(t.name);
     if plain.contains(name) { return false; }
-    let refused = vec!["String", "Bytes", "str", "char", "int", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"];
+    let refused = vec!["String", "str", "char", "int", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"];
     !refused.iter().any(|word| { AsRef::<str>::as_ref(&(word)) == AsRef::<str>::as_ref(&(name)) })
 }
 
@@ -5291,7 +5295,7 @@ pub(crate) fn hb_roots(body: &Block, args: &[FnArg], plain_self: bool, words: &w
     for way in ways.iter() {
         let way = *way;
         let root = match hb_place_root(way, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if !opted && hb_a_name(way) { return None; }
+        if !opted && hb_a_name(way) && !hb_a_run(args, &root, words) { return None; }
         if root == "self" {
             if !plain_self || hb_a_name(way) || rebinds(body, &root, words) { return None; }
             roots.insert(root);
@@ -5303,6 +5307,8 @@ pub(crate) fn hb_roots(body: &Block, args: &[FnArg], plain_self: bool, words: &w
     }
     Some(roots)
 }
+
+pub(crate) fn hb_a_run(args: &[FnArg], root: &str, words: &winnow_grammar::InternerContext) -> bool { args.iter().any(|arg| { words.resolve(arg.name) == root && arg.ty.count.is_none() && arg.ty.generics.len() == 1 && words.resolve(arg.ty.name) == "Array" }) }
 
 pub(crate) fn hb_a_name(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
 

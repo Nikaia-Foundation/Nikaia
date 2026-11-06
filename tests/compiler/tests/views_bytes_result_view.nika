@@ -1,0 +1,17 @@
+// A `Bytes` result that is a piece of a lent `Bytes` is a view of it
+// (ADR-views-3 D15, D11), with or without `from`.
+fn rest(b: Bytes) -> Bytes {
+    return b[1..]
+}
+
+fn head(b: Bytes, n: i64) -> Bytes from b {
+    return b[0..<n]
+}
+
+fn main() {
+    let b: Bytes = Bytes([1, 2, 3, 4])
+    let r = rest(b)
+    println(f"{r.len()} {r[0]}")
+    let h = head(b, 2)
+    println(f"{h.len()} {h[1]}")
+}

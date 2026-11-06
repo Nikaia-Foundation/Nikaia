@@ -7054,7 +7054,16 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
             }
             // A result written `from` is a view of what it names, of any type
             // (D8): the checker holds the body to it, as for text.
+            // A lent parameter it names is lent as the view it hands out, as
+            // where the source is inferred: `fn rest(b: Bytes) -> Bytes from
+            // b` reads `b` as `ref Bytes` (D15).
             if ret_from.len() > 0 {
+                for mut arg in args {
+                    let named = ret_from.iter().any(fn(source) { words.resolve(source) == words.resolve(arg.name) })
+                    if named && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && arg.ty.code == null && hb_type_may_be_a_view(arg.ty, words, plain) {
+                        hb_set(arg.ty)
+                    }
+                }
                 hb_set_maybe(ret_type)
                 return
             }
@@ -7122,6 +7131,8 @@ fn hb_result_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerCon
 
 /// A type a view of a parameter can stand in, whether or not it is one
 /// already: not text, not a word copied at a read, nothing a place cannot be.
+/// `Bytes` can: a piece of a lent `Bytes` handed back is a view of it, as a
+/// piece of an `Array[T]` is (ADR-views-3 D15, D11).
 fn hb_type_may_be_a_view(t: ref Type, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
     if t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || t.code != null || t.count != null || t.either || t.lasting {
         return false
@@ -7130,7 +7141,7 @@ fn hb_type_may_be_a_view(t: ref Type, words: ref winnow_grammar::InternerContext
     if plain.contains(name) {
         return false
     }
-    let refused = ["String", "Bytes", "str", "char", "int", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"]
+    let refused = ["String", "str", "char", "int", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"]
     return !refused.iter().any(fn(word) { word == name })
 }
 
@@ -7145,7 +7156,7 @@ fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref 
     let mut roots: collections::BTreeSet[String] = collections::BTreeSet()
     for way in ways {
         let root = hb_place_root(way, words) ?? return null
-        if !opted && hb_a_name(way) {
+        if !opted && hb_a_name(way) && !hb_a_run(args, root, words) {
             return null
         }
         if root == "self" {
@@ -7164,6 +7175,13 @@ fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref 
         roots.insert(root)
     }
     return roots
+}
+
+/// **An `Array[T]` parameter with no length is a run of the caller's**
+/// (ADR-views-3 D11): it has no value of its own a result could keep, so
+/// handed back whole it is a view in any file, as a piece of it is.
+fn hb_a_run(args: ref Vec[FnArg], root: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return args.iter().any(fn(arg) { words.resolve(arg.name) == root && arg.ty.count == null && arg.ty.generics.len() == 1 && words.resolve(arg.ty.name) == "Array" })
 }
 
 fn hb_a_name(expr: ref Expr) -> bool {
