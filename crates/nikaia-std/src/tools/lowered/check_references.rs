@@ -186,6 +186,13 @@ impl CheckState {
                     fits = true;
                 }
             }
+            if !fits && !wrote_a_reference && !found.is_a_view() {
+                let through: Option<Ty> = self.seen_through(world, found);
+                if through.is_some() {
+                    let seen = match through { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    fits = seen.is_a_view() && unviewed_type(&seen).fits(want);
+                }
+            }
         }
         if !fits { return false; }
         if already_a_view {

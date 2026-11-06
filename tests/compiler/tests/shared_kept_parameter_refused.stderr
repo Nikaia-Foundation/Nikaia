@@ -1,0 +1,9 @@
+error[NK1102]: `pool` expects `db` to be `Conn`, but you're passing `Shared[Conn]`.
+   --> tests/shared_kept_parameter_refused.nika:12:18
+    |
+ 12 |     println(pool(db).conn.host)
+    |                  ^^
+    |
+    = note: It's declared as `pool(db: Conn) -> Pool`.
+    = help: Make it a `Conn`, or change the declaration to `Shared[Conn]`.
+1 type error

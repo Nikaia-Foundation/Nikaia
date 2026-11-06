@@ -1,0 +1,27 @@
+// A lent plain parameter takes a hull as `ref T` did (ADR-views-3 D4, #1254):
+// `serve(db: Conn)` is lent `db`, so a `Shared[Conn]` is lent through its
+// `deref`, never moved; a lent `SharedMut[i64]` is lent as the handle.
+struct Conn { host: String }
+
+fn serve(db: Conn) -> String {
+    return db.host
+}
+
+fn serve_old(db: ref Conn) -> String {
+    return db.host
+}
+
+fn bump(c: SharedMut[i64]) {
+    c.update fn(mut v) { v += 1 }
+}
+
+fn main() {
+    let db = Shared(Conn { host: "localhost" })
+    println(serve_old(db))
+    println(serve(db))
+    println(serve(db))
+    let c = SharedMut(0)
+    bump(c)
+    bump(c)
+    println(f"{c.get()}")
+}

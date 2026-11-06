@@ -1,0 +1,13 @@
+// A kept parameter takes no hull through its `deref` (ADR-views-3 D4, #1254):
+// only a lent one does, so `pool(db)` with a `Shared[Conn]` stays refused.
+struct Conn { host: String }
+struct Pool { conn: Conn }
+
+fn pool(keep db: Conn) -> Pool {
+    return Pool { conn: db }
+}
+
+fn main() {
+    let db = Shared(Conn { host: "k" })
+    println(pool(db).conn.host)
+}

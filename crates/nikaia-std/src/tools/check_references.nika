@@ -286,6 +286,17 @@ impl CheckState {
                     fits = true
                 }
             }
+            // **A hull lent to a plain parameter is lent through its
+            // `deref`** (ADR-views-3 D4, #1254): `ref T` became `T`, so what a
+            // `ref T` took, a lent `T` takes: a `Shared[Conn]` handed to
+            // `serve(db: Conn)` is `serve(&db)`, never moved, never copied.
+            if !fits && !wrote_a_reference && !found.is_a_view() {
+                let through: Ty? = self.seen_through(world, found)
+                if through != null {
+                    let seen = through ?? return false
+                    fits = seen.is_a_view() && unviewed_type(seen).fits(want)
+                }
+            }
         }
         if !fits {
             return false
