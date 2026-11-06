@@ -5216,7 +5216,12 @@ pub(crate) fn tw_said(tiers: &collections::BTreeMap<(i64, String, String, i64, V
 pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerContext) {
     let plain = hb_plain_enums(&program.items, words);
     let opted = keep_marks_opted_in_items(&program.items);
-    for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, opted); }
+    let mut views: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
+    loop {
+        let before = views.len() as i64;
+        for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, opted, &mut views); }
+        if (views.len() as i64) == before { break; }
+    }
     sf_slice_fields(program, words);
 }
 
@@ -5271,36 +5276,46 @@ pub(crate) fn sf_body(body: &Block, words: &winnow_grammar::InternerContext, fil
 
 pub(crate) fn sf_a_run(ty: &Type, words: &winnow_grammar::InternerContext) -> bool { !ty.is_view && !ty.is_slice && !ty.is_mut && !ty.is_nullable && ty.count.is_none() && (*ty.code).is_none() && ty.generics.len() == 1 && words.resolve(ty.name) == "Array" }
 
-pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool) {
+pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>) {
     match item {
-        Item::Fn { .. } => { hb_fn(item, words, plain, opted); },
+        Item::Fn { .. } => { hb_fn(item, words, plain, opted, views, true); },
         Item::Impl { trait_name, methods, .. } => {
             let trait_name = *trait_name;
-            if trait_name.is_none() { for method in methods.iter_mut() { hb_fn(&mut (*method).node, words, plain, opted); } }
+            if trait_name.is_none() { for method in methods.iter_mut() { hb_fn(&mut (*method).node, words, plain, opted, views, false); } }
         },
         _ => { },
     }
 }
 
-pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool) {
+pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, free: bool) {
     match item {
-        Item::Fn { receiver, args, ret_type, body, is_extern, ret_from, .. } => {
-            let is_extern = *is_extern;
+        Item::Fn { name, receiver, args, ret_type, body, is_extern, ret_from, .. } => {
+            let is_extern = *is_extern; let name = *name;
             if is_extern || !hb_result_may_be_a_view((ret_type).as_ref(), words, plain) { return; }
+            let mut sources: Vec<i64> = vec![];
             if !ret_from.is_empty() {
+                for (at, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) { if ret_from.iter().any(|source| { words.resolve(*source) == words.resolve(arg.name) }) { sources.push(at as i64); } }
                 for arg in args.iter_mut() {
                     let named = ret_from.iter().any(|source| { words.resolve(*source) == words.resolve((*arg).name) });
                     if named && !(*arg).keep && !(*arg).mutable && !(*arg).ty.is_view && !(*arg).ty.is_mut && (*(*arg).ty.code).is_none() && hb_type_may_be_a_view(&(*arg).ty, words, plain) { hb_set(&mut (*arg).ty); }
                 }
                 hb_set_maybe(&mut *ret_type);
+                hb_enter((name).as_ref(), sources, words, views, free);
                 return;
             }
-            let roots = match hb_roots(body, &args, hb_plain_self((receiver).as_ref()), words, opted) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let roots = match hb_roots(body, &args, hb_plain_self((receiver).as_ref()), words, opted, &views) { Some(__nikaia_value) => __nikaia_value, None => return };
+            for (at, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) { if roots.contains(words.resolve(arg.name)) { sources.push(at as i64); } }
             for arg in args.iter_mut() { if roots.contains(words.resolve((*arg).name)) { hb_set(&mut (*arg).ty); } }
             hb_set_maybe(&mut *ret_type);
+            hb_enter((name).as_ref(), sources, words, views, free);
         },
         _ => { },
     }
+}
+
+pub(crate) fn hb_enter(name: Option<&winnow_grammar::Symbol>, sources: Vec<i64>, words: &winnow_grammar::InternerContext, views: &mut collections::BTreeMap<String, Vec<i64>>, free: bool) {
+    let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return };
+    if free { views.insert(words.resolve(*symbol).to_string(), sources); }
 }
 
 pub(crate) fn hb_plain_self(receiver: Option<&Receiver>) -> bool {
@@ -5315,7 +5330,8 @@ pub fn hands_back_a_piece_of_self(item: &Item, words: &winnow_grammar::InternerC
             if is_extern || !ret_from.is_empty() || !hb_plain_self((receiver).as_ref()) { return false; }
             let t = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
             if !hb_type_may_be_a_view(t, words, plain) { return false; }
-            let roots = match hb_roots(body, args, true, words, true) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let none: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
+            let roots = match hb_roots(body, args, true, words, true, &none) { Some(__nikaia_value) => __nikaia_value, None => return false };
             return roots.contains("self");
         },
         _ => { },
@@ -5340,24 +5356,55 @@ pub(crate) fn hb_type_may_be_a_view(t: &Type, words: &winnow_grammar::InternerCo
     !refused.iter().any(|word| { AsRef::<str>::as_ref(&(word)) == AsRef::<str>::as_ref(&(name)) })
 }
 
-pub(crate) fn hb_roots(body: &Block, args: &[FnArg], plain_self: bool, words: &winnow_grammar::InternerContext, opted: bool) -> Option<collections::BTreeSet<String>> {
+pub(crate) fn hb_roots(body: &Block, args: &[FnArg], plain_self: bool, words: &winnow_grammar::InternerContext, opted: bool, views: &collections::BTreeMap<String, Vec<i64>>) -> Option<collections::BTreeSet<String>> {
     let ways = hb_ways_out(body);
     if ways.is_empty() { return None; }
     let mut roots: collections::BTreeSet<String> = collections::BTreeSet::new();
     for way in ways.iter() {
         let way = *way;
-        let root = match hb_place_root(way, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if !opted && hb_a_name(way) && !hb_a_run(args, &root, words) { return None; }
-        if root == "self" {
-            if !plain_self || hb_a_name(way) || rebinds(body, &root, words) { return None; }
-            roots.insert(root);
+        if hb_place_root(way, words).is_some() {
+            roots.insert(match hb_root(way, body, args, plain_self, words, opted, false) { Some(__nikaia_value) => __nikaia_value, None => return None });
             continue;
         }
-        if !args.iter().any(|arg| { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && (*arg.ty.code).is_none() }) { return None; }
-        if rebinds(body, &root, words) { return None; }
-        roots.insert(root);
+        let given = match hb_call_sources(way, words, views) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        for place in given.iter() {
+            let place = *place;
+            roots.insert(match hb_root(place, body, args, plain_self, words, opted, true) { Some(__nikaia_value) => __nikaia_value, None => return None });
+        }
     }
     Some(roots)
+}
+
+pub(crate) fn hb_root(way: &Expr, body: &Block, args: &[FnArg], plain_self: bool, words: &winnow_grammar::InternerContext, opted: bool, lent: bool) -> Option<String> {
+    let root = match hb_place_root(way, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !lent && !opted && hb_a_name(way) && !hb_a_run(args, &root, words) { return None; }
+    if root == "self" {
+        if !plain_self || hb_a_name(way) || rebinds(body, &root, words) { return None; }
+        return Some(root);
+    }
+    if !args.iter().any(|arg| { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && (*arg.ty.code).is_none() }) { return None; }
+    if rebinds(body, &root, words) { return None; }
+    Some(root)
+}
+
+pub(crate) fn hb_call_sources<'r>(expr: &'r Expr, words: &winnow_grammar::InternerContext, views: &collections::BTreeMap<String, Vec<i64>>) -> Option<Vec<&'r Expr>> {
+    let (func, given) = match expr {
+        Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); (func, args) },
+        _ => return None,
+    };
+    let callee = match func {
+        Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_string() },
+        _ => return None,
+    };
+    let sources = match views.get(&callee) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut out: Vec<&Expr> = vec![];
+    for at in sources.iter() {
+        let at = nikaia_std::num::value(at);
+        if at < 0 || at >= given.len() as i64 { return None; }
+        let argument = nikaia_std::index::get(&given, nikaia_std::index::at(at));
+        if hb_place_root(&argument, words).is_some() { out.push(argument); } else { out.extend(match hb_call_sources(&argument, words, views) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+    }
+    Some(out)
 }
 
 pub(crate) fn hb_a_run(args: &[FnArg], root: &str, words: &winnow_grammar::InternerContext) -> bool { args.iter().any(|arg| { words.resolve(arg.name) == root && arg.ty.count.is_none() && arg.ty.generics.len() == 1 && words.resolve(arg.ty.name) == "Array" }) }

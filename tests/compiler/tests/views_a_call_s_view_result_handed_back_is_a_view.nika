@@ -1,0 +1,45 @@
+// #1266, ADR-views-3 D8, D11, D15: a result that hands back a call's view
+// result is a view of what the call was given, through any number of calls
+// and in one arm of a choice between two parameters.
+fn rest(xs: Array[i64]) -> Array[i64] {
+	return xs[1..]
+}
+
+fn rest2(xs: Array[i64]) -> Array[i64] {
+	return rest(rest(xs))
+}
+
+fn pick(a: Array[i64], b: Array[i64]) -> Array[i64] {
+	if a.len() > b.len() {
+		return rest(a)
+	}
+	return b
+}
+
+fn total(xs: Array[i64]) -> i64 {
+	let mut t = 0
+	for x in xs {
+		t = t + x
+	}
+	return t
+}
+
+fn tail(b: Bytes) -> Bytes {
+	return b[1..]
+}
+
+fn tail2(b: Bytes) -> Bytes {
+	return tail(tail(b))
+}
+
+fn main() {
+	let v: Vec[i64] = [1, 2, 3, 4]
+	println(f"{total(rest2(v))}")
+	println(f"{total(pick(v, v[3..]))}")
+	println(f"{v.len()}")
+	let a: Array[i64, 3] = [1, 2, 3]
+	println(f"{total(rest2(a))}")
+	let text: String = "abcd"
+	println(f"{tail2(text.bytes).len()}")
+	println(text)
+}

@@ -7024,11 +7024,21 @@ fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64])
 /// back is asked only in a file that writes `keep` (#1213): until the
 /// migration reaches a file, returning a parameter by value keeps it there,
 /// as `NK2302` is raised only in such a file (`check_keep_marks.nika`).
+/// A call of a function of the file whose result is a view hands back a view
+/// of what it is given there (D8, #1266): `return rest(xs)` is a view of `xs`
+/// once `rest`'s result is one, so the pass runs until no result changes.
 pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerContext) {
     let plain = hb_plain_enums(program.items, words)
     let opted = keep_marks_opted_in_items(program.items)
-    for mut item in program.items {
-        hb_item(item.node, words, plain, opted)
+    let mut views: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+    while true {
+        let before = views.len()
+        for mut item in program.items {
+            hb_item(item.node, words, plain, opted, views)
+        }
+        if views.len() == before {
+            break
+        }
     }
     sf_slice_fields(program, words)
 }
@@ -7103,13 +7113,15 @@ fn sf_a_run(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
     return !ty.is_view && !ty.is_slice && !ty.is_mut && !ty.is_nullable && ty.count == null && ty.code == null && ty.generics.len() == 1 && words.resolve(ty.name) == "Array"
 }
 
-fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool) {
+/// `views` holds, for each free function of the file whose result the pass
+/// made a view, the positions of the parameters it points into.
+fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]]) {
     match item {
-        Item::Fn { .. } => hb_fn(item, words, plain, opted),
+        Item::Fn { .. } => hb_fn(item, words, plain, opted, views, true),
         Item::Impl { trait_name, methods, .. } => {
             if trait_name == null {
                 for mut method in methods {
-                    hb_fn(method.node, words, plain, opted)
+                    hb_fn(method.node, words, plain, opted, views, false)
                 }
             }
         },
@@ -7117,18 +7129,26 @@ fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: re
     }
 }
 
-fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool) {
+/// `free`: a function of the file, not a method; only such a one is entered
+/// in `views`, where a call names it.
+fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]], free: bool) {
     match item {
-        Item::Fn { receiver, args, ret_type, body, is_extern, ret_from, .. } => {
+        Item::Fn { name, receiver, args, ret_type, body, is_extern, ret_from, .. } => {
             if is_extern || !hb_result_may_be_a_view(ret_type, words, plain) {
                 return
             }
+            let mut sources: Vec[i64] = []
             // A result written `from` is a view of what it names, of any type
             // (D8): the checker holds the body to it, as for text.
             // A lent parameter it names is lent as the view it hands out, as
             // where the source is inferred: `fn rest(b: Bytes) -> Bytes from
             // b` reads `b` as `ref Bytes` (D15).
             if ret_from.len() > 0 {
+                for (at, arg) in args.iter().enumerate() {
+                    if ret_from.iter().any(fn(source) { words.resolve(source) == words.resolve(arg.name) }) {
+                        sources.push(at as i64)
+                    }
+                }
                 for mut arg in args {
                     let named = ret_from.iter().any(fn(source) { words.resolve(source) == words.resolve(arg.name) })
                     if named && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && arg.ty.code == null && hb_type_may_be_a_view(arg.ty, words, plain) {
@@ -7136,17 +7156,33 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
                     }
                 }
                 hb_set_maybe(ret_type)
+                hb_enter(name, sources, words, views, free)
                 return
             }
-            let roots = hb_roots(body, args, hb_plain_self(receiver), words, opted) ?? return
+            let roots = hb_roots(body, args, hb_plain_self(receiver), words, opted, views) ?? return
+            for (at, arg) in args.iter().enumerate() {
+                if roots.contains(words.resolve(arg.name)) {
+                    sources.push(at as i64)
+                }
+            }
             for mut arg in args {
                 if roots.contains(words.resolve(arg.name)) {
                     hb_set(arg.ty)
                 }
             }
             hb_set_maybe(ret_type)
+            hb_enter(name, sources, words, views, free)
         },
         else => {},
+    }
+}
+
+/// Enters a free function whose result is now a view of the parameters at
+/// `sources`.
+fn hb_enter(name: ref winnow_grammar::Symbol?, sources: Vec[i64], words: ref winnow_grammar::InternerContext, mut views: collections::BTreeMap[String, Vec[i64]], free: bool) {
+    let symbol = name ?? return
+    if free {
+        views.insert(words.resolve(symbol).clone(), sources)
     }
 }
 
@@ -7175,7 +7211,8 @@ pub fn hands_back_a_piece_of_self(item: ref Item, words: ref winnow_grammar::Int
             if !hb_type_may_be_a_view(t, words, plain) {
                 return false
             }
-            let roots = hb_roots(body, args, true, words, true) ?? return false
+            let none: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+            let roots = hb_roots(body, args, true, words, true, none) ?? return false
             return roots.contains("self")
         },
         else => {},
@@ -7219,33 +7256,79 @@ fn hb_type_may_be_a_view(t: ref Type, words: ref winnow_grammar::InternerContext
 /// The parameters every way out of `body` is a place of; `null` where one
 /// way out is anything else, or the whole parameter outside a file that
 /// writes `keep`.
-fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref winnow_grammar::InternerContext, opted: bool) -> collections::BTreeSet[String]? {
+fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref winnow_grammar::InternerContext, opted: bool, views: ref collections::BTreeMap[String, Vec[i64]]) -> collections::BTreeSet[String]? {
     let ways = hb_ways_out(body)
     if ways.is_empty() {
         return null
     }
     let mut roots: collections::BTreeSet[String] = collections::BTreeSet()
     for way in ways {
-        let root = hb_place_root(way, words) ?? return null
-        if !opted && hb_a_name(way) && !hb_a_run(args, root, words) {
-            return null
-        }
-        if root == "self" {
-            if !plain_self || hb_a_name(way) || rebinds(body, root, words) {
-                return null
-            }
-            roots.insert(root)
+        if hb_place_root(way, words) != null {
+            roots.insert(hb_root(way, body, args, plain_self, words, opted, false) ?? return null)
             continue
         }
-        if !args.iter().any(fn(arg) { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && arg.ty.code == null }) {
-            return null
+        // A call of a function whose result is a view is a view of the
+        // places it hands to the parameters that result points into; a
+        // parameter handed there whole is lent to it, not handed back.
+        let given = hb_call_sources(way, words, views) ?? return null
+        for place in given {
+            roots.insert(hb_root(place, body, args, plain_self, words, opted, true) ?? return null)
         }
-        if rebinds(body, root, words) {
-            return null
-        }
-        roots.insert(root)
     }
     return roots
+}
+
+/// The parameter the place `way` hands back a view of; `null` where it is
+/// none, or the whole parameter handed back by value (not `lent` to a call)
+/// outside a file that writes `keep`.
+fn hb_root(way: ref Expr, body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref winnow_grammar::InternerContext, opted: bool, lent: bool) -> String? {
+    let root = hb_place_root(way, words) ?? return null
+    if !lent && !opted && hb_a_name(way) && !hb_a_run(args, root, words) {
+        return null
+    }
+    if root == "self" {
+        if !plain_self || hb_a_name(way) || rebinds(body, root, words) {
+            return null
+        }
+        return root
+    }
+    if !args.iter().any(fn(arg) { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && arg.ty.code == null }) {
+        return null
+    }
+    if rebinds(body, root, words) {
+        return null
+    }
+    return root
+}
+
+/// **The arguments a call of a function of the file hands to the parameters
+/// its result is a view of** (D8, #1266): `xs` of `rest(xs)` and of
+/// `rest(rest(xs))`. `null` where `expr` is no such call, or one of those
+/// arguments is neither a place nor such a call.
+fn hb_call_sources(expr: ref Expr, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) -> Vec[ref Expr]? {
+    let (func, given) = match expr {
+        Expr::Call { func, args, .. } => (func, args),
+        else => return null,
+    }
+    let callee = match func {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        else => return null,
+    }
+    let sources = views.get(callee) ?? return null
+    let mut out: Vec[ref Expr] = []
+    for at in sources {
+        if at < 0 || at >= given.len() {
+            return null
+        }
+        let argument = given[at]
+        if hb_place_root(argument, words) != null {
+            out.push(argument)
+        } else {
+            // `rest(rest(xs))`: a call handed on is a view of what it hands.
+            out.extend(hb_call_sources(argument, words, views) ?? return null)
+        }
+    }
+    return out
 }
 
 /// **An `Array[T]` parameter with no length is a run of the caller's**
