@@ -2,122 +2,193 @@
 layout: home
 title: Very safe
 description: >-
-  Many bugs follow patterns. Nikaia checks for those patterns before they reach your users, and says where it cannot.
+  Safety as a whole: what happens while the program runs, data from outside, parts that keep their promises, changes that keep them too, and a program under load.
 ---
 <!--
-  Level 2 of the home page's "Very safe": every topic a little more fully,
-  each with a link to its own page. The tiles on the home page jump to the
-  anchors here.
+  Level 2 of the home page's "Very safe": the five layers of safety, each with
+  its topics a little more fully, and each topic with a link to its own page.
+  The tiles on the home page jump to the layer anchors here (#running,
+  #outside, #logic, #changes, #load); the level-3 pages link back to the topic
+  anchors (#errors, #promises, #conflicts, #stuck, #memory).
 -->
 
 <section class="home-section" id="top">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Nikaia</a></p>
     <h1 class="home-heading">Very safe</h1>
-    <p class="safe-lead home-intro">Many bugs follow patterns. Nikaia checks for those patterns before they reach your users, and says where it cannot.</p>
-    <p class="safe-lead home-intro">Five kinds of mistake, each with the problem, what Nikaia checks and where the check stops. Every one has a page with the whole program and the message the compiler gives.</p>
+    <p class="safe-lead home-intro">Safety is more than one check. A program fails when something goes wrong while it runs and nothing handles it, when data from outside is not what it expected, when a part is used outside what it was made for, when a change quietly breaks a rule another part relies on, and when a service it waits for is slow or gone.</p>
+    <p class="safe-lead home-intro">Nikaia looks at all five, at compile time wherever it can. For each one this page says what the compiler checks and where the check stops, and every topic has a page with the whole program and the message the compiler gives.</p>
+    <p class="safe-others">The five layers: <a href="#running">While the program runs</a><a href="#outside">Data from outside</a><a href="#logic">Parts that keep their promises</a><a href="#changes">Changes, by people and by models</a><a href="#load">Under load and failure</a></p>
     <p class="safe-others">Also: <a href="{{ "/fast/" | relative_url }}">Very fast</a><a href="{{ "/easy/" | relative_url }}">Easy to understand</a><a href="{{ "/good/" | relative_url }}">Made for good</a></p>
   </div>
 </section>
 
-<section class="home-section home-code-section" id="conflicts">
-  <div class="home-inner home-split">
-    <div class="home-split-text">
-      <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-todo">Still being built</span> For <code>async</code> tasks the check is being built (#988), and two writes to the same file are not yet told apart from writes to two files.</p>
-<p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
-</details>
-      <h2>Two tasks changing the same value</h2>
-      <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches when the program is built, and refuses two tasks that change the same value or both write to standard output, naming what they share. The way out is in the message: a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
-      <p>Where the compiler cannot tell what a call touches, as in a Rust crate or a C library that starts its own threads, it does not refuse, so this is not a proof that every race is found. The compiler builds <code>async</code> tasks today, but this check between them is still being built (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/988">#988</a>): the example shows what the specification refuses. Older programs written with <code>overlap</code> get the check today.</p>
-    </div>
-    <div class="home-code-side">
-<div class="home-code markdown-body"><pre><code class="language-nika">async {
-    async fn { balance = balance + 50 }
-    async fn { balance = balance - 30 }   // refused: both change `balance`
-}</code></pre></div>
-    </div>
-    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/safe/conflicting-actions.html" | relative_url }}">In depth →</a></p>
-  </div>
-</section>
-
-<section class="home-section home-section-alt home-code-section" id="stuck">
-  <div class="home-inner home-split">
-    <div class="home-split-text">
-      <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-todo">Still being built</span> A lock taken inside another lock by hand is not refused yet, so for several locks using <code>update_all</code> is up to you.</p>
-<p><span class="why why-limit">Beyond what a compiler sees</span> Whether a program can get stuck cannot be decided for every program. Where the analysis cannot tell, it does not claim the problem is solved.</p>
-</details>
-      <h2>Tasks that get stuck</h2>
-      <p>Sometimes tasks wait for each other forever. A task that pauses while it holds a lock is rejected, since everyone who needs that value would wait too. For several locks at once, <code>update_all</code> takes them in one fixed order, so two transfers cannot hold one each and wait for the other.</p>
-      <p>Nikaia does not yet reject a lock taken inside another lock when you write it by hand, so using <code>update_all</code> for several locks is up to you. And not every possible deadlock can be ruled out in every situation; where the analysis cannot decide, it does not claim the problem is solved.</p>
-    </div>
-    <div class="home-code-side">
-<div class="home-code markdown-body"><pre><code class="language-nika">a.update fn(mut acc) {
-    acc.balance -= 30
-    time::sleep(5.millis())
-}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `time::sleep` can pause, but you're holding a lock here.</b></code></pre></div>
-        
-    </div>
-    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/safe/stuck-tasks.html" | relative_url }}">In depth →</a></p>
-  </div>
-</section>
-
-<section class="home-section home-code-section" id="memory">
-  <div class="home-inner home-split">
-    <div class="home-split-text">
-      <span class="safe-chip safe-chip-run">Specified, not built yet</span>
-      <h2>A memory budget for every task</h2>
-      <p>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine. Nikaia is specified to keep such a task from taking the rest of the program down with it.</p>
-      <p>In the specification every task gets a memory budget of its own. A task that spends it ends on its own, and the rest of the program, your main application included, runs on. A shared value has a budget of its own too. This is decided and written into the specification. A calculation that runs while the program is built is already bounded in steps and in memory.</p>
-      <p>The per-task budget is not built yet, and today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof: Nikaia will not show at build time that a task stays within its budget, it makes sure that a task which does not ends with <code>task::OverBudget</code>, an error like any other, and only that task ends. Memory that a Rust crate or a C library allocates and keeps for itself is in no budget.</p>
-    </div>
-    <div class="home-code-side">
-        <p class="safe-note">Decided and specified, not built yet: today a task can still take memory from the whole program.</p>
-
-        
-    </div>
-    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/safe/memory.html" | relative_url }}">In depth →</a></p>
-  </div>
-</section>
-
-<section class="home-section home-section-alt home-code-section" id="errors">
-  <div class="home-inner home-split">
-    <div class="home-split-text">
-      <span class="safe-chip safe-chip-build">Caught at compile time</span>
-      <h2>Errors that go unhandled</h2>
-      <p>When something fails, the program needs a way to deal with it. Functions declare when they can fail, and what they can fail with is worked out from their bodies. A function that calls something that can fail, and neither declares it nor handles it, is rejected when the program is built. Tasks are held to the same rule. A task&rsquo;s error is thrown where the program waits for the task, where its value is first needed, or at the end of its <code>async { … }</code> group when nobody reads it, and the compiler asks for it to be handled there as for any call that can fail. A task handle that is never joined, cancelled or detached is refused (<code>NK2109</code>), so the error has a place to arrive.</p>
-      <p>For functions from outside Nikaia that nothing describes, Nikaia cannot know every way they fail. A description of the library closes that gap. The check shows where failures are not accounted for; it does not make the handling itself correct.</p>
-    </div>
-    <div class="home-code-side">
+<section class="home-section home-section-alt" id="running">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Layer 1</p>
+    <h2 class="home-heading">While the program runs</h2>
+    <p class="safe-lead home-intro">A file is missing, an index is past the end of a list, a task fails. A program meets states nobody planned for, and what matters is that each is handled where it happens, and that one failing part does not take the rest of the program with it.</p>
+    <div class="safe-tiles">
+      <div class="safe-tile safe-tile-b" id="errors">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a></h3>
+        <p>Functions declare when they can fail, and what they can fail with is worked out from their bodies. A call that can fail and is neither handled nor declared is refused when the program is built. A task's error arrives where the program waits for the task and is held to the same rule. For a library that nothing describes, Nikaia cannot know every way it fails; a description of the library closes that gap.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
     return fs::read_to_string("config.txt", fs::Root::Anywhere)
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This function can fail, because `fs::read_to_string` can fail.</b></code></pre></div>
-        
+        <a class="safe-more" href="{{ "/safe/unhandled-errors.html" | relative_url }}">In depth →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Checked while the program runs</span>
+        <h3>An index past the end, a number that overflows</h3>
+        <p>An index outside a list or an integer that overflows stops the program and names the line, before anything reads or writes memory it does not own. Where the compiler has proved that such a check cannot fail, a build setting leaves it out of the machine code.</p>
+        <a class="safe-more" href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Checks left out where proved →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-run">Decided, being built</span>
+        <h3>A failure that ends only its task</h3>
+        <p>In the specification a panic in a task ends that task: its cleanups run, whoever waits for it receives <code>task::Crashed</code> as an error to handle, and the rest of the program goes on. A panic in <code>main</code> ends the program. With the new <code>async</code> tasks this is part of the build of <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/983">#983</a>.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-326.html" | relative_url }}">ADR-326, D4 →</a>
+      </div>
     </div>
-    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/safe/unhandled-errors.html" | relative_url }}">In depth →</a></p>
   </div>
 </section>
 
-<section class="home-section home-code-section" id="promises">
-  <div class="home-inner home-split">
-    <div class="home-split-text">
-      <span class="safe-chip safe-chip-build">Caught at compile time</span>
-      <h2>Calls that break a function's contract</h2>
-      <p><strong><strong>Every part of a program should be able to rely on what the other parts promise.</strong></strong></p>
-      <p>You write the expectation as an <code>assert</code> and it becomes a contract. A call that breaks it is rejected when the program is built, a promise about a result is available to the callers, and a contract carries across package boundaries.</p>
-      <p>A compiler cannot know whether data from files, arguments or the network is valid. Check it where it enters the program; once checked, the rest of the code can rely on it.</p>
+<section class="home-section" id="outside">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Layer 2</p>
+    <h2 class="home-heading">Data from outside</h2>
+    <p class="safe-lead home-intro">What a request carries, what another program prints or what a person types is not up to your program. Nikaia knows which values come from outside, and asks for them to be checked where they arrive, before the rest of the program relies on them.</p>
+    <div class="safe-tiles">
+      <div class="safe-tile safe-tile-b">
+        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+<p><span class="why why-todo">Still being built</span> A file read while the program runs still counts as trusted, although the specification counts it as outside data.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one.</p>
+</details>
+        <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A guard where the data arrives</a></h3>
+        <p>A claim about a value from outside, an <code>assert</code> or a function's precondition, is refused until a guard handles the bad case. After the guard the claim is proved. Words on the command line are checked against <code>main</code>'s preconditions before the body runs.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let out = process::run("git", ["rev-parse", "HEAD"])
+let n: int = out.stdout.len()
+assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `n == 41` is a claim about data from outside the program.</b></code></pre></div>
+        <a class="safe-more" href="{{ "/safe/outside-data.html" | relative_url }}">In depth →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Checked at the call</span>
+        <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A path stays in its directory</a></h3>
+        <p>Every function that opens a path takes the directory the name may not leave. A name such as <code>../../etc/passwd</code> is refused at the call. Where the program writes <code>fs::Root::Anywhere</code> instead, it answers for the name itself, and <code>nikaia build --trust</code> lists the place.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">fs::read_to_string(name, fs::Root::Dir("store"))</code></pre></div>
+        <a class="safe-more" href="{{ "/safe/outside-data.html" | relative_url }}">In depth →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Chosen by the compiler</span>
+        <h3>Keys an attacker cannot line up</h3>
+        <p>A map whose keys come from the network gets a hash with a random seed, so whoever sends the keys cannot pick ones that all land in the same place and slow the program down. A map filled from data the program trusts keeps a faster hash. <code>--trust</code> shows which map got which.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-316.html" | relative_url }}">ADR-316 →</a>
+      </div>
     </div>
-    <div class="home-code-side">
+  </div>
+</section>
+
+<section class="home-section home-section-alt" id="logic">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Layer 3</p>
+    <h2 class="home-heading">Parts that keep their promises</h2>
+    <p class="safe-lead home-intro">A function is written for certain inputs, and a value shared between tasks is meant to change in a certain way. Nikaia lets these rules be written in the code, and checks them when the program is built, so a state the program relies on is not broken unnoticed.</p>
+    <div class="safe-tiles">
+      <div class="safe-tile safe-tile-b" id="promises">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3><a href="{{ "/safe/broken-promises.html" | relative_url }}">Calls that break a function's contract</a></h3>
+        <p>An expectation written as an <code>assert</code> becomes a contract. A call that breaks it is refused, a promise about a result is available to the callers, and a contract carries across package boundaries. A claim the compiler cannot prove refuses the program too, unless the project asks for it to be checked while the program runs.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
     assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
     return n
 }
 
 percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b></code></pre></div>
-        
+        <a class="safe-more" href="{{ "/safe/broken-promises.html" | relative_url }}">In depth →</a>
+      </div>
+      <div class="safe-tile safe-tile-b" id="conflicts">
+        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+<p><span class="why why-todo">Still being built</span> For <code>async</code> tasks the check is being built (#988), and two writes to the same file are not yet told apart from writes to two files.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
+</details>
+        <h3><a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a></h3>
+        <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches and refuses two tasks that change the same value or both write to standard output, naming what they share. The way out is in the message: a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">async {
+    async fn { balance = balance + 50 }
+    async fn { balance = balance - 30 }   // refused: both change `balance`
+}</code></pre></div>
+        <a class="safe-more" href="{{ "/safe/conflicting-actions.html" | relative_url }}">In depth →</a>
+      </div>
     </div>
-    <p class="home-split-more"><a class="safe-in-depth" href="{{ "/safe/broken-promises.html" | relative_url }}">In depth →</a></p>
   </div>
 </section>
 
+<section class="home-section" id="changes">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Layer 4</p>
+    <h2 class="home-heading">Changes, by people and by models</h2>
+    <p class="safe-lead home-intro">More and more changes are made by a model or an agent, often faster than a person can read them closely. Such a change can look right line by line and still break a rule that another part of the program relies on.</p>
+    <p class="safe-lead home-intro">In Nikaia those rules are part of the code: the <code>assert</code> that states what a function expects, the <code>throws</code> that says it can fail, the directory a path may not leave. The compiler checks every change against all of them on every build, whoever wrote it. A change that calls a function outside its precondition, lets an error through unhandled or starts two tasks that change the same value is refused, and the message says what to write instead, so an agent can fix the code and build again.</p>
+    <div class="safe-tiles">
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Shown on every build</span>
+        <h3>What the compiler relied on</h3>
+        <p><code>nikaia build --asserts</code> lists every claim of the program and how it is held: proved, checked where the data arrives, or checked while the program runs. <code>--trust</code> lists every place where the program vouches for its input itself. A reviewer reads these beside the diff.</p>
+<div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
+  …/src/main.nika:10  assert(n == 41)  proved</code></pre></div>
+        <a class="safe-more" href="{{ "/guide/contracts.html" | relative_url }}">Contracts in the guide →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-part">Where the check stops</span>
+        <h3>The rules that are written</h3>
+        <p>The compiler checks the rules the code states. A change that rewrites a rule itself, removes an <code>assert</code> or writes <code>fs::Root::Anywhere</code>, is accepted: it shows in the diff and in the two reports, and that is where a person looks. A rule nobody has written is not checked.</p>
+        <a class="safe-more" href="{{ "/manifesto.html#8-a-language-for-the-age-of-generated-code" | relative_url }}">The longer argument →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-section-alt" id="load">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Layer 5</p>
+    <h2 class="home-heading">Under load and failure</h2>
+    <p class="safe-lead home-intro">A service the program depends on gets slow, a connection stops answering, one task uses more than its share. The program should answer in time with what it has, and the trouble should stay with the part that has it.</p>
+    <div class="safe-tiles">
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3><a href="{{ "/safe/deadlines.html" | relative_url }}">A deadline for every wait</a></h3>
+        <p>A task started with <code>async(within: d)</code> is cancelled when its time runs out and ends with <code>task::TimedOut</code>, a failure like any other. The compiler asks for it to be handled, and a fallback stands in where the value is needed. The check is that a timeout is handled, not that the time chosen is right.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let price = async(within: 100.millis()) lookup()
+    catch { "cached price" }</code></pre></div>
+        <a class="safe-more" href="{{ "/safe/deadlines.html" | relative_url }}">In depth →</a>
+      </div>
+      <div class="safe-tile safe-tile-b" id="stuck">
+        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+<p><span class="why why-todo">Still being built</span> A lock taken inside another lock by hand is not refused yet, so for several locks using <code>update_all</code> is up to you.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> Whether a program can get stuck cannot be decided for every program. Where the analysis cannot tell, it does not claim the problem is solved.</p>
+</details>
+        <h3><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a></h3>
+        <p>A task that pauses while it holds a lock is refused, since everyone who needs that value would wait too. For several locks at once, <code>update_all</code> takes them in one fixed order, so two transfers cannot hold one each and wait for the other.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">a.update fn(mut acc) {
+    acc.balance -= 30
+    time::sleep(5.millis())
+}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `time::sleep` can pause, but you're holding a lock here.</b></code></pre></div>
+        <a class="safe-more" href="{{ "/safe/stuck-tasks.html" | relative_url }}">In depth →</a>
+      </div>
+      <div class="safe-tile safe-tile-b" id="memory">
+        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <h3><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a></h3>
+        <p>In the specification every task gets a memory budget of its own. A task that spends it ends with <code>task::OverBudget</code>, and the rest of the program runs on. It is a protection while the program runs, not a proof, and memory a Rust crate or a C library keeps for itself is in no budget.</p>
+        <p class="safe-note">Decided and specified, not built yet: today a task can still take memory from the whole program.</p>
+        <a class="safe-more" href="{{ "/safe/memory.html" | relative_url }}">In depth →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <h3>How many run at once</h3>
+        <p>A form that starts tasks is specified to take <code>limit:</code>, the number that may run at once, and <code>admission:</code>, what happens to the next one when that many are running. Neither is built yet (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/986">#986</a>), and serving many connections at once is not possible yet.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5, D15 →</a>
+      </div>
+    </div>
+  </div>
+</section>
