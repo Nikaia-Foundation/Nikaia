@@ -309,6 +309,14 @@ whose result writes `from` names the parameters it reads. Positions (`from 0`)
 are not used: a number says less than a name and means nothing elsewhere in a
 signature.
 
+A function fits a function type only if both results are views or both own
+their values. A view result fits where the type's `from` names the parameters
+it reads, and those are lent. A result that owns its value does not fit a type
+whose result writes `from`, and the reverse does not fit either. The type says
+whether the caller gets a view or a value of its own, and the code below holds
+the two differently (`Fn(&str) -> &str` cannot hand back a `String` it made).
+A function that makes its result is handed to a type without `from`.
+
 ### D15 — `Bytes` and `comptime` text follow D11: lent or build-fixed, they are views.
 
 *Added November 5, 2026 (#1213), from migrating the examples and tests.*
