@@ -1,5 +1,5 @@
 
-# Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)
+# Facts for this brief (Core and the named sections of docs/builder-facts-lookup.md; more on a topic: `nikaia run scripts/syntax.nika -- KEYWORD`)
 
 ## Core
 
@@ -13,9 +13,10 @@
 
 * a move rule
 
+
 --
 
-# Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)
+# Facts for this brief (Core and the named sections of docs/builder-facts-lookup.md; more on a topic: `nikaia run scripts/syntax.nika -- KEYWORD`)
 
 ## Core
 
@@ -31,7 +32,7 @@
 
 --
 plain: [
-# Facts for this brief (sections of docs/builder-facts.md; read the rest of it only when needed)
+# Facts for this brief (Core and the named sections of docs/builder-facts-lookup.md; more on a topic: `nikaia run scripts/syntax.nika -- KEYWORD`)
 
 ## Core
 
