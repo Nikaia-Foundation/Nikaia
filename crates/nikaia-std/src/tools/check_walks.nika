@@ -137,6 +137,13 @@ fn check_walks_task_operations(state: ref CheckState, inner: ref Expr, words: re
         },
         else => values.push(inner.clone()),
     }
+    return check_walks_values_operations(state, values, words, walking)
+}
+
+/// What the values of some statements perform, each read as an expression
+/// statement after `check_walks_lock_door`; `null` where one cannot be
+/// accounted for.
+fn check_walks_values_operations(state: ref CheckState, mut values: Vec[Expr], words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Vec[Operation]? {
     let mut out: Vec[Operation] = []
     for value in values.drain() {
         match check_walks_lock_door(state, value, words, walking) {
@@ -221,6 +228,12 @@ fn check_walks_door_on(state: ref CheckState, value: ref Expr, receiver: ref Exp
 fn check_walks_task_clash(earlier: ref CheckWalksTask, later: ref CheckWalksTask) -> Verdict? {
     let first = earlier.operations ?? return null
     let second = later.operations ?? return null
+    return check_walks_operations_clash(first, second)
+}
+
+/// The first pair of `first` and `second` that meets on a resource one of
+/// them writes, as its verdict; `null` where none does.
+fn check_walks_operations_clash(first: ref Vec[Operation], second: ref Vec[Operation]) -> Verdict? {
     for a in first {
         for b in second {
             let found = verdict(a, b)
@@ -230,6 +243,81 @@ fn check_walks_task_clash(earlier: ref CheckWalksTask, later: ref CheckWalksTask
         }
     }
     return null
+}
+
+/// Whether a statement starts a task or a child task where it stands, outside
+/// its blocks: it is no main-line statement of a window (Part I 8.1.2).
+fn check_walks_starts_a_task(stmt: ref Stmt) -> bool {
+    for each in check_visit_stmt(stmt) {
+        match each {
+            Expr::Async(_, _, _) => return true,
+            Expr::Spawn { .. } => return true,
+            else => {},
+        }
+    }
+    return false
+}
+
+/// What a main-line statement performs, read as the tasks' statements are
+/// (`check_walks_values_operations`); `null` where it cannot be accounted
+/// for, or holds a block or a loop.
+fn check_walks_statement_operations(state: ref CheckState, stmt: ref Stmt, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Vec[Operation]? {
+    let value = match stmt {
+        Stmt::Let { value, .. } => value.clone(),
+        Stmt::Expr(value) => value.clone(),
+        Stmt::Assign { value, .. } => value.clone(),
+        else => return null,
+    }
+    return check_walks_values_operations(state, [value], words, walking)
+}
+
+/// **The main-line statements in a task's window** (Part I 8.1.2, #1259):
+/// each statement of `block` that starts after a task and before the point
+/// where the task meets the main line again (`until`: the group's end, the
+/// statement that names its binding, the call it is an argument of) is
+/// compared with that task by the rule two tasks are (`NK2104` where both
+/// reach one resource and one writes it). A statement holding a task of the
+/// group is walked into for an `async { }`, whose nested blocks hold its
+/// tasks too; one finding per statement, at the statement.
+fn check_walks_window(state: ref CheckState, world: ref CheckWorld, walking: ref Walking, block: ref Block, group: i64, tasks: ref Vec[CheckWalksTask], mut out: Vec[CheckFinding]) {
+    for stmt in block.stmts {
+        let mut holds = false
+        for task in tasks {
+            if task.span.start >= stmt.span.start && task.span.end <= stmt.span.end {
+                holds = true
+            }
+        }
+        if holds {
+            if group >= 0 {
+                for nested in check_visit_stmt_blocks(stmt.node) {
+                    check_walks_window(state, world, walking, nested, group, tasks, out)
+                }
+            }
+            continue
+        }
+        if check_walks_starts_a_task(stmt.node) {
+            continue
+        }
+        let mut read = false
+        let mut main: Vec[Operation] = []
+        for task in tasks {
+            if stmt.span.start < task.span.end || stmt.span.start as i64 >= task.until {
+                continue
+            }
+            let operations = task.operations ?? continue
+            if !read {
+                main = check_walks_statement_operations(state, stmt.node, world.words, walking) ?? break
+                read = true
+            }
+            let clash = check_walks_operations_clash(operations, main)
+            if clash != null {
+                let verdict = clash ?? Verdict::NotAccountedFor
+                let why = capitalised(verdict.why())
+                out.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104", message: "This statement can't run at the same time as a task before it.", notes: [f"{why}.", "A task runs beside the statements after it until it is waited for: the end of its group, or where its value is read."], help: "If it should run after the task, move it after the group's end or after the read of the task's value, or write the task without `async`.", labels: [] })
+                break
+            }
+        }
+    }
 }
 
 impl CheckState {
@@ -292,6 +380,8 @@ impl CheckState {
     /// earlier one is waited for - may not share a resource one of them
     /// writes (`NK2104`); a name a task changes is `NK2107` on its own. One
     /// finding per task, at the later one; a task inside another is that task's.
+    /// Nor does a task meet the main-line statements in its window
+    /// (`check_walks_window`, Part I 8.1.2, #1259).
     pub fn tasks_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, group: i64) sync {
         let mut count = 0
         for (_, wait) in self.facts.async_waits {
@@ -299,12 +389,15 @@ impl CheckState {
                 count += 1
             }
         }
-        if count < 2 {
+        if count < 1 {
             return
         }
         let walking = Walking { own: world.own, library: world.library, into: Going::Ours }
         let mut tasks: Vec[CheckWalksTask] = []
         check_walks_tasks_in(self, world, walking, block, group, tasks)
+        let mut beside: Vec[CheckFinding] = []
+        check_walks_window(self, world, walking, block, group, tasks, beside)
+        self.findings.extend(beside.drain())
         for j in 0..<tasks.len() {
             for i in 0..<tasks.len() {
                 if i == j {

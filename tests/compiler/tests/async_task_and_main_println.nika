@@ -1,0 +1,5 @@
+// A task that writes stdout and the main-line println beside it: NK2104 (Part I 8.1.2, #1259).
+fn main() {
+	async fn { println("x") }
+	println("y")
+}

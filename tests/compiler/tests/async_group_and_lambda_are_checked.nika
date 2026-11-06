@@ -9,9 +9,11 @@ fn work(n: i64) {
 fn main() {
 	let n = async {
 		async work(1)
-		work(2)
 		3
 	}
+	// The main line's `work(2)` follows the group: beside the task it would
+	// write stdout in the task's window (Part I 8.1.2, #1259).
+	work(2)
 	let v: i64 = async fn { 4 }
 	let w = work(5)
 	println(f"{n} {v}")

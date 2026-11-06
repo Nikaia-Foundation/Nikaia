@@ -86,8 +86,12 @@ pub(crate) fn check_walks_task_operations(state: &CheckState, inner: &Expr, word
         },
         _ => { values.push(inner.clone()); },
     }
+    check_walks_values_operations(state, &mut values, words, walking)
+}
+
+pub(crate) fn check_walks_values_operations(state: &CheckState, values: &mut Vec<Expr>, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Option<Vec<Operation>> {
     let mut out: Vec<Operation> = vec![];
-    for value in values.into_iter() {
+    for value in values.drain(..) {
         match check_walks_lock_door(state, &value, words, walking) {
             CheckWalksDoor::Door(ref operation) => {
                 out.push(operation.clone());
@@ -150,6 +154,10 @@ pub(crate) fn check_walks_door_on(state: &CheckState, value: &Expr, receiver: &E
 pub(crate) fn check_walks_task_clash(earlier: &CheckWalksTask, later: &CheckWalksTask) -> Option<Verdict> {
     let first = match earlier.operations.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let second = match later.operations.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    check_walks_operations_clash(first, second)
+}
+
+pub(crate) fn check_walks_operations_clash(first: &[Operation], second: &[Operation]) -> Option<Verdict> {
     for a in first.iter() {
         for b in second.iter() {
             let found = verdict(a, b);
@@ -157,6 +165,56 @@ pub(crate) fn check_walks_task_clash(earlier: &CheckWalksTask, later: &CheckWalk
         }
     }
     None
+}
+
+pub(crate) fn check_walks_starts_a_task(stmt: &Stmt) -> bool {
+    for each in check_visit_stmt(stmt) {
+        match each {
+            Expr::Async(_, _, _) => { return true; },
+            Expr::Spawn { .. } => { return true; },
+            _ => { },
+        }
+    }
+    false
+}
+
+pub(crate) fn check_walks_statement_operations(state: &CheckState, stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Option<Vec<Operation>> {
+    let value = match stmt {
+        Stmt::Let { value, .. } => value.clone(),
+        Stmt::Expr(value) => value.clone(),
+        Stmt::Assign { value, .. } => value.clone(),
+        _ => return None,
+    };
+    check_walks_values_operations(state, &mut vec![value], words, walking)
+}
+
+pub(crate) fn check_walks_window(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walking: &Walking<'_, '_>, block: &Block, group: i64, tasks: &[CheckWalksTask], out: &mut Vec<CheckFinding>) {
+    for stmt in block.stmts.iter() {
+        let mut holds = false;
+        for task in tasks.iter() { if task.span.start >= stmt.span.start && task.span.end <= stmt.span.end { holds = true; } }
+        if holds {
+            if group >= 0 { for nested in check_visit_stmt_blocks(&stmt.node) { check_walks_window(state, world, walking, nested, group, tasks, out); } }
+            continue;
+        }
+        if check_walks_starts_a_task(&stmt.node) { continue; }
+        let mut read = false;
+        let mut main: Vec<Operation> = vec![];
+        for task in tasks.iter() {
+            if stmt.span.start < task.span.end || (stmt.span.start as i64) >= task.until { continue; }
+            let operations = match task.operations.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if !read {
+                main = match check_walks_statement_operations(state, &stmt.node, world.words, walking) { Some(__nikaia_value) => __nikaia_value, None => break };
+                read = true;
+            }
+            let clash = check_walks_operations_clash(operations, &main);
+            if clash.is_some() {
+                let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
+                let why = capitalised(&verdict.why());
+                out.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: String::from("NK2104"), message: String::from("This statement can't run at the same time as a task before it."), notes: vec![format!("{}.", why), String::from("A task runs beside the statements after it until it is waited for: the end of its group, or where its value is read.")], help: Some(String::from("If it should run after the task, move it after the group's end or after the read of the task's value, or write the task without `async`.")), labels: vec![] });
+                break;
+            }
+        }
+    }
 }
 
 impl CheckState {
@@ -216,10 +274,13 @@ impl CheckState {
             let wait = *wait;
             if wait.group == group { count += 1; }
         }
-        if count < 2 { return; }
+        if count < 1 { return; }
         let walking = Walking { own: world.own, library: world.library, into: Going::Ours };
         let mut tasks: Vec<CheckWalksTask> = vec![];
         check_walks_tasks_in(self, world, &walking, block, group, &mut tasks);
+        let mut beside: Vec<CheckFinding> = vec![];
+        check_walks_window(self, world, &walking, block, group, &tasks, &mut beside);
+        self.findings.extend(beside.into_iter());
         for j in 0..tasks.len() as i64 {
             for i in 0..tasks.len() as i64 {
                 if i == j { continue; }

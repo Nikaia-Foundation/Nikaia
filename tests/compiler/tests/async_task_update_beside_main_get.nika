@@ -1,0 +1,9 @@
+// A task's update and a main-line get on one lock in its window: NK2104, naming the lock (Part II 12.2, #1259).
+fn main() {
+	let seen = SharedMut(0)
+	async {
+		async seen.update fn(mut v) { v += 1 }
+		let v = seen.get()
+		println(f"{v}")
+	}
+}

@@ -1,0 +1,10 @@
+error[NK2104]: This statement can't run at the same time as a task before it.
+  --> tests/async_task_update_beside_main_get.nika:6:3
+   |
+ 6 | 		let v = seen.get()
+   |   ^^^^^^^^^^^^^^^^^^
+   |
+   = note: Both reach the lock `seen`, and one writes it.
+   = note: A task runs beside the statements after it until it is waited for: the end of its group, or where its value is read.
+   = help: If it should run after the task, move it after the group's end or after the read of the task's value, or write the task without `async`.
+1 branch that cannot run beside the others

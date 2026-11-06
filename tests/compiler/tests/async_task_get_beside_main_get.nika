@@ -1,0 +1,9 @@
+// A task's get and a main-line get on one lock, beside a task get: both read, so they run beside each other (Part II 12.2, #1259).
+fn main() {
+	let seen = SharedMut(7)
+	async {
+		async seen.get()
+		let v = seen.get()
+		println(f"{v}")
+	}
+}
