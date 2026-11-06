@@ -2801,7 +2801,7 @@ pub mod keep {
 }
 pub mod keeps {
     #[allow(unused_imports)]
-    pub use super::{KeepsBody, uses_in, keeps_its_bytes, KeepsHost, KeepsColumn, KeepsKeeper, KeepsImplRow, KeepsIndexes, KeepsFound, keeps_infer, keeps_uses_of};
+    pub use super::{KeepsBody, uses_in, keeps_its_bytes, KeepsHost, KeepsColumn, KeepsKeeper, KeepsImplRow, KeepsIndexes, KeepsFound, keeps_a_copy_type, keeps_copy_types, keeps_infer, keeps_uses_of};
 }
 pub mod leaves {
     #[allow(unused_imports)]

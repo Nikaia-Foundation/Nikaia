@@ -1,0 +1,45 @@
+migrated TMP/marks.nika
+struct Row {
+    id: i64,
+    name: String,
+}
+
+enum Kind {
+    A,
+    B,
+}
+
+struct Point {
+    x: i64,
+    y: i64,
+}
+
+struct Ev {
+    kind: Kind,
+    at: Point,
+    name: String,
+}
+
+struct Bag {
+    kind: Kind,
+    names: Vec[String],
+}
+
+fn mark(kind: Kind, at: Point, r: Row) -> Ev {
+    return Ev { kind: kind, at: at, name: r.name }
+}
+
+fn hold(kind: Kind, keep names: Vec[String]) -> Bag {
+    return Bag { kind: kind, names: names }
+}
+
+fn main() {
+    let r = Row { id: 1, name: "x" }
+    let k = Kind::B
+    let p = Point { x: 1, y: 2 }
+    println(mark(k, p, r).name)
+    println(mark(k, p, r).at.y)
+    println(hold(k, ["y"]).names.len())
+}
+-- check: 0
+Checked TMP/marks.nika

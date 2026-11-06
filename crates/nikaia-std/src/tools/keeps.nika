@@ -1363,6 +1363,78 @@ fn keeps_a_copied_scalar(ty: ref Ty) -> bool {
     }
 }
 
+/// **Whether a parameter of this type is a copy** (ADR-views-3 D2, #1254):
+/// a copied scalar, or one of the file's copy types (`keeps_copy_types`), or
+/// such a value that may be `null`. Kept below, it is handed over by value
+/// all the same, so no caller's value goes with it and no `keep` is written
+/// or asked for.
+pub fn keeps_a_copy_type(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
+    return keeps_copied_field(ty, copies)
+}
+
+/// The name of a type written by its name alone, or such a type that may be
+/// `null`.
+fn keeps_type_name(ty: ref Ty) -> String? {
+    return match ty {
+        Ty::Named { name, args, view } => if !view && args.is_empty() { name.clone() } else { null },
+        Ty::Nullable(inner) => keeps_type_name(inner),
+        else => null,
+    }
+}
+
+/// **The file's copy types** (ADR-294 D9.1): a data-less enum, and a struct
+/// whose every field is a copied scalar or such a type, asked again until
+/// nothing more joins; never one with a `Drop`.
+pub fn keeps_copy_types(view: ref ParsedView) -> collections::BTreeSet[String] {
+    let mut dropped: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in view.items {
+        match item.node {
+            Item::Impl { trait_name, target, .. } => {
+                let named = trait_name ?? continue
+                if view.text(named) == "Drop" {
+                    dropped.insert(view.text(target.name))
+                }
+            },
+            else => {},
+        }
+    }
+    let mut copies: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in hb_plain_enums(view.items, view.words) {
+        if !dropped.contains(name) {
+            copies.insert(name)
+        }
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for item in view.items {
+            match item.node {
+                Item::Struct { name, fields, .. } => {
+                    let own = view.text(name)
+                    if copies.contains(own) || dropped.contains(own) {
+                        continue
+                    }
+                    let all = fields.iter().all(fn(f) { keeps_copied_field(written_ty(view.words, view.aliases, f.ty), copies) })
+                    if all {
+                        copies.insert(own)
+                        changed = true
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    return copies
+}
+
+fn keeps_copied_field(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
+    if keeps_a_copied_scalar(ty) {
+        return true
+    }
+    let name = keeps_type_name(ty) ?? return false
+    return copies.contains(name)
+}
+
 comptime KEEPS_SCALARS: Array[ref String, 15] = ["i8", "i16", "i32", "i64", "isize", "usize", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char", "scalar"]
 
 fn no_uses() -> Uses {

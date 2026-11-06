@@ -1,0 +1,27 @@
+// #1254 step 1, ADR-views-3 D2: `nikaia migrate views-3` writes no `keep`
+// for a parameter of a copy type (a data-less enum, a struct of copied
+// fields) even where the body stores it: it is handed over as a copy, so no
+// caller's value goes with it. A by-value `Vec[String]` stored the same way
+// still gets `keep`, and the migrated program checks (NK2302 asks no mark for the
+// copies either).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/marks.nika", fs::Root::Anywhere, "struct Row {\n    id: i64,\n    name: String,\n}\n\nenum Kind {\n    A,\n    B,\n}\n\nstruct Point {\n    x: i64,\n    y: i64,\n}\n\nstruct Ev {\n    kind: Kind,\n    at: Point,\n    name: String,\n}\n\nstruct Bag {\n    kind: Kind,\n    names: Vec[String],\n}\n\nfn mark(kind: Kind, at: Point, r: ref Row) -> Ev {\n    return Ev { kind: kind, at: at, name: r.name }\n}\n\nfn hold(kind: Kind, names: Vec[String]) -> Bag {\n    return Bag { kind: kind, names: names }\n}\n\nfn main() {\n    let r = Row { id: 1, name: \"x\" }\n    let k = Kind::B\n    let p = Point { x: 1, y: 2 }\n    println(mark(k, p, r).name)\n    println(mark(k, p, r).at.y)\n    println(hold(k, [\"y\"]).names.len())\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/marks.nika"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(f"{tmp}/marks.nika", fs::Root::Anywhere))
+    let checked = process::run(nikaia, ["check", f"{tmp}/marks.nika"])
+    println(f"-- check: {checked.code}")
+    print(f"{checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}

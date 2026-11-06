@@ -131,11 +131,13 @@ pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item
                 None => None,
             }).as_deref(), own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let contract = match *nikaia_std::index::get(&own.functions, &found.key) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let copies: collections::BTreeSet<String> = if opted { keeps_copy_types(view) } else { collections::BTreeSet::new() };
             for arg in args.iter() {
                 let parameter = view.text(arg.name);
                 if parameter == "" || parameter == "_" { continue; }
                 let kept = nikaia_std::list::contains(&contract.keeps, &parameter);
-                if kept && !arg.keep && opted {
+                let a_copy = !arg.ty.is_view && !arg.mutable && keeps_a_copy_type(&written_ty(view.words, view.aliases, &arg.ty), &copies);
+                if kept && !arg.keep && opted && !a_copy {
                     let at = nikaia_std::index::or(keep_marks_keeping_statement(view, item, (match target {
                         Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                         None => None,

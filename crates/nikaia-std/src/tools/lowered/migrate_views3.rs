@@ -422,9 +422,11 @@ pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, i
                 None => None,
             }).as_deref(), own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let contract = match *nikaia_std::index::get(&own.functions, &found.key) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let copies = keeps_copy_types(view);
             for arg in args.iter() {
                 let parameter = view.text(arg.name);
                 if parameter == "" || parameter == "_" || arg.keep || arg.mutable || !arg.attributes.is_empty() { continue; }
+                if !arg.ty.is_view && keeps_a_copy_type(&written_ty(view.words, view.aliases, &arg.ty), &copies) { continue; }
                 if nikaia_std::list::contains(&contract.keeps, &parameter) { out.push(arg.span.start as i64); }
             }
         },

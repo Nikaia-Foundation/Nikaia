@@ -587,9 +587,16 @@ fn migrate_keeps_of_body(view: ref ParsedView, item: ref Spanned[Item], target: 
             }
             let found = keeps_uses_of(view, item.node, target?.clone(), own, library, indexes, resolved, holes_of) ?? return
             let contract = own.functions[found.key] ?? return
+            let copies = keeps_copy_types(view)
             for arg in args {
                 let parameter = view.text(arg.name)
                 if parameter == "" || parameter == "_" || arg.keep || arg.mutable || !arg.attributes.is_empty() {
+                    continue
+                }
+                // **A copy is never marked `keep`** (ADR-views-3 D2, #1254):
+                // a data-less enum or a struct of copied fields is handed over
+                // by value, so storing it keeps no caller's value.
+                if !arg.ty.is_view && keeps_a_copy_type(written_ty(view.words, view.aliases, arg.ty), copies) {
                     continue
                 }
                 if contract.keeps.contains(parameter) {

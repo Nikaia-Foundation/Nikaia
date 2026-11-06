@@ -912,6 +912,58 @@ pub(crate) fn keeps_a_copied_scalar(ty: &Ty) -> bool {
     }
 }
 
+pub fn keeps_a_copy_type(ty: &Ty, copies: &collections::BTreeSet<String>) -> bool { keeps_copied_field(ty, copies) }
+
+pub(crate) fn keeps_type_name(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() { Some(name.to_string()) } else { None } },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); keeps_type_name(inner) },
+        _ => None,
+    }
+}
+
+pub fn keeps_copy_types(view: &ParsedView<'_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<String> {
+    let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Impl { trait_name, target, .. } => {
+                let trait_name = *trait_name;
+                let named = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if view.text(named) == "Drop" { dropped.insert(view.text(target.name)); }
+            },
+            _ => { },
+        }
+    }
+    let mut copies: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in hb_plain_enums(view.items, view.words) { if !dropped.contains(&name) { copies.insert(name); } }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for item in view.items.iter() {
+            match &item.node {
+                Item::Struct { name, fields, .. } => {
+                    let name = *name;
+                    let own = view.text(name);
+                    if copies.contains(&own) || dropped.contains(&own) { continue; }
+                    let all = fields.iter().all(|f| { keeps_copied_field(&written_ty(view.words, view.aliases, &f.ty), &copies) });
+                    if all {
+                        copies.insert(own);
+                        changed = true;
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
+    copies
+}
+
+pub(crate) fn keeps_copied_field(ty: &Ty, copies: &collections::BTreeSet<String>) -> bool {
+    if keeps_a_copied_scalar(ty) { return true; }
+    let name = match keeps_type_name(ty) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    copies.contains(&name)
+}
+
 pub(crate) const KEEPS_SCALARS: [&str; 15] = ["i8", "i16", "i32", "i64", "isize", "usize", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char", "scalar"];
 
 pub(crate) fn no_uses() -> Uses { Uses { kept: collections::BTreeSet::new(), passed: vec![] } }
@@ -928,11 +980,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple69358| {
-                            let (at, arg) = __nikaia_tuple69358; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple72036| {
+                            let (at, arg) = __nikaia_tuple72036; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple69534| {
-                            let (at, arg) = __nikaia_tuple69534;
+                        }).map(|__nikaia_tuple72212| {
+                            let (at, arg) = __nikaia_tuple72212;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);
