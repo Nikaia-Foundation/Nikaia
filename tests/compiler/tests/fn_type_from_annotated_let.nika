@@ -1,0 +1,20 @@
+// ADR-views-3 D14: an argument a function type's `from` names is lent, so an
+// owned `String` given there, its type written or not, goes in as a view
+// whose view comes back (#1254).
+fn same(s: String) -> String from s {
+    return s
+}
+
+fn apply(f: fn(s: String) -> String from s, s: String) -> String from s {
+    return f(s)
+}
+
+fn main() {
+    let g: String = "hi ".trim().to_string()
+    println(apply(same, g))
+    let h = "ho ".trim().to_string()
+    println(apply(same, h))
+    let f: fn(s: String) -> String from s = same
+    let k: String = " ha".trim().to_string()
+    println(f(k))
+}

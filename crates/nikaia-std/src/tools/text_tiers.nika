@@ -4870,11 +4870,47 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
     // another file of the package: no position this walk sees says what
     // (ADR-282 D29).
     if names_a_type(last_segment(callee)) || !ask.library.functions.contains_key(callee) {
-        kept_args(args, given, ask, walk)
+        // **An argument a function value's `from` names is lent** (ADR-views-3
+        // D14, #1254): `f(g)` through `f: fn(s: String) -> String from s`
+        // hands back a view of `g`, so `g` goes in as a view, not kept, as it
+        // does into a function's parameter that `-> String from s` names.
+        let lent_at = from_named_positions(func, ask, walk)
+        let mut at = 0
+        for arg in args {
+            if at < given.len() && given[at].still && !lent_at.contains(at) {
+                kept_unseen(arg, ask, walk)
+            }
+            at += 1
+        }
     } else {
         std_container_args(args, ask, walk)
     }
     return std_result(callee, ask)
+}
+
+/// **The positions a function value's type names in its result's `from`**
+/// (ADR-views-3 D14): for `f: fn(s: String, n: i64) -> String from s`, `[0]`.
+/// The function value is a parameter or a `let` that writes its type; empty
+/// for anything else.
+fn from_named_positions(func: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> Vec[i64] {
+    let mut out: Vec[i64] = []
+    let name = match func {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        else => return out,
+    }
+    let local = tier_local(name, walk) ?? return out
+    let declared = local.declared ?? return out
+    let code = declared.ty.code ?? return out
+    let mut position = 0
+    for written in code.param_names {
+        let here = position
+        position += 1
+        let symbol = written ?? continue
+        if code.result_from.contains(symbol) {
+            out.push(here)
+        }
+    }
+    return out
 }
 
 /// **A container of text handed whole to `std` holds text of its own**
