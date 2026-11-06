@@ -14,14 +14,19 @@
 // in single-DIR mode (a report's `Found:` does not cut: it goes to DIR/found.txt,
 // `drive_found`); an area entered with an empty queue is skipped (`FOCUS
 // <area> empty, skipped`); every area empty escalates. Before each cycle the open
-// issues labelled `ready` and the area's name are appended to DIR/batch.txt
-// as `#N` (`QUEUED #N <area>`, drive_queue). At a block's end the debriefs'
+// issues labelled `ready` and the area's name, without `wip`, are appended to
+// DIR/batch.txt as `#N` (`QUEUED #N <area>`, drive_queue). A run on issue N
+// sets `wip` on it first and, by its report, keeps it (done, `Fixes:` names
+// #N; promote closes the issue), swaps `ready` for `blocked` (blocked), or
+// removes it (anything else), drive_wip_after; an escalation mid-run leaves
+// `wip` for the supervisor to clear. At a block's end the debriefs'
 // `Fact:` lines go into the facts files (`facts-collect.nika -- --apply`,
 // committed as docs, `FACTS <n> entered`). Before a block, the first unrun
 // docs/briefs/bugs brief with a `Blocks:` line runs first. Test flags:
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
-// `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add).
+// `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
+// `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`.
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time:
 //
@@ -35,7 +40,10 @@
 //                                 issue); no suite until the batch ends;
 //                                 a report's `Found:` appended to
 //                                 DIR/found.txt and printed as `FOUND
-//                                 <brief>: Found: ...`, the batch goes on
+//                                 <brief>: Found: ...`, then filed as an
+//                                 issue (`ready` or `decision`, the area;
+//                                 `FILED #N <brief>`, drive_found_file),
+//                                 the batch goes on
 //     BUMP pending, CI green      cycle.nika -- DIR --apply
 //     CUT, RED, BATCH DONE        the batch's suite runs and is waited for,
 //                                 then the driver stops for the supervisor
@@ -1205,14 +1213,156 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 		"a batch's suite that has finished (target/suite.lock/exit-<sha>): handle it (drive_settle) first; one still running: go on, CI runs it",
 	)
 	drive_post_brief(dry, brief)
+	drive_wip_start(dry, brief)
 	drive_agent(exe, dry, dir, brief, "builder")
 	drive_report_pushed(dry, brief)
+	drive_wip_end(dry, brief)
 	drive_tidy(dry, dir.clone())
 	drive_say(dry, f"append {brief} to {dir}/unpushed.txt (no suite until the batch ends)")
 	if dry { return }
 	drive_append(f"{dir}/unpushed.txt", brief.clone())
 	let found = drive_found(dir, brief)
-	if found != "" { println(found) }
+	if found != "" {
+		println(found)
+		drive_found_file(dir, brief)
+	}
+}
+
+// Adds LABEL to issue N (`gh api -X POST .../labels`); true when it went through.
+fn drive_label_add(issue: String, label: String) -> bool throws {
+	let repo = drive_repo()
+	return process::run(
+		"gh",
+		["api", "-X", "POST", f"repos/{repo}/issues/{issue}/labels", "-f", f"labels[]={label}"],
+	).ok
+}
+
+// Removes LABEL from issue N (`gh api -X DELETE .../labels/LABEL`).
+fn drive_label_remove(issue: String, label: String) throws {
+	let repo = drive_repo()
+	process::run("gh", ["api", "-X", "DELETE", f"repos/{repo}/issues/{issue}/labels/{label}"])
+}
+
+// Before a run on issue N (owner, 2026-11-06): the issue gets the label
+// `wip`, so drive_queue does not queue it again while it is worked on. No
+// issue, or a failed call, is logged (`wip failed for <brief>`) and stops nothing.
+fn drive_wip_start(dry: bool, brief: String) throws {
+	let issue = drive_issue(brief)
+	if issue == "" { return }
+	drive_say(dry, f"gh api -X POST repos/{drive_repo()}/issues/{issue}/labels -f labels[]=wip")
+	if dry { return }
+	if !drive_label_add(issue, "wip") { println(f"wip failed for {drive_stem(brief)}") }
+}
+
+// What a run's end does to the labels of its issue N, by the report's
+// `Result:` and `Fixes:`: `keep` (done and `Fixes:` names #N: `wip` stays
+// until promote closes the issue, so it is not queued again), `block`
+// (blocked: `wip` and `ready` go, `blocked` comes, the supervisor decides),
+// `remove` (anything else, partial or no report: `wip` goes, `ready` stays,
+// the next queue picks it up again).
+fn drive_wip_after(result: String, fixes: String, issue: String) -> String {
+	let word = drive_word(result)
+	if word == "done" {
+		for w in fixes.replace(",", " ").split(" ") {
+			if w.trim() == f"#{issue}" { return "keep" }
+		}
+	}
+	if word == "blocked" { return "block" }
+	return "remove"
+}
+
+// After a run on issue N: its labels by drive_wip_after.
+fn drive_wip_end(dry: bool, brief: String) throws {
+	let issue = drive_issue(brief)
+	if issue == "" { return }
+	drive_say(dry, f"by the report's Result and Fixes: keep wip, or remove it (blocked: ready -> blocked) on #{issue}")
+	if dry { return }
+	let report = drive_report_of(brief.clone())
+	let body = if report == "" { "" } else { drive_read(report) }
+	let what = drive_wip_after(drive_field(body.clone(), "Result"), drive_field(body, "Fixes"), issue.clone())
+	if what == "keep" { return }
+	drive_label_remove(issue.clone(), "wip")
+	if what == "block" {
+		drive_label_remove(issue.clone(), "ready")
+		drive_label_add(issue, "blocked")
+	}
+}
+
+// The labels of an issue filed from a report's `Found:` in AREA: `ready`
+// and AREA, `decision` instead of `ready` when `Needs:` asks for something.
+fn drive_found_labels(needs: String, area: String) -> Vec[String] {
+	let mut status: String = "decision"
+	if needs == "" || drive_word(needs) == "none" { status = "ready" }
+	return [status, area]
+}
+
+// The title of an issue filed from FOUND: its first 80 characters, cut at a
+// word, `...` when cut.
+fn drive_found_title(found: String) -> String {
+	let chars: Vec[scalar] = found.trim().chars().collect()
+	if chars.len() <= 80 { return found.trim().clone() }
+	let mut out: String = ""
+	let mut word: String = ""
+	for i in 0..<77 {
+		let c = chars[i]
+		if c == ' ' {
+			out = out + word
+			word = " "
+		} else {
+			word = f"{word}{c}"
+		}
+	}
+	return out.trim().clone() + "..."
+}
+
+// The body of an issue filed from a report's `Found:`: where it came from (the
+// brief, its issue), the Found, `Needs:` when it asks for something, a *To
+// build* and a *Done when* for the builder that takes it (docs/issues.md),
+// then the footer.
+fn drive_found_body(name: String, issue: String, found: String, needs: String) -> String {
+	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
+	let mut body = f"Filed by the driver from the `Found:` of {from} (owner, 2026-11-06).\n\n## Found\n\n{found.trim()}\n"
+	if needs != "" && drive_word(needs) != "none" { body = body + f"\n## Needs\n\n{needs.trim()}\n" }
+	body = body + "\n## To build\n\n- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`).\n- [ ] Fix it where it lives, with a test in `tests/compiler/`.\n"
+	body = body + "\n## Done when\n\nThe probe gives the specified result and its test is green.\n"
+	return body + drive_footer()
+}
+
+// Files a report's `Found:` as an issue (owner, 2026-11-06): labels
+// drive_found_labels (AREA: the last part of DIR), title drive_found_title,
+// body drive_found_body; `<brief>: filed #N` goes into DIR/found.txt and
+// `FILED #N <brief>` is printed. A failed call is logged (`file failed for
+// <brief>`), the Found stays in found.txt for the supervisor.
+fn drive_found_file(dir: String, brief: String) throws {
+	let report = drive_report_of(brief.clone())
+	if report == "" { return }
+	let text = drive_read(report)
+	let found = drive_field(text.clone(), "Found")
+	if found == "" || drive_word(found.clone()) == "none" { return }
+	let needs = drive_field(text, "Needs")
+	let name = drive_stem(brief.clone())
+	let area = drive_stem(dir.clone())
+	let body = drive_found_body(name.clone(), drive_issue(brief), found.clone(), needs.clone())
+	let file = process::run("mktemp", []).stdout.trim().clone()
+	fs::write(file.clone(), fs::Root::Anywhere, body)
+	let mut call: Vec[String] = ["api", f"repos/{drive_repo()}/issues", "-f", f"title={drive_found_title(found)}", "-F", f"body=@{file}"]
+	for l in drive_found_labels(needs, area) { call.push(f"labels[]={l}") }
+	let mut args: Vec[String] = []
+	for a in call {
+		if a.starts_with("labels[]=") { args.push("-f") }
+		args.push(a.clone())
+	}
+	args.push("--jq")
+	args.push(".number")
+	let made = process::run("gh", args)
+	process::run("rm", ["-f", file])
+	let number = made.stdout.trim().clone()
+	if !made.ok || number == "" {
+		println(f"file failed for {name}")
+		return
+	}
+	drive_append(f"{dir}/found.txt", f"{name}: filed #{number}")
+	println(f"FILED #{number} {name}")
 }
 
 // A report's `Found:` (a defect outside the builder's step) does not stop the
@@ -1591,7 +1741,7 @@ fn drive_queue_add(batch: String, numbers: Vec[String]) -> String {
 }
 
 // Queues the lane's ready issues (owner, 2026-11-06): the open issues
-// labelled `ready` and AREA go into DIR/batch.txt as `#N` lines, oldest
+// labelled `ready` and AREA, without `wip` (one being worked on), go into DIR/batch.txt as `#N` lines, oldest
 // first (drive_queue_add); prints `QUEUED #N AREA` for each new one.
 fn drive_queue(dir: String, area: String) throws {
 	let repo = drive_repo()
@@ -1601,7 +1751,7 @@ fn drive_queue(dir: String, area: String) throws {
 			"api",
 			f"repos/{repo}/issues?state=open&labels=ready,{area}&per_page=100&sort=created&direction=asc",
 			"--jq",
-			".[] | select(.pull_request == null) | .number",
+			".[] | select(.pull_request == null and ([.labels[].name] | index(\"wip\") | not)) | .number",
 		],
 	)
 	if !got.ok { return }
@@ -1834,6 +1984,16 @@ fn main() throws {
 			i += 1
 		}
 		print(drive_queue_add(drive_read(args[2]), numbers))
+		return
+	}
+	if args.len() == 5 && args[1] == "--wip-after" {
+		println(drive_wip_after(args[2].clone(), args[3].clone(), args[4].clone()))
+		return
+	}
+	if args.len() == 6 && args[1] == "--found-issue" {
+		println(drive_found_title(args[4].clone()))
+		println(drive_found_labels(args[5].clone(), "views").join(","))
+		print(drive_found_body(args[2].clone(), args[3].clone(), args[4].clone(), args[5].clone()))
 		return
 	}
 	if args.len() == 3 && args[1] == "--blocks" {

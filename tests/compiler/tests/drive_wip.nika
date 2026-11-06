@@ -1,0 +1,40 @@
+// scripts/drive.nika --wip-after and --found-issue (owner, 2026-11-06): what
+// a run's end does to its issue's `wip` label by the report's Result and
+// Fixes (keep, block, remove), and the title, labels and body of an issue the
+// driver files from a report's `Found:`.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn drive(repo: String, nikaia: String, args: Vec[String]) throws {
+    let mut all: Vec[String] = ["run", "scripts/drive.nika", "--"]
+    for a in args { all.push(a.clone()) }
+    let out = process::run(nikaia, all; dir: repo)
+    println(out.stdout.trim())
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    drive(repo.clone(), nikaia.clone(), ["--wip-after", "done", "#1267", "1267"])
+    drive(repo.clone(), nikaia.clone(), ["--wip-after", "done", "#1260, #1267", "1267"])
+    drive(repo.clone(), nikaia.clone(), ["--wip-after", "done", "none", "1267"])
+    drive(repo.clone(), nikaia.clone(), ["--wip-after", "blocked", "none", "1267"])
+    drive(repo.clone(), nikaia.clone(), ["--wip-after", "partial: two items left", "#1267", "1267"])
+    drive(repo.clone(), nikaia.clone(), ["--wip-after", "", "", "1267"])
+    drive(repo.clone(), nikaia.clone(), ["--found-issue", "issue-1267", "1267", "a Bytes field filled from a[1..] fails at rustc (Into &[u8] -> Bytes), not covered by the issue", "none"])
+    drive(repo.clone(), nikaia.clone(), ["--found-issue", "v45-x", "", "a short gap", "supervisor decision"])
+}
