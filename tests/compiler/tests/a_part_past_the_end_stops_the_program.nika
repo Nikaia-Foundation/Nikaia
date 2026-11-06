@@ -1,0 +1,14 @@
+// A part that runs past the end of its list stops the program, as an index
+// past the end does (ADR-views-3 D11, #1209).
+
+fn sum(xs: Array[u32]) -> u32 {
+    let mut s: u32 = 0
+    for x in xs { s += x }
+    return s
+}
+
+fn main() {
+    let v: Vec[u32] = [1, 2, 3, 4]
+    let n = v.len() + 2
+    println(f"{sum(v[1..<n])}")
+}

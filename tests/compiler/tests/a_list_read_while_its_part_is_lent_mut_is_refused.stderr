@@ -1,0 +1,9 @@
+error[NK2305]: `v` is read here, but `put` changes it in the same call.
+   --> tests/a_list_read_while_its_part_is_lent_mut_is_refused.nika:10:9
+    |
+ 10 |     put(v[1..<3], v[0])
+    |         ^ `v` is handed to `put` to change, and read by a later argument
+    |
+    = note: A `mut` parameter lends `v`, or a part of it, for the whole call, so no argument after it reads it.
+    = help: Read what you need into a name before the call, `let first = v[0]`, and hand that.
+1 change to data a view still to be used may point into

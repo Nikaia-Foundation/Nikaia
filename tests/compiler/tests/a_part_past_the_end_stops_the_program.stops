@@ -1,0 +1,1 @@
+tests/a_part_past_the_end_stops_the_program.nika:13: the program stopped: range end index 6 out of range for slice of length 4

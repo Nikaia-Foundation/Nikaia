@@ -117,6 +117,10 @@ struct VcCall {
     path: String,
     roots: Vec[String?],
     names: Vec[String?],
+    /// The roots handed to a `mut` parameter that a later argument of the
+    /// same call reads while it is lent (ADR-views-3 D11): `put(v[1..<3],
+    /// v[0])`, a lambda that reads `v`.
+    lent_and_read: Vec[String],
 }
 
 /// The refusals (`NK2305`) and the give-ups of one unit.
@@ -348,7 +352,7 @@ fn vc_calls_in(expr: ref Expr, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Exp
                 roots.push(root_of(ask.names, arg))
                 names.push(vc_variable(arg, ask))
             }
-            out.push(VcCall { method: true, callee: ask.names.resolve(method).clone(), root: root_of(ask.names, receiver), path: vc_path_of(receiver, ask), roots: roots, names: names })
+            out.push(VcCall { method: true, callee: ask.names.resolve(method).clone(), root: root_of(ask.names, receiver), path: vc_path_of(receiver, ask), roots: roots, names: names, lent_and_read: [] })
         }
         Expr::Call { func, args, .. } => {
             let mut roots: Vec[String?] = []
@@ -357,7 +361,27 @@ fn vc_calls_in(expr: ref Expr, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Exp
                 roots.push(root_of(ask.names, arg))
                 names.push(vc_variable(arg, ask))
             }
-            out.push(VcCall { method: false, callee: vc_variable(func, ask), root: null, path: "", roots: roots, names: names })
+            let callee = vc_variable(func, ask)
+            let mut lent_and_read: Vec[String] = []
+            for i in 0..<args.len() {
+                let root = roots[i] ?? continue
+                if !vc_lent_mut(callee, i, ask) {
+                    continue
+                }
+                let path = vc_path_of(args[i], ask)
+                // An argument before it is read before the `&mut` is made,
+                // and so is a later one made in the call (`f(w, g(w))`): the
+                // lowering binds it ahead (`emit_call_hoisted`). A place
+                // read or a lambda after it reads `root` under the `&mut`.
+                for j in i + 1..<args.len() {
+                    let bound_ahead = made_in_the_call(args[j]) && !emit_arg_is_closure(args[j])
+                    if !bound_ahead && vc_reads_path(args[j], path, ask, holes_of) {
+                        lent_and_read.push(root.clone())
+                        break
+                    }
+                }
+            }
+            out.push(VcCall { method: false, callee: callee, root: null, path: "", roots: roots, names: names, lent_and_read: lent_and_read })
         }
         else => {}
     }
@@ -541,9 +565,100 @@ fn vc_changes_argument(callee: ref String?, index: i64, ask: ref VcAsk) -> bool 
     return signature.mutable.contains(signature.params[index].0)
 }
 
+/// Whether `expr` reads a place that `path` is, lies inside or holds:
+/// `search.arena` and `search.proof` are apart, `v` and `v[0]` are not.
+fn vc_reads_path(expr: ref Expr, path: ref String, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    let place = match expr {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        Expr::SafeField { .. } => true,
+        Expr::Index { .. } => true,
+        else => false,
+    }
+    let read = vc_path_of(expr, ask)
+    if place && read != "" && !read.starts_with(".") {
+        if read == path || read.starts_with(f"{path}.") || path.starts_with(f"{read}.") {
+            return true
+        }
+        // The index of an element is read as well: `w[v[0]]`.
+        match expr {
+            Expr::Index { index, .. } => return vc_reads_path(index, path, ask, holes_of),
+            else => return false,
+        }
+    }
+    if check_visit_has_holes(expr) {
+        for hole in holes_of(expr) {
+            if vc_reads_path(hole, path, ask, holes_of) {
+                return true
+            }
+        }
+    }
+    for child in check_visit_children(expr) {
+        if vc_reads_path(child, path, ask, holes_of) {
+            return true
+        }
+    }
+    // A lambda's body runs under the `&mut`, an arm's block as well.
+    for block in check_visit_expr_blocks(expr) {
+        if vc_block_reads_path(block, path, ask, holes_of) {
+            return true
+        }
+    }
+    return false
+}
+
+fn vc_block_reads_path(block: ref Block, path: ref String, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    for each in block.stmts {
+        let read = match each.node {
+            Stmt::Let { value, .. } => vc_reads_path(value, path, ask, holes_of),
+            Stmt::Comptime { value, .. } => vc_reads_path(value, path, ask, holes_of),
+            Stmt::Assign { target, value, .. } => vc_reads_path(target, path, ask, holes_of) || vc_reads_path(value, path, ask, holes_of),
+            Stmt::For { iter, .. } => vc_reads_path(iter, path, ask, holes_of),
+            Stmt::While { cond, .. } => vc_reads_path(cond, path, ask, holes_of),
+            Stmt::Return(value) => match value {
+                null => false,
+                returned => vc_reads_path(returned, path, ask, holes_of),
+            },
+            Stmt::Expr(expr) => vc_reads_path(expr, path, ask, holes_of),
+            else => false,
+        }
+        if read {
+            return true
+        }
+        for inner in check_visit_stmt_blocks(each.node) {
+            if vc_block_reads_path(inner, path, ask, holes_of) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+/// Whether a callee the ledgers know declares its parameter `index` `mut`:
+/// the argument is lent `&mut` for the whole call.
+fn vc_lent_mut(callee: ref String?, index: i64, ask: ref VcAsk) -> bool {
+    let name = callee ?? return false
+    let contract = ask.own.functions[name] ?? ask.library.functions[name] ?? return false
+    let signature = contract.signature ?? return false
+    if index >= signature.params.len() {
+        return false
+    }
+    return signature.mutable.contains(signature.params[index].0)
+}
+
 /// The changes in place among a statement's own expressions.
 fn vc_changes_in(stmt: ref Stmt, at: ref Span, views: ref Vec[VcView], ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: VcWalk) {
     let calls = vc_calls(stmt, ask, holes_of)
+    // **A place lent `mut` is not read by the same call** (ADR-views-3
+    // D11, Part I 2.x): while `put` changes `v` or a part of it, a later
+    // argument does not read `v`.
+    for call in calls {
+        let callee = call.callee ?? continue
+        for root in call.lent_and_read {
+            let labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{root}` is handed to `{callee}` to change, and read by a later argument", true)]
+            walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{root}` is read here, but `{callee}` changes it in the same call.", notes: [f"A `mut` parameter lends `{root}`, or a part of it, for the whole call, so no argument after it reads it."], help: f"Read what you need into a name before the call, `let first = {root}[0]`, and hand that.", warning: false, labels: labels })
+        }
+    }
     let mut changed: Vec[(String, String)] = []
     for call in calls {
         if !call.method {
