@@ -39,7 +39,7 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                     }
                 }
                 let mut missing: Vec<String> = vec![];
-                for wanted in declared.iter() { if !given.contains(&wanted.to_string()) { missing.push(wanted.to_string()); } }
+                for wanted in declared.iter() { if !nikaia_std::list::contains(&given, &wanted.to_string()) { missing.push(wanted.to_string()); } }
                 if !missing.is_empty() { found.push(incomplete(&named, &target_name, &missing, item.span.clone())); }
             },
             _ => { },

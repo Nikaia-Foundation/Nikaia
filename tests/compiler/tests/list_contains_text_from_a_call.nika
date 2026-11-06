@@ -1,0 +1,13 @@
+// A list of text asked whether it holds what a call hands back: a view of
+// text from a function `-> String from s` or a method (`trim`), compared
+// element by element as a local or a literal is (#375, #1254).
+fn pick(s: String) -> String from s {
+    return s
+}
+
+fn main() {
+    let names: Vec[String] = ["a", "b"]
+    let g: String = " b "
+    println(names.contains(pick(g)))
+    println(names.contains(g.trim()))
+}

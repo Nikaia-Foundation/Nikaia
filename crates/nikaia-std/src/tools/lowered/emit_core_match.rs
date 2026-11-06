@@ -30,7 +30,7 @@ pub(crate) fn emit_match_else_unreachable(world: &EmitWorld<'_, '_, '_, '_>, arm
             Item::Enum { name, variants, .. } => {
                 let name = *name;
                 if emit_text(world, name) == owner {
-                    for each in variants.iter() { if !named.contains(&emit_text(world, each.name)) { return false; } }
+                    for each in variants.iter() { if !nikaia_std::list::contains(&named, &emit_text(world, each.name)) { return false; } }
                     return true;
                 }
             },

@@ -91,7 +91,7 @@ pub fn sends(bounds: &str) -> Vec<String> {
         let head = __keep_frame.put(slice(&c, 0, colon));
         let name = head.trim();
         let bound = slice(&c, colon + 1, c.len() as i64);
-        if bounds_send(&bound) && !name.is_empty() && !name.starts_with('\'') && !out.contains(&name.to_string()) { out.push(name.to_string()); }
+        if bounds_send(&bound) && !name.is_empty() && !name.starts_with('\'') && !nikaia_std::list::contains(&out, &name.to_string()) { out.push(name.to_string()); }
     }
     out.sort();
     out

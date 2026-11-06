@@ -446,7 +446,7 @@ impl EmitState {
         for arg in method.args.iter() {
             let mut reference = if arg.mutable && !foreign { "&mut " } else { "" };
             let mut written: String = String::from("");
-            let lent_source = if !arg.mutable && from_names.contains(&emit_text(world, arg.name)) { emit_item_lent_view(world, &arg.ty) } else { None };
+            let lent_source = if !arg.mutable && nikaia_std::list::contains(&from_names, &emit_text(world, arg.name)) { emit_item_lent_view(world, &arg.ty) } else { None };
             if lent_source.is_some() {
                 let source = nikaia_std::index::or(lent_source, || arg.ty.clone().into());
                 written = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, &source, &EmitLifetimes::Shared));

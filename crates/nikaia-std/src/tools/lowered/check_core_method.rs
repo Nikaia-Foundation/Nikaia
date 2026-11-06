@@ -303,20 +303,29 @@ pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWo
         None => None,
     };
     state.flow.last_resolved = None;
+    let callee: String = nikaia_std::index::or(match state.facts.method_callees.get(&(id_of(receiver) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || nikaia_std::index::or(match last.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "".into()).into());
+    if (callee == "Vec::contains" || callee == "Array::contains") && args.len() == 1 {
+        let text = match nikaia_std::index::get(&args, 0) {
+            Expr::Variable(_, _) => check_core_method_text_local(&state, world, nikaia_std::index::get(&args, 0)),
+            Expr::LitStr { .. } => true,
+            Expr::Field { .. } => check_core_method_text_items(on),
+            Expr::Call { .. } => check_core_method_text_items(on),
+            Expr::MethodCall { .. } => check_core_method_text_items(on),
+            _ => false,
+        };
+        if text { state.facts.text_in_lists.insert(id_of(receiver) as i64); }
+    }
     let key: String = match last { Some(__nikaia_value) => __nikaia_value, None => return };
     let library = key.ends_with("::clone") && world.library.functions.contains_key(&key) && !world.own.functions.contains_key(&key);
     if library && args.is_empty() {
         state.facts.owned_copies.insert(id_of(receiver) as i64);
         if key == "String::clone" || key == "str::clone" { state.facts.text_copies.insert(id_of(receiver) as i64); }
-    }
-    if (key == "Vec::contains" || key == "Array::contains") && args.len() == 1 {
-        let text = match nikaia_std::index::get(&args, 0) {
-            Expr::Variable(_, _) => check_core_method_text_local(&state, world, nikaia_std::index::get(&args, 0)),
-            Expr::LitStr { .. } => true,
-            Expr::Field { .. } => check_core_method_text_items(on),
-            _ => false,
-        };
-        if text { state.facts.text_in_lists.insert(id_of(receiver) as i64); }
     }
     if key == format!("{}::fold", SEQ) && args.len() == 2 {
         match nikaia_std::index::get(&args, 0) {
