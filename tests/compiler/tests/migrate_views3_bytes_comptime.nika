@@ -1,0 +1,23 @@
+// ADR-views-3 D4, D15, #1254: `nikaia migrate views-3` drops `ref` from a
+// read-only `Bytes` parameter and from a `comptime` text. The migrated file
+// runs, the `comptime` in a `Vec[String]` too.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/a.nika", fs::Root::Anywhere, "fn size(b: ref Bytes) -> i64 {\n    return b.len()\n}\n\ncomptime NAME: ref String = \"nikaia\"\n\nfn main() {\n    let text: String = \"abc\"\n    println(size(text.bytes))\n    println(NAME)\n    println(NAME.len())\n    let names: Vec[String] = [NAME]\n    println(names.len())\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/a.nika"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(f"{tmp}/a.nika", fs::Root::Anywhere))
+    let ran = process::run(nikaia, ["run", f"{tmp}/a.nika"])
+    print(f"run:\n{ran.stdout}{ran.stderr}".replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}

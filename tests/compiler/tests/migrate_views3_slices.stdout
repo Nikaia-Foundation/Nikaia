@@ -1,0 +1,29 @@
+migrated TMP/a.nika
+fn total(xs: Array[i64]) -> i64 {
+    let mut s = 0
+    for x in xs {
+        s = s + x
+    }
+    return s
+}
+
+fn rest(xs: Array[i64]) -> Array[i64] {
+    return xs[1..]
+}
+
+fn main() {
+    let a: Array[i64, 3] = [1, 2, 3]
+    let v: Vec[i64] = [4, 5, 6]
+    println(total(a))
+    println(total(v))
+    println(rest(a).len())
+    for x in rest(v) {
+        println(x)
+    }
+}
+run:
+6
+15
+2
+5
+6

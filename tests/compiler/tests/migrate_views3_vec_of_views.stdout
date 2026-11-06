@@ -1,0 +1,45 @@
+migrated TMP/a.nika
+comptime SEP: String = "-"
+
+struct Parts {
+    all: Vec[String],
+}
+
+fn words(s: String) -> Parts {
+    let mut all: Vec[String] = []
+    for w in s.split(" ") {
+        all.push(w)
+    }
+    return Parts { all: all }
+}
+
+fn rows(s: String) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for line in s.lines() {
+        out.push(line)
+    }
+    return out
+}
+
+struct Marks {
+    all: Vec[String],
+}
+
+fn marks() -> Marks {
+    return Marks { all: [SEP, SEP] }
+}
+
+fn main() {
+    let text: String = "a b c"
+    println(words(text).all.len())
+    let block: String = "x\ny"
+    println(rows(block).join(","))
+    println(marks().all.join(""))
+    let seps: Vec[String] = [SEP]
+    println(seps.len())
+}
+run:
+3
+x,y
+--
+1

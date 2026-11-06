@@ -1,0 +1,23 @@
+// ADR-views-3 D4, D5, D15, #1254: `nikaia migrate views-3` writes
+// `Vec[ref String]` as `Vec[String]`. The migrated file runs: a field and a
+// local filled from a parameter's `split` and `lines`, and from a `comptime`.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/a.nika", fs::Root::Anywhere, "comptime SEP: ref String = \"-\"\n\nstruct Parts {\n    all: Vec[ref String],\n}\n\nfn words(s: ref String) -> Parts {\n    let mut all: Vec[ref String] = []\n    for w in s.split(\" \") {\n        all.push(w)\n    }\n    return Parts { all: all }\n}\n\nfn rows(s: ref String) -> Vec[ref String] {\n    let mut out: Vec[ref String] = []\n    for line in s.lines() {\n        out.push(line)\n    }\n    return out\n}\n\nstruct Marks {\n    all: Vec[ref String],\n}\n\nfn marks() -> Marks {\n    return Marks { all: [SEP, SEP] }\n}\n\nfn main() {\n    let text: String = \"a b c\"\n    println(words(text).all.len())\n    let block: String = \"x\\ny\"\n    println(rows(block).join(\",\"))\n    println(marks().all.join(\"\"))\n    let seps: Vec[ref String] = [SEP]\n    println(seps.len())\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/a.nika"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(f"{tmp}/a.nika", fs::Root::Anywhere))
+    let ran = process::run(nikaia, ["run", f"{tmp}/a.nika"])
+    print(f"run:\n{ran.stdout}{ran.stderr}".replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}

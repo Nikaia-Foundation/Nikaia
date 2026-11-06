@@ -1,0 +1,20 @@
+migrated TMP/a.nika
+fn size(b: Bytes) -> i64 {
+    return b.len()
+}
+
+comptime NAME: String = "nikaia"
+
+fn main() {
+    let text: String = "abc"
+    println(size(text.bytes))
+    println(NAME)
+    println(NAME.len())
+    let names: Vec[String] = [NAME]
+    println(names.len())
+}
+run:
+3
+nikaia
+6
+1

@@ -1,0 +1,23 @@
+// ADR-views-3 D4, D11, #1254: `nikaia migrate views-3` drops `ref` from a
+// slice parameter and a slice result. The migrated file runs: the parameter
+// is lent an `Array[T, N]` and a `Vec`, the result `xs[1..]` is a view.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/a.nika", fs::Root::Anywhere, "fn total(xs: ref Array[i64]) -> i64 {\n    let mut s = 0\n    for x in xs {\n        s = s + x\n    }\n    return s\n}\n\nfn rest(xs: ref Array[i64]) -> ref Array[i64] {\n    return xs[1..]\n}\n\nfn main() {\n    let a: Array[i64, 3] = [1, 2, 3]\n    let v: Vec[i64] = [4, 5, 6]\n    println(total(a))\n    println(total(v))\n    println(rest(a).len())\n    for x in rest(v) {\n        println(x)\n    }\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/a.nika"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(f"{tmp}/a.nika", fs::Root::Anywhere))
+    let ran = process::run(nikaia, ["run", f"{tmp}/a.nika"])
+    print(f"run:\n{ran.stdout}{ran.stderr}".replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}
