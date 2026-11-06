@@ -146,7 +146,7 @@ pub fn promise_lines(promises: &[String]) -> Vec<String> {
     out
 }
 
-pub fn thread_lines(name: &str, bound: &[String], way: Option<Vec<String>>) -> Vec<String> {
+pub fn thread_lines(name: &str, bound: &[String], way: Option<&Vec<String>>) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     if !bound.is_empty() {
         let listed = a_list(bound, "the parameter", "the parameters");
@@ -155,7 +155,7 @@ pub fn thread_lines(name: &str, bound: &[String], way: Option<Vec<String>>) -> V
         out.push(String::from("  send it, which is usually `spawn` and is sometimes an API keeping a door open."));
     }
     if way.is_some() {
-        let steps = nikaia_std::index::or(way, || vec![].into());
+        let steps = nikaia_std::index::or(way, || &[][..]);
         let sink = nikaia_std::index::get(&steps, nikaia_std::index::at(steps.len() as i64 - 1));
         if steps.len() == 1 { out.push(format!("`{}`: calls `{}`.", name, sink)); } else {
             let mut through: String = String::from("");

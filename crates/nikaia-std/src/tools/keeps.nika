@@ -107,11 +107,7 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
             // **An option written into a `let` of an owned type is moved
             // into it** (#892, #1256): `let s: P = if p != null { p } ..`
             // takes `p`, so `p` is kept and not lent as an `Option<&P>`.
-            let mut owned_declared = false
-            if ty != null {
-                let declared = ty ?? return
-                owned_declared = !declared.is_view
-            }
+            let owned_declared = keeps_an_owned_declared(ty)
             if owned_declared {
                 for name in reached_of(value, interner, context, own, library, walk, false) {
                     if context.options.contains(name) {
@@ -137,6 +133,21 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
                     alias(interner.resolve(bound).clone(), reached, walk.aliases)
                 }
             }
+            // **`let x = p ?? e` over an option of a type other than text
+            // binds a view of `p`** (ADR-views-3 D2, #1254): `p` is lent, and
+            // kept only where `x` leaves - returned, handed on, matched apart
+            // and handed on, taken by a method, or bound `mut`.
+            if !mutable && !owned_declared {
+                let read = coalesced_option(value, interner, context)
+                if read != null {
+                    let mut lent: collections::BTreeSet[String] = collections::BTreeSet()
+                    lent.insert(read ?? "")
+                    for bound in names {
+                        alias(interner.resolve(bound).clone(), lent, walk.aliases)
+                        alias(interner.resolve(bound).clone(), lent, walk.views)
+                    }
+                }
+            }
             if viewed.len() > 0 {
                 for bound in names {
                     alias(interner.resolve(bound).clone(), viewed, walk.views)
@@ -152,7 +163,13 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
 // the blocks it holds.
 fn keeps_statement_parts(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     match stmt {
-        Stmt::Let { value, .. } => keeps_expression(value, interner, holes_of, context, own, library, walk),
+        Stmt::Let { value, mutable, ty, .. } => {
+            if !mutable && !keeps_an_owned_declared(ty) && a_read_option(value, interner, context) {
+                keeps_read_option(value, interner, holes_of, context, own, library, walk)
+            } else {
+                keeps_expression(value, interner, holes_of, context, own, library, walk)
+            }
+        }
         Stmt::Comptime { value, .. } => keeps_expression(value, interner, holes_of, context, own, library, walk),
         Stmt::Assign { target, value, .. } => {
             keeps_expression(target, interner, holes_of, context, own, library, walk)
@@ -183,6 +200,13 @@ fn keeps_statement_parts(stmt: ref Stmt, interner: ref winnow_grammar::InternerC
         }
         else => {}
     }
+}
+
+// **A `let` written with a type that is not a view** (#892): what it binds
+// is moved into it.
+fn keeps_an_owned_declared(ty: ref Type?) -> bool {
+    let declared = ty ?? return false
+    return !declared.is_view
 }
 
 fn alias(name: String, reached: ref collections::BTreeSet[String], mut into: collections::BTreeMap[String, collections::BTreeSet[String]]) {

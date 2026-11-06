@@ -1,0 +1,44 @@
+migrated TMP/lent.nika
+struct Bag {
+    tags: Vec[i64],
+}
+
+impl Bag {
+    fn tags(self) -> Vec[i64] {
+        return self.tags
+    }
+}
+
+struct Label {
+    name: String,
+}
+
+fn text_of(t: String?) -> String {
+    return t ?? ""
+}
+
+fn label(s: String) -> Label {
+    return Label { name: s }
+}
+
+fn main() {
+    let t: String? = "x"
+    println(text_of(t))
+    println(text_of(t))
+    let b = Bag { tags: [1, 2] }
+    println(b.tags().len())
+    println(b.tags().len())
+    let s = " abc ".trim()
+    let l = label(s)
+    println(l.name)
+    println(label(s).name)
+}
+-- check: 0
+Checked TMP/lent.nika
+-- run: 0
+x
+x
+2
+2
+abc
+abc

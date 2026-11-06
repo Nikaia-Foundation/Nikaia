@@ -42,7 +42,7 @@ pub(crate) fn notes_on(surface: &Surface, crate_word: &str, wanted: &collections
     for name in wanted.iter() {
         let at = match *nikaia_std::index::get(&surface.reachable, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let function = match *nikaia_std::index::get(&surface.functions, at) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let said = thread_lines(name, &bound_parameters(function), reaches_a_thread(at, &calls));
+        let said = thread_lines(name, &bound_parameters(function), (reaches_a_thread(at, &calls)).as_ref());
         if !said.is_empty() { notes.about_a_function.insert(format!("{}::{}", crate_word, name), said); }
     }
     notes

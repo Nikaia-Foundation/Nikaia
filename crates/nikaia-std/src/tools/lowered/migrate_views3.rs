@@ -250,45 +250,13 @@ pub(crate) fn migrate_receivers(tokens: &[MigrateToken]) -> Vec<(i64, bool)> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn migrate_views3_selves(code: &str) -> Vec<bool> {
-    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
-    lexer.run();
+pub(crate) fn migrate_in_params(tokens: &[MigrateToken]) -> Vec<bool> {
     let mut out: Vec<bool> = vec![];
-    for (_, bare) in migrate_receivers(&lexer.tokens) { out.push(bare); }
-    out
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool]) -> String {
-    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
-    lexer.run();
-    let tokens = &lexer.tokens;
-    let n = tokens.len() as i64;
-    let receivers = migrate_receivers(&tokens);
-    let mut dropped: Vec<bool> = vec![];
-    let mut gapless: Vec<bool> = vec![];
-    let mut prefix: Vec<&'static str> = vec![];
-    let mut guarded: Vec<bool> = vec![];
-    for _t in tokens.iter() {
-        dropped.push(false);
-        gapless.push(false);
-        prefix.push("");
-        guarded.push(false);
-    }
     let mut params: Vec<bool> = vec![];
     let mut fn_depth: i64 = -1;
-    let mut until: i64 = -1;
-    let mut k: i64 = 0;
-    while k < n {
-        let t = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text.to_string();
-        let kind = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind;
-        if k <= until { { let __nikaia_stored = true; nikaia_std::index::set(&mut guarded, nikaia_std::index::at(k), __nikaia_stored); } }
-        if kind == MigrateKind::Word && t == "extern" && k > until {
-            until = migrate_extern_end(&tokens, k);
-            { let __nikaia_stored = true; nikaia_std::index::set(&mut guarded, nikaia_std::index::at(k), __nikaia_stored); }
-        }
-        match kind {
+    for token in tokens.iter() {
+        let t = token.text.to_string();
+        match token.kind {
             MigrateKind::Open => {
                 params.push(t == "(" && fn_depth == params.len() as i64);
                 if t == "(" && fn_depth == params.len() as i64 - 1 { fn_depth = -1; }
@@ -299,15 +267,88 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool]) -> St
             MigrateKind::Punct => { if t == "=" || t == ";" { fn_depth = -1; } },
             _ => { },
         }
+        out.push(!params.is_empty() && *nikaia_std::index::get(&params, nikaia_std::index::at(params.len() as i64 - 1)));
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn migrate_parameters(tokens: &[MigrateToken]) -> Vec<i64> {
+    let in_params = migrate_in_params(tokens);
+    let mut out: Vec<i64> = vec![];
+    for k in 1..tokens.len() as i64 {
+        let before = nikaia_std::index::get(&tokens, nikaia_std::index::at(k - 1)).text.to_string();
+        if *nikaia_std::index::get(&in_params, nikaia_std::index::at(k)) && nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Word && migrate_text_at(tokens, k + 1) == ":" && (before == "(" || before == "," || before == "keep" || before == "mut") { out.push(k); }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn migrate_ordinal_of(items: &[i64], wanted: i64) -> i64 {
+    for at in 0..items.len() as i64 { if *nikaia_std::index::get(&items, (at) as usize) == wanted { return at; } }
+    -1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn migrate_views3_lent(code: &str) -> Vec<bool> {
+    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
+    lexer.run();
+    let mut out: Vec<bool> = vec![];
+    for k in migrate_parameters(&lexer.tokens) { out.push(migrate_text_at(&lexer.tokens, k + 2) == "ref" && migrate_text_at(&lexer.tokens, k + 3) != "mut"); }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn migrate_views3_selves(code: &str) -> Vec<bool> {
+    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
+    lexer.run();
+    let mut out: Vec<bool> = vec![];
+    for (_, bare) in migrate_receivers(&lexer.tokens) { out.push(bare); }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent: &[bool]) -> String {
+    let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
+    lexer.run();
+    let tokens = &lexer.tokens;
+    let n = tokens.len() as i64;
+    let receivers = migrate_receivers(&tokens);
+    let parameters = migrate_parameters(&tokens);
+    let mut dropped: Vec<bool> = vec![];
+    let mut gapless: Vec<bool> = vec![];
+    let mut prefix: Vec<&'static str> = vec![];
+    let mut guarded: Vec<bool> = vec![];
+    for _t in tokens.iter() {
+        dropped.push(false);
+        gapless.push(false);
+        prefix.push("");
+        guarded.push(false);
+    }
+    let in_params = migrate_in_params(&tokens);
+    let mut until: i64 = -1;
+    let mut k: i64 = 0;
+    while k < n {
+        let t = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text.to_string();
+        let kind = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind;
+        if k <= until { { let __nikaia_stored = true; nikaia_std::index::set(&mut guarded, nikaia_std::index::at(k), __nikaia_stored); } }
+        if kind == MigrateKind::Word && t == "extern" && k > until {
+            until = migrate_extern_end(&tokens, k);
+            { let __nikaia_stored = true; nikaia_std::index::set(&mut guarded, nikaia_std::index::at(k), __nikaia_stored); }
+        }
         if kind == MigrateKind::Word && t == "ref" && !*nikaia_std::index::get(&guarded, nikaia_std::index::at(k)) {
             let next = migrate_text_at(&tokens, k + 1);
             let after = migrate_text_at(&tokens, k + 2);
-            let in_params = !params.is_empty() && *nikaia_std::index::get(&params, nikaia_std::index::at(params.len() as i64 - 1));
             let named = k >= 3 && migrate_text_at(&tokens, k - 1) == ":" && nikaia_std::index::get(&tokens, nikaia_std::index::at(k - 2)).kind == MigrateKind::Word && (migrate_text_at(&tokens, k - 3) == "(" || migrate_text_at(&tokens, k - 3) == ",");
             if next == "(" && nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 1)).gap == "" { } else if next == "mut" && after == "self" {
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut dropped, nikaia_std::index::at(k), __nikaia_stored); }
                 { let __nikaia_stored = migrate_blank(&nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 1)).gap); nikaia_std::index::set(&mut gapless, nikaia_std::index::at(k + 1), __nikaia_stored); }
-            } else if next == "mut" && in_params && named {
+            } else if next == "mut" && *nikaia_std::index::get(&in_params, nikaia_std::index::at(k)) && named {
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut dropped, nikaia_std::index::at(k), __nikaia_stored); }
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut dropped, nikaia_std::index::at(k + 1), __nikaia_stored); }
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut gapless, nikaia_std::index::at(k + 1), __nikaia_stored); }
@@ -323,19 +364,22 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool]) -> St
     for at in keep_at.iter() {
         let at = nikaia_std::num::value(at);
         let mut j: i64 = 0;
-        while j < n && nikaia_std::index::get(&tokens, (j) as usize).at < at { j += 1; }
-        if j < n && (nikaia_std::index::get(&tokens, (j) as usize).text == "pub" || nikaia_std::index::get(&tokens, (j) as usize).text == "fn") {
+        while j < n && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).at < at { j += 1; }
+        if j < n && (nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == "pub" || nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == "fn") {
             let mut r: i64 = 0;
             while ((r) as usize) < receivers.len() && nikaia_std::index::get(&receivers, (r) as usize).0 < j { r += 1; }
             if ((r) as usize) < receivers.len() && ((r) as usize) < by_value.len() && *nikaia_std::index::get(&by_value, (r) as usize) && nikaia_std::index::get(&receivers, (r) as usize).1 && *nikaia_std::index::get(&prefix, nikaia_std::index::at(nikaia_std::index::get(&receivers, (r) as usize).0)) == "" { { let __nikaia_stored = "keep "; nikaia_std::index::set(&mut prefix, nikaia_std::index::at(nikaia_std::index::get(&receivers, (r) as usize).0), __nikaia_stored); } }
-        } else if j < n && *nikaia_std::index::get(&prefix, (j) as usize) == "" && !*nikaia_std::index::get(&guarded, (j) as usize) && nikaia_std::index::get(&tokens, (j) as usize).text != "keep" && nikaia_std::index::get(&tokens, (j) as usize).text != "mut" { { let __nikaia_stored = "keep "; nikaia_std::index::set(&mut prefix, (j) as usize, __nikaia_stored); } }
+        } else if j < n && *nikaia_std::index::get(&prefix, nikaia_std::index::at(j)) == "" && !*nikaia_std::index::get(&guarded, nikaia_std::index::at(j)) && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "keep" && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "mut" {
+            let at_parameter = migrate_ordinal_of(&parameters, j);
+            if at_parameter < 0 || at_parameter >= lent.len() as i64 || !*nikaia_std::index::get(&lent, nikaia_std::index::at(at_parameter)) { { let __nikaia_stored = "keep "; nikaia_std::index::set(&mut prefix, nikaia_std::index::at(j), __nikaia_stored); } }
+        }
     }
     let mut out: String = String::from("");
     let mut j: i64 = 0;
     while j < n {
-        if !*nikaia_std::index::get(&gapless, (j) as usize) { out.push_str(&nikaia_std::index::get(&tokens, (j) as usize).gap); }
-        out.push_str(*nikaia_std::index::get(&prefix, (j) as usize));
-        if !*nikaia_std::index::get(&dropped, (j) as usize) { out.push_str(&nikaia_std::index::get(&tokens, (j) as usize).text); }
+        if !*nikaia_std::index::get(&gapless, nikaia_std::index::at(j)) { out.push_str(&nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).gap); }
+        out.push_str(*nikaia_std::index::get(&prefix, nikaia_std::index::at(j)));
+        if !*nikaia_std::index::get(&dropped, nikaia_std::index::at(j)) { out.push_str(&nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text); }
         j += 1;
     }
     out
@@ -345,9 +389,10 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool]) -> St
 // this was written - see `contracts::sync`.
 pub fn migrate_views3_nika(source: &str, keeps_of: &impl Fn(&str) -> Vec<i64>) -> String {
     let by_value = migrate_views3_selves(&source.to_string());
-    let dropped = migrate_views3_code(source, &vec![], &vec![]);
+    let lent = migrate_views3_lent(&source.to_string());
+    let dropped = migrate_views3_code(source, &vec![], &vec![], &vec![]);
     let keep_at = keeps_of(&dropped);
-    migrate_views3_code(&dropped, &keep_at, &by_value)
+    migrate_views3_code(&dropped, &keep_at, &by_value, &lent)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

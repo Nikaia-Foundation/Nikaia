@@ -97,21 +97,21 @@ pub(crate) fn receivers(names: &winnow_grammar::InternerContext, items: &[Spanne
                 let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let written = names.resolve(symbol).to_string();
                 let wanted = wanted_receiver(names, items, trait_name, &written);
-                if !wanted.known || same_receiver(match wanted.receiver.as_ref() {
+                if !wanted.known || same_receiver((match wanted.receiver.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
-                }, match receiver {
+                }).as_ref(), (match receiver {
                     Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
                     None => None,
-                }) { continue; }
-                let theirs = receiver_text(match wanted.receiver.as_ref() {
+                }).as_ref()) { continue; }
+                let theirs = receiver_text((match wanted.receiver.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
-                });
-                let ours = receiver_text(match receiver {
+                }).as_ref());
+                let ours = receiver_text((match receiver {
                     Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
                     None => None,
-                });
+                }).as_ref());
                 let notes: Vec<String> = vec![String::from("Callers go through the trait, so they pass the value the way the trait declares.")];
                 found.push(refusal("NK1196", method.span.clone(), format!("`{}`'s `{}` takes {}, but this one takes {}.", trait_name, written, theirs, ours), notes, format!("Take it as {}, like `{}` declares.", theirs, trait_name)));
             },
@@ -148,14 +148,14 @@ pub(crate) fn wanted_receiver(names: &winnow_grammar::InternerContext, items: &[
     Wanted { known: false, receiver: None }
 }
 
-pub(crate) fn same_receiver(a: Option<Receiver>, b: Option<Receiver>) -> bool {
+pub(crate) fn same_receiver(a: Option<&Receiver>, b: Option<&Receiver>) -> bool {
     if a.is_none() || b.is_none() { return a.is_none() && b.is_none(); }
     let one = nikaia_std::index::or(a, || Receiver { is_ref: false, is_mut: false, is_keep: false });
     let other = nikaia_std::index::or(b, || Receiver { is_ref: false, is_mut: false, is_keep: false });
     one.is_ref == other.is_ref && one.is_mut == other.is_mut
 }
 
-pub(crate) fn receiver_text(receiver: Option<Receiver>) -> &'static str {
+pub(crate) fn receiver_text(receiver: Option<&Receiver>) -> &'static str {
     let taken = match receiver { Some(__nikaia_value) => __nikaia_value, None => return "no `self`" };
     if taken.is_ref && taken.is_mut { return "`ref mut self`"; }
     if taken.is_ref { return "`ref self`"; }

@@ -1,0 +1,31 @@
+// #1254 step 2, ADR-views-3 D2, D4, D5, D7/D8: `nikaia migrate views-3`
+// never writes `keep` for a parameter written `ref`. A `ref T` was a borrow,
+// so the body reads it, hands back a view of it or stores one, and the lent
+// `T` it becomes says that: `text_of` hands back the text or a fallback,
+// `tags(ref self)` hands back a field as a view of `self`, and `label` stores
+// a `ref String` in a field. The migrated program checks and runs with two
+// calls in a row.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/lent.nika", fs::Root::Anywhere, "struct Bag {\n    tags: Vec[i64],\n}\n\nimpl Bag {\n    fn tags(ref self) -> ref Vec[i64] {\n        return self.tags\n    }\n}\n\nstruct Label {\n    name: ref String,\n}\n\nfn text_of(t: ref String?) -> String {\n    return t ?? \"\"\n}\n\nfn label(s: ref String) -> Label {\n    return Label { name: s }\n}\n\nfn main() {\n    let t: String? = \"x\"\n    println(text_of(t))\n    println(text_of(t))\n    let b = Bag { tags: [1, 2] }\n    println(b.tags().len())\n    println(b.tags().len())\n    let s = \" abc \".trim()\n    let l = label(s)\n    println(l.name)\n    println(label(s).name)\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/lent.nika"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(f"{tmp}/lent.nika", fs::Root::Anywhere))
+    let checked = process::run(nikaia, ["check", f"{tmp}/lent.nika"])
+    println(f"-- check: {checked.code}")
+    print(f"{checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
+    let ran = process::run(nikaia, ["run", f"{tmp}/lent.nika"])
+    println(f"-- run: {ran.code}")
+    print(ran.stdout)
+    process::run("rm", ["-rf", tmp])
+}

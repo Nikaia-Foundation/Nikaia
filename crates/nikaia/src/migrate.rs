@@ -41,8 +41,9 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
                 Package::Keeps(dropped, keep_at) => {
                     let by_value =
                         nikaia_std::tools::migrate_views3::migrate_views3_selves(&source);
+                    let lent = nikaia_std::tools::migrate_views3::migrate_views3_lent(&source);
                     nikaia_std::tools::migrate_views3::migrate_views3_code(
-                        &dropped, &keep_at, &by_value,
+                        &dropped, &keep_at, &by_value, &lent,
                     )
                 }
                 Package::Refused(root) => {
@@ -105,7 +106,7 @@ fn keeps_in_package(file: &Path) -> Result<Package> {
     for path in &paths {
         let written = std::fs::read_to_string(path)
             .with_context(|| format!("cannot read {}", path.display()))?;
-        let text = nikaia_std::tools::migrate_views3::migrate_views3_code(&written, &[], &[]);
+        let text = nikaia_std::tools::migrate_views3::migrate_views3_code(&written, &[], &[], &[]);
         match parse_unrefined(&text) {
             Ok(parsed) => units.push(parsed),
             Err(_) => return Ok(Package::None),
@@ -122,7 +123,7 @@ fn keeps_in_package(file: &Path) -> Result<Package> {
         };
         let written = std::fs::read_to_string(file)
             .with_context(|| format!("cannot read {}", file.display()))?;
-        let text = nikaia_std::tools::migrate_views3::migrate_views3_code(&written, &[], &[]);
+        let text = nikaia_std::tools::migrate_views3::migrate_views3_code(&written, &[], &[], &[]);
         let Ok(parsed) = parse_to_ast(&text) else {
             return Ok(Package::None);
         };

@@ -45,11 +45,7 @@ pub(crate) fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerCo
         Stmt::Let { names, value, mutable, ty, .. } => {
             let mutable = *mutable;
             let reached = reached_of(value, interner, context, own, library, &walk, true);
-            let mut owned_declared = false;
-            if ty.is_some() {
-                let declared = match ty { Some(__nikaia_value) => __nikaia_value, None => return };
-                owned_declared = !declared.is_view;
-            }
+            let owned_declared = keeps_an_owned_declared((ty).as_ref());
             if owned_declared { for name in reached_of(value, interner, context, own, library, &walk, false) { if context.options.contains(&name) { walk.uses.kept.insert(name.to_string()); } } }
             let viewed = keeps_viewed_of(value, interner, context, own, library, &walk);
             if mutable { for name in reached_of(value, interner, context, own, library, &walk, false) { if !context.lent.contains(&name) { walk.uses.kept.insert(name.to_string()); } } }
@@ -57,6 +53,18 @@ pub(crate) fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerCo
                 for bound in names.iter() {
                     let bound = *bound;
                     alias(interner.resolve(bound).to_string(), &reached, &mut walk.aliases);
+                }
+            }
+            if !mutable && !owned_declared {
+                let read = coalesced_option(value, interner, context);
+                if read.is_some() {
+                    let mut lent: collections::BTreeSet<String> = collections::BTreeSet::new();
+                    lent.insert(nikaia_std::index::or(read, || "".into()));
+                    for bound in names.iter() {
+                        let bound = *bound;
+                        alias(interner.resolve(bound).to_string(), &lent, &mut walk.aliases);
+                        alias(interner.resolve(bound).to_string(), &lent, &mut walk.views);
+                    }
                 }
             }
             if !viewed.is_empty() {
@@ -73,7 +81,10 @@ pub(crate) fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerCo
 
 pub(crate) fn keeps_statement_parts(stmt: &Stmt, interner: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     match stmt {
-        Stmt::Let { value, .. } => { keeps_expression(value, interner, &holes_of, context, own, library, walk); },
+        Stmt::Let { value, mutable, ty, .. } => {
+            let mutable = *mutable;
+            if !mutable && !keeps_an_owned_declared((ty).as_ref()) && a_read_option(value, interner, context) { keeps_read_option(value, interner, &holes_of, context, own, library, walk); } else { keeps_expression(value, interner, &holes_of, context, own, library, walk); }
+        },
         Stmt::Comptime { value, .. } => { keeps_expression(value, interner, &holes_of, context, own, library, walk); },
         Stmt::Assign { target, value, .. } => {
             keeps_expression(target, interner, &holes_of, context, own, library, walk);
@@ -104,6 +115,11 @@ pub(crate) fn keeps_statement_parts(stmt: &Stmt, interner: &winnow_grammar::Inte
         },
         _ => { },
     }
+}
+
+pub(crate) fn keeps_an_owned_declared(ty: Option<&Type>) -> bool {
+    let declared = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !declared.is_view
 }
 
 pub(crate) fn alias(name: String, reached: &collections::BTreeSet<String>, into: &mut collections::BTreeMap<String, collections::BTreeSet<String>>) {
@@ -1025,11 +1041,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple76357| {
-                            let (at, arg) = __nikaia_tuple76357; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple77563| {
+                            let (at, arg) = __nikaia_tuple77563; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple76533| {
-                            let (at, arg) = __nikaia_tuple76533;
+                        }).map(|__nikaia_tuple77739| {
+                            let (at, arg) = __nikaia_tuple77739;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);

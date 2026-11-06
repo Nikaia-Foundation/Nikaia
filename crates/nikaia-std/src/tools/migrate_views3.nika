@@ -350,56 +350,15 @@ fn migrate_receivers(tokens: ref Vec[MigrateToken]) -> Vec[(i64, bool)] sync {
     return out
 }
 
-/// **Which receivers were the old by-value `self`**, in order: read on the
-/// code as written, before `ref` goes, since `ref self` and `self` read
-/// alike after it (ADR-views-3 D2: a consumed one becomes `keep self`).
-pub fn migrate_views3_selves(code: String) -> Vec[bool] sync {
-    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
-    lexer.run()
+/// **Whether each token stands directly inside a declaration's parameter
+/// list**: the first `(` after a `fn`, as the brackets open and close.
+fn migrate_in_params(tokens: ref Vec[MigrateToken]) -> Vec[bool] sync {
     let mut out: Vec[bool] = []
-    for (_, bare) in migrate_receivers(lexer.tokens) {
-        out.push(bare)
-    }
-    return out
-}
-
-/// **The rewrite of one piece of Nikaia code**: `keep_at` are the character
-/// indices of the parameters to mark `keep` (a parameter takes the mark at
-/// its first token at or after the index; a method's `self`, named by where
-/// the method starts, takes it where `by_value` says its receiver was the old
-/// by-value `self`, in `migrate_views3_selves`'s order).
-pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool]) -> String sync {
-    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
-    lexer.run()
-    let tokens = lexer.tokens
-    let n = tokens.len()
-    let receivers = migrate_receivers(tokens)
-    let mut dropped: Vec[bool] = []
-    let mut gapless: Vec[bool] = []
-    let mut prefix: Vec[String] = []
-    let mut guarded: Vec[bool] = []
-    for _t in tokens {
-        dropped.push(false)
-        gapless.push(false)
-        prefix.push("")
-        guarded.push(false)
-    }
-    // Where a bracket opened: `true` for a declaration's parameter list.
     let mut params: Vec[bool] = []
     let mut fn_depth = -1
-    let mut until = -1
-    let mut k = 0
-    while k < n {
-        let t = tokens[k].text.clone()
-        let kind = tokens[k].kind
-        if k <= until {
-            guarded[k] = true
-        }
-        if kind == MigrateKind::Word && t == "extern" && k > until {
-            until = migrate_extern_end(tokens, k)
-            guarded[k] = true
-        }
-        match kind {
+    for token in tokens {
+        let t = token.text.clone()
+        match token.kind {
             MigrateKind::Open => {
                 params.push(t == "(" && fn_depth == params.len())
                 if t == "(" && fn_depth == params.len() - 1 {
@@ -426,10 +385,99 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool])
             },
             else => {},
         }
+        out.push(params.len() > 0 && params[params.len() - 1])
+    }
+    return out
+}
+
+/// **Each declared parameter, in order**: the index of its name's token, a
+/// word before `:` right after `(`, `,`, `keep` or `mut` in a parameter list.
+fn migrate_parameters(tokens: ref Vec[MigrateToken]) -> Vec[i64] sync {
+    let in_params = migrate_in_params(tokens)
+    let mut out: Vec[i64] = []
+    for k in 1..<tokens.len() {
+        let before = tokens[k - 1].text.clone()
+        if in_params[k] && tokens[k].kind == MigrateKind::Word && migrate_text_at(tokens, k + 1) == ":" && (before == "(" || before == "," || before == "keep" || before == "mut") {
+            out.push(k)
+        }
+    }
+    return out
+}
+
+fn migrate_ordinal_of(items: ref Vec[i64], wanted: i64) -> i64 sync {
+    for at in 0..<items.len() {
+        if items[at] == wanted {
+            return at
+        }
+    }
+    return -1
+}
+
+/// **Which declared parameters were written `ref`**, in
+/// `migrate_parameters`'s order: read on the code as written, before `ref`
+/// goes, since `p: ref T` and `p: T` read alike after it (ADR-views-3 D4:
+/// such a one was a borrow, and is never marked `keep`).
+pub fn migrate_views3_lent(code: String) -> Vec[bool] sync {
+    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
+    lexer.run()
+    let mut out: Vec[bool] = []
+    for k in migrate_parameters(lexer.tokens) {
+        out.push(migrate_text_at(lexer.tokens, k + 2) == "ref" && migrate_text_at(lexer.tokens, k + 3) != "mut")
+    }
+    return out
+}
+
+/// **Which receivers were the old by-value `self`**, in order: read on the
+/// code as written, before `ref` goes, since `ref self` and `self` read
+/// alike after it (ADR-views-3 D2: a consumed one becomes `keep self`).
+pub fn migrate_views3_selves(code: String) -> Vec[bool] sync {
+    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
+    lexer.run()
+    let mut out: Vec[bool] = []
+    for (_, bare) in migrate_receivers(lexer.tokens) {
+        out.push(bare)
+    }
+    return out
+}
+
+/// **The rewrite of one piece of Nikaia code**: `keep_at` are the character
+/// indices of the parameters to mark `keep` (a parameter takes the mark at
+/// its first token at or after the index; a method's `self`, named by where
+/// the method starts, takes it where `by_value` says its receiver was the old
+/// by-value `self`, in `migrate_views3_selves`'s order).
+pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool], lent: Vec[bool]) -> String sync {
+    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
+    lexer.run()
+    let tokens = lexer.tokens
+    let n = tokens.len()
+    let receivers = migrate_receivers(tokens)
+    let parameters = migrate_parameters(tokens)
+    let mut dropped: Vec[bool] = []
+    let mut gapless: Vec[bool] = []
+    let mut prefix: Vec[String] = []
+    let mut guarded: Vec[bool] = []
+    for _t in tokens {
+        dropped.push(false)
+        gapless.push(false)
+        prefix.push("")
+        guarded.push(false)
+    }
+    let in_params = migrate_in_params(tokens)
+    let mut until = -1
+    let mut k = 0
+    while k < n {
+        let t = tokens[k].text.clone()
+        let kind = tokens[k].kind
+        if k <= until {
+            guarded[k] = true
+        }
+        if kind == MigrateKind::Word && t == "extern" && k > until {
+            until = migrate_extern_end(tokens, k)
+            guarded[k] = true
+        }
         if kind == MigrateKind::Word && t == "ref" && !guarded[k] {
             let next = migrate_text_at(tokens, k + 1)
             let after = migrate_text_at(tokens, k + 2)
-            let in_params = params.len() > 0 && params[params.len() - 1]
             let named = k >= 3 && migrate_text_at(tokens, k - 1) == ":" && tokens[k - 2].kind == MigrateKind::Word && (migrate_text_at(tokens, k - 3) == "(" || migrate_text_at(tokens, k - 3) == ",")
             if next == "(" && tokens[k + 1].gap == "" {
                 // `ref(a | b) T`: left for D8's `from`; `ref (A, B)` is a
@@ -437,7 +485,7 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool])
             } else if next == "mut" && after == "self" {
                 dropped[k] = true
                 gapless[k + 1] = migrate_blank(tokens[k + 1].gap)
-            } else if next == "mut" && in_params && named {
+            } else if next == "mut" && in_params[k] && named {
                 dropped[k] = true
                 dropped[k + 1] = true
                 gapless[k + 1] = true
@@ -467,7 +515,13 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool])
                 prefix[receivers[r].0] = "keep "
             }
         } else if j < n && prefix[j] == "" && !guarded[j] && tokens[j].text != "keep" && tokens[j].text != "mut" {
-            prefix[j] = "keep "
+            // **An old `ref` parameter is never kept** (ADR-views-3 D2, D4,
+            // #1254): it was a borrow, so the body reads it, hands back a view
+            // of it (D7/D8) or stores one (D5), and the lent `T` says that.
+            let at_parameter = migrate_ordinal_of(parameters, j)
+            if at_parameter < 0 || at_parameter >= lent.len() || !lent[at_parameter] {
+                prefix[j] = "keep "
+            }
         }
     }
     let mut out: String = ""
@@ -491,9 +545,10 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool])
 /// `ref` still written (a `ref` field, `ref mut self`) changes what it finds.
 pub fn migrate_views3_nika(source: String, keeps_of: fn(ref String) -> Vec[i64] sync) -> String sync {
     let by_value = migrate_views3_selves(source.clone())
-    let dropped = migrate_views3_code(source, [], [])
+    let lent = migrate_views3_lent(source.clone())
+    let dropped = migrate_views3_code(source, [], [], [])
     let keep_at = keeps_of(dropped)
-    return migrate_views3_code(dropped, keep_at, by_value)
+    return migrate_views3_code(dropped, keep_at, by_value, lent)
 }
 
 /// **A Markdown file**: only a fenced block marked `nika` or `nikaia` is

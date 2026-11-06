@@ -111,7 +111,7 @@ pub fn sharing_report(sharing: &Sharing) -> String {
         if decision.count != Count::Plain { atomic += 1; }
         if decision.undecided() {
             undecided += 1;
-            caught.push(fallback_text(decision.fallback));
+            caught.push(fallback_text((decision.fallback).as_ref()));
         }
     }
     let all = sharing.decisions.len() as i64;
@@ -128,7 +128,7 @@ pub fn sharing_report(sharing: &Sharing) -> String {
     out
 }
 
-pub(crate) fn fallback_text(fallback: Option<Fallback>) -> String {
+pub(crate) fn fallback_text(fallback: Option<&Fallback>) -> String {
     let row = match fallback { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
     row.as_str()
 }

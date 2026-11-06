@@ -232,7 +232,7 @@ pub(crate) fn check_attributes_at<H: CheckHost>(state: &mut CheckState, world: &
         let fields: Vec<FieldContract> = nikaia_std::index::or(declared, || vec![].into());
         let mark = check_attributes_mark_for(marks, &name);
         if !check_attributes_allows(marks, &name, &here) {
-            check_attributes_out_of_place(state, &name, &here, mark, &attribute.span);
+            check_attributes_out_of_place(state, &name, &here, (mark).as_ref(), &attribute.span);
             continue;
         }
         seen.entry(name.to_string()).and_modify(|__nikaia_slot| { let mut n = *__nikaia_slot; (|| { n += 1; })(); *__nikaia_slot = n; }).or_insert(1);
@@ -489,7 +489,7 @@ pub(crate) fn check_attributes_nothing_declares(state: &mut CheckState, name: &s
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_out_of_place(state: &mut CheckState, name: &str, place: &str, mark: Option<CheckAttributesMark>, span: &Span) {
+pub(crate) fn check_attributes_out_of_place(state: &mut CheckState, name: &str, place: &str, mark: Option<&CheckAttributesMark>, span: &Span) {
     let mut here: String = format!("a `{}`", place);
     if place == "" { here = String::from("this declaration"); }
     let mark_name = check_attributes_mark_name();

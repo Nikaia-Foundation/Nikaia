@@ -16,9 +16,14 @@ fn same(r: Row?) -> bool {
     return (r ?? Row { id: 0, name: "" }).id == 1
 }
 
-fn first(keep r: Row?) -> i64 {
+fn first(r: Row?) -> i64 {
     let x = r ?? Row { id: 0, name: "" }
     return x.id
+}
+
+fn handed(keep r: Row?) -> Row {
+    let x = r ?? Row { id: 0, name: "" }
+    return x
 }
 
 fn give(keep r: Row?) -> Row {
@@ -35,6 +40,8 @@ fn main() {
     println(back(xs))
     println(back(xs))
     println(first(r))
+    println(first(r))
+    println(handed(null).id)
     println(give(null).id)
 }
 -- check: 0
@@ -47,4 +54,6 @@ true
 2
 2
 1
+1
+0
 0

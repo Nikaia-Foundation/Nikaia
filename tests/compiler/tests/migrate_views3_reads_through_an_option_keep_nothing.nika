@@ -2,9 +2,10 @@
 // for a parameter only read through an option: `row?.id` of a field that
 // copies, and `p ?? e` over a non-text option whose result is only read (a
 // field read, a method that lends its receiver, a comparison). The migrated
-// program checks and runs with two calls in a row. A `??` whose result is
-// bound by a `let` or handed back still keeps (`first`, `give`): the name may
-// leave the call, and lending it changed tool signatures (v36).
+// program checks and runs with two calls in a row. A `let` of one is a view
+// of the parameter (`first`, written by value so that only the inference
+// decides): the parameter is kept only where the name leaves (`handed`). A
+// `??` handed back keeps (`give`).
 use std::fs
 use std::process
 
@@ -17,7 +18,7 @@ fn toolchain() -> String throws {
 fn main() throws {
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let nikaia = toolchain()
-    fs::write(f"{tmp}/reads.nika", fs::Root::Anywhere, "struct Row {\n    id: i64,\n    name: String,\n}\n\nfn id_of(row: ref Row?) -> i64 {\n    return row?.id ?? 0\n}\n\nfn back(xs: ref Vec[i64]?) -> i64 {\n    return (xs ?? []).len() as i64\n}\n\nfn same(r: ref Row?) -> bool {\n    return (r ?? Row { id: 0, name: \"\" }).id == 1\n}\n\nfn first(r: ref Row?) -> i64 {\n    let x = r ?? Row { id: 0, name: \"\" }\n    return x.id\n}\n\nfn give(r: Row?) -> Row {\n    return r ?? Row { id: 0, name: \"\" }\n}\n\nfn main() {\n    let r: Row? = Row { id: 1, name: \"x\" }\n    println(id_of(r))\n    println(id_of(r))\n    println(same(r))\n    println(same(r))\n    let xs: Vec[i64]? = [1, 2]\n    println(back(xs))\n    println(back(xs))\n    println(first(r))\n    println(give(null).id)\n}\n")
+    fs::write(f"{tmp}/reads.nika", fs::Root::Anywhere, "struct Row {\n    id: i64,\n    name: String,\n}\n\nfn id_of(row: ref Row?) -> i64 {\n    return row?.id ?? 0\n}\n\nfn back(xs: ref Vec[i64]?) -> i64 {\n    return (xs ?? []).len() as i64\n}\n\nfn same(r: ref Row?) -> bool {\n    return (r ?? Row { id: 0, name: \"\" }).id == 1\n}\n\nfn first(r: Row?) -> i64 {\n    let x = r ?? Row { id: 0, name: \"\" }\n    return x.id\n}\n\nfn handed(r: Row?) -> Row {\n    let x = r ?? Row { id: 0, name: \"\" }\n    return x\n}\n\nfn give(r: Row?) -> Row {\n    return r ?? Row { id: 0, name: \"\" }\n}\n\nfn main() {\n    let r: Row? = Row { id: 1, name: \"x\" }\n    println(id_of(r))\n    println(id_of(r))\n    println(same(r))\n    println(same(r))\n    let xs: Vec[i64]? = [1, 2]\n    println(back(xs))\n    println(back(xs))\n    println(first(r))\n    println(first(r))\n    println(handed(null).id)\n    println(give(null).id)\n}\n")
     let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/reads.nika"])
     print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
     print(fs::read_to_string(f"{tmp}/reads.nika", fs::Root::Anywhere))
