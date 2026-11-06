@@ -108,8 +108,11 @@ fn a_field_of_a_field_is_refused_by_its_whole_path() {
 
 #[test]
 fn the_tail_of_a_ref_self_method_is_refused_as_its_return_is() {
+    // One way out is an owned `Ty`, so the result is no view of `self`
+    // (ADR-views-3 D7 makes it one only where every way out is a place of
+    // `self`, #1257) and the tail moves the field out of the loan.
     let found = errors(&format!(
-        "{HEAD}impl L {{\n    fn t(ref self) -> Ty {{\n        self.ty\n    }}\n}}\n"
+        "{HEAD}impl L {{\n    fn t(ref self) -> Ty {{\n        if self.n == 1 {{\n            return Ty {{ name: \"z\" }}\n        }}\n        self.ty\n    }}\n}}\n"
     ));
     let codes: Vec<_> = found.iter().map(|f| f.code_str()).collect();
     assert_eq!(codes, ["NK1131"], "{found:#?}");

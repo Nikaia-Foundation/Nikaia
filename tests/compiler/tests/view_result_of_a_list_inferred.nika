@@ -1,0 +1,23 @@
+// ADR-views-3 D7, D8, D11 (#1257): a method that hands back a field or a
+// piece of its plain `self` hands back a view of the subject, of any type,
+// with no `from` written; an `Array[T]` result needs no length there.
+struct Bag {
+	tags: Vec[i64],
+}
+
+impl Bag {
+	fn tags(self) -> Vec[i64] {
+		return self.tags
+	}
+
+	fn first_tags(self) -> Array[i64] {
+		return self.tags[0..<1]
+	}
+}
+
+fn main() {
+	let b = Bag { tags: [1, 2, 3] }
+	println(b.tags().len())
+	println(b.first_tags().len())
+	println(b.tags.len())
+}

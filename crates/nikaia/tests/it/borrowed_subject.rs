@@ -161,8 +161,10 @@ fn main() {
 ///
 /// **The half of it that was real is built**, and the help offers it: declaring
 /// the result a view is enough, and the `&` is the compiler's. What stays
-/// refused is the shape here — the result is declared `Vec[i64]`, so the value
-/// is moved out of a loan whatever the help says.
+/// refused is the shape here — the result is declared `Vec[i64]` and one way
+/// out is an owned list, so the result is no view of `self` (ADR-views-3 D7
+/// makes it one only where every way out is a place of `self`, #1257) and the
+/// field is moved out of a loan whatever the help says.
 #[test]
 fn the_help_names_only_what_can_be_taken() {
     let found = findings(
@@ -173,6 +175,9 @@ struct Row {
 
 impl Row {
     fn t(ref self) -> Vec[i64] {
+        if self.tags.is_empty() {
+            return [0]
+        }
         return self.tags
     }
 }

@@ -6880,16 +6880,18 @@ fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64])
 /// inference does not count `x` as kept, the emitter ties the result to `x`
 /// (`fn hand<'a, T>(x: &'a T) -> &'a T`) and the caller holds a temporary
 /// argument as it holds one for text. Only where every way out is such a
-/// place, rooted in a parameter neither `keep` nor `mut` nor `ref` already;
-/// text and a word copied at a read are not asked. `self` is not asked
-/// either: its word says how it is taken. A result written `from` is a view
-/// of any type (D8, #1257): the checker holds the body to it, as for text.
+/// place, rooted in a parameter neither `keep` nor `mut` nor `ref` already,
+/// a piece `x[a..<b]` too (D11); text and a word copied at a read are not
+/// asked. A method's plain `self` lends it (D7, #1257): a field or a piece
+/// of it handed back is a view of the subject; a `mut` or `keep` `self` says
+/// how it is taken. A result written `from` is a view of any type (D8,
+/// #1257): the checker holds the body to it, as for text.
 /// An `impl` of a trait keeps the trait's signature. A whole parameter handed
 /// back is asked only in a file that writes `keep` (#1213): until the
 /// migration reaches a file, returning a parameter by value keeps it there,
 /// as `NK2302` is raised only in such a file (`check_keep_marks.nika`).
 pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerContext) {
-    let plain = hb_plain_enums(program, words)
+    let plain = hb_plain_enums(program.items, words)
     let opted = keep_marks_opted_in_items(program.items)
     for mut item in program.items {
         hb_item(item.node, words, plain, opted)
@@ -6912,7 +6914,7 @@ fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: re
 
 fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool) {
     match item {
-        Item::Fn { args, ret_type, body, is_extern, ret_from, .. } => {
+        Item::Fn { receiver, args, ret_type, body, is_extern, ret_from, .. } => {
             if is_extern || !hb_result_may_be_a_view(ret_type, words, plain) {
                 return
             }
@@ -6922,7 +6924,7 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
                 hb_set_maybe(ret_type)
                 return
             }
-            let roots = hb_roots(body, args, words, opted) ?? return
+            let roots = hb_roots(body, args, hb_plain_self(receiver), words, opted) ?? return
             for mut arg in args {
                 if roots.contains(words.resolve(arg.name)) {
                     hb_set(arg.ty)
@@ -6932,6 +6934,39 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
         },
         else => {},
     }
+}
+
+/// A method that takes `self` plainly (or `ref self`, parsed the same) lends
+/// it (D7): a field or a piece of it handed back is a view of the subject.
+/// `mut` and `keep` already say how it is taken.
+fn hb_plain_self(receiver: ref Receiver?) -> bool {
+    let word = receiver ?? return false
+    return !word.is_mut && !word.is_keep
+}
+
+/// **A method whose plain `self` the inference makes the source of its
+/// result** (D7, D11): a field or a piece of `self` handed back as a result
+/// of a type other than text. `migrate views-3` writes `keep self` there
+/// where it was the old by-value `self`, which moved what it handed back
+/// (D2): the migration does not change what the program means. A result
+/// the pass already made a view counts, since the migration reads the
+/// file after the pass ran.
+pub fn hands_back_a_piece_of_self(item: ref Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
+    match item {
+        Item::Fn { receiver, args, ret_type, body, is_extern, ret_from, .. } => {
+            if is_extern || ret_from.len() > 0 || !hb_plain_self(receiver) {
+                return false
+            }
+            let t = ret_type ?? return false
+            if !hb_type_may_be_a_view(t, words, plain) {
+                return false
+            }
+            let roots = hb_roots(body, args, true, words, true) ?? return false
+            return roots.contains("self")
+        },
+        else => {},
+    }
+    return false
 }
 
 fn hb_set(mut ty: Type) {
@@ -6948,7 +6983,13 @@ fn hb_set_maybe(mut ty: Type?) {
 /// copied at a read, not already a view, nothing a place cannot be.
 fn hb_result_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
     let t = ty ?? return false
-    if t.is_view || t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || t.code != null || t.count != null || t.either || t.lasting {
+    return !t.is_view && hb_type_may_be_a_view(t, words, plain)
+}
+
+/// A type a view of a parameter can stand in, whether or not it is one
+/// already: not text, not a word copied at a read, nothing a place cannot be.
+fn hb_type_may_be_a_view(t: ref Type, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
+    if t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || t.code != null || t.count != null || t.either || t.lasting {
         return false
     }
     let name = words.resolve(t.name)
@@ -6962,7 +7003,7 @@ fn hb_result_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerCon
 /// The parameters every way out of `body` is a place of; `null` where one
 /// way out is anything else, or the whole parameter outside a file that
 /// writes `keep`.
-fn hb_roots(body: ref Block, args: ref Vec[FnArg], words: ref winnow_grammar::InternerContext, opted: bool) -> collections::BTreeSet[String]? {
+fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref winnow_grammar::InternerContext, opted: bool) -> collections::BTreeSet[String]? {
     let ways = hb_ways_out(body)
     if ways.is_empty() {
         return null
@@ -6972,6 +7013,13 @@ fn hb_roots(body: ref Block, args: ref Vec[FnArg], words: ref winnow_grammar::In
         let root = hb_place_root(way, words) ?? return null
         if !opted && hb_a_name(way) {
             return null
+        }
+        if root == "self" {
+            if !plain_self || hb_a_name(way) || rebinds(body, root, words) {
+                return null
+            }
+            roots.insert(root)
+            continue
         }
         if !args.iter().any(fn(arg) { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && arg.ty.code == null }) {
             return null
@@ -6991,15 +7039,13 @@ fn hb_a_name(expr: ref Expr) -> bool {
     }
 }
 
-/// The name a place starts at: `x` of `x`, `x.item`, `x[0].name`.
+/// The name a place starts at: `x` of `x`, `x.item`, `x[0].name`, and a
+/// piece `x.items[0..<2]` (D11).
 fn hb_place_root(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     return match expr {
         Expr::Variable(name, _) => words.resolve(name).clone(),
         Expr::Field { base, .. } => hb_place_root(base, words),
-        Expr::Index { base, index, .. } => match index {
-            Expr::Range { .. } => null,
-            else => hb_place_root(base, words),
-        },
+        Expr::Index { base, .. } => hb_place_root(base, words),
         else => null,
     }
 }
@@ -7066,9 +7112,9 @@ fn hb_maybe(expr: ref Expr?) -> Vec[ref Expr] {
 }
 
 /// The enums whose variants hold nothing: copied at a read, never a view.
-fn hb_plain_enums(program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+pub fn hb_plain_enums(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut plain: collections::BTreeSet[String] = collections::BTreeSet()
-    for item in program.items {
+    for item in items {
         match item.node {
             Item::Enum { name, variants, .. } => {
                 if variants.iter().all(fn(variant) { variant.fields == VariantFields::Unit }) {

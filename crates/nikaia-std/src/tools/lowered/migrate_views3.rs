@@ -384,14 +384,15 @@ pub fn migrate_views3_markdown(source: &str, keeps_of: &impl Fn(&str) -> Vec<i64
 
 pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, findings: &[CheckFinding]) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
+    let plain = hb_plain_enums(view.items, view.words);
     for item in view.items.iter() {
         match &item.node {
-            Item::Fn { .. } => { migrate_keeps_of_body(view, item, None, own, library, &indexes, resolved, holes_of, findings, &mut out); },
+            Item::Fn { .. } => { migrate_keeps_of_body(view, item, None, own, library, &indexes, resolved, holes_of, findings, &plain, &mut out); },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
                 if trait_name.is_none() {
                     let target_name = view.text(target.name);
-                    for method in methods.iter() { migrate_keeps_of_body(view, method, Some(&target_name.to_string()), own, library, &indexes, resolved, holes_of, findings, &mut out); }
+                    for method in methods.iter() { migrate_keeps_of_body(view, method, Some(&target_name.to_string()), own, library, &indexes, resolved, holes_of, findings, &plain, &mut out); }
                 }
             },
             _ => { },
@@ -401,13 +402,13 @@ pub fn migrate_views3_keeps(view: &ParsedView<'_, '_, '_, '_, '_, '_>, own: &Led
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: Option<&str>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, findings: &[CheckFinding], out: &mut Vec<i64>) {
+pub(crate) fn migrate_keeps_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, target: Option<&str>, own: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, findings: &[CheckFinding], plain: &collections::BTreeSet<String>, out: &mut Vec<i64>) {
     match &item.node {
         Item::Fn { args, is_extern, receiver, .. } => {
             let is_extern = *is_extern;
             if is_extern { return; }
             let bare = receiver.is_some() && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || true) && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_keep), || true);
-            if bare && target.is_some() {
+            if bare && target.is_some() && hands_back_a_piece_of_self(&item.node, view.words, plain) { out.push(item.span.start as i64); } else if bare && target.is_some() {
                 for finding in findings.iter() {
                     if finding.code == "NK1131" && finding.message.starts_with("You can't give away `self.") && finding.span.start >= item.span.start && finding.span.end <= item.span.end {
                         out.push(item.span.start as i64);

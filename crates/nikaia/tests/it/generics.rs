@@ -388,17 +388,23 @@ struct Holder[T] {
 }
 
 impl Holder[T] {
-    fn get(ref self) -> T {
+    fn get(ref self, other: T, pick: bool) -> T {
+        if pick {
+            return other
+        }
         return self.value
     }
 }
 
 fn main() {
     let h = Holder { value: 7 }
-    println(f"{h.get()}")
+    println(f"{h.get(8, false)}")
 }
 "#,
     );
+    // One way out is the owned `other`, so the result is no view of `self`
+    // (ADR-views-3 D7 makes it one only where every way out is a place of
+    // `self`, #1257) and `self.value` leaves a borrowed subject.
     let refusal = found
         .iter()
         .find(|f| f.code == "NK1131")

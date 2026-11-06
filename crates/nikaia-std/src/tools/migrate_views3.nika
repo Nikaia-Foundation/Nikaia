@@ -536,22 +536,25 @@ pub fn migrate_views3_markdown(source: String, keeps_of: fn(ref String) -> Vec[i
 /// parameter of a free function or an inherent method that the inference
 /// keeps and that says neither `keep` nor `mut`, as the byte offset its
 /// declaration starts at. The inference does not decide `self`; the checker
-/// does: a bare `self` whose body gives a piece of it away (its `NK1131`,
-/// among `findings`) is named by the offset its method starts at, and
+/// and the tier pass do: a bare `self` whose body gives a piece of it away
+/// (its `NK1131`, among `findings`) or hands a field or a piece of it back
+/// as a result the tier pass makes a view of it (`hands_back_a_piece_of_self`,
+/// D7) is named by the offset its method starts at, and
 /// `migrate_views3_code` writes `keep self` there where it was the old
 /// by-value `self`. An `impl` of a trait takes the trait's marks.
 pub fn migrate_views3_keeps(view: ref ParsedView, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync, findings: ref Vec[CheckFinding]) -> Vec[i64] {
     let mut out: Vec[i64] = []
+    let plain = hb_plain_enums(view.items, view.words)
     for item in view.items {
         match item.node {
             Item::Fn { .. } => {
-                migrate_keeps_of_body(view, item, null, own, library, indexes, resolved, holes_of, findings, out)
+                migrate_keeps_of_body(view, item, null, own, library, indexes, resolved, holes_of, findings, plain, out)
             },
             Item::Impl { trait_name, target, methods } => {
                 if trait_name == null {
                     let target_name = view.text(target.name)
                     for method in methods {
-                        migrate_keeps_of_body(view, method, target_name.clone(), own, library, indexes, resolved, holes_of, findings, out)
+                        migrate_keeps_of_body(view, method, target_name.clone(), own, library, indexes, resolved, holes_of, findings, plain, out)
                     }
                 }
             },
@@ -561,7 +564,7 @@ pub fn migrate_views3_keeps(view: ref ParsedView, own: ref Ledger, library: ref 
     return out
 }
 
-fn migrate_keeps_of_body(view: ref ParsedView, item: ref Spanned[Item], target: String?, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync, findings: ref Vec[CheckFinding], mut out: Vec[i64]) {
+fn migrate_keeps_of_body(view: ref ParsedView, item: ref Spanned[Item], target: String?, own: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync, findings: ref Vec[CheckFinding], plain: ref collections::BTreeSet[String], mut out: Vec[i64]) {
     match item.node {
         Item::Fn { args, is_extern, receiver, .. } => {
             if is_extern {
@@ -569,7 +572,9 @@ fn migrate_keeps_of_body(view: ref ParsedView, item: ref Spanned[Item], target: 
             }
             // A bare `self` reads as lent, as `ref self` did (D1).
             let bare = receiver != null && !(receiver?.is_mut ?? true) && !(receiver?.is_keep ?? true)
-            if bare && target != null {
+            if bare && target != null && hands_back_a_piece_of_self(item.node, view.words, plain) {
+                out.push(item.span.start as i64)
+            } else if bare && target != null {
                 for finding in findings {
                     if finding.code == "NK1131" && finding.message.starts_with("You can't give away `self.") && finding.span.start >= item.span.start && finding.span.end <= item.span.end {
                         out.push(item.span.start as i64)
