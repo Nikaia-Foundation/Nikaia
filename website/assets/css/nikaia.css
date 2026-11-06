@@ -1474,6 +1474,10 @@ a.safe-more:hover { text-decoration: underline; }
   gap: 16px;
 }
 
+.next-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .next-card {
   display: block;
   padding: 20px 22px;
@@ -1544,7 +1548,8 @@ a.safe-more:hover { text-decoration: underline; }
 
   .features,
   .features-four,
-  .next {
+  .next,
+  .next-two {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1562,7 +1567,8 @@ a.safe-more:hover { text-decoration: underline; }
 @media (min-width: 900px) and (max-width: 1099px) {
   .features,
   .features-four,
-  .next {
+  .next,
+  .next-two {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
