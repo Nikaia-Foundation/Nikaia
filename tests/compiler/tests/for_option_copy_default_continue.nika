@@ -1,0 +1,18 @@
+// A loop over a list of number options binds `x ?? continue` to the
+// number, read out of the element (was a rustc mismatch of `&i64` and
+// `i64`, #1254).
+fn first_big(xs: Vec[i64?], limit: i64) -> i64 {
+    for x in xs {
+        let n = x ?? continue
+        if n > limit {
+            return n
+        }
+    }
+    return 0
+}
+
+fn main() {
+    let xs: Vec[i64?] = [1, null, 7, 3]
+    println(first_big(xs, 2))
+    println(first_big(xs, 9))
+}

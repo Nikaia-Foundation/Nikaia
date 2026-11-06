@@ -2044,7 +2044,15 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         // of the package that derives `Copy`, or a described one whose ledger
         // says `copies`, as a number is above.
         let declared_copy = lent && !mut_view && name != "_" && !copied && !element.is_a_view() && state.a_view_that_copies(world, view_of_type(element))
-        let a_view = declared_copy || (lent && !mut_view && name != "_" && !copied && element.is_a_view())
+        // **An element `T?` of a type that copies is the option** (#1254): a
+        // number's or a `Symbol`'s option is read out of the view, so `x ??
+        // continue` binds the value and not a view of it.
+        let an_option_that_copies = match element {
+            Ty::Nullable(inner) => a_copy_by_value(inner) || (!inner.is_a_view() && state.a_view_that_copies(world, view_of_type(inner))),
+            else => false,
+        }
+        let option_copy = lent && !mut_view && name != "_" && !copied && an_option_that_copies
+        let a_view = declared_copy || option_copy || (lent && !mut_view && name != "_" && !copied && element.is_a_view())
         if a_view {
             state.facts.copied_view_bindings.insert((span.start as i64, name.clone()))
         }

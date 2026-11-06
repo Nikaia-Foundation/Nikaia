@@ -1490,7 +1490,12 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let copied = lent && !mut_view && name != "_" && a_copy_by_value(&element);
         if copied { state.facts.copied_loop_bindings.insert((span.start as i64, name.to_string())); }
         let declared_copy = lent && !mut_view && name != "_" && !copied && !element.is_a_view() && state.a_view_that_copies(world, &view_of_type(&element));
-        let a_view = declared_copy || lent && !mut_view && name != "_" && !copied && element.is_a_view();
+        let an_option_that_copies = match element {
+            Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); a_copy_by_value(inner) || !inner.is_a_view() && state.a_view_that_copies(world, &view_of_type(inner)) },
+            _ => false,
+        };
+        let option_copy = lent && !mut_view && name != "_" && !copied && an_option_that_copies;
+        let a_view = declared_copy || option_copy || lent && !mut_view && name != "_" && !copied && element.is_a_view();
         if a_view { state.facts.copied_view_bindings.insert((span.start as i64, name.to_string())); }
         let named = matches!(element, Ty::Named { .. });
         let mut bound = element.clone();
