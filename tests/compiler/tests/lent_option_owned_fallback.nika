@@ -40,7 +40,7 @@ fn label(r: ref Row?, n: i64) -> String {
 
 fn inside(xs: ref Vec[i64]?) -> i64 {
     let mut total = 0
-    for k in 0..3 {
+    for k in 0..<4 {
         if k > 0 {
             let v = xs ?? [k, k]
             total += v.len()
