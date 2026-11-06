@@ -26,7 +26,7 @@ ending with the Claude Code footer), rule I13.
 * Commit locally after each step with `target/fast/nikaia run scripts/commit.nika -- REPORT` (it adds exactly the report's `Files:`); the driver pushes.
 * Before committing, cheap checks only: `cargo build --profile fast -p nikaia`, `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `nikaia run scripts/pre-push.nika`, the tests the issue names and the ones your change touches.
 * Version lines, `CHANGELOG.md`, badges and NK codes are the supervisor's. New tests in Nikaia only.
-* A defect you meet on the way to the issue's goal (a compiler or lowering bug in the path) you fix, with a test, as its own commit; `Found:` is only for what lies off that path or cannot be fixed this run.
+* A defect you meet on the way to the issue's goal (a compiler or lowering bug in the path) you fix, with a test, as its own commit; so is one off the path but inside the issue's area that fits this run (owner, 2026-11-06), named in `Body:`. `Found:` is only for what lies outside the area, cannot be fixed this run or needs a decision; the driver files it as an issue.
 * A form Nikaia, `std` or the toolchain lacks stops the work, unless an ADR or Part I-III refuses it (name it): `Result: blocked`, `Found:` the gap with a probe, `Needs: supervisor decision`.
 * Disk: `NIKAIA_CACHE_LIMIT=2G`; at the end delete your own clone's `target/` and `target/release/nikaia-scratch`.
 * No cause after about 40 turns: stop, `Result: partial` with what you ruled out, the probe, and the suspected file and function.
@@ -35,6 +35,6 @@ ending with the Claude Code footer), rule I13.
 Fields: Result, Files, Commit, Body (optional), Fixes, Pushed, Tests, Gate, Deviation, Found, Needs, Changelog, Issue, Owner (a question for the owner), Disk freed, and last `Attribution:` with your commit trailer lines below it.
 * `Result:`, `Gate:` (`green` or `red <check>`), `Deviation:`, `Found:` and the other fields with nothing to say hold the bare word: `done`, `none`. Anything after it reads as content.
 * `Result: done` only when the issue's *Done when* holds; `partial` with the items left otherwise.
-* `Deviation:` only for an item of the issue built otherwise than written, or not built. `Found:` only for a defect outside your change. Everything else goes into `Body:`; how you verified goes into `Tests:`.
+* `Deviation:` only for an item of the issue built otherwise than written, or not built. `Found:` only for a defect outside your area, or one this run cannot fix. Everything else goes into `Body:`; how you verified goes into `Tests:`.
 * `Issue:` by `docs/issues.md`, *How a run judges its issue*: `complete`, or `broke I<n>: ...`, `rules-gap: ...`, `wrong I<n>: ...`, joined with `;`.
 * Final answer, one line: `done <sha>, report <path>` (or `BLOCKED: ...` / `PUSH REJECTED ...`).

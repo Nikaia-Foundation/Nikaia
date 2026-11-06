@@ -49,6 +49,12 @@ You build one small slice of an issue in the Nikaia repository and end.
   moved code. Only when the fix does not fit the time box below, or needs a
   decision, stop: commit nothing that routes around it, report
   `Result: blocked` with the defect and a probe of a few lines.
+* **A Found in your area is fixed, not reported** (owner, 2026-11-06). A
+  defect you meet off your path but inside your lane's area (the views lane: a
+  view or slice defect) that fits the run is fixed in the same run, with a
+  `tests/compiler/` test, as its own commit, and named in `Body:`. `Found:`
+  holds only what lies outside the area, does not fit the run or needs a
+  decision; the driver files each `Found:` as an issue.
 * **A missing form stops the slice too** (owner, 2026-10-29; CLAUDE.md, *A
   missing form stops the work*). A `std` entry, a method, a syntax or a
   conversion Nikaia lacks is not written around (no get-clone-insert for
