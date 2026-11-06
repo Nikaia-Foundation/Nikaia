@@ -87,7 +87,7 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   builder or QA agent started by `scripts/drive.nika` commits locally after
   cheap checks (build, touched tests, fmt, clippy, `scripts/pre-push.nika`) and
   never pushes. The driver runs the complete suite once per batch: when the
-  batch ends it starts it on HEAD in the background and waits for it before the next batch's first builder (one at a time per
+  batch ends it starts it on HEAD in the background, the next builders go on meanwhile (owner, 2026-11-06), and it handles the result once the suite has finished (one at a time per
   checkout, on CI: the tested commit pushed to `ci/<lane>` runs the whole
   workflow, `drive.nika --ci-wait` follows it with `gh api`); green, it pushes the
   tested commit; red, a QA agent (`.claude/agents/qa.md`) gets the briefs and
@@ -261,8 +261,11 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   Builders and QA commit locally; the driver runs `gate.nika -- --all` once
   per batch (owner, 2026-10-31: once per batch): when the batch ends it starts
   the suite on HEAD in the background (`SUITE <sha8> started in the
-  background`), and waits for it (`SUITE <sha8> waiting`)
-  before the next batch's first builder, a bump or its own end (lock
+  background`); the next builders go on meanwhile (owner, 2026-11-06), a
+  finished suite is handled before the next builder, and the driver waits for
+  it (`SUITE <sha8> waiting`) only before a bump, the next suite or its own
+  end; a green whose push is rejected after HEAD moved on pushes nothing, the
+  next suite pushes it all (lock
   `target/suite.lock`, so the two lanes' drivers
   take turns), prints `SUITE <sha8> green|red <steps>`, pushes the tested
   commit on green (`PUSHED <sha8>`), and on red starts QA

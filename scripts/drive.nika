@@ -58,10 +58,13 @@
 // run's brief is appended to DIR/unpushed.txt (one brief path a line). The
 // builders of a batch run one after the other with no suite between them. When
 // the batch ends (CUT, RED or BATCH DONE) the suite starts on HEAD in the
-// background (`drive_suite`); before the next batch's first builder, a bump, or the end of
-// the run (an escalation and a RESTART too) the driver waits for it
-// (`drive_settle`: one line `SUITE <sha8> waiting`, a poll every 10 s) and
-// handles its result. When `git rev-list --count origin/develop..HEAD` is 0
+// background (`drive_suite`) and the next builders go on meanwhile (owner,
+// 2026-11-06); a suite that has finished is handled before the next builder
+// (`drive_suite_done`). Before a bump, the next suite, or the end of the run
+// (an escalation and a RESTART too) the driver waits for it (`drive_settle`:
+// one line `SUITE <sha8> waiting`, a poll every 10 s) and handles its result.
+// Green pushes the tested sha; when that push is rejected and HEAD has moved
+// on, nothing is pushed and the next suite, on HEAD, pushes all. When `git rev-list --count origin/develop..HEAD` is 0
 // after a fetch, there is nothing to test (unpushed.txt is emptied). When every
 // path those commits touch (`git log --format= --name-only origin/develop..HEAD`)
 // is documentation by the rule of scripts/ci-changes.sh (`drive_docs_path`: CI
@@ -301,13 +304,21 @@ fn drive_say(dry: bool, line: String) {
 // Pushes the tested commit; rejected, merges `origin/develop` once and pushes
 // HEAD (the merge is CI's to judge; a merge, not a rebase: a rebase replays the
 // tested commits and, on 2026-11-05, deleted every brief a replayed commit had
-// untracked). Prints `PUSHED <sha8>`. True when HEAD was pushed (after the
-// merge), false when exactly `sha`.
-fn drive_push(sha: String) -> bool throws {
+// untracked). Prints `PUSHED <sha8>`. "head" when HEAD was pushed (after the
+// merge), "sha" when exactly `sha`. When HEAD has moved past `sha` (builders
+// went on while CI ran, owner 2026-11-06), a rejected push merges nothing: a
+// merge would push HEAD's untested commits; "none", and the next suite, on
+// HEAD, pushes them all.
+fn drive_push(sha: String) -> String throws {
 	let first = process::run("git", ["push", "origin", f"{sha}:develop"])
-	let mut pushed = sha
-	let mut head = false
+	let mut pushed = sha.clone()
+	let mut head = "sha"
 	if !first.ok {
+		let now = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		if now != sha {
+			println(f"SUITE {drive_short(sha)} green, push rejected and HEAD moved on: the next suite pushes")
+			return "none"
+		}
 		// The shared checkout holds other agents' unfinished files and build locks:
 		// they are stashed around the merge, not a reason to stop (2026-10-28).
 		let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
@@ -317,10 +328,19 @@ fn drive_push(sha: String) -> bool throws {
 		let second = process::run("git", ["push", "origin", "HEAD:develop"])
 		if !second.ok { drive_escalate("push rejected after one merge") }
 		pushed = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
-		head = true
+		head = "head"
 	}
 	println(f"PUSHED {drive_short(pushed)}")
 	return head
+}
+
+// True when this driver's background suite has finished (its exit file is
+// there): drive_settle then handles it without waiting.
+fn drive_suite_done() -> bool throws {
+	let testing = drive_testing()
+	if testing == "" { return false }
+	let sha = testing.split(" ").collect()[0].clone()
+	return fs::exists(f"{drive_lock_dir()}/exit-{sha}", fs::Root::Anywhere)
 }
 
 // A failed merge must not leave the shared checkout mid-merge: the conflicted
@@ -658,13 +678,13 @@ fn drive_settle(exe: String, dir: String) throws {
 		let steps = drive_red_steps(out)
 		if steps == "" {
 			println(f"SUITE {drive_short(sha)} green")
-			let all = drive_push(sha)
+			let how = drive_push(sha)
 			let mut left: Vec[String] = []
 			let mut seen: i64 = 0
 			for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
 				if l.trim() == "" { continue }
 				seen += 1
-				if seen > covered && !all { left.push(l.trim().clone()) }
+				if how == "none" || (seen > covered && how == "sha") { left.push(l.trim().clone()) }
 			}
 			let mut body: String = ""
 			if left.len() > 0 { body = left.join("\n") + "\n" }
@@ -773,7 +793,7 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 	)
 	drive_say(
 		dry,
-		f"before the next batch's first builder (or a bump, or the end): wait for it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock",
+		f"builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock",
 	)
 	drive_say(
 		dry,
@@ -1062,7 +1082,7 @@ fn drive_cycle(exe: String, dir: String, lines_file: String) -> String throws {
 fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 	drive_say(
 		dry,
-		"a batch's suite still running (target/suite.lock/testing): wait for it and handle it (drive_settle) first",
+		"a batch's suite that has finished (target/suite.lock/exit-<sha>): handle it (drive_settle) first; one still running: go on, CI runs it",
 	)
 	drive_post_brief(dry, brief)
 	drive_agent(exe, dry, dir, brief, "builder")
@@ -1374,13 +1394,11 @@ fn drive_focus_end(
 ) throws {
 	let path = "docs/briefs/focus.txt"
 	drive_suite(exe, dry, dir)
-	drive_say(dry, "wait for the suite (drive_settle)")
 	drive_say(
 		dry,
 		f"gh api {drive_comments_api("<lane issue of " + area + ">")} -F body=@<the block's line, the footer>",
 	)
 	if !dry {
-		drive_settle(exe, dir)
 		let stamp = process::run("date", ["+%F %H:%M"]).stdout.trim().clone()
 		let line = drive_focus_record(stamp, area, dir, briefs, cost_from)
 		drive_post_focus(file, area, line)
@@ -1395,6 +1413,7 @@ fn drive_focus_end(
 		let cyc = drive_cycle(exe, other.clone(), "")
 		let green = cyc.contains(" green\n") || cyc.trim().ends_with(" green")
 		if green && cyc.contains("BUMP pending") {
+			drive_settle(exe, dir)
 			let rel = process::run(
 				exe,
 				["run", "scripts/cycle.nika", "--", other.clone(), "--apply"],
@@ -1444,7 +1463,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 			let urgent = drive_focus_blocking(bugs)
 			if urgent != "" {
 				if runs >= max { drive_escalate(f"--max {max} agent runs reached") }
-				if !dry && drive_testing() != "" { drive_settle(exe, dir) }
+				if !dry && drive_suite_done() { drive_settle(exe, dir) }
 				let bugs_from = drive_line_count(drive_read(f"{bugs}/cost.txt"))
 				drive_builder(exe, dry, bugs, urgent)
 				runs += 1
@@ -1477,7 +1496,9 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 			println(action)
 			process::exit(2)
 		}
-		if !dry && action.starts_with("NEXT ") && drive_testing() != "" {
+		// Builders go on while CI runs the suite (owner, 2026-11-06); a
+		// finished suite is handled before the next builder.
+		if !dry && action.starts_with("NEXT ") && drive_suite_done() {
 			drive_settle(exe, dir)
 			continue
 		}
