@@ -1,0 +1,9 @@
+// Two tasks that only read one lock run beside each other (Part II 12.2, #985).
+fn main() {
+	let seen = SharedMut(7)
+	async {
+		async seen.access fn(v) { v + 1 }
+		async seen.get()
+	}
+	println(f"{seen.get()}")
+}

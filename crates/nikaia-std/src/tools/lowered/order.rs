@@ -75,6 +75,7 @@ impl Verdict {
 pub(crate) fn same_resource(kind: &str, named: Option<&str>, unnameable: bool) -> String {
     if named.is_some() {
         let name = nikaia_std::index::or(named, || "");
+        if kind == "lock" { return format!("both reach the lock `{}`, and one writes it", name); }
         return format!("both reach {} `{}`, and one writes it", kind, name);
     }
     if unnameable { return format!("both touch a {} the compiler can't name, and one writes to it", kind); }

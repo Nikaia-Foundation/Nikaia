@@ -68,10 +68,10 @@ pub(crate) fn check_walks_task(state: &CheckState, world: &CheckWorld<'_, '_, '_
         CheckAsyncWaitAt::BeforeStatement(start) => start,
         CheckAsyncWaitAt::Before(operation) => nikaia_std::index::or(world.here.spans.get(&u32::try_from(operation).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"))).map(|__nikaia_it| __nikaia_it.end), || at.end.into()) as i64,
     };
-    Some(CheckWalksTask { span: Span { start: at.start, end: at.end }, until, operations: check_walks_task_operations(inner, world.words, walking) })
+    Some(CheckWalksTask { span: Span { start: at.start, end: at.end }, until, operations: check_walks_task_operations(state, inner, world.words, walking) })
 }
 
-pub(crate) fn check_walks_task_operations(inner: &Expr, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Option<Vec<Operation>> {
+pub(crate) fn check_walks_task_operations(state: &CheckState, inner: &Expr, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Option<Vec<Operation>> {
     let mut values: Vec<Expr> = vec![];
     match inner {
         Expr::Closure { body, .. } => {
@@ -88,6 +88,14 @@ pub(crate) fn check_walks_task_operations(inner: &Expr, words: &winnow_grammar::
     }
     let mut out: Vec<Operation> = vec![];
     for value in values.into_iter() {
+        match check_walks_lock_door(state, &value, words, walking) {
+            CheckWalksDoor::Door(ref operation) => {
+                out.push(operation.clone());
+                continue;
+            },
+            CheckWalksDoor::Unaccounted => { return None; },
+            CheckWalksDoor::NotADoor => { },
+        }
         let found = accounted(&Stmt::Expr(value), words, walking);
         match found {
             Accounted::Operation(ref operation) => { out.push(operation.clone()); },
@@ -96,6 +104,47 @@ pub(crate) fn check_walks_task_operations(inner: &Expr, words: &winnow_grammar::
         }
     }
     Some(out)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CheckWalksDoor {
+    NotADoor,
+    Door(Operation),
+    Unaccounted,
+}
+
+pub(crate) fn check_walks_lock_door(state: &CheckState, value: &Expr, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> CheckWalksDoor {
+    match value {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !config.is_empty() { return CheckWalksDoor::NotADoor; }
+            check_walks_door_on(state, value, receiver, &words.resolve(method).to_string(), args, words, walking)
+        },
+        _ => CheckWalksDoor::NotADoor,
+    }
+}
+
+pub(crate) fn check_walks_door_on(state: &CheckState, value: &Expr, receiver: &Expr, door: &str, args: &[Expr], words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> CheckWalksDoor {
+    let write = door == "set" || door == "update";
+    if !write && door != "get" && door != "access" { return CheckWalksDoor::NotADoor; }
+    let name = match receiver {
+        Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_string() },
+        _ => return CheckWalksDoor::NotADoor,
+    };
+    let held = match state.lookup(&name) { Some(__nikaia_value) => __nikaia_value, None => return CheckWalksDoor::NotADoor };
+    let lock = match held {
+        Ty::Named { ref name, .. } => name.to_string(),
+        _ => return CheckWalksDoor::NotADoor,
+    };
+    if lock != "SharedMut" && lock != "Locked" { return CheckWalksDoor::NotADoor; }
+    let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new();
+    names_in(value, words, &mut mentions);
+    let mut reaches: Vec<Reached> = vec![Reached { kind: String::from("lock"), named: Some(name.to_string()), unknown: false, write }];
+    for arg in args.iter() {
+        let inside = match check_walks_task_operations(state, arg, words, walking) { Some(__nikaia_value) => __nikaia_value, None => return CheckWalksDoor::Unaccounted };
+        for operation in inside.iter() { reaches.extend(operation.reaches.iter().cloned()); }
+    }
+    CheckWalksDoor::Door(Operation { binds: None, mentions, reaches, callee: format!("{}::{}", lock, door) })
 }
 
 pub(crate) fn check_walks_task_clash(earlier: &CheckWalksTask, later: &CheckWalksTask) -> Option<Verdict> {

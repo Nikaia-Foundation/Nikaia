@@ -1,0 +1,10 @@
+// Two tasks that write two different locks run beside each other (Part II 12.2, #985).
+fn main() {
+	let left = SharedMut(0)
+	let right = Locked(10)
+	async {
+		async left.update fn(mut v) { v += 1 }
+		async fn { right.set(12) }
+	}
+	println(f"{left.get()} {right.get()}")
+}

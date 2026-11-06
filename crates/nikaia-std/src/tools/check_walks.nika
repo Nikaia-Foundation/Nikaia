@@ -115,13 +115,14 @@ fn check_walks_task(state: ref CheckState, world: ref CheckWorld, walking: ref W
         CheckAsyncWaitAt::BeforeStatement(start) => start,
         CheckAsyncWaitAt::Before(operation) => (world.here.spans.get(operation as u32)?.end ?? at.end) as i64,
     }
-    return CheckWalksTask { span: Span { start: at.start, end: at.end }, until: until, operations: check_walks_task_operations(inner, world.words, walking) }
+    return CheckWalksTask { span: Span { start: at.start, end: at.end }, until: until, operations: check_walks_task_operations(state, inner, world.words, walking) }
 }
 
 /// What a task performs, one operation per statement of a run lambda or the
 /// one of its expression; `null` where a part cannot be accounted for. Each is
-/// read as an expression statement: what a task binds is its own.
-fn check_walks_task_operations(inner: ref Expr, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Vec[Operation]? {
+/// read as an expression statement: what a task binds is its own. A door on a
+/// lock (`check_walks_lock_door`) is read here, before the ledger walk.
+fn check_walks_task_operations(state: ref CheckState, inner: ref Expr, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Vec[Operation]? {
     let mut values: Vec[Expr] = []
     match inner {
         Expr::Closure { body, .. } => {
@@ -138,6 +139,14 @@ fn check_walks_task_operations(inner: ref Expr, words: ref winnow_grammar::Inter
     }
     let mut out: Vec[Operation] = []
     for value in values.drain() {
+        match check_walks_lock_door(state, value, words, walking) {
+            CheckWalksDoor::Door(operation) => {
+                out.push(operation.clone())
+                continue
+            },
+            CheckWalksDoor::Unaccounted => return null,
+            CheckWalksDoor::NotADoor => {},
+        }
         let found = accounted(Stmt::Expr(value), words, walking)
         match found {
             Accounted::Operation(operation) => out.push(operation.clone()),
@@ -146,6 +155,64 @@ fn check_walks_task_operations(inner: ref Expr, words: ref winnow_grammar::Inter
         }
     }
     return out
+}
+
+/// What a task's statement is when read as a **door on a lock** (Part II
+/// 12.2, #985): not one, one accounted for, or one whose lambda or argument
+/// is not.
+enum CheckWalksDoor {
+    NotADoor,
+    Door(Operation),
+    Unaccounted,
+}
+
+/// **A door on a lock bound to a local or a parameter** (Part II 12.2,
+/// #985): `get` and `access` read the lock, `set` and `update` write it, and
+/// the lock is named by its binding, so two doors on one binding meet and two
+/// on two bindings do not. What the door's lambda and its other arguments
+/// reach is the door's too; a part not accounted for makes the whole door
+/// so (Part III C.4). A lock reached through a field or a call's result is no
+/// door here, and the ledger walk does not account it either.
+fn check_walks_lock_door(state: ref CheckState, value: ref Expr, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> CheckWalksDoor {
+    return match value {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            if config.len() > 0 {
+                return CheckWalksDoor::NotADoor
+            }
+            check_walks_door_on(state, value, receiver, words.resolve(method).clone(), args, words, walking)
+        },
+        else => CheckWalksDoor::NotADoor,
+    }
+}
+
+// The door `door` on `receiver`, where it is a lock's.
+fn check_walks_door_on(state: ref CheckState, value: ref Expr, receiver: ref Expr, door: String, args: ref Vec[Expr], words: ref winnow_grammar::InternerContext, walking: ref Walking) -> CheckWalksDoor {
+    let write = door == "set" || door == "update"
+    if !write && door != "get" && door != "access" {
+        return CheckWalksDoor::NotADoor
+    }
+    let name = match receiver {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        else => return CheckWalksDoor::NotADoor,
+    }
+    let held = state.lookup(name) ?? return CheckWalksDoor::NotADoor
+    let lock = match held {
+        Ty::Named { name, .. } => name.clone(),
+        else => return CheckWalksDoor::NotADoor,
+    }
+    if lock != "SharedMut" && lock != "Locked" {
+        return CheckWalksDoor::NotADoor
+    }
+    let mut mentions: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(value, words, mentions)
+    let mut reaches: Vec[Reached] = [Reached { kind: "lock", named: name.clone(), unknown: false, write: write }]
+    for arg in args {
+        let inside = check_walks_task_operations(state, arg, words, walking) ?? return CheckWalksDoor::Unaccounted
+        for operation in inside {
+            reaches.extend(operation.reaches.clone())
+        }
+    }
+    return CheckWalksDoor::Door(Operation { binds: null, mentions: mentions, reaches: reaches, callee: f"{lock}::{door}" })
 }
 
 /// Whether two tasks meet on a resource one of them writes, and the verdict

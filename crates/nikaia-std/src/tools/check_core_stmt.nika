@@ -2408,10 +2408,12 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
     if count > 0 {
         state.views_end(state.scope.len() as i64 - 1, block.stmts[count - 1].span.end as i64)
     }
-    state.scope.pop()
+    // **Before the block's names go**: a door on a lock bound in this block
+    // is a touch of that lock, named by its binding (#985).
     if ends_group != null {
         state.tasks_meet_on_nothing(world, block, ends_group ?? 0)
     }
+    state.scope.pop()
     return tail
 }
 

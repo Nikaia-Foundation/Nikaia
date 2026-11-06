@@ -125,6 +125,11 @@ impl Verdict {
 fn same_resource(kind: ref String, named: ref String?, unnameable: bool) -> String {
     if named != null {
         let name = named ?? ""
+        // A lock is named by its binding (Part II 12.2, #985), which is a
+        // name of the program's and not of the kind's.
+        if kind == "lock" {
+            return f"both reach the lock `{name}`, and one writes it"
+        }
         return f"both reach {kind} `{name}`, and one writes it"
     }
     if unnameable {
