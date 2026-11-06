@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1348] — 2026-11-06
+
+**Tests: the read of async_outer_write_shared_mut_runs follows the group, as Part II 12.2 orders a get after an update (#985); Checker: a door on a lock bound to a name is a touch of that lock, so two tasks that write one lock are NK2104; limit: replaces workers: on Par::fold and par_fold, and a method's unknown option is NK1109; Checker: a task is ordered against the main-line statements in its window, NK2104 where both reach a resource one writes (#1259); ADR-269 D22: an expected stop is declared by NAME.stops (#1260)**
+- Two tasks of one `async` group that write the same `SharedMut` or `Locked` bound to a local or parameter are refused with NK2104, naming the lock; two reads, or two different locks, still run beside each other.
+- Two tasks of one `async` group that write the same `SharedMut` or `Locked` (bound to a local or a parameter) are refused with NK2104, naming the lock; two reads, or two different locks, still run beside each other.
+- `limit:` replaces `workers:` on folds (ADR-async-5 D27, #987). `Par::fold(init, step, merge; limit:)` and a grammar's `par_fold(...; limit:)` cap how many accumulators fold at once; `workers:` is refused (NK1109) with a help naming `limit:`. A method call now refuses an option its declaration does not have (NK1109), as a function call did; before, the option was dropped without a word.
+- Checker: a task of an async group is ordered against the main-line statements in its window (Part I 8.1.2): a statement beside a task that reaches a resource the task reaches, one writing it (stdout, stderr, files, a lock bound to a name), is NK2104.
+- nikaia test: a program that stops at run time on purpose (panic, broken run-time check) is a test with NAME.stops beside it, holding its standard error; --bless rewrites a .stops but never makes one (#1260)
+
 ## [0.0.1347] — 2026-11-05
 
 **parser: a `-` that begins a line begins an expression (ADR-390) (#1247); tests: `nikaia fmt` formats every `async` form and is idempotent; parse tests for `async(detached)` without a lambda and an unknown option (ADR-async-5) (#984, #984); async: a function that starts an async task throws `task::Crashed` in its inferred throw set; website: teach `async` instead of `overlap` and `spawn`; async: a binding's refusal stands at its let (#1226); check: NK2101 names async(detached) for a detached task (#1227); spec: Part III's NK2107 row names the async task (ADR-async-5 D7) (#1229)**
