@@ -475,7 +475,8 @@ fn drive_launch(dir: String) throws {
 
 // `--ci-wait SHA LOG EXIT`: follows the CI run of the push of SHA to a `ci/`
 // branch, polling `gh api` every 30 s. Green writes `Gate: green` to LOG; red
-// (failure, cancelled, timed out) writes `Gate: red <job names>` and the last
+// (failure, timed out, or cancelled three times: a cancel is started again)
+// writes `Gate: red <job names>` and the last
 // 200 lines of each failed job's log; no run after 15 minutes is `Gate: red
 // ci-no-run`, none finished after 3 hours `Gate: red ci-timeout`. Then the exit
 // status (0 green, 1 red) to EXIT, through EXIT.tmp.
@@ -492,6 +493,7 @@ fn drive_ci_poll(sha: String) -> (String, bool) throws {
 	let repo = drive_repo()
 	let query = ".workflow_runs[] | select(.name == \"Nikaia\" and (.head_branch | startswith(\"ci/\"))) | \"\\(.id) \\(.status) \\(.conclusion)\""
 	let mut polls: i64 = 0
+	let mut reruns: i64 = 0
 	while true {
 		let runs = process::run(
 			"gh",
@@ -507,6 +509,16 @@ fn drive_ci_poll(sha: String) -> (String, bool) throws {
 		if runs.ok && words.len() >= 3 && words[1] == "completed" {
 			let id = words[0]
 			let url = f"https://github.com/{repo}/actions/runs/{id}"
+			if words[2] == "cancelled" && reruns < 3 {
+				// A newer push to the same `ci/` branch cancels the run
+				// (nikaia.yml concurrency); that is no verdict on SHA, so the
+				// run is started again on SHA and followed further.
+				process::run("gh", ["api", "-X", "POST", f"repos/{repo}/actions/runs/{id}/rerun"])
+				reruns += 1
+				polls += 1
+				process::run("sleep", ["30"])
+				continue
+			}
 			if words[2] == "success" {
 				return (f"CI run {url}: success\nGate: green\n", true)
 			} else {
