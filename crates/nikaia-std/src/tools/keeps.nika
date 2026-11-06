@@ -48,6 +48,10 @@ pub struct KeepsBody {
     /// D4): the clone is a count on the caller's owner, so the parameter takes
     /// the `Bytes` with its owner rather than a run of bytes to copy.
     pub cloned_keeps: collections::BTreeSet[String],
+    /// **The parameters written `T?` of a type other than text** (ADR-views-3
+    /// D2, #1254): `p ?? e` over one whose result is only read keeps nothing
+    /// of `p`.
+    pub options: collections::BTreeSet[String],
     /// **The parameters of function type, by which of their own parameters
     /// the code lends** (ADR-views-3 D14): one written `ref`, or named by the
     /// type's `from`. An argument handed there is lent to the call, not kept.
@@ -417,8 +421,12 @@ fn keeps_expression(expr: ref Expr, interner: ref winnow_grammar::InternerContex
                 keeps_expression(setting.value, interner, holes_of, context, own, library, walk)
             }
         }
-        Expr::MethodCall { receiver, args, config, .. } => {
-            keeps_expression(receiver, interner, holes_of, context, own, library, walk)
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            if a_read_option(receiver, interner, context) && a_method_that_lends(interner.resolve(method), context, own, library) {
+                keeps_read_option(receiver, interner, holes_of, context, own, library, walk)
+            } else {
+                keeps_expression(receiver, interner, holes_of, context, own, library, walk)
+            }
             keeps_expressions(args, interner, holes_of, context, own, library, walk)
             for setting in config {
                 keeps_expression(setting.value, interner, holes_of, context, own, library, walk)
@@ -431,16 +439,30 @@ fn keeps_expression(expr: ref Expr, interner: ref winnow_grammar::InternerContex
                 keeps_expression(setting.value, interner, holes_of, context, own, library, walk)
             }
         }
-        Expr::Binary { lhs, rhs, .. } => {
-            keeps_expression(lhs, interner, holes_of, context, own, library, walk)
-            keeps_expression(rhs, interner, holes_of, context, own, library, walk)
+        Expr::Binary { op, lhs, rhs, .. } => {
+            if op.is_comparison() && a_read_option(lhs, interner, context) {
+                keeps_read_option(lhs, interner, holes_of, context, own, library, walk)
+            } else {
+                keeps_expression(lhs, interner, holes_of, context, own, library, walk)
+            }
+            if op.is_comparison() && a_read_option(rhs, interner, context) {
+                keeps_read_option(rhs, interner, holes_of, context, own, library, walk)
+            } else {
+                keeps_expression(rhs, interner, holes_of, context, own, library, walk)
+            }
         }
         Expr::Unary { expr, .. } => keeps_expression(expr, interner, holes_of, context, own, library, walk),
         Expr::Try(inner, _) => keeps_expression(inner, interner, holes_of, context, own, library, walk),
         Expr::Async(inner, _, _) => keeps_expression(inner, interner, holes_of, context, own, library, walk),
         Expr::Throw(inner, _) => keeps_expression(inner, interner, holes_of, context, own, library, walk),
         Expr::Cast { expr, .. } => keeps_expression(expr, interner, holes_of, context, own, library, walk),
-        Expr::Field { base, .. } => keeps_expression(base, interner, holes_of, context, own, library, walk),
+        Expr::Field { base, .. } => {
+            if a_read_option(base, interner, context) {
+                keeps_read_option(base, interner, holes_of, context, own, library, walk)
+            } else {
+                keeps_expression(base, interner, holes_of, context, own, library, walk)
+            }
+        }
         Expr::SafeField { base, .. } => keeps_expression(base, interner, holes_of, context, own, library, walk),
         Expr::Index { base, index, .. } => {
             keeps_expression(base, interner, holes_of, context, own, library, walk)
@@ -611,7 +633,15 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         // `p.0 ?? ".."` and `s.name ?? ".."` move the option out of it, as a
         // part handed back does.
         Expr::Coalesce { value, .. } => keep_part(value, interner, context, own, library, walk),
-        Expr::SafeField { base, .. } => keep_named(base, interner, context, own, library, walk),
+        // **A read through `?.` of a field that copies keeps nothing**
+        // (ADR-views-3 D2, #1254): `row?.id ?? 0` copies the number out and
+        // leaves the row where it is.
+        Expr::SafeField { base, name, .. } => {
+            let parameter = parameter_named(base, interner, context)
+            if parameter == null || !a_field_that_copies(parameter ?? "", interner.resolve(name), context) {
+                keep_named(base, interner, context, own, library, walk)
+            }
+        },
         Expr::Try(value, _) => keep_named(value, interner, context, own, library, walk),
         Expr::Async(value, _, _) => keep_named(value, interner, context, own, library, walk),
         // **`p with { .. }` builds a value out of the whole of `p`** (Part I
@@ -1151,6 +1181,47 @@ fn parameter_named(expr: ref Expr, interner: ref winnow_grammar::InternerContext
         },
         else => null,
     }
+}
+
+// **`p ?? e` over an option of a type other than text** (ADR-views-3 D2,
+// #1254): the parameter `p`, or `null`.
+fn coalesced_option(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> String? {
+    return match expr {
+        Expr::Coalesce { value, .. } => {
+            let parameter = parameter_named(value, interner, context) ?? return null
+            if context.options.contains(parameter) { parameter } else { null }
+        },
+        else => null,
+    }
+}
+
+fn a_read_option(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> bool {
+    return coalesced_option(expr, interner, context) != null
+}
+
+// **`p ?? e` whose result is only read keeps nothing of `p`** (ADR-views-3
+// D2, #1254): a field read, a method that takes its receiver lent, a
+// comparison. Its two sides are walked as they stand; the `??` itself is not
+// classified. A `let` of one still keeps `p`: the name may leave the call.
+fn keeps_read_option(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
+    match expr {
+        Expr::Coalesce { value, fallback, .. } => {
+            keeps_expression(value, interner, holes_of, context, own, library, walk)
+            keeps_expression(fallback, interner, holes_of, context, own, library, walk)
+        }
+        else => keeps_expression(expr, interner, holes_of, context, own, library, walk),
+    }
+}
+
+// **A method every entry of that name takes its receiver lent**: one the
+// ledgers know, none of which takes it whole, in a body whose calls resolved.
+fn a_method_that_lends(method: ref String, context: ref KeepsBody, own: ref Ledger, library: ref Ledger) -> bool {
+    if context.unresolved {
+        return false
+    }
+    let ours = receiver_taken_in(own, context.own_methods, method, null)
+    let theirs = receiver_taken_in(library, context.library_methods, method, null)
+    return (ours.any || theirs.any) && !ours.hit && !theirs.hit
 }
 
 // **The parameter an expression is, or is a moving part of** (ADR-293 D32):
@@ -2114,6 +2185,14 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                     cloned_keeps.insert(view.text(a.name))
                 }
             }
+            // **The options of a type other than text** (ADR-views-3 D2, #1254).
+            let mut options: collections::BTreeSet[String] = collections::BTreeSet()
+            for a in args {
+                let written = view.text(a.ty.name)
+                if a.ty.is_nullable && !a.ty.is_slice && a.ty.code == null && written != "String" && written != "str" {
+                    options.insert(view.text(a.name))
+                }
+            }
             // **What each parameter of function type lends** (ADR-views-3 D14).
             let mut code_lends: collections::BTreeMap[String, Vec[bool]] = collections::BTreeMap()
             for a in args {
@@ -2127,7 +2206,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             // **The walk** (`uses_in`): every statement's expressions
             // classified where they stand, then the blocks it holds, and **the
             // value a body ends in leaves the call**, as a `return` does.
-            let context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps, code_lends: code_lends }
+            let context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps, code_lends: code_lends, options: options }
             let uses = uses_in(body, view.words, holes_of, context, ledger, library)
             // **A receiver the author wrote `ref` is not kept** (issue #173),
             // **nor an argument written `mut`** (0.0.258): each is a reference

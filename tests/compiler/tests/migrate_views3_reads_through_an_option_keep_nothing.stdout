@@ -1,0 +1,50 @@
+migrated TMP/reads.nika
+struct Row {
+    id: i64,
+    name: String,
+}
+
+fn id_of(row: Row?) -> i64 {
+    return row?.id ?? 0
+}
+
+fn back(xs: Vec[i64]?) -> i64 {
+    return (xs ?? []).len() as i64
+}
+
+fn same(r: Row?) -> bool {
+    return (r ?? Row { id: 0, name: "" }).id == 1
+}
+
+fn first(keep r: Row?) -> i64 {
+    let x = r ?? Row { id: 0, name: "" }
+    return x.id
+}
+
+fn give(keep r: Row?) -> Row {
+    return r ?? Row { id: 0, name: "" }
+}
+
+fn main() {
+    let r: Row? = Row { id: 1, name: "x" }
+    println(id_of(r))
+    println(id_of(r))
+    println(same(r))
+    println(same(r))
+    let xs: Vec[i64]? = [1, 2]
+    println(back(xs))
+    println(back(xs))
+    println(first(r))
+    println(give(null).id)
+}
+-- check: 0
+Checked TMP/reads.nika
+-- run: 0
+1
+1
+true
+true
+2
+2
+1
+0

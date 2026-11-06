@@ -1,0 +1,31 @@
+// #1254 step 1, ADR-views-3 D2: `nikaia migrate views-3` writes no `keep`
+// for a parameter only read through an option: `row?.id` of a field that
+// copies, and `p ?? e` over a non-text option whose result is only read (a
+// field read, a method that lends its receiver, a comparison). The migrated
+// program checks and runs with two calls in a row. A `??` whose result is
+// bound by a `let` or handed back still keeps (`first`, `give`): the name may
+// leave the call, and lending it changed tool signatures (v36).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/reads.nika", fs::Root::Anywhere, "struct Row {\n    id: i64,\n    name: String,\n}\n\nfn id_of(row: ref Row?) -> i64 {\n    return row?.id ?? 0\n}\n\nfn back(xs: ref Vec[i64]?) -> i64 {\n    return (xs ?? []).len() as i64\n}\n\nfn same(r: ref Row?) -> bool {\n    return (r ?? Row { id: 0, name: \"\" }).id == 1\n}\n\nfn first(r: ref Row?) -> i64 {\n    let x = r ?? Row { id: 0, name: \"\" }\n    return x.id\n}\n\nfn give(r: Row?) -> Row {\n    return r ?? Row { id: 0, name: \"\" }\n}\n\nfn main() {\n    let r: Row? = Row { id: 1, name: \"x\" }\n    println(id_of(r))\n    println(id_of(r))\n    println(same(r))\n    println(same(r))\n    let xs: Vec[i64]? = [1, 2]\n    println(back(xs))\n    println(back(xs))\n    println(first(r))\n    println(give(null).id)\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/reads.nika"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(f"{tmp}/reads.nika", fs::Root::Anywhere))
+    let checked = process::run(nikaia, ["check", f"{tmp}/reads.nika"])
+    println(f"-- check: {checked.code}")
+    print(f"{checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
+    let ran = process::run(nikaia, ["run", f"{tmp}/reads.nika"])
+    println(f"-- run: {ran.code}")
+    print(ran.stdout)
+    process::run("rm", ["-rf", tmp])
+}
