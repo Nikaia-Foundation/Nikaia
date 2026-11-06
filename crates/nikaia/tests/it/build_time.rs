@@ -702,31 +702,6 @@ fn a_string_a_body_built_crosses_as_a_view() {
     );
 }
 
-/// `NK1167`'s text half ([ADR-311](../../../docs/specification/adr/adr-311.md)
-/// D2). The way out used to be `NK1166`'s *write `.to_string()`*, which is
-/// advice that makes the problem worse: a `String` is the one thing a `const`
-/// cannot hold.
-#[test]
-fn a_constant_declared_a_string_is_sent_to_the_view() {
-    let found = findings("comptime NAME: String = \"nikaia\"\nfn main() { println(NAME) }\n");
-    let refusal = found
-        .iter()
-        .find(|f| f.code == "NK1167")
-        .unwrap_or_else(|| panic!("NK1167: {found:#?}"));
-    assert!(
-        refusal
-            .help
-            .as_deref()
-            .is_some_and(|h| h.contains("Declare it as `ref String`")),
-        "the view-shaped equivalent, not `.to_string()`: {:?}",
-        refusal.help
-    );
-    // In the language's words (ADR-184 D2, D4): `&str` is a spelling the
-    // parser refuses, so a way out that named it could not be taken.
-    let said = format!("{:?} {:?} {}", refusal.notes, refusal.help, refusal.message);
-    assert!(!said.contains('&') && !said.contains("[T; N]"), "{said}");
-}
-
 /// **A question about the value is answered**, which 0.0.112 refused and
 /// 0.0.113 does not.
 ///

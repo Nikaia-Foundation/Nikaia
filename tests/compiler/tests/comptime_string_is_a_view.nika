@@ -1,0 +1,24 @@
+// A `comptime` declared `String` is a view of text the build fixed
+// (ADR-views-3 D15, #1257): it means what `comptime X: ref String` means,
+// and nothing allocates.
+comptime GREETING: String = "hello"
+comptime JOINED: String = "ab" + "cd"
+
+fn shout(s: String) -> String {
+	s.to_uppercase()
+}
+
+fn main() {
+	comptime LOCAL: String = "local"
+	println(shout(GREETING))
+	let owned: String = GREETING.to_string()
+	println(owned)
+	println(GREETING.len())
+	println(GREETING == "hello")
+	println(JOINED)
+	if true {
+		comptime INNER: String = "inner"
+		println(INNER)
+	}
+	println(LOCAL)
+}

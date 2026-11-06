@@ -110,6 +110,7 @@ pub fn beside_fields(files: &[&Parsed]) -> BesideFields {
 /// One file, against the published fields of its package's files.
 pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     separate_repeated_ids(parsed);
+    comptime_text_is_a_view(parsed);
     use nikaia_std::tools::text_tiers::{TierAsk, hand_number, text_tiers, tier_write};
     let library = crate::contracts::std_ledger();
     let methods = nikaia_std::tools::ty::method_index(library);
@@ -190,6 +191,43 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     let written = tier_write(&mut parsed.program, &parsed.interner, &decided, text);
     parsed.text_tiers = written.said;
     parsed.text_views = written.views;
+}
+
+/// **A `comptime` declared `String` is a view of text the build fixed**
+/// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D15, #1257),
+/// as a `comptime` `Array[T]` is (D11): nothing allocates, so it means what
+/// `comptime X: ref String` means, and every later reader reads it so. Only a
+/// bare `String`; a `String?`, a `Vec[String]` or a struct with a `String`
+/// field is not text the build fixes as one view.
+///
+/// Rust because the type is fixed here, right after parsing, before the
+/// checker reads it (#1214, specification first).
+fn comptime_text_is_a_view(parsed: &mut Parsed) {
+    let text = parsed.interner.intern_string("String");
+    let mark = |ty: &mut Option<crate::ast::Type>| {
+        if let Some(ty) = ty
+            && ty.name == text
+            && ty.generics.is_empty()
+            && !ty.is_nullable
+            && !ty.is_tuple
+            && !ty.is_slice
+            && ty.code.is_none()
+        {
+            ty.is_view = true;
+        }
+    };
+    for item in &mut parsed.program.items {
+        if let Item::Comptime { ty, .. } = &mut item.node {
+            mark(ty);
+        }
+        each_block(&mut item.node, &mut |block| {
+            visit_block_mut(block, &mut |_| {}, &mut |stmt, _| {
+                if let Stmt::Comptime { ty, .. } = stmt {
+                    mark(ty);
+                }
+            })
+        });
+    }
 }
 
 // --- Walking the program mutably ------------------------------------------
