@@ -113,6 +113,7 @@ COMPILER_NIKA = {
     "bounds_basic.nika": "bounds: the loop over a list's own length that makes an index check unneeded (ADR-306 D3), which methods keep a list's length, and whether a body binds a name again (0.0.428, 0.0.429)",
     "bounds_body.nika": "bounds: what a loop's body does - a break that leaves it, the lists a turn pushes onto once, and the names a deferred body changes (ADR-306 D4, 0.0.431)",
     "bounds_frame.nika": "bounds: each function's frame, what it may write through `mut self` and its `mut` parameters, over the call graph to a fixed point (ADR-391 D2, #1328)",
+    "bounds_rules.nika": "bounds: rules between a struct's private list fields, read off the source, checked against every method that writes them, and used as facts (ADR-369 D4, #1330)",
     "bounds_shape.nika": "bounds: what the aggressive walk reads off a body once - its constants, unsigned names, the lists whose every write it sees and their aliases (ADR-306 D7, 0.0.436)",
     "bounds_report.nika": "bounds: the `--bounds` report - the sites of a file's items, grammars and folds walked, sorted and laid out with their reasons (S2)",
     "cexport_model.nika": "cexport: the entry points of a library C calls and the shapes that cross the boundary, read off the declarations (0.0.746)",

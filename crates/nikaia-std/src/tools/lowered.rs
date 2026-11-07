@@ -115,6 +115,14 @@ mod bounds_report_lowered {
 #[allow(unused_imports)]
 pub use bounds_report_lowered::*;
 
+mod bounds_rules_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/bounds_rules.rs");
+}
+#[allow(unused_imports)]
+pub use bounds_rules_lowered::*;
+
 mod bounds_shape_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2330,6 +2338,10 @@ pub mod bounds_reasons {
 pub mod bounds_report {
     #[allow(unused_imports)]
     pub use super::{BoundsReportFacts, bounds_report_checked};
+}
+pub mod bounds_rules {
+    #[allow(unused_imports)]
+    pub use super::{BoundsRule, rules_candidates};
 }
 pub mod bounds_shape {
     #[allow(unused_imports)]

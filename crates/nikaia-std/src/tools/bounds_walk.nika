@@ -216,6 +216,16 @@ struct BoundsWalk {
     /// a value of such a type is what a goal may be stated against
     /// (`bounding_relative`).
     typed: collections::BTreeMap[String, String],
+    /// **The rules between list fields this body uses** (ADR-369 D4,
+    /// `bounds_rules.nika`), and the values they hold of, by their type.
+    rules: Vec[BoundsRule],
+    rule_roots: collections::BTreeMap[String, String],
+    /// Whether this walk checks `rules` in a method: the index of each rule
+    /// the method is not proved to keep goes into `rule_failed`; the
+    /// `result` rules of the method are `checked_results`.
+    checking: bool,
+    checked_results: collections::BTreeSet[i64],
+    rule_failed: collections::BTreeSet[i64],
 }
 
 /// **A loop's candidate invariant, while its body is walked** (ADR-361 D4):
@@ -275,6 +285,46 @@ fn nothing_changed() -> BoundsChanged {
 /// nothing. The pass that checks proves too, and when it keeps every bound it
 /// assumed, what it proved stands.
 pub fn bounds_aggressive(args: ref Vec[FnArg], body: ref Block, nonnegative: collections::BTreeSet[String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> BoundsProven {
+    let mut walk = bounding_new(args, body, nonnegative, context, program, words)
+    rules_settle(walk, args, body, context, program, words, ask)
+    let mut settled = false
+    if !walk.shape.roots.is_empty() {
+        walk.collecting = true
+        for _round in 0..<2 {
+            bounding_pass(walk, args, body, context, program, words, ask)
+            walk.assumed = bounding_found(walk)
+        }
+        walk.collecting = false
+        for _round in 0..<4 {
+            walk.proven = no_proofs()
+            bounding_pass(walk, args, body, context, program, words, ask)
+            let found = bounding_found(walk)
+            let before = walk.assumed.len()
+            let mut kept: collections::BTreeMap[String, Range] = collections::BTreeMap()
+            for (key, bound) in walk.assumed {
+                let seen = found.get(key) ?? continue
+                if bound.holds(seen) {
+                    kept.insert(key.clone(), bound.clone())
+                }
+            }
+            walk.assumed = kept
+            if walk.assumed.len() == before {
+                settled = true
+                break
+            }
+        }
+    }
+    if !settled {
+        if !walk.shape.roots.is_empty() {
+            walk.assumed = collections::BTreeMap()
+        }
+        walk.proven = no_proofs()
+        bounding_pass(walk, args, body, context, program, words, ask)
+    }
+    return walk.proven
+}
+
+fn bounding_new(args: ref Vec[FnArg], body: ref Block, nonnegative: collections::BTreeSet[String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext) -> BoundsWalk {
     let pinned = pinned_in(body, words)
     let mut shape = shape_of(args, body, pinned, context.around, words)
     // **A `comptime` of the module, written as a number**, is that number
@@ -323,6 +373,11 @@ pub fn bounds_aggressive(args: ref Vec[FnArg], body: ref Block, nonnegative: col
         turns: [],
         leaving: collections::BTreeSet(),
         typed: collections::BTreeMap(),
+        rules: [],
+        rule_roots: collections::BTreeMap(),
+        checking: false,
+        checked_results: collections::BTreeSet(),
+        rule_failed: collections::BTreeSet(),
     }
     for arg in args {
         let name = words.resolve(arg.name).clone()
@@ -331,41 +386,7 @@ pub fn bounds_aggressive(args: ref Vec[FnArg], body: ref Block, nonnegative: col
             walk.typed.insert(name, ty)
         }
     }
-    let mut settled = false
-    if !walk.shape.roots.is_empty() {
-        walk.collecting = true
-        for _round in 0..<2 {
-            bounding_pass(walk, args, body, context, program, words, ask)
-            walk.assumed = bounding_found(walk)
-        }
-        walk.collecting = false
-        for _round in 0..<4 {
-            walk.proven = no_proofs()
-            bounding_pass(walk, args, body, context, program, words, ask)
-            let found = bounding_found(walk)
-            let before = walk.assumed.len()
-            let mut kept: collections::BTreeMap[String, Range] = collections::BTreeMap()
-            for (key, bound) in walk.assumed {
-                let seen = found.get(key) ?? continue
-                if bound.holds(seen) {
-                    kept.insert(key.clone(), bound.clone())
-                }
-            }
-            walk.assumed = kept
-            if walk.assumed.len() == before {
-                settled = true
-                break
-            }
-        }
-    }
-    if !settled {
-        if !walk.shape.roots.is_empty() {
-            walk.assumed = collections::BTreeMap()
-        }
-        walk.proven = no_proofs()
-        bounding_pass(walk, args, body, context, program, words, ask)
-    }
-    return walk.proven
+    return walk
 }
 
 /// One pass over the body: proofs into `proven`, what is written into
@@ -401,7 +422,14 @@ fn bounding_pass(mut walk: BoundsWalk, args: ref Vec[FnArg], body: ref Block, co
             bounding_bounded(walk, facts, length_of(name), range)
         }
     }
-    bounding_block(walk, body, facts, context, program, words, ask)
+    // **The rules between list fields** (ADR-369 D4), of `self` and of each
+    // parameter of a type that has them.
+    rules_given(walk, facts)
+    let leaves = bounding_block(walk, body, facts, context, program, words, ask)
+    if !leaves {
+        // What the body ends with is what it hands back.
+        rules_exit(walk, facts, rules_tail(body), false, context, program, words, ask)
+    }
 }
 
 /// The bounds this pass found: every key written, none written something
@@ -1275,6 +1303,10 @@ fn bounding_element_hit(v: ref String, place: ref String, keep_own: bool) -> boo
     if keep_own && v == f"{list}[{at}]{rest}" {
         return false
     }
+    // What holds of every element no longer does once one is written.
+    if v == bounding_element_of(list) || v.starts_with(f"{bounding_element_of(list)}.") {
+        return true
+    }
     if v.starts_with(f"{list}[") {
         let after: String = (v.split("]").last() ?? "").clone()
         return at.is_empty() || rest.is_empty() || after.is_empty() || after == rest || after.starts_with(f"{rest}.") || rest.starts_with(f"{after}.")
@@ -2050,6 +2082,11 @@ fn bounding_inside(mut walk: BoundsWalk, list: ref String, node: i64, index: ref
     }
     let at = bounding_lin(walk, index, facts, context, program, words)
     if at == null {
+        // **A position read out of a list of positions** (ADR-369 D4): what
+        // holds of its every element.
+        if rules_element_inside(walk, len, index, facts, words, ask) {
+            return true
+        }
         // A position read out of a list whose values are bounded (ADR-306
         // D7), or one `%` keeps small (D3).
         let range = bounding_range(walk, index, facts, context, program, words, ask) ?? return false
@@ -2210,8 +2247,11 @@ fn bounding_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFacts, c
             return false
         },
         Stmt::Return(value) => {
-            let returned = value ?? return true
-            bounding_expr(walk, returned, facts, context, program, words, ask)
+            if value != null {
+                let returned = value ?? return true
+                bounding_expr(walk, returned, facts, context, program, words, ask)
+            }
+            rules_exit(walk, facts, value, false, context, program, words, ask)
             return true
         },
         Stmt::Break => {
@@ -3248,6 +3288,10 @@ fn bounding_let(mut walk: BoundsWalk, names: ref Vec[winnow_grammar::Symbol], ty
     for fact in bounding_each(walk, value, held, facts, context, program, words) {
         bounding_push(walk, facts, fact)
     }
+    // **What a rule between list fields says of the value** (ADR-369 D4):
+    // a method's result inside a list, an element of a list of positions.
+    rules_result_facts(walk, facts, name, value, context, words)
+    rules_element_facts(walk, facts, name, value, words)
     if whole {
         facts.ints.insert(name.clone())
         if value_lin != null {
@@ -3707,8 +3751,11 @@ fn bounding_expr_leaves(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsF
     match expr {
         Expr::If { cond, then_branch, else_branch, .. } => return bounding_if_leaves(walk, cond, then_branch, else_branch, facts, context, program, words, ask),
         Expr::Return(value, _) => {
-            let returned = value ?? return true
-            bounding_expr(walk, returned, facts, context, program, words, ask)
+            if value != null {
+                let returned = value ?? return true
+                bounding_expr(walk, returned, facts, context, program, words, ask)
+            }
+            rules_exit(walk, facts, value, false, context, program, words, ask)
             return true
         },
         Expr::Break(_) => {
@@ -3721,6 +3768,7 @@ fn bounding_expr_leaves(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsF
         },
         Expr::Throw(value, _) => {
             bounding_expr(walk, value, facts, context, program, words, ask)
+            rules_exit(walk, facts, null, true, context, program, words, ask)
             return true
         },
         // `panic(…)` does not come back.
@@ -3855,11 +3903,21 @@ fn bounding_expr(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsFacts, c
                 bounding_assume(walk, facts, args[0], context, program, words)
             }
             let frame = called_function_frame(func, context, words)
+            let callee = callee_params(func, context.around, words)
+            if walk.checking && loaded == 0 {
+                let mut handed: Vec[String] = []
+                for at in 0..<args.len() {
+                    if hands_on(callee, at) {
+                        handed.push(path_of(args[at], words) ?? continue)
+                    }
+                }
+                let changed = rules_changed_by(frame, null, frame_handed(args, words), handed)
+                rules_at_call(walk, expr, null, claimed, args, changed, facts, context, program, words, ask)
+            }
             if frame != null && loaded == 0 {
                 bounding_by_frame(walk, facts, frame ?? nothing_changed(), func, args, words)
                 return
             }
-            let callee = callee_params(func, context.around, words)
             for at in 0..<args.len() {
                 let handed = path_of(args[at], words) ?? continue
                 // A load reads its bytes and changes nothing.
@@ -3987,8 +4045,23 @@ fn bounding_method_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref Expr
     // (ADR-391 D2): what it writes through `mut self` and its `mut`
     // parameters, put onto the receiver and the arguments.
     let frame = called_frame(call, method, context)
+    let receiver_path = path_of(receiver, words)
+    if walk.checking {
+        let mut handed: Vec[String] = []
+        if context.around.changing_receivers.contains(method) {
+            handed.push(path_of(receiver, words) ?? "self")
+        }
+        if context.around.changing_methods.contains(method) {
+            for arg in args {
+                handed.push(path_of(arg, words) ?? continue)
+            }
+        }
+        let changed = rules_changed_by(frame, receiver_path, frame_handed(args, words), handed)
+        rules_at_call(walk, call, receiver_path, method, args, changed, facts, context, program, words, ask)
+    }
     if frame != null {
         bounding_by_frame(walk, facts, frame ?? nothing_changed(), receiver, args, words)
+        rules_after_call(walk, facts, call, path_of(receiver, words), context)
         return
     }
     // **A method on an element may change it** and, the index not being
@@ -3996,7 +4069,6 @@ fn bounding_method_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref Expr
     if context.around.changing_receivers.contains(method) || !keeps_length(method) {
         bounding_forget_aliases(walk, facts, receiver, words)
     }
-    let receiver_path = path_of(receiver, words)
     if receiver_path != null {
         let name = receiver_path ?? ""
         // **A word read lies inside where its cut does** (ADR-320 D12):
@@ -4027,6 +4099,7 @@ fn bounding_method_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref Expr
             bounding_forget(walk, facts, text)
         }
     }
+    rules_after_call(walk, facts, call, path_of(receiver, words), context)
 }
 
 /// A method on a name: what it does to the name's length.
@@ -4144,15 +4217,24 @@ fn bounding_children(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsFact
             }
         },
         Expr::Unary { expr, .. } => bounding_expr(walk, expr, facts, context, program, words, ask),
-        Expr::Try(inner, _) => bounding_expr(walk, inner, facts, context, program, words, ask),
+        Expr::Try(inner, _) => {
+            bounding_expr(walk, inner, facts, context, program, words, ask)
+            rules_exit(walk, facts, null, true, context, program, words, ask)
+        },
         Expr::Async(inner, _, _) => bounding_expr(walk, inner, facts, context, program, words, ask),
-        Expr::Throw(inner, _) => bounding_expr(walk, inner, facts, context, program, words, ask),
+        Expr::Throw(inner, _) => {
+            bounding_expr(walk, inner, facts, context, program, words, ask)
+            rules_exit(walk, facts, null, true, context, program, words, ask)
+        },
         Expr::Cast { expr, .. } => bounding_expr(walk, expr, facts, context, program, words, ask),
         Expr::TryCatch { expr, handler, .. } => {
             bounding_expr(walk, expr, facts, context, program, words, ask)
             bounding_inner_block(walk, handler, facts, context, program, words, ask)
         },
-        Expr::Return(value, _) => bounding_maybe_expr(walk, value, facts, context, program, words, ask),
+        Expr::Return(value, _) => {
+            bounding_maybe_expr(walk, value, facts, context, program, words, ask)
+            rules_exit(walk, facts, value, false, context, program, words, ask)
+        },
         Expr::Coalesce { value, fallback, .. } => {
             bounding_expr(walk, value, facts, context, program, words, ask)
             bounding_expr(walk, fallback, facts, context, program, words, ask)

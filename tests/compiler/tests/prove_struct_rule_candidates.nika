@@ -1,0 +1,177 @@
+// #1330 (ADR-369 D4): the walk reads rules between a struct's private list
+// fields off the source as candidates. `Good` pushes `cols` and `ks`
+// together and builds them empty, so `cols.len() == ks.len()` is one and
+// holds, and `self.ks[i]` is proved. None of the others is a candidate, and
+// each one's `self.ks[i]` stays checked: `Open`'s `ks` is public, `Odd` is
+// built with lists of two lengths, `Taker` has a method that takes a
+// parameter `mut`, and `Grown`'s `ks` is pushed to by a free function,
+// which drops `Grown`'s rule and not `Good`'s. `Spoilt`'s positions are
+// refilled by `fill` outside its methods, so `self.items[self.refs[i]]`
+// stays checked too.
+struct Good {
+	cols: Vec[i64],
+	ks: Vec[i64],
+}
+
+impl Good {
+	fn add(ref mut self, c: i64, k: i64) {
+		self.cols.push(c)
+		self.ks.push(k)
+	}
+
+	fn total(ref self) -> i64 {
+		let mut i = 0
+		let mut sum = 0
+		while i < self.cols.len() {
+			sum = self.ks[i]
+			i += 1
+		}
+		return sum
+	}
+}
+
+struct Open {
+	cols: Vec[i64],
+	pub ks: Vec[i64],
+}
+
+impl Open {
+	fn add(ref mut self, c: i64, k: i64) {
+		self.cols.push(c)
+		self.ks.push(k)
+	}
+
+	fn total(ref self) -> i64 {
+		let mut i = 0
+		let mut sum = 0
+		while i < self.cols.len() {
+			sum = self.ks[i]
+			i += 1
+		}
+		return sum
+	}
+}
+
+struct Odd {
+	cols: Vec[i64],
+	ks: Vec[i64],
+}
+
+impl Odd {
+	fn add(ref mut self, c: i64, k: i64) {
+		self.cols.push(c)
+		self.ks.push(k)
+	}
+
+	fn total(ref self) -> i64 {
+		let mut i = 0
+		let mut sum = 0
+		while i < self.cols.len() {
+			sum = self.ks[i]
+			i += 1
+		}
+		return sum
+	}
+}
+
+struct Taker {
+	cols: Vec[i64],
+	ks: Vec[i64],
+}
+
+impl Taker {
+	fn add(ref mut self, c: i64, k: i64) {
+		self.cols.push(c)
+		self.ks.push(k)
+	}
+
+	fn swap_into(ref self, mut other: Vec[i64]) {
+		other.push(self.cols.len())
+	}
+
+	fn total(ref self) -> i64 {
+		let mut i = 0
+		let mut sum = 0
+		while i < self.cols.len() {
+			sum = self.ks[i]
+			i += 1
+		}
+		return sum
+	}
+}
+
+struct Spoilt {
+	items: Vec[i64],
+	refs: Vec[i64],
+}
+
+impl Spoilt {
+	fn node(ref mut self, v: i64) -> i64 {
+		self.items.push(v)
+		return self.items.len() - 1
+	}
+
+	fn link(ref mut self, v: i64) {
+		let at = self.node(v)
+		self.refs.push(at)
+	}
+
+	fn follow(ref self, i: i64) -> i64 {
+		if i < 0 || i >= self.refs.len() {
+			return 0
+		}
+		return self.items[self.refs[i]]
+	}
+}
+
+fn spoil(mut s: Spoilt) {
+	s.refs.fill(9)
+}
+
+struct Grown {
+	cols: Vec[i64],
+	ks: Vec[i64],
+}
+
+impl Grown {
+	fn add(ref mut self, c: i64, k: i64) {
+		self.cols.push(c)
+		self.ks.push(k)
+	}
+
+	fn total(ref self) -> i64 {
+		let mut i = 0
+		let mut sum = 0
+		while i < self.cols.len() {
+			sum = self.ks[i]
+			i += 1
+		}
+		return sum
+	}
+}
+
+fn grow(mut g: Grown) {
+	g.ks.push(1)
+}
+
+fn main() {
+	let mut good = Good { cols: [], ks: [] }
+	good.add(1, 2)
+	let mut open = Open { cols: [], ks: [] }
+	open.add(1, 3)
+	let mut odd = Odd { cols: [], ks: [] }
+	odd.add(1, 4)
+	let mut uneven = Odd { cols: [1], ks: [] }
+	uneven.add(1, 4)
+	let mut taker = Taker { cols: [], ks: [] }
+	taker.add(1, 5)
+	taker.swap_into([])
+	let mut spoilt = Spoilt { items: [], refs: [] }
+	spoilt.link(6)
+	println(f"{spoilt.follow(0)}")
+	spoil(spoilt)
+	let mut grown = Grown { cols: [], ks: [] }
+	grown.add(1, 7)
+	grow(grown)
+	println(f"{good.total()} {open.total()} {odd.total()} {taker.total()} {grown.total()}")
+}
