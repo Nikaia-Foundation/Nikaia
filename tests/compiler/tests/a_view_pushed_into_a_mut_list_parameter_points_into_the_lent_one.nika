@@ -1,0 +1,22 @@
+// A view of a lent parameter pushed into a `mut` list parameter points into
+// the caller's argument (ADR-283 D27, #1228): the two parameters share one
+// lifetime, as for text.
+struct Expr { n: i64, name: String }
+struct Block { exprs: Vec[Expr] }
+
+fn collect(block: ref Block, mut out: Vec[ref Expr]) {
+    for each in block.exprs {
+        if each.n > 1 {
+            out.push(each)
+        }
+    }
+}
+
+fn main() {
+    let block = Block { exprs: [Expr { n: 1, name: "a" }, Expr { n: 2, name: "b" }, Expr { n: 3, name: "c" }] }
+    let mut out: Vec[ref Expr] = []
+    collect(block, out)
+    for each in out {
+        println(f"{each.n} {each.name}")
+    }
+}
