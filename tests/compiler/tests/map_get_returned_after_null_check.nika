@@ -1,0 +1,46 @@
+// A map's read bound by a `let`, proved not `null`, is copied out where a
+// value of its own is wanted (ADR-293 D15, ADR-387 D1, #1291).
+use std::collections
+
+fn find(m: collections::BTreeMap[String, u32], name: String) -> u32? {
+    let known = m.get(name)
+    if known != null { return known }
+    return null
+}
+
+fn find_text(m: collections::BTreeMap[String, String], name: String) -> String? {
+    let known = m.get(name)
+    if known != null { return known }
+    return null
+}
+
+fn find_or_zero(m: collections::BTreeMap[String, u32], name: String) -> u32 {
+    let known = m.get(name)
+    if known != null { return known }
+    return 0
+}
+
+fn find_past_a_jump(m: collections::BTreeMap[String, u32], name: String) -> u32? {
+    let known = m.get(name)
+    if known == null { return null }
+    let held: u32? = known
+    return held
+}
+
+fn first_of(v: Vec[u32]) -> u32? {
+    let k = v.first()
+    if k != null { return k }
+    return null
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, u32] = collections::BTreeMap()
+    m.insert("a", 1)
+    let mut n: collections::BTreeMap[String, String] = collections::BTreeMap()
+    n.insert("a", "x")
+    println(f"{find(m, "a") ?? 0} {find(m, "b") ?? 0}")
+    println(f"{find_text(n, "a") ?? "-"} {find_text(n, "b") ?? "-"}")
+    println(f"{find_or_zero(m, "a")} {find_past_a_jump(m, "a") ?? 0}")
+    let v: Vec[u32] = [3, 4]
+    println(f"{first_of(v) ?? 0}")
+}

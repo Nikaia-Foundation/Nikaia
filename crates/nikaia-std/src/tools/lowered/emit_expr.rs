@@ -45,7 +45,8 @@ impl EmitState {
             match node {
                 Expr::Variable(name, _) => {
                     let name = *name;
-                    self.emit_expr_narrowed(out, &EmitOut { buf: emit_text(world, name), entries: vec![] }, how, false);
+                    let copied_out = self.facts.copied_views.contains(&at) && !self.facts.copied_args.contains(&at);
+                    self.emit_expr_narrowed(out, &EmitOut { buf: emit_text(world, name), entries: vec![] }, if copied_out { how + 64 } else { how }, false);
                     return Ok(());
                 },
                 Expr::Field { .. } => {
@@ -84,6 +85,20 @@ impl EmitState {
         let given_up = how / 8 % 2 == 1;
         let written = how / 16 % 2 == 1;
         let a_reference = how / 32 % 2 == 1;
+        let copied_out = how / 64 % 2 == 1;
+        if copied_out && !written {
+            if out.buf.ends_with("Some(") {
+                out.buf = nikaia_std::index::or(out.buf.strip_suffix("Some("), || "").to_string();
+                out.push("std::convert::identity(");
+                out.append(&name);
+                out.push(".copied()");
+                return;
+            }
+            out.push("*");
+            out.append(&name);
+            out.push(".unwrap()");
+            return;
+        }
         if written {
             if copied {
                 out.push("(*");

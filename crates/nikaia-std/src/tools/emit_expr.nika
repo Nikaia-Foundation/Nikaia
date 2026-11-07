@@ -64,7 +64,11 @@ impl EmitState {
         if how >= 0 {
             match node {
                 Expr::Variable(name, _) => {
-                    self.emit_expr_narrowed(out, EmitOut { buf: emit_text(world, name), entries: [] }, how, false)
+                    // **A proved view of a value that copies, where the value
+                    // is wanted, is copied out** (ADR-387 D1, #1291): a
+                    // `let` of a map's read binds `Option<&T>` below.
+                    let copied_out = self.facts.copied_views.contains(at) && !self.facts.copied_args.contains(at)
+                    self.emit_expr_narrowed(out, EmitOut { buf: emit_text(world, name), entries: [] }, if copied_out { how + 64 } else { how }, false)
                     return
                 },
                 // **A path of fields, as written, and then unwrapped**.
@@ -123,7 +127,8 @@ impl EmitState {
     /// A narrowed read of `name`, by the checker's flags in `how`: 1 copied,
     /// 2 an operand, 4 a struct or a list lent out of the option (#621), 8
     /// given up where the read hands it to something that keeps it, 16
-    /// written through (a path, ADR-382). A `path` of fields is not the
+    /// written through (a path, ADR-382), 64 a view of a value that copies
+    /// read where the value is wanted (#1291). A `path` of fields is not the
     /// caller's to give up: what it hands on is a copy.
     fn emit_expr_narrowed(ref self, mut out: EmitOut, name: EmitOut, how: i64, path: bool) sync {
         let copied = how % 2 == 1
@@ -134,6 +139,23 @@ impl EmitState {
         // **A name bound out of a lent value is a reference to the option**
         // (#898): put back into one, it is lent out as `Option<&T>`.
         let a_reference = (how / 32) % 2 == 1
+        // **A view of a value that copies is copied out** (ADR-387 D1,
+        // #1291): the option below is an `Option<&T>`, put back into a `T?`
+        // through `copied()`, read as the `T` through `*`.
+        let copied_out = (how / 64) % 2 == 1
+        if copied_out && !written {
+            if out.buf.ends_with("Some(") {
+                out.buf = (out.buf.strip_suffix("Some(") ?? "").clone()
+                out.push("std::convert::identity(")
+                out.append(name)
+                out.push(".copied()")
+                return
+            }
+            out.push("*")
+            out.append(name)
+            out.push(".unwrap()")
+            return
+        }
         if written {
             if copied {
                 out.push("(*")
