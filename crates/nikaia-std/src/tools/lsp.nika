@@ -22,9 +22,10 @@ use std::text
 /// program `entry` belongs to, read as `nikaia check` reads it with the files
 /// in `open` (a path to the text the editor holds) instead of the disk, and
 /// checked; nothing emitted, cached or written. Each finding comes with the
-/// path of the file it is about, warnings too.
+/// path of the file it is about, warnings too. `alone` checks `entry` as a
+/// single file, in no package: a document with no `file://` path (#1365).
 pub trait LspHost {
-    fn diagnose(ref self, entry: ref String, open: ref collections::BTreeMap[String, String]) -> Vec[(String, Shown)] sync
+    fn diagnose(ref self, entry: ref String, open: ref collections::BTreeMap[String, String], alone: bool) -> Vec[(String, Shown)] sync
 }
 
 /// A message the editor sent that cannot be read as one.
@@ -111,9 +112,10 @@ pub fn lsp_serve[H: LspHost](host: ref H) -> i64 throws {
     // The documents the editor has open, by path, and the URI it named each by.
     let mut open: collections::BTreeMap[String, String] = collections::BTreeMap()
     let mut uris: collections::BTreeMap[String, String] = collections::BTreeMap()
-    // The URIs whose markers the last check published, to be cleared when a
-    // check finds nothing there any more.
-    let mut marked: collections::BTreeSet[String] = collections::BTreeSet()
+    // The URIs whose markers a check published, each with the package that
+    // check was of, to be cleared when a check of that package finds nothing
+    // there any more.
+    let mut marked: collections::BTreeMap[String, String] = collections::BTreeMap()
     while true {
         let body = lsp_read_message() ?? return 1
         let message = json::parse(body) catch {
@@ -131,11 +133,15 @@ pub fn lsp_serve[H: LspHost](host: ref H) -> i64 throws {
                 let params = cargo_json_member(message, "params")
                 let document = cargo_json_member(params, "textDocument")
                 let uri = cargo_json_text(cargo_json_member(document, "uri")) ?? continue
-                let path = lsp_uri_path(uri) ?? continue
+                // **A document with no `file://` path** (`untitled:`) is
+                // named by its URI and belongs to no package (#1365): it is
+                // checked alone, as a single file.
+                let alone = !uri.starts_with("file://")
+                let path = if alone { uri.clone() } else { lsp_uri_path(uri) ?? continue }
                 if method == "textDocument/didOpen" {
                     open.insert(path.clone(), cargo_json_text(cargo_json_member(document, "text")) ?? "")
                     uris.insert(path.clone(), uri.clone())
-                    marked = lsp_publish(host, path, open, uris, marked)
+                    marked = lsp_publish(host, path, open, uris, marked, alone)
                 } else if method == "textDocument/didChange" {
                     // The whole text, as `textDocumentSync` 1 asks: the last
                     // change is the document.
@@ -145,15 +151,22 @@ pub fn lsp_serve[H: LspHost](host: ref H) -> i64 throws {
                         let changed: json::Value? = changes[last].clone()
                         open.insert(path.clone(), cargo_json_text(cargo_json_member(changed, "text")) ?? "")
                     }
-                    marked = lsp_publish(host, path, open, uris, marked)
+                    marked = lsp_publish(host, path, open, uris, marked, alone)
                 } else if method == "textDocument/didSave" {
-                    marked = lsp_publish(host, path, open, uris, marked)
+                    marked = lsp_publish(host, path, open, uris, marked, alone)
                 } else if method == "textDocument/didClose" {
                     open.remove(path)
                     uris.remove(path)
-                    if marked.contains(uri) {
+                    if marked.contains_key(uri) {
                         marked.remove(uri)
                         lsp_notify_diagnostics(uri, [])
+                    }
+                    // The package lost the editor's text of this file - all
+                    // of it where the file was never saved (#1365) - so an
+                    // open document beside it is checked again.
+                    if !alone {
+                        let beside = lsp_open_beside(path, open) ?? continue
+                        marked = lsp_publish(host, beside, open, uris, marked, false)
                     }
                 }
             },
@@ -241,10 +254,18 @@ pub fn lsp_position(source: ref String, at: i64) -> (i64, i64) {
 /// **What the check of `path`'s program says, published** (#1347): one
 /// `publishDiagnostics` for each file it found something in, one for `path`
 /// itself even when that is nothing, and an empty one for each file the last
-/// check marked and this one did not, so old markers disappear. What it
-/// gives back is the URIs it marked.
-fn lsp_publish[H: LspHost](host: ref H, path: ref String, open: ref collections::BTreeMap[String, String], uris: ref collections::BTreeMap[String, String], marked: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
-    let found = host.diagnose(path, open)
+/// check of the same package marked and this one did not, so old markers
+/// disappear; a check of another package leaves them (#1365: a document
+/// checked alone cleared the markers of a package's file). What it gives
+/// back is the URIs marked, each with its package: `path`'s directory, or
+/// `path` itself for a document checked alone.
+fn lsp_publish[H: LspHost](host: ref H, path: ref String, open: ref collections::BTreeMap[String, String], uris: ref collections::BTreeMap[String, String], marked: ref collections::BTreeMap[String, String], alone: bool) -> collections::BTreeMap[String, String] {
+    let checked: fs::Path = path
+    let package = match checked.parent() {
+        null => path.clone(),
+        dir => if alone { path.clone() } else { dir.text_of().clone() },
+    }
+    let found = host.diagnose(path, open, alone)
     let mut by_file: collections::BTreeMap[String, Vec[json::Value]] = collections::BTreeMap()
     by_file.insert(path.clone(), [])
     let mut sources: collections::BTreeMap[String, String] = collections::BTreeMap()
@@ -261,20 +282,40 @@ fn lsp_publish[H: LspHost](host: ref H, path: ref String, open: ref collections:
         let diagnostic = lsp_diagnostic(shown, source, uri)
         by_file.entry(file.clone()).or_insert([]).push(diagnostic)
     }
-    let mut now: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut now: collections::BTreeMap[String, String] = collections::BTreeMap()
     for (file, list) in by_file {
         let uri = lsp_uri_of(file, uris)
         if !list.is_empty() {
-            now.insert(uri.clone())
+            now.insert(uri.clone(), package.clone())
         }
         lsp_notify_diagnostics(uri, list.clone())
     }
-    for uri in marked {
-        if !now.contains(uri) && !by_file.keys().any(fn(file) { lsp_uri_of(file, uris) == uri }) {
+    for (uri, of) in marked {
+        if now.contains_key(uri) || by_file.keys().any(fn(file) { lsp_uri_of(file, uris) == uri }) {
+            continue
+        }
+        if of == package {
             lsp_notify_diagnostics(uri, [])
+        } else {
+            now.insert(uri.clone(), of.clone())
         }
     }
     return now
+}
+
+/// The first open document in the directory of `path`, a file of the same
+/// package; nothing where there is none.
+fn lsp_open_beside(path: ref String, open: ref collections::BTreeMap[String, String]) -> String? {
+    let closed: fs::Path = path
+    let dir = closed.parent() ?? return null
+    for key in open.keys() {
+        let held: fs::Path = key
+        let parent = held.parent() ?? continue
+        if parent.text_of() == dir.text_of() {
+            return key.clone()
+        }
+    }
+    return null
 }
 
 /// One `textDocument/publishDiagnostics` notification.
