@@ -27,6 +27,8 @@ use nikaia_std::fs;
 #[allow(unused_imports)]
 use nikaia_std::hash;
 #[allow(unused_imports)]
+use nikaia_std::io;
+#[allow(unused_imports)]
 use nikaia_std::node_id;
 #[allow(unused_imports)]
 use nikaia_std::process;
@@ -1651,6 +1653,14 @@ mod logic_smtlib_lowered {
 #[allow(unused_imports)]
 pub use logic_smtlib_lowered::*;
 
+mod lsp_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/lsp.rs");
+}
+#[allow(unused_imports)]
+pub use lsp_lowered::*;
+
 mod manifest_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3038,6 +3048,10 @@ pub mod logic_search {
 pub mod logic_smtlib {
     #[allow(unused_imports)]
     pub use super::{lg_smtlib_write, lg_symbol, lg_term, LgScript, LgReadError, LgRead, lg_smtlib_read};
+}
+pub mod lsp {
+    #[allow(unused_imports)]
+    pub use super::{LspRefusal, lsp_read_message, lsp_write_message, lsp_object, lsp_string, lsp_number, lsp_respond, lsp_refuse, lsp_capabilities, lsp_serve, lsp_uri_path, lsp_position};
 }
 pub mod manifest {
     #[allow(unused_imports)]

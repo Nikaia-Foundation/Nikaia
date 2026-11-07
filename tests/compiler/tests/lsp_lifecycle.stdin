@@ -1,0 +1,13 @@
+Content-Length: 119
+
+{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"processId": null, "rootUri": null, "capabilities": {}}}Content-Length: 57
+
+{"jsonrpc": "2.0", "method": "initialized", "params": {}}Content-Length: 67
+
+{"jsonrpc": "2.0", "method": "$/unknownNotification", "params": {}}Content-Length: 73
+
+{"jsonrpc": "2.0", "id": 2, "method": "textDocument/hover", "params": {}}Content-Length: 49
+
+{"jsonrpc": "2.0", "id": 3, "method": "shutdown"}Content-Length: 36
+
+{"jsonrpc": "2.0", "method": "exit"}

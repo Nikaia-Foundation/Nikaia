@@ -249,6 +249,9 @@ pub enum Command {
         #[arg(value_name = "FILE")]
         file: PathBuf,
     },
+    /// The language server an editor starts (#1347): LSP's JSON-RPC on
+    /// standard input and output, until the editor sends `exit`.
+    Lsp,
     /// Format `.nika` files in the one style (Part III 13.2,
     /// [ADR-337](../../../docs/specification/adr/adr-337.md)).
     ///
@@ -736,6 +739,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
         | Command::Cache { .. }
         | Command::Check { .. }
         | Command::Fmt { .. }
+        | Command::Lsp
         | Command::Migrate { .. }
         | Command::Interpret { .. }
         | Command::Explain { .. } => {
@@ -1121,6 +1125,11 @@ fn run() -> Result<()> {
             },
         ),
         Command::Check { file } => single_file(&args, file, Verb::Check),
+        Command::Lsp => {
+            let code = nikaia_std::rt::exec::block_on(nikaia_std::tools::lsp::lsp_serve())
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
+            std::process::exit(code as i32);
+        }
         Command::Fmt { files, check } => {
             let start = std::env::current_dir().context("finding the working directory")?;
             let code = nikaia::fmt::run(&start, files, *check)?;
