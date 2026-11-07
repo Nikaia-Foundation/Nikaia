@@ -85,4 +85,9 @@ together with the specification section and an example test.
 * The cycle's first `lower-std` with `$S/old/nikaia` can fail on files nobody changed; the new binary's `lower-std` is the one that counts, and that failure goes in the report. (issue-1228)
 * A `from` fix for text must also be probed with a struct type: the trait lowers only text `from` as a view, so a fix in `keeps.nika` breaks the struct case. (issue-1250)
 * A text `+` is a `Binary` node that the emitter recognises by `facts.concatenations.contains(span.start as i64)`, using the operator span, not `node_key`. (issue-1251)
+* Copy the old binary to the scratchpad before the first build, so each new test can be shown to fail there without a stash. (issue-1254-r1)
+* `nikaia check` on a new test inside `tests/compiler/tests/` reads the sibling files; write a test's `.stderr` with `nikaia test --filter NAME --bless` from `tests/compiler`. (issue-1261)
+* `pre-push` "self-hosted.svg out of date" can persist even when `badges.py` on the staged tree gives a byte-identical badge; compare with `cmp` and report it, don't chase it. (issue-1261)
+* Nikaia has no `loop` or `|x|` closures and declares mutables with `let mut`; write probes with `while true` and `fn(x) { … }`. (issue-1261)
+* a view of a lent parameter handed to an owning `String` result is a refusal with a `.clone()` hint by ADR-282 D8 and views-3 D12/D14, whatever an issue's expected output says. (issue-1263)
 
