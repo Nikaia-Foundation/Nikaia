@@ -98,4 +98,5 @@ together with the specification section and an example test.
 * Package-wide facts reach a file's tier pass only through `BesideFields` in `crates/nikaia/src/text_tiers.rs` (built in `beside_fields`, read by `refine_with`); add a field there rather than a new parameter at each caller. (issue-1272)
 * A two-file package test puts the struct in `tests/compiler/src/X_beside.nika` and the user in `X_beside_caller.nika`, and the program in `tests/` calls it as `compiler_tests::fn`. (issue-1272)
 * `cargo test -p nikaia --lib text_tiers::` runs 0 tests; the tier pass is covered only by tests/compiler programs. (issue-1272)
+* The cycle in builder.md writes `target/fast/nikaia lower-std` first, but after a failed attempt that binary holds the bad logic; run `$S/old/nikaia lower-std` first. (issue-1274)
 
