@@ -5418,8 +5418,46 @@ pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerCon
     }
     sf_slice_fields(program, words);
     sv_view_fields(program, words, &plain, opted);
+    lv_let_views(program, words, &views);
     made
 }
+
+pub(crate) fn lv_let_views(program: &mut Program, words: &winnow_grammar::InternerContext, views: &collections::BTreeMap<String, Vec<i64>>) { for item in program.items.iter_mut() { lv_item(&mut (*item).node, words, views); } }
+
+pub(crate) fn lv_item(item: &mut Item, words: &winnow_grammar::InternerContext, views: &collections::BTreeMap<String, Vec<i64>>) {
+    match item {
+        Item::Fn { body, .. } => { lv_block(&mut *body, words, views); },
+        Item::Test { body, .. } => { lv_block(&mut *body, words, views); },
+        Item::Impl { methods, .. } => { for method in methods.iter_mut() { lv_item(&mut (*method).node, words, views); } },
+        _ => { },
+    }
+}
+
+pub(crate) fn lv_block(block: &mut Block, words: &winnow_grammar::InternerContext, views: &collections::BTreeMap<String, Vec<i64>>) { for stmt in block.stmts.iter_mut() { lv_stmt(&mut (*stmt).node, words, views); } }
+
+pub(crate) fn lv_stmt(stmt: &mut Stmt, words: &winnow_grammar::InternerContext, views: &collections::BTreeMap<String, Vec<i64>>) {
+    match stmt {
+        Stmt::Let { names, mutable, ty, value, .. } => {
+            let mutable = *mutable;
+            if names.len() == 1 && !mutable && lv_a_piece(value, words, views) { lv_mark(&mut *ty, words); }
+        },
+        Stmt::For { body, .. } => { lv_block(&mut *body, words, views); },
+        Stmt::While { body, .. } => { lv_block(&mut *body, words, views); },
+        _ => { },
+    }
+}
+
+pub(crate) fn lv_a_piece(value: &Expr, words: &winnow_grammar::InternerContext, views: &collections::BTreeMap<String, Vec<i64>>) -> bool {
+    match value {
+        Expr::Index { .. } => hb_place_root(value, words).is_some(),
+        Expr::Call { .. } => hb_call_sources(value, words, views).is_some(),
+        _ => false,
+    }
+}
+
+pub(crate) fn lv_mark(ty: &mut Option<Type>, words: &winnow_grammar::InternerContext) { if ty.is_some() { lv_mark_run(ty.as_mut().unwrap(), words); } }
+
+pub(crate) fn lv_mark_run(ty: &mut Type, words: &winnow_grammar::InternerContext) { if sf_a_run(&ty, words) { ty.is_view = true; } }
 
 pub(crate) fn sf_slice_fields(program: &mut Program, words: &winnow_grammar::InternerContext) {
     let mut filled: collections::BTreeMap<String, bool> = collections::BTreeMap::new();

@@ -7303,7 +7303,78 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
     }
     sf_slice_fields(program, words)
     sv_view_fields(program, words, plain, opted)
+    lv_let_views(program, words, views)
     return made
+}
+
+/// **A `let` declared `Array[T]` with no length that is given a piece of a
+/// buffer is a view** (ADR-views-3 D8, D11; #1270): owning needs a length, so
+/// `let r: Array[i64] = xs[1..]`, `= grid[0]` or `= rest(v)`, a call of a
+/// function of the file whose result is a view of what it is handed, is
+/// written as `ref Array[T]` and holds a view of the place, as a field or a
+/// result of that type does. A `mut` let, a tuple of names, and a value of
+/// its own (a call of anything else, a literal) stay as written, and
+/// `NK1182` says the type needs a length.
+fn lv_let_views(mut program: Program, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) {
+    for mut item in program.items {
+        lv_item(item.node, words, views)
+    }
+}
+
+fn lv_item(mut item: Item, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) {
+    match item {
+        Item::Fn { body, .. } => lv_block(body, words, views),
+        Item::Test { body, .. } => lv_block(body, words, views),
+        Item::Impl { methods, .. } => {
+            for mut method in methods {
+                lv_item(method.node, words, views)
+            }
+        },
+        else => {},
+    }
+}
+
+/// The `let`s of `block` and of its loops.
+fn lv_block(mut block: Block, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) {
+    for mut stmt in block.stmts {
+        lv_stmt(stmt.node, words, views)
+    }
+}
+
+fn lv_stmt(mut stmt: Stmt, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) {
+    match stmt {
+        Stmt::Let { names, mutable, ty, value, .. } => {
+            if names.len() == 1 && !mutable && lv_a_piece(value, words, views) {
+                lv_mark(ty, words)
+            }
+        },
+        Stmt::For { body, .. } => lv_block(body, words, views),
+        Stmt::While { body, .. } => lv_block(body, words, views),
+        else => {},
+    }
+}
+
+/// A piece of a buffer: an element or a piece of a place (`xs[1..]`,
+/// `grid[0]`), or a call whose result is a view of the places it is handed.
+/// A whole name or field is not: the `let` would take it over.
+fn lv_a_piece(value: ref Expr, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) -> bool {
+    return match value {
+        Expr::Index { .. } => hb_place_root(value, words) != null,
+        Expr::Call { .. } => hb_call_sources(value, words, views) != null,
+        else => false,
+    }
+}
+
+fn lv_mark(mut ty: Type?, words: ref winnow_grammar::InternerContext) {
+    if ty != null {
+        lv_mark_run(ty, words)
+    }
+}
+
+fn lv_mark_run(mut ty: Type, words: ref winnow_grammar::InternerContext) {
+    if sf_a_run(ty, words) {
+        ty.is_view = true
+    }
 }
 
 /// **A field `Array[T]` with no length that the file fills only with a place
