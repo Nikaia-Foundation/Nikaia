@@ -1,0 +1,434 @@
+// crates/nikaia-std/src/tools/bounds_frame.nika
+//
+// **What each function of the program may write** (ADR-391 D2, #1328): its
+// frame, the paths it may change through `mut self` and through each `mut`
+// parameter - a field, a field's length, an element. A call then forgets
+// only what its callee's frame names, where it forgot every fact about the
+// receiver (ADR-306 D17).
+//
+// A frame is what the walk takes a block to change (`bounding_changed`),
+// read off the function's body and kept for the paths that start at `self`
+// or at a `mut` parameter, each written from its root: `#self` for the
+// receiver, `#0`, `#1`, ... for the parameters by position. A call in the
+// body adds its callee's frame, put onto what it is handed; so every frame
+// is found again from the last ones until none changes, starting from
+// nothing, over the call graph. A call the walk cannot resolve writes what
+// it wrote before: every path it is handed, any part of its receiver.
+//
+// Nothing here changes a meaning or a check: a frame only keeps facts the
+// walk would throw away (ADR-391 D2), and it is never published (D4).
+
+use std::collections
+
+/// **The deepest a frame's path goes below its root.** A deeper one, which
+/// only a recursion through a part of a part reaches, is cut there and taken
+/// as written whole: the frames stay finite, and so does their search.
+fn frame_depth() -> i64 {
+    return 4
+}
+
+/// The most rounds the search takes; one that has not settled by then
+/// leaves the program without frames, every call writing what it wrote
+/// before.
+fn frame_rounds() -> i64 {
+    return 64
+}
+
+/// **What the program around every body says about a call**: each free
+/// function's parameters, `true` where one is `mut`; the methods that take a
+/// parameter `mut`, of this program and of what `ledgers` describe; those
+/// that take their receiver `mut` (ADR-306 D17); and every function's frame,
+/// by its name or by `Type::method` (ADR-391 D2).
+pub fn bounds_around(program: ref Program, ledgers: ref Vec[ref Ledger], std_receivers: ref collections::BTreeMap[i64, String], simd_loads: ref collections::BTreeMap[i64, i64], words: ref winnow_grammar::InternerContext) -> Around {
+    let mut around = Around { functions: collections::BTreeMap(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet(), frames: collections::BTreeMap() }
+    for item in program.items {
+        match item.node {
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, args, receiver, .. } => {
+                            let written = name ?? continue
+                            if args.iter().any(fn(a) { a.mutable }) {
+                                around.changing_methods.insert(words.resolve(written).clone())
+                            }
+                            if receiver?.is_mut ?? false {
+                                around.changing_receivers.insert(words.resolve(written).clone())
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            Item::Fn { name, receiver, args, .. } => {
+                let written = name ?? continue
+                if receiver == null {
+                    around.functions.insert(words.resolve(written).clone(), args.iter().map(fn(a) { a.mutable }).collect())
+                }
+            },
+            else => {},
+        }
+    }
+    let mut context = frame_context(around, std_receivers, simd_loads)
+    // The search starts from every function writing nothing: a call to one
+    // not found yet would write what it wrote before, and a recursion
+    // would never get below that.
+    for (key, _) in frames_round(program, context, words) {
+        context.around.frames.insert(key.clone(), nothing_changed())
+    }
+    let mut round = 0
+    while round < frame_rounds() {
+        let next = frames_round(program, context, words)
+        if next == context.around.frames {
+            return context.around
+        }
+        context.around.frames = next
+        round += 1
+    }
+    context.around.frames = collections::BTreeMap()
+    return context.around
+}
+
+/// The context the search reads a body's changes with: only what a call
+/// needs, `around` and the receivers' types.
+fn frame_context(around: Around, std_receivers: ref collections::BTreeMap[i64, String], simd_loads: ref collections::BTreeMap[i64, i64]) -> BoundsContext {
+    return BoundsContext {
+        lengths: collections::BTreeSet(),
+        sized: collections::BTreeSet(),
+        arithmetic: collections::BTreeMap(),
+        nonnegative: collections::BTreeSet(),
+        char_codes: collections::BTreeSet(),
+        ensured: collections::BTreeMap(),
+        required: collections::BTreeMap(),
+        each: collections::BTreeMap(),
+        std_receivers: std_receivers.clone(),
+        simd_loads: simd_loads.clone(),
+        shifts: collections::BTreeMap(),
+        given: collections::BTreeMap(),
+        negations: collections::BTreeMap(),
+        classes: collections::BTreeMap(),
+        text_lengths: collections::BTreeMap(),
+        text_classes: collections::BTreeMap(),
+        around: around,
+        whole_fields: collections::BTreeSet(),
+        array_lengths: collections::BTreeMap(),
+        through_loops: false,
+        decided: collections::BTreeMap(),
+    }
+}
+
+/// **Every function's frame, from the frames `context` holds.** Methods of
+/// one type under one name are joined.
+fn frames_round(program: ref Program, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, BoundsChanged] {
+    let mut out: collections::BTreeMap[String, BoundsChanged] = collections::BTreeMap()
+    for item in program.items {
+        match item.node {
+            Item::Fn { name, receiver, args, body, .. } => {
+                let written = name ?? continue
+                frame_join(out, words.resolve(written).clone(), frame_of_body(receiver, args, body, context, words))
+            },
+            Item::Impl { target, methods, .. } => {
+                let owner = words.resolve(target.name).clone()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, receiver, args, body, .. } => {
+                            let written = name ?? continue
+                            frame_join(out, f"{owner}::{words.resolve(written)}", frame_of_body(receiver, args, body, context, words))
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+fn frame_join(mut frames: collections::BTreeMap[String, BoundsChanged], key: String, frame: BoundsChanged) {
+    let mut joined = frames.get(key)?.clone() ?? nothing_changed()
+    bounding_extend(joined, frame)
+    frames.insert(key, joined)
+}
+
+/// **One function's frame**: what its body changes, kept for the paths from
+/// `self`, where the receiver is `mut`, and from each `mut` parameter, each
+/// written from its root. A name bound to a part of one of them - a `for`
+/// binding, a `match` arm's, a lambda's parameter handed to a method on it -
+/// writes there: what it changes is that part, written whole.
+fn frame_of_body(receiver: ref Receiver?, args: ref Vec[FnArg], body: ref Block, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> BoundsChanged {
+    let mut out = nothing_changed()
+    let mut roots: collections::BTreeMap[String, String] = collections::BTreeMap()
+    if receiver?.is_mut ?? false {
+        roots.insert("self", "#self")
+    }
+    for (at, arg) in args.iter().enumerate() {
+        if arg.mutable {
+            roots.insert(words.resolve(arg.name).clone(), f"#{at}")
+        }
+    }
+    if roots.is_empty() {
+        return out
+    }
+    let changed = bounding_changed(body, context, words)
+    let mut aliases: collections::BTreeMap[String, String] = collections::BTreeMap()
+    // Two rounds: one alias may be bound to a part of another.
+    frame_aliases_block(body, roots, aliases, words)
+    frame_aliases_block(body, roots, aliases, words)
+    for path in changed.values {
+        frame_put(out, path, 0, roots, aliases)
+    }
+    for path in changed.lengths {
+        frame_put(out, path, 1, roots, aliases)
+    }
+    for path in changed.parts {
+        frame_put(out, path, 2, roots, aliases)
+    }
+    for place in changed.elements {
+        let pieces: Vec[ref String] = place.split("|").collect()
+        if pieces.len() != 3 {
+            continue
+        }
+        let list = pieces[0]
+        if roots.contains_key(path_root(list)) {
+            let mapped = frame_rooted(list, roots)
+            if frame_deep(mapped) {
+                out.values.insert(frame_cut(mapped))
+            } else {
+                // The element's index is the callee's own name: at the
+                // call, any element.
+                out.elements.insert(f"{mapped}||{pieces[2]}")
+            }
+        } else {
+            frame_put(out, list, 0, roots, aliases)
+        }
+    }
+    return out
+}
+
+/// A path the body changes, as `kind` says (0 its value, 1 its length, 2
+/// the parts of it), put into the frame from its root; through an alias,
+/// the part the alias is bound to, written whole; a path from a local of
+/// the body's own, nowhere.
+fn frame_put(mut out: BoundsChanged, path: ref String, kind: i64, roots: ref collections::BTreeMap[String, String], aliases: ref collections::BTreeMap[String, String]) {
+    let mut at = path.clone()
+    let mut whole = false
+    let mut steps = 0
+    while !roots.contains_key(path_root(at)) {
+        let source = aliases.get(path_root(at)) ?? return
+        at = source.clone()
+        whole = true
+        steps += 1
+        if steps > aliases.len() {
+            // Bound to itself, through another: every root, written whole.
+            for (_, root) in roots {
+                out.values.insert(root.clone())
+            }
+            return
+        }
+    }
+    let mapped = frame_rooted(at, roots)
+    if whole || kind == 0 || frame_deep(mapped) {
+        out.values.insert(frame_cut(mapped))
+    } else if kind == 1 {
+        out.lengths.insert(mapped)
+    } else {
+        out.parts.insert(mapped)
+    }
+}
+
+/// `path` with its root written as the frame writes it: `#self.rows`.
+fn frame_rooted(path: ref String, roots: ref collections::BTreeMap[String, String]) -> String {
+    let root = path_root(path)
+    let mapped = roots.get(root) ?? return path.clone()
+    let rest = path.strip_prefix(root) ?? ""
+    return f"{mapped}{rest}"
+}
+
+fn frame_deep(path: ref String) -> bool {
+    return path.split(".").count() > frame_depth() + 1
+}
+
+/// `path` cut to the frame's depth below its root.
+fn frame_cut(path: ref String) -> String {
+    let kept: Vec[ref String] = path.split(".").take(frame_depth() + 1).collect()
+    return kept.join(".")
+}
+
+/// **The names a body binds to a part of a root or of another such name**,
+/// each with the path of that part.
+fn frame_aliases_block(block: ref Block, roots: ref collections::BTreeMap[String, String], mut aliases: collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext) {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::For { bindings, iter, .. } => {
+                let source = frame_source(iter, roots, aliases, words)
+                if source != null {
+                    for name in bindings {
+                        aliases.insert(words.resolve(name).clone(), (source ?? "").clone())
+                    }
+                }
+            },
+            else => {},
+        }
+        for expr in check_visit_stmt(stmt.node) {
+            match expr {
+                Expr::Match { value, arms, .. } => {
+                    let source = frame_source(value, roots, aliases, words) ?? continue
+                    let mut names: Vec[String] = []
+                    for arm in arms {
+                        frame_pattern_names(arm.pattern, words, names)
+                    }
+                    for name in names {
+                        aliases.insert(name.clone(), source.clone())
+                    }
+                },
+                Expr::MethodCall { receiver, args, .. } => frame_lambda_aliases(receiver, args, roots, aliases, words),
+                Expr::SafeMethod { receiver, args, .. } => frame_lambda_aliases(receiver, args, roots, aliases, words),
+                else => {},
+            }
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            frame_aliases_block(inner, roots, aliases, words)
+        }
+    }
+}
+
+/// A lambda handed to a method on a part of a root: its parameters may be
+/// that part's values, changed in place (`m.update(k) fn(mut v) { ... }`).
+fn frame_lambda_aliases(receiver: ref Expr, args: ref Vec[Expr], roots: ref collections::BTreeMap[String, String], mut aliases: collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext) {
+    let source = frame_source(receiver, roots, aliases, words) ?? return
+    for arg in args {
+        match arg {
+            Expr::Closure { params, .. } => {
+                for name in params {
+                    aliases.insert(words.resolve(name).clone(), source.clone())
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+/// **The part of a root an expression reads**, as a path of fields: `x.rows`
+/// of `x.rows[i]`, of `x.rows.iter()`, of `x.rows[i] ?? d`; none where it
+/// starts at no root and no alias.
+fn frame_source(expr: ref Expr, roots: ref collections::BTreeMap[String, String], aliases: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext) -> String? {
+    let path = path_of(expr, words)
+    if path != null {
+        let found = path ?? ""
+        let root = path_root(found)
+        if roots.contains_key(root) || aliases.contains_key(root) {
+            return found.clone()
+        }
+        return null
+    }
+    return match expr {
+        Expr::Index { base, .. } => frame_source(base, roots, aliases, words),
+        Expr::Field { base, .. } => frame_source(base, roots, aliases, words),
+        Expr::SafeField { base, .. } => frame_source(base, roots, aliases, words),
+        Expr::MethodCall { receiver, .. } => frame_source(receiver, roots, aliases, words),
+        Expr::SafeMethod { receiver, .. } => frame_source(receiver, roots, aliases, words),
+        Expr::Coalesce { value, .. } => frame_source(value, roots, aliases, words),
+        Expr::Unary { expr, .. } => frame_source(expr, roots, aliases, words),
+        Expr::Try(inner, _) => frame_source(inner, roots, aliases, words),
+        Expr::Cast { expr, .. } => frame_source(expr, roots, aliases, words),
+        else => null,
+    }
+}
+
+/// Every symbol a pattern names, bound or not: too many costs only a fact.
+fn frame_pattern_names(pattern: ref MatchPattern, words: ref winnow_grammar::InternerContext, mut out: Vec[String]) {
+    match pattern {
+        MatchPattern::Path(segments) => {
+            for s in segments {
+                out.push(words.resolve(s).clone())
+            }
+        },
+        MatchPattern::Tuple { parts, .. } => {
+            for p in parts {
+                frame_pattern_names(p, words, out)
+            }
+        },
+        MatchPattern::List(parts) => {
+            for p in parts {
+                frame_pattern_names(p, words, out)
+            }
+        },
+        MatchPattern::RestNamed(name) => out.push(words.resolve(name).clone()),
+        MatchPattern::Named { fields, .. } => {
+            for field in fields {
+                frame_pattern_names(field.pat, words, out)
+            }
+        },
+        MatchPattern::Or(alternatives) => {
+            for p in alternatives {
+                frame_pattern_names(p, words, out)
+            }
+        },
+        else => {},
+    }
+}
+
+// --- a frame at a call -------------------------------------------------------
+
+/// **What a call changes by its callee's frame** (ADR-391 D2): each path put
+/// onto the receiver's path and the arguments' (`handed`, none where one is
+/// not a path of fields). A value written is a value changed otherwise than
+/// by a step, and its length with it.
+pub fn frame_at_call(frame: ref BoundsChanged, receiver: ref String?, handed: ref Vec[String?]) -> BoundsChanged {
+    let mut out = nothing_changed()
+    for path in frame.values {
+        let on = frame_onto(path, receiver, handed) ?? continue
+        out.values.insert(on.clone())
+        out.jumps.insert(on.clone())
+        out.drops.insert(on.clone())
+        out.lengths.insert(on)
+    }
+    for path in frame.lengths {
+        out.lengths.insert(frame_onto(path, receiver, handed) ?? continue)
+    }
+    for path in frame.parts {
+        out.parts.insert(frame_onto(path, receiver, handed) ?? continue)
+    }
+    for place in frame.elements {
+        let pieces: Vec[ref String] = place.split("|").collect()
+        if pieces.len() != 3 {
+            continue
+        }
+        let list = frame_onto(pieces[0], receiver, handed) ?? continue
+        out.elements.insert(f"{list}|{pieces[1]}|{pieces[2]}")
+    }
+    return out
+}
+
+/// A frame's path from `#self` or `#n`, put onto the receiver's path or the
+/// `n`-th argument's.
+fn frame_onto(path: ref String, receiver: ref String?, handed: ref Vec[String?]) -> String? {
+    let root = path_root(frame_list(path))
+    let rest = path.strip_prefix(root) ?? ""
+    if root == "#self" {
+        let on = receiver ?? return null
+        return f"{on}{rest}"
+    }
+    for (at, given) in handed.iter().enumerate() {
+        if root == f"#{at}" {
+            let on = given ?? return null
+            return f"{on}{rest}"
+        }
+    }
+    return null
+}
+
+/// The path part of a frame's entry: the list of an element's place.
+fn frame_list(entry: ref String) -> String {
+    let pieces: Vec[ref String] = entry.split("|").collect()
+    return pieces[0].clone()
+}
+
+/// **Whether a frame writes anything from `root`** (`#self`, `#0`, ...).
+pub fn frame_writes(frame: ref BoundsChanged, root: ref String) -> bool {
+    return frame.values.iter().any(fn(e) { frame_from(e, root) }) || frame.lengths.iter().any(fn(e) { frame_from(e, root) }) || frame.parts.iter().any(fn(e) { frame_from(e, root) }) || frame.elements.iter().any(fn(e) { frame_from(e, root) })
+}
+
+fn frame_from(entry: ref String, root: ref String) -> bool {
+    return path_root(frame_list(entry)) == root
+}

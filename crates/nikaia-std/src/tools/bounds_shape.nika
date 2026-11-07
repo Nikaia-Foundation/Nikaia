@@ -47,6 +47,10 @@ pub struct Around {
     /// The methods of this program that take their receiver `mut`: they
     /// may change any field of it (ADR-306 D17).
     pub changing_receivers: collections::BTreeSet[String],
+    /// What each function may write through `mut self` and its `mut`
+    /// parameters, by its name or by `Type::method` (ADR-391 D2,
+    /// `bounds_frame.nika`): a call to one forgets only that.
+    pub frames: collections::BTreeMap[String, BoundsChanged],
 }
 
 enum Look {
