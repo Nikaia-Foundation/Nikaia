@@ -337,6 +337,19 @@ impl EmitState {
         }
         if world.library.functions.contains_key(name) {
             let found = world.library.functions.get(name) ?? return []
+            // **`trusted:` is said to the compiler** (ADR-365 D2): it picks
+            // what the prover may assume and which hash a map gets, and the
+            // source reads the same bytes either way, so it does not reach
+            // the function below.
+            if found.provenance != null {
+                let mut kept: Vec[ConfigContract] = []
+                for option in emit_config_of(found) {
+                    if option.name != "trusted" {
+                        kept.push(option)
+                    }
+                }
+                return kept
+            }
             return emit_config_of(found)
         }
         return []

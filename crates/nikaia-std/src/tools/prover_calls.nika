@@ -152,8 +152,8 @@ fn thrower_named(call: ref Expr, words: ref winnow_grammar::InternerContext, una
 }
 
 /// **Whether a value came from outside the program** (ADR-010 D2): it names
-/// a binding in `tainted`, or calls a source `std`'s ledger calls untrusted -
-/// anywhere inside it, as `contracts::sync`'s walk reads it: every
+/// a binding in `tainted`, or calls a source `std`'s ledger calls untrusted
+/// without writing `trusted: true` (ADR-365 D2) - anywhere inside it, as `contracts::sync`'s walk reads it: every
 /// expression, not into its blocks, the holes of its literals included.
 pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
     match expr {
@@ -162,9 +162,9 @@ pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], 
                 return true
             }
         },
-        Expr::Call { func, .. } => {
+        Expr::Call { func, config, .. } => {
             let source = outside_source_named(func, words)
-            if source != null && untrusted(library, source ?? "") {
+            if source != null && untrusted(library, source ?? "") && !says_trusted(words, config) {
                 return true
             }
         },

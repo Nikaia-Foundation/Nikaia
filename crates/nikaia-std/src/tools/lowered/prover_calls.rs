@@ -124,10 +124,10 @@ pub fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>, words:
             let name = *name;
             if tainted.contains(words.resolve(name)) { return true; }
         },
-        Expr::Call { func, .. } => {
+        Expr::Call { func, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let source = outside_source_named(func, words);
-            if source.is_some() && untrusted(library, nikaia_std::index::or(source.as_deref(), || "")) { return true; }
+            if source.is_some() && untrusted(library, nikaia_std::index::or(source.as_deref(), || "")) && !says_trusted(words, config) { return true; }
         },
         _ => { },
     }

@@ -62,8 +62,7 @@ description: >-
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
         <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-todo">Still being built</span> Standard input and a file read while the program runs still count as trusted, although the specification counts them as outside data (#649).</p>
-<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who wrote a file or what arrives on standard input is something only the program knows: it says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place.</p>
 </details>
         <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A guard where the data arrives</a></h3>
         <p>A claim about a value from outside, an <code>assert</code> or a function's precondition, is refused until a guard handles the bad case. After the guard the claim is proved. Words on the command line are checked against <code>main</code>'s preconditions before the body runs.</p>

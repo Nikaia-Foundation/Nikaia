@@ -112,9 +112,13 @@
 # `provenance` marks a **source**: a function whose result is bytes that entered
 # the program from outside, and who chose them (ADR-010 D2). Its absence is not
 # "trusted" - it is "this is not a source", which is what almost every function
-# is. Every source `std` has today is the operator's own: a file they named, a
-# pipe they connected, the arguments they typed. The untrusted ones - `http`,
-# `net`, `db` - arrive with the modules that have them.
+# is. The arguments the program was started with are the operator's own, so
+# `trusted`. Standard input, every file read while the program runs, a socket
+# and another program's output are `untrusted` (ADR-365 D1): a path or a pipe
+# does not say who wrote the bytes. Each such source takes the option
+# `trusted: bool = false`; a call that writes `trusted: true` says the operator
+# chose them (ADR-365 D2). The option is the compiler's: the emitter does not
+# hand it to the function below, which reads the same bytes either way.
 version = 3
 
 # --- Written by hand: the modules that are still Rust ------------------------
@@ -283,12 +287,14 @@ signature = "(self: ?)"
 # What comes back reads as bytes and the pages arrive as they are touched, which
 # is what makes a file larger than memory workable. It checks nothing: `text()`
 # reads it as text (ADR-016 D5). It fails where the file cannot be opened.
+# Whoever wrote the file may not be the program's operator, so the bytes are
+# **untrusted** unless the call says `trusted: true` (ADR-365).
 [fn."fs::map"]
 pub = true
 touches = ["file(path) read"]
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "(path: ref fs::Path, root: ref fs::Root) -> Mapped"
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> Mapped"
 
 # The mapped file, as bytes.
 #
@@ -318,26 +324,28 @@ signature = "(self: ref Mapped) -> ref(self) String"
 # The whole of a file, as bytes.
 #
 # It hands back one shared buffer and not a copy, so passing the file on costs a
-# reference count. It fails where the file cannot be read. The bytes came from
-# the program's own machine, so what it hands back is **trusted**.
+# reference count. It fails where the file cannot be read. A path does not say
+# who wrote the file, so what it hands back is **untrusted** unless the call
+# says `trusted: true` (ADR-365).
 [fn."fs::read"]
 pub = true
 touches = ["file(path) read"]
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "(path: ref fs::Path, root: ref fs::Root) -> Bytes"
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> Bytes"
 
 # The whole of a file, as text.
 #
-# It fails where the file cannot be read or is not UTF-8. The bytes came from
-# the program's own machine, so what it hands back is **trusted**: a map keyed
-# on it is hashed with the fast function.
+# It fails where the file cannot be read or is not UTF-8. A path does not say
+# who wrote the file, so what it hands back is **untrusted** unless the call
+# says `trusted: true` (ADR-365): only then is a map keyed on it hashed with
+# the fast function.
 [fn."fs::read_to_string"]
 pub = true
 touches = ["file(path) read"]
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "(path: ref fs::Path, root: ref fs::Root) -> String"
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> String"
 
 # Every file under a directory, as names relative to it, in sorted order.
 # Directories are not listed, and each is visited once.
@@ -345,14 +353,15 @@ signature = "(path: ref fs::Path, root: ref fs::Root) -> String"
 # Under `fs::Root::Dir` a name the walk finds that leads out of the root - a
 # symlink pointing away - is left out rather than failing the walk. It fails
 # where the directory itself cannot be read; a name that is not text is listed
-# as the platform's bytes (ADR-319 D7). The names came from the program's own machine, so they are **trusted**
-# (ADR-290 D14).
+# as the platform's bytes (ADR-319 D7). Whoever made the files chose their
+# names, so they are **untrusted** unless the call says `trusted: true`
+# (ADR-365).
 [fn."fs::walk"]
 pub = true
 touches = ["file(path) read"]
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "(path: ref fs::Path, root: ref fs::Root) -> Vec[fs::Path]"
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> Vec[fs::Path]"
 
 # Whether a file or directory is there (Part III 17.1). The root comes first
 # (ADR-108 D1): a name that leaves an `fs::Root::Dir` throws `Outside` rather
@@ -419,13 +428,16 @@ throws = ["io::IoError"]
 signature = "(path: ref fs::Path, root: ref fs::Root) -> fs::Metadata"
 
 # The names in a directory, each its own name, in byte order: the same on
-# every machine whatever order the system keeps them in.
+# every machine whatever order the system keeps them in. Whoever made the files
+# chose their names, so they are **untrusted** unless the call says `trusted:
+# true` (ADR-365).
 [fn."fs::read_dir"]
 pub = true
 sync = true
 touches = ["file(path) read"]
 throws = ["io::IoError"]
-signature = "(path: ref fs::Path, root: ref fs::Root) -> Vec[fs::Path]"
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> Vec[fs::Path]"
 
 # **A test's own directory, as a root** (ADR-247 D5). `sync`: making one
 # directory is one system call, the same size of blocking as `cli::args`'s read.
@@ -517,12 +529,14 @@ signature = "(markup: ?) -> ?"
 # The whole of standard input, as bytes.
 #
 # It may pause rather than holding the thread it is called on, and it fails
-# where the input cannot be read.
+# where the input cannot be read. Whoever is on the other end of the pipe chose
+# the bytes, so they are **untrusted** unless the call says `trusted: true`
+# (ADR-365).
 [fn."io::read"]
 pub = true
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "() -> Vec[u8]"
+provenance = "untrusted"
+signature = "(; trusted: bool = false) -> Vec[u8]"
 
 # **A produced sequence, and its step can fail**
 # ([ADR-105](../../docs/specification/adr/adr-105.md) D1). It said `-> Lines`,
@@ -542,21 +556,23 @@ signature = "() -> Vec[u8]"
 #
 # The lines are produced as they are asked for rather than read up front, so a
 # stream larger than memory is a `for` over this. A **step** can fail, because
-# a step of it reads the pipe.
+# a step of it reads the pipe. The lines are **untrusted** unless the call says
+# `trusted: true` (ADR-365).
 [fn."io::lines"]
 pub = true
-provenance = "trusted"
-signature = "() -> Seq[String] pauses throws"
+provenance = "untrusted"
+signature = "(; trusted: bool = false) -> Seq[String] pauses throws"
 
 # The whole of standard input, as text.
 #
 # It pauses rather than holding the thread it is called on. It fails where the
-# input is not UTF-8.
+# input is not UTF-8. The text is **untrusted** unless the call says `trusted:
+# true` (ADR-365).
 [fn."io::read_to_string"]
 pub = true
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "() -> String"
+provenance = "untrusted"
+signature = "(; trusted: bool = false) -> String"
 
 # Each element through a function, as a new list.
 #
@@ -5468,7 +5484,7 @@ pub = true
 throws = ["io::IoError"]
 provenance = "untrusted"
 keeps = ["args"]
-signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured) -> process::Output"
+signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured, trusted: bool = false) -> process::Output"
 
 # A program started and not yet waited for (#1177): what `process::spawn`
 # hands back. Its two output streams are read to their end from the start, so

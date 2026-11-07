@@ -150,7 +150,9 @@ fn main() throws {
     // cannot be mapped like a file. There is no `await`, yet while the pipe is
     // empty other tasks run. With `user-parallelism = "yes"` in nikaia.toml
     // `[build]` the read may resume on another thread; the output is the same.
-    let text = io::read_to_string() catch {
+    // Standard input is untrusted unless the call says who wrote it: here it is
+    // the benchmark's own fixture, so the counts take the fast hash (ADR-365 D2).
+    let text = io::read_to_string(trusted: true) catch {
         eprintln(f"cannot read standard input: {error}")
         return
     }

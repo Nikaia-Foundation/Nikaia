@@ -979,7 +979,7 @@ There is one standard input, so these are functions rather than a handle. Readin
 time yields nothing.
 
 **Provenance** follows the rule files follow: standard input is **Untrusted**. A program that
-knows who writes it reads it with `io::read_to_string(; trusted: true)` ([ADR-365](adr/adr-365.md)).
+knows who writes it reads it with `io::read_to_string(trusted: true)` ([ADR-365](adr/adr-365.md)).
 
 **Writing output**
 
