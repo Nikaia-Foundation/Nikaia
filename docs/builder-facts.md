@@ -85,4 +85,8 @@ together with the specification section and an example test.
 * The cycle's first `lower-std` with `$S/old/nikaia` can fail on files nobody changed; the new binary's `lower-std` is the one that counts, and that failure goes in the report. (issue-1228)
 * A `from` fix for text must also be probed with a struct type: the trait lowers only text `from` as a view, so a fix in `keeps.nika` breaks the struct case. (issue-1250)
 * A text `+` is a `Binary` node that the emitter recognises by `facts.concatenations.contains(span.start as i64)`, using the operator span, not `node_key`. (issue-1251)
+* A `let` bound by `x ?? null` used to lose `x`'s `ref` (it was typed as the `null`); if a `&` appears in front of a `match` in the lowered code, check the checker's result type of the `??` first (`check_core_ops.nika`). (issue-1340)
+* `git reset -- <paths>` only unstages, but builder.md forbids every `git reset`; to unstage your own file, use `git restore --staged FILE`. (issue-1340)
+* Write a new `tests/compiler` program's `.stderr` with `nikaia test --filter NAME --bless` from `tests/compiler`; `nikaia check` there reads every sibling test. (issue-1352)
+* Run `pre-push.nika` with your files staged, then unstage only them before `commit.nika`, which refuses files that are already staged. (issue-1352)
 
