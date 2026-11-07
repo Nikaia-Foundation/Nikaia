@@ -323,7 +323,7 @@ fn run_package(purpose: &str, main: &str) -> (bool, String, String) {
     .expect("write ring.nika");
     std::fs::write(
         dir.join("src/main.nika"),
-        format!("fn main() {{\n{main}}}\n"),
+        format!("fn main() throws {{\n{main}}}\n"),
     )
     .expect("write main.nika");
     let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))

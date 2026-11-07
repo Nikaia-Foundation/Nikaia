@@ -111,7 +111,7 @@ fn an_overflow_is_refused_wherever_the_operation_stands() {
         ("receiver", "let d = (a + b).abs()"),
     ] {
         let found = findings(&format!(
-            "fn main() {{\n    let a: i32 = 2000000000\n    let b: i32 = 2000000000\n    {line}\n}}\n"
+            "fn main() throws {{\n    let a: i32 = 2000000000\n    let b: i32 = 2000000000\n    {line}\n}}\n"
         ));
         assert_eq!(found.len(), 1, "{place}: {found:#?}");
         assert!(

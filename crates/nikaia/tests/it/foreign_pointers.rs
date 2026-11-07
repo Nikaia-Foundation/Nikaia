@@ -651,9 +651,10 @@ fn the_copy_is_a_call_that_can_fail() {
          \x20   fn getenv(name: ref Array[u8]) -> foreign::CStr\n\
          }\n\
          \n\
-         fn main() throws {\n\
+         fn main() {\n\
          \x20   let raw = unsafe { getenv(\"HOME\\0\") }\n\
-         \x20   println(raw.to_string())\n\
+         \x20   let text = raw.to_string()\n\
+         \x20   println(text) catch { return }\n\
          }\n",
     )
     .into_iter()

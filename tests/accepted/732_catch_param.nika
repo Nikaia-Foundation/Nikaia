@@ -8,8 +8,8 @@ impl Error for Bad {
 fn fail() throws {
     throw Bad::Oops
 }
-fn quiet() throws {
-    println("fine")
+fn quiet() {
+    println("fine") catch {}
 }
 fn guard(run: fn() throws) throws {
     run() catch {

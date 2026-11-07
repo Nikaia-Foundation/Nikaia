@@ -15,8 +15,8 @@ fn fail() throws {
 fn worse() throws {
     throw Boom::Bang
 }
-fn quiet() throws {
-    println("quiet")
+fn quiet() {
+    println("quiet") catch {}
 }
 fn main() throws {
     let job = Job { run: fail, name: "first" }

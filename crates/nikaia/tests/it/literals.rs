@@ -82,7 +82,10 @@ fn a_character_literal_is_a_pattern() {
 #[test]
 fn a_unicode_escape_is_not_a_hole() {
     let emitted = emit(r#"fn main() throws { println("\u{0041}") }"#);
-    assert!(emitted.contains(r#"println!("\u{0041}")"#), "{emitted}");
+    assert!(
+        emitted.contains(r#"nikaia_std::io::println(format_args!("\u{0041}")"#),
+        "{emitted}"
+    );
     assert!(!emitted.contains("0041)"), "{emitted}");
 }
 
@@ -94,7 +97,7 @@ fn an_escape_does_not_swallow_the_interpolation_after_it() {
 println(f"\u{0041}{x}\n") }"#,
     );
     assert!(
-        emitted.contains(r#"println!("\u{0041}{}\n", x)"#),
+        emitted.contains(r#"nikaia_std::io::println(format_args!("\u{0041}{}\n", x)"#),
         "{emitted}"
     );
 }
@@ -107,8 +110,14 @@ fn print_is_a_macro_like_println() {
         r#"fn main() throws { print("a")
 eprint("b") }"#,
     );
-    assert!(emitted.contains(r#"print!("a")"#), "{emitted}");
-    assert!(emitted.contains(r#"eprint!("b")"#), "{emitted}");
+    assert!(
+        emitted.contains(r#"nikaia_std::io::print(format_args!("a")"#),
+        "{emitted}"
+    );
+    assert!(
+        emitted.contains(r#"nikaia_std::io::eprint(format_args!("b")"#),
+        "{emitted}"
+    );
 }
 
 /// **A hole is code as written** ([ADR-309](../../../docs/specification/adr/adr-309.md)
@@ -147,7 +156,10 @@ fn a_plain_string_is_text_and_a_brace_is_part_of_it() {
 #[test]
 fn a_plain_string_printed_keeps_its_braces() {
     let emitted = emit(r#"fn main() throws { print("{}") }"#);
-    assert!(emitted.contains(r#"print!("{{}}")"#), "{emitted}");
+    assert!(
+        emitted.contains(r#"nikaia_std::io::print(format_args!("{{}}")"#),
+        "{emitted}"
+    );
 }
 
 /// An escape is copied whole, `\u{…}` included - doubling the braces inside one
@@ -155,7 +167,10 @@ fn a_plain_string_printed_keeps_its_braces() {
 #[test]
 fn an_escape_is_not_a_brace_to_double() {
     let emitted = emit(r#"fn main() throws { println("\u{0041}") }"#);
-    assert!(emitted.contains(r#"println!("\u{0041}")"#), "{emitted}");
+    assert!(
+        emitted.contains(r#"nikaia_std::io::println(format_args!("\u{0041}")"#),
+        "{emitted}"
+    );
 }
 
 /// `f"…"` is what says there is code in here (ADR-309 D1).

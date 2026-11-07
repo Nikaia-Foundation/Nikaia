@@ -71,7 +71,10 @@ fn a_line_comment_inside_a_block_comment_is_comment() {
          }",
     )
     .expect("it parses and lowers");
-    assert!(rust.contains("println!(\"ok\")"), "{rust}");
+    assert!(
+        rust.contains("nikaia_std::io::println(format_args!(\"ok\"))"),
+        "{rust}"
+    );
 }
 
 /// **An unclosed block comment is reported at the `/*` that opened it** (D2).

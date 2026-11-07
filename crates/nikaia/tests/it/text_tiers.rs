@@ -1837,7 +1837,9 @@ fn a_struct_viewing_a_kept_parameter_pushed_into_a_container_owns_its_text() {
 /// and lowers byte for byte as its `ref String` twin.
 #[test]
 fn a_struct_viewing_a_parameter_only_read_still_lends_it() {
-    let read = KEPT_INTO_A_CONTAINER.replace("    b.items.push(a)", "    println(a.label)");
+    let read = KEPT_INTO_A_CONTAINER
+        .replace("    b.items.push(a)", "    println(a.label)")
+        .replace("mut b: Box) {", "mut b: Box) throws {");
     runs("kept-only-read", &read, "x1\n0");
     let written = read
         .replace("    label: String,", "    label: ref String,")

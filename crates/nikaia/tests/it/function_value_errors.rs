@@ -29,8 +29,8 @@ const JOB: &str = "enum Bad { Oops }\n\
                    fn fail() throws {\n\
                    \x20   throw Bad::Oops\n\
                    }\n\
-                   fn quiet() throws {\n\
-                   \x20   print(\"fine\")\n\
+                   fn quiet() {\n\
+                   \x20   print(\"fine\") catch {}\n\
                    }\n";
 
 /// **The program of #620**: the kept arm is exhaustive with no `else`, and
@@ -217,7 +217,7 @@ const ONLY_BAD: &str = "catch {\n\
 /// `?`** (ADR-351 D4): an arm list naming only `Bad` would otherwise lower to
 /// an `unreachable!` that a `Boom` hits at run time.
 fn refused_without_else(body: &str, extra: &str) {
-    let source = format!("{JOB}{WORSE}{extra}fn main() {{\n{body}\n}}\n");
+    let source = format!("{JOB}{WORSE}{extra}fn main() throws {{\n{body}\n}}\n");
     let found = codes(&source);
     assert!(!found.is_empty(), "accepted, would panic:\n{source}");
 }
@@ -299,7 +299,7 @@ const BOTH: &str = "catch {\n\
 /// **Where more code reaches a place, the place carries the union** (ADR-351
 /// D3): an arm per member, no `else`, and nothing refused.
 fn accepted_exactly(body: &str, extra: &str) {
-    let source = format!("{JOB}{WORSE}{extra}fn main() {{\n{body}\n}}\n");
+    let source = format!("{JOB}{WORSE}{extra}fn main() throws {{\n{body}\n}}\n");
     let found = findings(&source);
     assert!(found.is_empty(), "{found:?}\n{source}");
 }
@@ -379,7 +379,7 @@ fn a_mut_list_handed_to_a_mut_parameter() {
 #[test]
 fn a_caller_replaces_from_with_what_it_passed() {
     let now = "pub fn now(f: fn() throws) throws {\n    f()\n}\n";
-    let source = format!("{JOB}{WORSE}{now}fn main() {{\n    now(fail) {ONLY_BAD}\n}}\n");
+    let source = format!("{JOB}{WORSE}{now}fn main() throws {{\n    now(fail) {ONLY_BAD}\n}}\n");
     assert!(codes(&source).is_empty(), "{:?}", findings(&source));
     refused_without_else(&format!("    now(worse) {ONLY_BAD}"), now);
 }

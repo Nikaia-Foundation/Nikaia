@@ -18,8 +18,9 @@ views = ["input: borrowed", "<result>: borrowed"]
 signature = "(input: ?) -> Vec[Entry]"
 
 [fn."main"]
-throws = ["?"]
+throws = ["io::IoError"]
 locks = true
+panics = true
 signature = "()"
 
 [fn."read"]
@@ -39,12 +40,14 @@ signature = "(entries: Vec[Entry], total: i64; title: String = \"Stock\") -> Str
 [fn."total"]
 pub = true
 sync = "inferred"
+panics = true
 touches = []
 views = ["entries: borrowed"]
 signature = "(entries: ref Vec[Entry]) -> i64"
 
 [fn."weight"]
 sync = "inferred"
+panics = false
 touches = []
 views = ["entry: borrowed"]
 signature = "(entry: ref Entry) -> i64"

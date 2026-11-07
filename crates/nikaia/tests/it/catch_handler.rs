@@ -89,7 +89,7 @@ fn read(text: ref String) -> i32 throws {{
     return 7
 }}
 
-fn parsed(text: ref String) -> i32 {{
+fn parsed(text: ref String) -> i32 throws {{
     let errors = 5
     return read(text) {handler}
 }}

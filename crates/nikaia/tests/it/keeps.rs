@@ -698,7 +698,10 @@ fn a_result_that_views_a_parameter_keeps_it_where_it_leaves() {
 #[test]
 fn a_result_that_views_a_parameter_handed_back() {
     let source = A_VIEW_ONLY_READ
-        .replace("fn shout(v: String) {", "fn shout(v: ref String) -> Tag {")
+        .replace(
+            "fn shout(v: String) throws {",
+            "fn shout(v: ref String) -> Tag {",
+        )
         .replace("    println(a.label)\n}", "    return a\n}")
         .replace(
             "    shout(x)\n",

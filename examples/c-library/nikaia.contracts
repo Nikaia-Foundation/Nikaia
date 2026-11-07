@@ -12,6 +12,7 @@ version = 4
 [fn."Tally::add"]
 pub = true
 sync = true
+panics = true
 touches = []
 views = ["text: borrowed"]
 signature = "(ref mut self, text: ref String) -> i64"
@@ -19,11 +20,13 @@ signature = "(ref mut self, text: ref String) -> i64"
 [fn."Tally::new"]
 pub = true
 sync = true
+panics = false
 touches = []
 signature = "() -> Tally"
 
 [fn."case_of"]
 sync = true
+panics = false
 touches = []
 views = ["word: borrowed"]
 signature = "(word: ref String) -> Case"
@@ -32,6 +35,7 @@ signature = "(word: ref String) -> Case"
 pub = true
 sync = true
 locks = "?"
+panics = true
 views = ["text: borrowed", "each: borrowed"]
 signature = "(text: ref String, each: fn(ref String, Case) -> bool sync) -> i64"
 

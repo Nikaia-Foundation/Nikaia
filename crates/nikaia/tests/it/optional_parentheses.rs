@@ -60,11 +60,11 @@ fn runs(purpose: &str, source: &str, expected: &str) {
 fn a_function_without_parameters_omits_the_parentheses() {
     runs(
         "init",
-        "fn init {\n\
+        "fn init throws {\n\
          \x20   println(\"init\")\n\
          }\n\
          \n\
-         fn main() { init() }\n",
+         fn main() throws { init() }\n",
         "init\n",
     );
 }
@@ -106,7 +106,7 @@ fn the_declaration_is_the_one_with_empty_parentheses() {
 fn the_call_still_needs_its_parentheses() {
     runs(
         "bare-name",
-        "fn init {\n\
+        "fn init throws {\n\
          \x20   println(\"init\")\n\
          }\n\
          \n\
@@ -130,7 +130,7 @@ fn pub_functions_and_methods_take_it_too() {
          \x20   pub fn start -> Counter { Counter { n: 0 } }\n\
          }\n\
          \n\
-         pub fn hello {\n\
+         pub fn hello throws {\n\
          \x20   println(\"hello\")\n\
          }\n\
          \n\

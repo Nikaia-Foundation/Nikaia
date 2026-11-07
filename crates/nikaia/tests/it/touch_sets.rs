@@ -356,7 +356,7 @@ fn the_programs_arguments_are_a_resource() {
     let reason = why("use std::cli\n\
          fn main() throws {\n\
              let a = cli::args()\n\
-             println(\"x\")\n\
+             println(\"x\") catch {}\n\
              println(f\"{a.len()}\")\n\
          }");
     assert!(reason.contains("together"), "{reason}");
@@ -383,9 +383,9 @@ fn the_two_console_handles_keep_their_order() {
     // … and the refusal is about the resource rather than about ignorance:
     // both are described, and what they meet on is what is printed.
     let reason = why("fn main() throws {\n\
-             println(\"out\")\n\
-             eprintln(\"err\")\n\
-             println(\"out2\")\n\
+             println(\"out\") catch {}\n\
+             eprintln(\"err\") catch {}\n\
+             println(\"out2\") catch {}\n\
          }");
     assert!(
         reason.contains("which might be the same place") && reason.contains("stderr"),
@@ -464,7 +464,7 @@ fn a_handlers_own_effects_are_part_of_the_statement() {
     const HANDLER_WRITES_STDOUT: &str = "use std::fs\n\
          fn main() throws {\n\
          \x20   fs::write(\"a.txt\", fs::Root::Anywhere, \"x\") catch { println(\"failed\") }\n\
-         \x20   println(\"next\")\n\
+         \x20   println(\"next\") catch {}\n\
          }";
 
     assert!(

@@ -50,8 +50,8 @@ fn a_computed_default_is_evaluated_once_and_recorded() {
 /// D7: a default whose callee touches the world is `NK1152`, as a `comptime`'s.
 #[test]
 fn a_default_that_cannot_run_at_build_time_is_refused() {
-    let source = "fn loud() -> i64 throws {\n\
-         \x20   println(\"side effect\")\n\
+    let source = "fn loud() -> i64 {\n\
+         \x20   println(\"side effect\") catch { return 0 }\n\
          \x20   return 1\n\
          }\n\
          \n\
@@ -117,8 +117,8 @@ fn a_default_that_owns_memory_is_refused_at_the_default() {
 /// D7: a refused default is pointed at, not the body's first statement.
 #[test]
 fn a_refused_default_is_pointed_at() {
-    let source = "fn loud() -> i64 throws {\n\
-         \x20   println(\"x\")\n\
+    let source = "fn loud() -> i64 {\n\
+         \x20   println(\"x\") catch { return 0 }\n\
          \x20   return 1\n\
          }\n\
          \n\

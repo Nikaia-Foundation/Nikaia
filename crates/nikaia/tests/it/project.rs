@@ -1125,7 +1125,7 @@ fn a_packages_type_is_constructed_and_its_handler_chain_runs() {
                 "app/src/main.nika",
                 "use tiny\n\
                  \n\
-                 fn main() {\n    \
+                 fn main() throws {\n    \
                      tiny::Server()\n        \
                          .route(\"/a\") fn(r) { return tiny::Response { status: 200, body: f\"A {r.path}\" } }\n        \
                          .route(\"/b\") fn(r) { return tiny::Response { status: 404, body: f\"B {r.path}\" } }\n        \
@@ -2348,7 +2348,7 @@ fn a_shape_walk_reaches_across_the_files_of_a_package() {
     let dir = a_project(
         "project-reflection",
         "[package]\nname = \"reflect\"\nversion = \"0.1.0\"\n",
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   describe(User { name: \"ada\", age: 36 })\n\
          \x20   describe(Point { x: 1, y: 2 })\n\
          }\n",

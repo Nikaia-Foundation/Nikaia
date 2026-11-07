@@ -43,7 +43,7 @@ fn first_let(source: &str) -> Expr {
 }
 
 fn in_main(body: &str) -> String {
-    format!("fn main() {{\n{body}\n}}\n")
+    format!("fn main() throws {{\n{body}\n}}\n")
 }
 
 /// **D1: `[v; n]` is a list literal of its own kind**, its value and its count

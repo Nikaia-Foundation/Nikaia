@@ -77,7 +77,7 @@ fn the_shadow_type_carries_the_names_and_the_call_site_the_types() {
     // per DSL string" is in the language below.
     assert!(
         rust.contains(
-            "pub fn prepare<NikaiaDsl>(&self, statement: &str, args: NikaiaDsl) -> NikaiaDsl"
+            "pub fn prepare<NikaiaDsl>(&self, statement: &str, args: NikaiaDsl) -> Result<NikaiaDsl, nikaia_std::error::Thrown<io::IoError>>"
         ),
         "{rust}"
     );
