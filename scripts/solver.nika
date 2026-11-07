@@ -6,6 +6,16 @@
 //   nikaia run scripts/solver.nika -- oracle [--write] FILE...
 //   nikaia run scripts/solver.nika -- fuzz N SEED
 //   nikaia run scripts/solver.nika -- fuzz --self-test
+//   nikaia run scripts/solver.nika -- tune [--timeout S] [DIR]
+//
+// `tune` (ADR-270 D14, #1284 item 5) splits the `.smt2` files of DIR
+// (default `tests/solver/qflia`), sorted by name, into two fixed halves: the
+// files at even places tune, the files at odd places are held out. It walks
+// the parameters of `sv_params` (`solver/sv_strategy.nika`) one by one, tries
+// each of its candidate values on the tuning half with the engine
+// `new:name=value,...`, and keeps a value only where it lowers the half's
+// PAR-2 with no wrong answer. Then it reports the defaults and the tuned set
+// on the held-out half, which the tuning never saw.
 //
 // `run` puts the logic layer's files of `crates/nikaia-std/src/tools/` (read,
 // never copied), the new engine's files of `crates/nikaia-std/src/solver/`
@@ -143,8 +153,11 @@ fn solver_files(arg: String) -> Vec[(String, String)] throws {
 	rels.sort()
 	for rel in rels {
 		let at = rel.rfind("/")
+		// `f"{base}"`, not `base.to_string()`: the latter makes the
+		// returned tuples `EitherText` and a caller's `Vec[(String,
+		// String)]` fails in rustc (#1311).
 		let group = match at {
-			null => base.to_string(),
+			null => f"{base}",
 			else => f"{base}/{rel[0..<(at ?? 0)]}",
 		}
 		out.push((group, f"{trimmed}/{rel}"))
@@ -614,6 +627,139 @@ fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 	process::run("rm", ["-rf", work, bin_dir])
 }
 
+// --- tune: the parameters on one half, the report on the other ---
+
+// The candidate values of each tuned parameter of `sv_params`, the default
+// first.
+fn solver_tune_candidates() -> Vec[String] {
+	return [
+		"walk_first=250|0|100|500",
+		"moves_per_unit=100|50|400",
+		"noise=100|30|300",
+		"tenure=3|1|10",
+		"walk_after=true|false",
+		"dense_width=4|2|8",
+		"theory=both|simplex|fm",
+		"cut_kind=gmi|cg",
+		"cut_rounds=8|2|32",
+		"bland_after=64|8",
+	]
+}
+
+// The engine for the settings `name=value`: `new` where there are none.
+fn solver_tune_engine(settings: Vec[String]) -> String {
+	if settings.len() == 0 { return "new" }
+	return f"new:{settings.join(",")}"
+}
+
+// The rows of `files` answered by `engine`.
+fn solver_tune_rows(
+	bin: String,
+	engine: String,
+	files: Vec[(String, String)],
+	timeout: i64,
+) -> Vec[SolverRow] throws {
+	let mut rows: Vec[SolverRow] = []
+	for (group, path) in files {
+		let (answer, work, shown) = solver_answer(
+			bin.clone(),
+			engine.clone(),
+			path.clone(),
+			timeout,
+		)
+		let file = path.split("/").last() ?? path
+		rows.push(SolverRow {
+			group: group.clone(),
+			name: f"{group}/{file}",
+			answer: answer,
+			work: work,
+			shown: shown,
+		})
+	}
+	return rows
+}
+
+// The PAR-2 sum of `rows`, or -1 where one of them is wrong.
+fn solver_tune_cost(rows: Vec[SolverRow]) -> i64 {
+	let mut cost = 0
+	for r in rows {
+		if r.answer.starts_with("wrong") { return -1 }
+		if solver_solved(r.answer.clone()) {
+			cost += r.work
+		} else {
+			cost += 2 * solver_budget()
+		}
+	}
+	return cost
+}
+
+fn solver_tune(repo: String, nikaia: String, args: Vec[String]) throws {
+	let mut timeout = 30
+	let mut dir = f"{repo}/tests/solver/qflia"
+	let mut i = 0
+	while i < args.len() {
+		if args[i] == "--timeout" && i + 1 < args.len() {
+			timeout = text::parse_i64(args[i + 1].clone()) ?? 30
+			i += 2
+			continue
+		}
+		dir = args[i].clone()
+		i += 1
+	}
+	let files = solver_files(dir)
+	let mut tuning: Vec[(String, String)] = []
+	let mut held: Vec[(String, String)] = []
+	for k in 0..<files.len() {
+		if k % 2 == 0 { tuning.push(files[k].clone()) } else { held.push(files[k].clone()) }
+	}
+	if tuning.len() == 0 || held.len() == 0 {
+		println("tune needs two .smt2 files at least")
+		process::exit(2)
+	}
+	let bin = solver_build(repo, nikaia)
+	if bin == "" { process::exit(1) }
+	println(f"tuning on {tuning.len()} files, holding out {held.len()}")
+	let mut settings: Vec[String] = []
+	let mut best = solver_tune_cost(solver_tune_rows(bin.clone(), "new", tuning, timeout))
+	println(f"defaults: PAR-2 sum {best}")
+	for line in solver_tune_candidates() {
+		let (name, values) = line.split_once("=") ?? continue
+		let mut chosen: Vec[String] = settings.clone()
+		for value in values.split("|") {
+			let mut trial: Vec[String] = []
+			for s in settings {
+				if !s.starts_with(f"{name}=") { trial.push(s.clone()) }
+			}
+			trial.push(f"{name}={value}")
+			let engine = solver_tune_engine(trial)
+			let cost = solver_tune_cost(solver_tune_rows(
+				bin.clone(),
+				engine.clone(),
+				tuning,
+				timeout,
+			))
+			println(f"  {engine}: PAR-2 sum {cost}")
+			if cost >= 0 && cost < best {
+				best = cost
+				chosen = trial.clone()
+			}
+		}
+		settings = chosen
+	}
+	let tuned = solver_tune_engine(settings)
+	println(f"tuned: {tuned}, PAR-2 sum {best}")
+	println(solver_summary(
+		"held out, defaults",
+		solver_tune_rows(bin.clone(), "new", held, timeout),
+	))
+	println(solver_summary(
+		f"held out, {tuned}",
+		solver_tune_rows(bin.clone(), tuned.clone(), held, timeout),
+	))
+	let bin_dir = bin.replace("/target/nikaia/bin/solver_rod", "")
+	process::run("rm", ["-rf", bin_dir])
+}
+
 fn main() throws {
 	// The program's name, the command, and what the command reads.
 	let mut command: String = ""
@@ -633,8 +779,10 @@ fn main() throws {
 		solver_oracle(rest)
 	} else if command == "fuzz" {
 		solver_fuzz(repo, nikaia, rest)
+	} else if command == "tune" {
+		solver_tune(repo, nikaia, rest)
 	} else {
-		println("usage: solver.nika run|gen|oracle|fuzz ... (see the head of scripts/solver.nika)")
+		println("usage: solver.nika run|gen|oracle|fuzz|tune ... (see the head of scripts/solver.nika)")
 		process::exit(2)
 	}
 }
