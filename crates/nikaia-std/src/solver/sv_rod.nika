@@ -99,6 +99,9 @@ fn sv_line(source: String, engine: String) -> String {
 	let mut arena = script.arena.clone()
 	let goal = arena.boolean(false)
 	let budget = lg_budget()
+	if engine == "new" {
+		return sv_new_line(arena, script.assertions, goal, budget, status)
+	}
 	let run = sv_fm_check(arena, script.assertions, goal, budget)
 	let answer = match run.answer {
 		LgAnswer::Proved { certificate } => {
@@ -124,8 +127,45 @@ fn sv_line(source: String, engine: String) -> String {
 	return f"{answer} {run.work}"
 }
 
+/// The new engine's line (#1282): a *proved* is its proof log replayed by
+/// `sv_check`, a model evaluated as Fourier-Motzkin's is.
+fn sv_new_line(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	status: String,
+) -> String {
+	let run = sv_engine(arena, facts, goal, budget, true)
+	let answer = match run.driven {
+		SvDriven::Proved(query, steps) => {
+			let verdict = sv_check(query, steps)
+			if !verdict.ok {
+				f"wrong (log rejected at {verdict.step}: {verdict.reason})"
+			} else if status == "sat" {
+				"wrong (proved, status sat)"
+			} else {
+				"proved"
+			}
+		},
+		SvDriven::Answer(LgAnswer::Refuted { model }) => {
+			if !lg_verify_model(arena, facts, goal, model) {
+				"wrong (model rejected)"
+			} else if status == "unsat" {
+				"wrong (refuted, status unsat)"
+			} else {
+				"refuted"
+			}
+		},
+		SvDriven::Answer(LgAnswer::Unknown { why }) => sv_unknown(why),
+		SvDriven::Answer(_) => "unknown",
+	}
+	return f"{answer} {run.work}"
+}
+
 /// The program's entry: `ENGINE FILE...`, one line per file. The engine is
-/// `fm`, Fourier-Motzkin as the compiler runs it.
+/// `fm`, Fourier-Motzkin as the compiler runs it, or `new`, the theory
+/// interface's driver (#1282).
 pub fn sv_rod_main() throws {
 	let mut args: Vec[String] = []
 	for a in cli::args() {

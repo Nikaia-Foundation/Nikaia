@@ -1,0 +1,569 @@
+// crates/nikaia-std/src/solver/sv_drive.nika
+//
+// **The enumeration driver** (ADR-270 D12, #1282 item 5): the query of
+// `logic_lia.nika` (`lg_indexed`) put into the proof log's form, and its
+// disjunctions split by enumeration as `lg_search` splits them - the open
+// disjunction with the fewest alternatives first, each case a theory level,
+// a case that does not rely on its alternative closing the whole branch - so
+// its answers can be held against Fourier-Motzkin's. It is no CDCL yet; what
+// it derives is a clause per case, learned by unit propagation, down to the
+// empty clause, which `sv_check.nika` replays.
+//
+// The query's clauses: each atom at the top a unit; each disjunction the
+// clause of its alternatives' *heads*. An alternative of one atom is headed
+// by that atom; any other by a *selector*, a fresh atom `s <= 0` over a
+// fresh column, with the clause `¬s ∨ a` for each item `a` it adds (Tseitin:
+// a model of the formula is one of the clauses with `s = 0` on the chosen
+// alternative and `s = 1` elsewhere). The atoms `lg_indexed` adds after a
+// disjunction - what every alternative implies, its hull - are no query
+// clauses: each is derived, a Farkas lemma per alternative and one learned
+// clause.
+
+/// Where an atom stands in the formula.
+pub struct SvShape {
+	/// The literal an atom holds under - an alternative's head - or `-1` at
+	/// the top.
+	pub guard: Vec[i64],
+	/// Whether the atom heads an alternative (an alternative's only atom, or
+	/// a selector).
+	pub head: Vec[bool],
+	/// The clause that gives the atom under its guard; `-1` for a head.
+	pub clause: Vec[i64],
+	/// Per disjunction: its guard, its heads and its clause.
+	pub or_guard: Vec[i64],
+	pub or_heads: Vec[Vec[u32]],
+	pub or_clause: Vec[i64],
+	/// Per disjunction the atoms of its hull.
+	pub hulls: Vec[Vec[i64]],
+}
+
+/// The query of `indexed` in the log's form, its shape and the theory's
+/// column names.
+pub struct SvBuilt {
+	pub query: SvQuery,
+	pub shape: SvShape,
+	pub names: Vec[String],
+	/// The clauses of the query, `Input` in their order.
+	pub top: Vec[i64],
+}
+
+/// `¬l`. Written as a branch: #1286.
+fn sv_not(l: u32) -> u32 {
+	return if l % 2 == 0 { l + 1 } else { l - 1 }
+}
+
+/// The literals `ls`, ascending.
+fn sv_sorted(ls: Vec[u32]) -> Vec[u32] {
+	let mut out = ls
+	out.sort()
+	return out
+}
+
+/// What an item list adds, under `guard`: its atoms' guards, its
+/// disjunctions' heads (selectors made on the way), its hulls marked.
+fn sv_walk(
+	indexed: ref LgIndexed,
+	items: ref Vec[LgItem],
+	guard: i64,
+	mut shape: SvShape,
+	mut selectors: Vec[i64],
+) {
+	let mut at = 0
+	while at < items.len() {
+		let item = items[at].clone()
+		at += 1
+		if item.atom {
+			shape.guard[item.n] = guard
+			continue
+		}
+		let o = item.n
+		shape.or_guard[o] = guard
+		let count = indexed.hull(indexed.ors[o]).len()
+		let mut hull: Vec[i64] = []
+		let mut k = 0
+		while k < count && at < items.len() {
+			let h = items[at].clone()
+			shape.guard[h.n] = guard
+			hull.push(h.n)
+			at += 1
+			k += 1
+		}
+		shape.hulls[o] = hull
+		let mut heads: Vec[u32] = []
+		for alternative in indexed.ors[o] {
+			if alternative.len() == 1 && alternative[0].atom {
+				let a = alternative[0].n
+				shape.guard[a] = guard
+				shape.head[a] = true
+				heads.push(sv_lit(a as u32, false))
+				continue
+			}
+			let s = shape.guard.len()
+			shape.guard.push(guard)
+			shape.head.push(true)
+			shape.clause.push(-1)
+			selectors.push(s)
+			let lit = sv_lit(s as u32, false)
+			heads.push(lit)
+			sv_walk(indexed, alternative, lit as i64, shape, selectors)
+		}
+		shape.or_heads[o] = heads
+	}
+}
+
+/// Whether atom `a` is in one of the hulls.
+fn sv_is_hull(shape: ref SvShape, a: i64) -> bool {
+	for hull in shape.hulls {
+		if hull.contains(a) {
+			return true
+		}
+	}
+	return false
+}
+
+/// The query of `indexed`; `null` where a row leaves `i64` or the columns
+/// `u32`.
+fn sv_built(indexed: ref LgIndexed) -> SvBuilt? {
+	let n = indexed.atoms.len()
+	let mut shape = SvShape {
+		guard: [],
+		head: [],
+		clause: [],
+		or_guard: [],
+		or_heads: [],
+		or_clause: [],
+		hulls: [],
+	}
+	for _ in indexed.atoms {
+		shape.guard.push(-1)
+		shape.head.push(false)
+		shape.clause.push(-1)
+	}
+	for _ in indexed.ors {
+		shape.or_guard.push(-1)
+		shape.or_heads.push([])
+		shape.or_clause.push(-1)
+		shape.hulls.push([])
+	}
+	let mut selectors: Vec[i64] = []
+	sv_walk(indexed, indexed.top, -1, shape, selectors)
+	let mut vars = sv_vars()
+	let mut atoms: Vec[SvAtom] = []
+	for lin in indexed.atoms {
+		atoms.push(SvAtom { row: sv_row_of_lin(lin, vars) ?? return null, rel: SvRel::Le })
+	}
+	let mut names = vars.names.clone()
+	for s in selectors {
+		let col = names.len().checked_u32() ?? return null
+		names.push(f"sel#{s}")
+		atoms.push(SvAtom { row: SvRow { cols: [col], ks: [1], constant: 0 }, rel: SvRel::Le })
+	}
+	// The clauses: each atom under its guard (heads and hulls aside), each
+	// disjunction's heads.
+	let mut clauses: Vec[Vec[u32]] = []
+	let mut top: Vec[i64] = []
+	let mut a = 0
+	while a < n {
+		let referenced = shape.guard[a] >= 0 || sv_on_top(indexed, a)
+		if referenced && !shape.head[a] && !sv_is_hull(shape, a) {
+			let lit = sv_lit(a as u32, false)
+			let clause = if shape.guard[a] < 0 {
+				[lit]
+			} else {
+				sv_sorted([sv_not(shape.guard[a] as u32), lit])
+			}
+			shape.clause[a] = clauses.len()
+			clauses.push(clause)
+		}
+		a += 1
+	}
+	let mut o = 0
+	while o < indexed.ors.len() {
+		if shape.or_heads[o].len() > 0 {
+			let mut clause = shape.or_heads[o].clone()
+			if shape.or_guard[o] >= 0 {
+				clause.push(sv_not(shape.or_guard[o] as u32))
+			}
+			shape.or_clause[o] = clauses.len()
+			clauses.push(sv_sorted(clause))
+		}
+		o += 1
+	}
+	let mut i = 0
+	while i < clauses.len() {
+		top.push(i)
+		i += 1
+	}
+	let columns = names.len().checked_u32() ?? return null
+	return SvBuilt {
+		query: SvQuery { atoms: atoms, clauses: clauses, columns: columns },
+		shape: shape,
+		names: names,
+		top: top,
+	}
+}
+
+/// Whether atom `a` is an item of the top.
+fn sv_on_top(indexed: ref LgIndexed, a: i64) -> bool {
+	for item in indexed.top {
+		if item.atom && item.n == a {
+			return true
+		}
+	}
+	return false
+}
+
+/// The clauses put in and the hulls derived: `shape.clause` and
+/// `shape.or_clause` become entries of the log. `null` where a hull's lemma
+/// does not close.
+fn sv_prepared(
+	indexed: ref LgIndexed,
+	mut shape: SvShape,
+	query: ref SvQuery,
+	mut book: SvBook,
+) -> bool {
+	let mut entry: Vec[i64] = []
+	let mut c = 0
+	while c < query.clauses.len() {
+		entry.push(book.input(c as u32) as i64)
+		c += 1
+	}
+	let mut a = 0
+	while a < shape.clause.len() {
+		if shape.clause[a] >= 0 {
+			shape.clause[a] = entry[shape.clause[a]]
+		}
+		a += 1
+	}
+	let mut o = 0
+	while o < shape.or_clause.len() {
+		if shape.or_clause[o] >= 0 {
+			shape.or_clause[o] = entry[shape.or_clause[o]]
+		}
+		o += 1
+	}
+	// The hulls in the order of their atoms: an inner disjunction's hull
+	// comes before the outer one's, which may rest on it.
+	let mut order: Vec[(i64, i64)] = []
+	o = 0
+	while o < shape.hulls.len() {
+		for h in shape.hulls[o] {
+			order.push((h, o))
+		}
+		o += 1
+	}
+	order.sort()
+	for (hat, oat) in order {
+		if !sv_hull_derived(indexed, shape, hat, oat, book) {
+			return false
+		}
+	}
+	return true
+}
+
+/// Hull atom `h` of disjunction `o` under the disjunction's guard: per
+/// alternative its strongest atom on `h`'s form gives `h` (a Farkas lemma
+/// `h ∨ ¬a`), and the disjunction's clause closes the learned clause.
+fn sv_hull_derived(
+	indexed: ref LgIndexed,
+	mut shape: SvShape,
+	h: i64,
+	o: i64,
+	mut book: SvBook,
+) -> bool {
+	let hl = sv_lit(h as u32, false)
+	let mut hints: Vec[u32] = []
+	let mut j = 0
+	for alternative in indexed.ors[o] {
+		let mut best: i64 = -1
+		for item in alternative {
+			if !item.atom
+				|| lg_terms_cmp(indexed.atoms[item.n].terms, indexed.atoms[h].terms) != 0 {
+					continue
+				}
+			if best < 0 || indexed.atoms[item.n].constant > indexed.atoms[best].constant {
+				best = item.n
+			}
+		}
+		if best < 0 {
+			return false
+		}
+		let al = sv_lit(best as u32, false)
+		let lemma = book.farkas([SvSrc::Lit(sv_not(hl)), SvSrc::Lit(al)], [1, 1]) ?? return false
+		hints.push(lemma.id)
+		if !shape.head[best] {
+			if shape.clause[best] < 0 {
+				return false
+			}
+			hints.push(shape.clause[best] as u32)
+		}
+		j += 1
+	}
+	hints.push(shape.or_clause[o] as u32)
+	let mut lits = [hl]
+	if shape.or_guard[o] >= 0 {
+		lits.push(sv_not(shape.or_guard[o] as u32))
+	}
+	shape.clause[h] = book.learn(sv_sorted(lits), hints) as i64
+	return true
+}
+
+/// How a branch of the search ended.
+pub enum SvFound {
+	/// Refuted: the clause learned, over the negated heads it relied on.
+	Done(SvClause),
+	Consistent,
+	Unknown(LgUnknown),
+}
+
+/// The heads literal `t` holds under, `t` itself where it is one.
+fn sv_heads_of(shape: ref SvShape, t: u32, mut heads: Vec[u32]) {
+	let mut at = (t / 2) as i64
+	let mut lit = t
+	while true {
+		if shape.head[at] && !heads.contains(lit) {
+			heads.push(lit)
+		}
+		let g = shape.guard[at]
+		if g < 0 {
+			return
+		}
+		lit = g as u32
+		at = (lit / 2) as i64
+	}
+}
+
+/// The clause a theory conflict refutes the branch by: the negated heads
+/// its literals hold under, learned through their clauses and the conflict.
+fn sv_leaf(shape: ref SvShape, conflict: ref SvClause, mut book: SvBook) -> SvClause {
+	let mut heads: Vec[u32] = []
+	for l in conflict.lits {
+		sv_heads_of(shape, sv_not(l), heads)
+	}
+	let mut assigned = heads.clone()
+	let mut hints: Vec[u32] = []
+	for l in conflict.lits {
+		let t = sv_not(l)
+		if assigned.contains(t) {
+			continue
+		}
+		hints.push(shape.clause[(t / 2) as i64] as u32)
+		assigned.push(t)
+	}
+	hints.push(conflict.id)
+	let mut lits: Vec[u32] = []
+	for h in heads {
+		lits.push(sv_not(h))
+	}
+	let sorted = sv_sorted(lits)
+	let id = book.learn(sorted.clone(), hints)
+	return SvClause { id: id, lits: sorted }
+}
+
+/// The search's state that every branch shares.
+pub struct SvSearch {
+	pub budget: LgBudget,
+	pub work: i64,
+}
+
+/// Searches the branch that adds `held` (atoms) and leaves `open`
+/// (disjunctions) open, one theory level.
+fn sv_search(
+	indexed: ref LgIndexed,
+	shape: ref SvShape,
+	held: ref Vec[i64],
+	open: ref Vec[i64],
+	mut theory: SvTheory,
+	mut book: SvBook,
+	mut search: SvSearch,
+) -> SvFound {
+	search.work += 1
+	if search.work > search.budget.cases {
+		return SvFound::Unknown(LgUnknown::TooManyCases)
+	}
+	let level = theory.level()
+	theory.push()
+	let mut checked = SvChecked::Consistent
+	for a in held {
+		checked = theory.assert(sv_lit(a as u32, false), book)
+		match checked {
+			SvChecked::Consistent => {},
+			else => {
+				break
+			},
+		}
+	}
+	match checked {
+		SvChecked::Consistent => {
+			checked = theory.check(open.len() == 0, search.budget, book)
+		},
+		else => {},
+	}
+	match checked {
+		SvChecked::Conflict(conflict) => {
+			theory.backtrack(level)
+			return SvFound::Done(sv_leaf(shape, conflict, book))
+		},
+		SvChecked::Consistent => {
+			if open.len() == 0 {
+				return SvFound::Consistent
+			}
+		},
+		SvChecked::Lemmas(_) => {
+			theory.backtrack(level)
+			return SvFound::Unknown(LgUnknown::OutsideTheTheory)
+		},
+		SvChecked::Unknown(why) => {
+			theory.backtrack(level)
+			return SvFound::Unknown(why.clone())
+		},
+	}
+	// The open disjunction with the fewest alternatives, the lowest on a tie.
+	let mut at = 0
+	let mut index = 1
+	while index < open.len() {
+		let here = open[index]
+		let best = open[at]
+		let fewer = indexed.ors[here].len() < indexed.ors[best].len()
+		let same = indexed.ors[here].len() == indexed.ors[best].len()
+		if fewer || (same && here < best) {
+			at = index
+		}
+		index += 1
+	}
+	let o = open[at]
+	let mut rest: Vec[i64] = []
+	let mut position = 0
+	while position < open.len() {
+		if position != at {
+			rest.push(open[position])
+		}
+		position += 1
+	}
+	let mut children: Vec[SvClause] = []
+	let mut j = 0
+	for alternative in indexed.ors[o] {
+		let negated = sv_not(shape.or_heads[o][j])
+		j += 1
+		let mut adds: Vec[i64] = []
+		let mut opens = rest.clone()
+		for item in alternative {
+			if item.atom {
+				adds.push(item.n)
+			} else {
+				opens.push(item.n)
+			}
+		}
+		let found = sv_search(indexed, shape, adds, opens, theory, book, search)
+		match found {
+			SvFound::Done(clause) => {
+				if !clause.lits.contains(negated) {
+					theory.backtrack(level)
+					return SvFound::Done(clause.clone())
+				}
+				children.push(clause.clone())
+			},
+			else => {
+				theory.backtrack(level)
+				return found
+			},
+		}
+	}
+	theory.backtrack(level)
+	// The clause of every case, its own head taken out: each case's clause is
+	// unit on its head's negation, the disjunction's clause then false.
+	let mut lits: Vec[u32] = []
+	let mut hints: Vec[u32] = []
+	for child in children {
+		for l in child.lits {
+			if !shape.or_heads[o].contains(sv_not(l)) && !lits.contains(l) {
+				lits.push(l)
+			}
+		}
+		hints.push(child.id)
+	}
+	hints.push(shape.or_clause[o] as u32)
+	let sorted = sv_sorted(lits)
+	let id = book.learn(sorted.clone(), hints)
+	return SvFound::Done(SvClause { id: id, lits: sorted })
+}
+
+/// How the new engine answered a query.
+pub enum SvDriven {
+	/// The query and the log that refutes it.
+	Proved(SvQuery, Vec[SvStep]),
+	/// A model or an unknown, as `lg_check` gives them.
+	Answer(LgAnswer),
+}
+
+/// The new engine's answer and its work: the theory checks it ran.
+pub struct SvEngineRun {
+	pub driven: SvDriven,
+	pub work: i64,
+}
+
+/// **The new engine** on whether `facts` imply `goal`: the query read as
+/// `lg_check` reads it, put into the log's form, split by enumeration over
+/// the theory interface.
+fn sv_engine(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	exact: bool,
+) -> SvEngineRun {
+	let mut why = lg_why()
+	let read = lg_indexed(arena, facts, goal, why)
+	if read == null {
+		return SvEngineRun {
+			driven: SvDriven::Answer(LgAnswer::Unknown { why: why.unknown.clone() }),
+			work: 0,
+		}
+	}
+	let indexed = read ?? return sv_engine_unknown(LgUnknown::NoContradiction, 0)
+	let built = sv_built(indexed) ?? return sv_engine_unknown(LgUnknown::Overflow, 0)
+	let mut shape = built.shape.clone()
+	let mut book = sv_book(built.query) ?? return sv_engine_unknown(LgUnknown::Overflow, 0)
+	if !sv_prepared(indexed, shape, built.query, book) {
+		return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0)
+	}
+	let mut theory = sv_theory(built.names.clone())
+	theory.exact = exact
+	let mut search = SvSearch { budget: budget.clone(), work: 0 }
+	let mut held: Vec[i64] = []
+	let mut open: Vec[i64] = []
+	for item in indexed.top {
+		if item.atom {
+			held.push(item.n)
+		} else {
+			open.push(item.n)
+		}
+	}
+	let found = sv_search(indexed, shape, held, open, theory, book, search)
+	return match found {
+		SvFound::Done(clause) => {
+			if clause.lits.len() > 0 {
+				return sv_engine_unknown(LgUnknown::NoContradiction, search.work)
+			}
+			SvEngineRun {
+				driven: SvDriven::Proved(built.query.clone(), book.log.steps.clone()),
+				work: search.work,
+			}
+		},
+		SvFound::Consistent => SvEngineRun {
+			driven: SvDriven::Answer(lg_consistent_answer(
+				arena,
+				facts,
+				goal,
+				true,
+				theory.model(),
+			)),
+			work: search.work,
+		},
+		SvFound::Unknown(why_not) => sv_engine_unknown(why_not.clone(), search.work),
+	}
+}
+
+fn sv_engine_unknown(why: LgUnknown, work: i64) -> SvEngineRun {
+	return SvEngineRun { driven: SvDriven::Answer(LgAnswer::Unknown { why: why }), work: work }
+}

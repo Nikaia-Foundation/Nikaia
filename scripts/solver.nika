@@ -8,7 +8,8 @@
 //   nikaia run scripts/solver.nika -- fuzz --self-test
 //
 // `run` puts the logic layer's files of `crates/nikaia-std/src/tools/` (read,
-// never copied) and the driver `crates/nikaia-std/src/solver/sv_rod.nika` into
+// never copied), the new engine's files of `crates/nikaia-std/src/solver/`
+// and the driver `crates/nikaia-std/src/solver/sv_rod.nika` into
 // one program in a temporary directory, builds it with the `nikaia` that runs
 // this script, and answers every `.smt2` file: one line per file (`name answer
 // work`), then a row per directory: solved, unknown (overflow and files the
@@ -26,6 +27,12 @@ use std::text
 // The logic layer's files, in the order the program takes them.
 fn solver_logic_files() -> Vec[String] {
 	return ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"]
+}
+
+// The new engine's files of `crates/nikaia-std/src/solver/` (#1282), in the
+// order the program takes them, before the driver.
+fn solver_engine_files() -> Vec[String] {
+	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_theory", "sv_drive"]
 }
 
 // The work budget PAR-2 doubles: `lg_budget().cases`, the branches
@@ -60,6 +67,9 @@ fn solver_program(repo: String) -> String throws {
 	let mut paths: Vec[String] = []
 	for name in solver_logic_files() {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
+	}
+	for name in solver_engine_files() {
+		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
 	}
 	paths.push(f"{repo}/crates/nikaia-std/src/solver/sv_rod.nika")
 	let mut uses: Vec[String] = []
@@ -221,11 +231,7 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 		}
 		i += 1
 	}
-	if engine == "new" {
-		println("engine new: not built (#1283)")
-		return
-	}
-	if engine != "fm" {
+	if engine != "fm" && engine != "new" {
 		println(f"unknown engine {engine}: fm or new")
 		process::exit(2)
 	}
