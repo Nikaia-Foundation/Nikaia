@@ -1039,8 +1039,11 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     }
     // **A fallback of its own is handed over** (ADR-005 D3, #1292): `a ?? r`
     // gives `r` where `a` is `null`, so a second use of `r` is a move error
-    // here, never rustc's. A view of it, made above, moves nothing.
-    if nullable && !other.is_a_view() && !state.jumps(world, fallback) && a_name_or_a_field(fallback) && !state.facts.view_fallbacks.contains(id_of(fallback) as i64) {
+    // here, never rustc's. A view of it, made above, moves nothing; nor does
+    // a `??` over a name that is lent where it is only read (ADR-279 D5), which
+    // lends its fallback as well.
+    let lends = place && state.a_coalesce_that_may_lend(world, left, fallback, other) != null
+    if nullable && !lends && !other.is_a_view() && !state.jumps(world, fallback) && a_name_or_a_field(fallback) && !state.facts.view_fallbacks.contains(id_of(fallback) as i64) {
         state.hands_over(world, fallback, other, "given to `??` as its fallback", span)
     }
     // **`a ?? b` where `b` may be `null` too is a `T?`** (Part I 3.5).
