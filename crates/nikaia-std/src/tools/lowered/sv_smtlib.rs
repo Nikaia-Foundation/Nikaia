@@ -19,6 +19,7 @@ pub enum SvReadWhy {
     Unsupported(String),
     Undeclared(String),
     Overflow(String),
+    Malformed(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +42,15 @@ pub(crate) struct SvIte {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SvNl {
+    pub name: String,
+    pub op: String,
+    pub a: String,
+    pub b: String,
+    pub partner: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SvSmtReader {
     pub(crate) arena: TermArena,
     pub(crate) ints: collections::BTreeSet<String>,
@@ -55,6 +65,8 @@ pub(crate) struct SvSmtReader {
     pub(crate) ites: collections::BTreeMap<String, SvIte>,
     pub(crate) folds: collections::BTreeMap<String, i64>,
     pub(crate) made: collections::BTreeMap<String, i64>,
+    pub(crate) nl: Vec<SvNl>,
+    pub(crate) nl_names: collections::BTreeMap<String, String>,
 }
 
 pub(crate) fn sv_lin_constant(r: SvRat) -> SvLin { SvLin { terms: collections::BTreeMap::new(), c: r } }
@@ -120,6 +132,65 @@ pub(crate) fn sv_decimal(a: &str) -> SvGot {
     SvGot::Val(SvVal::Lin(sv_lin_constant(r)))
 }
 
+pub(crate) fn sv_lin_atom(arena: &mut TermArena, rel: &str, d: &SvLin) -> Option<i64> {
+    let mut scale: i64 = d.c.den;
+    for (_, k) in d.terms.iter() {
+        let k = *k;
+        scale = match sv_lcm(scale, k.den) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    }
+    let cleared = match sv_lin_scale(d, &sv_int(scale)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let c = cleared.c.num;
+    if cleared.terms.is_empty() {
+        let holds = if rel == "<=" { c <= 0 } else if rel == "<" { c < 0 } else if rel == ">=" { c >= 0 } else if rel == ">" { c > 0 } else if rel == "=" { c == 0 } else { c != 0 };
+        return Some(arena.boolean(holds));
+    }
+    let mut lhs: i64 = -1;
+    for (name, k) in cleared.terms.iter() {
+        let k = *k;
+        let v = arena.var(name);
+        let minus = lhs >= 0 && k.num < 0;
+        let size = if minus { match k.num.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None } } else { k.num };
+        let part = if size == 1 { v } else if size == -1 { arena.neg(v) } else {
+            let factor = arena.int(size);
+            arena.mul(factor, v)
+        };
+        lhs = if lhs < 0 { part } else if minus { arena.sub(lhs, part) } else { arena.add(lhs, part) };
+    }
+    let bound = match c.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let rhs = arena.int(bound);
+    Some(if rel == "<=" { arena.le(lhs, rhs) } else if rel == "<" { arena.lt(lhs, rhs) } else if rel == ">=" { arena.ge(lhs, rhs) } else if rel == ">" { arena.gt(lhs, rhs) } else if rel == "=" { arena.equal(lhs, rhs) } else { arena.unequal(lhs, rhs) })
+}
+
+pub(crate) fn sv_ratio(a: &str) -> Option<SvGot> {
+    let at = match nikaia_std::search::find(&a, &"/", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let num = nikaia_std::index::get(&a, nikaia_std::index::at(0..at));
+    let den = nikaia_std::index::get(&a, nikaia_std::index::at(at + "/".len() as i64..));
+    if !sv_is_numeral(num) || !sv_is_numeral(den) { return None; }
+    let n = match text::parse_i64(num) { Some(__nikaia_value) => __nikaia_value, None => return Some(sv_overflow(format!("the numeral {}", a))) };
+    let d = match text::parse_i64(den) { Some(__nikaia_value) => __nikaia_value, None => return Some(sv_overflow(format!("the numeral {}", a))) };
+    if d == 0 { return Some(SvGot::Failed(SvReadWhy::Malformed(format!("the literal {} has a zero denominator", a)))); }
+    let r = match sv_rat(n, d) { Some(__nikaia_value) => __nikaia_value, None => return Some(sv_overflow(format!("the numeral {}", a))) };
+    Some(SvGot::Val(SvVal::Lin(sv_lin_constant(r))))
+}
+
+pub(crate) fn sv_lin_unit(a: &SvLin) -> SvRat {
+    if a.terms.len() == 1 && a.c.num == 0 {
+        for (_, k) in a.terms.iter() {
+            let k = *k;
+            return k.clone();
+        }
+    }
+    sv_int(1)
+}
+
+pub(crate) fn sv_pow2(n: i64) -> Option<i64> {
+    if n < 0 { return Some(0); }
+    if n > 62 { return None; }
+    let mut p: i64 = 1;
+    for _ in 0..n { p = p * 2; }
+    Some(p)
+}
+
 impl SvSmtReader {
     pub(crate) fn fresh_name(&mut self, kind: &str) -> String {
         self.fresh += 1;
@@ -155,6 +226,10 @@ impl SvSmtReader {
             return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(n))));
         }
         if a.contains('.') { return sv_decimal(a); }
+        match sv_ratio(a) {
+            None => { },
+            Some(ref got) => { return got.clone(); },
+        }
         self.symbol(&lg_unquoted(a))
     }
     pub(crate) fn is_real(&self, a: &SvLin) -> bool {
@@ -254,21 +329,7 @@ impl SvSmtReader {
             let holds = if rel == "<=" { c <= 0 } else if rel == "<" { c < 0 } else if rel == ">=" { c >= 0 } else if rel == ">" { c > 0 } else if rel == "=" { c == 0 } else { c != 0 };
             return SvGot::Val(SvVal::Formula(self.truth_node(holds)));
         }
-        let mut lhs: i64 = -1;
-        for (name, k) in cleared.terms.iter() {
-            let k = *k;
-            let v = self.arena.var(name);
-            let minus = lhs >= 0 && k.num < 0;
-            let size = if minus { match k.num.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the atom ({} ...)", rel)) } } else { k.num };
-            let part = if size == 1 { v } else if size == -1 { self.arena.neg(v) } else {
-                let factor = self.arena.int(size);
-                self.arena.mul(factor, v)
-            };
-            lhs = if lhs < 0 { part } else if minus { self.arena.sub(lhs, part) } else { self.arena.add(lhs, part) };
-        }
-        let bound = match c.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the atom ({} ...)", rel)) };
-        let rhs = self.arena.int(bound);
-        let made = if rel == "<=" { self.arena.le(lhs, rhs) } else if rel == "<" { self.arena.lt(lhs, rhs) } else if rel == ">=" { self.arena.ge(lhs, rhs) } else if rel == ">" { self.arena.gt(lhs, rhs) } else if rel == "=" { self.arena.equal(lhs, rhs) } else { self.arena.unequal(lhs, rhs) };
+        let made = match sv_lin_atom(&mut self.arena, rel, &cleared) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the atom ({} ...)", rel)) };
         SvGot::Val(SvVal::Formula(made))
     }
     pub(crate) fn iff(&mut self, a: i64, b: i64) -> i64 {
@@ -319,12 +380,63 @@ impl SvSmtReader {
         let otherwise = self.arena.and(vec![not_c, b]);
         self.arena.or(vec![then, otherwise])
     }
+    pub(crate) fn nl_term(&mut self, op: String, a: String, b: String, partner: String, real: bool) -> String {
+        let key = format!("{} {} {}", op, a, b);
+        match self.nl_names.get(&key) {
+            None => { },
+            Some(name) => { return name.to_string(); },
+        }
+        let name = self.fresh_name("nl");
+        if real { self.reals.insert(name.to_string()); } else { self.ints.insert(name.to_string()); }
+        self.nl_names.insert(key, name.to_string());
+        self.nl.push(SvNl { name: name.to_string(), op, a, b, partner });
+        name
+    }
+    pub(crate) fn nl_arg(&mut self, a: &SvLin) -> Option<String> {
+        let mut key = String::from("arg");
+        for (name, k) in a.terms.iter() {
+            let k = *k;
+            if a.terms.len() == 1 && a.c.num == 0 && k.num == 1 && k.den == 1 { return Some(name.to_string()); }
+            key = format!("{} {}*{}", key, sv_rat_text(&k), name);
+        }
+        key = format!("{} {}", key, sv_rat_text(&a.c));
+        match self.nl_names.get(&key) {
+            None => { },
+            Some(name) => { return Some(name.to_string()); },
+        }
+        let name = self.fresh_name("arg");
+        if self.is_real(a) { self.reals.insert(name.to_string()); } else { self.ints.insert(name.to_string()); }
+        self.nl_names.insert(key, name.to_string());
+        let d = match sv_lin_sub(&sv_lin_var(&name.to_string()), a) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let fact = match sv_lin_atom(&mut self.arena, "=", &d) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        self.side.push(fact);
+        Some(name)
+    }
+    pub(crate) fn nl_product(&mut self, a: &SvLin, b: &SvLin) -> Option<SvLin> {
+        let ka = sv_lin_unit(a);
+        let kb = sv_lin_unit(b);
+        let ia = match sv_rat_div(&sv_int(1), &ka) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let ib = match sv_rat_div(&sv_int(1), &kb) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let x = match self.nl_arg(&match sv_lin_scale(a, &ia) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let y = match self.nl_arg(&match sv_lin_scale(b, &ib) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let real = self.is_real(a) || self.is_real(b);
+        let m = if AsRef::<str>::as_ref(&(x)) <= AsRef::<str>::as_ref(&(y)) { self.nl_term(String::from("*"), x, y, String::from(""), real) } else { self.nl_term(String::from("*"), y, x, String::from(""), real) };
+        let k = match sv_rat_mul(&ka, &kb) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        sv_lin_scale(&sv_lin_var(&m), &k)
+    }
     pub(crate) fn let_term(&mut self, sexp: &LgSexp, items: &[LgSexp]) -> SvGot {
         if items.len() != 3 { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); }
         let bindings = match (*nikaia_std::index::get(&items, 1)).clone() {
             LgSexp::List(inside) => inside,
             LgSexp::Atom(_) => { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); },
         };
+        let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for binding in bindings.iter() {
+            match binding.clone() {
+                LgSexp::List(ref pair) => { if pair.len() == 2 && lg_is_atom(pair, 0) { own.insert(lg_unquoted(&lg_atom_at(pair, 0))); } },
+                LgSexp::Atom(_) => { },
+            }
+        }
         let mut names: Vec<String> = vec![];
         let mut values: Vec<SvVal> = vec![];
         for binding in bindings.iter() {
@@ -335,6 +447,10 @@ impl SvSmtReader {
             if pair.len() != 2 || !lg_is_atom(&pair, 0) { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); }
             match self.term(nikaia_std::index::get(&pair, 1)) {
                 SvGot::Val(ref v) => { values.push(v.clone()); },
+                SvGot::Failed(SvReadWhy::Undeclared(ref name)) => {
+                    if own.contains(name) { return SvGot::Failed(SvReadWhy::Malformed(format!("{} is unbound: a parallel let binds its names only in its body", name))); }
+                    return SvGot::Failed(SvReadWhy::Undeclared(name.to_string()));
+                },
                 SvGot::Failed(ref why) => { return SvGot::Failed(why.clone()); },
             }
             names.push(lg_unquoted(&lg_atom_at(&pair, 0)));
@@ -559,7 +675,7 @@ impl SvSmtReader {
                 let mut acc = (*nikaia_std::index::get(&lins, 0)).clone();
                 for at in 1..n {
                     let next = (*nikaia_std::index::get(&lins, nikaia_std::index::at(at))).clone();
-                    if next.terms.is_empty() { acc = match sv_lin_scale(&acc, &next.c) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) }; } else if acc.terms.is_empty() { acc = match sv_lin_scale(&next, &acc.c) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) }; } else { return SvGot::Failed(SvReadWhy::Unsupported(format!("a non-linear product: {}", lg_show(sexp)))); }
+                    if next.terms.is_empty() { acc = match sv_lin_scale(&acc, &next.c) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) }; } else if acc.terms.is_empty() { acc = match sv_lin_scale(&next, &acc.c) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) }; } else { acc = match self.nl_product(&acc, &next) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) }; }
                 }
                 return SvGot::Val(SvVal::Lin(acc));
             }
@@ -567,12 +683,44 @@ impl SvSmtReader {
                 let mut acc = (*nikaia_std::index::get(&lins, 0)).clone();
                 for at in 1..n {
                     let next = (*nikaia_std::index::get(&lins, nikaia_std::index::at(at))).clone();
-                    if !next.terms.is_empty() { return SvGot::Failed(SvReadWhy::Unsupported(format!("a non-linear division: {}", lg_show(sexp)))); }
-                    if next.c.num == 0 { return SvGot::Failed(SvReadWhy::Unsupported(format!("a division by zero: {}", lg_show(sexp)))); }
+                    if !next.terms.is_empty() || next.c.num == 0 {
+                        let x = match self.nl_arg(&acc) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) };
+                        let y = match self.nl_arg(&next) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) };
+                        acc = sv_lin_var(&self.nl_term(String::from("/"), x, y, String::from(""), true));
+                        continue;
+                    }
                     let inverse = match sv_rat_div(&sv_int(1), &next.c) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) };
                     acc = match sv_lin_scale(&acc, &inverse) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) };
                 }
                 return SvGot::Val(SvVal::Lin(acc));
+            }
+            if op == "div" && n >= 2 || op == "mod" && n == 2 {
+                for l in lins.iter() { if self.is_real(l) { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); } }
+                let mut acc = (*nikaia_std::index::get(&lins, 0)).clone();
+                for at in 1..n {
+                    let next = (*nikaia_std::index::get(&lins, nikaia_std::index::at(at))).clone();
+                    if acc.terms.is_empty() && next.terms.is_empty() && next.c.num != 0 {
+                        if next.c.num == -1 && acc.c.num.checked_neg().is_none() { return sv_overflow(lg_show(sexp)); }
+                        let folded = if op == "div" { acc.c.num.div_euclid(next.c.num) } else { acc.c.num.rem_euclid(next.c.num) };
+                        acc = sv_lin_constant(sv_int(folded));
+                        continue;
+                    }
+                    let x = match self.nl_arg(&acc) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) };
+                    let y = match self.nl_arg(&next) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) };
+                    let q = self.nl_term(String::from("div"), x.to_string(), y.to_string(), String::from(""), false);
+                    acc = if op == "div" { sv_lin_var(&q) } else { sv_lin_var(&self.nl_term(String::from("mod"), x, y, q, false)) };
+                }
+                return SvGot::Val(SvVal::Lin(acc));
+            }
+            if op == "int.pow2" && n == 1 {
+                let a = (*nikaia_std::index::get(&lins, 0)).clone();
+                if self.is_real(&a) { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); }
+                if a.terms.is_empty() {
+                    let p = match sv_pow2(a.c.num) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) };
+                    return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(p))));
+                }
+                let x = match self.nl_arg(&a) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) };
+                return SvGot::Val(SvVal::Lin(sv_lin_var(&self.nl_term(String::from("pow2"), x, String::from(""), String::from(""), false))));
             }
             if (op == "<=" || op == "<" || op == ">=" || op == ">" || op == "=") && n >= 2 {
                 let mut links: Vec<i64> = vec![];
@@ -673,6 +821,7 @@ pub(crate) fn sv_smtlib_levels(items: &[LgSexp]) -> Option<i64> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SvSorts {
     pub reals: collections::BTreeSet<String>,
+    pub nl: Vec<SvNl>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -700,8 +849,9 @@ pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
         }
     }
     if queries > 1 { return SvSmtRead::Failed(SvReadWhy::Unsupported(format!("{} check-sat commands: a query is self-contained (ADR-270 D3)", queries))); }
-    let mut reader = SvSmtReader { arena: TermArena::empty(), ints: collections::BTreeSet::new(), reals: collections::BTreeSet::new(), bools: collections::BTreeSet::new(), bound_names: vec![], bound_values: vec![], defined: collections::BTreeMap::new(), funs: collections::BTreeMap::new(), side: vec![], fresh: 0, ites: collections::BTreeMap::new(), folds: collections::BTreeMap::new(), made: collections::BTreeMap::new() };
+    let mut reader = SvSmtReader { arena: TermArena::empty(), ints: collections::BTreeSet::new(), reals: collections::BTreeSet::new(), bools: collections::BTreeSet::new(), bound_names: vec![], bound_values: vec![], defined: collections::BTreeMap::new(), funs: collections::BTreeMap::new(), side: vec![], fresh: 0, ites: collections::BTreeMap::new(), folds: collections::BTreeMap::new(), made: collections::BTreeMap::new(), nl: vec![], nl_names: collections::BTreeMap::new() };
     let mut stack: Vec<Vec<i64>> = vec![vec![]];
+    let mut asserted = 0;
     for command in commands.iter() {
         let items = match command.clone() {
             LgSexp::List(inside) => inside,
@@ -733,12 +883,14 @@ pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
             continue;
         }
         if n == 2 && head == "assert" {
+            asserted += 1;
             match reader.formula(nikaia_std::index::get(&items, 1)) {
                 SvGot::Val(SvVal::Formula(id)) => {
                     let last = stack.len() as i64 - 1;
                     stack[nikaia_std::index::at(last)].push(id);
                 },
                 SvGot::Val(_) => { },
+                SvGot::Failed(SvReadWhy::Malformed(ref s)) => { return SvSmtRead::Failed(SvReadWhy::Malformed(format!("{}, in assertion {}", s, asserted))); },
                 SvGot::Failed(ref why) => { return SvSmtRead::Failed(why.clone()); },
             }
             continue;
@@ -780,7 +932,7 @@ pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
         let id = nikaia_std::num::value(id);
         assertions.push(id);
     }
-    SvSmtRead::Script(LgScript { arena: reader.arena, assertions }, SvSorts { reals: reader.reals })
+    SvSmtRead::Script(LgScript { arena: reader.arena, assertions }, SvSorts { reals: reader.reals, nl: reader.nl })
 }
 
 pub(crate) fn sv_read_why_text(why: &SvReadWhy) -> String {
@@ -789,6 +941,7 @@ pub(crate) fn sv_read_why_text(why: &SvReadWhy) -> String {
         SvReadWhy::Unsupported(s) => format!("unsupported: {}", s),
         SvReadWhy::Undeclared(s) => format!("undeclared: {}", s),
         SvReadWhy::Overflow(s) => format!("overflow: {}", s),
+        SvReadWhy::Malformed(s) => format!("malformed: {}", s),
     }
 }
 

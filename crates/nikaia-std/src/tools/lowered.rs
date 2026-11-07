@@ -2067,6 +2067,22 @@ mod sv_fast_lowered {
 #[allow(unused_imports)]
 pub use sv_fast_lowered::*;
 
+mod sv_lemma_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_lemma.rs");
+}
+#[allow(unused_imports)]
+pub use sv_lemma_lowered::*;
+
+mod sv_nl_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_nl.rs");
+}
+#[allow(unused_imports)]
+pub use sv_nl_lowered::*;
+
 mod sv_num_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3236,6 +3252,14 @@ pub mod sv_fast {
     #[allow(unused_imports)]
     pub use super::{SvFastEnd, SvFastRun};
 }
+pub mod sv_lemma {
+    #[allow(unused_imports)]
+    pub use super::{SvLemma, sv_lemma_formula, sv_lemma_alethe, sv_nl_holds, sv_lemma_query, sv_lemma_check};
+}
+pub mod sv_nl {
+    #[allow(unused_imports)]
+    pub use super::{SvNlRun, sv_nl_engine};
+}
 pub mod sv_num {
     #[allow(unused_imports)]
     pub use super::{SvUnknown, sv_fits32, sv_reduced, sv_max_abs, sv_dense_combine, sv_dense_eliminate, sv_pick_column, SvRat, sv_rat_text, SvDelta, sv_delta_sub, sv_delta_text};
@@ -3266,7 +3290,7 @@ pub mod sv_smt {
 }
 pub mod sv_smtlib {
     #[allow(unused_imports)]
-    pub use super::{SvReadWhy, SvSorts, SvSmtRead, sv_smtlib_script, sv_smtlib_read};
+    pub use super::{SvReadWhy, SvNl, SvSorts, SvSmtRead, sv_smtlib_script, sv_smtlib_read};
 }
 pub mod sv_strategy {
     #[allow(unused_imports)]

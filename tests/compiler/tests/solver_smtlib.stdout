@@ -20,17 +20,17 @@ skipped commands: yes, 1: x > 0
 push and pop: yes, 2: x > 0 ; x < 5
 reset-assertions: yes, 1: x > 0
 two check-sat: no, unsupported: 2 check-sat commands: a query is self-contained (ADR-270 D3)
-non-linear product: no, unsupported: a non-linear product: (* x y)
+non-linear product: yes, 1: |sv!|nl:1 == 1
 uninterpreted function: no, unsupported: (declare-fun f (Int) Int)
-non-standard symbol: no, unsupported: (int.pow2 x)
+non-standard symbol: yes, 1: |sv!|nl:1 == 2
 undeclared name: no, undeclared: y
 numeral out of i64: no, overflow: the numeral 9223372036854775808
 real zero: yes, 1: true; reals x
 decimal scale: yes, 1: x < 2; reals x
 division: yes, 1: 3 * x < 1; reals x
 real ite: yes, 2: -x + |sv!|ite:1 > 0 ; x > 0 && -x + |sv!|ite:1 == 0 || !(x > 0) && 2 * |sv!|ite:1 == 1; reals x |sv!|ite:1
-division by a variable: no, unsupported: a non-linear division: (/ 1 x)
-division by zero: no, unsupported: a division by zero: (/ x 0)
-real product: no, unsupported: a non-linear product: (* x y)
+division by a variable: yes, 2: |sv!|nl:2 < 2 ; |sv!|arg:1 == 1; reals x |sv!|nl:2
+division by zero: yes, 2: |sv!|nl:2 < 2 ; |sv!|arg:1 == 0; reals x |sv!|nl:2
+real product: yes, 1: |sv!|nl:1 == 1; reals x y |sv!|nl:1
 overflowing scale: no, overflow: the atom (< ...)
 decimal out of i64: no, overflow: the decimal 0.00000000000000000001
