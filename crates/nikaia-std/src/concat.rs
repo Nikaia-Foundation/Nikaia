@@ -91,6 +91,49 @@ impl Plus<String> for &str {
     }
 }
 
+/// **A side lent out of a list** (#1268): the element of a `for` over a
+/// `Vec[String]` is a `&String` below, and the emitter, which does not know
+/// types, writes it as it is. Each shape reads it as the `&str` it holds, so
+/// the owned side keeps the buffer reuse above.
+impl Plus<&String> for String {
+    #[inline]
+    fn plus(self, rhs: &String) -> String {
+        self.plus(rhs.as_str())
+    }
+}
+
+/// The same, with the left side borrowed: one allocation, at the size needed.
+impl Plus<&String> for &str {
+    #[inline]
+    fn plus(self, rhs: &String) -> String {
+        self.plus(rhs.as_str())
+    }
+}
+
+/// A lent `&String` on the left is borrowed text, as a `&str` is.
+impl Plus<&str> for &String {
+    #[inline]
+    fn plus(self, rhs: &str) -> String {
+        self.as_str().plus(rhs)
+    }
+}
+
+/// The right side's buffer is reused, as for `&str + String`.
+impl Plus<String> for &String {
+    #[inline]
+    fn plus(self, rhs: String) -> String {
+        self.as_str().plus(rhs)
+    }
+}
+
+/// Both sides lent.
+impl Plus<&String> for &String {
+    #[inline]
+    fn plus(self, rhs: &String) -> String {
+        self.as_str().plus(rhs.as_str())
+    }
+}
+
 /// The emitted spelling: `nikaia_std::concat::plus(a, b)`.
 #[inline]
 pub fn plus<L: Plus<R>, R>(left: L, right: R) -> String {
