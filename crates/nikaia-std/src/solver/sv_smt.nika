@@ -51,6 +51,37 @@ pub struct SvEngineRun {
 	pub work: i64,
 	pub path: String,
 	pub carried: Vec[Vec[u32]],
+	/// What the search did, for `--stats`.
+	pub stats: SvSmtStats,
+}
+
+/// The search's counters (#1312 item 2): the SAT core's conflicts, the
+/// theory's conflicts, theory lemmas (conflicts and explained
+/// propagations) and those whose literals an earlier lemma already had,
+/// decisions and restarts.
+pub struct SvSmtStats {
+	pub conflicts: i64,
+	pub theory_conflicts: i64,
+	pub lemmas: i64,
+	pub repeated: i64,
+	pub decisions: i64,
+	pub restarts: i64,
+}
+
+fn sv_smt_stats_none() -> SvSmtStats {
+	return SvSmtStats {
+		conflicts: 0,
+		theory_conflicts: 0,
+		lemmas: 0,
+		repeated: 0,
+		decisions: 0,
+		restarts: 0,
+	}
+}
+
+/// The counters as `--stats` prints them.
+fn sv_smt_stats_text(st: ref SvSmtStats) -> String {
+	return f"conflicts {st.conflicts}, theory conflicts {st.theory_conflicts}, lemmas {st.lemmas} (repeated {st.repeated}), decisions {st.decisions}, restarts {st.restarts}"
 }
 
 fn sv_engine_unknown(why: LgUnknown, work: i64) -> SvEngineRun {
@@ -59,6 +90,7 @@ fn sv_engine_unknown(why: LgUnknown, work: i64) -> SvEngineRun {
 		work: work,
 		path: "",
 		carried: [],
+		stats: sv_smt_stats_none(),
 	}
 }
 
@@ -211,6 +243,13 @@ pub struct SvSmt[T: SvTh] {
 	pub propagated: i64,
 	/// Whether the theory's `propagate` is asked after each check.
 	pub propagating: bool,
+	/// Theory lemmas added, those repeating an earlier one, and the
+	/// literals of each, sorted.
+	pub lemmas: i64,
+	pub repeated: i64,
+	pub seen: collections::BTreeSet[Vec[u32]],
+	/// Whether a literal went to the theory since its last check.
+	pub fresh: bool,
 }
 
 /// How the search ended.
@@ -245,6 +284,7 @@ fn sv_smt_assert[T: SvTh](mut s: SvSmt[T]) -> SvChecked {
 		if !s.theory_atom[(l / 2) as i64] {
 			continue
 		}
+		s.fresh = true
 		let got = s.th.assert(l, s.sat.book)
 		match got {
 			SvChecked::Consistent => {},
@@ -263,6 +303,13 @@ fn sv_smt_lemma[T: SvTh](mut s: SvSmt[T], clause: ref SvClause) -> bool {
 		if !s.sat.knows(l) {
 			return false
 		}
+	}
+	s.lemmas += 1
+	let key = sv_sorted(clause.lits.clone())
+	if s.seen.contains(key) {
+		s.repeated += 1
+	} else {
+		s.seen.insert(key)
 	}
 	let conflict = s.sat.add_lemma(clause.lits, clause.id)
 	if conflict >= 0 {
@@ -340,6 +387,16 @@ fn sv_smt_search[T: SvTh](mut s: SvSmt[T]) -> SvSmtEnd {
 				continue
 			},
 		}
+		// A check only where the theory was handed a literal since the
+		// last one: a decision on a definition gives it nothing new.
+		if !s.fresh {
+			let next = s.sat.pick()
+			if next != null {
+				s.sat.decide(next ?? 0)
+				continue
+			}
+		}
+		s.fresh = false
 		s.checks += 1
 		let partial = s.th.check(false, s.budget, s.sat.book)
 		match partial {
@@ -460,28 +517,42 @@ fn sv_smt_congruence(
 	let mut n_ids: Vec[u32] = []
 	for h in clause {
 		let a = (sv_not(h) / 2) as i64
+		// The first pair `x - v <= 0`, `v - x <= 0` (in the order of the
+		// list, the first one's place first), found through the second
+		// ones by column and constant: one pass, not one per pair (#1312).
+		let n = short_lit[a].len()
+		let mut rows: Vec[SvBound] = []
+		let mut second: collections::BTreeMap[String, i64] = collections::BTreeMap()
+		for k in 0..<n {
+			let r = book.lit_bound(short_lit[a][k]) ?? return true
+			if r.row.ks == [-1] {
+				let key = f"{r.row.cols[0]} {r.row.constant}"
+				if !second.contains_key(key) {
+					second.insert(key, k)
+				}
+			}
+			rows.push(r)
+		}
 		let mut found = false
 		let mut i = 0
-		while i < short_lit[a].len() && !found {
-			let pr = book.lit_bound(short_lit[a][i]) ?? return true
-			let mut j = 0
-			while j < short_lit[a].len() && !found {
-				let nr = book.lit_bound(short_lit[a][j]) ?? return true
-				let sum = pr.row.constant.checked_add(nr.row.constant) ?? return true
-				let x = if pr.row.cols.len() == 1 { pr.row.cols[0] as i64 } else { -1 }
-				if pr.row.ks == [1] && nr.row.ks == [-1] && pr.row.cols == nr.row.cols && sum == 0
-					&& (column < 0 || x == column) {
-						column = x
-						values.push(pr.row.constant.checked_neg() ?? return true)
-						ps.push(short_lit[a][i])
-						ns.push(short_lit[a][j])
-						p_ids.push(short_id[a][i])
-						n_ids.push(short_id[a][j])
-						found = true
-					}
-				j += 1
-			}
+		while i < n && !found {
+			let pr = rows[i].clone()
 			i += 1
+			if pr.row.ks != [1] {
+				continue
+			}
+			let x = pr.row.cols[0] as i64
+			let v = pr.row.constant.checked_neg() ?? continue
+			let j: i64 = second.get(f"{x} {v}") ?? -1
+			if j >= 0 && (column < 0 || x == column) {
+				column = x
+				values.push(v)
+				ps.push(short_lit[a][i - 1])
+				ns.push(short_lit[a][j])
+				p_ids.push(short_id[a][i - 1])
+				n_ids.push(short_id[a][j])
+				found = true
+			}
 		}
 		if !found {
 			return true
@@ -619,12 +690,14 @@ fn sv_smt_search_cnf(
 			work: fast.work,
 			path: fast.path.clone(),
 			carried: [],
+			stats: sv_smt_stats_none(),
 		},
 		SvFastEnd::Sat(values) => return SvEngineRun {
 			driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, values)),
 			work: fast.work,
 			path: fast.path.clone(),
 			carried: [],
+			stats: sv_smt_stats_none(),
 		},
 		SvFastEnd::Skip => {},
 	}
@@ -635,6 +708,7 @@ fn sv_smt_search_cnf(
 			work: 0,
 			path: "pre",
 			carried: [],
+			stats: sv_smt_stats_none(),
 		}
 	}
 	let shown = sv_smt_pre_shown(pre)
@@ -754,6 +828,10 @@ fn sv_smt_run[T: SvTh](
 		conflicts: 0,
 		propagated: 0,
 		propagating: true,
+		lemmas: 0,
+		repeated: 0,
+		seen: collections::BTreeSet(),
+		fresh: true,
 	}
 	for f in known {
 		match s.th.fact(f, s.sat.book) {
@@ -764,12 +842,21 @@ fn sv_smt_run[T: SvTh](
 		}
 	}
 	let end = sv_smt_search(s)
+	let stats = SvSmtStats {
+		conflicts: s.sat.stats.conflicts,
+		theory_conflicts: s.conflicts,
+		lemmas: s.lemmas,
+		repeated: s.repeated,
+		decisions: s.sat.stats.decisions,
+		restarts: s.sat.stats.restarts,
+	}
 	return match end {
 		SvSmtEnd::Unsat => SvEngineRun {
 			driven: SvDriven::Proved(cnf.query.clone(), s.sat.book.log.steps.clone()),
 			work: s.checks,
 			path: "",
 			carried: [],
+			stats: stats.clone(),
 		},
 		SvSmtEnd::Sat => {
 			if cnf.query.reals.len() == 0 {
@@ -784,23 +871,28 @@ fn sv_smt_run[T: SvTh](
 					work: s.checks,
 					path: "",
 					carried: [],
+					stats: stats.clone(),
 				}
 			}
 			let values = s.th.real_values()
 			if !sv_real_model_holds(arena, facts, goal, values) {
-				return sv_engine_unknown(LgUnknown::NoContradiction, s.checks)
+				let mut none = sv_engine_unknown(LgUnknown::NoContradiction, s.checks)
+				none.stats = stats.clone()
+				return none
 			}
 			SvEngineRun {
 				driven: SvDriven::RealModel(values),
 				work: s.checks,
 				path: "",
 				carried: [],
+				stats: stats.clone(),
 			}
 		},
 		SvSmtEnd::Unknown(why) => {
 			// What crosses a switch (ADR-270 D14): the learned clauses and the
 			// level-zero units over the query's own atoms.
 			let mut run = sv_engine_unknown(why.clone(), s.checks)
+			run.stats = stats.clone()
 			let atoms = cnf.query.atoms.len()
 			for c in s.sat.carried() {
 				let mut inside = true

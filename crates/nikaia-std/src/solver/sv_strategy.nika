@@ -379,6 +379,7 @@ pub fn sv_strategy_run(
 					work: spent,
 					path: "walk",
 					carried: [],
+					stats: sv_smt_stats_none(),
 				}
 			},
 		}
@@ -412,5 +413,6 @@ pub fn sv_strategy_run(
 		work: run.work + sv_walk_units(walk.moves, p.walk),
 		path: sv_strategy_path(run.path, "walk"),
 		carried: [],
+		stats: run.stats.clone(),
 	}
 }

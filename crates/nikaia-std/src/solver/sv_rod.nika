@@ -113,6 +113,12 @@ fn sv_engine_settings(engine: String) -> String {
 /// One file's answer and the work it took: `proved`, `refuted`, `unknown
 /// (why)` or `wrong (why)`, then the work.
 fn sv_line(source: String, engine: String) -> String {
+	return sv_line_stats(source, engine, false)
+}
+
+/// `sv_line`, where `stats` says so with the new engine's counters on a
+/// second line (`stats: ...`, #1312 item 2).
+fn sv_line_stats(source: String, engine: String, stats: bool) -> String {
 	let status = sv_status(source)
 	let mut reals: collections::BTreeSet[String] = collections::BTreeSet()
 	let script = match sv_smtlib_script(source) {
@@ -144,6 +150,7 @@ fn sv_line(source: String, engine: String) -> String {
 			sv_new_theory(base),
 			reals,
 			settings,
+			stats,
 		)
 	}
 	// `lg_check` reads every variable as an integer (ADR-270 D27): a real
@@ -189,6 +196,7 @@ fn sv_new_line(
 	theory: String,
 	reals: ref collections::BTreeSet[String],
 	settings: String,
+	stats: bool,
 ) -> String {
 	let run = sv_smt_engine_set(arena, facts, goal, budget, theory, reals, settings)
 		?? return f"unknown (settings {settings}) 0"
@@ -226,7 +234,8 @@ fn sv_new_line(
 	}
 	// The work of a fast path carries its name (#1283 item 4).
 	let path = if run.path == "" { "" } else { f"/{run.path}" }
-	return f"{answer} {run.work}{path}"
+	let counted = if stats { f"\nstats: {sv_smt_stats_text(run.stats)}" } else { "" }
+	return f"{answer} {run.work}{path}{counted}"
 }
 
 /// The program's entry: `ENGINE FILE...`, one line per file. The engine is
@@ -238,9 +247,12 @@ pub fn sv_rod_main() throws {
 	for a in cli::args() {
 		args.push(a)
 	}
-	let engine = args[1].clone()
-	for i in 2..<args.len() {
+	// `--stats ENGINE FILE...`: each answer followed by the counters.
+	let stats = args.len() > 1 && args[1] == "--stats"
+	let from = if stats { 2 } else { 1 }
+	let engine = args[from].clone()
+	for i in from + 1..<args.len() {
 		let source = fs::read_to_string(args[i].clone(), fs::Root::Anywhere)
-		println(sv_line(source, engine))
+		println(sv_line_stats(source, engine, stats))
 	}
 }

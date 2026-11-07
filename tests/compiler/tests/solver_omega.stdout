@@ -1,0 +1,9 @@
+70241a + 76389b + 66512c + 11267d + 9158e = 82, 55644a + 74117b - 29262c - 76416d - 75644e = -175, -5 <= a..e <= 5
+  exact: conflict; 31 extend, 360 combine, 18 round, 1 farkas, 1 learn; checked
+7x + 12y + 31z = 17, 3x + 5y + 14z = 7, 1 <= x <= 40, -50 <= y <= 50
+  exact: consistent, x = 12, y = -3, z = -1; the atoms hold
+4x + 6y = 5
+  exact: conflict; 0 extend, 2 combine, 2 round, 1 farkas, 1 learn; checked
+broken: the first extension's divisor one too large, the first rounding by 1 (none)
+  exact, divisor: conflict; 31 extend, 360 combine, 18 round, 1 farkas, 1 learn; rejected at 17: round: the coefficient -9160 of x5 is not divisible by 9159
+  exact, round: conflict; 31 extend, 360 combine, 18 round, 1 farkas, 1 learn; rejected at 39: round: the coefficient -707520802296 of x0 is not divisible by 298
