@@ -1,0 +1,40 @@
+// The measuring rod of the solver (#1281, ADR-270 D17): `scripts/solver.nika
+// run` on the three smoke files (one sat, one unsat, one the reader refuses),
+// then the summary of the stress families: Fourier-Motzkin's counts of the day,
+// unknowns included (they are the baseline the engine issues compare with).
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain(repo.clone())
+	for args in [["run", "tests/solver/smoke"], ["run", "--summary", "tests/solver/stress"], ["run", "--engine", "new", "tests/solver/smoke"]] {
+		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--"]
+		for a in args { all.push(a.clone()) }
+		let out = process::run(nikaia.clone(), all; dir: repo.clone())
+		println(out.stdout.trim())
+	}
+}

@@ -1,0 +1,615 @@
+// The solver's measuring rod (ADR-270 D17, #1281), run standalone against the
+// toolchain of the day: no compiler change, no `lower-std`, no rebuild.
+//
+//   nikaia run scripts/solver.nika -- run [--engine fm|new] [--summary] [--timeout S] DIR|FILE...
+//   nikaia run scripts/solver.nika -- gen [DIR]
+//   nikaia run scripts/solver.nika -- oracle [--write] FILE...
+//   nikaia run scripts/solver.nika -- fuzz N SEED
+//   nikaia run scripts/solver.nika -- fuzz --self-test
+//
+// `run` puts the logic layer's files of `crates/nikaia-std/src/tools/` (read,
+// never copied) and the driver `crates/nikaia-std/src/solver/sv_rod.nika` into
+// one program in a temporary directory, builds it with the `nikaia` that runs
+// this script, and answers every `.smt2` file: one line per file (`name answer
+// work`), then a row per directory: solved, unknown (overflow and files the
+// reader refuses among them), wrong, PAR-2 over the work budget, certificates
+// checked, models evaluated.
+// The query is the conjunction of a file's assertions with the goal `false`:
+// *proved* is `unsat`, *refuted* is `sat`. A *proved* whose certificate
+// `lg_verify` rejects, a *refuted* whose model `lg_verify_model` rejects, and
+// any answer against the file's status count as wrong.
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+// The logic layer's files, in the order the program takes them.
+fn solver_logic_files() -> Vec[String] {
+	return ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"]
+}
+
+// The work budget PAR-2 doubles: `lg_budget().cases`, the branches
+// Fourier-Motzkin's search may look at.
+fn solver_budget() -> i64 {
+	return 1024
+}
+
+fn solver_toolchain(repo: String) -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return f"{repo}/target/fast/nikaia"
+}
+
+fn solver_root() -> String throws {
+	let here = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	return process::run("pwd", []).stdout.trim().clone()
+}
+
+// --- Assembling and building the program ---
+
+// The program: every file's `use std::` lines once at the top, then the files
+// without them, then `main`.
+fn solver_program(repo: String) -> String throws {
+	let mut paths: Vec[String] = []
+	for name in solver_logic_files() {
+		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
+	}
+	paths.push(f"{repo}/crates/nikaia-std/src/solver/sv_rod.nika")
+	let mut uses: Vec[String] = []
+	let mut body = ""
+	for p in paths {
+		let text = fs::read_to_string(p.clone(), fs::Root::Anywhere)
+		for line in text.lines() {
+			if line.starts_with("use std::") {
+				if !uses.contains(line.to_string()) { uses.push(line.to_string()) }
+			} else {
+				body = body + line + "\n"
+			}
+		}
+	}
+	return uses.join("\n") + "\n" + body + "fn main() throws {\n    sv_rod_main()\n}\n"
+}
+
+// Builds the program in a fresh temporary directory and gives the binary's
+// path, or an empty text after printing why it did not build.
+fn solver_build(repo: String, nikaia: String) -> String throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	process::run("mkdir", ["-p", f"{tmp}/src"])
+	fs::write(
+		f"{tmp}/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n",
+	)
+	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, solver_program(repo))
+	let built = process::run(nikaia, ["build"]; dir: tmp.clone())
+	let bin = f"{tmp}/target/nikaia/bin/solver_rod"
+	if !built.ok || !fs::exists(bin.clone(), fs::Root::Anywhere) {
+		println("the solver program did not build:")
+		for line in built.stderr.lines() {
+			if line.starts_with("error") || line.contains("-->") { println(line) }
+		}
+		return ""
+	}
+	return bin
+}
+
+// --- run ---
+
+// One answered file.
+struct SolverRow {
+	group: String,
+	name: String,
+	answer: String,
+	work: i64,
+}
+
+// The `.smt2` files of an argument, each with the directory it is counted
+// under: its path below the argument's parent.
+fn solver_files(arg: String) -> Vec[(String, String)] throws {
+	let mut out: Vec[(String, String)] = []
+	let trimmed = arg.trim_end_matches("/").to_string()
+	let base = trimmed.split("/").last() ?? trimmed
+	if trimmed.ends_with(".smt2") {
+		let parts: Vec[String] = trimmed.split("/").collect()
+		let group = if parts.len() >= 2 { parts[parts.len() - 2].clone() } else { "." }
+		out.push((group, trimmed.clone()))
+		return out
+	}
+	let mut rels: Vec[String] = []
+	for p in fs::walk(trimmed.clone(), fs::Root::Anywhere) {
+		let rel = p.to_text()
+		if rel.ends_with(".smt2") { rels.push(rel) }
+	}
+	rels.sort()
+	for rel in rels {
+		let at = rel.rfind("/")
+		let group = match at {
+			null => base.to_string(),
+			else => f"{base}/{rel[0..<(at ?? 0)]}",
+		}
+		out.push((group, f"{trimmed}/{rel}"))
+	}
+	return out
+}
+
+// The engine's answer to one file: `answer work`, from the built binary.
+fn solver_answer(bin: String, engine: String, path: String, timeout: i64) -> (String, i64) throws {
+	let out = process::run(bin, [engine, path]; within: timeout.seconds())
+	if out.timed_out { return ("unknown (timeout)", -1) }
+	if !out.ok { return ("unknown (crashed)", -1) }
+	let line = out.stdout.trim().to_string()
+	let at = line.rfind(" ") ?? return ("unknown (no answer)", -1)
+	let work = text::parse_i64(line[at + 1..].to_string()) ?? -1
+	return (line[0..<at].to_string(), work)
+}
+
+fn solver_solved(answer: String) -> bool {
+	return answer == "proved" || answer == "refuted"
+}
+
+// `n` tenths as `a.b`.
+fn solver_tenths(n: i64) -> String {
+	return f"{n / 10}.{n % 10}"
+}
+
+// The summary row of `rows`.
+fn solver_summary(label: String, rows: Vec[SolverRow]) -> String {
+	let mut solved = 0
+	let mut proved = 0
+	let mut refuted = 0
+	let mut unknown = 0
+	let mut overflow = 0
+	let mut unreadable = 0
+	let mut wrong = 0
+	let mut checked = 0
+	let mut evaluated = 0
+	let mut par2 = 0
+	for r in rows {
+		if solver_solved(r.answer.clone()) {
+			solved += 1
+			par2 += r.work
+		} else {
+			par2 += 2 * solver_budget()
+		}
+		if r.answer == "proved" { proved += 1 }
+		if r.answer == "refuted" { refuted += 1 }
+		if r.answer.starts_with("unknown") { unknown += 1 }
+		if r.answer == "unknown (overflow)" { overflow += 1 }
+		if r.answer == "unknown (unreadable)" { unreadable += 1 }
+		if r.answer.starts_with("wrong") { wrong += 1 }
+		if r.answer == "proved"
+			|| r.answer == "wrong (certificate rejected)"
+			|| r.answer == "wrong (proved, status sat)" { checked += 1 }
+		if r.answer == "refuted"
+			|| r.answer == "wrong (model rejected)"
+			|| r.answer == "wrong (refuted, status unsat)" { evaluated += 1 }
+	}
+	let n = rows.len()
+	let mean = if n > 0 { par2 * 10 / n } else { 0 }
+	return f"{label}: {n} files, solved {solved} (proved {proved}, refuted {refuted}), unknown {unknown} (overflow {overflow}, unreadable {unreadable}), wrong {wrong}, PAR-2 {solver_tenths(mean)}, certificates checked {checked}, models evaluated {evaluated}"
+}
+
+fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
+	let mut engine: String = "fm"
+	let mut summary_only = false
+	let mut timeout = 60
+	let mut targets: Vec[String] = []
+	let mut i = 0
+	while i < args.len() {
+		let a = args[i].clone()
+		if a == "--engine" && i + 1 < args.len() {
+			engine = args[i + 1].clone()
+			i += 2
+			continue
+		}
+		if a == "--timeout" && i + 1 < args.len() {
+			timeout = text::parse_i64(args[i + 1].clone()) ?? 60
+			i += 2
+			continue
+		}
+		if a == "--summary" {
+			summary_only = true
+		} else {
+			targets.push(a)
+		}
+		i += 1
+	}
+	if engine == "new" {
+		println("engine new: not built (#1283)")
+		return
+	}
+	if engine != "fm" {
+		println(f"unknown engine {engine}: fm or new")
+		process::exit(2)
+	}
+	let mut files: Vec[(String, String)] = []
+	for t in targets { files.extend(solver_files(t)) }
+	if files.len() == 0 {
+		println("no .smt2 files")
+		return
+	}
+	let bin = solver_build(repo, nikaia)
+	if bin == "" { process::exit(1) }
+	let mut rows: Vec[SolverRow] = []
+	for (group, path) in files {
+		let (answer, work) = solver_answer(bin.clone(), engine.clone(), path.clone(), timeout)
+		let file = path.split("/").last() ?? path
+		let row = SolverRow {
+			group: group.clone(),
+			name: f"{group}/{file}",
+			answer: answer,
+			work: work,
+		}
+		if !summary_only { println(f"{row.name} {row.answer} {row.work}") }
+		rows.push(row)
+	}
+	let mut groups: Vec[String] = []
+	for r in rows {
+		if !groups.contains(r.group.clone()) { groups.push(r.group.clone()) }
+	}
+	for g in groups {
+		let mut part: Vec[SolverRow] = []
+		for r in rows {
+			if r.group == g { part.push(r.clone()) }
+		}
+		println(solver_summary(g, part))
+	}
+	if groups.len() > 1 { println(solver_summary("all", rows)) }
+	let bin_dir = bin.replace("/target/nikaia/bin/solver_rod", "")
+	process::run("rm", ["-rf", bin_dir])
+}
+
+// --- oracle ---
+
+fn solver_has_z3() -> bool throws {
+	return process::run("sh", ["-c", "command -v z3"]).ok
+}
+
+// z3's answer to a file: `sat`, `unsat` or `unknown`.
+fn solver_z3(path: String) -> String throws {
+	let out = process::run("z3", ["-smt2", "-T:30", path])
+	for line in out.stdout.lines() {
+		let w = line.trim()
+		if w == "sat" || w == "unsat" || w == "unknown" { return w.to_string() }
+	}
+	return "unknown"
+}
+
+// The status a file states, as the driver reads it.
+fn solver_status(source: String) -> String {
+	for raw in source.lines() {
+		let line = raw.trim()
+		if line.starts_with("(set-info :status ") {
+			let rest = line["(set-info :status ".len()..].replace(")", "").trim().clone()
+			if rest == "sat" || rest == "unsat" { return rest }
+		}
+		if line.starts_with("; EXPECT: ") {
+			let rest = line["; EXPECT: ".len()..].trim().clone()
+			if rest == "sat" || rest == "unsat" { return rest }
+		}
+	}
+	return ""
+}
+
+// The source with its `:status` set to `status`: the line replaced where there
+// is one, else written after `set-logic` (or first). An `unknown` status is
+// not written.
+fn solver_with_status(source: String, status: String) -> String {
+	if status != "sat" && status != "unsat" { return source }
+	let wanted = f"(set-info :status {status})"
+	let mut out: Vec[String] = []
+	let mut done = false
+	for line in source.lines() {
+		if line.trim().starts_with("(set-info :status ") {
+			if !done { out.push(wanted.clone()) }
+			done = true
+			continue
+		}
+		out.push(line.to_string())
+		if !done && line.trim().starts_with("(set-logic ") {
+			out.push(wanted.clone())
+			done = true
+		}
+	}
+	if !done { out.insert(0, wanted) }
+	return out.join("\n") + "\n"
+}
+
+fn solver_oracle(args: Vec[String]) throws {
+	if !solver_has_z3() {
+		println("z3 is not on the path: no oracle")
+		return
+	}
+	let mut write = false
+	let mut paths: Vec[String] = []
+	for a in args {
+		if a == "--write" {
+			write = true
+		} else {
+			for (_, p) in solver_files(a) { paths.push(p) }
+		}
+	}
+	let mut disagree = 0
+	for p in paths {
+		let source = fs::read_to_string(p.clone(), fs::Root::Anywhere)
+		let said = solver_status(source.clone())
+		let z3 = solver_z3(p.clone())
+		if write && z3 != "unknown" && said == "" {
+			fs::write(p.clone(), fs::Root::Anywhere, solver_with_status(source, z3.clone()))
+			println(f"{p} {z3} written")
+		} else if said != "" && z3 != "unknown" && said != z3 {
+			disagree += 1
+			println(f"{p} status {said}, z3 {z3}")
+		} else {
+			println(f"{p} {z3}")
+		}
+	}
+	println(f"{paths.len()} files, {disagree} disagree with z3")
+}
+
+// --- gen: the stress families of D9 ---
+
+fn solver_declare(names: Vec[String]) -> String {
+	let mut out = ""
+	for n in names { out = out + f"(declare-const {n} Int)\n" }
+	return out
+}
+
+fn solver_names(prefix: String, from: i64, to: i64) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for i in from..<(to + 1) { out.push(f"{prefix}{i}") }
+	return out
+}
+
+fn solver_script(declared: Vec[String], asserts: Vec[String]) -> String {
+	let mut out = "(set-logic QF_LIA)\n" + solver_declare(declared)
+	for a in asserts { out = out + f"(assert {a})\n" }
+	return out + "(check-sat)\n(exit)\n"
+}
+
+// Guards: `y` counts the steps where `x` rises, as an `if x[i-1] < x[i]`
+// chain. Even `n` asks for more steps than there are (unsat), odd `n` for
+// every one (sat).
+fn solver_guards(n: i64) -> String {
+	let mut names = solver_names("x", 0, n)
+	names.extend(solver_names("y", 0, n))
+	let mut asserts: Vec[String] = ["(= y0 0)"]
+	for i in 1..<(n + 1) {
+		asserts.push(f"(or (and (< x{i - 1} x{i}) (= y{i} (+ y{i - 1} 1))) (and (>= x{i - 1} x{i}) (= y{i} y{i - 1})))")
+	}
+	if n % 2 == 0 { asserts.push(f"(> y{n} {n})") } else { asserts.push(f"(= y{n} {n})") }
+	return solver_script(names, asserts)
+}
+
+// Unrelated disjunctions: `x = 0 || x = 1` for each of `n` variables beside a
+// core about `i` and `k` that does not mention them. Even `n` holds the
+// bounds-check contradiction (unsat), odd `n` only its consistent half (sat).
+fn solver_disjunctions(n: i64) -> String {
+	let mut names = solver_names("x", 1, n)
+	names.push("i")
+	names.push("k")
+	let mut asserts: Vec[String] = []
+	for name in solver_names("x", 1, n) { asserts.push(f"(or (= {name} 0) (= {name} 1))") }
+	asserts.push("(<= 0 i)")
+	asserts.push("(< i k)")
+	if n % 2 == 0 { asserts.push("(not (< i (+ k 1)))") }
+	return solver_script(names, asserts)
+}
+
+// `+1 or +2` paths: a counter stepping by one or two over `n` steps. Even `n`
+// asks for more than `2n` (unsat), odd `n` for exactly `n + 1` (sat).
+fn solver_steps(n: i64) -> String {
+	let names = solver_names("c", 0, n)
+	let mut asserts: Vec[String] = ["(= c0 0)"]
+	for i in 1..<(n + 1) {
+		asserts.push(f"(or (= c{i} (+ c{i - 1} 1)) (= c{i} (+ c{i - 1} 2)))")
+	}
+	if n % 2 == 0 { asserts.push(f"(> c{n} {2 * n})") } else { asserts.push(f"(= c{n} {n + 1})") }
+	return solver_script(names, asserts)
+}
+
+// Parity: `x1 + ... + xn = 2m + 1` with each `xi` in `{-1, 1}`; unsat for even
+// `n`, sat for odd.
+fn solver_parity(n: i64) -> String {
+	let mut names = solver_names("x", 1, n)
+	names.push("m")
+	let mut asserts: Vec[String] = []
+	for name in solver_names("x", 1, n) { asserts.push(f"(or (= {name} (- 1)) (= {name} 1))") }
+	asserts.push(f"(= (+ {solver_names("x", 1, n).join(" ")} 0) (+ (* 2 m) 1))")
+	return solver_script(names, asserts)
+}
+
+// `blank = 2·n`, the shape of D9's 92 unknown queries: `n` values each twice
+// some integer, summed. Even `n` asks for an odd sum (unsat), odd `n` for an
+// even one (sat).
+fn solver_blank(n: i64) -> String {
+	let mut names = solver_names("b", 1, n)
+	names.extend(solver_names("k", 1, n))
+	names.push("m")
+	let mut asserts: Vec[String] = []
+	for i in 1..<(n + 1) { asserts.push(f"(= b{i} (* 2 k{i}))") }
+	let total = f"(+ {solver_names("b", 1, n).join(" ")} 0)"
+	if n % 2
+		== 0 { asserts.push(f"(= {total} (+ (* 2 m) 1))") } else {
+			asserts.push(f"(= {total} (+ (* 2 m) 2))")
+		}
+	return solver_script(names, asserts)
+}
+
+fn solver_two(n: i64) -> String {
+	return if n < 10 { f"0{n}" } else { f"{n}" }
+}
+
+fn solver_gen(args: Vec[String]) throws {
+	let dir = if args.len() > 0 { args[0].clone() } else { "tests/solver/stress" }
+	let oracle = solver_has_z3()
+	let mut written = 0
+	for family in ["guards", "disjunctions", "steps", "parity", "blank"] {
+		process::run("mkdir", ["-p", f"{dir}/{family}"])
+		let first = if family == "parity" { 2 } else { 1 }
+		for n in first..<13 {
+			let source = match family {
+				"guards" => solver_guards(n),
+				"disjunctions" => solver_disjunctions(n),
+				"steps" => solver_steps(n),
+				"parity" => solver_parity(n),
+				else => solver_blank(n),
+			}
+			let path = f"{dir}/{family}/{family}-{solver_two(n)}.smt2"
+			fs::write(path.clone(), fs::Root::Anywhere, source.clone())
+			if oracle {
+				let z3 = solver_z3(path.clone())
+				if z3
+					!= "unknown" {
+						fs::write(path.clone(), fs::Root::Anywhere, solver_with_status(source, z3))
+					}
+			}
+			written += 1
+		}
+	}
+	let note = if oracle { "status from z3" } else { "no z3 on the path: no status written" }
+	println(f"{written} files in {dir}, {note}")
+}
+
+// --- fuzz ---
+
+// A linear congruential generator: the same seed, the same queries.
+struct SolverRandom {
+	state: i64,
+}
+
+impl SolverRandom {
+	fn below(mut self, n: i64) -> i64 {
+		self.state = (self.state * 1103515245 + 12345) % 2147483648
+		return (self.state / 65536) % n
+	}
+}
+
+fn solver_atom(mut r: SolverRandom, vars: i64) -> String {
+	let mut terms: Vec[String] = []
+	for v in 0..<vars {
+		let c = r.below(7) - 3
+		if c == 0 || r.below(2) == 0 { continue }
+		if c
+			== 1 { terms.push(f"x{v}") } else if c
+			< 0 { terms.push(f"(* (- {-c}) x{v})") } else { terms.push(f"(* {c} x{v})") }
+	}
+	if terms.len() == 0 { terms.push(f"x{r.below(vars)}") }
+	let lhs = if terms.len() == 1 { terms[0].clone() } else { f"(+ {terms.join(" ")})" }
+	let d = r.below(21) - 10
+	let rhs = if d < 0 { f"(- {-d})" } else { f"{d}" }
+	let ops: Vec[String] = ["<=", "<", "=", ">=", ">", "distinct"]
+	let op = ops[r.below(6)].clone()
+	return f"({op} {lhs} {rhs})"
+}
+
+// A random query over 1-8 variables: atoms, and disjunctions of two or three.
+fn solver_query(mut r: SolverRandom) -> String {
+	let vars = 1 + r.below(8)
+	let names = solver_names("x", 0, vars - 1)
+	let mut asserts: Vec[String] = []
+	let count = 1 + r.below(6)
+	for _ in 0..<count {
+		if r.below(3) == 0 {
+			let width = 2 + r.below(2)
+			let mut parts: Vec[String] = []
+			for _ in 0..<width { parts.push(solver_atom(r, vars)) }
+			asserts.push(f"(or {parts.join(" ")})")
+		} else {
+			asserts.push(solver_atom(r, vars))
+		}
+	}
+	return solver_script(names, asserts)
+}
+
+// z3's status of the `i`th query, or the self-test's stub: `unsat` for every
+// third query, `sat` otherwise; it exercises the comparison, not the queries.
+fn solver_fuzz_oracle(stub: bool, i: i64, path: String) -> String throws {
+	if !stub { return solver_z3(path) }
+	if i % 3 == 0 { return "unsat" }
+	return "sat"
+}
+
+fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
+	let self_test = args.contains("--self-test")
+	if !self_test && args.len() < 2 {
+		println("fuzz N SEED, or fuzz --self-test")
+		process::exit(2)
+	}
+	if !self_test && !solver_has_z3() {
+		println("z3 is not on the path: no oracle, no fuzzing")
+		return
+	}
+	let n = if self_test { 8 } else { text::parse_i64(args[0].clone()) ?? 0 }
+	let seed = if self_test { 7 } else { text::parse_i64(args[1].clone()) ?? 0 }
+	let bugs: String = if self_test { process::run("mktemp", ["-d"]).stdout.trim().clone() } else {
+		f"{repo}/tests/solver/bugs"
+	}
+	let work: String = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	process::run("mkdir", ["-p", bugs.clone()])
+	let bin = solver_build(repo, nikaia)
+	if bin == "" { process::exit(1) }
+	let mut r = SolverRandom { state: seed }
+	let mut proved = 0
+	let mut refuted = 0
+	let mut unknown = 0
+	let mut found = 0
+	for i in 0..<n {
+		let source = solver_query(r)
+		let name = f"fuzz-{seed}-{i}.smt2"
+		let path = f"{work}/{name}"
+		fs::write(path.clone(), fs::Root::Anywhere, source.clone())
+		let z3 = solver_fuzz_oracle(self_test, i, path.clone())
+		let (answer, _) = solver_answer(bin.clone(), "fm", path.clone(), 60)
+		if answer == "proved" { proved += 1 }
+		if answer == "refuted" { refuted += 1 }
+		if answer.starts_with("unknown") { unknown += 1 }
+		let against = (answer == "proved" && z3 == "sat") || (answer == "refuted" && z3 == "unsat")
+		if against || answer.starts_with("wrong") {
+			found += 1
+			fs::write(
+				f"{bugs}/{name}",
+				fs::Root::Anywhere,
+				solver_with_status(source.clone(), z3.clone()),
+			)
+			println(f"{name}: engine {answer}, z3 {z3}")
+		}
+		if self_test && i == 0 { print(source) }
+	}
+	println(f"{n} queries (seed {seed}): proved {proved}, refuted {refuted}, unknown {unknown}, disagreements {found}")
+	if self_test { process::run("rm", ["-rf", bugs]) }
+	let bin_dir = bin.replace("/target/nikaia/bin/solver_rod", "")
+	process::run("rm", ["-rf", work, bin_dir])
+}
+
+fn main() throws {
+	// The program's name, the command, and what the command reads.
+	let mut command: String = ""
+	let mut rest: Vec[String] = []
+	let mut at = 0
+	for a in cli::args() {
+		if at == 1 { command = a } else if at > 1 { rest.push(a) }
+		at += 1
+	}
+	let repo = solver_root()
+	let nikaia = solver_toolchain(repo.clone())
+	if command == "run" {
+		solver_run(repo, nikaia, rest)
+	} else if command == "gen" {
+		solver_gen(rest)
+	} else if command == "oracle" {
+		solver_oracle(rest)
+	} else if command == "fuzz" {
+		solver_fuzz(repo, nikaia, rest)
+	} else {
+		println("usage: solver.nika run|gen|oracle|fuzz ... (see the head of scripts/solver.nika)")
+		process::exit(2)
+	}
+}
