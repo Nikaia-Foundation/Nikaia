@@ -1,0 +1,11 @@
+// A lambda handed where a function type's result writes `from` hands back a
+// view of its parameter, lent and never copied (ADR-views-3 D14, #1263).
+fn apply(f: fn(s: String) -> String from s, s: String) -> String from s {
+	f(s)
+}
+
+fn main() {
+	let g: String = "  hi  "
+	println(f"[{apply(fn(s) { s.trim() }, g)}]")
+	println(f"[{g}]")
+}
